@@ -17,6 +17,8 @@ import json
 import os
 import sys
 
+import pytest
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nudge-land-sh.py"
 )
@@ -25,6 +27,10 @@ _spec = importlib.util.spec_from_file_location("nudge_land_sh", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
+
+from _hook_common import Unsplittable  # noqa: E402
+
+pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
 
 
 # --- classify: blocking waits --------------------------------------------------------------
@@ -85,7 +91,20 @@ def test_the_subcommand_words_must_be_adjacent():
 
 
 def test_unbalanced_quotes_are_declined_rather_than_guessed():
+    """A refused parse is no nudge, not an `ask`: bash refuses the same text, and a missed
+    nudge costs one hand-written poll."""
     assert _mod.classify("gh run watch 'oops") is None
+
+
+@pytest.mark.without_segmenter
+def test_a_missing_segmenter_is_declined_rather_than_asked():
+    """The half-deployed host. An `ask` on every command for the sake of a nudge is a hook the
+    operator turns off; the deny guards with a real cost ask instead."""
+
+    def missing(command):
+        raise Unsplittable("segmenter-missing", "not deployed")
+
+    assert _mod.classify("gh run watch", split=missing) is None
 
 
 def test_a_word_merely_containing_gh_is_not_matched():

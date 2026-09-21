@@ -54,10 +54,12 @@ output -> normal permission flow. The hook can only ever DENY.
 """
 
 import json
+import re
 import sys
 from urllib.parse import urlsplit
 
 from _hook_common import (
+    Unsplittable,
     emit_pretooluse_decision,
     invokes,
     short_flags,
@@ -279,6 +281,23 @@ _RULES = (
 )
 
 
+# The binaries the rules key on, as words in the raw text. The gate for asking when the
+# splitter cannot read the command: text naming none of them cannot reach a rule however it
+# is split, so a typo in a command about something else costs no prompt, and a host without
+# the `claude_guard` deploy prompts only on the commands this hook exists for.
+_RULE_BINARIES = (
+    frozenset({"grep", "git", "kubectl", "ssh", "pgrep", "gh"}) | _BURST_TOOLS
+)
+_RULE_BINARY_RE = re.compile(
+    r"(?<![\w/.-])(" + "|".join(sorted(_RULE_BINARIES)) + r")(?![\w.-])"
+)
+
+
+def could_fire(command: str) -> bool:
+    """True if `command` names a binary one of `_RULES` keys on, read off the raw text."""
+    return _RULE_BINARY_RE.search(command) is not None
+
+
 def problem(command: str) -> str | None:
     """The first footgun this command trips, or None.
 
@@ -295,7 +314,11 @@ def problem(command: str) -> str | None:
     keep the call — it is idempotent, and a rule that only works when its caller strips first
     is a trap for whoever reuses it.
     """
-    for stage in split_stages(command):
+    return _first_problem(split_stages(command))
+
+
+def _first_problem(stages: list[list[str]]) -> str | None:
+    for stage in stages:
         words = strip_shell_keywords(stage)
         for rule in _RULES:
             found = rule(words)
@@ -304,11 +327,45 @@ def problem(command: str) -> str | None:
     return None
 
 
-def main() -> int:
-    """Read the hook payload from stdin and deny the command if `problem` flags it.
+def decide(command: str, split=split_stages) -> tuple[str, str] | tuple[None, None]:
+    """The (decision, reason) pair for `command`, or (None, None).
 
-    Emits a PreToolUse deny decision naming the flagged footgun; otherwise emits nothing.
-    Always returns 0 (a deny is expressed through emitted JSON, not the exit code).
+    A `deny` carries what `problem` found. An `ask` is emitted where the splitter cannot read
+    a command that names a rule's binary: the package's contract for a non-ok parse is a
+    refusal, never "nothing here". It is gated on `could_fire` the way
+    `block-protected-bash.py` gates its own on a writer shape — a deny guard that prompts on
+    every unreadable command, or on every command where the package is not deployed, is a
+    guard the operator turns off.
+    """
+    try:
+        stages = split(command)
+    except Unsplittable as exc:
+        if not could_fire(command):
+            return None, None
+        if exc.missing:
+            return (
+                "ask",
+                f"block-footguns cannot split this command: the `claude_guard` package is "
+                f"not deployed ({exc.detail}), so none of its rules ran. Run `chezmoi apply` "
+                f"on this host, or review the command against the rules yourself.",
+            )
+        return (
+            "ask",
+            f"block-footguns cannot read this command ({exc.status}), so none of its rules "
+            f"ran. Fix the quoting, or review the command against the rules yourself.",
+        )
+    found = _first_problem(stages)
+    if found:
+        return "deny", found
+    return None, None
+
+
+def main() -> int:
+    """Read the hook payload from stdin and emit the decision `decide` returns.
+
+    A deny names the flagged footgun and its fix; an ask names why the rules could not run.
+    Otherwise emits nothing. Always returns 0 (a decision is expressed through emitted JSON,
+    not the exit code).
     """
     try:
         payload = json.loads(sys.stdin.read() or "{}")
@@ -317,9 +374,9 @@ def main() -> int:
     command = (payload.get("tool_input") or {}).get("command", "")
     if not command:
         return 0
-    found = problem(command)
-    if found:
-        emit_pretooluse_decision("deny", found)
+    decision, reason = decide(command)
+    if decision and reason:
+        emit_pretooluse_decision(decision, reason)
     return 0
 
 

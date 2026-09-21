@@ -7,6 +7,11 @@ before it (`"hi;"`), so a rule keyed on a stage's first word never sees anything
 writing `;` instead of `&&`, confirmed live — `git stash && ... ; git stash pop` was
 ALLOWED and applied another session's 25-file work-in-progress into this tree.
 
+Since #2134 the splitter is the dotfiles package's segmenter, so the `;` cases below pin
+what that package must keep doing for this repo, and the newline and heredoc cases pin what
+the hand-rolled splitter never did. The module runs under `segmenter_or_skip` (conftest.py):
+the deployed package is the thing under test, and CI does not have it.
+
 Every case below is an accept/reject pair: a `;`-joined command that must still split into
 stages a rule can see, and a quoted `;` that must NOT split. Run:
     uv run pytest .claude/hooks/tests/test_hook_common.py
@@ -15,9 +20,13 @@ stages a rule can see, and a quoted `;` that must NOT split. Run:
 import os
 import sys
 
+import pytest
+
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-from _hook_common import split_stages
+from _hook_common import Unsplittable, split_stages
+
+pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
 
 
 # --- the bug: `;` must split like `&&` does -----------------------------------------------
@@ -92,9 +101,52 @@ def test_pipe_still_splits():
     ]
 
 
-def test_unbalanced_quotes_yield_no_stages():
-    assert split_stages("echo 'unterminated") == []
-
-
 def test_a_plain_command_is_one_stage():
     assert split_stages("git stash pop") == [["git", "stash", "pop"]]
+
+
+# --- what the hand-rolled splitter never did ---------------------------------------------
+
+
+def test_a_newline_splits_like_a_semicolon():
+    """`shlex.split` read a newline as whitespace, so `git fetch\ngh run watch` was ONE stage
+    whose first word was `git` — and no rule keyed on `gh` ever saw it."""
+    assert split_stages("git fetch\ngh run watch") == [
+        ["git", "fetch"],
+        ["gh", "run", "watch"],
+    ]
+
+
+def test_a_heredoc_body_is_not_a_stage():
+    """The body is data the interpreter reads, not commands the shell runs."""
+    assert split_stages("python3 - <<'EOF'\ngrep -Z x\nEOF\nls") == [
+        ["python3", "-", "<<EOF"],
+        ["ls"],
+    ]
+
+
+# --- a command that cannot be read is a refusal, never an empty answer -------------------
+
+
+def test_unbalanced_quotes_are_refused():
+    """Until #2134 this returned `[]`, which every consumer read as "nothing to judge"."""
+    with pytest.raises(Unsplittable) as caught:
+        split_stages("echo 'unterminated")
+    assert caught.value.status == "unreadable:unbalanced-quote"
+    assert not caught.value.missing
+
+
+def test_an_unclosed_substitution_is_refused():
+    with pytest.raises(Unsplittable) as caught:
+        split_stages("echo $(ls")
+    assert caught.value.status == "unreadable:substitution"
+
+
+@pytest.mark.without_segmenter
+def test_a_missing_segmenter_is_refused_as_missing():
+    """The half-deployed host: hook code present, `claude_guard` not yet applied. The
+    consumer decides what to do with it; the splitter's job is to say which cause it was."""
+    with pytest.raises(Unsplittable) as caught:
+        split_stages("git stash pop", parse=None)
+    assert caught.value.missing
+    assert caught.value.status == "segmenter-missing"

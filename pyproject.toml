@@ -132,6 +132,7 @@ filterwarnings = ["error"]
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
   "ui: live browser smoke against the homelab's own routes (scripts/diagnostics/tests/test_ui_smoke.py)",
+  "without_segmenter: runs where the dotfiles claude_guard segmenter is absent (CI); the rest of a module under the segmenter_or_skip fixture skips there (.claude/hooks/tests/conftest.py)",
 ]
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
@@ -456,14 +457,15 @@ unresolved-import = "ignore"
 # Same collateral as above: `_readonly_tables.py` and `test_claude_guard_import.py` also lose
 # the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
-# `block-protected-bash.py` (#2053) also loses it on `_hook_common`; `test_block_protected_bash.py`
-# loads the hook by path, so a typo there fails that suite at collection instead.
+# `_hook_common.py` (#2053, moved there from `block-protected-bash.py` by #2134) imports only
+# `_claude_guard` first-party, and every hook test module imports it, so a typo there fails
+# those suites at collection instead.
 # `tests/conftest.py` (#2078) probes `claude_guard.tables` for a name the hooks read before it
 # decides between the real package and its stand-in; it imports nothing else first-party.
 include = [
   ".claude/hooks/_claude_guard.py",
+  ".claude/hooks/_hook_common.py",
   ".claude/hooks/_readonly_tables.py",
-  ".claude/hooks/block-protected-bash.py",
   ".claude/hooks/tests/conftest.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]

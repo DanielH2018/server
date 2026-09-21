@@ -12,6 +12,8 @@ Run: uv run pytest .claude/hooks/tests/test_block_protected_bash.py
 """
 
 import importlib.util
+import io
+import json
 import os
 import sys
 import tempfile
@@ -21,6 +23,8 @@ import pytest
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
 sys.path.insert(0, _HERE)  # block-protected-bash.py imports _hook_common
+
+import _hook_common as hook_common  # noqa: E402
 
 
 def _load(name):
@@ -189,7 +193,7 @@ def isolation(tmp_path):
     every writer-shaped command instead -- `test_a_missing_segmenter_asks...` below covers
     that path, and runs everywhere.
     """
-    if _mod._parse is None:
+    if hook_common._parse is None:
         pytest.skip(
             "the deployed claude_guard package is not present; arm 3 asks instead"
         )
@@ -361,40 +365,82 @@ def test_an_unreadable_command_with_no_writer_is_clean(isolation):
     assert decision is None
 
 
-@pytest.fixture
-def no_segmenter(monkeypatch):
-    """The half-deployed host: hook code present, `claude_guard` not yet applied."""
-    monkeypatch.setattr(_mod, "_parse", None)
-    monkeypatch.setattr(
-        _mod, "_PARSE_UNAVAILABLE", "claude_guard package not found", raising=False
+def _no_segmenter(command):
+    """The half-deployed host's splitter: hook code present, `claude_guard` not yet applied."""
+    raise hook_common.Unsplittable(
+        "segmenter-missing", "claude_guard package not found"
     )
 
 
-def test_a_missing_segmenter_asks_for_a_writer_shaped_command(tmp_path, no_segmenter):
+def test_a_missing_segmenter_asks_for_a_writer_shaped_command(tmp_path):
     """Deny-side: a silent fail-open here would retire the #1419 rule on exactly the host the
     `_claude_guard` DECIDED marker was written about, so the missing package is an `ask`
     that names the fix."""
     worktree, primary = _checkouts(tmp_path)
     decision, reason = _mod.decide(
-        f"cd {primary} && {HEREDOC}", worktree, session_cwd=worktree
+        f"cd {primary} && {HEREDOC}",
+        worktree,
+        session_cwd=worktree,
+        split=_no_segmenter,
     )
     assert decision == "ask"
     assert "chezmoi apply" in reason
 
 
-def test_a_missing_segmenter_leaves_a_read_alone(tmp_path, no_segmenter):
+def test_a_missing_segmenter_leaves_a_read_alone(tmp_path):
     worktree, primary = _checkouts(tmp_path)
     decision, _ = _mod.decide(
-        f"cd {primary} && grep -rn token .", worktree, session_cwd=worktree
+        f"cd {primary} && grep -rn token .",
+        worktree,
+        session_cwd=worktree,
+        split=_no_segmenter,
     )
     assert decision is None
 
 
-def test_a_missing_segmenter_is_inert_outside_an_isolated_session(
-    tmp_path, no_segmenter
-):
+def test_a_missing_segmenter_is_inert_outside_an_isolated_session(tmp_path):
     _, primary = _checkouts(tmp_path)
     decision, _ = _mod.decide(
-        f"cd {primary} && {HEREDOC}", primary, session_cwd=primary
+        f"cd {primary} && {HEREDOC}", primary, session_cwd=primary, split=_no_segmenter
     )
     assert decision is None
+
+
+# ── the payload's `cwd`, and what stands in for it ───────────────────────────────────
+
+
+def _run_main(monkeypatch, capsys, payload):
+    monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(json.dumps(payload)))
+    assert _mod.main() == 0
+    out = capsys.readouterr().out.strip()
+    return json.loads(out)["hookSpecificOutput"] if out else None
+
+
+def test_a_payload_without_cwd_resolves_paths_in_the_process_cwd(monkeypatch, capsys):
+    """The `DECIDED` at `repo_root` (#2135): the shim's `cd` makes the process cwd the primary
+    checkout, so arm 1 still has a tree to classify a relative path against."""
+    monkeypatch.chdir(_REPO)
+    out = _run_main(
+        monkeypatch,
+        capsys,
+        {"tool_name": "Bash", "tool_input": {"command": FLAGGED_WRITES[0]}},
+    )
+    assert out and out["permissionDecision"] == "ask"
+
+
+def test_a_payload_with_cwd_does_not_read_the_process_cwd(
+    monkeypatch, capsys, tmp_path
+):
+    """The near miss: a `cwd` in the payload wins, and the same relative path names nothing
+    protected there, so the process cwd being the repo must not leak into the verdict."""
+    monkeypatch.chdir(_REPO)
+    out = _run_main(
+        monkeypatch,
+        capsys,
+        {
+            "tool_name": "Bash",
+            "tool_input": {"command": FLAGGED_WRITES[0]},
+            "cwd": str(tmp_path),
+        },
+    )
+    assert out is None

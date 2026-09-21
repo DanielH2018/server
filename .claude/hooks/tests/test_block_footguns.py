@@ -14,6 +14,8 @@ import json
 import os
 import sys
 
+import pytest
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "block-footguns.py"
 )
@@ -22,6 +24,10 @@ _spec = importlib.util.spec_from_file_location("block_footguns", _HOOK)
 assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
+
+from _hook_common import Unsplittable  # noqa: E402
+
+pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
 
 
 # --- 1. ugrep's -Z and -z ---------------------------------------------------------------------
@@ -145,6 +151,75 @@ def test_malformed_payload_is_ignored(monkeypatch, capsys):
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO("{nope"))
     assert _mod.main() == 0
     assert capsys.readouterr().out == ""
+
+
+# --- a command the splitter cannot read --------------------------------------------------------
+
+
+def test_an_unreadable_command_naming_a_rule_binary_asks():
+    """The package's contract: a non-ok parse is a refusal, never "nothing here". Until #2134
+    `split_stages` returned `[]` for this and the hook stayed silent."""
+    decision, reason = _mod.decide("git stash pop 'oops")
+    assert decision == "ask"
+    assert "unbalanced-quote" in reason
+
+
+def test_an_unreadable_command_naming_no_rule_binary_is_left_alone():
+    """The near miss: text that could not reach a rule however it was split costs no prompt."""
+    assert _mod.decide("echo 'oops") == (None, None)
+
+
+def test_could_fire_matches_a_binary_as_a_word():
+    assert _mod.could_fire("cd x && git stash pop")
+    assert _mod.could_fire("ssh daniel-pi 'git status'")
+    # A word merely containing one, or a path component, is not a command.
+    assert not _mod.could_fire("highlight run watch")
+    assert not _mod.could_fire("cat /var/lib/git/README")
+    assert not _mod.could_fire("ls -la")
+
+
+def test_the_gate_is_exactly_as_wide_as_the_rules_on_an_absolute_path():
+    """Every rule compares the stage's first word to the bare binary, so `/usr/bin/git stash
+    pop` denies nothing — and the gate must not ask about a form the rules cannot judge."""
+    assert _mod.problem("/usr/bin/git stash pop") is None
+    assert not _mod.could_fire("/usr/bin/git stash pop")
+
+
+def test_every_rule_binary_reaches_a_rule():
+    """The gate is a hand-written list beside `_RULES`; this is what keeps a rule added with a
+    new binary from being an `ask` the gate never opens. Each name here must be the command
+    word of something `problem` denies."""
+    denied_by = {
+        "grep": "grep -Z x",
+        "git": "git stash pop",
+        "kubectl": "kubectl rollout restart deploy/x",
+        "ssh": "ssh daniel-pi 'git status'",
+        "pgrep": "pgrep -f land.sh",
+        "gh": "gh issue create --title x",
+        "ab": "ab -n 100 https://sonarr.daniel-hunter.com/",
+    }
+    assert set(denied_by) <= _mod._RULE_BINARIES
+    for name, command in denied_by.items():
+        assert _mod.problem(command), f"{name!r} is in the gate but denies nothing"
+
+
+def _missing_segmenter(command):
+    """The half-deployed host's splitter: hook code present, `claude_guard` not yet applied."""
+    raise Unsplittable("segmenter-missing", "not deployed")
+
+
+@pytest.mark.without_segmenter
+def test_a_missing_segmenter_asks_for_a_rule_shaped_command():
+    """A silent fail-open here would retire every rule on exactly the host `_claude_guard`'s
+    DECIDED marker was written about, so it is an `ask` that names the fix."""
+    decision, reason = _mod.decide("git stash pop", split=_missing_segmenter)
+    assert decision == "ask"
+    assert "chezmoi apply" in reason
+
+
+@pytest.mark.without_segmenter
+def test_a_missing_segmenter_leaves_an_unrelated_command_alone():
+    assert _mod.decide("ls -la", split=_missing_segmenter) == (None, None)
 
 
 def test_a_later_pipeline_stage_is_still_judged():

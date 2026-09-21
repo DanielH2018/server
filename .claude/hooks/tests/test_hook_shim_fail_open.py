@@ -1,18 +1,23 @@
-"""The `cd /home/ubuntu/server || exit 0` arm in the four PreToolUse deny/ask shims.
+"""The `cd /home/ubuntu/server || …` arm in every hook shim that changes into the repo.
 
 Issue #1014: each shim is `cd /home/ubuntu/server || exit 0` followed by an `exec` into its
-paired `.py` guard. All three ways the shim can fail are fail-open (exit 0, normal permission
+paired `.py` guard. All three ways the shim can fail were fail-open (exit 0, normal permission
 flow), which is defensible for a permission hook — a broken guard must not brick every tool
 call. But two of the three failure paths already write a line to stderr on their own (`uv`
 missing, the `.py` missing), and the `cd` arm did not, so it disarmed the guard with nothing
-to notice. This test proves two things per shim:
+to notice. Issue #2171: for the four DENY/ASK guards a silent exit 0 is still an allow, so
+their `cd` arm now emits an `ask` decision naming the shim. The allow-side classifier, the
+context injector, the linter and the bridge keep exit 0 with no stdout: a missed approval is
+a prompt, not a bypass, and the bridge's events have no `ask` to emit. This test proves per
+shim:
 
-  1. the `# DECIDED:` marker documenting the fail-open trade-off is present (so a future
-     session does not read the silence as an oversight and "fix" it into fail-closed), and
-  2. the `cd` arm, when it fails, now writes a line to stderr — matching the other two arms.
+  1. the `# DECIDED:` marker recording the trade-off is present (so a future session does
+     not read either posture as an oversight and "fix" it the other way),
+  2. the `cd` arm, when it fails, writes a line to stderr — matching the other two arms, and
+  3. what it puts on stdout: the `ask` JSON for a deny guard, nothing for the rest.
 
 Every check here is a REJECT/ACCEPT pair: REJECT is a `cd` target that does not exist (the
-failure this issue is about — must now produce a stderr line and still exit 0), ACCEPT is a
+failure these issues are about — must produce a stderr line and still exit 0), ACCEPT is a
 `cd` target that exists (must NOT produce that line, and must still reach the `exec`, proven
 by python's own "can't open file" error appearing instead once it fails to find the `.py`
 next to a throwaway copy of the shim).
@@ -20,6 +25,7 @@ next to a throwaway copy of the shim).
 Run: uv run pytest .claude/hooks/tests/test_hook_shim_fail_open.py
 """
 
+import json
 import subprocess
 from pathlib import Path
 
@@ -29,9 +35,10 @@ HOOKS = Path(__file__).resolve().parent.parent
 
 _CD_GUARD = "cd /home/ubuntu/server || "
 
-# The four shims issue #1014 originally fixed. Only these carry the `# DECIDED:` block, which
-# records the fail-open trade-off once for the whole class.
-ISSUE_1014_SHIMS = frozenset(
+# The four shims issue #1014 originally fixed, and the four whose `cd` arm asks since #2171:
+# every PreToolUse guard whose only decisions are `deny` and `ask`. Only these carry the
+# `# DECIDED:` block, which records the trade-off once for the whole class.
+DENY_GUARD_SHIMS = frozenset(
     {
         "block-protected-bash.sh",
         "block-footguns.sh",
@@ -84,7 +91,7 @@ def test_the_shim_census_is_non_vacuous():
         "inject-nested-docs.sh",
         "nudge-land-sh.sh",
     }
-    assert ISSUE_1014_SHIMS <= set(SHIM_NAMES)
+    assert DENY_GUARD_SHIMS <= set(SHIM_NAMES)
     # ansible-lint.sh is the only one that does not exec into a paired .py.
     assert set(SHIM_NAMES) - set(EXEC_SHIM_NAMES) == {"ansible-lint.sh"}
 
@@ -109,12 +116,13 @@ def _run(tmp_path: Path, hook_name: str, cd_target: str) -> subprocess.Completed
     )
 
 
-@pytest.mark.parametrize("hook_name", sorted(ISSUE_1014_SHIMS))
-def test_decided_marker_documents_the_fail_open_trade_off(hook_name):
+@pytest.mark.parametrize("hook_name", sorted(DENY_GUARD_SHIMS))
+def test_decided_marker_documents_the_trade_off(hook_name):
     text = (HOOKS / hook_name).read_text(encoding="utf-8")
     assert "# DECIDED:" in text
     assert "fail-open" in text
     assert "#1014" in text
+    assert "#2171" in text
 
 
 @pytest.mark.parametrize("hook_name", SHIM_NAMES)
@@ -127,6 +135,28 @@ def test_reject_a_missing_cd_target_now_reports_on_stderr(tmp_path, hook_name):
     # (guard / classifier / bridge / lint), which is what an operator reading one line needs.
     assert "did not run" in proc.stderr
     assert hook_name in proc.stderr
+
+
+@pytest.mark.parametrize("hook_name", sorted(DENY_GUARD_SHIMS))
+def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path, hook_name):
+    """#2171: a bare exit 0 from a DENY guard is an allow. The `ask` names the shim, because
+    four of these can fire on one call and the operator needs to know which one did not run."""
+    proc = _run(tmp_path, hook_name, str(tmp_path / "does-not-exist"))
+    assert proc.returncode == 0, proc.stderr
+    out = json.loads(proc.stdout)["hookSpecificOutput"]
+    assert out["hookEventName"] == "PreToolUse"
+    assert out["permissionDecision"] == "ask"
+    assert hook_name in out["permissionDecisionReason"]
+
+
+@pytest.mark.parametrize("hook_name", sorted(set(SHIM_NAMES) - DENY_GUARD_SHIMS))
+def test_reject_a_non_deny_shim_that_cannot_run_stays_silent(tmp_path, hook_name):
+    """The near miss: the allow-side classifier, the linter, the bridge and the context
+    injector keep no stdout on a failed `cd` — an `ask` from any of them would be a prompt
+    where the design is a pass-through."""
+    proc = _run(tmp_path, hook_name, str(tmp_path / "does-not-exist"))
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout == ""
 
 
 @pytest.mark.parametrize("hook_name", EXEC_SHIM_NAMES)

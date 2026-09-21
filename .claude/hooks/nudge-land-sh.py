@@ -36,7 +36,7 @@ import tempfile
 import time
 from pathlib import Path
 
-from _hook_common import emit_pretooluse_decision, invokes, split_stages
+from _hook_common import Unsplittable, emit_pretooluse_decision, invokes, split_stages
 
 # Reads that answer "what is CI doing right now". `gh pr view` and `gh api` are absent on
 # purpose: both are general-purpose and used for far more than CI status.
@@ -65,9 +65,19 @@ _LAND = (
 )
 
 
-def classify(command: str) -> str | None:
-    """What kind of CI polling this command is: "watch", "status", or None."""
-    for stage in split_stages(command):
+def classify(command: str, split=split_stages) -> str | None:
+    """What kind of CI polling this command is: "watch", "status", or None.
+
+    A command the splitter cannot read is None. The deny guards with a real cost
+    (`block-footguns.py`, `block-protected-bash.py`) turn that into an `ask`; a missed nudge
+    costs one hand-written poll, which is not worth a prompt on every unreadable command or,
+    on a host without the `claude_guard` deploy, on every command.
+    """
+    try:
+        stages = split(command)
+    except Unsplittable:
+        return None
+    for stage in stages:
         if any(invokes(stage, p) for p in _WATCH_COMMANDS):
             return "watch"
         if any(invokes(stage, p) for p in _STATUS_COMMANDS):
