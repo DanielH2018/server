@@ -40,7 +40,8 @@ check with a 10-minute period, and every other slug is a Cron check carrying tha
 in the timezone its cron runs in. That is UTC for every host cron, and `America/Chicago` for
 `pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
 (`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
-`30 23 * * *` in `America/Chicago`. A console read on 2026-09-17 (#1949) found the console
+`0 23 * * *` in `America/Chicago` (`30 23` until 2026-09-21, when the CronJob moved off the
+weekly Longhorn shard's slot). A console read on 2026-09-17 (#1949) found the console
 already there, and the graces above are the values the console was reconciled to.
 
 | Check slug | Schedule type | Grace |

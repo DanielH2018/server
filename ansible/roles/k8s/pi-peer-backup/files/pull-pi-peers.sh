@@ -33,7 +33,7 @@ install -m 0400 /ssh/id "$HOME/.ssh/id"
 # pi-peer-backup-deploy-gate on every deploy of this role, to prove a bumped image still runs.
 # That run is not the scheduled backup, and it must not report as one: pushing here would make
 # the Kuma monitor mean "something ran" instead of "the nightly backup ran", masking a missed
-# 23:30 firing for the rest of its 2.5-day window, and a failing gate run would page the
+# 23:00 firing for the rest of its 2.5-day window, and a failing gate run would page the
 # operator from a deploy-time probe rather than from the backup itself. The pod's hostname is
 # `<job-name>-<random>` (kubectl create job --from=cronjob copies the pod spec verbatim, so
 # there is no other way for the script to tell the two runs apart).

@@ -417,8 +417,11 @@ k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
 # filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
 # this asserts "real data came back", not any particular size, so it does not need revisiting
-# when the service grows or shrinks.
-k3s_longhorn_restore_drill_min_bytes: 1024
+# when the service grows or shrinks. It was 1024 until 2026-09-21, and tdarr-configs — five
+# JSON files, 1007 bytes in total, the whole of Tdarr's /app/configs — failed the drill on it
+# (2026-09-07) and read as unproven for the rest of the rotation. The drill's `files > 0`
+# check is what rejects an empty mount; this floor only has to reject files that hold nothing.
+k3s_longhorn_restore_drill_min_bytes: 1
 k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 # The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
 # volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
