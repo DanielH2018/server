@@ -154,7 +154,9 @@ so a check already down is not paged again.
   manifests. `release-staleness-check.sh` runs `probe.py releases --stale-only` every
   `k3s_release_staleness_cron_minute` and pushes the tile down while any service's applied
   commit sits behind `origin/master` under its role paths, or under an inventory key or
-  shared macro its render reads (#1993). The full account, including why it runs as
+  shared macro its render reads (#1993). A merge younger than
+  `k3s_release_staleness_grace_minutes` is named in the `up` message and not counted, so a
+  landing still deploying its own merge does not page. The full account, including why it runs as
   `sys_user` and not root, is the `#947` bullet in `roles/setup/gitops_deploy/CLAUDE.md`.
   **The DOWN msg carries the stale services' names and a count, not their reasons** (#2013).
   A refused narrowing marks the whole fleet stale, and the per-service reasons then ran to

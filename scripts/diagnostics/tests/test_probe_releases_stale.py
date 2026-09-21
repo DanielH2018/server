@@ -14,7 +14,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_stale.py
 
 from diagnostics.probe_lib import releases as pr
 
-from _release_fixtures import _commit, _init_repo, _record, _set_origin_master
+from _release_fixtures import (
+    _commit,
+    _init_repo,
+    _record,
+    _set_origin_master,
+)
 
 
 def test_named_role_is_stale_after_its_own_role_changes(tmp_path):
