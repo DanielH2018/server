@@ -122,6 +122,12 @@
 #
 # `Connection refused` rather than a timeout is also the tell that this is a REJECT and not a
 # DROP, so do not read it as a NetworkPolicy that merely omits the caller.
+#
+# Not convertible to `kubectl wait` (#2205). The `sleep 2` below runs INSIDE the probe pod, and
+# what it waits on is kube-router having programmed this pod into the policy's `from:` selector
+# — iptables/ipset state on the node, not a field on any API object, so there is no condition
+# to name. The only cluster-side wait available is on the probe pod itself, and `--rm -i` is
+# already that wait. The loop is bounded (20 x 2s) and is the probe's own body.
 - name: Reach the WebUI from a pod, as Traefik does
   tags: [deploy]
   # Skipped under --check, unlike proof 1 above: this is the one task in the file that creates a

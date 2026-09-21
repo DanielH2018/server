@@ -14,16 +14,15 @@ Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_rea
 """
 
 import subprocess
-import sys
-import time
 
 import pytest
 from _longhorn_reader_stubs import (
-    READER,
+    NOW,
     _green_path_stub_kubectl,
     _reader_env,
     _rfc3339,
     _run_reader_against,
+    reader_argv,
 )
 
 
@@ -45,7 +44,7 @@ def test_reader_pins_the_transport(tmp_path):
     env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL=str(stub))
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(),
         capture_output=True,
         text=True,
         env=env,
@@ -67,7 +66,7 @@ def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
     env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL="/bin/false")
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(),
         capture_output=True,
         text=True,
         env=env,
@@ -92,7 +91,7 @@ def test_reader_exits_nonzero_naming_a_missing_env_var(tmp_path):
     del env["LONGHORN_DAILY_BACKUP_BUDGET"]
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(),
         capture_output=True,
         text=True,
         env=env,
@@ -110,7 +109,7 @@ def test_reader_treats_a_clean_bool_env_normally(tmp_path):
         LONGHORN_R2_ARMED="False",
     )
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(),
         capture_output=True,
         text=True,
         env=env,
@@ -134,7 +133,7 @@ def test_reader_exits_nonzero_on_an_unrecognized_bool_env(tmp_path):
         LONGHORN_R2_ARMED="maybe",
     )
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(),
         capture_output=True,
         text=True,
         env=env,
@@ -153,7 +152,7 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     the three row parsers, or the up<TAB>msg contract the shim's success branch depends on. This
     runs the reader against fixtures shaped to leave every one of the eight checks clean.
     """
-    now = time.time()
+    now = NOW
     snapshot_ts = _rfc3339(now - 60)
     drill_dir = tmp_path / "drill"
     drill_dir.mkdir()
@@ -167,7 +166,7 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     )
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(now=NOW),
         capture_output=True,
         text=True,
         env=env,
@@ -178,6 +177,36 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert "backup target(s) default r2 available" in proc.stdout
     assert "1 backed-up volume(s) covered across daily+weekly" in proc.stdout
     assert "1 B2 backup(s)/24h (budget 16)" in proc.stdout
+
+
+def test_reader_argv_hands_now_to_main(tmp_path):
+    """The red half of the green path: the same fixture, judged from 40 days later, is stale.
+
+    NOW sits months ahead of the real clock, so a shim that silently ran the reader against
+    `time.time()` would read every NOW-dated fixture as fresh and the green path would pass
+    for the wrong reason. Moving `now` alone, with the fixture fixed, is what proves the
+    argument reached main().
+    """
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(NOW - 3600)))
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+    )
+
+    proc = subprocess.run(
+        reader_argv(now=NOW + 40 * 86400),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "960h old (limit 30h)" in proc.stdout, proc.stdout
 
 
 # ── fetch failures: the deadman must go DOWN with a reason, never quietly UP (issue #1061) ────
@@ -211,7 +240,7 @@ def test_a_timed_out_fetch_is_flagged_by_name(tmp_path, logger_calls, branch, na
     from the coverage count. A 30s API-server timeout on one call therefore left the whole
     verdict UP with a quietly smaller number in it.
     """
-    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH=branch)
 
     assert proc.returncode == 0, proc.stderr
@@ -237,7 +266,7 @@ def test_an_unparseable_json_body_is_flagged_by_name(
     fetches are covered — for the five jsonpath fetches a garbage body is indistinguishable from
     data, and a malformed jsonpath makes kubectl exit nonzero, which the rc pair above covers.
     """
-    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_NULL_BRANCH=branch)
 
     assert proc.returncode == 0, proc.stderr
@@ -255,7 +284,7 @@ def test_a_failed_coverage_fetch_does_not_cascade_into_the_tier_loop(
     failed coverage fetch would report all nine tiers' volumes as stale or missing — burying the
     one thing that actually happened under nine consequences of it.
     """
-    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(time.time() - 60))
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
     proc = _run_reader_against(stub, tmp_path, STUB_FAIL_BRANCH="coverage")
 
     assert proc.stdout.startswith("down\t"), proc.stdout

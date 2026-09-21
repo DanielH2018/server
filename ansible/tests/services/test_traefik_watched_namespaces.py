@@ -28,46 +28,15 @@ import pytest
 
 from lib import yaml_fast
 
-from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    K8S_ROLES,
-    SHARED_TPL,
-    load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
-)
+
+from _k8s_render import render_role_template
 
 _ROLE = "traefik"
 _HOSTS = ("daniel-box", "daniel-stage")
 
 
-def _context(host: str) -> dict:
-    host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
-    base["playbook_dir"] = str(ANSIBLE)
-    base = resolve_vars(base, base)
-    entry = next(c for c in base["containers_list"] if c["name"] == _ROLE)
-    # Role defaults FIRST: Ansible ranks host_vars above them, and a staging host exists to
-    # override them. See test_staging_manifests_have_their_variables for the same ordering.
-    return {**role_defaults(_ROLE, base), **base, "container_item": entry}
-
-
 def _render(host: str, template: str) -> str:
-    ctx = _context(host)
-    env = make_env([K8S_ROLES / _ROLE / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"{_ROLE}/{template} failed to render for {host}: {err}"
-    )
-    return rendered
+    return render_role_template(_ROLE, template, host=host)
 
 
 def _role_namespaces(host: str) -> list[str]:

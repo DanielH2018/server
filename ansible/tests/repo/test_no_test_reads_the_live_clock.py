@@ -7,11 +7,14 @@ crossing midnight, a "fresh" marker read after a slow collection, a `1.0 days ag
 that rounds to `1.1`. Every function these tests exercise takes a `now` (or a `clock`), so
 the deterministic form is a fixed epoch per module handed to both sides (#2158).
 
-Four files stay on the live clock and are listed below with the reason: each drives a
-cron entry point as a SUBPROCESS, and the only way to hand a subprocess a `now` is an
-environment variable the production script would have to honour — a test-only seam in a
-script that deletes backups is the wrong trade. Their fixtures are dated seconds to hours
-away from thresholds measured in hours or days, so the straddle cannot happen there.
+A subprocess-driven test is no exception. The Longhorn reader and reaper suites run their
+entry points as real subprocesses and used to stay on the live clock, because handing a
+subprocess a `now` looked like an env var the production script would have to honour. Both
+entry points now take `main(..., now=None)`, and the harnesses run them through a one-line
+`runpy` shim that calls `main` with a fixed epoch — still a subprocess, still the real env
+parsing, bootstrap and kubectl shell-out, but no seam the cron's environment can reach
+(#2220). `SUBPROCESS_DRIVEN` below is the list of files still excused on that ground; it is
+empty, and the guard fails if a listed file stops reading the clock, so it can only shrink.
 
 Run: uv run pytest ansible/tests/repo/test_no_test_reads_the_live_clock.py
 """
@@ -22,16 +25,10 @@ from pathlib import Path
 
 from _helpers import REPO, is_test_file
 
-# Each entry is a subprocess-driven test whose `now` cannot cross the process boundary
-# without a production-side env knob. Remove a line when the file sheds its clock read.
-SUBPROCESS_DRIVEN = frozenset(
-    {
-        "ansible/roles/setup/k3s/tests/_longhorn_reader_stubs.py",
-        "ansible/roles/setup/k3s/tests/test_longhorn_backup_grace_cron.py",
-        "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py",
-        "ansible/roles/setup/k3s/tests/test_longhorn_reap_snapshots_cli.py",
-    }
-)
+# A subprocess-driven test whose `now` cannot cross the process boundary. Empty since #2220;
+# an entry here needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not
+# cover, and is removed again the moment the file sheds its clock read.
+SUBPROCESS_DRIVEN: frozenset[str] = frozenset()
 
 # Non-vacuity floor: files the census must reach, so a moved `tests/` directory or a renamed
 # module cannot empty it and let the guard pass over nothing. The census is every tracked

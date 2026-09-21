@@ -329,8 +329,15 @@ def _syslog(message: str) -> None:
         pass
 
 
-def main() -> int:
-    now_s = time.time()
+def main(now: float | None = None) -> int:
+    """Run the eight checks and print the up/down<TAB>msg verdict.
+
+    `now` is the epoch every age is measured from; the cron leaves it None and reads the
+    clock. A test hands one in so its fixtures date against a fixed epoch rather than the
+    suite's own runtime (#2220) — through this argument, not an env var, so nothing in the
+    production environment can shift what the script thinks the time is.
+    """
+    now_s = time.time() if now is None else now
 
     # Parsed here, not at module scope: a malformed value must degrade the first-run grace for
     # the affected tier(s), not crash the reader before any of the other seven checks run (see

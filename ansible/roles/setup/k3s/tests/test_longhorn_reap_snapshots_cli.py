@@ -12,7 +12,9 @@ The stub `k3s` and the staging harness are shared in `_reap_entrypoint_harness.p
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_snapshots_cli.py
 """
 
-from _reap_entrypoint_harness import SNAPSHOTS_ENTRY, _run, _snapshot, _volume
+import datetime
+
+from _reap_entrypoint_harness import NOW, SNAPSHOTS_ENTRY, _run, _snapshot, _volume
 
 
 # ── snapshots: dry run emits no delete ──────────────────────────────────────────────────
@@ -104,10 +106,8 @@ def test_snapshots_dry_run_prints_the_age_floor_as_a_bare_integer_day_count(tmp_
     # k3s_longhorn_snapshot_reap_min_age_days is an int in defaults/main.yml; bash's arithmetic
     # context only ever held one, and printed "younger than 3d" -- not "3.0d", which a
     # float-typed MIN_AGE_DAYS would print instead.
-    import datetime
-
-    one_day_ago = (
-        datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=1)
+    one_day_ago = datetime.datetime.fromtimestamp(
+        NOW - 86400, tz=datetime.timezone.utc
     ).strftime("%Y-%m-%dT%H:%M:%SZ")
     fixtures = {
         # A resolvable RecurringJob so `abort_reason`'s recurringjob check does not fire; the
@@ -123,7 +123,7 @@ def test_snapshots_dry_run_prints_the_age_floor_as_a_bare_integer_day_count(tmp_
             _snapshot("recent", "vol-a", one_day_ago, job="daily-backup"),
         ],
     }
-    proc, _calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path)
+    proc, _calls = _run(SNAPSHOTS_ENTRY, [], fixtures, tmp_path, now=NOW)
     assert proc.returncode == 0, proc.stderr
     assert "younger than 3d" in proc.stdout
     assert "3.0d" not in proc.stdout

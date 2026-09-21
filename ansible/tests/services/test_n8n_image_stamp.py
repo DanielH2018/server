@@ -14,21 +14,8 @@ DIFFERENT digest produces a different manifest.
 
 from lib import yaml_fast
 
-from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
-    K8S_ROLES,
-    SHARED_TPL,
-    k8s_entries,
-    load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
-)
+
+from _k8s_render import render_role_template
 
 ROLE = "n8n"
 # The two Deployments the n8n role ships, and the image each one runs. They differ: the app image
@@ -41,22 +28,8 @@ TEMPLATES = {
 
 
 def _render(template: str, built_images: list[dict] | None) -> dict:
-    role_dir = K8S_ROLES / ROLE
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    ctx = {
-        **base,
-        **role_defaults(ROLE, base),
-        "container_item": k8s_entries()[ROLE],
-    }
-    if built_images is not None:
-        ctx["k8s_built_images"] = built_images
-    env = make_env([role_dir / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, f"{template} failed to render: {err}"
-    return yaml_fast.safe_load(rendered)
+    staged = {} if built_images is None else {"k8s_built_images": built_images}
+    return yaml_fast.safe_load(render_role_template(ROLE, template, staged))
 
 
 def _stamp(doc: dict) -> str:
