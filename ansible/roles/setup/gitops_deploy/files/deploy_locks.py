@@ -35,6 +35,7 @@ import fcntl
 import os
 import re
 import sys
+import threading
 import time
 from collections.abc import Iterable
 from typing import NamedTuple
@@ -58,9 +59,11 @@ SERVICE_LOCK_ALL = "all"
 # `deploy.sh` made on its side before the naming moved here; a deploy tag is a containers_list
 # key and never needs it, but a name that reached the filesystem unsanitised could carry a `/`.
 _UNSAFE_NAME_CHARS = re.compile(r"[^A-Za-z0-9_.-]")
-# How often a blocked acquire retries. `fcntl.flock` has no timeout of its own, and
-# `signal.alarm` would interrupt whatever else this process happens to be in the middle of.
-SERVICE_LOCK_POLL_S = 0.5
+# A blocked acquire waits IN the kernel, not on a poll. `fcntl.flock` has no timeout of its
+# own and `signal.alarm` would interrupt whatever else this process is in the middle of, so
+# the blocking call runs on a helper thread and the caller waits on it with a deadline
+# (`_take`). The wake is immediate on release rather than up to a poll interval late, and
+# the outcome no longer depends on where the poll phase happened to fall (issue #2156).
 # The wait a caller with no budget of its own gets. Only another deploy of the same service can
 # hold one of these locks, and a full `ansible/deploy.yml` measured 1212s on 2026-08-22 -- the
 # same ceiling `gitops_deploy_broad_timeout_s` gives one apply. Waiting forever is not an option:
@@ -150,19 +153,43 @@ def _take(name: str, path: str, mode: int, deadline: float) -> tuple[str, int]:
         OSError: the lock file could not be opened.
     """
     fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+    try:
+        fcntl.flock(fd, mode | fcntl.LOCK_NB)
+        return name, fd
+    except OSError:
+        pass
     started = time.monotonic()
-    while True:
+    # The blocking flock runs on a helper thread; this thread waits on it with the deadline.
+    # `state` settles exactly once under `state_lock`: either the helper acquired first and
+    # the lock is handed back, or the caller gave up first and the helper releases the lock
+    # whenever the kernel finally grants it. Without that mutual exclusion a grant landing
+    # between the timeout and the give-up would be held by nobody until the process exits.
+    acquired = threading.Event()
+    state_lock = threading.Lock()
+    state = {"outcome": None}
+
+    def wait_in_kernel() -> None:
         try:
-            fcntl.flock(fd, mode | fcntl.LOCK_NB)
-            return name, fd
+            fcntl.flock(fd, mode)
         except OSError:
-            if time.monotonic() >= deadline:
-                os.close(fd)
-                waited = round(time.monotonic() - started)
-                raise ServiceLockBusy(
-                    f"service lock {name} busy for {waited}s", lock=name
-                ) from None
-            time.sleep(SERVICE_LOCK_POLL_S)
+            return
+        with state_lock:
+            if state["outcome"] is None:
+                state["outcome"] = "acquired"
+                acquired.set()
+                return
+        # The caller already raised; hand the grant straight back.
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        os.close(fd)
+
+    threading.Thread(target=wait_in_kernel, daemon=True, name=f"flock-{name}").start()
+    acquired.wait(max(0.0, deadline - time.monotonic()))
+    with state_lock:
+        if state["outcome"] == "acquired":
+            return name, fd
+        state["outcome"] = "abandoned"
+    waited = round(time.monotonic() - started)
+    raise ServiceLockBusy(f"service lock {name} busy for {waited}s", lock=name)
 
 
 @contextlib.contextmanager

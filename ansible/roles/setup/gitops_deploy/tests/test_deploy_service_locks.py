@@ -68,6 +68,22 @@ def test_a_deploy_waits_for_another_deploy_of_the_same_service(service_lock_dir)
         os.close(held)
 
 
+def test_a_release_wakes_the_waiting_deploy_before_its_timeout(service_lock_dir):
+    """The wait ends when the holder lets go, not when a timeout or a poll tick says so.
+
+    The holder releases after 0.5s under a 30s budget; a wait that only ended at the
+    timeout would take the full 30s, and a poll would add up to its interval on top of the
+    release (issue #2156).
+    """
+    held = _hold(service_lock_dir, "sonarr")
+    threading.Timer(0.5, os.close, args=(held,)).start()
+    started = time.monotonic()
+    with deploy_locks.service_locks({"sonarr"}, timeout=30) as taken:
+        waited = time.monotonic() - started
+        assert "sonarr" in taken
+    assert 0.5 <= waited < 5, f"waited {waited:.2f}s for a lock released after 0.5s"
+
+
 def test_a_deploy_of_a_different_service_is_not_blocked(service_lock_dir):
     """FLAGGED half for over-locking: one global lock would pass the test above and fail here.
 
