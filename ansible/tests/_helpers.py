@@ -75,9 +75,10 @@ def load_defaults(role: Path) -> dict:
 
     Takes the directory (`K8S_ROLES / "jellyfin"`, `SETUP_ROLES / "k3s"`) rather than a name:
     callers already hold the path, and a name would force a plane lookup that buys nothing.
-    This is the RAW file. `lib.k8s_context.role_defaults(name, base)` is the other reader —
-    it resolves the values against the inventory, which is what a render needs and what a
-    guard on the literal text of a default must not get.
+    This is the RAW file. `lib.k8s_context.role_defaults(name, base)` resolves the values
+    against the inventory, which is what a render needs and what a guard on the literal text
+    of a default must not get; `scripts/docs/fragment_readers.role_defaults(path)` is the docs
+    generator's own raw read.
     """
     return load_yaml(role / "defaults" / "main.yml") or {}
 
