@@ -174,7 +174,7 @@ and the digest's headline is that delta:
 - `🚨 FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
 `permission denials:` on a digest line is the one to act on. Headless auto mode approving the
-session's writes is the assumption the whole design rests on; it was verified on 2026-09-02
+session's writes is the assumption the whole design rests on; it was measured
 against Claude Code 2.1.258 (a bash file create, a `sed -i`, and an `Edit` tool call all
 landed with `permission_denials: []`), but a Claude Code upgrade can change it, and the
 failure mode is a session that reads green and does nothing.

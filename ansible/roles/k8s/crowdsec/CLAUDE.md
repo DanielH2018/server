@@ -54,7 +54,7 @@ sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions 
 ## Traps
 
 ### A crowdsec deploy races its own rollout
-`tasks/main.yml:18` ("Register the remote agent machines on the LAPI") runs
+The task "Register the remote agent machines on the LAPI" in `ansible/roles/k8s/crowdsec/tasks/main.yml` runs
 `k3s kubectl exec deploy/crowdsec -- cscli machines ...`. It sits immediately after
 `k8s/manifests`' rollout-restart, which deliberately does not wait — the drain is queued for
 the end of the batch. So whenever a crowdsec manifest actually changes, the exec lands on a

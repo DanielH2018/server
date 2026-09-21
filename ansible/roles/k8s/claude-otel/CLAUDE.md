@@ -208,7 +208,7 @@ A gauge built on the cheaper call and labelled "billable" would under-report the
 
 ## The trap: an idle stack is indistinguishable from a broken one
 
-Verified 2026-08-05. The stack ran 47h with every pod Ready, zero export failures, and the
+Measured once: the stack ran 47h with every pod Ready, zero export failures, and the
 Kuma heartbeat green — while carrying **one metric name, no prompt/tool logs, and zero spans**.
 Nothing was wrong. Two behaviours combine to produce that appearance:
 

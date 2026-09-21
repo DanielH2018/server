@@ -209,7 +209,7 @@ Edit the `.j2` files, never the live config: homepage seeds any missing file int
   and `services.yaml.j2` drops the matching `server:`/`container:` keys — tiles render
   dot-less rather than erroring on a `my-docker` host that does not exist here.
 - **The browser tab title comes from `title:` in `templates/config/settings.yaml.j2`, and
-  `Homepage` is the app's config-less default.** `src/pages/index.jsx:410` in gethomepage
+  `Homepage` is the app's config-less default.** The `<title>` fallback in gethomepage's `src/pages/index.jsx` at
   v1.13.2 renders `initialSettings.title || "Homepage"`, and `getStaticProps` returns
   `initialSettings: {}` when it renders with no settings — so a tab reading `Homepage` says
   the page rendered with NO settings, not that the setting was dropped. The `-m ui` smoke test

@@ -29,7 +29,7 @@ onto daniel-box.
 
 **It pulls; it never pushes.** The reason is written at the task and is worth repeating because
 it looks backwards at first glance: the name `daniel-box` does not resolve from daniel-server
-(verified 2026-08-19), and pushing would need an ssh key inside the cluster either way.
+(measured), and pushing would need an ssh key inside the cluster either way.
 daniel-box already reaches daniel-server over ssh, so the sync runs from the side that works.
 It is a host cron rather than a sidecar for the same reason — **the ssh credential stays on the
 host and never enters a pod.**

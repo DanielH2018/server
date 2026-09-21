@@ -40,7 +40,7 @@ content shifts the Docker build layer cache, producing a new image ID, which
 `common_config_changed` wiring needed.
 
 **No release tag currently covers the standalone shape.** The newest tag (`v3`) predates
-`sources/standalone.ts`/PGlite (verified missing from that ref, 2026-07-19); the `cli-*`
+`sources/standalone.ts`/PGlite (missing from that ref); the `cli-*`
 tags are the npm `happy` CLI package's own releases, not the server. `happy_git_version` is
 therefore pinned to an explicit `main` commit SHA. Re-check `gh api repos/slopus/happy/tags`
 next time this is bumped — a real server release tag may exist by then.
