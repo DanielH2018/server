@@ -97,10 +97,12 @@
 
 - name: Download the k3s installer
   tags: [k3s_agent]
+  # Same pinned script and checksum as server.yml; the comment there has the reasoning.
   ansible.builtin.get_url:
-    url: https://get.k3s.io
+    url: "{{ k3s_install_script_url }}"
     dest: /usr/local/bin/k3s-install.sh
     mode: "0755"
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
 - name: Keep k3s-agent's own output in a file the journald cap cannot drop

@@ -22,10 +22,16 @@
 
 - name: Download the k3s installer
   tags: [k3s_server]
+  # The script from the pinned release's tag, not get.k3s.io: that URL serves master, which
+  # moves between plays with no signal, and the script is what runs as root. The checksum is
+  # the whole argument (roles/setup/sops_setup has the long form) -- a copy already on the host
+  # that hashes differently is re-fetched, and a fetch that hashes differently fails here.
+  # Both pins live in defaults/main.yml; a k3s_version bump finishes the sha256 by hand.
   ansible.builtin.get_url:
-    url: https://get.k3s.io
+    url: "{{ k3s_install_script_url }}"
     dest: /usr/local/bin/k3s-install.sh
     mode: "0755"
+    checksum: "sha256:{{ k3s_install_script_sha256 }}"
   become: true
 
 # ── audit logging: these two MUST precede the installer ─────────────────────────────────

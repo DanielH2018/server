@@ -48,18 +48,30 @@ recovery cron (#1910) restarts a stopped container; it cannot recreate one.
 uv run ansible-playbook ansible/initial_setup.yml --tags docker-engine-upgrade -e docker_install_engine_upgrade=true -e target=daniel-pi
 ```
 It refuses a host with no `~/server` checkout (nothing could stop or recreate the projects),
-refreshes the cache, unholds, and asks the apt module in check mode whether `state: latest`
-would change anything — the module's own verdict, not a parse of `apt-get -s`. Nothing
-pending: re-hold and report. Otherwise it stops every Compose project in `containers_list`
+refreshes the cache, unholds, and asks the apt module in check mode whether installing
+`docker_install_package_specs` would change anything — the module's own verdict, not a parse
+of `apt-get -s`. Nothing pending: re-hold and report. Otherwise it stops every Compose project in `containers_list`
 (reverse order), upgrades, re-holds (in `always:`, so a failed apt run leaves the hold in
 place), starts `docker.socket`/`docker.service`, and brings every project back with
 `recreate: always` — the recreate the incident needed by hand, so docker-proxy gets the new
 socket. Expect the Pi's containers, wg-easy included, to be down for the length of the apt
 run. Run it from a LAN session, not over the tunnel.
 
-**Cost accepted:** a Docker security fix waits for that command. The engine's upgrade
-cadence is Renovate-free (no deb datasource is wired here); check `apt list --upgradable`
-over ssh when the Renovate PRs for the Pi's images come round.
+**The versions are pinned, and Renovate carries the signal** (#2153). `defaults/main.yml`
+names four upstream versions — `docker_install_engine_version` for docker-ce and its cli,
+and one each for containerd.io, the compose plugin and the buildx plugin — and renders them
+into apt's `name=5:29.8.1-1~ubuntu.24.04~noble` form as `docker_install_package_specs`.
+Before the pins, a fresh install took whatever `download.docker.com` served that day and
+the deliberate bump moved to whatever it served on the day it ran. Renovate tracks the four
+on github-releases (moby/moby, containerd/containerd, docker/compose, docker/buildx) in one
+manual group. Merging that PR moves nothing on the Pi: `install.yml` reads the installed
+docker-ce version first and installs only where there is none (an explicit
+`apt-get install pkg=ver` moves a held package, so `state: present` alone would not have
+protected a running engine from a pin bump); on an installed host it reports the gap and
+leaves it. The command above is what closes it.
+
+**Cost accepted:** a Docker security fix waits for that command, and now for the Renovate
+PR that names it.
 
 **Teardown unholds first.** apt with `-y` refuses to change a held package unless told
 `--allow-change-held-packages`, so `teardown.yml` releases the hold before its purge.
@@ -89,8 +101,9 @@ services. Install without uninstall is a one-way door; this is the way back out.
 2. **Install:** `docker_engine_packages` — `docker-ce`, `-cli`, `containerd.io`, **and
    explicitly** `docker-compose-plugin` + `docker-buildx-plugin` (the engine behind
    `community.docker.docker_compose_v2` and its `build: always` — declared so they can't be
-   dropped as auto-installed Recommends) — then HOLDS them (previous section). `state:
-   present`, so an installed engine is never bumped by this task. Removes the deprecated
+   dropped as auto-installed Recommends) — each at its pinned version, on a host with no
+   docker-ce yet — then HOLDS them (previous section). An installed engine is never bumped by
+   this task, whatever the pin says. Removes the deprecated
    linuxserver compose-v1 wrapper. The cache-refresh task before it carried `upgrade: true`
    until 2026-09-18 — a second full host upgrade on every run of this role; it refreshes only.
 3. **docker group:** resolves the *connecting* user (not `root` under `become`) via `id -un`

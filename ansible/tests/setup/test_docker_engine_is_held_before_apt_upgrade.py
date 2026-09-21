@@ -14,6 +14,12 @@ unheld package simply upgrades on the next run:
    runs after initial_setup in the play, so a hold set only there lands one upgrade late;
 3. teardown unholds before it purges, because apt with -y refuses to change a held package.
 
+A fourth, since #2153 pinned the versions: the install reads `docker_install_package_specs`,
+whose keys (`docker_install_package_versions` in the role defaults) must be exactly the hold
+list -- a package pinned and installed under a name the hold never sees floats the same way.
+And no apt task under docker_install says `state: latest`, because that is the calendar
+deciding the engine version; the pin decides now.
+
 Run: uv run pytest ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
 """
 
@@ -26,8 +32,13 @@ HOST_BASICS = SETUP_ROLES / "initial_setup" / "tasks" / "host-basics.yml"
 INSTALL = SETUP_ROLES / "docker_install" / "tasks" / "install.yml"
 TEARDOWN = SETUP_ROLES / "docker_install" / "tasks" / "teardown.yml"
 ENGINE_UPGRADE = SETUP_ROLES / "docker_install" / "tasks" / "engine-upgrade.yml"
+DEFAULTS = SETUP_ROLES / "docker_install" / "defaults" / "main.yml"
 
 PACKAGES_VAR = "docker_engine_packages"
+# The `name=version` list the install and the deliberate upgrade hand to apt, and the dict
+# it is rendered from -- both in the role defaults.
+SPECS_VAR = "docker_install_package_specs"
+VERSIONS_VAR = "docker_install_package_versions"
 # The census must keep finding these two. containerd.io is the one whose upgrade swaps the
 # shim; docker-ce is the one whose postinst restarts the daemon and the socket.
 MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
@@ -84,15 +95,46 @@ def test_the_shared_package_list_names_the_engine():
     assert not missing, f"{PACKAGES_VAR} no longer lists {sorted(missing)}"
 
 
+def pinned_names(versions: dict) -> set[str]:
+    """The package names the pin dict covers -- what the install and the upgrade hand to apt."""
+    return set(versions)
+
+
 def test_install_and_hold_read_the_same_list():
-    """A package installed from a literal list is a package the hold never sees."""
+    """A package installed from a literal list is a package the hold never sees.
+
+    The install reads the pinned specs; the specs are rendered from the versions dict; the
+    dict's keys are the hold list. Any link missing and a package floats or is never held.
+    """
     tasks = load_tasks(INSTALL)
-    installs = [t for t in tasks if apt_names(t) == "{{ " + PACKAGES_VAR + " }}"]
-    assert installs, f"install.yml does not install from {PACKAGES_VAR}"
+    installs = [t for t in tasks if apt_names(t) == "{{ " + SPECS_VAR + " }}"]
+    assert installs, f"install.yml does not install from {SPECS_VAR}"
     assert any(selection_task(t, "hold") for t in tasks), (
         "install.yml installs the engine and never holds it -- a fresh host floats until "
         "the next full run reaches host-basics"
     )
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
+    assert SPECS_VAR in defaults and VERSIONS_VAR in defaults[SPECS_VAR], (
+        f"{SPECS_VAR} is not rendered from {VERSIONS_VAR} in defaults/main.yml"
+    )
+    held = set(yaml_fast.safe_load(ALL_VARS.read_text())[PACKAGES_VAR])
+    pinned = pinned_names(defaults[VERSIONS_VAR])
+    assert pinned == held, (
+        f"{VERSIONS_VAR} pins {sorted(pinned - held)} the hold never sees and omits "
+        f"{sorted(held - pinned)} the hold covers"
+    )
+
+
+def test_no_apt_task_under_docker_install_says_latest():
+    """`state: latest` is the calendar choosing the engine version; the pin chooses now."""
+    latest = [
+        t.get("name")
+        for path in (INSTALL, ENGINE_UPGRADE, TEARDOWN)
+        for t in iter_tasks(load_tasks(path))
+        if isinstance(t.get("ansible.builtin.apt"), dict)
+        and t["ansible.builtin.apt"].get("state") == "latest"
+    ]
+    assert not latest, f"apt tasks with state: latest under docker_install: {latest}"
 
 
 def test_the_hold_precedes_the_dist_upgrade():
@@ -253,7 +295,16 @@ def test_a_hold_after_the_upgrade_is_detected():
 
 def test_a_literal_package_list_is_detected():
     task = {"ansible.builtin.apt": {"name": ["docker-ce"], "state": "present"}}
-    assert apt_names(task) != "{{ " + PACKAGES_VAR + " }}"
+    assert apt_names(task) != "{{ " + SPECS_VAR + " }}"
+
+
+def test_a_pin_outside_the_hold_list_is_detected():
+    """docker-ce-rootless-extras pinned and installed, but never held: it floats."""
+    held = {"docker-ce", "containerd.io"}
+    assert pinned_names({"docker-ce": "5:1", "containerd.io": "1"}) == held
+    assert (
+        pinned_names({"docker-ce": "5:1", "docker-ce-rootless-extras": "5:1"}) != held
+    )
 
 
 def test_a_hold_on_another_list_is_detected():

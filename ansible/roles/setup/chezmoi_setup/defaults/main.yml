@@ -1,6 +1,18 @@
 ---
 chezmoi_setup_repo: https://github.com/DanielH2018/dotfiles.git
 
+# The chezmoi release a fresh host installs, the installer script at that same tag, and the
+# script's hash. get.chezmoi.io serves master's copy of the script, and the script installs
+# the newest release unless told which -- two things that moved with no signal, and the
+# script runs as the connecting user. Renovate tracks the version (github-releases,
+# twpayne/chezmoi, no automerge); the sha256 is a MANUAL finish on that PR:
+#   curl -fsSL "https://raw.githubusercontent.com/twpayne/chezmoi/<tag>/assets/scripts/install.sh" | sha256sum
+# A bump here moves nothing on a host that already has the binary (`creates:` on the install
+# task); it decides what the NEXT fresh host gets.
+chezmoi_setup_version: "v2.72.2"
+chezmoi_setup_installer_url: "https://raw.githubusercontent.com/twpayne/chezmoi/{{ chezmoi_setup_version }}/assets/scripts/install.sh"
+chezmoi_setup_installer_sha256: 75de125a45a82b53c16546db7057052e98c11866ded27c4b6f95a51f59432e7b
+
 # Answers to the two promptOnce functions in the dotfiles' .chezmoi.toml.tmpl. Passed on
 # the command line so `chezmoi init` never blocks waiting for a TTY that Ansible has not
 # given it. Recorded into ~/.config/chezmoi/chezmoi.toml on first init and reused after.

@@ -57,7 +57,15 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   during provisioning, then create/secure/format/persist/activate a swap file — disk swap so
   heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
 - **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
-  24.04+) and the Python CLI tooling as uv tools. Also installs the **Vale** binary into
+  24.04+) and the Python CLI tooling as uv tools. **All of it is pinned** (#2148): uv is
+  `initial_setup_uv_version`, fetched as the versioned installer with a sha256 (that script
+  verifies the tarball it downloads, so one hash pins the binary), and the tools are
+  `ansible-core==`, `ansible-lint==`, `prek==` loop items — each equal to a twin elsewhere
+  (pyproject.toml's dev group, prek.toml's rev, ci.yml's `pip install`), which
+  `ansible/tests/repo/test_host_tool_pins_match_their_twins.py` holds. Before the pins, the
+  two hosts ran ansible-core 2.21.0 and 2.21.2 against a 2.21.4 lock. Every install is
+  version-gated, not `creates:`-gated, so a bump actually replaces the tool on the next
+  `--tags tooling` run. Also installs the **Vale** binary into
   `/usr/local/bin`, pinned to the version `.github/workflows/ci.yml` installs — the prek `vale`
   hook is `language = "system"`, so a host without it fails every docs commit with exit 127
   while CI reads green (#1703). Version-gated rather than `creates:`-gated, so a Renovate bump
@@ -95,7 +103,7 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   bridge's reverse unix-socket forward. `local` alone does not work and the reason is not
   guessable: sshd builds the channel layer from `AllowTcpForwarding` alone, so excluding
   `FORWARD_REMOTE` refuses every remote forward — unix-domain included — before
-  `AllowStreamLocalForwarding` is ever read. The comment at `tasks/access.yml:172-196` carries
+  `AllowStreamLocalForwarding` is ever read. The comment above the `Match` block in `tasks/access.yml` carries
   the full derivation and the log line that distinguishes the two refusals.
 
   It is a real widening. It is acceptable because `sys_user` already has a full shell and can

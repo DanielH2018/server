@@ -34,7 +34,12 @@
 - name: Upgrade the held engine packages
   # The hold is released before the containers stop, because the pending check needs it
   # released: it is the apt module's own check mode, whose `changed` is the module's verdict
-  # on whether `state: latest` would install anything. A held package reads as current.
+  # on whether installing the pinned versions would change anything. A held package reads as
+  # current. The pins are docker_install_package_specs (defaults/main.yml, #2153): "pending"
+  # means the host is not at the pin, never "download.docker.com has something newer" -- that
+  # signal is Renovate's PR now. A pin BELOW the installed version fails at the upgrade task
+  # (apt refuses a downgrade without allow_downgrade), which is the right verdict for a pin
+  # nobody meant to lower.
   # `always:` re-holds on every exit, so a no-op run, a failed apt run and a good one all
   # leave the engine held.
   become: true
@@ -45,11 +50,10 @@
         selection: install
       loop: "{{ docker_engine_packages }}"
 
-    - name: Ask apt whether an engine upgrade is pending
+    - name: Ask apt whether the engine is behind its pin
       ansible.builtin.apt:
-        name: "{{ docker_engine_packages }}"
-        state: latest
-        only_upgrade: true
+        name: "{{ docker_install_package_specs }}"
+        state: present
       check_mode: true
       register: docker_install_engine_upgrade_probe
 
@@ -59,7 +63,7 @@
 
     - name: Report an engine that is already current
       ansible.builtin.debug:
-        msg: "Docker engine packages are at their candidate versions; nothing stopped, nothing upgraded."
+        msg: "Docker engine packages are at their pinned versions; nothing stopped, nothing upgraded."
       when: not docker_install_engine_upgrade_pending
 
     - name: Stop every Compose project before the engine moves
@@ -75,11 +79,10 @@
         - docker_install_engine_upgrade_pending
         - has_repo_checkout
 
-    - name: Upgrade the engine packages
+    - name: Upgrade the engine packages to their pins
       ansible.builtin.apt:
-        name: "{{ docker_engine_packages }}"
-        state: latest
-        only_upgrade: true
+        name: "{{ docker_install_package_specs }}"
+        state: present
       when: docker_install_engine_upgrade_pending
   always:
     - name: Hold the engine packages again
