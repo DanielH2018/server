@@ -1,11 +1,12 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: run by block-footguns.sh through `uv run python`
-"""PreToolUse(Bash) guard: seven commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: eight commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
-them worth a hook rather than a paragraph. What they share is that none of them ERRORS: every
-one produces a plausible-looking result that is wrong, so nothing downstream notices.
+them worth a hook rather than a paragraph. What they share is that none of them ERRORS: seven
+produce a plausible-looking result that is wrong, and the eighth succeeds outright while
+bypassing the wrapper the repo requires, so nothing downstream notices either way.
 
   1. `grep -Z` / `grep -z`. This host's grep is ugrep 7.8, where `-Z` is `--fuzzy` (approximate
      matching, not a NUL separator) and `-z` is `--decompress` (not `--null-data`). A
@@ -40,6 +41,13 @@ one produces a plausible-looking result that is wrong, so nothing downstream not
   7. A partial `security_and_analysis` PATCH. GitHub REPLACES the object, so every member left
      out is reset rather than preserved, and the call returns 200 either way. One such PATCH
      disabled Dependabot alerts and enabled nothing.
+
+  8. `gh issue create` by hand. The issue lands, but without the `claude` label, the
+     fingerprint trailer and the title/file dedup that `findings.py open` supplies — so the
+     register's `list`, `next` and re-observation matching never see it, and a second session
+     files the same finding again. CLAUDE.md said "never by hand" and nothing enforced it
+     (#2160). `findings.py` itself calls `gh` from Python, which never reaches this hook, so
+     there is no exemption to write.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
@@ -239,6 +247,26 @@ def security_and_analysis_problem(stage: list[str]) -> str | None:
     )
 
 
+def issue_create_by_hand_problem(stage: list[str]) -> str | None:
+    """`gh issue create` typed directly, bypassing `findings.py open`.
+
+    Matched on the argv (`invokes` tolerates a global flag such as `--repo` before the
+    subcommand), never as a substring, so `gh issue list --search 'gh issue create'` stays
+    clean. `findings.py open` runs `gh` through `subprocess` inside Python, so its own call
+    never reaches a PreToolUse(Bash) hook and needs no exemption here.
+    """
+    words = strip_shell_keywords(stage)
+    if not invokes(words, ("gh", "issue", "create")):
+        return None
+    return (
+        "A hand-filed `gh issue create` lands without the `claude` label, the fingerprint "
+        "trailer and the title/file dedup the register keys on, so `findings.py list`/`next` "
+        "never see it and a later session files the same finding again. File it with "
+        "`uv run python scripts/dev/findings.py open --title '<title>' ...` instead "
+        "(flags: docs/reference/scripts.md)."
+    )
+
+
 _RULES = (
     ugrep_flag_problem,
     bare_stash_problem,
@@ -247,6 +275,7 @@ _RULES = (
     burst_public_hostname_problem,
     pgrep_self_match_problem,
     security_and_analysis_problem,
+    issue_create_by_hand_problem,
 )
 
 
