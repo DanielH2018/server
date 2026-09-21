@@ -18,6 +18,9 @@ from secrets_mgmt.git_dates import (
     advance_last_rotated,
     ciphertext_rotation_dates,
     derived_rotation_dates,
+    historical_names,
+    revived_departures,
+    undeclared_departures,
 )
 
 
@@ -211,6 +214,56 @@ def test_derivation_failure_degrades_to_recorded_dates():
     the monitor down would be a worse outage than the drift it corrects."""
     tools = build_tools(Fakes(git_error=subprocess.CalledProcessError(128, "git")))[0]
     assert derived_rotation_dates(tools) == {}
+
+
+# --- departed names: the tables RENAMED_FROM and RETIRED must cover -------------------------
+
+_RENAMED = {"new_tok": "old_tok"}
+_RETIRED = frozenset({"dead_tok"})
+
+
+def test_historical_names_unions_every_revision():
+    """A key dropped early and one added late are both history; neither is at HEAD alone."""
+    tools = _history_tools(
+        [
+            ("c", "2026-08-01", {"late_tok": "ENC[c]"}),
+            ("b", "2026-05-01", {"mid_tok": "ENC[b]"}),
+            ("a", "2026-01-01", {"early_tok": "ENC[a]", "mid_tok": "ENC[a]"}),
+        ]
+    )
+    assert historical_names(tools) == {"early_tok", "mid_tok", "late_tok"}
+
+
+def test_a_departure_both_tables_explain_is_clean():
+    history = {"old_tok", "dead_tok", "live_tok"}
+    current = {"new_tok", "live_tok"}
+    assert (
+        undeclared_departures(history, current, renamed_from=_RENAMED, retired=_RETIRED)
+        == set()
+    )
+
+
+def test_a_rename_without_a_renamed_from_entry_is_flagged():
+    """The issue's red proof: a key renamed with no table entry is a silent clock reset."""
+    history = {"old_tok", "live_tok"}
+    current = {"new_tok", "live_tok"}
+    assert undeclared_departures(
+        history, current, renamed_from={}, retired=_RETIRED
+    ) == {"old_tok"}
+
+
+def test_a_store_holding_no_listed_departure_is_clean():
+    current = {"new_tok", "live_tok"}
+    assert revived_departures(current, renamed_from=_RENAMED, retired=_RETIRED) == set()
+
+
+def test_a_revived_listed_departure_is_flagged():
+    """A `RENAMED_FROM` source back in the store turns the live key into a rename boundary."""
+    current = {"old_tok", "new_tok", "dead_tok"}
+    assert revived_departures(current, renamed_from=_RENAMED, retired=_RETIRED) == {
+        "old_tok",
+        "dead_tok",
+    }
 
 
 # --- the fake's failure shape ----------------------------------------------------------------
