@@ -190,14 +190,6 @@ _MIN_SELF_POD_INSPECTIONS = 24
 # with the reason. An entry here is NOT "assume it is fine" — it is a claim that the ordering
 # is carried by something else in the same role, written down where the next reader meets it.
 _UNRESOLVED_TARGETS = {
-    # Reads the OTHER instance's pod, and must run BEFORE this instance restarts — restarting
-    # with no ready sibling is a LAN-wide DNS outage. Requiring a gate ahead of it would invert
-    # the sequence the second Pi-hole exists to provide. The instance is chosen by a set_fact
-    # conditional, which no static read of the command resolves.
-    (
-        "pihole",
-        "Verify the sibling instance is ready before restarting {{ pihole_instance }}",
-    ): "gating this would invert the sibling-first ordering it exists to enforce",
     # `pihole_pod_by_instance[item]` is a runtime map from instance name to pod name, built from
     # the register of "Find the pod backing each Pi-hole instance". That lookup IS resolved and
     # IS gated, and it precedes both of these, so the ordering these two need is already proven.

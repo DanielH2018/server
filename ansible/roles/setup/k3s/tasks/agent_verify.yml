@@ -37,6 +37,17 @@
 # lever is the node CR itself. Through the join window (k3s_agent_longhorn_scheduling:
 # false) this pair disables scheduling declaratively and proves no replica landed; the
 # §F replica raise flips the var, after which the same patch asserts participation.
+# The Longhorn node CR appears asynchronously after longhorn-manager starts; patching it
+# before then is a NotFound. `--for=create` returns the moment the CR exists.
+- name: Wait for the node's Longhorn node CR to exist
+  tags: [k3s_agent]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n longhorn-system wait --for=create nodes.longhorn.io/{{ k3s_join_node }}
+      --timeout=120s
+  become: true
+  changed_when: false
+
 - name: Enforce the node's Longhorn scheduling participation
   tags: [k3s_agent]
   ansible.builtin.command:
@@ -48,10 +59,6 @@
   become: true
   register: k3s_join_longhorn_sched
   changed_when: "'no change' not in k3s_join_longhorn_sched.stdout"
-  retries: 12
-  delay: 10
-  # The Longhorn node CR appears asynchronously after longhorn-manager starts.
-  until: k3s_join_longhorn_sched.rc == 0
 
 - name: Verify no Longhorn replica sits on the new node
   tags: [k3s_agent]

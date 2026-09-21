@@ -67,12 +67,27 @@
 # shared selector picks — never guaranteed to be the one named by `item`. Resolve the actual
 # pod by the pod-only `instance` label first and exec that pod name explicitly.
 #
-# No `[0]` index in the jsonpath: on zero matches (pod still Pending, crashlooping, or the
-# instance was just created) `.items[0]...` makes kubectl error with "array index out of
-# bounds" and rc != 0, failing every deploy that catches an instance mid-start. `.items[*]...`
-# on an empty list just returns an empty string with rc 0, so retry/until can wait out a slow
-# start instead. It must still fail loudly if an instance genuinely never produces a pod —
-# that's what failed_when is for once retries are exhausted.
+# An instance caught mid-start (pod still Pending, crashlooping, or the Deployment just
+# created — roll_one.yml skips its rollout wait on that run) has no Running pod yet, so wait
+# for one to exist AND turn Ready before reading its name: `--for=create` is what makes an
+# unmatched selector wait rather than fail on the spot with "no matching resources found".
+# Two `--for` flags print the name once per condition under `-o`, so the read is separate.
+- name: Wait for a Ready pod behind each Pi-hole instance
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} wait pod -l instance={{ item }}
+      --field-selector=status.phase=Running
+      --for=create --for=condition=Ready --timeout=300s
+  become: true
+  changed_when: false
+  loop:
+    - pihole
+    - pihole-2
+
+# No `[0]` index in the jsonpath: `.items[0]...` on zero matches makes kubectl error with
+# "array index out of bounds" rather than an empty string, and the wait above already proved a
+# match exists. failed_when keeps the loud failure if the read still comes back empty.
 - name: Find the pod backing each Pi-hole instance
   tags: [deploy]
   ansible.builtin.command:
@@ -83,9 +98,6 @@
   become: true
   register: pihole_pods
   changed_when: false
-  retries: 30
-  delay: 10
-  until: pihole_pods.stdout | trim != ''
   failed_when: pihole_pods.stdout | trim == ''
   loop:
     - pihole
@@ -173,21 +185,21 @@
   when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
   failed_when: (pihole_dns_ready_endpoints.stdout.split() | length) < 2
 
+# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
+# once the condition holds — one watch instead of a 12x5s sampling loop.
 - name: Read the pihole-dns LoadBalancer address
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get svc pihole-dns
+      k3s kubectl -n {{ k8s_namespace }} wait svc/pihole-dns
+      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
       -o jsonpath={.status.loadBalancer.ingress[0].ip}
   register: pihole_k8s_lb_ip
   become: true
   changed_when: false
-  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
-  # never match, and the run dies after 12 retries taking the assertion below with it.
+  # Only reads, so let it run under --check too — otherwise stdout is empty and the assertion
+  # below dies with it.
   check_mode: false
-  retries: 12
-  delay: 5
-  until: pihole_k8s_lb_ip.stdout | length > 0
 
 # MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
 # it does not recognise — so a wrong prefix is silent: the Service comes up on an

@@ -34,9 +34,13 @@
       - kubectl
       - -n
       - "{{ k8s_namespace }}"
-      - get
-      - pvc
-      - "{{ jellyfin_k8s_claim }}"
+      - wait
+      - pvc/{{ jellyfin_k8s_claim }}
+      # A Pending PVC has an empty volumeName. Immediate binding makes that a transient state
+      # on a first-ever deploy, so wait for Bound rather than sample it; `-o` prints the name
+      # once the condition holds.
+      - --for=jsonpath={.status.phase}=Bound
+      - --timeout=30s
       - -o
       - 'jsonpath={.spec.volumeName}'
   become: true
@@ -45,11 +49,6 @@
   # and a task that reports "skipped" here would leave the assert reading an empty register.
   check_mode: false
   register: jellyfin_k8s_volume
-  # A Pending PVC returns rc 0 and an empty volumeName. Immediate binding makes that a
-  # transient state on a first-ever deploy, not a permanent one, so retry rather than fail.
-  retries: 10
-  delay: 3
-  until: jellyfin_k8s_volume.stdout | default('') | trim | length > 0
 
 - name: Read the current snapshot-space cap on the jellyfin volume
   tags: [deploy]
@@ -114,21 +113,21 @@
       - service-lan.yaml
       - ingressroute.yaml
 
+# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
+# once the condition holds — one watch instead of a 12x5s sampling loop.
 - name: Read the jellyfin-lan LoadBalancer address
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get svc jellyfin-lan
+      k3s kubectl -n {{ k8s_namespace }} wait svc/jellyfin-lan
+      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
       -o jsonpath={.status.loadBalancer.ingress[0].ip}
   register: jellyfin_k8s_lb_ip
   become: true
   changed_when: false
-  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
-  # never match, and the run dies after 12 retries taking the assertion below with it.
+  # Only reads, so let it run under --check too — otherwise stdout is empty and the assertion
+  # below dies with it.
   check_mode: false
-  retries: 12
-  delay: 5
-  until: jellyfin_k8s_lb_ip.stdout | length > 0
 
 # MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
 # it does not recognise — so a wrong prefix is silent: the Service comes up on an

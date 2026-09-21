@@ -70,22 +70,22 @@
          + (['crowdsec-secret.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
          + (['livesync-gate-secret.yaml'] if traefik_k8s_manage_livesync_gate | bool else []) }}
 
+# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
+# once the condition holds — one watch instead of a 12x5s sampling loop.
 - name: Read the address MetalLB assigned to the Traefik Service
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get svc traefik
+      k3s kubectl -n {{ k8s_namespace }} wait svc/traefik
+      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
       -o jsonpath={.status.loadBalancer.ingress[0].ip}
   register: traefik_k8s_lb_ip
   become: true
   changed_when: false
   # Runs under --check too: this only reads. Without it the command is skipped, stdout is
-  # empty, `until` can never match, and the run dies after 12 pointless retries — taking the
-  # VIP assertion below with it, which is the one thing --check could usefully have checked.
+  # empty, and the VIP assertion below dies with it — the one thing --check could usefully
+  # have checked.
   check_mode: false
-  retries: 12
-  delay: 5
-  until: traefik_k8s_lb_ip.stdout | length > 0
 
 - name: Fail if Traefik did not get the reserved ingress VIP
   tags: [deploy]

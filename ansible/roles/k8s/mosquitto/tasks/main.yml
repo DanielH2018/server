@@ -11,21 +11,21 @@
     manifests_secret_files:
       - config-secret.yaml
 
+# `wait` returns the moment MetalLB writes the address, and `-o jsonpath` prints that field
+# once the condition holds — one watch instead of a 12x5s sampling loop.
 - name: Read the mosquitto-lan LoadBalancer address
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} get svc mosquitto-lan
+      k3s kubectl -n {{ k8s_namespace }} wait svc/mosquitto-lan
+      --for=jsonpath={.status.loadBalancer.ingress[0].ip} --timeout=60s
       -o jsonpath={.status.loadBalancer.ingress[0].ip}
   register: mosquitto_k8s_lb_ip
   become: true
   changed_when: false
-  # Only reads, so let it run under --check too — otherwise stdout is empty, `until` can
-  # never match, and the run dies after 12 retries taking the assertion below with it.
+  # Only reads, so let it run under --check too — otherwise stdout is empty and the assertion
+  # below dies with it.
   check_mode: false
-  retries: 12
-  delay: 5
-  until: mosquitto_k8s_lb_ip.stdout | length > 0
 
 # MetalLB reads a request annotation rather than a spec field, and it ignores annotation keys
 # it does not recognise — so a wrong prefix is silent: the Service comes up on an
