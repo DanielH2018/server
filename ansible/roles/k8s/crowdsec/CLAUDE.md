@@ -21,6 +21,36 @@ applying the manifests. See repo-root `CLAUDE.md` for shared conventions.
 - **`use_authelia: false`** — bouncers authenticate with their own API keys.
 - **`crowdsec-db` is on the no-backup tier**: decisions expire and re-derive from logs.
 
+## The two operator allowlists, and how to unban yourself
+
+Both are LAPI allowlists (`cscli allowlists`), fed by root crons on daniel-box every 5 min.
+An allowlisted address raises no decision, local or CAPI.
+
+- **`home-ips`** — `crowdsec-update-home-allowlist.sh` looks up the home public IPv4 and
+  IPv6 /64 via ipify. Covers browsing from home.
+- **`remote-ips`** — `crowdsec-update-remote-allowlist.sh` runs
+  `files/remote_allowlist.py`, which reads Traefik's access log for a 2xx on a router that
+  carries the `authelia` middleware and keeps that client address for 7 days, refreshed on
+  use, capped at 8 entries. Covers a VPN exit or a phone, which the server cannot look up
+  and which self-banned the operator on 2026-08-09, 2026-09-19 and 2026-09-21 (#2123). The
+  module docstring is the design: why the signal is the access log and not an Authelia
+  login, why router names are derived from the IngressRoutes rather than listed, and what
+  bounds the trade-off that a shared exit is exempted for everyone on it.
+  `crowdsec-trusted-remote-whitelist.yaml` (a parser whitelist, pinned /32s) predates it and
+  is kept as the fallback; with the cron live its entries are redundant, not wrong.
+
+To see what is exempt: `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli
+allowlists inspect remote-ips`. To withdraw one: `… cscli allowlists remove remote-ips <ip>`.
+
+Neither list lifts a ban already in force, and the remote cron cannot see a banned address at
+all — a 403 is not a 2xx — so the first burst from a brand-new exit still bans it for up to
+the cron period before the entry lands. To lift a ban by hand (a Claude session cannot; the
+read-only ServiceAccount is refused `pods/exec`):
+
+```bash
+sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions delete --ip <ip>
+```
+
 ## Traps
 
 ### A crowdsec deploy races its own rollout
