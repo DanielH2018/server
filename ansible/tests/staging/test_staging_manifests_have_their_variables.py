@@ -32,15 +32,12 @@ from validate.k8s_manifests import (
     ANSIBLE,
     BASE_CONTEXT,
     K8S_ROLES,
-    SHARED_TPL,
     load_yaml,
-    make_env,
-    make_lookup,
     register_ansible_filters,
-    render_or_error,
-    resolve_vars,
     role_defaults,
 )
+
+from _k8s_render import host_context, render_role_template
 
 _HOST = "daniel-stage"
 _SENTINEL = "UNSUPPLIED-ON-STAGING"
@@ -80,13 +77,7 @@ def _staging_secret_keys() -> set[str]:
 
 
 def _base_context() -> dict:
-    base = {
-        **BASE_CONTEXT,
-        **load_yaml(ALL_VARS),
-        **load_yaml(_HOST_VARS),
-        "playbook_dir": str(ANSIBLE),
-    }
-    return resolve_vars(base, base)
+    return host_context(_HOST)
 
 
 def _supplied_by_the_inventory(role: str) -> set[str]:
@@ -121,21 +112,7 @@ def _staging_roles() -> list[str]:
 
 
 def _render(role: str, template: str, extra: dict) -> str:
-    base = _base_context()
-    entry = next(c for c in base["containers_list"] if c["name"] == role)
-    # Role defaults FIRST: Ansible ranks host_vars above them, and a staging host exists to
-    # override them. validate.k8s_manifests' own order is the other way round; that is now held
-    # harmless by `colliding_default_keys`, which fails the validator if any role default ever
-    # shares a key with the inventory, rather than by nobody having done it yet.
-    ctx = {**role_defaults(role, base), **base, **extra, "container_item": entry}
-    env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"{role}/{template} failed to render for {_HOST}: {err}"
-    )
-    return rendered
+    return render_role_template(role, template, extra, host=_HOST)
 
 
 def _deployed_templates(role: str) -> list[str]:

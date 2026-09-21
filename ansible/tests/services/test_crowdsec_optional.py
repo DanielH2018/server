@@ -27,20 +27,13 @@ import pytest
 from lib import yaml_fast
 
 from validate.k8s_manifests import (
-    ALL_VARS,
     ANSIBLE,
-    BASE_CONTEXT,
     K8S_ROLES,
-    SHARED_TPL,
-    k8s_entries,
     load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
     role_defaults,
 )
+
+from _k8s_render import host_context, render_role_template
 
 _FLAGS = {
     "traefik": "traefik_k8s_manage_crowdsec",
@@ -49,23 +42,7 @@ _FLAGS = {
 
 
 def _render(role: str, template: str, **overrides) -> str:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    role_dir = K8S_ROLES / role
-    ctx = {
-        **base,
-        **role_defaults(role, base),
-        "container_item": k8s_entries()[role],
-        **overrides,
-    }
-    env = make_env([role_dir / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"{role}/{template} failed to render with {overrides}: {err}"
-    )
-    return rendered
+    return render_role_template(role, template, overrides)
 
 
 def _docs(role: str, template: str, manage: bool) -> list[dict]:
@@ -370,30 +347,8 @@ def test_prod_manages_crowdsec(role: str) -> None:
 # Detection here is on RENDERED output, under each host's own variables.
 
 
-def _host_context(host: str) -> dict:
-    host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
-    base["playbook_dir"] = str(ANSIBLE)
-    base = resolve_vars(base, base)
-    # Role defaults FIRST: Ansible ranks host_vars above them, which is the whole point —
-    # a host's flag must beat the role's default.
-    return {
-        **role_defaults("traefik", base),
-        **base,
-        "container_item": {"name": "traefik"},
-    }
-
-
 def _host_render(host: str, template: str) -> str:
-    ctx = _host_context(host)
-    env = make_env([K8S_ROLES / "traefik" / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"traefik/{template} failed to render for {host}: {err}"
-    )
-    return rendered
+    return render_role_template("traefik", template, host=host)
 
 
 def _hosts_running_traefik() -> list[str]:
@@ -452,7 +407,7 @@ def public_edge_problem(public: bool, bouncer: bool) -> str:
 
 @pytest.mark.parametrize("host", _hosts_running_traefik())
 def test_the_public_route_and_the_bouncer_move_together(host: str) -> None:
-    ctx = _host_context(host)
+    ctx = host_context(host)
     problem = public_edge_problem(bool(ctx["k8s_public_route"]), has_bouncer(host))
     assert not problem, f"{host}: {problem}"
 

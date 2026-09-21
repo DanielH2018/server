@@ -9,6 +9,7 @@ what a test considers a manifest cannot drift from what that validator does.
 """
 
 from lib import yaml_fast
+from lib.repo_paths import HOST_VARS as HOST_VARS_DIR
 from validate.k8s_manifests import (
     ALL_VARS,
     ANSIBLE,
@@ -103,3 +104,56 @@ def rendered_texts():
     """
     rendered_docs()
     return iter(tuple(_TEXTS))
+
+
+def host_context(host: str = "daniel-box") -> dict:
+    """The resolved inventory a render for `host` starts from: base context, all.yml, host_vars.
+
+    The same layering `_render_all` builds for daniel-box, with the host a parameter so a
+    staging guard can render against `daniel-stage.yml`. Not cached: a caller lays role
+    defaults and overrides on top, and `resolve_vars` is cheap next to the render itself.
+    """
+    base = {
+        **BASE_CONTEXT,
+        **load_yaml(ALL_VARS),
+        **load_yaml(HOST_VARS_DIR / f"{host}.yml"),
+        "playbook_dir": str(ANSIBLE),
+    }
+    return resolve_vars(base, base)
+
+
+def render_role_template(
+    role: str, template: str, overrides: dict | None = None, *, host: str = "daniel-box"
+) -> str:
+    """One role's template rendered as text, with `overrides` laid over the role's context.
+
+    `overrides` is a dict rather than `**kwargs` because a caller may need to override a
+    variable named `host` — the staging variables guard hands every unsupplied name in.
+
+    For a guard that flips one variable — a `manage_*` flag, `k8s_built_images` — and asserts
+    on what changes. `rendered_docs()` is the whole tree at inventory values; this is one
+    template at values the inventory does not hold, so it is not cached and each call renders.
+
+    # DECIDED: role defaults go under the inventory here, which is Ansible's own precedence
+    # and the reverse of `_render_all`'s. `_render_all` copies the validator, which puts the
+    # defaults on top and holds that harmless with `colliding_default_keys` — but that guard
+    # runs against daniel-box only, and daniel-stage overrides `traefik_k8s_manage_crowdsec`
+    # on purpose, so a staging render with defaults on top would render the value the deploy
+    # never uses. For daniel-box the guard makes the two orders render the same text.
+    """
+    base = host_context(host)
+    entry = next(c for c in base["containers_list"] if c["name"] == role)
+    ctx = {
+        **role_defaults(role, base),
+        **base,
+        "container_item": entry,
+        **(overrides or {}),
+    }
+    env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
+    env.globals["lookup"] = make_lookup(ctx)
+    register_ansible_filters(env)
+    rendered, err = render_or_error(env, template, ctx)
+    assert rendered is not None, (
+        f"{role}/{template} failed to render for {host} with {overrides}: {err}"
+    )
+    return rendered

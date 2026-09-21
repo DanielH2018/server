@@ -15,14 +15,13 @@ Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_grace_cron
 """
 
 import subprocess
-import sys
-import time
 
 from _longhorn_reader_stubs import (
-    READER,
+    NOW,
     _grace_pair_stub_kubectl,
     _reader_env,
     _rfc3339,
+    reader_argv,
 )
 
 
@@ -35,7 +34,7 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
     check_tier() already treats as "no grace" — `pvc-new`, created moments ago, is paged as
     uncovered instead of silently excused, and the reader still completes and emits a verdict.
     """
-    now = time.time()
+    now = NOW
     old_ts = _rfc3339(now - 3600)
     new_ts = _rfc3339(now - 30)
     stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
@@ -52,7 +51,7 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
     )
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(now=NOW),
         capture_output=True,
         text=True,
         env=env,
@@ -65,7 +64,7 @@ def test_malformed_cron_pages_the_new_volume_instead_of_gracing_it(tmp_path):
 
 def test_well_formed_cron_graces_the_new_volume(tmp_path):
     """CLEAN half of the malformed-cron pair: a well-formed value grants the new-volume grace."""
-    now = time.time()
+    now = NOW
     old_ts = _rfc3339(now - 3600)
     new_ts = _rfc3339(now - 30)
     stub = _grace_pair_stub_kubectl(tmp_path, created_ts=new_ts, old_backup_ts=old_ts)
@@ -82,7 +81,7 @@ def test_well_formed_cron_graces_the_new_volume(tmp_path):
     )
 
     proc = subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(now=NOW),
         capture_output=True,
         text=True,
         env=env,

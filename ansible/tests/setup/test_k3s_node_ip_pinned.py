@@ -22,40 +22,19 @@ Run: uv run pytest ansible/tests/setup/test_k3s_node_ip_pinned.py
 """
 
 import re
-from pathlib import Path
 
-from lib import yaml_fast
 
-from _helpers import SETUP_ROLES, leaf_tasks
-from _helpers import load_defaults
+from _helpers import SETUP_ROLES, imported_task_files, imported_tasks, load_defaults
 
 K3S = SETUP_ROLES / "k3s"
 
 
-# main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —
-# otherwise these assertions pass vacuously against a file holding nothing but imports.
-# Both helpers below expand the SAME set, in import order: globbing tasks/*.yml instead
-# would also pull in agent.yml/agent_verify.yml, which main.yml does not import and which
-# the server-side assertions here are not about.
-def _imported_files() -> list[Path]:
-    tasks_dir = K3S / "tasks"
-    return [
-        tasks_dir / entry["ansible.builtin.import_tasks"]
-        for entry in yaml_fast.safe_load((tasks_dir / "main.yml").read_text()) or []
-        if entry.get("ansible.builtin.import_tasks")
-    ]
-
-
 def _task_text() -> str:
-    return "\n".join(p.read_text() for p in _imported_files())
+    return "\n".join(p.read_text() for p in imported_task_files(K3S))
 
 
 def _tasks() -> list[dict]:
-    tasks: list[dict] = []
-    for path in _imported_files():
-        loaded = yaml_fast.safe_load(path.read_text()) or []
-        tasks += leaf_tasks(loaded)
-    return tasks
+    return imported_tasks(K3S)
 
 
 def _install_task() -> dict:
