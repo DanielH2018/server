@@ -45,12 +45,13 @@
 
 # The pod-roll trigger must cover BOTH staged modules, not just stats.py — the manifests
 # role only restarts on manifest changes, and neither script is one. An edit confined to
-# stats_lib.py would deploy, read green, and change nothing live otherwise.
+# stats_lib.py would deploy, read green, and change nothing live otherwise. Sorted before
+# hashing so the trigger is a function of the pair, not of which is written first.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
     terraria_stats_script_checksum: >-
-      {{ [terraria_stats_script.checksum, game_stats_lib_stage.checksum] | join(',') | hash('sha1') }}
+      {{ [terraria_stats_script.checksum, game_stats_lib_stage.checksum] | sort | join(',') | hash('sha1') }}
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so
 # it becomes a ConfigMap via kubectl --from-file, never via a template — the same

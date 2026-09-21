@@ -114,6 +114,19 @@ def normalize(obj):
             normalize(v)
 
 
+def dump(d):
+    """The one serialisation every committed dashboard is written in.
+
+    `sort_keys` because Grafana's own export order is not stable across upgrades, and a
+    hand-imported board arrives in whatever order its author saved it in; a key reorder
+    on an unchanged dashboard is exactly the spurious diff the drift check must not see.
+    `ensure_ascii=False` keeps a hand-authored description's em-dash as the character the
+    author typed, so a re-export leaves it byte-identical. `fetch_grafana_dashboards.py`
+    and the committed files under OUTDIR use this same call (#2157).
+    """
+    return json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False) + "\n"
+
+
 def main():
     """Export every non-skipped live dashboard to a normalized JSON file under OUTDIR."""
     index = gapi("/api/search?type=dash-db")
@@ -135,8 +148,8 @@ def main():
         dest_dir = os.path.join(OUTDIR, subdir)
         os.makedirs(dest_dir, exist_ok=True)
         dest = os.path.join(dest_dir, name + ".json")
-        with open(dest, "w") as fh:
-            fh.write(json.dumps(d, indent=2) + "\n")
+        with open(dest, "w", encoding="utf-8") as fh:
+            fh.write(dump(d))
         rel = os.path.relpath(dest, OUTDIR)
         print("%-38s %-30s -> %s" % (uid, title, rel))
         untracked.append(uid)

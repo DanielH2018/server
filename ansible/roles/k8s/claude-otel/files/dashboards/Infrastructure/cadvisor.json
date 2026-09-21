@@ -12,6 +12,7 @@
       }
     ]
   },
+  "description": "Simple exporter for cadvisor only",
   "editable": true,
   "gnetId": 14282,
   "graphTooltip": 0,
@@ -38,18 +39,18 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
             "pointSize": 5,
+            "showPoints": "never",
             "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
             "stacking": {
-              "mode": "normal",
-              "group": "A"
+              "group": "A",
+              "mode": "normal"
             }
           },
           "unit": "percent"
@@ -63,6 +64,21 @@
         "y": 1
       },
       "id": 15,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "expr": "sum(rate(container_cpu_usage_seconds_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name) *100",
@@ -75,22 +91,7 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "CPU Usage",
-      "type": "timeseries",
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      }
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -111,18 +112,18 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
             "pointSize": 5,
+            "showPoints": "never",
             "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
             "stacking": {
-              "mode": "normal",
-              "group": "A"
+              "group": "A",
+              "mode": "normal"
             }
           },
           "unit": "bytes"
@@ -136,6 +137,21 @@
         "y": 9
       },
       "id": 9,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "expr": "sum(container_memory_rss{instance=~\"$host\",name=~\"$container\",name=~\".+\"}) by (name)",
@@ -148,40 +164,25 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Memory Usage",
-      "type": "timeseries",
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      }
+      "type": "timeseries"
     },
     {
       "datasource": "EGdsQqhVk",
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
             "pointSize": 5,
+            "showPoints": "never",
             "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
             "stacking": {
-              "mode": "normal",
-              "group": "A"
+              "group": "A",
+              "mode": "normal"
             }
           },
           "unit": "bytes"
@@ -195,6 +196,21 @@
         "y": 9
       },
       "id": 14,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "expr": "sum(container_memory_cache{instance=~\"$host\",name=~\"$container\",name=~\".+\"}) by (name)",
@@ -207,22 +223,7 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Memory Cached",
-      "type": "timeseries",
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      }
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -243,18 +244,18 @@
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
             "pointSize": 5,
+            "showPoints": "never",
             "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
             "stacking": {
-              "mode": "none",
-              "group": "A"
+              "group": "A",
+              "mode": "none"
             }
           },
           "unit": "Bps"
@@ -268,6 +269,21 @@
         "y": 18
       },
       "id": 4,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "expr": "sum(rate(container_network_receive_bytes_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name)",
@@ -280,40 +296,25 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Received Network Traffic",
-      "type": "timeseries",
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      }
+      "type": "timeseries"
     },
     {
       "datasource": "EGdsQqhVk",
       "fieldConfig": {
         "defaults": {
           "custom": {
+            "axisLabel": "",
+            "axisPlacement": "auto",
             "drawStyle": "line",
+            "fillOpacity": 10,
             "lineInterpolation": "linear",
             "lineWidth": 1,
-            "fillOpacity": 10,
-            "showPoints": "never",
             "pointSize": 5,
+            "showPoints": "never",
             "spanNulls": false,
-            "axisPlacement": "auto",
-            "axisLabel": "",
             "stacking": {
-              "mode": "none",
-              "group": "A"
+              "group": "A",
+              "mode": "none"
             }
           },
           "unit": "Bps"
@@ -327,6 +328,21 @@
         "y": 18
       },
       "id": 6,
+      "options": {
+        "legend": {
+          "calcs": [
+            "mean",
+            "max"
+          ],
+          "displayMode": "table",
+          "placement": "right",
+          "showLegend": true
+        },
+        "tooltip": {
+          "mode": "multi",
+          "sort": "none"
+        }
+      },
       "targets": [
         {
           "expr": "sum(rate(container_network_transmit_bytes_total{instance=~\"$host\",name=~\"$container\",name=~\".+\"}[5m])) by (name)",
@@ -338,22 +354,7 @@
       "timeFrom": null,
       "timeShift": null,
       "title": "Sent Network Traffic",
-      "type": "timeseries",
-      "options": {
-        "legend": {
-          "displayMode": "table",
-          "placement": "right",
-          "showLegend": true,
-          "calcs": [
-            "mean",
-            "max"
-          ]
-        },
-        "tooltip": {
-          "mode": "multi",
-          "sort": "none"
-        }
-      }
+      "type": "timeseries"
     },
     {
       "collapsed": false,
@@ -590,6 +591,5 @@
   "timezone": "",
   "title": "Cadvisor exporter",
   "uid": "pMEd7m0Mz",
-  "version": 1,
-  "description": "Simple exporter for cadvisor only"
+  "version": 1
 }

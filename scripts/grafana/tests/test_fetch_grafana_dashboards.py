@@ -78,3 +78,16 @@ def test_prom_series_yields_no_series_when_prometheus_cannot_be_reached():
         fetch_json=lambda url, resolve=None: (None, 1),
     )
     assert result == []
+
+
+def test_adapt_writes_the_same_form_as_the_exporter():
+    """One serialisation for both writers, so neither churns the other's files: keys sorted at
+    every depth, non-ASCII left literal (export_grafana_dashboards.dump is the reference)."""
+    s, _ = fg.adapt(
+        "none",
+        {"uid": "x", "templating": {"list": []}, "panels": [{"title": "é", "id": 1}]},
+    )
+    assert s == (
+        '{\n  "id": null,\n  "panels": [\n    {\n      "id": 1,\n      "title": "é"\n    }\n  ],\n'
+        '  "templating": {\n    "list": []\n  },\n  "uid": "x"\n}'
+    )

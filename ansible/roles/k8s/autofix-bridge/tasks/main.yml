@@ -44,13 +44,14 @@
 
 # The pod-roll trigger must cover EVERY module, not just autofix.py — see monitor-bridge's
 # identically-named task for why: a ConfigMap update alone does not restart a Deployment, so an
-# edit confined to bridge/common.py would deploy, read green, and change nothing live.
+# edit confined to bridge/common.py would deploy, read green, and change nothing live. Sorted
+# before hashing for the same reason as there: the module set, not the list order, rolls the pod.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
     autofix_bridge_script_checksum: >-
       {{ autofix_bridge_script.results | default([]) | map(attribute='checksum', default='')
-         | join(',') | hash('sha1') }}
+         | sort | join(',') | hash('sha1') }}
 
 # One --from-file per module rather than --from-file=<dir>, for the same reason as
 # monitor-bridge: the staging directory also holds the rendered configmap.yaml below.

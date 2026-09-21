@@ -32,7 +32,7 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "How many cycles each check spent DOWN over the dashboard's time range. A cycle is one evaluation (~5 min for monitor-bridge, the cron's own period for a host cron), so this is firing *duration*, not distinct incidents. Two queries because two alert paths exist: A reads monitor-bridge's container log, B reads the host crons that push Kuma directly and log through `logger` \u2014 monitor-bridge polls no Kuma state, so its log carries nothing about them.",
+      "description": "How many cycles each check spent DOWN over the dashboard's time range. A cycle is one evaluation (~5 min for monitor-bridge, the cron's own period for a host cron), so this is firing *duration*, not distinct incidents. Two queries because two alert paths exist: A reads monitor-bridge's container log, B reads the host crons that push Kuma directly and log through `logger` — monitor-bridge polls no Kuma state, so its log carries nothing about them.",
       "fieldConfig": {
         "defaults": {
           "color": {
@@ -115,7 +115,7 @@
         "type": "loki",
         "uid": "bf4q19tuivta8e"
       },
-      "description": "Stacked per-check DOWN cycles over time \u2014 shows when alerts fired and which checks clustered together (a shared spike usually means one root cause, e.g. a host reboot). A covers monitor-bridge's checks, B the host crons that push Kuma directly.",
+      "description": "Stacked per-check DOWN cycles over time — shows when alerts fired and which checks clustered together (a shared spike usually means one root cause, e.g. a host reboot). A covers monitor-bridge's checks, B the host crons that push Kuma directly.",
       "fieldConfig": {
         "defaults": {
           "color": {

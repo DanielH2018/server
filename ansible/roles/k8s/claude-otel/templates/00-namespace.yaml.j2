@@ -11,7 +11,7 @@ metadata:
   # why nothing is enforced here. Four workloads in this namespace publish a loopback
   # hostPort, so `enforce: baseline` would refuse loki, tempo, prometheus and the collector.
   labels:
-{% for key, value in k8s_psa_labels.items() %}
+{% for key, value in k8s_psa_labels | dictsort %}
     {{ key }}: {{ value }}
 {% endfor %}
 {% endif %}
@@ -31,11 +31,11 @@ spec:
   limits:
     - type: Container
       defaultRequest:
-{% for key, value in k8s_default_limitrange.defaultRequest.items() %}
+{% for key, value in k8s_default_limitrange.defaultRequest | dictsort %}
         {{ key }}: {{ value }}
 {% endfor %}
       default:
-{% for key, value in k8s_default_limitrange.default.items() %}
+{% for key, value in k8s_default_limitrange.default | dictsort %}
         {{ key }}: {{ value }}
 {% endfor %}
 {% endif %}

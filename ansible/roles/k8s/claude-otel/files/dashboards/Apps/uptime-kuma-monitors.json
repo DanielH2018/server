@@ -221,7 +221,7 @@
           "refId": "A"
         }
       ],
-      "title": "TLS Cert \u2014 Days Remaining",
+      "title": "TLS Cert — Days Remaining",
       "type": "bargauge"
     }
   ],
@@ -237,7 +237,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Uptime-Kuma \u2014 Monitors",
+  "title": "Uptime-Kuma — Monitors",
   "uid": "homelab-uptime-kuma",
   "version": 1
 }

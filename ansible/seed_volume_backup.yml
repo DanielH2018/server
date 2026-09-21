@@ -87,7 +87,7 @@
         seed_robustness: "{{ (seed_volume.stdout | from_json).status.robustness | default('unknown') }}"
         seed_group: >-
           {{ ((seed_volume.stdout | from_json).metadata.labels | default({}))
-             | dict2items
+             | dict2items | sort(attribute='key')
              | selectattr('key', 'search', '^recurring-job-group.longhorn.io/')
              | map(attribute='key') | map('regex_replace', '^.*/', '') | list | first | default('') }}
 

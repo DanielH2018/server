@@ -96,7 +96,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Estimated only \u2014 on a subscription plan this is not real spend.",
+      "description": "Estimated only — on a subscription plan this is not real spend.",
       "fieldConfig": {
         "defaults": {
           "decimals": 2,
@@ -336,7 +336,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Estimated only \u2014 on a subscription plan this is not real spend. Edit accept/reject shows as tool_decision events in the Recent events panel below (Claude Code only emits the code_edit_tool.decision metric for interactive diff decisions, not auto-accepted edits).",
+      "description": "Estimated only — on a subscription plan this is not real spend. Edit accept/reject shows as tool_decision events in the Recent events panel below (Claude Code only emits the code_edit_tool.decision metric for interactive diff decisions, not auto-accepted edits).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -385,7 +385,7 @@
         "type": "tempo",
         "uid": "tempo"
       },
-      "description": "One trace per turn: claude_code.interaction, with llm_request and tool spans beneath it. Click a row for the flame graph \u2014 the only view that separates time spent waiting on a permission prompt (tool.blocked_on_user) from time spent running the tool.",
+      "description": "One trace per turn: claude_code.interaction, with llm_request and tool spans beneath it. Click a row for the flame graph — the only view that separates time spent waiting on a permission prompt (tool.blocked_on_user) from time spent running the tool.",
       "gridPos": {
         "h": 9,
         "w": 12,
@@ -729,7 +729,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Only interactive diff decisions are counted \u2014 auto-accepted edits never reach this metric, so a flat line here does not mean no edits happened.",
+      "description": "Only interactive diff decisions are counted — auto-accepted edits never reach this metric, so a flat line here does not mean no edits happened.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -950,7 +950,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Claude Code \u2014 Usage & Observability",
+  "title": "Claude Code — Usage & Observability",
   "uid": "claude-code-otel",
   "version": 1
 }

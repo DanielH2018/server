@@ -232,7 +232,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Loki \u2014 Internals",
+  "title": "Loki — Internals",
   "uid": "homelab-loki-internals",
   "version": 1
 }
