@@ -55,7 +55,7 @@ whenever 8 characters is already unambiguous, which is the overwhelmingly common
 diverge only on an 8-hex-char collision in the repo's history — negligibly likely, and safe when
 it happens: the prefix this role builds then fails to match, and "no snapshot matches this
 deploy" fires before anything moves, the same fail-closed outcome as every other unmatched
-prefix. See `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s "Logic tests" section for the full
+prefix. See `docs/gitops-pipeline.md`'s *Trap: moving a config source* section for the full
 reconciliation; not changed here because the failure mode it falls into is already correct.
 
 ## The sequence, and why every step is there
@@ -263,7 +263,7 @@ service's snapshot phase, succeeding but slowly, can still cost up to 240s
 (`volume_snapshot_timeout` x 2 claims) ADDITIVE to a slow-but-successful 720s revert on one
 continuous timeline where nothing fails — and that combined slow-success total is not proven to
 fit in the 180s left. That is an accepted residual risk (a slow full success getting cut short),
-not a proven-safe one — see `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout
+not a proven-safe one — see `docs/gitops-pipeline.md`'s *The rollback timeout, derived*
 section. The unit's `TimeoutStartSec` was raised from 25min to 35min to fit
 `K8S_DEPLOY_TIMEOUT_S` (900s, the forward attempt) plus `K8S_ROLLBACK_TIMEOUT_S` (900s) plus the
 flock wait.

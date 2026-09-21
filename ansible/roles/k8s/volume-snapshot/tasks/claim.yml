@@ -675,6 +675,15 @@
 # recovery point behind it. A silent skip would defeat the point of the slice, so this warns by
 # name — service, claim, and the fact that the deploy proceeds unprotected — rather than only
 # in a debug log nobody reads.
+#
+# DECIDED: this warning is an Ansible debug line and nothing forwards it to Discord. Accepted,
+# not fixed. Under the GitOps deployer the play output reaches nobody, and a later rollback's
+# revert-status note (gitops_deploy's `rollback_volume_revert_note`) names a service as one the
+# revert targets by reading its role DEFAULTS (`k8s_autodeploy_snapshot_pvcs`), not what this
+# task did on THAT run — so an operator reading the rollback alert has no signal that this
+# snapshot never happened, and no reason to expect the revert that follows to fail loudly rather
+# than do nothing. Closing it means threading a per-run "snapshot skipped" fact from this play
+# into the deployer's alert. Long form: docs/gitops-pipeline.md, *The deployer's record*.
 - name: Warn and skip the snapshot for a detached volume backing {{ volume_snapshot_claim }}
   tags: [deploy]
   when:

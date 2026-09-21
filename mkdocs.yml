@@ -204,6 +204,9 @@ nav:
       - WireGuard private access: wireguard-private-homelab-access.md
       - Healthchecks.io deadman: healthchecks-io-deadman.md
       - Uptime Robot monitors: uptime-robot-monitors.md
+      # The per-check record behind monitor-bridge's role CLAUDE.md: measurements, incidents
+      # and retirements, kept off the file a session loads on every touch of the role (#2126).
+      - monitor-bridge check history: monitor-bridge-checks.md
       # Label omits the word this document's title carries before "drain". With it,
       # gitleaks' generic-api-key rule reads the label plus the high-entropy filename
       # after the colon as a credential and fails the commit.

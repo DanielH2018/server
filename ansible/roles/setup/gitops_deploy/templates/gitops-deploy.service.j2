@@ -39,7 +39,7 @@ Type=oneshot
 # always fires on schedule") in exchange for the k8s rollback getting a budget that can actually
 # finish. That is a considered trade, not a bug to tighten back: a normal run finishes in well
 # under a minute, so the 30-min tick is only at risk in the pathological case both k8s timeouts
-# get spent in full — and per `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s rollback-timeout
+# get spent in full — and per docs/gitops-pipeline.md's *The rollback timeout, derived*
 # section (verified live against this unit on daniel-box, not inferred from the man page alone),
 # an overrun never produces a second or concurrent run: systemd finds the unit already
 # `activating` and coalesces the timer's start request into the run already in flight, rather
