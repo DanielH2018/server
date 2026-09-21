@@ -25,7 +25,8 @@ reading an absent directory as "no hold". Set `GITOPS_STATE_DIR` to point it els
 Exit codes:
   0      every gate passed
   1..4   the first gate that failed, by its number above
-  69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster)
+  69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
+         or a list that returned nothing parseable)
 
 Usage:
     uv run python scripts/deploy_tools/k3s_upgrade_gates.py
@@ -54,13 +55,15 @@ from lib.kubectl import (
 CLUSTER = "prod"
 EX_UNAVAILABLE = 69
 
-# Longhorn's volume robustness values that mean a replica is already gone or going. `unknown`
-# is what an idle, detached volume reports and is deliberately not here.
-UNSAFE_ROBUSTNESS = frozenset({"degraded", "faulted"})
+# Allow-lists, not deny-lists: a Longhorn state this file has not heard of (a rename, a new
+# value after a Longhorn bump) must stop the upgrade, not pass it. `healthy` is a volume with
+# every replica; `unknown` is what an idle, detached volume reports. `degraded` and `faulted`
+# are the ones the runbook names.
+SAFE_ROBUSTNESS = frozenset({"healthy", "unknown"})
 
-# Longhorn backup states a restart would abort. `Completed`, `Error` and `Unknown` are
-# settled; the empty string is a Backup CR the controller has not picked up yet.
-IN_FLIGHT_BACKUP = frozenset({"", "New", "Pending", "InProgress"})
+# Backup states a restart cannot abort. `New`, `Pending` and `InProgress` are in flight; the
+# empty string is a Backup CR the controller has not picked up yet.
+SETTLED_BACKUP = frozenset({"Completed", "Error", "Unknown"})
 
 VOLUMES_ARGS = ("-n", "longhorn-system", "get", "volumes.longhorn.io", "-o", "json")
 BACKUPS_ARGS = ("-n", "longhorn-system", "get", "backups.longhorn.io", "-o", "json")
@@ -78,29 +81,30 @@ def _name(item: dict) -> str:
 # ── the gates, as pure verdicts over what kubectl answered ──────────────────────────────────
 #
 # Each returns the list of offenders — empty means the gate passes. `None` from kubectl_json
-# (a failed read) is an offender too: a gate that cannot see its subject must not pass.
+# (a failed read) is an offender too, so a direct call can never pass on a read that failed;
+# the runner maps that case to `EX_UNAVAILABLE` before it gets here.
 
 
 def unsafe_volumes(doc) -> list[str]:
-    """`name (robustness)` for every volume whose robustness is in `UNSAFE_ROBUSTNESS`."""
+    """`name (robustness)` for every volume whose robustness is not in `SAFE_ROBUSTNESS`."""
     if doc is None:
         return ["<could not list volumes.longhorn.io>"]
     found = []
     for item in _items(doc):
         robustness = str((item.get("status") or {}).get("robustness", ""))
-        if robustness in UNSAFE_ROBUSTNESS:
-            found.append(f"{_name(item)} ({robustness})")
+        if robustness not in SAFE_ROBUSTNESS:
+            found.append(f"{_name(item)} ({robustness or 'no robustness reported'})")
     return found
 
 
 def in_flight_backups(doc) -> list[str]:
-    """`name (state)` for every backup whose state is in `IN_FLIGHT_BACKUP`."""
+    """`name (state)` for every backup whose state is not in `SETTLED_BACKUP`."""
     if doc is None:
         return ["<could not list backups.longhorn.io>"]
     found = []
     for item in _items(doc):
         state = str((item.get("status") or {}).get("state", ""))
-        if state in IN_FLIGHT_BACKUP:
+        if state not in SETTLED_BACKUP:
             found.append(f"{_name(item)} ({state or 'no state yet'})")
     return found
 
@@ -161,12 +165,23 @@ class Gate:
     check: Callable[[Tools, str], list[str]]
 
 
+class Unreadable(RuntimeError):
+    """A cluster list returned nothing parseable — the gate could not look, so it is not graded."""
+
+
+def _doc(tools: Tools, args: tuple[str, ...]):
+    doc = kubectl_json(CLUSTER, *args, tools=tools)
+    if doc is None:
+        raise Unreadable(f"`kubectl {' '.join(args)}` returned no document")
+    return doc
+
+
 def _gate_volumes(tools: Tools, state_dir: str) -> list[str]:
-    return unsafe_volumes(kubectl_json(CLUSTER, *VOLUMES_ARGS, tools=tools))
+    return unsafe_volumes(_doc(tools, VOLUMES_ARGS))
 
 
 def _gate_backups(tools: Tools, state_dir: str) -> list[str]:
-    return in_flight_backups(kubectl_json(CLUSTER, *BACKUPS_ARGS, tools=tools))
+    return in_flight_backups(_doc(tools, BACKUPS_ARGS))
 
 
 def _gate_hold(tools: Tools, state_dir: str) -> list[str]:
@@ -174,7 +189,7 @@ def _gate_hold(tools: Tools, state_dir: str) -> list[str]:
 
 
 def _gate_nodes(tools: Tools, state_dir: str) -> list[str]:
-    return nodes_not_ready(kubectl_json(CLUSTER, *NODES_ARGS, tools=tools))
+    return nodes_not_ready(_doc(tools, NODES_ARGS))
 
 
 # Order is the runbook's, and the exit code is the position. Append; never reorder.
@@ -196,7 +211,7 @@ def run_gates(
     for gate in GATES:
         try:
             offenders = gate.check(tools, state_dir)
-        except (WrongCluster, MissingKubectl) as exc:
+        except (WrongCluster, MissingKubectl, Unreadable) as exc:
             print(
                 f"gate {gate.number} ({gate.title}): cannot ask the cluster — {exc}",
                 file=out,

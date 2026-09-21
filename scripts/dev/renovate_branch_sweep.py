@@ -30,7 +30,7 @@ Usage:
     uv run python scripts/dev/renovate_branch_sweep.py --prune    # also delete them
 
 Exit codes: 0 always for a report (an empty orphan set is the healthy answer); 2 `gh` or
-`git` failed (its stderr is printed).
+`git` failed (its stderr is printed), or no open Dependency Dashboard was found.
 """
 
 import argparse
@@ -69,12 +69,30 @@ def orphans(all_branches, open_pr_heads, dashboard_body: str) -> list[str]:
     )
 
 
+class NoDashboard(RuntimeError):
+    """The open Dependency Dashboard could not be found, so nothing can be judged live by it."""
+
+
 def dashboard_body(issues: list[dict]) -> str:
-    """The open Dependency Dashboard's body, or `""` when there is none (nothing is live by it)."""
+    """The open Dependency Dashboard's body, from a title search.
+
+    Matched by title AND a renovate author, the way `renovate_notify` matches it, so a
+    look-alike issue a human opened is not read as the dashboard. `gh`'s bot login is
+    `app/renovate`; the notifier reads the REST payload, where it is `renovate[bot]`.
+
+    Raises:
+        NoDashboard: no issue matched. Loud on purpose: an empty body would make every
+            branch the dashboard speaks for read as an orphan — #1629's failure through
+            a different door.
+    """
     for issue in issues:
-        if issue.get("title") == DASHBOARD_TITLE:
+        login = (issue.get("author") or {}).get("login", "")
+        if issue.get("title") == DASHBOARD_TITLE and "renovate" in login:
             return issue.get("body") or ""
-    return ""
+    raise NoDashboard(
+        f"no open issue titled {DASHBOARD_TITLE!r} by a renovate author; "
+        "refusing to grade branches against an empty dashboard"
+    )
 
 
 def _lines(proc: subprocess.CompletedProcess[str]) -> list[str]:
@@ -100,19 +118,19 @@ def census(gh: Gh = _gh) -> list[str]:
             ".[].headRefName",
         )
     )
+    # A server-side title search, not a recency-bounded list: the dashboard is issue #3, the
+    # oldest open issue here, and `gh issue list --limit N` drops it first once open issues
+    # outnumber N.
     issues = gh(
         "issue",
         "list",
         "--state",
         "open",
-        "--limit",
-        "200",
+        "--search",
+        f'"{DASHBOARD_TITLE}" in:title',
         "--json",
-        "title,body",
-        "-q",
-        f'[.[] | select(.title == "{DASHBOARD_TITLE}")]',
+        "title,body,author",
     ).stdout
-
     return orphans(branches, heads, dashboard_body(json.loads(issues or "[]")))
 
 
@@ -128,6 +146,9 @@ def main(
         found = census(gh)
     except subprocess.CalledProcessError as exc:
         print(f"gh failed: {exc.stderr.strip()}", file=out)
+        return 2
+    except NoDashboard as exc:
+        print(str(exc), file=out)
         return 2
     if not found:
         print("no orphan renovate/* branch", file=out)

@@ -16,7 +16,7 @@ Usage:
     uv run python scripts/dev/renovate_rebase.py <pr-number>
 
 Exit codes: 0 ticked (or already ticked); 1 the body carries no rebase checkbox;
-2 `gh` failed (its stderr is printed).
+2 `gh` failed (its stderr is printed); 64 the argument is not one PR number.
 """
 
 import subprocess

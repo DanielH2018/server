@@ -164,6 +164,16 @@ def test_a_failed_read_never_passes_a_gate():
     assert gates.nodes_not_ready(None)
 
 
+def test_a_state_this_file_has_not_heard_of_is_flagged():
+    # Allow-lists: a Longhorn rename must stop the upgrade, not pass it.
+    assert gates.unsafe_volumes({"items": [_volume("pvc-new", "rebuilding")]}) == [
+        "pvc-new (rebuilding)"
+    ]
+    assert gates.in_flight_backups({"items": [_backup("b", "Finalizing")]}) == [
+        "b (Finalizing)"
+    ]
+
+
 # ── the runner: order, stop, exit code ──────────────────────────────────────────────────────
 
 
@@ -202,6 +212,25 @@ def test_a_held_sha_stops_at_gate_three_before_the_node_read(state_dir):
     assert code == 3
     assert "deadbeef" in out
     assert "gate 4" not in out
+
+
+def test_a_list_that_returns_nothing_is_unavailable_not_a_failed_gate(state_dir):
+    tools = _tools()
+    real_run = tools.run
+
+    def run(argv, timeout):
+        if any(arg == "volumes.longhorn.io" for arg in argv):
+            return subprocess.CompletedProcess(argv, 1, "", "Forbidden")
+        return real_run(argv, timeout)
+
+    out = io.StringIO()
+    code = gates.run_gates(
+        tools=kubectl.Tools(run, tools.find_tool, tools.find_kubeconfig),
+        state_dir=str(state_dir),
+        out=out,
+    )
+    assert code == gates.EX_UNAVAILABLE
+    assert "returned no document" in out.getvalue()
 
 
 def test_the_wrong_cluster_is_refused_not_graded(state_dir):
