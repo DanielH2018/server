@@ -13,7 +13,11 @@ Every tracked `.j2` is scanned, not only `roles/k8s/**/templates/`: a `templates
 is embedded in a ConfigMap through `lookup('template')`, so its key order is manifest bytes
 too, and a setup or Pi template carries the same hazard into a file diff.
 
-Run: uv run pytest ansible/tests/k8s/test_templates_iterate_dicts_sorted.py
+`dictsort` compares keys case-insensitively by default, and two keys equal under that
+comparison keep insertion order — the nondeterminism this guard exists to close. A dict
+whose keys differ only by case needs `dictsort(true)`; none in the tree does today.
+
+Run: uv run pytest ansible/tests/repo/test_templates_iterate_dicts_sorted.py
 """
 
 import re
