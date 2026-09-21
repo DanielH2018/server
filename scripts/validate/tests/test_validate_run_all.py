@@ -84,18 +84,20 @@ def test_every_module_in_the_package_bar_the_two_exclusions_is_registered():
     """
     census = set(package_entry_points(validate))
     # `refresh_vendored_schemas` refreshes the vendored schemas (traefik CRDs + Authelia's
-    # configuration schema); `run_all` is the dispatcher itself. Neither has a prek hook.
-    assert census - {"refresh_vendored_schemas", "run_all"} == set(
+    # configuration schema); `asset_pins` fetches every pinned download (network-bound);
+    # `run_all` is the dispatcher itself. None has a prek hook.
+    assert census - {"refresh_vendored_schemas", "asset_pins", "run_all"} == set(
         run_all.EXPECTED_MODULES
     )
 
 
-def test_refresh_vendored_schemas_is_a_real_main_deliberately_excluded():
+@pytest.mark.parametrize("module", ["refresh_vendored_schemas", "asset_pins"])
+def test_a_network_bound_main_is_deliberately_excluded(module):
     # package_entry_points sees it (it has a main()); EXPECTED_MODULES does not, because it
     # isn't a prek validator. This pins that the exclusion is a choice, not a stale census.
     census = package_entry_points(validate)
-    assert "refresh_vendored_schemas" in census
-    assert "refresh_vendored_schemas" not in run_all.EXPECTED_MODULES
+    assert module in census
+    assert module not in run_all.EXPECTED_MODULES
 
 
 def test_assert_complete_rejects_a_registry_missing_a_module():

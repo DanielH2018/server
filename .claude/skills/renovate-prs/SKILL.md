@@ -141,12 +141,17 @@ The 2026-09-02 case: `jellyfin-ani-sync` release assets are named
 `4.4.0.0`, leaving `10.11.6.` — a URL that 404s, next to a checksum still belonging to the old
 release, for a plugin whose ABI the pinned server then rejects. Three defects, green CI.
 
-So for any PR that changes a download URL or a version used to build one:
+So for any PR that changes a download URL or a version used to build one, check out the
+bot's branch and fetch every pin it touched:
 
 ```bash
-curl -sIL -o /dev/null -w '%{http_code}\n' '<the URL from the diff>'   # must be 200
-curl -sL '<url>' | md5sum                                             # must match the pinned checksum
+uv run python scripts/validate/asset_pins.py --only <pin name>   # `--list` prints the names
 ```
+
+It renders the URL from `defaults/` (including `{{ version }}` references), requires a 200,
+hashes the download and compares it to the pinned `_sha256`/`_md5`; a failure names which of
+the three broke. `--list` needs no network; without `--only` it fetches every pin in the tree,
+and `--skip hypervisor_staging_vm_image` leaves out the 600 MB cloud image.
 
 Take the URL and checksum from the **publisher's own manifest** where one exists, not by
 editing the string Renovate produced.
@@ -172,12 +177,12 @@ digest or the base has moved, hand the refresh back to Renovate — tick the reb
 the PR body:
 
 ```bash
-body=$(mktemp)
-gh pr view <n> --json body -q .body | sed 's/- \[ \] <!-- rebase-check -->/- [x] <!-- rebase-check -->/' > "$body"
-gh pr edit <n> --body-file "$body"
+uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
-Renovate refreshes the branch within a cycle. Do not hand-edit the digest: the next Renovate
+It is idempotent (a ticked box exits 0 and writes nothing) and exits 1 on a body with no
+`<!-- rebase-check -->` box, which is a PR Renovate did not author. Renovate refreshes the
+branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
 ## 6. Land them one at a time
@@ -222,20 +227,17 @@ back empty. Such a branch reads `diverged` against master and is invisible to ev
 and an orphan branch appears in neither. Nothing else reports it, so census it here.
 
 ```bash
-gh api repos/DanielH2018/server/branches --paginate -q '.[].name' | grep '^renovate/' | sort > /tmp/rb-all
-gh pr list --state open --limit 100 --json headRefName -q '.[].headRefName' > /tmp/rb-live
-gh issue view 3 --json body -q .body | grep -oE '[a-z-]+-branch=renovate/[^ ]+' | sed 's/.*branch=//' >> /tmp/rb-live
-sort -u /tmp/rb-live -o /tmp/rb-live
-comm -23 /tmp/rb-all /tmp/rb-live
+uv run python scripts/dev/renovate_branch_sweep.py            # the orphan list, report only
 ```
 
-Both queries are deliberately wider than the markers and authors seen on any one day (#1629).
-The dashboard grep matches `[a-z-]+-branch=` rather than the three verbs issue #3 happened to
-carry, because Renovate emits other section markers with their own `<verb>-branch=` prefix and an
-unmatched one makes every branch in that section read as an orphan. The `gh pr list` carries no
-`--author` filter, because the question is whether ANY open PR speaks for the branch — §4's
-pattern of rebasing the bot's commit onto your own branch opens exactly such a PR. Both errors
-ran toward over-reporting, so neither ever hid an orphan.
+Both of its readings are deliberately wider than the markers and authors seen on any one day
+(#1629). The dashboard match is `[a-z-]+-branch=` rather than the three verbs issue #3 happened
+to carry, because Renovate emits other section markers with their own `<verb>-branch=` prefix
+and an unmatched one makes every branch in that section read as an orphan. The open-PR list
+carries no `--author` filter, because the question is whether ANY open PR speaks for the branch
+— §4's pattern of rebasing the bot's commit onto your own branch opens exactly such a PR. Both
+errors ran toward over-reporting, so neither ever hid an orphan; the script's docstring carries
+the same two decisions at the line.
 
 Twelve branches answered that on 2026-09-10, and nine branches with an empty orphan set answered
 it later the same day — the branches were pruned in between, so treat the count as a reading
@@ -259,7 +261,8 @@ branch writes — then read that key's value **on master**, because a three-dot 
 
 **Report the list; never delete a branch.** A branch with no PR is not proof the work on it is
 gone, and a sweep is the operator's call. When the operator asks for one,
-`git push origin --delete <branch>` per branch is the whole of it. Do not reach for a config
+`renovate_branch_sweep.py --prune` runs `git push origin --delete <branch>` per orphan, and
+that is the whole of it. Do not reach for a config
 fix instead: Renovate's own `pruneStaleBranches` defaults to true and should already remove an
 orphan branch it created, and why it has not here is undetermined — the Mend hosted run log is
 not readable from a session, the same limit §0 names. Name the orphan list in the run's
