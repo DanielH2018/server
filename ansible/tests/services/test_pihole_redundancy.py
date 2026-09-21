@@ -208,7 +208,7 @@ def test_roll_one_checks_sibling_readiness_before_restarting():
         (
             i
             for i, t in enumerate(tasks)
-            if "pihole_sibling_instance" in _cmd(t) and "failed_when" in t
+            if "pihole_sibling_instance" in _cmd(t) and "condition=Ready" in _cmd(t)
         ),
         None,
     )

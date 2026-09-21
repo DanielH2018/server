@@ -30,26 +30,27 @@
 
 - name: Read back the advertised device resource
   tags: [deploy]
-  # NOT `-o jsonpath`: escaping the dot in `devic.es/dri` needs a backslash that does not survive
-  # the YAML -> Ansible -> argv path. It arrived as `devic.es/dri`, which jsonpath reads as three
-  # separate keys and quietly returns empty — a false negative that looked exactly like a broken
-  # plugin. Match on the whole allocatable map instead.
-  ansible.builtin.shell:
-    # pipefail so a kubectl failure surfaces instead of being masked by grep's exit status.
-    executable: /bin/bash
-    cmd: >-
-      set -o pipefail &&
-      k3s kubectl get node {{ inventory_hostname }} -o json
-      | grep -o '"devic.es/dri": *"[0-9]*"'
+  # `argv`, not `cmd`: the dot in `devic.es/dri` needs the jsonpath escape `devic\.es`, and
+  # `cmd`'s shlex split eats the backslash — kubectl then reads three separate keys and quietly
+  # returns empty, a false negative that looked exactly like a broken plugin. The list form
+  # hands the argument over verbatim. `wait` returns the moment the kubelet advertises the
+  # resource, and `-o` prints the count once it has; a 120s timeout is the old 24x5s budget.
+  ansible.builtin.command:
+    argv:
+      - k3s
+      - kubectl
+      - wait
+      - node/{{ inventory_hostname }}
+      - '--for=jsonpath={.status.allocatable.devic\.es/dri}'
+      - --timeout=120s
+      - -o
+      - 'jsonpath={.status.allocatable.devic\.es/dri}'
   become: true
   register: dri_plugin_allocatable
   changed_when: false
-  # Runs under --check too: reads only. Skipped, stdout is empty, so `until` can never match
-  # and the run dies after 24 retries (two full minutes) before reaching the assert below.
+  # Runs under --check too: reads only. Skipped, stdout is empty and the assert below fails
+  # on a plugin that is fine.
   check_mode: false
-  retries: 24
-  delay: 5
-  until: dri_plugin_allocatable.stdout | default('') | length > 0
 
 - name: Fail if the node is not advertising the render device
   tags: [deploy]
