@@ -43,10 +43,12 @@ USER root
 # Force npm to use /usr/local
 ENV NPM_CONFIG_PREFIX=/usr/local
 
-# Add your npm packages here.
-# Use 'RUN npm install -g ...'
-# Example:
-RUN npm install -g fuzzball
+# fuzzball, the one npm package this image adds. PINNED (#2213): a bare `npm install -g
+# fuzzball` took whatever npm served on build day, and nothing recorded which version a running
+# pod carried. The renovate.json regex manager over this line (npm datasource) raises a PR when
+# a new release ships; it merges by hand and is realised by `deploy.sh --tags n8n-images,n8n`,
+# since a built image only moves when something rebuilds it.
+RUN npm install -g fuzzball@2.2.6
 
 # Switch back to the non-privileged 'node' user
 USER node

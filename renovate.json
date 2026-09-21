@@ -425,6 +425,18 @@
     },
     {
       "customType": "regex",
+      "description": "The fuzzball package the n8n image installs with `npm install -g fuzzball@X.Y.Z` (#2213). Same shape as the Claude Code CLI manager above and for the same reason: the built-in npm manager reads package.json only, and this pin sits in a Dockerfile. It was `npm install -g fuzzball` with no version until 2026-09-21, so every rebuild took whatever npm served that day — the class #2149 closed for code-server.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/n8n-images/templates/Dockerfile\\.j2$/"
+      ],
+      "matchStrings": [
+        "npm install -g fuzzball@(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "fuzzball",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
       "description": "The Node.js release the code-server image unpacks from nodejs.org (`code_server_k8s_node_version` in the role's defaults, #2149). Replaced NodeSource's setup_22.x script piped to bash, which resolved whatever NodeSource served on build day. The paired code_server_k8s_node_sha256 is the tarball's line in SHASUMS256.txt, which no regex manager can compute — so no automerge (packageRule below), the same manual-finish class as the uv installer. Majors (22 -> 24) stay manual per the default rules anyway.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/k8s/code-server/defaults/main\\.yml$/"
@@ -815,6 +827,20 @@
         "n8nio/runners"
       ],
       "groupName": "n8n (manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)",
+      "automerge": false
+    },
+    {
+      "description": "fuzzball, the one npm package the n8n image installs (#2213). Its own group rather than the n8n base-image group above: a base digest bump carries the base-pin-history.tsv finish, and a fuzzball bump carries none, so merging them into one PR would attach that manual step to a change that does not need it. NO automerge, for the reason the n8n rule gives: the image is built, so a merged bump ships only when an operator rebuilds it (deploy.sh --tags n8n-images,n8n). The k8s_autodeploy: false marker follows the same build coupling onto n8n, which is the denied role that runs the image; the unattended renovate_agent reads the title for it (#1963). matchDatasources keeps this off the role's docker pins, which the rule above owns.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/n8n-images/templates/Dockerfile.j2"
+      ],
+      "matchDatasources": [
+        "npm"
+      ],
+      "groupName": "n8n fuzzball (manual — built image, rebuild with deploy.sh --tags n8n-images,n8n; k8s_autodeploy: false)",
       "automerge": false
     },
     {
