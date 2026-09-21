@@ -40,7 +40,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Prometheus self-scrape of the collector DaemonSet. up=1 means that node's loopback OTLP listener is reachable to be scraped \u2014 it says nothing about whether Claude Code on that host is actually sending anything (see the two panels below).",
+      "description": "Prometheus self-scrape of the collector DaemonSet. up=1 means that node's loopback OTLP listener is reachable to be scraped — it says nothing about whether Claude Code on that host is actually sending anything (see the two panels below).",
       "gridPos": {
         "h": 6,
         "w": 8,
@@ -76,7 +76,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server hit this on 2026-08-22 \u2014 `claude -p` exited 'OAuth session expired and could not be refreshed', so no session started and nothing was exported; re-auth restored both signals within minutes), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start \u2014 restart it).",
+      "description": "os_version is the host proxy: 6.8.0-137-generic is daniel-box, 7.0.0-28-generic is daniel-server (this cluster's Loki has no other kernel). A host with a flat zero line here while its collector shows up=1 above means Claude Code itself is not exporting on that host, not that the pipeline is broken. Two causes, cheapest check first: the host cannot authenticate (daniel-server hit this on 2026-08-22 — `claude -p` exited 'OAuth session expired and could not be refreshed', so no session started and nothing was exported; re-auth restored both signals within minutes), or a session started before the telemetry config landed and is reading the old one (config is read once, at process start — restart it).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -112,7 +112,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "The metrics pipeline's own per-node coverage \u2014 both nodes should appear once each has run a session. daniel-server was absent from this series entirely until 2026-08-22, and from the logs too, while its collector was up and its settings.json was correct. The cause was never the pipeline: Claude Code on that host could not start a session at all, exiting 'Failed to authenticate: OAuth session expired and could not be refreshed'. Re-auth fixed it the same day and both signals arrived within minutes. Keep the lesson, not the incident: a node flat at zero here is unauthenticated or idle before it is broken \u2014 run `claude -p` on it before investigating its collector. Confirm with: otelq metric 'sum by (node) (claude_code_session_count_total)' --rows",
+      "description": "The metrics pipeline's own per-node coverage — both nodes should appear once each has run a session. daniel-server was absent from this series entirely until 2026-08-22, and from the logs too, while its collector was up and its settings.json was correct. The cause was never the pipeline: Claude Code on that host could not start a session at all, exiting 'Failed to authenticate: OAuth session expired and could not be refreshed'. Re-auth fixed it the same day and both signals arrived within minutes. Keep the lesson, not the incident: a node flat at zero here is unauthenticated or idle before it is broken — run `claude -p` on it before investigating its collector. Confirm with: otelq metric 'sum by (node) (claude_code_session_count_total)' --rows",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -159,7 +159,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Same claude_code_token_usage series as the main Claude Code board, broken down by node instead of model/type \u2014 the dimension that board doesn't carry. A node missing here has run no session in the window, not necessarily nothing at all \u2014 see the coverage panel above.",
+      "description": "Same claude_code_token_usage series as the main Claude Code board, broken down by node instead of model/type — the dimension that board doesn't carry. A node missing here has run no session in the window, not necessarily nothing at all — see the coverage panel above.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -196,7 +196,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Estimated only \u2014 on a subscription plan this is not real spend, same caveat as the main board.",
+      "description": "Estimated only — on a subscription plan this is not real spend, same caveat as the main board.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -232,7 +232,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Per-session_id breakdown \u2014 the main board never groups by session. Estimated only, same subscription caveat.",
+      "description": "Per-session_id breakdown — the main board never groups by session. Estimated only, same subscription caveat.",
       "fieldConfig": {
         "defaults": {
           "decimals": 3,
@@ -286,7 +286,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "claude_code.api_error events \u2014 verified present (e.g. status_code=400 tool_use errors, and OAuth refresh failures with no status_code). Not on the main board.",
+      "description": "claude_code.api_error events — verified present (e.g. status_code=400 tool_use errors, and OAuth refresh failures with no status_code). Not on the main board.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -357,7 +357,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "error, status_code, model, session_id fields \u2014 verbatim from the hook_execution_complete/api_error event.",
+      "description": "error, status_code, model, session_id fields — verbatim from the hook_execution_complete/api_error event.",
       "gridPos": {
         "h": 8,
         "w": 24,
@@ -387,7 +387,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "num_non_blocking_error summed from hook_execution_complete \u2014 a genuine hook failure. Distinct from num_blocking below, which is a deny rule doing its job, not an error.",
+      "description": "num_non_blocking_error summed from hook_execution_complete — a genuine hook failure. Distinct from num_blocking below, which is a deny rule doing its job, not an error.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -423,7 +423,7 @@
         "type": "loki",
         "uid": "loki"
       },
-      "description": "num_blocking summed from hook_execution_complete. A rising count here is a deny rule (e.g. block-protected-edits) working as intended \u2014 read alongside the panel above, not as an error rate on its own.",
+      "description": "num_blocking summed from hook_execution_complete. A rising count here is a deny rule (e.g. block-protected-edits) working as intended — read alongside the panel above, not as an error rate on its own.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -469,7 +469,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Claude Code \u2014 Pipeline Health & Cost by Host",
+  "title": "Claude Code — Pipeline Health & Cost by Host",
   "uid": "claude-code-otel-pipeline",
   "version": 1
 }

@@ -31,7 +31,7 @@
       }
     ]
   },
-  "description": "Loki log viewer \u2014 filter by container or by job/system, with a free-text match.",
+  "description": "Loki log viewer — filter by container or by job/system, with a free-text match.",
   "editable": true,
   "fiscalYearStartMonth": 0,
   "graphTooltip": 0,

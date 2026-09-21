@@ -20,11 +20,11 @@ data:
   # is not free to rename.
   Dockerfile: |
 {{ lookup('template', image_builder_dockerfile) | indent(4, true) }}
-{% for src, dest in image_builder_context.items() %}
+{% for src, dest in image_builder_context | dictsort %}
   {{ dest }}: |
 {{ lookup('template', src) | indent(4, true) }}
 {% endfor %}
-{% for src, dest in image_builder_context_files.items() %}
+{% for src, dest in image_builder_context_files | dictsort %}
   {{ dest }}: |
 {{ lookup('file', src) | indent(4, true) }}
 {% endfor %}

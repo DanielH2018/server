@@ -196,7 +196,9 @@ def adapt(name, d):
     d.pop("__requires", None)
     d["id"] = None  # let Grafana assign a local id; keep the stable `uid`
 
-    s = json.dumps(d, indent=2)
+    # Same serialisation as export_grafana_dashboards.dump, so the two writers agree on
+    # the committed form and a re-fetch of an unchanged revision is a no-op (#2157).
+    s = json.dumps(d, indent=2, sort_keys=True, ensure_ascii=False)
     for ph, uid in placeholders.items():
         s = s.replace("${%s}" % ph, uid)
     leftover = re.findall(r"\$\{DS_[^}]*\}|\$\{ds_[^}]*\}", s)
@@ -210,7 +212,7 @@ def main():
         s, resolved = adapt(name, fetch(gnet_id))
         dest = OUTDIR / SUBDIR.get(name, "") / ("%s.json" % name)
         dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(s + "\n")
+        dest.write_text(s + "\n", encoding="utf-8")
         print("%-20s defaults=%s" % (name, resolved or "{includeAll->All}"))
 
 

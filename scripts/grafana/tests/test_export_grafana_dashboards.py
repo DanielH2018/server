@@ -61,3 +61,15 @@ def test_normalize_recurses_into_nested_panels_and_lists():
     eg.normalize(obj)
     target = obj["panels"][0]["targets"][0]
     assert "key" not in target and target["datasource"] == eg.PROM_UID
+
+
+def test_dump_sorts_keys_at_every_depth_and_keeps_non_ascii_literal():
+    """The committed form: a re-export of an unchanged board must be byte-identical, however
+    Grafana ordered the keys this time and whatever the description's author typed."""
+    out = eg.dump(
+        {"uid": "x", "panels": [{"title": "b", "id": 2, "description": "a — b"}]}
+    )
+    assert out == (
+        '{\n  "panels": [\n    {\n      "description": "a — b",\n      "id": 2,\n'
+        '      "title": "b"\n    }\n  ],\n  "uid": "x"\n}\n'
+    )

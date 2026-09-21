@@ -118,6 +118,11 @@ To change a board: edit the JSON here (or edit in the Grafana UI and round-trip 
 `scripts/grafana/export_grafana_dashboards.py`, which execs into the observability/grafana pod via
 `sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
 `scripts/grafana/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
+A hand-edited board must stay in the writers' form — keys sorted at every depth, 2-space
+indent, non-ASCII literal — or the next export rewrites it and the drift read (`git diff
+--stat` after an export) shows a change that is not one. ENFORCED by
+`ansible/tests/services/test_committed_dashboards_are_a_fixed_point_of_the_exporter.py`, whose
+oracle is `scripts/grafana/export_grafana_dashboards.py:dump`.
 
 **A board in a folder `claude_otel_dashboard_folders` does not list is provisioned nowhere.**
 `tasks/dashboards.yml` bakes one ConfigMap per listed folder and the Deployment mounts each by

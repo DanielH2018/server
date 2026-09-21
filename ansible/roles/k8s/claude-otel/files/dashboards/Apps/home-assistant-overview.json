@@ -360,7 +360,7 @@
           "refId": "A"
         }
       ],
-      "title": "CO\u2082",
+      "title": "CO₂",
       "type": "timeseries"
     },
     {
@@ -436,7 +436,7 @@
           "refId": "C"
         }
       ],
-      "title": "Particulates (\u00b5g/m\u00b3)",
+      "title": "Particulates (µg/m³)",
       "type": "timeseries"
     },
     {
@@ -782,7 +782,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Home Assistant \u2014 Overview",
+  "title": "Home Assistant — Overview",
   "uid": "home-assistant-overview",
   "version": 1
 }

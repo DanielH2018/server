@@ -87,7 +87,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Deaths are attributed by character name straight off the death line, so they stay correct even if a handshake was missed. Playtime depends on the SteamID\u2192name binding and is the softer number of the two.",
+      "description": "Deaths are attributed by character name straight off the death line, so they stay correct even if a handshake was missed. Playtime depends on the SteamID→name binding and is the softer number of the two.",
       "fieldConfig": {
         "defaults": {
           "custom": {}
@@ -271,7 +271,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Two independent numbers. 'derived' comes from the session state machine; 'server heartbeat' is what Valheim itself reports every ~10 min. A persistent gap means the session logic has drifted from reality \u2014 that is the point of showing both, and it is the cheapest check on parsing that could not be validated before the first real session.",
+      "description": "Two independent numbers. 'derived' comes from the session state machine; 'server heartbeat' is what Valheim itself reports every ~10 min. A persistent gap means the session logic has drifted from reality — that is the point of showing both, and it is the cheapest check on parsing that could not be validated before the first real session.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -299,7 +299,7 @@
           "refId": "B"
         }
       ],
-      "title": "Players Online \u2014 derived vs. server-reported",
+      "title": "Players Online — derived vs. server-reported",
       "type": "timeseries"
     },
     {
@@ -307,7 +307,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Non-zero means the console emitted something player-shaped that did not parse \u2014 i.e. upstream changed its wording. Expect a flat zero; a step up here alongside frozen player metrics is the signature of a format change.",
+      "description": "Non-zero means the console emitted something player-shaped that did not parse — i.e. upstream changed its wording. Expect a flat zero; a step up here alongside frozen player metrics is the signature of a format change.",
       "gridPos": {
         "h": 8,
         "w": 12,
@@ -342,7 +342,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "Valheim \u2014 Player Stats",
+  "title": "Valheim — Player Stats",
   "uid": "valheim-player-stats",
   "version": 1
 }

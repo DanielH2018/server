@@ -20,6 +20,7 @@
       }
     ]
   },
+  "description": "The APC UPS. Every panel reads nut-exporter's direct scrape of upsd first and falls back to Home Assistant's re-export of the same UPS, matching what monitor-bridge's check_ups alerts on (issue #1548). The fallback is what keeps history readable across 2026-09-10, when the NUT series begin.",
   "id": null,
   "panels": [
     {
@@ -141,7 +142,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "NUT's RB (Replace Battery) verdict via HA binary_sensor.apc_ups_replace_battery. monitor-bridge check_ups pages on this \u2014 the earliest UPS signal, it can trip while charge/runtime still read fine.",
+      "description": "NUT's RB (Replace Battery) verdict via HA binary_sensor.apc_ups_replace_battery. monitor-bridge check_ups pages on this — the earliest UPS signal, it can trip while charge/runtime still read fine.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -206,7 +207,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Full-charge runway decaying over weeks/months is the aging-battery signal check_ups' floor eventually trips \u2014 widen the range to spot slow decay.",
+      "description": "Full-charge runway decaying over weeks/months is the aging-battery signal check_ups' floor eventually trips — widen the range to spot slow decay.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -268,7 +269,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "Mains voltage into the UPS \u2014 a drop toward 0 means it's on battery (an outage/brownout).",
+      "description": "Mains voltage into the UPS — a drop toward 0 means it's on battery (an outage/brownout).",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -305,7 +306,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "UPS output load \u2014 higher load shortens the estimated runtime above.",
+      "description": "UPS output load — higher load shortens the estimated runtime above.",
       "fieldConfig": {
         "defaults": {
           "custom": {
@@ -344,7 +345,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "NUT's OB flag: mains power is gone and the UPS is carrying the load. ups.status is one-hot over `flag`, so the exporter forces a 0 whenever the UPS is not asserting it \u2014 which is what makes this a 0/1 alert input rather than a series whose absence is ambiguous. monitor-bridge check_ups pages on it after UPS_CONSECUTIVE cycles, so a brownout shorter than the grace window does not.",
+      "description": "NUT's OB flag: mains power is gone and the UPS is carrying the load. ups.status is one-hot over `flag`, so the exporter forces a 0 whenever the UPS is not asserting it — which is what makes this a 0/1 alert input rather than a series whose absence is ambiguous. monitor-bridge check_ups pages on it after UPS_CONSECUTIVE cycles, so a brownout shorter than the grace window does not.",
       "fieldConfig": {
         "defaults": {
           "mappings": [
@@ -417,8 +418,7 @@
     "to": "now"
   },
   "timezone": "browser",
-  "title": "UPS \u2014 Power & Battery",
+  "title": "UPS — Power & Battery",
   "uid": "ups-power-battery",
-  "version": 1,
-  "description": "The APC UPS. Every panel reads nut-exporter's direct scrape of upsd first and falls back to Home Assistant's re-export of the same UPS, matching what monitor-bridge's check_ups alerts on (issue #1548). The fallback is what keeps history readable across 2026-09-10, when the NUT series begin."
+  "version": 1
 }
