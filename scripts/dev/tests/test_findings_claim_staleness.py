@@ -173,7 +173,7 @@ def test_age_days_returns_none_for_naive_datetime():
     """Verify age_days returns None when createdAt is a naive datetime.
 
     A date-only string like "2026-09-01" parses as a naive datetime. The subtraction
-    against datetime.now(UTC) would raise TypeError, which is caught and treated as
+    against an aware `now` would raise TypeError, which is caught and treated as
     None.
     """
     # A date-only string (naive datetime).
