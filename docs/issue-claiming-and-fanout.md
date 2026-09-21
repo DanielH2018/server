@@ -20,7 +20,10 @@ command plans a list of argv first, then runs it, so `--dry-run` writes nothing.
 
 `scripts/dev/prune_worktrees.py` decides whether a session worktree is done with. It exports
 `parse_worktree_list` and `session_is_alive`; `.claude/hooks/session-health.py` already imports
-both to print the other-live-sessions banner.
+both to print the other-live-sessions banner. Since #2133 those two, `Worktree` and the cherry
+and merge-tree readers come from the `claude_worktree` module the dotfiles repo deploys to
+`~/.local/share/claude-worktree`; `scripts/dev/_claude_worktree.py` is the bootstrap, and it
+raises rather than falls back, so a host without the deploy prunes and reaps nothing.
 
 Every open issue except #3 carries the `claude` label. #3 is Renovate's Dependency Dashboard,
 created 2026-06-06 with no labels. Scoping claims to `claude`-labelled issues therefore costs

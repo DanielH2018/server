@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
-"""Tests for the session-worktree pruner's parsing and removal decision.
+"""Tests for the session-worktree pruner: the removal decision, and what it does with it.
 
-The git calls are kept out of both functions under test, so these run without a fixture
-repo: `parse_worktree_list` takes porcelain text and `classify` takes the two facts the
-git calls produce.
+The readers -- the porcelain parser, the lock-liveness check, the cherry and merge-tree
+verdicts -- live in the deployed `claude_worktree` module (#2133) and are tested in the
+dotfiles repo beside it; `test_claude_worktree_import.py` covers the bootstrap. What is
+tested here is what stays in this repo: `classify` takes the facts the git calls produce,
+`is_merged` gates the readers on exit status, and `remove`/`prune_all`/`main` act.
 
 Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 """
@@ -17,32 +19,13 @@ from prune_worktrees import (
     REMOVABLE,
     Worktree,
     _worktree_facts,
-    cherry_says_merged,
     classify,
     find_orphan_dirs,
     main,
-    merge_tree_says_contained,
-    parse_worktree_list,
     pr_head_says_merged,
     prune_all,
     remove,
-    session_is_alive,
 )
-
-
-def test_a_lock_held_by_a_running_process_reads_as_alive():
-    assert session_is_alive(_live_lock_reason()) is True
-
-
-def test_a_lock_naming_a_dead_process_reads_as_dead():
-    # pid 1 exists but its start time will not match this fabricated one, which is the
-    # pid-reuse case the start field is there to catch
-    assert session_is_alive("claude session old (pid 1 start 999999999)") is False
-
-
-def test_an_unparseable_lock_reason_is_treated_as_live():
-    # someone else's lock in an unknown format; guessing wrong would destroy work
-    assert session_is_alive("locked by hand while debugging") is True
 
 
 def test_orphan_dirs_are_those_git_does_not_track(tmp_path):
@@ -68,59 +51,6 @@ def _live_lock_reason():
     with open(f"/proc/{pid}/stat") as handle:
         start = handle.read().rpartition(")")[2].split()[19]
     return LIVE_LOCK.format(pid=pid, start=start)
-
-
-PORCELAIN = """worktree /home/ubuntu/server
-HEAD 15f277c8aa
-branch refs/heads/master
-
-worktree /home/ubuntu/server/.claude/worktrees/merged-work
-HEAD 2ea6f0881b
-branch refs/heads/worktree-merged-work
-locked
-
-worktree /home/ubuntu/server/.claude/worktrees/live-work
-HEAD 88c45837cc
-branch refs/heads/worktree-live-work
-
-worktree /home/ubuntu/server/.claude/worktrees/detached
-HEAD 4576e3160a
-detached
-"""
-
-
-def test_parses_every_worktree_including_the_last():
-    trees = parse_worktree_list(PORCELAIN)
-    assert [t.path.split("/")[-1] for t in trees] == [
-        "server",
-        "merged-work",
-        "live-work",
-        "detached",
-    ]
-
-
-def test_strips_the_refs_heads_prefix_from_branches():
-    trees = parse_worktree_list(PORCELAIN)
-    assert trees[1].branch == "worktree-merged-work"
-
-
-def test_detached_worktree_has_no_branch():
-    trees = parse_worktree_list(PORCELAIN)
-    assert trees[3].branch is None
-    assert trees[3].head == "4576e3160a"
-
-
-def test_reads_the_lock_marker():
-    trees = parse_worktree_list(PORCELAIN)
-    assert trees[1].locked is True
-    assert trees[2].locked is False
-
-
-def test_locked_with_a_reason_still_counts_as_locked():
-    trees = parse_worktree_list(
-        "worktree /w\nHEAD abc\nbranch refs/heads/b\nlocked in use by session 3\n"
-    )
-    assert trees[0].locked is True
 
 
 def _tree(branch="worktree-x", locked=False):
@@ -174,75 +104,6 @@ def test_detached_head_is_kept_rather_than_guessed_about():
     verdict, reason = classify(_tree(branch=None), merged=True, dirty=False)
     assert verdict == KEEP
     assert "detached" in reason
-
-
-def test_rebase_merged_branch_reads_as_merged():
-    # The case that made this script keep merged worktrees forever: `gh pr merge --rebase`
-    # replays the commit onto master as a new object, so it is not an ancestor — but its
-    # patch is upstream, which is what `-` means.
-    assert cherry_says_merged("- edf6dd1ec3ff0d5bfa201364a3fdf3ab5e072736") is True
-
-
-def test_a_branch_with_unlanded_work_is_not_merged():
-    assert cherry_says_merged("+ 4f5515ed1c0e4a2b8d3f9a7c6b5e4d3c2b1a0f9e") is False
-
-
-def test_a_partly_landed_branch_is_not_merged():
-    # One commit upstream, one not. Removing this worktree would lose the `+` commit.
-    assert cherry_says_merged("- aaaaaaa\n+ bbbbbbb") is False
-
-
-def test_nothing_ahead_of_upstream_reads_as_merged():
-    assert cherry_says_merged("") is True
-
-
-def test_blank_lines_do_not_change_the_verdict():
-    assert cherry_says_merged("\n- aaaaaaa\n\n") is True
-
-
-# Squash merges defeat ancestry AND patch-id, so before this check landed every squash-merged
-# worktree was kept forever. Measured 2026-08-22: five of the six worktrees on disk were
-# squash-merged and none was collectable. The YES direction is what makes the script useful;
-# the NO direction is what keeps it safe, since a false positive deletes unlanded work.
-
-_MASTER_TREE = "7d278b4e4cbba850de748c2265a8eefc05d3b72b"
-
-
-def test_a_merge_that_changes_nothing_reads_as_merged():
-    # The squash case: merging the branch produces master's own tree, so the content is
-    # already there even though no commit and no patch-id survived the squash.
-    assert merge_tree_says_contained(f"{_MASTER_TREE}\n", _MASTER_TREE) is True
-
-
-def test_a_merge_that_would_change_master_is_not_merged():
-    # An open PR's head. Real value, measured against PR #244 on 2026-08-22.
-    assert (
-        merge_tree_says_contained(
-            "e86afc98b5b1b42935f5853c758c6a865bb7dc88\n", _MASTER_TREE
-        )
-        is False
-    )
-
-
-def test_only_the_first_line_is_the_tree():
-    # On a conflict git prints the tree, then conflict detail. is_merged gates on the exit
-    # code so that output never reaches here, but the parse must not be confused by it.
-    assert (
-        merge_tree_says_contained(f"{_MASTER_TREE}\nCONFLICT (content)\n", _MASTER_TREE)
-        is True
-    )
-
-
-def test_no_output_is_not_a_match():
-    # A git too old for --write-tree prints nothing. Empty must never read as merged, or an
-    # unsupported git would make every worktree collectable.
-    assert merge_tree_says_contained("", _MASTER_TREE) is False
-
-
-def test_an_unreadable_master_tree_is_not_a_match():
-    # Both sides empty would compare equal on a naive implementation, and delete everything.
-    assert merge_tree_says_contained("", "") is False
-    assert merge_tree_says_contained(f"{_MASTER_TREE}\n", "") is False
 
 
 # bug survived CI — every test above exercises classify()/is_merged()/session_is_alive()/

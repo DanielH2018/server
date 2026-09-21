@@ -38,11 +38,9 @@ A prune also repairs the shared object store the removed worktrees leave litter 
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -52,75 +50,26 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
+# The readers — the Worktree record, the porcelain parser, the lock-liveness check, the
+# cherry and merge-tree verdicts — are shared with the dotfiles prune-worktrees.py hook
+# through the deployed claude_worktree module (#2133); `_claude_worktree` is the
+# bootstrap onto it and says why a missing deploy raises rather than falls back. The
+# names are re-exported: `findings_lib`, `fanout_lib` and the SessionStart banner import
+# them from here, and `parse_worktree_list`/`session_is_alive` are this module's public
+# reading of a worktree whichever file defines them.
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+import _claude_worktree  # noqa: F401
+from claude_worktree import (
+    Worktree,
+    cherry_says_landed,
+    merge_tree_says_contained,
+    parse_worktree_list,
+    session_is_alive,
+)
+
 REMOVABLE = "removable"
 KEEP = "keep"
 ORPHAN = "orphan"
-
-LOCK_OWNER = re.compile(r"\(pid (\d+) start (\d+)\)")
-
-
-@dataclass
-class Worktree:
-    """One entry from `git worktree list --porcelain`.
-
-    Attributes:
-        branch: the checked-out branch, or None when the worktree is detached.
-        lock_reason: the reason text `git worktree lock` recorded, empty when unlocked.
-    """
-
-    path: str
-    head: str
-    branch: str | None
-    locked: bool
-    lock_reason: str = ""
-
-
-def parse_worktree_list(porcelain: str) -> list[Worktree]:
-    """Parse `git worktree list --porcelain` into records, primary checkout first."""
-    trees: list[Worktree] = []
-    path = head = branch = None
-    locked, reason = False, ""
-    for line in porcelain.splitlines():
-        if line.startswith("worktree "):
-            path = line[len("worktree ") :]
-            head, branch, locked = None, None, False
-        elif line.startswith("HEAD "):
-            head = line[len("HEAD ") :]
-        elif line.startswith("branch "):
-            branch = line[len("branch ") :].removeprefix("refs/heads/")
-        elif line == "locked" or line.startswith("locked "):
-            locked = True
-            reason = line[len("locked ") :] if line.startswith("locked ") else ""
-        elif line == "" and path is not None:
-            trees.append(Worktree(path, head or "", branch, locked, reason))
-            path = head = branch = None
-            locked, reason = False, ""
-    if path is not None:
-        trees.append(Worktree(path, head or "", branch, locked, reason))
-    return trees
-
-
-def session_is_alive(lock_reason: str) -> bool:
-    """Is the process named in a worktree's lock reason still running?
-
-    The reason Claude Code writes carries the owning pid and its start time, e.g.
-    `claude session foo (pid 1285937 start 2164388)`. Comparing the start time against
-    /proc/<pid>/stat rejects a pid that has been reused since the session died. A reason
-    in any other format is treated as live: an unrecognized lock is someone else's, and
-    guessing wrong destroys work.
-    """
-    match = LOCK_OWNER.search(lock_reason)
-    if not match:
-        return True
-    pid, start = match.group(1), match.group(2)
-    try:
-        stat = Path(f"/proc/{pid}/stat").read_text()
-    except OSError:
-        return False
-    # The comm field can itself contain spaces and parentheses, so field numbering is only
-    # reliable after the final ')'. starttime is field 22, the 20th of those that follow.
-    fields = stat.rpartition(")")[2].split()
-    return len(fields) > 19 and fields[19] == start
 
 
 def find_orphan_dirs(worktrees_dir: str, registered: set[str]) -> list[str]:
@@ -158,39 +107,6 @@ def classify(tree: Worktree, merged: bool, dirty: bool) -> tuple[str, str]:
 
 def _git(args: list[str], cwd: str | None = None) -> str:
     return git_stdout(*args, cwd=cwd, check=False)
-
-
-def cherry_says_merged(cherry_output: str) -> bool:
-    """Read `git cherry origin/master <head>` output: True when every commit is upstream.
-
-    One line per commit on `head`, prefixed `-` when an equivalent patch is already on
-    origin/master and `+` when it isn't. No lines means nothing is ahead of upstream, which
-    is merged.
-    """
-    lines = [line for line in cherry_output.splitlines() if line.strip()]
-    return all(line.startswith("-") for line in lines)
-
-
-def merge_tree_says_contained(merge_tree_stdout: str, master_tree: str) -> bool:
-    """Read `git merge-tree --write-tree origin/master <head>`: True when the merge is a no-op.
-
-    The command prints the OID of the tree merging the branch would produce. When that equals
-    origin/master's own tree, the branch has nothing master does not already hold — which is
-    what a squash merge leaves behind, and what neither ancestry nor patch-id can see, because
-    a squash keeps the content while discarding the commits that carried it.
-
-    This asks about content, not history, so it also covers the ancestry and rebase cases the
-    two cheaper checks handle first. It is last because it is the expensive one: it performs a
-    real merge.
-
-    Empty input is a failure to read a verdict, not a match, so it returns False — both
-    arguments must be present for a comparison to mean anything.
-    """
-    lines = [line.strip() for line in merge_tree_stdout.splitlines() if line.strip()]
-    master = master_tree.strip()
-    if not lines or not master:
-        return False
-    return lines[0] == master
 
 
 def is_merged(repo: str, head: str, branch: str = "") -> bool:
@@ -236,7 +152,7 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     # the return code has to gate this, or an unknown ref would read as safe to delete.
     if cherry.returncode != 0:
         return False
-    if cherry_says_merged(cherry.stdout):
+    if cherry_says_landed(cherry.stdout, empty_means=True):
         return True
     master_tree = subprocess.run(
         ["git", "rev-parse", "origin/master^{tree}"],
