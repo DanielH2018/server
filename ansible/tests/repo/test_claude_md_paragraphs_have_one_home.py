@@ -66,6 +66,19 @@ def test_a_short_pointer_is_not_graded():
     assert copied_paragraphs(pointer, {"docs/x.md": pointer}) == []
 
 
+# The root file graded 32 paragraphs when this guard landed. A census that finds its subject
+# by pattern must know it found something, or a changed split leaves it green over nothing.
+MIN_GRADED_PARAGRAPHS = 20
+
+
+def test_the_census_grades_the_root_file():
+    graded = paragraphs(CLAUDE_MD.read_text())
+    assert len(graded) >= MIN_GRADED_PARAGRAPHS, (
+        f"only {len(graded)} root paragraphs clear MIN_CHARS; the split or the threshold "
+        "stopped matching the file"
+    )
+
+
 def test_no_root_paragraph_is_also_in_a_skill_rule_or_docs_page():
     others = {
         str(doc.relative_to(REPO)): doc.read_text(errors="replace")
