@@ -134,7 +134,7 @@ filterwarnings = ["error"]
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
-  "ui: live browser smoke against the homelab's own routes (scripts/diagnostics/tests/test_ui_smoke.py)",
+  "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
   "without_segmenter: runs where the dotfiles claude_guard segmenter is absent (CI); the rest of a module under the segmenter_or_skip fixture skips there (.claude/hooks/tests/conftest.py)",
 ]
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
