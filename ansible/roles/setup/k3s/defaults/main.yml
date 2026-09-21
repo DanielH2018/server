@@ -385,7 +385,9 @@ k3s_longhorn_csi_sidecar_memory_request: 192Mi
 # ROTATES over every volume declared for backup — one per night, least-recently-attempted first,
 # which is a full cycle in as many days as there are candidates (25 on 2026-08-20). Empty means
 # rotate; setting this to a PVC name pins the drill to that one volume, which is a debugging
-# lever and not the normal mode.
+# lever and not the normal mode. To drill one volume ONCE, do not set this: pass the PVC to the
+# script (`sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or RESTORE_DRILL_PIN=<pvc>),
+# which overrides this value for that run only.
 #
 # It was pinned to one volume until 2026-08-20, on a cost model that no longer holds. That model
 # read "a Class B GET per block, so drilling everything is unaffordable" — true at 2 MiB blocks,
