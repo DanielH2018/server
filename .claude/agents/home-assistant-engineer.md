@@ -144,7 +144,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   item, same consequence: Cloud/mDNS discovery doesn't work, and the Zigbee coordinator is
   network-attached (SLZB-06M over TCP) precisely so no dongle passthrough is needed. Plus any
   "don't re-flag" items provided in your dispatch context.
-- Z2M **device** settings (FP300/Hue tuning) are NOT templated — they're set via `mosquitto_pub`
+- Z2M **device** settings (FP300/Hue tuning) are NOT templated — they're set by `scripts/z2m/set_device_option.sh`
   and must be re-applied after a re-pair. Use `z2m-device-setting`; note them in the role `CLAUDE.md`.
 - Make changes only in `ansible/roles/k8s/home-assistant/` (and `scripts/`/`.claude/` for
   tooling). Never hand-edit the generated `state/` files (`derived_state.yml`, `STATE.md`,

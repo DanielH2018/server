@@ -13,8 +13,10 @@ route — infra role, no Deployment of its own.
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Must run before any role that mounts `media-data`** (`sonarr` in `containers_list` is
-  ordered right after it, with a comment saying so).
+- **Must run before any role that mounts `media-data`** — the seven mounters (`sonarr`,
+  `qbittorrent`, `radarr`, `bazarr`, `jellyfin`, `tdarr`, `janitorr`) each carry
+  `depends_on: [media-volume]` on their `containers_list` entry, and every pair is pinned by
+  `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 - **Storage:** a **static local PV** (`media-local` StorageClass) at `media_volume_host_path`
   (`/srv/media`, 400Gi advisory only — no quota behind it), deliberately not a dynamic
   `local-path` PVC — see `defaults/main.yml` for the three reasons (naming, reclaim policy,

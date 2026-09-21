@@ -233,3 +233,56 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
         assert idx["crowdsec"] < idx["traefik"], (
             "crowdsec sorted after traefik despite the LAPI machine-credential depends_on"
         )
+
+
+# Every pairwise ordering a role doc or a containers_list comment states in prose, as the
+# `depends_on:` edge that carries it. Until issue #2167 these held by hand position alone,
+# which the stable sort preserved and nothing checked: dropping the edge, or moving the entry,
+# passed every test above. The value names where the prose lives, so a reader of a red
+# failure knows which doc to reconcile.
+DOCUMENTED_ORDERINGS = {
+    ("mosquitto", "zigbee2mqtt"): "roles/k8s/mosquitto/CLAUDE.md",
+    ("media-volume", "sonarr"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "qbittorrent"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "radarr"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "bazarr"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "jellyfin"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "tdarr"): "roles/k8s/media-volume/CLAUDE.md",
+    ("media-volume", "janitorr"): "roles/k8s/media-volume/CLAUDE.md",
+    ("loki-homelab", "valheim-stats"): "roles/k8s/valheim-stats/CLAUDE.md",
+    (
+        "loki-homelab",
+        "terraria-stats",
+    ): "host_vars/daniel-box.yml (terraria-stats comment)",
+    ("sonarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("radarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+    ("jellyfin", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
+}
+
+
+@pytest.mark.parametrize(
+    ("before", "after"), sorted(DOCUMENTED_ORDERINGS), ids=lambda s: s
+)
+def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before, after):
+    """The derived order keeps `before` ahead of `after` when the list itself says otherwise.
+
+    The hand-ordered list already satisfies every pair, and toposort_containers is stable,
+    so sorting it proves nothing about the edge. `after` is moved to the head and `before`
+    to the tail: only an edge in build_k8s_dep_map can put them back.
+    """
+    # fact: ansible/roles/k8s/mosquitto/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/media-volume/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/valheim-stats/CLAUDE.md#At a glance
+    _path, entries, idx = host
+    if before not in idx or after not in idx:
+        pytest.skip(f"host does not deploy both {before} and {after}")
+    by_name = {c["name"]: c for c in entries}
+    others = [c for c in entries if c["name"] not in (before, after)]
+    adversarial = [by_name[after], *others, by_name[before]]
+
+    order = _sorted_names(adversarial)
+    assert order.index(before) < order.index(after), (
+        f"{after} sorted before {before}; {DOCUMENTED_ORDERINGS[(before, after)]} says it "
+        f"must not. The `depends_on:` on {after}'s containers_list entry is what carries "
+        "that, and it is gone or points elsewhere."
+    )

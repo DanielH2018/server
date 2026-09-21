@@ -14,8 +14,9 @@ web UI, no route — infra role.
   independent reasons
 <!-- /generated_from -->
 
-- **Must deploy before `zigbee2mqtt`** (`containers_list` orders it right after, with a comment saying so — z2m resolves the broker
-  by bare Service name).
+- **Must deploy before `zigbee2mqtt`** — z2m resolves the broker by bare Service name. The edge is
+  `depends_on: [mosquitto]` on zigbee2mqtt's `containers_list` entry, pinned by
+  `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 - **LAN address:** a MetalLB LoadBalancer Service pinned to `mqtt_k8s_vip` (`group_vars`, so
   daniel-server's Docker-side clients can render the same value), asserted after apply.
 - **Persists:** `mosquitto-data` (`longhorn-nobackup`, 1Gi) — retained messages and QoS session
