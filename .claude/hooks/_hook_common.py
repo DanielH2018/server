@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: imported by auto-approve-readonly.py, block-footguns.py, block-protected-bash.py, block-protected-edits.py and nudge-land-sh.py
+#   reason: imported by auto-approve-readonly.py, block-footguns.py, block-protected-bash.py, block-protected-edits.py, inject-nested-docs.py and nudge-land-sh.py
 """Shared helpers for the PreToolUse hooks (auto-approve-readonly.py, block-protected-edits.py).
 
 Both hooks run standalone under the repo's uv python with the hooks dir as ``sys.path[0]`` (the
@@ -190,6 +190,26 @@ def emit_pretooluse_decision(decision: str, reason: str) -> None:
                     "hookEventName": "PreToolUse",
                     "permissionDecision": decision,
                     "permissionDecisionReason": reason,
+                }
+            }
+        )
+    )
+
+
+def emit_pretooluse_context(context: str) -> None:
+    """Print a PreToolUse output that adds `context` for the model and decides nothing.
+
+    The harness accepts `additionalContext` on its own: with no `permissionDecision` the
+    call proceeds through the normal permission flow and the text reaches the model beside
+    the tool result (read from the 2.1.267 bundle, `jno` / `uMn`). Keep it under 10,000
+    chars — a longer one is persisted to disk and replaced by a preview stub.
+    """
+    print(
+        json.dumps(
+            {
+                "hookSpecificOutput": {
+                    "hookEventName": "PreToolUse",
+                    "additionalContext": context,
                 }
             }
         )

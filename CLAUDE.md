@@ -333,7 +333,9 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   `scripts/diagnostics/ui_mcp.sh`, which supplies the DNS pin, the Authelia session and the
   0600 config. **Going through Traefik is not a shortcut here, it is the only path** — a
   ClusterIP reaches only pods on the node you run from (the baseline NetworkPolicy admits the
-  two cni0 gateways alone, `netpol-baseline/defaults/main.yml:41`), and `kubectl port-forward`
+  two cni0 gateways alone,
+  `ansible/roles/k8s/netpol-baseline/defaults/main.yml:netpol_baseline_node_cidrs`), and
+  `kubectl port-forward`
   is denied to the read-only ServiceAccount. code-server, n8n and longhorn are `two_factor` and
   need `ui_mcp.sh --two-factor`, which mints its own session as the `claude-ui` Authelia user —
   no typed code, since that user's TOTP secret is a SOPS value.
@@ -357,6 +359,15 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a
   quoted `;` stays inside its word; text it cannot split — no `claude_guard` deploy on the
   host, or an unbalanced quote — is an **ask** naming the fix, never a silent pass.
+- **inject-nested-docs** (PreToolUse, Bash) — *adds context*, never a decision. A role's
+  `CLAUDE.md` and a `.claude/rules/*.md` load only when Read/Edit/Write touches a matching
+  path; a `cat`/`sed -n` through Bash — the form auto mode instructs — loads neither, and 74
+  of 113 Bash-only session×role pairs never saw the role doc (measured 2026-09-19, #2125).
+  `.claude/hooks/inject-nested-docs.py` reads the paths a command names, returns each
+  ancestor `CLAUDE.md` and matching rule as `additionalContext` once per session, and logs
+  the row to `.claude/logs/instructions.log` as `bash_path_match` so the same log grades it.
+  A doc over 7,500 chars arrives as its heading outline plus a read pointer: the harness
+  persists a longer `additionalContext` to disk and hands the model a preview stub instead.
 - **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
   `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
   `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and

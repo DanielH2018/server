@@ -4,7 +4,10 @@
 """Record which CLAUDE.md / .claude/rules file loaded into context, and why.
 
 One line per file as it loads, carrying the file and its `load_reason`: session_start,
-path_glob_match, nested_traversal, include, compact.
+path_glob_match, nested_traversal, include, compact. `inject-nested-docs.py` appends a sixth,
+`bash_path_match`, through `append_row` below, for a doc it supplied because a Bash command
+named a path under it (issue #2125) — so one log grades both the harness's loads and the
+hook's.
 
 The point: verify that path-scoped rules actually fire. Claude Code has known bugs where a
 `paths:`-scoped rule isn't loaded when you edit a matching file (or loads globally regardless). With
@@ -63,6 +66,16 @@ def main():
         extra += " globs=" + ",".join(d["globs"])
     if d.get("parent_file_path"):
         extra += " parent=" + rel(d["parent_file_path"], cwd)
+    append_row(reason, mtype, fp, sid, extra)
+
+
+def append_row(reason, mtype, fp, session_id, extra=""):
+    """Append one row to the log: `<ts> [<sid>] <reason> <mtype> <path><extra>`.
+
+    `session_id` may be the full id or the 8-char prefix the row carries; `extra` is the
+    already-formatted tail (` trigger=…`), empty for a session_start row.
+    """
+    sid = (session_id or "")[:8]
     ts = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
     line = "{} [{:8}] {:16} {:8} {}{}\n".format(ts, sid, reason, mtype, fp, extra)
 
