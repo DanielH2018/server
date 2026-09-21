@@ -28,7 +28,10 @@ command: its own text never contains `gh pr merge`, so it reaches the classifier
 single script invocation the worktree-containment check already accepts. It is idempotent —
 a PR already `MERGED` is left alone, so re-running the same command after a `merge-conflict`
 or `merge-timeout` re-arms cleanly. Pass `--subject` to override the squash commit's subject;
-the PR's own title is used otherwise.
+the PR's own title is used otherwise. Under `LAND_REQUIRE_AUTHOR=<login>` the arm refuses a
+PR by any other author (renovate-agent.service sets it to `app/renovate`, so the unattended
+agent can only merge Renovate's PRs — #2170); `--any-author` lifts it for a session that is
+allowed to merge the PR. An interactive shell leaves the variable unset and never sees this.
 
 **Open the PR with `--fill`, then replace the body — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is

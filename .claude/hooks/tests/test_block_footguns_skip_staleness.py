@@ -21,27 +21,59 @@ assert _spec and _spec.loader, "spec_from_file_location found no loader"
 _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
-pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
+# The rule itself, handed a stage directly: these run on CI, which has no `claude_guard`
+# deploy and skips every `problem()` test below. Without them a rule that stopped matching
+# would fail nothing on the host that gates a merge.
 
 
+def test_the_rule_denies_a_deploy_sh_stage_carrying_the_flag():
+    assert _mod.skip_staleness_problem(
+        ["./scripts/deploy.sh", "--tags", "sonarr", "--skip-staleness-check"]
+    )
+
+
+def test_the_rule_ignores_a_deploy_sh_stage_without_the_flag():
+    assert (
+        _mod.skip_staleness_problem(["./scripts/deploy.sh", "--tags", "sonarr"]) is None
+    )
+
+
+def test_the_rule_ignores_the_flag_behind_another_binary():
+    assert (
+        _mod.skip_staleness_problem(["grep", "-rn", "--skip-staleness-check"]) is None
+    )
+
+
+def test_the_rule_is_registered():
+    assert _mod.skip_staleness_problem in _mod._RULES
+
+
+_needs_segmenter = pytest.mark.usefixtures("segmenter_or_skip")
+
+
+@_needs_segmenter
 def test_deploy_sh_with_the_staleness_flag_is_denied():
     assert "staging_gate_remote.sh" in _mod.problem(
         "./scripts/deploy.sh --tags sonarr --skip-staleness-check"
     )
 
 
+@_needs_segmenter
 def test_the_flag_before_the_tags_is_denied():
     assert _mod.problem("scripts/deploy.sh --skip-staleness-check --tags sonarr")
 
 
+@_needs_segmenter
 def test_a_keyword_prefixed_deploy_is_denied():
     assert _mod.problem("! ./scripts/deploy.sh --tags sonarr --skip-staleness-check")
 
 
+@_needs_segmenter
 def test_deploy_sh_without_the_flag_is_clean():
     assert _mod.problem("./scripts/deploy.sh --tags sonarr") is None
 
 
+@_needs_segmenter
 def test_the_staging_gate_invocation_is_clean():
     """The one sanctioned use is inside staging_gate_remote.sh's own text. DECIDED: this
     case cannot fire — the flag never appears in the invocation — and the test stays, because
@@ -55,6 +87,7 @@ def test_the_staging_gate_invocation_is_clean():
     )
 
 
+@_needs_segmenter
 def test_the_flag_as_a_grep_argument_is_clean():
     """Keyed on the command word, not the flag: reading about the flag is not using it."""
     assert _mod.problem("grep -rn -- --skip-staleness-check scripts/ docs/") is None
