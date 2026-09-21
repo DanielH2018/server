@@ -94,7 +94,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; the repo is public, so the fetch needs no token
+          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -186,6 +186,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
           # A change to one of these is a change to what a hook CHECKS, not to a file it checks,
           # and the scoped run cannot see that: the hook's `files` regex matches the code, so a
           # PR editing only the config ran that hook against nothing and master's full sweep
@@ -204,7 +205,12 @@ jobs:
             .gitleaks.toml
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE_REF"
+          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
+          # private, so a bare fetch has no credential and dies on "could not read Username". The
+          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
+          # written to .git/config.
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$BASE_REF"
           # --no-renames so a rename is reported as its D + A halves rather than one R entry:
           # the D is what trips the full-sweep fallback below, which is the behaviour we want.
           base="origin/$BASE_REF...HEAD"
@@ -295,7 +301,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; the repo is public, so the fetch needs no token
+          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -339,6 +345,7 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
           # What changes ansible-lint's verdict on files this PR did not touch: its own config,
           # the hook rev in prek.toml, and the collections it resolves modules against. None of
           # them can go in the hook's `files` — an explicitly passed path is linted whatever it
@@ -352,7 +359,12 @@ jobs:
             ansible/requirements.yml
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE_REF"
+          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
+          # private, so a bare fetch has no credential and dies on "could not read Username". The
+          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
+          # written to .git/config.
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$BASE_REF"
           base="origin/$BASE_REF...HEAD"
           # --no-renames so a rename is reported as its D + A halves rather than one R entry.
           mapfile -t deleted < <(git diff --name-only --no-renames --diff-filter=D "$base")
@@ -524,7 +536,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0  # the merge-base diff below needs history
-          persist-credentials: false  # nothing here pushes; the repo is public, so the fetch needs no token
+          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
@@ -549,9 +561,15 @@ jobs:
         if: github.event_name == 'pull_request'
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
         run: |
           set -euo pipefail
-          git fetch --no-tags origin "$BASE_REF"
+          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
+          # private, so a bare fetch has no credential and dies on "could not read Username". The
+          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
+          # written to .git/config.
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$BASE_REF"
           # Three dots: against the merge base, so it is this PR's own change to the file.
           if git diff --quiet "origin/$BASE_REF...HEAD" -- renovate.json; then
             echo "changed=false" >> "$GITHUB_OUTPUT"
