@@ -26,30 +26,7 @@ docs/             # Runbooks, design specs, security notes
   archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
 ```
 
-> **A script imports across `scripts/` subdirectories with `from <dir> import <mod>`, and only
-> after a `sys.path` bootstrap.** A directly-invoked script gets its OWN directory on
-> `sys.path` and nothing else — `pythonpath` in `pyproject.toml` is a pytest setting, so a
-> cross-directory import that pytest resolves still raises `ModuleNotFoundError` under the cron
-> or prek hook that actually runs it. Every module reaching outside its own directory therefore
-> carries its own aliased insert (`_sys.path.insert(0, _Path(__file__).resolve().parents[1])`);
-> copy that from a sibling. It goes on the module that needs it, never on a shared one — a
-> single bootstrap in an imported module only works for whoever imports it first.
-> A module under a `tests/` directory carries none of this — a `test_*.py`, a `conftest.py`
-> or a `_*.py` fixture module a test imports: pytest is its only invoker, and `pythonpath`
-> lists `scripts/` and every subdirectory but `validate` and `diagnostics`. A test under
-> those two inserts its own package directory; any other insert `pythonpath` already
-> supplies is dead weight, and `scripts/tests/test_test_module_bootstraps_present.py`
-> refuses it.
-> The subdirectories have **no `__init__.py`** on purpose: they resolve as PEP 420 namespace
-> packages, and adding one would change how pytest names the test modules under them.
-> Verify a moved or new entry point by RUNNING it (`uv run python scripts/<dir>/<name>.py
-> --help`), not by running the suite — the suite is exactly the thing that cannot see this.
-
-> **`containers/` is not a directory in this repo** — it is untracked and rendered by Ansible onto the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/` instead. (The `block-protected-edits` hook enforces this.)
-
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 eleven roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
->
-> **Where a k8s role's non-manifest config goes.** `roles/k8s/<name>/templates/` is for **manifests only**. App config a manifest embeds via `lookup('template')` goes in **`templates/config/`** (CouchDB's `local.ini`, HA's `secrets.yaml.j2`); a file it carries verbatim with `lookup('file')` goes in `files/` (HA's `configuration.yaml`). `scripts/validate/k8s_manifests.py` enforces both directions — it fails a `lookup('template')` naming a `templates/` path outside `config/`, and a top-level template that renders a document with no `kind` — and `is_manifest_template` in `scripts/lib/k8s_roles.py` names the two shapes it exempts (`Dockerfile*`, `*.sh.j2`).
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 some roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly:
@@ -70,9 +47,10 @@ Route to the source of truth by what you're doing, before reading linearly:
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
 | Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
 | Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** — `.claude/hooks/block-protected-edits.py` (and `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write) denies any write to a file carrying a `generated_from:` banner. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
-| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. *Generated docs fragments* below has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
+| CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. `.claude/rules/generated-docs.md` has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
 | CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
-| CI fails on `test_every_recorded_atom_hashes_as_recorded` | A `CLAUDE.md` section's support no longer matches what `docs/facts.lock` recorded. The finding names which of five causes: you changed a cited symbol, value, test or marker (`moved`/`missing`); you added a citation to an already-verified section (`unrecorded-atom`); you dropped one (`atom-no-longer-cited`); you cited a marker prefix that now matches twice (`ambiguous`); or the interpreter moved (`interpreter-moved`). Edit the section, or `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commit `docs/facts.lock`. A RENAMED heading reads as `section-gone` instead: verify the new key, then `fact_status.py forget '<old key>'`. *Fact support* below. |
+| CI fails on `test_every_recorded_atom_hashes_as_recorded` | A `CLAUDE.md` section's support no longer matches what `docs/facts.lock` recorded. The finding names which of five causes: you changed a cited symbol, value, test or marker (`moved`/`missing`); you added a citation to an already-verified section (`unrecorded-atom`); you dropped one (`atom-no-longer-cited`); you cited a marker prefix that now matches twice (`ambiguous`); or the interpreter moved (`interpreter-moved`). Edit the section, or `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commit `docs/facts.lock`. A RENAMED heading reads as `section-gone` instead: verify the new key, then `fact_status.py forget '<old key>'`. `.claude/rules/facts.md` has the citation grammar. |
+| Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md` — the `sys.path` bootstrap a cross-directory import needs, the `tests/` sibling rule and the `ansible/tests/` taxonomy. It loads on its own when you touch a path it governs; read it first when you are choosing the path. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
 | Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — monitor-bridge names its `check-script`, rendered in `ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
@@ -100,16 +78,10 @@ service rather than a fact you need in every session:
 
 Two facts stay here because they bite from outside those procedures:
 
-- **`containers_list` position no longer matters for a k8s entry** (Docker still runs its own
-  play in tag-narrowed dependency order, unaffected). `ansible/deploy.yml` toposorts the k8s
-  play with `build_k8s_dep_map` / `toposort_containers`
-  (`ansible/filter_plugins/toposort.py`): a role that renders a Traefik CRD gets an edge onto
-  `traefik`, and `use_authelia: true` gets one onto `authelia`, both derived from the role's
-  own templates and the entry itself — a new entry gets them for free, wherever you put it in
-  the list. The one ordering need no template carries — crowdsec before traefik, for the LAPI
-  machine credential — is declared, not positioned: `depends_on: [crowdsec]` on traefik's
-  entry in `host_vars`. If a new entry needs an ordering constraint a template can't express,
-  add its own `depends_on:` rather than moving it in the list.
+- **`containers_list` position does not matter for a k8s entry.** `ansible/deploy.yml`
+  toposorts the k8s play (`ansible/filter_plugins/toposort.py`) from edges the role's own
+  templates and entry declare; an ordering no template carries goes in `depends_on:` on the
+  entry, never in its list position. The `new-k8s-service` skill has the derivation.
 - **`kubectl apply` leaves stale Secret keys behind.** Removing a key from a `secret.yaml.j2`
   does not remove it live.
 
@@ -137,17 +109,11 @@ error naming a module rather than the cache, after the ~9-minute wait on the loc
 
 Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO_VERDICT`
 (`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
-than a playbook failure (retry a busy lock, `git pull` a stale tree — never
-`--skip-staleness-check` — deploy by hand on a broad change, check `--list-services` on a tag
-miss, fix the lock file itself on 76, fix what the captured stderr names on 77, fix the inventory or host
-pattern on 78 — the playbook matched no host, which ansible itself exits 0 for — and run
-`deploy_locks.py plan <tag>` by hand on 79, where the wrapper got no lock list and refused
-rather than order the locks itself).
-`DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command line rather than a retry.
-`DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a task
-failed, and changes before it are live — not a safe re-run. The full table, why 20 collides
-with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps tick, and
-initial setup are all in the **`deploy` skill**.
+than a playbook failure. `DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command
+line rather than a retry. `DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a
+task failed, and changes before it are live — not a safe re-run. The per-code table, why 20
+collides with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps
+tick, and initial setup are all in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -176,32 +142,19 @@ load-bearing, and why `--since` is needed are in the **`land-after-merge` skill*
 hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
 before `land.sh` existed.
 
-**A PR reaching service tags and nothing the tick applies itself is deployed from a snapshot of
-its own merge commit, not from the primary checkout.** `land.sh` hands `deploy.sh --at <merge
-sha>`, so it neither needs nor waits for the tick to fast-forward that checkout first: the
-tick is kicked with `--no-wait` AFTER the deploy returns, and converges the checkout while the
-health gate runs. `tick=0` on the Landings board means no tick was awaited in step 4; a `lock=`
-wait beside it is the deployer's timer-started tick, or another deploy of the same service
-holding its per-service lock — which is the common case, since the tree lock is held for the
-snapshot only. A landing waits for the tick wherever the tick is the apply for part of its
-range: a PR reaching no service tag, and a PR reaching tags AND something the tick applies
-itself (the deploy plane, or a setup role `initial_setup.yml` includes — `--tags` does not opt
-out of this). The mixed one waits because the verdict grades that half from the deployer's own
-markers, which say nothing about a tick kicked seconds earlier. A change only a HAND can apply
-does not route to the tick and does not cost the fast path.
+`land.sh` deploys a PR's own merge commit (`deploy.sh --at <sha>`) and kicks the tick
+afterwards; it awaits the tick only where the tick is the apply for part of the PR's range.
+The skill says which ranges those are and how to read `tick=` and `lock=` on the Landings
+board.
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`
-is the list, and a commit whose merge was immediately followed by another reads `cancelled`
-permanently. If you ever check by hand, check that way. (ENFORCED:
-`ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`
-holds `cancelled` in that list; the identifier-presence test beside it stays until the
-fact-support conversion retires it against this lock row.)
+is the list, and the **`land-after-merge` skill** owns the rule (ENFORCED:
+`ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
-180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires
-in the middleware before the backend is reached, and 19 dead Grafana panels sat behind a 1/1
-pod. Exercise the thing you actually changed as well.
+restart window; it cannot see whether *your change* took effect (an Authelia 302 fires before
+the backend is reached). Exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
@@ -292,53 +245,24 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
 `auto-mode-bridge` internals, and the `/audit-permissions` Loki break — is in
 `docs/claude-tooling.md`.
 
-- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt).
-  Resolves the live container IP via `docker inspect`, so prefer it over curling bridge IPs
-  (which change on recreate): `uv run python scripts/diagnostics/probe.py <targets |
-  metric '<promql>' | loki-query '<logql>' | alerts | monitors | kuma-drift | scrutiny |
-  pi <path> | cert <host> | health <svc> | ha <state|automation|get> …>`.
+- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt):
+  `uv run python scripts/diagnostics/probe.py <targets | metric | loki-query | alerts |
+  monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> | ha …>`.
   - `monitors` answers "what is down"; **`kuma-drift` answers "what is missing"**, which
-    `monitors` structurally cannot — it counts the exporter's own set, so a monitor that is gone
-    rather than down leaves the ratio at N/N up.
-  - **`health <svc>` is the k8s post-deploy gate.** It exits 0 only when the Deployment **or
-    DaemonSet** is fully rolled out **and** no container restarted in the last 180s (an
-    unreadable restart time counts as recent, so it fails closed). Both halves matter —
-    readiness flips a Deployment to Available before a bad liveness probe starts killing it, so
-    a rollout check alone reports green on a crashlooping pod. A third half reads the
-    service's release record: a workload the last apply queued a restart of must carry a
-    `restartedAt` newer than that apply, or it FAILS as NOT ROLLED — the pods that were
-    already running satisfy the first two halves, so a deploy that changed the manifests and
-    rolled nothing read green until 2026-09-17 (#1867). No record, or an apply that changed
-    nothing, leaves the verdict as it was. `--docker` inspects the Pi's
-    container over ssh instead, and is the only mode that touches Docker at all.
-    **It gates the PRODUCTION cluster unless you say otherwise**, whichever cluster you just
-    deployed to — kubectl reads whatever the local kubeconfig serves. `--cluster prod|stage`
-    names the intended one, and `scripts/lib/kubectl.py` — the one invoker every script runs
-    kubectl through — refuses when the local kubectl serves a different cluster, for every
-    subcommand and not only `health`, so a staging deploy can no longer read green about
-    prod (#1663). There is no host-side kubeconfig for the staging cluster, so gate a
-    `-e target=daniel-stage` deploy from daniel-stage itself.
-    **The argument is a deploy TAG, not a workload name.** It renders the role's manifests to
-    find every Deployment/DaemonSet/StatefulSet they declare, with each object's own namespace,
-    and gates on all of them — `health claude-otel` checks six workloads in `observability`,
-    none of them named claude-otel. A workload the manifests declare and the cluster lacks is a
-    FAILURE, not a skip; only a tag naming no workload anywhere is skipped.
-  - `ha …` reads live Home Assistant state (authed with the SOPS `claude_ha_token`); `ha
-    automation <id-or-alias>` resolves the alias-slug≠id trap. See the home-assistant role's
-    CLAUDE.md.
+    `monitors` structurally cannot.
+  - **`health <svc>` is the k8s post-deploy gate**, and its argument is a deploy TAG, not a
+    workload name. It fails closed on a rollout that is not complete, a container that
+    restarted in the last 180s, and a queued restart that never rolled (#1867). **It gates the
+    PRODUCTION cluster unless you say otherwise** — pass `--cluster prod|stage`, and
+    `scripts/lib/kubectl.py` refuses when the local kubectl serves a different cluster (#1663).
+    `--docker` is the only mode that touches the Pi's Docker.
+  - `ha …` reads live Home Assistant state; `ha automation <id-or-alias>` resolves the
+    alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
 - **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so it
-  can *see* a service's UI rather than infer it from a status code. This is the half `probe.py
-  health` structurally cannot cover: readiness flips a Deployment to Available while the UI
-  behind it is broken, which is how 19 dead Grafana panels sat behind a 1/1 pod. Launched by
-  `scripts/diagnostics/ui_mcp.sh`, which supplies the DNS pin, the Authelia session and the
-  0600 config. **Going through Traefik is not a shortcut here, it is the only path** — a
-  ClusterIP reaches only pods on the node you run from (the baseline NetworkPolicy admits the
-  two cni0 gateways alone,
-  `ansible/roles/k8s/netpol-baseline/defaults/main.yml:netpol_baseline_node_cidrs`), and
-  `kubectl port-forward`
-  is denied to the read-only ServiceAccount. code-server, n8n and longhorn are `two_factor` and
-  need `ui_mcp.sh --two-factor`, which mints its own session as the `claude-ui` Authelia user —
-  no typed code, since that user's TOTP secret is a SOPS value.
+  can *see* a service's UI rather than infer it from a status code — the half `probe.py health`
+  structurally cannot cover. Launched by `scripts/diagnostics/ui_mcp.sh`; the `two_factor`
+  services need `ui_mcp.sh --two-factor`. Going through Traefik is the only path — a ClusterIP
+  reaches only pods on the node you run from, and `kubectl port-forward` is denied.
 - **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
   `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
   (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
@@ -466,151 +390,32 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   secrets are encrypted to, and auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/`
   directories (SOPS searches upward from the file, so this lives at `ansible/`, not root)
 - At runtime, `community.sops.sops_decrypt` lookup decrypts values
-- **Rotation tracking:** `ansible/secret_rotation.yml` (plaintext registry — names/dates/tiers,
-  no values) + `scripts/secrets_mgmt/secret_rotation.py` (`sync`/`audit`/`rotate`). A daily server cron pushes
-  the "Secret Rotation" Kuma monitor; due-dates are staggered. After adding a secret, run
-  `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. Runbook + the DANGER `pinned`
-  procedure (authelia storage key): `docs/secret-rotation.md`. The kopia repo password was the
-  other one and is **gone** — removed from SOPS with the repo on 2026-08-13, so there is nothing
-  left to rotate. The B2 account credentials Longhorn still uses were renamed `kopia_b2_*` →
-  `longhorn_b2_*` on 2026-09-09; see
-  `docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md`. **A SOPS rename re-encrypts
-  the value** — sops binds each ciphertext to its key path — so the rename commit reads as a
-  rotation unless the new name is recorded in `RENAMED_FROM` (`scripts/secrets_mgmt/git_dates.py`)
-  and its `last_rotated` carried over with `secret_rotation.py record --key <new> --last-rotated
-  <date>`. Rename that way, or the clock silently resets; a key dropped outright goes in
-  `RETIRED` beside the table, and `test_departed_secrets_are_accounted_for.py` fails on a
-  departed key in neither.
+- **Rotation tracking** is `ansible/secret_rotation.yml` (a plaintext registry — names, dates,
+  tiers, no values) plus `scripts/secrets_mgmt/secret_rotation.py`. After adding a secret, run
+  `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. The tiers, the
+  DANGER `pinned` procedure, and how to rename or retire a key without resetting its clock
+  (`RENAMED_FROM` / `RETIRED` in `scripts/secrets_mgmt/git_dates.py`) are in
+  `docs/secret-rotation.md`.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
   `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
   encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping
   because an encrypted diff is unreadable. But the plaintext lands in the terminal, the scrollback,
   and any agent transcript that captured the command, so a value exposed that way needs rotating.
-  A reviewer did exactly this during the 2026-08-24 review (L-5). To see THAT it changed without
-  seeing anything it holds, use `git diff --stat ansible/vars/secrets.yml` or `--name-only`: the
-  driver still decrypts, but those emit no file content, so no plaintext reaches stdout. To see
-  what actually changed, open it with `sops ansible/vars/secrets.yml`.
-  **Do not filter the plaintext through a pipe.** This file prescribed
-  `git diff … | grep -oE '^[-+][a-z_]+:'` until 2026-08-29, and the user-level deny hook
-  (`claude_guard.deny`, behind `~/.claude/hooks/guard-pre-tool-use.sh` since 2026-09-17; it was
-  `block-dangerous-bash.sh` before that) denies every `git diff`/`show`/`log -p` naming a SOPS
-  path unless one of the content-free flags above is present. Two reasons, and the second is the one that generalises. The hook matched the
-  `git diff` half regardless of what followed the pipe, so for a while the remedy this file named
-  was denied by the rule printing it. And `-o` is load-bearing: without it grep prints the whole
-  matching line — key *and* plaintext value. That is not hypothetical, it is how this line read
-  until 2026-08-27, and it leaked a freshly minted push token into a session transcript before the
-  token was rotated. A filter that leaks everything when mistyped is the wrong shape for the job;
-  a flag that emits no content cannot leak however it is typed.
+  To see THAT it changed without seeing anything it holds, use `git diff --stat
+  ansible/vars/secrets.yml` or `--name-only`: the driver still decrypts, but those emit no file
+  content, so no plaintext reaches stdout. To see what actually changed, open it with `sops
+  ansible/vars/secrets.yml`.
+  **Do not filter the plaintext through a pipe.** The user-level deny hook (`claude_guard.deny`,
+  behind `~/.claude/hooks/guard-pre-tool-use.sh`) denies every `git diff`/`show`/`log -p` naming a
+  SOPS path unless one of the content-free flags above is present. A filter that leaks everything
+  when mistyped is the wrong shape for the job; a flag that emits no content cannot leak however
+  it is typed. `docs/claude-shell-permissions.md` has the incidents behind the rule.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
   secret-load `pre_task`, which reads as a playbook bug rather than a missing key.
   `ansible/bootstrap.yml` is the way in — it has no secret dependency. The four-step
   onboarding is in the **`add-secret` skill**.
-
-## Ansible Conventions
-- All tasks must be **idempotent** — rerunning should be side-effect-free
-- Use specific modules (`ansible.builtin.apt`, `ansible.builtin.copy`, etc.) over `shell`/`command`
-- Give all tasks meaningful names
-- Use `ansible-lint` before committing playbooks
-- Jinja2 templating (`{{ var }}`) for all variables
-
-## Docker Compose Conventions
-- All containers use Traefik labels for reverse proxy routing
-- Docker network: `proxy`
-- PUID/PGID: `1000`/`1000`, user: `ubuntu`
-- Timezone: `America/Chicago`
-- Containers should have healthchecks defined where possible
-
-## Generated docs fragments
-
-The hand-written pages under `docs/` transclude their fact tables — a `--8<--` include pulling
-in a file `scripts/docs/gen_doc_fragments.py` writes under `docs/assets/generated/fragments/`.
-The prose stays hand-written; the tunables beside it are re-read from the tree.
-
-**Changing one of those tunables fails CI until you regenerate.** Run
-`uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes, in the same PR.
-`FRAGMENTS` in that generator lists every tunable it reads.
-
-**A role `CLAUDE.md`'s `## At a glance` block is generated the same way, in place.**
-`scripts/docs/gen_role_glance.py` writes one field set per role shape between two
-`generated_from` markers under that heading: a deployed k8s role's deploy tag, image
-repositories, route, claims with the Longhorn backup tier of each, and auto-deploy stance; a
-setup role's applying playbook and tag, crons and timers; a Pi compose role's deploy tag,
-image repositories, `containers_list` facts, `meta/deps.yml` ordering and
-`common_config_changed` wiring. The prose below the markers stays hand-written. Changing a
-role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
-claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — fails
-`scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
-block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
-and a write under `ansible/roles/` would leave the primary checkout dirty.
-
-**Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
-reference page carries a `generated_at` banner, so a stale one announces itself on the page.
-A fragment is spliced into someone else's prose and carries no stamp a reader can see, so
-nothing but `test_every_committed_fragment_matches_what_the_generator_writes_now` would catch
-it drifting. The asymmetry is the point, not an oversight.
-
-Two paths are safe and stay safe: the weekly secret-rotate cron commits `--no-verify`, and a
-rotation moves `last_rotated` rather than a tier count, so the fragment does not move either
-way; the docs-refresh cron regenerates before it commits, so its own hooks pass.
-
-### Fact support
-
-A `CLAUDE.md` section's status is derived from the atoms it cites, never stated. A section
-is the text under one heading up to the next heading of any level, so every citation has
-exactly one owning section, keyed `<doc>#<heading text>`. Heading text is not scanned for
-citations: a backticked span in a heading names the section, never an atom in it.
-
-The grammar is closed — `scripts/lib/facts/citations.py:FORMS` — and a backticked span is
-support only in one of these six shapes:
-
-```text
-# a repo path; a directory keeps its trailing slash
-ansible/roles/k8s/traefik/
-# a Python symbol
-scripts/lib/kubectl.py:kubectl
-# a YAML key
-ansible/roles/k8s/traefik/defaults/main.yml:traefik_k8s_https_port
-# a test node
-scripts/lib/tests/test_kubectl.py::test_asking_for_staging_against_a_prod_kubectl_is_flagged
-# a DECIDED: marker, cited by text prefix
-ansible/roles/setup/gitops_deploy/files/deploy_logic.py:DECIDED: a fixed slice while
-# a probe subcommand
-probe.py kuma-drift
-```
-
-A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the
-support points one way. The examples are fenced because the lint reads this file too:
-unfenced, each one would be support for this section rather than an illustration of the
-form.
-
-A `file:line` citation is rejected: a line number moves under every edit above it. Cite the
-symbol or the marker instead.
-
-A citation is support only when it names a **tracked** file, or a directory holding a
-tracked file — so an untracked or gitignored path is prose, not broken support, the same as
-a doc-relative `defaults/main.yml` or a slashed token that names nothing here at all. A
-verdict must not depend on which checkout runs it, and a citation resolving only on the
-machine that happens to have the file on disk (a gitignored spec, an uncommitted draft) is
-exactly the failure this rules out. The tracked set is read from `git ls-files`, not listed.
-A rejected form stays rejected whatever its prefix: a line number is a claim about this tree
-however it is spelled.
-
-`docs/facts.lock` records the hashes each verified section was checked against. The tool
-writes it; a hand edit fails `test_every_recorded_atom_hashes_as_recorded` as tampered.
-`fact_status.py status` prints every section's status. `verify '<doc>#<heading>'` is the
-only path from OUT back to IN, and `forget '<doc>#<heading>'` drops a row whose heading is
-gone — a rename makes a new unit, and the old row cannot be hand-deleted without tripping
-the lock's checksum. The `facts-lint-changed` prek hook is the ratchet for everything not
-yet in the lock: it runs `lint --changed-since` over the sections a commit edits.
-
-A section that cites atoms but has no lock row is UNVERIFIED and never fails anything. A
-section that cites nothing is a convention and is never graded. A `probe.py` citation reads
-UNKNOWN rather than IN: nothing in this slice runs a probe, so its shape hash waits on the
-reconcile timer. The memory store, the reconcile timer and the re-verifier are the spec's
-later slices:
-`docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md`.
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
@@ -645,24 +450,9 @@ uv run pytest scripts         # just one suite
   `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
   **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
 - **Suites:** read `testpaths` in `pyproject.toml` — it names every one, with a comment saying
-  what each covers. Four shapes recur: repo-wide guards in `ansible/tests/` (deploy ordering,
-  the auto-deploy gates, the documented-path and macro checks), a role's own cluster-side logic
-  under `ansible/roles/<plane>/<role>/tests/` (the code it covers stays in `files/`, which is
-  what the role ships), the Bash classifier in `.claude/hooks/tests/`, and `scripts/<dir>/tests/`.
-  Tests never sit beside the code they cover: a `tests/` sibling keeps them out of every
-  `files/` ship list and lets the deployer's test-only path rule stay a directory check
-  (ENFORCED by `ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test
-  in a `tests/` directory reaches its module through a `sys.path` bootstrap pointing at the
-  sibling `files/`, or through `pythonpath` where the module is shared across roles. A role
-  that ships a `files/*.py` with logic adds its `tests/` directory to `testpaths`.
-  `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
-  and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
-  `longhorn/` (backup, snapshot, revert), `setup/` (the host plane: k3s install, crons, DNS,
-  UPS, the Pi), `staging/`, `services/` (one role each) and `repo/` (CI, docs and the suite's
-  own guards). `_helpers.py`, `_k8s_render.py` and `conftest.py` stay at the root, reachable
-  from every subdirectory because `pyproject.toml` puts `ansible/tests` on `pythonpath`. A
-  new guard goes in the directory whose name answers "what does it read", and keeps a unique
-  basename — there are no `__init__.py` files, so pytest names modules by basename alone.
+  what each covers. Tests never sit beside the code they cover; where a new test or module
+  goes, and the `sys.path` bootstrap a cross-directory import needs, is
+  `.claude/rules/python-layout.md`, which loads when you touch a path it governs.
 - **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
   lands with a paired test: one input it must accept, and one input it must reject. A check is only
   ever observed passing, so without the rejecting half there is no evidence it can fail — and this
@@ -697,15 +487,6 @@ uv run pytest scripts         # just one suite
   decides and the expensive one only explains. **A slow source is a design input, not a detail:**
   when one exists, make it conditional on the cheap signal having already fired, and make its
   failure downgrade the diagnosis rather than the verdict.
-- **Test-placement gotcha:** pytest tests must NOT live under `ansible/filter_plugins/` —
-  Ansible's plugin loader imports every `.py` there at deploy time and would choke on the
-  `pytest` import. `test_every_suite_file_sits_in_a_tests_directory` (in the guard above)
-  refuses a test file beside the plugin. A `filter_plugins/tests/` subdirectory would pass it
-  and still load, because `PluginLoader._get_paths_with_context` globs two levels of
-  subdirectories.
 
 CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
 these tests plus lint, template validation, and secret scanning.
-
-## Variables
-Global vars in `ansible/inventory/group_vars/all.yml`. Per-host overrides in `ansible/inventory/host_vars/`.

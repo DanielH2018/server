@@ -1,15 +1,28 @@
 ---
 paths:
-  - "containers/**"
-  - "ansible/roles/containers/**/*.j2"
+  - "ansible/roles/containers/**"
 ---
 
 # Docker Compose Rules
 
-The core conventions (`containers/` is read-only/Ansible-generated, `proxy` network, PUID/PGID
-1000/1000, TZ America/Chicago, Traefik labels, healthchecks) live in CLAUDE.md. This file only adds
-the path-specific detail not spelled out there:
+These roles deploy to `daniel-pi` only; neither cluster node has Docker. The `/new-container`
+skill carries the compose skeleton and the shared macros in `ansible/templates/`.
 
+## `containers/` is rendered, not tracked
+
+`containers/` is not a directory in this repo — it is untracked and rendered by Ansible onto
+the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration
+it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are
+overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/`
+instead. (The `block-protected-edits` hook enforces this.)
+
+## Conventions
+
+- All containers use Traefik labels for reverse proxy routing
+- Docker network: `proxy`
+- PUID/PGID: `1000`/`1000`, user: `ubuntu`
+- Timezone: `America/Chicago`
+- Containers should have healthchecks defined where possible
 - Set `restart: unless-stopped` on every service.
 - Persistent storage = bind mounts under a well-known `/data` path; **no anonymous volumes** — bind
   mounts under `containers/` keep state inspectable and portable. (Kopia retired 2026-08-10;

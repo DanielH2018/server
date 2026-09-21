@@ -15,6 +15,7 @@ from _helpers import REPO
 
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 CLAUDE_MD = (REPO / "CLAUDE.md").read_text()
+LAND_SKILL = (REPO / ".claude" / "skills" / "land-after-merge" / "SKILL.md").read_text()
 
 
 def _run(conclusion, name="prek (lint + validate + tests + secrets)"):
@@ -47,16 +48,22 @@ def test_cancelled_is_declared_no_verdict():
 
 
 def test_the_operator_docs_name_the_constant():
-    """The doc sends an operator to this constant by name; a rename must break the doc, not hide.
+    """The skill owns the rule; the root doc keeps a pointer; both name the constant.
 
     Textual on purpose. The behavioural tests above cover the deployer, and this covers the
-    half a reader acts on — the post-merge procedure they follow by hand.
+    half a reader acts on — the post-merge procedure they follow by hand. A rename of the
+    constant must break both docs rather than hide; a reword of either leaves this green.
     """
-    assert "_CI_NO_VERDICT_CONCLUSIONS" in CLAUDE_MD, (
-        "the post-merge CI gate in CLAUDE.md must keep naming the constant that decides this, "
-        "or the operator has no way to check the rule still holds"
+    assert "_CI_NO_VERDICT_CONCLUSIONS" in LAND_SKILL, (
+        "the land-after-merge skill owns the cancelled rule and must keep naming the constant "
+        "that decides it, or the operator has no way to check the rule still holds"
     )
-    assert "cancelled" in CLAUDE_MD, (
-        "the post-merge procedure must say what a cancelled conclusion means, or an operator "
+    assert "cancelled" in LAND_SKILL, (
+        "the land-after-merge skill must say what a cancelled conclusion means, or an operator "
         "polls a run that can never go green"
+    )
+    assert (
+        "_CI_NO_VERDICT_CONCLUSIONS" in CLAUDE_MD and "land-after-merge" in CLAUDE_MD
+    ), (
+        "the root CLAUDE.md pointer must name the constant and the skill that owns the rule"
     )
