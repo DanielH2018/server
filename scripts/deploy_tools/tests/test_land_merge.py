@@ -67,6 +67,49 @@ def test_arm_merge_dies_on_a_closed_pr(landing):
     assert exc.value.rc == 1 and "closed without merging" in exc.value.error
 
 
+def _by(login: str) -> dict:
+    return {"author": {"is_bot": login.startswith("app/"), "login": login}}
+
+
+def test_arm_merge_refuses_another_author_when_one_is_required(landing):
+    """The renovate agent's contract, enforced: a human's PR is never armed by its session."""
+    ln, calls = landing(
+        Fakes(gh_views={"state,title": _OPEN, "author": _by("DanielH2018")}),
+        arm_merge=True,
+        require_author="app/renovate",
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "DanielH2018, not app/renovate" in exc.value.error
+    assert not [c for c in calls if c[0] == "gh"]
+
+
+def test_arm_merge_arms_the_required_authors_pr(landing):
+    ln, calls = landing(
+        Fakes(gh_views={"state,title": _OPEN, "author": _by("app/renovate")}),
+        arm_merge=True,
+        require_author="app/renovate",
+    )
+    merge.arm_merge(ln)
+    assert [c for c in calls if c[0] == "gh"]
+
+
+def test_arm_merge_reads_no_author_when_none_is_required(landing):
+    """An interactive landing makes exactly the calls it made before the check existed."""
+    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), arm_merge=True)
+    merge.arm_merge(ln)
+    assert not [c for c in calls if c[0] == "gh:author"], calls
+
+
+def test_arm_merge_on_a_merged_pr_stays_a_no_op_under_a_required_author(landing):
+    ln, calls = landing(
+        Fakes(gh_views={"state,title": {**_OPEN, "state": "MERGED"}}),
+        require_author="app/renovate",
+    )
+    merge.arm_merge(ln)
+    assert not [c for c in calls if c[0] == "gh"]
+
+
 @pytest.mark.parametrize(
     "states, verdict",
     [

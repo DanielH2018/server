@@ -75,6 +75,20 @@ def test_path_carries_the_user_local_bin(unit: str) -> None:
     assert ".local/bin" in paths[-1]
 
 
+def test_the_unit_pins_land_sh_to_renovates_prs(unit: str) -> None:
+    """The contract's "never a PR by another author" is held by `land.sh --arm-merge`,
+    which reads LAND_REQUIRE_AUTHOR (#2170). The login must be the one the wrapper's own
+    `gh pr list --author` census uses, read from its source rather than typed here."""
+    # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    envs = directive(unit, "Environment")
+    required = [e for e in envs if e.startswith("LAND_REQUIRE_AUTHOR=")]
+    assert required, "the unit sets no LAND_REQUIRE_AUTHOR"
+    wrapper = (ROLE / "files" / "renovate_agent.py").read_text()
+    census = re.search(r'"--author",\s*"([^"]+)"', wrapper)
+    assert census, "the wrapper's gh pr list --author census is gone"
+    assert required[-1] == f"LAND_REQUIRE_AUTHOR={census.group(1)}"
+
+
 def test_onfailure_pages(unit: str) -> None:
     assert "renovate-agent-alert.service" in directive(unit, "OnFailure")
 

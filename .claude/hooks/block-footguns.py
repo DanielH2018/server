@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: run by block-footguns.sh through `uv run python`
-"""PreToolUse(Bash) guard: eight commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: nine commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
 them worth a hook rather than a paragraph. What they share is that none of them ERRORS: seven
-produce a plausible-looking result that is wrong, and the eighth succeeds outright while
-bypassing the wrapper the repo requires, so nothing downstream notices either way.
+produce a plausible-looking result that is wrong, and the last two succeed outright while
+bypassing a gate the repo requires, so nothing downstream notices either way.
 
   1. `grep -Z` / `grep -z`. This host's grep is ugrep 7.8, where `-Z` is `--fuzzy` (approximate
      matching, not a NUL separator) and `-z` is `--decompress` (not `--null-data`). A
@@ -48,6 +48,15 @@ bypassing the wrapper the repo requires, so nothing downstream notices either wa
      files the same finding again. CLAUDE.md said "never by hand" and nothing enforced it
      (#2160). `findings.py` itself calls `gh` from Python, which never reaches this hook, so
      there is no exemption to write.
+
+  9. `deploy.sh --skip-staleness-check` typed by a session. deploy.sh refuses a tree behind
+     `origin/master` (exit 4, nothing deployed) because a stale tree renders stale templates
+     and reverts live config while every repo-side check reads green — and the flag makes that
+     deploy succeed with a green recap. The deploy skill and `docs/deploying.md` said "never";
+     `auto-mode-bridge.py` nudged in prose; nothing denied it (#2170). The one correct use is
+     INSIDE `scripts/deploy_tools/staging_gate_remote.sh`, whose tree is pinned behind master
+     by construction: that flag is in the script's own text, never in a Bash tool command, so
+     the script's invocation needs no exemption here.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
@@ -269,6 +278,31 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     )
 
 
+_STALENESS_FLAG = "--skip-staleness-check"
+
+
+def skip_staleness_problem(stage: list[str]) -> str | None:
+    """`deploy.sh --skip-staleness-check` typed as a command.
+
+    Keyed on the command word's basename so `./scripts/deploy.sh`, `scripts/deploy.sh` and
+    the absolute path all match, and so a `grep`/`sed` naming the flag as an argument stays
+    clean. `staging_gate_remote.sh` passes the flag from inside its own text; a session's
+    invocation of it carries no flag, so it never reaches this rule.
+    """
+    words = strip_shell_keywords(stage)
+    if not words or words[0].rsplit("/", 1)[-1] != "deploy.sh":
+        return None
+    if _STALENESS_FLAG not in words[1:]:
+        return None
+    return (
+        f"`deploy.sh {_STALENESS_FLAG}` deploys a tree behind origin/master: stale templates "
+        "render and live config reverts while every check reads green. Pull first (a landing "
+        "goes through `land.sh --at <sha>`), then deploy without the flag. The only sanctioned "
+        "use is inside scripts/deploy_tools/staging_gate_remote.sh, whose tree is pinned "
+        "behind master on purpose."
+    )
+
+
 _RULES = (
     ugrep_flag_problem,
     bare_stash_problem,
@@ -278,6 +312,7 @@ _RULES = (
     pgrep_self_match_problem,
     security_and_analysis_problem,
     issue_create_by_hand_problem,
+    skip_staleness_problem,
 )
 
 
@@ -294,8 +329,12 @@ _RULE_BINARY_RE = re.compile(
 
 
 def could_fire(command: str) -> bool:
-    """True if `command` names a binary one of `_RULES` keys on, read off the raw text."""
-    return _RULE_BINARY_RE.search(command) is not None
+    """True if `command` names a binary one of `_RULES` keys on, read off the raw text.
+
+    Rule 9 keys on a flag rather than a binary: `deploy.sh` is almost always typed behind a
+    `./scripts/` path, which the regex's lookbehind refuses, so the flag literal is the gate.
+    """
+    return _RULE_BINARY_RE.search(command) is not None or _STALENESS_FLAG in command
 
 
 def problem(command: str) -> str | None:

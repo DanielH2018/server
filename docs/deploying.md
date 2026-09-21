@@ -51,7 +51,7 @@ means the playbook ran, is in the `deploy` skill's table.
 | 77 | The snapshot worktree could not be created, or a full run could not list its deploy tags from it — the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works. For the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
 | 76 | `flock` failed on the lock file itself — a bad descriptor, or a lock file the deploy user cannot open — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
-| 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` |
+| 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` — `.claude/hooks/block-footguns.py` denies it typed against `deploy.sh`; the one sanctioned use is inside `staging_gate_remote.sh` |
 | 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
 | 2 | The tag matched no service | `--list-services` prints the valid values |
 | 64 | The flags contradict each other, or `--at` named no commit this checkout has (or none at all) | Fix the command line |

@@ -188,7 +188,7 @@ playbook ran and changes are live. The table is pinned to that module by
 | 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
 | 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
 | 64 | the flags contradict each other, or `--at` named no commit (or none at all) | fix the command line; nothing ran |
-| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` |
+| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` (`block-footguns` denies it typed against `deploy.sh`) |
 | 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
 | 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
 | 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |

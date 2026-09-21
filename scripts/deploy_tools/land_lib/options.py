@@ -29,6 +29,17 @@ def _merge_poll_from_env() -> int:
     return int(os.environ.get("LAND_MERGE_POLL") or MERGE_POLL_S)
 
 
+def _require_author_from_env() -> str:
+    """`LAND_REQUIRE_AUTHOR`: the only PR author `--arm-merge` may merge, or "" for any.
+
+    renovate-agent.service sets it, because that role's contract is "never a PR by another
+    author" (`ansible/roles/setup/renovate_agent/CLAUDE.md`) and nothing checked it (#2170).
+    An interactive session leaves it unset, so a person's own PR arms as before; the agent's
+    session inherits it from the unit and cannot arm a human's PR without `--any-author`.
+    """
+    return os.environ.get("LAND_REQUIRE_AUTHOR") or ""
+
+
 @dataclass(frozen=True)
 class Options:
     """The landing's parameters. Budgets are fields so a test sets them without an env knob.
@@ -44,6 +55,8 @@ class Options:
     await_merge: bool = False
     arm_merge: bool = False
     subject: str = ""
+    # The PR author `--arm-merge` insists on; "" arms any author's PR.
+    require_author: str = ""
     # Sized for a PR run plus queueing behind other PRs' runs; a PR still open after this is
     # not being merged, and the session should look at why.
     merge_timeout: int = 2700
@@ -91,6 +104,11 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         default="",
         help="the squash commit's subject (default: the PR title)",
     )
+    parser.add_argument(
+        "--any-author",
+        action="store_true",
+        help="arm a PR by any author, overriding LAND_REQUIRE_AUTHOR",
+    )
     ns = parser.parse_args(argv)
     return Options(
         pr=ns.pr,
@@ -100,6 +118,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         await_merge=ns.await_merge,
         arm_merge=ns.arm_merge,
         subject=ns.subject,
+        require_author="" if ns.any_author else _require_author_from_env(),
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),
     )

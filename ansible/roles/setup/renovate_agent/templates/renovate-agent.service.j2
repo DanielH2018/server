@@ -20,6 +20,11 @@ TimeoutStartSec={{ renovate_agent_unit_timeout }}
 Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 Environment=HOME=/home/{{ sys_user }}
 Environment=PYTHONDONTWRITEBYTECODE=1
+# The contract's "never a PR by another author", held by land.sh rather than by the prompt:
+# the session inherits this from the wrapper, and `land.sh --arm-merge` refuses a PR whose
+# author is anyone else before it issues a merge call (issue #2170). The value is the login
+# the wrapper's `gh pr list --author` census keys on.
+Environment=LAND_REQUIRE_AUTHOR=app/renovate
 # journald stores only notice+ on these hosts, and a unit's stdout logs at info by default —
 # so without this every wrapper line is discarded at the source and a post-mortem has nothing
 # to read. Same reasoning as gitops-deploy.service.

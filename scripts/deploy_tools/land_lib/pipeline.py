@@ -16,7 +16,7 @@ through every phase, so this table is the contract no signature states:
 
 | Phase | Reads | Writes |
 |---|---|---|
-| `merge.arm_merge` | `opts.subject` | -- |
+| `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll` | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
 | `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff` |
