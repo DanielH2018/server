@@ -127,6 +127,62 @@
     cron_file: crowdsec-home-allowlist
   become: true
 
+- name: Create the remote-ips allowlist on the LAPI
+  tags: [deploy]
+  # The home-ips sibling above, for the operator's authenticated remote exits (#2123).
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+      cscli allowlists create remote-ips --description 'Authenticated remote exits, TTL-managed by crowdsec-update-remote-allowlist.sh'
+  register: crowdsec_k8s_remote_allowlist_create
+  become: true
+  failed_when:
+    - crowdsec_k8s_remote_allowlist_create.rc != 0
+    - "'already exist' not in (crowdsec_k8s_remote_allowlist_create.stderr | default('') | lower)"
+  changed_when: crowdsec_k8s_remote_allowlist_create.rc == 0
+
+- name: Create the remote-allowlist module directory
+  tags: [cron]
+  ansible.builtin.file:
+    path: /opt/crowdsec-remote-allowlist
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Install the remote-allowlist decision module
+  tags: [cron]
+  ansible.builtin.copy:
+    src: remote_allowlist.py
+    dest: /opt/crowdsec-remote-allowlist/remote_allowlist.py
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the remote-allowlist updater
+  tags: [cron]
+  ansible.builtin.template:
+    src: crowdsec-update-remote-allowlist.sh.j2
+    dest: /usr/local/bin/crowdsec-update-remote-allowlist.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+  no_log: true  # renders the Kuma push token
+
+- name: Schedule the remote-allowlist updater
+  tags: [cron]
+  # root, for the same reason as the home-allowlist cron: it execs into the engine pod.
+  ansible.builtin.cron:
+    name: "CrowdSec remote allowlist"
+    minute: "*/5"
+    user: root
+    job: "/usr/local/bin/crowdsec-update-remote-allowlist.sh"
+    cron_file: crowdsec-remote-allowlist
+  become: true
+
 - name: Deploy the AppSec verifier
   tags: [cron]
   # Re-homed from the containers/traefik role at E7 — the Docker edge retired and this

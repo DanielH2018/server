@@ -175,6 +175,10 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # run (#1937). Unrouted, the fall-through below drops an auto-tier token out of
         # unattended rotation while the audit still reports it registered.
         pusher = "registry"
+    elif name == "crowdsec_remote_allowlist_push_token":
+        # Same shape as registry_gc: the crowdsec role renders the daniel-box cron that pushes,
+        # the tile is a static entity in k8s/uptime-kuma (#2123).
+        pusher = "crowdsec"
     else:
         # anything else unrecognised -> manual
         return ()

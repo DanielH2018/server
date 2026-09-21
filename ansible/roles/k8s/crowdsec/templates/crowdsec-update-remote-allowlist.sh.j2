@@ -1,0 +1,44 @@
+#!/bin/bash
+# Keeps the operator's authenticated REMOTE exits in the cluster LAPI's `remote-ips` allowlist,
+# the sibling of crowdsec-update-home-allowlist.sh for the addresses that script cannot know
+# (#2123). Every 5 min. The decision lives in /opt/crowdsec-remote-allowlist/remote_allowlist.py, whose
+# docstring is the design; this wrapper owns only what a template must: the Kuma push token,
+# cron's PATH, and the syslog line `probe.py alerts` reconstructs episodes from.
+#
+# set -uo (not -euo): the module's exit code and last line are what gets reported, so nothing
+# here may exit before the push.
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
+
+# shellcheck source=/dev/null
+source /usr/local/lib/kuma-push-lib.sh || {
+  logger -t crowdsec-remote-allowlist "kuma-push-lib.sh missing — run initial_setup on this host"
+  exit 1
+}
+
+KUMA_HOST="uptime-kuma.local.{{ domain }}"
+KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
+PUSH_URL="https://${KUMA_HOST}/api/push/{{ crowdsec_remote_allowlist_push_token }}"
+
+push() { # up|down msg
+  kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" crowdsec-remote-allowlist
+}
+
+# The pinned-interpreter form every host cron uses (janitorr-health.sh.j2 is the sibling);
+# ansible/tests/setup/test_host_python_invocations.py holds all three flags.
+OUTPUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/crowdsec-remote-allowlist/remote_allowlist.py 2>&1)
+RC=$?
+SUMMARY=$(printf '%s' "$OUTPUT" | tail -1)
+: "${SUMMARY:=remote_allowlist.py exited $RC with no output}"
+
+if [ "$RC" -ne 0 ]; then
+  # The `status=down` prefix is load-bearing for probe.py alerts' parse_syslog_down_line.
+  logger -t crowdsec-remote-allowlist "status=down $SUMMARY"
+  push down "$SUMMARY"
+  exit 1
+fi
+
+# Only a run that wrote something is worth a syslog line; a quiet run is the common case.
+case "$SUMMARY" in *added*|*refreshed*|*pruned*) logger -t crowdsec-remote-allowlist "$SUMMARY" ;; esac
+push up "$SUMMARY"
