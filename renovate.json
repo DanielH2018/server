@@ -200,7 +200,7 @@
     },
     {
       "customType": "regex",
-      "description": "CI test-runner Python pin (`python-version:` input in the workflows). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans EVERY workflow file (not just ci.yml): image-smoke.yml pins the same `python-version` and a ci.yml-only pattern let its twin age silently until it drifted (2026-07-10 review). Both hold the same value, so one bump PR edits them in lockstep.",
+      "description": "CI test-runner Python pin (`python-version:` input in the workflows). helpers:pinGitHubActionDigests tracks the setup-python ACTION digest but not its version INPUT, so this was one of the two last silently-aging pins in the repo. A bump PR runs the whole test suite ON the new interpreter, which is exactly the compatibility proof; keep it moving with the host toolchain rather than frozen at the requires-python floor. Scans EVERY workflow file (not just ci.yml): image-smoke.yml pins the same `python-version` and a ci.yml-only pattern let its twin age silently until it drifted (2026-07-10 review). Both hold the same value, so one bump PR edits them in lockstep. The literal is three-part (`3.14.7`, #2152): a two-part `3.14` had setup-python resolve the patch from the toolcache that day, while `.python-version` stays two-part on purpose — it is the minor the repo targets, and ansible/tests/repo/test_python_version_consistency.py compares the workflows to it on major.minor.",
       "managerFilePatterns": [
         "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
       ],
@@ -212,12 +212,12 @@
     },
     {
       "customType": "regex",
-      "description": "CI Node pin (`node-version:` input in ci.yml) \u2014 the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules.",
+      "description": "CI Node pin (`node-version:` input in the workflows) \u2014 the other silently-aging setup-* version input; it only feeds renovate-config-validator, so stakes are low, but the tracking doctrine applies uniformly. Majors (22 -> 24) stay manual per the default automerge rules. Scans EVERY workflow file, the same as the python manager above: renovate-config-canary.yml carries the same pin, and a ci.yml-only pattern left it untracked from the day the canary split out (#1269) until #2152. The literal is three-part (`24.21.0`), so the runner installs the patch this file names rather than whatever the toolcache holds that day; a `\\d+` matchString read the major alone and would go inert against it. Both files hold the same value, so one bump PR edits them in lockstep.",
       "managerFilePatterns": [
-        "/(^|/)\\.github/workflows/ci\\.yml$/"
+        "/(^|/)\\.github/workflows/[^/]+\\.yml$/"
       ],
       "matchStrings": [
-        "node-version:\\s*\"(?<currentValue>\\d+)\""
+        "node-version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
       "depNameTemplate": "node",
       "datasourceTemplate": "node-version"
@@ -361,6 +361,14 @@
         "ansible/roles/setup/initial_setup/tasks/host-basics.yml"
       ],
       "groupName": "{{depName}}"
+    },
+    {
+      "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is reading the new image's preinstalled-software list against those hooks before merging. One group for every workflow: the pins share one depName, so one PR moves all of them, and ansible/tests/repo/test_workflow_runners_are_pinned.py refuses a floating label in any of them.",
+      "matchDatasources": [
+        "github-runners"
+      ],
+      "groupName": "CI runner image (manual — check the preinstalled tools the system hooks assume)",
+      "automerge": false
     },
     {
       "description": "Digest bumps on the k8s plane. 22 of 74 pins carry a @sha256 digest and 18 of those sit on a MUTABLE tag (latest, release, master-web/-collector, jvm-stable, vanilla-latest) where a VERSION bump can never be offered \u2014 only a digest one. That is ~28% of the fleet, and `matchUpdateTypes: [minor, patch]` above does not match updateType `digest`, so none of them auto-merged. Watchtower applied exactly this class automatically until it was retired 2026-08-09 with the note 'Renovate owns image updates' \u2014 leaving it manual was a regression against what it replaced, not a deliberate posture. minimumReleaseAge is 3 days rather than 7: there is no version to soak, only a re-push of the same tag, so the wait is purely to let a poisoned/yanked push be noticed. The auto-deploy denylist (derived by ansible/filter_plugins/k8s_autodeploy.py) is the safety boundary, and since #1886 the manual rule below keeps it on the merge side too: a denylisted service's digest PR opens as `manual \u2014` rather than merging into a drift alert. A pin on a CHANNEL tag (`:latest@sha256:`) is the shape with no version anywhere in its diff, so a bump on one cannot be read for direction and a downgrade looks like an upgrade (issue #1524, the same shape as n8n's #1493). That class is accepted for the roles left eligible here and fenced by the denylist for the ones whose regression is expensive — the DECIDED marker recording why, and the guard holding the fence, are in ansible/tests/deploy/test_channel_tag_digest_pins_stay_off_autodeploy.py.",

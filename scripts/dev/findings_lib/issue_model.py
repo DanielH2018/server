@@ -457,24 +457,30 @@ PR_REPO = "DanielH2018/server"
 # work `next` exists to prevent. The optional `owner/repo` group is captured rather than
 # pinned to `PR_REPO` in the pattern, so `pr_refs` can tell a same-repo reference (withheld)
 # from one aimed at another repository (ignored): `Closes DanielH2018/dotfiles#558` must not
-# withhold server issue #558 (#2119).
+# withhold server issue #558 (#2119). GitHub also closes on the full URL,
+# `Closes https://github.com/DanielH2018/server/issues/558` (#2189); that arm captures its
+# `owner/repo` into a second group, so a match is (url_repo, slug_repo, number) with exactly
+# one of the first two set.
 _PR_REF_RE = re.compile(
-    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+(?:([\w.-]+/[\w.-]+))?#(\d+)\b"
+    r"(?i)\b(?:close[sd]?|fix(?:e[sd])?|resolve[sd]?)\s+"
+    r"(?:https?://github\.com/([\w.-]+/[\w.-]+)/issues/|(?:([\w.-]+/[\w.-]+))?#)(\d+)\b"
 )
 
 
 def pr_refs(bodies: list[str], repo: str = PR_REPO) -> set[int]:
     """Issue numbers the given PR bodies say they close, in `repo`.
 
-    A bare `#n` counts, and so does `owner/repo#n` when the qualifier names `repo` -- compared
-    case-insensitively, the way GitHub resolves a slug. The full `owner/repo` is compared, not
-    the repository name alone, so a fork's `SomeoneElse/server#n` does not withhold anything.
+    A bare `#n` counts, and so does `owner/repo#n` or `https://github.com/owner/repo/issues/n`
+    when the qualifier names `repo` -- compared case-insensitively, the way GitHub resolves a
+    slug. The full `owner/repo` is compared, not the repository name alone, so a fork's
+    `SomeoneElse/server#n` does not withhold anything, and neither does its URL.
     """
     return {
         int(number)
         for body in bodies
-        for qualifier, number in _PR_REF_RE.findall(body or "")
-        if not qualifier or qualifier.lower() == repo.lower()
+        for url_repo, slug_repo, number in _PR_REF_RE.findall(body or "")
+        if not (url_repo or slug_repo)
+        or (url_repo or slug_repo).lower() == repo.lower()
     }
 
 

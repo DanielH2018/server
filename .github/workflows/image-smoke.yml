@@ -38,7 +38,7 @@ permissions:
 jobs:
   smoke:
     name: pull + boot changed images
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20  # cap a hung docker pull / image that never reaches healthy (per-container boot is already bounded)
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -50,9 +50,10 @@ jobs:
         with:
           # Kept, though this job no longer needs a specific interpreter (see below): the pin is
           # asserted in lockstep with ci.yml and .python-version by
-          # scripts/tests/test_renovate_managers.py::test_python_version_pins_in_lockstep, and the step
-          # measures 0s because ubuntu-latest preinstalls this version.
-          python-version: "3.14"
+          # scripts/tests/test_renovate_dockerfiles.py::test_python_version_pins_in_lockstep. The
+          # step is free while the runner image's toolcache holds this patch, and a download
+          # of a few seconds when a Renovate bump gets ahead of the image.
+          python-version: "3.14.7"
 
       # No setup-uv step: scripts/dev/smoke_extract.py imports `re` and `sys` and nothing else, so it
       # needs no project env — `uv run` here was resolving the whole `dev` group (uncached, since

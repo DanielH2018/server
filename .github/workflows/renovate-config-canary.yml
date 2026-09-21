@@ -18,11 +18,20 @@ name: renovate-config-canary
 #
 # It is its own workflow rather than a `schedule:` on ci.yml because a schedule trigger there
 # would run hooks, pytest and the gate as well, and would share the head SHA's concurrency
-# group with that commit's push run.
+# group with that commit's push run. Its own concurrency group below is keyed on the workflow
+# name alone, never on a ref or SHA, so it can never join a ci.yml group either.
 on:
   schedule:
     - cron: "0 9 * * *" # 04:00 America/Chicago; nobody is landing, so a red run is not mistaken for a red merge
   workflow_dispatch: # after touching renovate.json on master, or when a Renovate major lands
+
+# One run at a time. A `workflow_dispatch` fired near 09:00 UTC otherwise overlaps the
+# scheduled run, and the two answer the same question against the same master head (#2152).
+# The superseded run is cancelled rather than queued: no run here is a commit's verdict (see
+# above), so a cancelled one loses nothing the next one does not re-establish.
+concurrency:
+  group: ${{ github.workflow }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -30,7 +39,7 @@ permissions:
 jobs:
   validate:
     name: validate renovate.json against latest Renovate
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20 # six install attempts at 60s, plus a wedged fetch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -39,7 +48,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version: "24.21.0"
 
       - name: Validate renovate.json
         run: scripts/validate/renovate_config.sh renovate.json
