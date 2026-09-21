@@ -41,8 +41,11 @@ in the timezone its cron runs in. That is UTC for every host cron, and `America/
 `pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
 (`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
 `0 23 * * *` in `America/Chicago` (`30 23` until 2026-09-21, when the CronJob moved off the
-weekly Longhorn shard's slot). A console read on 2026-09-17 (#1949) found the console
-already there, and the graces above are the values the console was reconciled to.
+weekly Longhorn shard's slot). The timezone field is load-bearing: a UTC expression matches
+the CronJob for one DST offset only, and drifts an hour — the whole grace — at the next
+change. The 2026-09-17 read (#1949) reported this check already in `America/Chicago`; on
+2026-09-21 the operator found it in UTC and set the timezone by hand together with the new
+expression. The graces above are the values the console was reconciled to.
 
 | Check slug | Schedule type | Grace |
 |---|---|---|
