@@ -401,11 +401,48 @@
     },
     {
       "customType": "regex",
-      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it.",
+      "description": "pip pins inside the two built Dockerfiles that install from PyPI (#2149, #2150): roles/k8s/code-server (the venv's seven tools) and roles/k8s/homelab-mcp (mcp, httpx, uvicorn). Each was a bare name or a range, re-resolved to newest PyPI on every rebuild behind a digest-pinned base — the same one-layer-down drift the karakeep time-tagger manager above closes. ical-proxy's Dockerfile is NOT here: its two pins are held in lockstep with uv.lock by ansible/tests/services/test_ical_proxy_pins_match_uv_lock.py, and lockFileMaintenance is the bump path there. Both files are also read by the built-in dockerfile manager, which sees only the FROM line — no overlap on these pins. The packageRules below keep every bump here manual (a built image ships only on a rebuild) and cap mcp at <2, because 2.0 removed mcp.server.fastmcp and app.py imports it.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/code-server/templates/Dockerfile\\.j2$/",
+        "/(^|/)ansible/roles/k8s/homelab-mcp/templates/Dockerfile\\.j2$/"
+      ],
+      "matchStrings": [
+        "(?<depName>[A-Za-z0-9._-]+)==(?<currentValue>[0-9][^\\s\"'\\\\]*)"
+      ],
+      "datasourceTemplate": "pypi"
+    },
+    {
+      "customType": "regex",
+      "description": "The Claude Code CLI the code-server image installs with `npm install -g @anthropic-ai/claude-code@X.Y.Z` (#2149). Renovate's built-in npm manager reads package.json only, so a pin inside a Dockerfile needs a regex manager over the npm datasource. Kept at the same release as the Anthropic.claude-code VSIX in the role's defaults (no datasource exists for a VS Code extension, so that half is a manual finish on this PR — the defaults comment has the recipe).",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/code-server/templates/Dockerfile\\.j2$/"
+      ],
+      "matchStrings": [
+        "@anthropic-ai/claude-code@(?<currentValue>[\\d.]+)"
+      ],
+      "depNameTemplate": "@anthropic-ai/claude-code",
+      "datasourceTemplate": "npm"
+    },
+    {
+      "customType": "regex",
+      "description": "The Node.js release the code-server image unpacks from nodejs.org (`code_server_k8s_node_version` in the role's defaults, #2149). Replaced NodeSource's setup_22.x script piped to bash, which resolved whatever NodeSource served on build day. The paired code_server_k8s_node_sha256 is the tarball's line in SHASUMS256.txt, which no regex manager can compute — so no automerge (packageRule below), the same manual-finish class as the uv installer. Majors (22 -> 24) stay manual per the default rules anyway.",
+      "managerFilePatterns": [
+        "/(^|/)ansible/roles/k8s/code-server/defaults/main\\.yml$/"
+      ],
+      "matchStrings": [
+        "code_server_k8s_node_version:\\s*\"(?<currentValue>[\\d.]+)\""
+      ],
+      "depNameTemplate": "node",
+      "datasourceTemplate": "node-version"
+    },
+    {
+      "customType": "regex",
+      "description": "Container images in k8s role defaults (ansible/roles/k8s/*/defaults/main.yml) AND in inventory/group_vars/all.yml. The cluster has no compose template to read, so these vars ARE the source of truth for what every pod runs \u2014 and until this manager existed none of them was tracked, so the whole cluster fleet aged with no update signal. group_vars/all.yml was added 2026-08-14: crowdsec_k8s_image had been hoisted out of its role defaults into group_vars, which put it outside this manager's patterns AND outside the coverage test's glob (scripts/tests/test_renovate_managers.py globbed roles/k8s/*/defaults/main.yml only) \u2014 so the WAF core, the one image whose staleness is a security problem, was the single pin neither could see. ansible/roles/setup/*/defaults/main.yml was added 2026-08-27: the same one-directory-short escape, this time for k3s_longhorn_restore_drill_image (busybox:stable) \u2014 an `_image:` pin one directory over from the *_version: pins the control-plane manager below already tracks in this same file. It is a mutable tag, so what Renovate can offer here is a digest bump (as with n8n's `stable` channel tag elsewhere in this file), not a version bump \u2014 that is enough signal to notice an upstream busybox re-push; the drill's own timeout/health assertions are the check that a bump didn't break it. ansible/migrate_volume_block_size.yml was added 2026-09-21 (#2150): its `mig_image:` pin (busybox, version tag plus digest) sits in a playbook rather than a defaults file, the same escape one directory further out, and a data-migration pod is not the place for a channel tag nothing tracks.",
       "managerFilePatterns": [
         "/^ansible/roles/k8s/[^/]+/defaults/main\\.yml$/",
         "/^ansible/roles/setup/[^/]+/defaults/main\\.yml$/",
-        "/^ansible/inventory/group_vars/all\\.yml$/"
+        "/^ansible/inventory/group_vars/all\\.yml$/",
+        "/^ansible/migrate_volume_block_size\\.yml$/"
       ],
       "matchStrings": [
         "_image:\\s*[\"']?(?<depName>[^:\\s\"'@]+):(?<currentValue>[^\\s\"'@]+)(?:@(?<currentDigest>sha256:[a-f0-9]+))?[\"']?"
@@ -723,6 +760,50 @@
       ],
       "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app; k8s_autodeploy: false)",
       "automerge": false
+    },
+    {
+      "description": "code-server's build pins — the venv's pip packages, the Claude Code CLI on npm and the Node.js release (#2149). One group, no automerge: the image is built, so a merged bump ships only when land.sh rebuilds it, and code-server is `k8s_autodeploy: false` (the marker in the group name is what keeps the unattended renovate_agent off the PR, #1963). A node bump is also a manual finish — code_server_k8s_node_sha256 comes from that release's SHASUMS256.txt. matchDatasources keeps this off the role's docker pins, which the denylist rule above owns.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/code-server/templates/Dockerfile.j2",
+        "ansible/roles/k8s/code-server/defaults/main.yml"
+      ],
+      "matchDatasources": [
+        "pypi",
+        "npm",
+        "node-version"
+      ],
+      "groupName": "code-server build pins (manual — built image, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
+      "automerge": false
+    },
+    {
+      "description": "homelab-mcp's pip pins (#2150). No automerge for the reason n8n's rule gives: the image is built, so a bump that merged itself would sit undeployed while reading as shipped — `deploy.sh --tags homelab-mcp` is what realises it. The role is auto-deploy ELIGIBLE, so no k8s_autodeploy marker here; the guard in ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py asserts the marker appears only where a denied role owns the pin.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchFileNames": [
+        "ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "groupName": "homelab-mcp pip deps (manual — built image; rebuild with deploy.sh --tags homelab-mcp)",
+      "automerge": false
+    },
+    {
+      "description": "mcp stays on the 1.x line. 2.0.0 removed mcp.server.fastmcp, which homelab-mcp's app.py imports, and crash-looped the container on the 2026-08-09 rebuild; the Dockerfile used to hold the range `mcp<2` for that reason and now holds an exact pin (#2150). allowedVersions is the range's replacement: Renovate offers 1.x bumps and never a 2.x. Lift it together with an app.py port to the 2.x API. ansible/tests/services/test_homelab_mcp_pins.py asserts this rule and the pin agree.",
+      "matchManagers": [
+        "custom.regex"
+      ],
+      "matchDatasources": [
+        "pypi"
+      ],
+      "matchPackageNames": [
+        "mcp"
+      ],
+      "allowedVersions": "<2"
     },
     {
       "description": "n8n and its task runners are pinned TWICE by design \u2014 roles/k8s/n8n-images/templates/Dockerfile.j2 (n8nio/n8n) and Dockerfile-runners.j2 (n8nio/runners) \u2014 and the two must move in lockstep: the runners are version-coupled to the n8n they serve, both repositories publish the same version tags, and a split surfaces as every Code-node workflow failing at RUNTIME rather than as a build error (the 2026-08-06 `@n8n/di` incident, recorded in Dockerfile-runners.j2). One group = one PR touching both files, so the lockstep test in scripts/tests/test_renovate_managers.py never sees half an update. NO automerge: these are built images, so a bump is only realised by an operator-driven rebuild (`deploy.sh --tags n8n-images,n8n`), and a PR that merged itself would sit undeployed while reading as shipped. Both FROMs were `:latest` until 2026-08-19, which meant no PR at all \u2014 see the Dockerfile header. They now pin the `stable` CHANNEL tag with a digest beside it, so what Renovate bumps here is the DIGEST: a PR arrives when n8n promotes a new stable, and a published-but-unpromoted release (2.36.2 at the time of writing) is never offered. The intermediate state \u2014 a bare `:2.35.4` \u2014 tracked correctly but off the wrong train, since `:latest` had always been an alias for `:stable` and a version pin handed the update stream to the full tag list instead. THE MANUAL HALF: a digest bump changes 64 hex characters and no version string, so the diff cannot show which way the version moved. PR #1440 (2026-09-09) proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a DOWNGRADE — through nine green checks, and only a human resolving each digest by hand caught it (issue #1493). Resolve each new digest to its `org.opencontainers.image.version` label and APPEND a row to roles/k8s/n8n-images/base-pin-history.tsv; that file's header carries the registry commands. scripts/tests/test_renovate_dockerfiles.py fails until the row is there, and again if a version decreases without a `DOWNGRADE-ACK:` note — an acknowledged decrease is allowed, because a channel pin follows what upstream promotes and a withdrawn release has to be followable.",
