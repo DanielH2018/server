@@ -25,6 +25,12 @@ Two guards, one subject:
 
 Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live
 census must contain, so a renamed `tasks/` layout fails loudly rather than checking nothing.
+
+3. A size ceiling (issue #2126). `gitops_deploy/CLAUDE.md` had grown to 1315 lines (~27k
+   tokens) of postmortem before its record moved to `docs/gitops-pipeline.md`, and a role doc is
+   loaded whole on every touch of the role. A doc over `MAX_LINES` (`wc -l` lines, the issue's
+   verify-by) fails unless `OVER_CEILING` names the role with the reason, and an entry there for
+   a doc that has since shrunk fails too. Same shape as the k8s test's ceiling.
 """
 
 from pathlib import Path
@@ -33,6 +39,17 @@ from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 
 CONTRACT_HEADING = "## Autonomous-role contract"
 MIN_NON_BLANK_LINES = 8
+MAX_LINES = 400
+
+# Roles whose CLAUDE.md is allowed over MAX_LINES, each with the reason. An entry is a
+# justification, not a waiver: name what in the doc is an operating rule that cannot move to a
+# docs/ page, or split the file instead.
+OVER_CEILING: dict[str, str] = {
+    "hypervisor": (
+        "411 lines on 2026-09-21, predating the ceiling; the staging-guest lifecycle it "
+        "documents has no docs/ page of its own yet. Trim or split it before adding to it."
+    ),
+}
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
@@ -87,13 +104,28 @@ def _non_blank_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip()]
 
 
-def _doc_problems(role_dir: Path) -> list[str]:
+def _line_count(text: str) -> int:
+    """What `wc -l` reports: newline characters, so a trailing newline is not a line."""
+    return text.count("\n")
+
+
+def _doc_problems(
+    role_dir: Path, over_ceiling: dict[str, str] = OVER_CEILING
+) -> list[str]:
     doc = role_dir / "CLAUDE.md"
     if not doc.is_file():
         return [f"{role_dir.name}: no CLAUDE.md"]
-    if len(_non_blank_lines(doc.read_text())) < MIN_NON_BLANK_LINES:
+    text = doc.read_text()
+    if len(_non_blank_lines(text)) < MIN_NON_BLANK_LINES:
         return [
             f"{role_dir.name}: CLAUDE.md has fewer than {MIN_NON_BLANK_LINES} non-blank lines"
+        ]
+    lines = _line_count(text)
+    if lines > MAX_LINES and role_dir.name not in over_ceiling:
+        return [
+            f"{role_dir.name}: CLAUDE.md is {lines} lines (wc -l), over the {MAX_LINES}-line "
+            f"ceiling — move history and measurements to a docs/ page, or add the role to "
+            f"OVER_CEILING with the reason (issue #2126)"
         ]
     return []
 
@@ -226,6 +258,44 @@ def test_fixture_role_without_a_cron_owes_no_contract(tmp_path):
 def test_fixture_exempt_cron_role_passes_without_the_heading(tmp_path):
     role = _fixture_role(tmp_path, "widget", cron=True, doc=_LONG_ENOUGH)
     assert _contract_problems(role, exempt={"widget": "pushes a heartbeat only"}) == []
+
+
+def _sized_doc(lines: int) -> str:
+    """A widget doc padded to exactly `lines` lines (wc -l)."""
+    return "# widget\n\n" + "".join(f"- line {i}\n" for i in range(lines - 2))
+
+
+def test_fixture_role_over_the_ceiling_is_flagged(tmp_path):
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
+    problems = _doc_problems(role, over_ceiling={})
+    assert len(problems) == 1 and problems[0].startswith(
+        f"widget: CLAUDE.md is {MAX_LINES + 1} lines (wc -l), over the {MAX_LINES}-line ceiling"
+    ), problems
+
+
+def test_fixture_role_at_the_ceiling_passes(tmp_path):
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES))
+    assert _doc_problems(role, over_ceiling={}) == []
+
+
+def test_fixture_role_over_the_ceiling_passes_when_justified(tmp_path):
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
+    assert _doc_problems(role, over_ceiling={"widget": "a reason"}) == []
+
+
+def test_over_ceiling_entries_are_still_over_the_ceiling():
+    """A justification for a doc that has since shrunk is dead text, and would wave a regrowth
+    through; an entry for a role that no longer exists is the same rot.
+    """
+    stale = [
+        name
+        for name in OVER_CEILING
+        if not (SETUP_ROLES / name / "CLAUDE.md").is_file()
+        or _line_count((SETUP_ROLES / name / "CLAUDE.md").read_text()) <= MAX_LINES
+    ]
+    assert not stale, (
+        f"OVER_CEILING names docs no longer over {MAX_LINES} lines: {stale}"
+    )
 
 
 def test_fixture_absent_cron_does_not_count_as_installing(tmp_path):

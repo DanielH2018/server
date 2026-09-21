@@ -240,6 +240,15 @@
   when: not (k8s_no_mutate | bool)
   # `disableFrontend: true` IS maintenance mode, and it is the only attach a revert accepts.
   #
+  # DECIDED: nothing self-heals a volume this attach leaves behind. If a later wait exhausts or
+  # an API call fails, the volume stays attached with `disableFrontend: true` and the workload
+  # at zero replicas (CLAUDE.md's manual-recovery steps), and the next deploy's k8s/volume-claim
+  # seed pod mounts the same RWO claim — whether that mount succeeds, hangs or fails against a
+  # non-pod maintenance attachment is untested, because nothing in this repo exercises a real
+  # Longhorn revert. Accepted: treat a stuck maintenance-mode attach as blocking that service's
+  # next deploy until cleared by hand, not as something the pipeline routes around. Long form:
+  # docs/gitops-pipeline.md, *The deployer's record*.
+  #
   # No `attachmentID`. Read from longhorn-manager v1.12.1: `manager.Attach` stores the
   # attachment ticket under whatever `attachmentID` the caller sends, and `manager.Detach` does
   # `delete(tickets, attachmentID)` — so the detach below can only remove a ticket whose key it

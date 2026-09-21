@@ -284,8 +284,13 @@ def split_k8s_auto_deploy(
     # Do NOT "fix" this by deferring the ff-merge: that strands the tree behind pods already
     # running the new images.
     #
-    # SECOND cap, on claim-declaring services specifically (2026-08-22 review H2). The rollback
-    # budget K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE promoted service that
+    # DECIDED: the batch-abort blast radius is accepted, and this SECOND cap on claim-declaring
+    # services is what bounds it (2026-08-22 review H2). ansible/tasks/k8s_batch.yml joins the
+    # batch into one playbook run with no `rescue`, on the rollback path too, so one service's
+    # revert failing during a rollback aborts every co-batched service's rollback and leaves
+    # those already reset mid-revert; the fix that would close it does not fit the unit's
+    # ceiling (the arithmetic below). Long form: docs/gitops-pipeline.md, *The deployer's record*.
+    # The rollback budget K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE promoted service that
     # declares k8s_autodeploy_snapshot_pvcs — but deploy_k8s joins the whole batch into one
     # playbook run, and each such service pays its own snapshot + revert phase serially inside
     # it (only the rollout WAIT is deduped, by k8s/rollout-drain). Measured from role sources:

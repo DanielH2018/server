@@ -2,9 +2,9 @@
 
 How the homelab deploys itself, and what to do when it stops.
 
-This is the operator's view. For the internals — the decision functions, their tests and the
-incidents each one encodes — read
-`ansible/roles/setup/gitops_deploy/CLAUDE.md`.
+This is the operator's view first. The rules the deployer follows, and the functions that
+hold each one, are in `ansible/roles/setup/gitops_deploy/CLAUDE.md`; the incidents and
+measurements behind those rules are at the end of this page, under *The deployer's record*.
 
 !!! warning "A merge is not a deploy"
     The deployer applies **only** an image-pin bump to a service that is not denylisted.
@@ -150,10 +150,10 @@ fast-forwarded. Nothing is rolled back, and the alert says so.
 A rollback re-run has to fit inside the unit's `TimeoutStartSec`, or it is killed partway —
 worse than never starting one. The arm stays forward-only because proving it fits needs a
 fresh `deploy.yml` measurement, not because of any particular timeout value:
-`deploy_logic.broad_budget_ok` encodes the check and has no production caller. The role's own
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` carries the numbers and the date they were taken;
-read `TimeoutStartSec` out of `gitops-deploy.service.j2` rather than from prose, since it moves
-when the staging gate's budget changes.
+`deploy_logic.broad_budget_ok` encodes the check and has no production caller. The numbers
+and the date they were taken are under *The deployer's record* below; read `TimeoutStartSec`
+out of `gitops-deploy.service.j2` rather than from prose, since it moves when the staging
+gate's budget changes.
 
 It deliberately does not reset the tree either. Resetting without redeploying would leave the
 tree claiming the old commit while live state is half-new — a tree that lies, over which every
@@ -270,3 +270,1107 @@ same services, on that service's own lock.
 
 Contention is still not silent starvation: the lock path never writes `last_run`, so
 contention outlasting the maximum age pages through the GitOps-Alive monitor.
+
+## The deployer's record
+
+Everything below this heading is the long form behind
+`ansible/roles/setup/gitops_deploy/CLAUDE.md`: the incidents each safety arm was added
+after, the measurements each budget was sized from, and the trade-offs that were accepted
+rather than fixed. The role file carries the rule; this page carries the evidence. It was
+moved here from the role file on 2026-09-21 (#2126), and a paragraph's "below" or "above"
+refers to its original neighbours in that file.
+
+
+### Health gate and rollback: the phantom-container hold
+
+After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
+On failure it `git reset --hard`es to the previous HEAD, redeploys the prior version,
+writes the bad SHA to `/var/lib/gitops-deploy/hold_sha` (so the next tick won't redeploy it),
+and alerts the dedicated Discord webhook. Reverting the offending PR advances `origin` past
+the held SHA, which stops the `skip_hold` short-circuit — but the marker itself (and the red
+**GitOps Deploy — Status** monitor, which pages on a non-empty `hold_sha`, no origin
+comparison) only clears when a later tick completes a *successful service deploy on this
+host*: the clean-deploy branch calls `clear_service_hold()`, and noop/docs-only ticks return
+before reaching it. If everything after the held SHA maps to no service here, diagnose the
+hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
+
+**A BROAD hold clears only when its own plane is applied** — see *Which apply clears a hold*
+below. `clear_service_hold()` is the service half of that rule: a k8s or Docker deploy applies
+no plane, so it leaves a broad hold standing rather than clearing `hold_sha` out from under an
+unapplied plane.
+
+**A service migrated off this host must take its rendered compose with it.** `containers_for()`
+treats a present `containers/<svc>/docker-compose.yml` as proof the service is deployed here,
+and a compose with no `container_name:` falls back to gating a container named `<svc>`. Removing
+a service from this host's `containers_list` deletes neither — so a later template-only commit
+for the now-other-host service deploys as a no-op, then health-gates a phantom container to the
+run budget and false-rollbacks + holds. That is the 2026-08-08 `configarr` hold (`02360cc3`):
+configarr had moved to a k8s CronJob on daniel-box, its daniel-server compose (a one-shot
+`compose run --rm` with no persistent container by design) was left rendered, and the `recyclarr`
+pin commit made the gate poll a container that could never exist. When migrating a service off a
+host, delete its `containers/<svc>/docker-compose.yml` on that host (config/ and data dirs can
+stay).
+
+### The safety arms, in full
+
+- **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
+  `deploy_logic.ci_verdict`). Before this the deployer applied whatever landed on master: nothing
+  in the pull path consulted a workflow result, so a red commit reached the homelab on the next
+  tick. It queries GitHub's check-runs API for `origin/master`, **authenticated through `gh auth
+  token`** when the CLI is logged in (`deploy_logic.github_token`; `GH_TOKEN`/`GITHUB_TOKEN` in
+  the environment win, and a logged-out gh degrades to anonymous), and only on a tick that would
+  otherwise deploy. Anonymous, the limit is 60/hour per source IP, shared with every landing's
+  `await_ci.py` poll on the same host (45 requests per 900s wait) — two landings exhausted it on
+  2026-09-01 and three ticks deferred on `HTTP Error 403: rate limit exceeded`, which reads as
+  "CI not finished." Authenticated it is 5000/hour per token.
+  - **A tip that is not green sends the gate walking, and the tick deploys the newest GREEN
+    ancestor instead of deferring the range.** `deploy_phases.assess` reads `git rev-list
+    --first-parent <local>..<origin>` newest first, asks GitHub about each commit below the tip
+    in turn, and stops at the first `pass`; that SHA becomes `target.origin` and everything
+    downstream reads it — the ff-merge, the changed-path diff, the declarations read, the
+    narrowing. A `fail` ancestor is skipped and never chosen, and a held SHA is dropped from
+    the candidates whether it arrives as the tip or below one. The walk runs ONLY on a tick
+    that would otherwise defer, and is bounded by `CI_ANCESTOR_WALK_MAX`
+    (`gitops_deploy_ci_ancestor_walk_max`, 10) counting the tip's own request — so a tick costs
+    at most ten GitHub reads against the authenticated 5000/hour, and a tick that was going to
+    deploy anyway still costs one. **An UNAUTHENTICATED host does not walk at all**, and says so
+    in the journal: anonymous the limit is 60/hour per source IP, shared with every landing's
+    `await_ci.py` poll, so a ten-request burst per tick would exhaust it and every reader's next
+    call would read `HTTP Error 403` — which this gate maps to `pending`. The walk would then
+    buy one tick's latency by deferring the next several. The
+    rule is `deploy_git.ci_walk_candidates`, which carries the `DECIDED:` marker.
+    Master takes about 124 merges a day (median gap 315s, p25 88s) against a ~103s master CI
+    sweep, so the tip is `pending` on most ticks that would deploy and the whole range waited
+    on it. The property the gate still holds: **the tree the host ends up running always has
+    its own green CI verdict.** One line names the choice: `origin <tip8>: CI
+    <pending|fail>; fast-forwarding to the newest green ancestor <sha8> (<n> behind the tip)`.
+  - `fail` on the tip with no green ancestor → `next_action` returns **`ci_failed`**: no
+    ff-merge, no deploy, and a Discord alert throttled once per SHA (`ci_alerted_sha`).
+    A red tip the tick fast-forwarded PAST still pages, once for that same SHA — `main()` calls
+    `deploy_handlers.alert_red_tip` on the deploying path, keyed on `target.tip`. Without it a
+    red master would go unreported the moment any earlier commit was green.
+  - `pending` on the tip with no green ancestor → **`ci_pending`**: silent deferral. Unfinished
+    CI is the normal state for the first tick after a push, so it logs and retries; only
+    *sustained* behind-ness is a problem.
+  - **An unreachable or malformed API reads as `pending`, never `pass`** — the gate fails closed or
+    it is not a gate. The tick still completes and writes `last_run`, so a GitHub outage does NOT
+    trip GitOps-Alive the way `RetryableFetchError` would.
+  - Both outcomes leave the host parked on `local`, which `behind_marker` records — so a
+    persistently red master pages through the existing **6h behind-origin watchdog** rather than
+    needing an escalation path of its own. That reuse is deliberate; don't add a second timer.
+    **An ancestor fast-forward keeps that watchdog armed too, and the whole design rests on
+    it.** The tick ends on a SHA below the tip, so the host IS still behind origin;
+    `entrypoint()` re-resolves the REAL `origin/<branch>` after `main()` returns, so
+    `behind_since` names the tip rather than the chosen SHA and a tail that never goes green
+    still pages at 6h. What keeps that from paging on a deployer that is WORKING is the stamp's
+    meaning: it records when the tick last fast-forwarded, not when the host first fell behind —
+    the watchdog bullet below carries the rule. `land.sh` reads the same marker and would have
+    reported `deferred` (exit 75) for every self-applied PR the tick landed at an ancestor, so
+    `Landing.tick_state` checks the merge commit of the PR itself against the primary checkout before it
+    believes `behind_since` (issue #1786).
+  - **This gates the DEPLOY, and it is the only gate.** This line read "branch protection gates
+    the MERGE" until 2026-08-29, when `gh api repos/DanielH2018/server/branches/master/protection`
+    was found to return 404 — there is no branch protection on `master`. The gate's value is
+    unchanged and its necessity is higher than the old wording implied: PR CI is scoped to changed
+    files while master runs the full sweep, so a whole-tree failure can only appear *after* the
+    merge, and nothing else stops it landing. Adding branch protection is a separate decision.
+  - `cancelled`/`stale` count as **no verdict, not failure**: `ci.yml` sets
+    `concurrency: cancel-in-progress` on `github.ref`, so two pushes in quick succession cancel the
+    first run. Mapping those to a failure would page on an ordinary back-to-back push.
+  - `CI_CONTEXTS` holds GitHub check-run **names**, which must match `ci.yml`'s `name:` exactly
+    (that file carries a comment saying so). An empty list or repo **disarms** the gate with a log
+    line rather than passing everything — the same fail-closed shape as the k8s denylist. Set
+    `gitops_deploy_require_ci: false` to turn it off.
+- **Staging gate — two switches, and only one of them is about blocking.** `STAGING_GATE`
+  (`gitops_deploy_staging_gate`) asks daniel-stage about every commit that would auto-deploy a
+  k8s service, on the k8s path only. `STAGING_GATE_BLOCKING`
+  (`gitops_deploy_staging_gate_blocking`) decides whether a REJECTION stops the prod deploy.
+  With the second false the gate is advisory: the verdict is logged and alerted, prod deploys
+  either way, and this deployer behaves as it did before slice 4. Both are false by default;
+  daniel-box sets only the first. `docs/staging-phase-c.md` carries the entry condition the flip
+  is gated on — do not restate the status here.
+  - **NO VERDICT never blocks, in either mode.** A wedged guest, an ssh outage, a timeout or a
+    bug in the gate reports NO VERDICT and prod deploys. Blocking there would park prod behind
+    one guest on a NAT network covering six services of fifty-four, where passing through leaves prod
+    where it was before the gate existed. `staging_blocks` carries the reasoning and
+    `tests/test_staging_blocking.py` pins it.
+  - **A rejection holds the SHA and applies nothing.** `consult_staging` runs BEFORE the
+    ff-merge, so the tree is still on `local` when the verdict arrives: no reset, no volume
+    revert, nothing to roll back. That asymmetry is Phase C's main prize. Moving the gate after
+    the merge would silently break it.
+  - **The escape hatch is one tick, and it announces itself.** `touch
+    /var/lib/gitops-deploy/staging_gate_override` on this host lets the next blocking tick
+    through, posts to Discord when it is spent, and removes itself; `rm` disarms it before use.
+    It is read at the point the gate would block, never on entry — arming it before a quiet tick
+    must not burn it.
+- Read-only against the repo (no push); rollback is local-only + self-guarding.
+- Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
+  completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
+  skip is healthy, not an outage, so it must not trip the GitOps-Alive monitor's stale-file
+  threshold. The dirty-tree Discord page is throttled (`should_alert_dirty`) to at most once
+  per slot — twice per America/Chicago day, on the first tick at/after 08:00 CT (morning) and
+  at/after 20:00 CT (evening) — without it a long edit session would re-page every 30-min tick.
+  State: `/var/lib/gitops-deploy/dirty_alerted_date` (holds the `YYYY-MM-DD:am|pm` slot key).
+- **Test-suite paths are skipped before every plane below** (`deploy_logic._is_test_only_path`):
+  `ansible/tests/`, any role-local `tests/` directory, and a `test_*.py`/`conftest.py` beside the
+  module it covers. Every prefix and regex here matches on path alone, so before this a test file
+  read as whatever plane it sat under — one under `roles/setup/gitops_deploy/` set `broad_manual`
+  and parked the tick for every session, one under `roles/k8s/<svc>/files/` set `ChangeSet.k8s`
+  and defer-alerted. PR #707 was three test files and did both, costing an operator a hand-run
+  playbook and an ff-merge (2026-09-01). A test-only push now produces an empty `ChangeSet` and
+  takes the `if not cs.services` ff-merge branch, exactly like a docs-only push. The invariant it
+  rests on — no role ships a test file to a host — is enforced tree-wide by
+  `ansible/tests/repo/test_no_role_ships_a_test_file.py`, because a role that started shipping one
+  would turn this skip into a change to deployed code that never deploys.
+- **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's `loop:`
+  that installs it under `/opt/gitops-deploy/`, and `stamp_deployed_pairs`, which records its
+  render provenance. pytest imports from `files/` on disk, so a module added and forgotten in
+  the copy loop passes CI and kills the deployer at import on its next tick. ENFORCED by
+  `ansible/tests/deploy/test_gitops_deploy_ship_list.py`, which fails when a runtime module in
+  `files/` is missing from either list; it is the sibling of `test_monitor_bridge_modules.py`.
+- **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
+  under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
+  `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
+  the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
+  `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as
+  `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
+  **A range carrying both planes applies both, setup first** — `plan` returns one plan per
+  plane and `handle_broad` runs them in order, sharing one `BROAD_DEPLOY_TIMEOUT_S` so the
+  unit's ceiling still reads the broad arm as a single apply.
+  It was an if/else until 2026-09-18 (#2046) and the setup arm won: two Pi retirements that
+  day landed a `roles/setup/optimize_pi` edit beside a `host_vars/daniel-pi.yml` one, the
+  tick applied `initial_setup.yml` and never planned the deploy plane, and `Release
+  Staleness Drift` sat DOWN over the 56 records the full `deploy.yml` was meant to re-stamp.
+  - **The deploy plane is narrowed before it is applied.** `deploy_narrow.plan` runs
+    `scripts/deploy_tools/deploy_tags.py narrow <local> <origin>` as a subprocess — the
+    derivation parses YAML and this unit runs under `uv run --no-project` — before the
+    ff-merge, so it reads the two refs the tick pinned. Tags come back and the apply is
+    `deploy.yml --tags <tags>`; an empty list means the range moves no rendered output, so
+    nothing is applied and `broad_applied` records `narrowed-to-nothing` in the tag slot;
+    any refusal (exit 3, a timeout, a crash) runs the full `deploy.yml` this arm always ran.
+    The journal says which branch it took on every tick. The rules and what each one refuses
+    are in `scripts/deploy_tools/narrow_broad.py`; the `# DECIDED:` at the fallback in
+    `deploy_narrow.py` carries why doubt runs the whole play. **The narrowed list is not
+    filtered through `K8S_AUTODEPLOY_DENYLIST`** (issue #1962): the denylist gates promotion
+    into the k8s auto-deploy machinery — snapshot, staging gate, rollback — and the broad
+    plane has none of it, running the plain playbook forward-only the way an operator's
+    `deploy.sh` does; a filter could only reach the narrowed path anyway, since a refused
+    range runs the whole play over every denied role. The `# DECIDED:` on
+    `deploy_narrow.denylisted_in` is the long form, and the journal names the denied tags a
+    narrowed apply includes. A failed narrowed apply writes
+    `hold_plane` naming those tags, so *Which apply clears a hold* now has a third shape: a
+    narrowed hold is cleared by a full run or by a narrowed run covering its tags, and not by
+    a narrowed run naming a different service.
+  - The narrowing reads the k8s role-caller graph from the WORKING TREE, which is still on
+    `local` at that point. A range that adds a caller of a shared role therefore reads one
+    caller short, and a shared role that then looks caller-less refuses — the safe direction,
+    since a refusal is the full run.
+  - The inventory scan skips a whole-line comment, so a key consumed only on a `#` line
+    inside a block scalar (`key: |`) would narrow rather than refuse — the unsafe direction.
+    No inventory block scalar carries such a line; one appearing is the reason to parse
+    instead of matching lines (`_defines_only` in `narrow_broad.py`).
+  - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`, and
+    assuming it was made this arm apply nothing while reporting success.** Two ways it breaks:
+    the playbook may not include the role (`k3s` is in `k3s-bringup.yml`; `common` is in no
+    playbook at all, and is read by two other roles on two different hosts), and the tag may not
+    be the directory name (`chezmoi_setup` is tagged `chezmoi`). Either way `--tags` matches no
+    task, `ansible-playbook` exits 0, and the tick records the change as applied — the exact
+    outcome `setup_tags_for`'s docstring says it returns an empty set to avoid.
+    Occurred 2026-09-01 on PR #702, a `roles/setup/k3s/` change installing daniel-box's host DNS
+    forwarder: the tick ff-merged and "applied" it as `initial_setup.yml --tags k3s`, and the
+    forwarder had to be installed by hand afterwards. `setup_role_playbook` / `setup_role_tag`
+    now own the routing, `setup_tags_for` returns nothing for a role initial_setup.yml cannot
+    apply (so it defers rather than guessing), and `broad_remediation` names the real playbook.
+    The map is hand-written because this module runs under `uv run --no-project` and cannot
+    import `yaml`; `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth from the
+    playbooks and fails when the two drift.
+  - **The ff-merge happens BEFORE the apply**, which is the order the *Deploying this role under
+    the shared tree lock* trap below already prescribes for the manual path: applying first
+    renders from the pre-merge tree and deploys nothing. It also means an unrelated commit sharing
+    the tick lands even when the apply fails — stranding a docs-only commit behind another session's
+    setup change was the original complaint this arm fixes.
+  - **Both arms are FORWARD-ONLY.** `deploy_logic.broad_budget_ok` showed a rollback re-run did
+    not fit: 180s max flock + 1212s forward (measured 2026-08-22) + 1212s rollback against
+    `TimeoutStartSec=2700` left 96s, and a rollback SIGTERMed partway is worse than none.
+    **The budget argument expired on 2026-08-29** — the staging gate raised the ceiling to 60min,
+    at which the same numbers fit (2904 against 3600). The arm is still forward-only, on the
+    second half of the argument alone: funding a broad rollback needs a fresh deploy.yml
+    measurement against today's tree, not the slack a ceiling raise left behind. Nothing changed
+    behaviour when the ceiling moved — `broad_budget_ok` has no production caller. A
+    failure writes `hold_sha` **and** `hold_plane`, alerts saying nothing was rolled back, and
+    leaves the tree fast-forwarded. Both markers then survive every tick until this same plane
+    applies — *Which apply clears a hold* below. It deliberately does not `git reset` — resetting without
+    redeploying would leave the tree claiming the old commit while live state is half-new.
+  - **`_BROAD_MANUAL_PREFIXES` keeps the old defer-and-alert with no ff-merge**:
+    `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml` — the bring-up playbooks, which run
+    by hand by construction. Staying parked is what keeps `behind_since` set, which is the only
+    durable signal those have. A setup-plane path that resolves to no ROLE joins them — a file
+    directly under `roles/setup/`, which `_note_setup_role` cannot name — because there is no
+    hand command to print and no role to record.
+  - **A setup ROLE whose tag cannot be derived no longer parks: it fast-forwards and is
+    recorded in `manual_plane`.** `k3s` (applied by `k3s-bringup.yml`) and `common` (applied by
+    no playbook at all) are the two, and `deploy_defer.py`'s module docstring carries the
+    `DECIDED:` marker and the measurement. The tick writes one line per role to
+    `/var/lib/gitops-deploy/manual_plane` — `"<origin_sha> <playbook-or-none> <role>
+    <unix_ts>"`, deduplicated by role so a role already listed keeps its first-seen stamp —
+    logs `manual_plane pending: <roles> — apply by hand: <commands>` on EVERY later tick, and
+    pages once per SHA. `broad_applied` is NOT written for the unapplied role; a role in the
+    same range that DID apply still records its own. Three things clear a line: applying the
+    role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
+    which no role reaches today because the tick runs neither playbook), an operator running
+    `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and nothing
+    else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
+    user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
+    cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
+    by hand with its apply still owed, and the marker's truncation was the only write).
+    Parking was the signal only because nothing else was, and it charged every other
+    session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
+    about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand
+    pulls the primary checkout.
+    A range carrying BOTH a bring-up playbook and an unapplyable role parks and writes no
+    marker at all — `deploy_defer.parks_the_tick` gives `cs.broad_manual` priority, nothing is
+    merged, and `behind_since` is the signal there exactly as it was before. `land.sh` prints
+    no clear command for such a PR for the same reason.
+  - **A park names its reason in the journal on every tick** (`deploy_remediation.broad_park_reason`).
+    The Discord page is throttled once per SHA and until 2026-09-09 the journal was throttled with
+    it, so from the second tick behind a range this arm logged nothing at all. daniel-box then sat
+    nine commits behind origin for twenty minutes with `roles/setup/k3s/` in the range — k3s is
+    applied by `k3s-bringup.yml`, so no tag resolves — and the only per-tick line came from an
+    unrelated comment-only path, which read as the cause and was not (#1467). The journal is what
+    an operator reads when `land.sh` exits 4; a page delivered an hour ago is not there.
+  - **This role applies itself.** It was in the manual set until 2026-09-01 on the claim that
+    applying it "restarts the unit executing the tick." The handler is `Run gitops-deploy once`,
+    `ansible.builtin.systemd: state: started`, and Ansible's module treats an `activating` unit
+    as already running, so from inside a tick it does nothing; the other handler is a
+    daemon-reload. Meanwhile the park stopped every other session's landing (#707, #712, #714
+    on one day) until someone hand-ran `initial_setup.yml --tags gitops_deploy` in the primary
+    checkout and ff-merged. A self-apply that fails takes the same hold + `hold_plane` + alert
+    path as any setup role. The `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in
+    `deploy_logic.py` is the long form.
+  - `BROAD_DEPLOY_TIMEOUT_S` (1800, `gitops_deploy_broad_timeout_s`) bounds one apply. Without it
+    a wedged run is SIGTERMed at `TimeoutStartSec` with no hold written and no alert sent.
+- **Behind-origin watchdog** (`deploy_logic.behind_marker`): every PARK above leaves the host
+  parked on an old tree, and until 2026-08-02 nothing but a Discord message said so — `last_run`
+  keeps ticking (Alive green) and `is_diverged` is false (origin is a strict *descendant*, so
+  Status green too). daniel-server ran a 12-commit-old tree for hours that way, and the miss only
+  surfaced when its un-deployed Pi-hole DNS records were noticed by hand. Each tick now records
+  `"<origin_sha> <first_seen_ts>"` to `/var/lib/gitops-deploy/behind_since` when it ends behind
+  origin, cleared on convergence, and `monitor-bridge`'s **GitOps Deploy — Status** pages once the
+  age exceeds `GITOPS_BEHIND_MAX_MIN` (6 h). Written AFTER `main()` so it reflects the state the
+  tick finished in, not the one it started in. Age-gated because being behind is normal in the
+  small: a push is behind for one tick, and the dirty path is behind for a whole edit session by
+  design.
+  - **The stamp measures TIME WITHOUT A FAST-FORWARD, not time behind the tip.** Any tick that
+    moved the tree renews it — `entrypoint()` compares HEAD before and after and passes
+    `fast_forwarded=` to `record_behind` — and a tick that moved nothing keeps what is there, so
+    a trickle of pushes to a stuck host still cannot restart the clock: a stuck host does not
+    fast-forward. A rollback resets HEAD to where it started, which counts as no progress,
+    which is what it is. The two readings were the same thing before the ancestor walk, because
+    a tick either crossed the whole range or parked. They are not the same now — a deployer
+    landing every merge at the newest green ancestor is behind the tip on nearly every tick, and
+    under the per-SHA rule that preceded this its stamp aged past six hours while it was working
+    normally. Every reader says so in its own prose: `scripts/lib/deployer_park.py` (shared by
+    `deploy.sh` exit 4 and the SessionStart banner) and
+    `monitor-bridge/files/checks/gitops.py`.
+    A wedge cannot game the re-stamp (issue #1846, refuted): every path that stops the
+    deployer converging — a park, a hold at the tip, a dirty tree, a diverged tree, a tail
+    with no green ancestor, a contention reset, a rollback — leaves HEAD where the tick found
+    it, so `fast_forwarded` is false and the stamp is kept. And a fast-forward to any commit
+    above a wedged range crosses that range, because the walk chooses a SHA on the first-parent
+    chain and the ff-merge goes TO it. `tests/test_gitops_deploy_alert_channels.py::
+    test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it` pins the
+    combination: a parked bring-up change with green commits landing above it every tick
+    keeps the first stamp.
+  - **The `manual_plane` marker is the second arm of that watchdog, for the deferral that no
+    longer leaves the host behind.** A recorded role fast-forwards, so `behind_since` clears
+    and every marker the watchdog reads goes quiet while the role stays unapplied.
+    `checks.gitops.gitops_status` therefore reads `manual_plane` too and pages once the
+    OLDEST pending line is older than the same `GITOPS_BEHIND_MAX_S` (6 h), naming the roles
+    and the clear command. Reported LAST of the four, behind rather than ahead of the behind
+    arm: the other three name a deployer that has stopped — a host sustained-behind exits every
+    other session's landing 4 from `deploy.sh` until a hand pulls the primary checkout — where
+    a pending role blocks nobody. They are independent faults, so specificity does not order
+    them and urgency does. The pod reads
+    it off the same `:ro` state mount as `behind_since`, and parses it with
+    `gitops_markers.parse_manual_plane` — its own copy of the deployer's module, since it
+    cannot import this tree (*One marker module, copied* below).
+    The SessionStart banner reads the marker too, through `lib.deployer_park`, and names a
+    pending role from the moment it is recorded rather than after six hours (issue #1774): the
+    monitor pages, where the banner only tells the sessions that did not land the change.
+    Both parse it with the same function from the same generated copy.
+- **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
+  rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
+  value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
+  `secrets_alerted_sha` marker) to redeploy the consumers. `secrets.yml` is deliberately
+  NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
+  stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
+- **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
+  every other k8s change still defers-and-alerts.** (Changed 2026-08-14 — this bullet used to read
+  "never auto-deployed," which is why the paragraph below is written against that older state.)
+  Eligibility is decided by `deploy_logic.split_k8s_auto_deploy` and is deliberately **diff-shape
+  first, identity second**: gating on the service name alone would not be safe, because
+  `_ACTIVE_K8S` matches the WHOLE role dir — a name-only allowlist would auto-deploy ConfigMap,
+  `tasks/` and template pushes too, none of which carry Renovate's soak. A service qualifies only
+  when the feature is enabled, it is not in `gitops_deploy_k8s_autodeploy_denylist`, the pilot
+  scope (if set) names it, the only path the push touched under its role is
+  `defaults/main.yml`, and every changed line in that file assigns an `*_image:` var. Everything
+  else stays in `ChangeSet.k8s` and behaves exactly as described below.
+
+    That denylist is no longer hand-maintained: `filter_plugins/k8s_autodeploy.py` derives it
+    from each role's own `k8s_autodeploy` declaration in `roles/k8s/<name>/defaults/main.yml`,
+    where the reason sits beside the role it describes. The filter fails closed — a role that
+    declares nothing raises at template time rather than dropping out of the denylist, since
+    absence from it means auto-deployable. To stop a role auto-deploying, set
+    `k8s_autodeploy: false` in its defaults; there is no central list to edit.
+
+    That edit alone does not reach the host. It lands under `roles/k8s/<role>/`, so the
+    deployer routes it to `ChangeSet.k8s` and its defer-and-alert names `ansible/deploy.yml
+    --tags <svc>` — `deploy.yml` runs no setup role, so it never re-renders
+    `/etc/gitops-deploy/config.env`, and the denylist on the host stays the old one while the
+    role you just denied is still auto-deployable. Run
+    `uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` to push the
+    change. This is the same silent-no-op class `broad_remediation()`'s docstring warns about
+    (`deploy_logic.py` around line 177) — naming `deploy.yml` for a setup-plane change leaves
+    it unapplied while a plain ff-merge clears the divergence.
+
+    **Adding a NEW role that declares `k8s_autodeploy: false` is the same edit site with the
+    same consequence, and it is the one that recurs** — denying an existing role is a rare,
+    deliberate act, while adding a role is routine. `game-stats-lib` landed 2026-09-05 with
+    `k8s_autodeploy: false`, and the host disarmed for six hours until an operator re-rendered
+    (#1265). Note the blast radius: a stale denylist disarms image-pin auto-deploy for EVERY
+    service, not only the role that went stale, because the disarm is a comparison of the whole
+    set rather than a per-role check. The `new-k8s-service` skill carries the re-render as a
+    step for that reason.
+
+    The trigger for that re-render is asymmetric with what the denylist reads.
+    `k8s_autodeploy_denylist` derives from every role under `roles/k8s/`, while the only path
+    that re-renders `config.env` from a *changed path* is one matching `_BROAD_SETUP_PREFIXES` —
+    `ansible/roles/setup/`. So a change that alters the derived denylist matches no prefix that
+    re-renders it, by construction.
+
+    `deploy_phases.reconcile_denylist` closes that gap without touching the prefix sets (#1294).
+    It states the invariant LOCALLY — config.env must agree with the declarations at the
+    checkout's own HEAD — and re-renders when it does not, by running
+    `initial_setup.yml --tags gitops_deploy` itself. Stating it against HEAD rather than origin is what makes it fixable:
+    the render reads the working tree, so it can only ever produce HEAD's list. The heal
+    therefore lands on the tick AFTER the ff-merge, which is normally an idle one. Six
+    properties are worth knowing before changing it:
+
+    - **It gates on the FILE-level enable flag, not the one the fail-closed disarm leaves
+      behind.** `gitops_deploy.py` flips `K8S_AUTODEPLOY_ENABLED` to False when the rendered
+      denylist is empty, so a config.env that LOST its denylist line used to disarm the very
+      reconcile whose re-render is the repair, and the host stayed that way until an operator
+      re-rendered by hand (#1317). `Config` therefore carries both values — the parsed one as
+      `k8s_autodeploy_enabled_in_file`, the post-disarm one as `k8s_autodeploy_enabled` — off
+      the same single config.env key. Three states, kept apart: the file says off, so skip; the
+      file says on with no denylist, so re-render; the file says on with a denylist, so compare.
+      `_promote_k8s_auto_deploys` still reads the post-disarm value, so the damaged state heals
+      without promoting anything.
+    - **It passes `gitops_deploy_kick_after_change=false`.** Rendering config.env notifies this
+      role's `Run gitops-deploy once` handler, whose `systemctl start` blocks on the activation
+      the render is running under. Without the flag the heal self-deadlocks until its timeout.
+      ENFORCED by `ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py`.
+    - **`denylist_rendered_sha` guards it once per checkout SHA.** That bounds both the cost (the
+      per-role `git show` reads are skipped on every idle tick) and the retry (a mismatch a
+      re-render cannot fix — a config rendered from an unpushed tree — renders once, not every
+      ten minutes). The marker is written BEFORE the run, so a SIGTERM mid-play cannot loop it.
+    - **A render ENDS that tick.** Two reasons, and the second is the harder one. The config in
+      memory still holds the list the render just disproved, so anything after it would decide
+      against a list known to be wrong. And every arm of this unit is non-stacking by
+      construction — the unit template sizes `TimeoutStartSec` as `max(broad, staging + k8s +
+      rollback)` rather than a sum — so a render that ran on to a k8s deploy would be the first
+      arm to add its budget to a sibling's, and could be SIGTERMed mid-rollback. The next tick is
+      ten minutes away and reads the fresh config.
+    - **A dirty tree is never rendered from**, because the filter reads the working tree and
+      would bake a list nobody pushed.
+    - **A failed render writes no `hold_sha`**, unlike `handle_broad`'s failed apply. It rewrites
+      only this deployer's own config.env, so a failure leaves the old file — the state the tick
+      already tolerates, with auto-deploy disarmed by the origin comparison below. Parking every
+      unrelated deploy behind a config render would be a larger outage than the one it heals.
+
+    The origin-side comparison below is unchanged and stays the fail-safe for the window where
+    origin is ahead of the checkout.
+
+    The deployer detects this itself instead of relying on an operator to remember it. Each
+    tick, `k8s_declarations_at(origin)` reads every role's `defaults/main.yml` at the SHA the
+    tick already pinned for the diff and the alert — not a re-resolved `origin/<branch>`, which
+    would open a TOCTOU against a concurrent fetch — and `declared_denylist()` parses it with a
+    stdlib regex, since the unit runs under `uv run --no-project` and cannot import `yaml` or the
+    filter plugin. If that result disagrees with `K8S_AUTODEPLOY_DENYLIST`, or can't be read at
+    all, k8s auto-deploy is disarmed for that tick. Both mismatch directions usually mean the
+    same thing — config is behind origin — since a role can be denied there OR promoted there;
+    either way the page leads with the re-render (`ansible/initial_setup.yml --tags
+    gitops_deploy`), and only when a role was removed from the denylist does it also name the
+    secondary cause, an operator who rendered locally before pushing (`git push` it). It includes
+    the read exception's type and message when the declarations couldn't be read at all. The disarm
+    itself is stateless: it is recomputed every tick, so it self-clears the moment the config is
+    re-rendered. Only the page is throttled, on the `stale_denylist_alerted` marker. The regex is deliberately
+    biased toward denied — unanimity is required across every match, an absent or unparseable
+    declaration counts as denied, and a shared role skips the check entirely — so a parsing bug
+    here almost always produces a spurious disarm rather than a permitted deploy. The one gap is
+    a file that is invalid YAML overall, which the regex can still read a value out of but the
+    filter would raise on rather than deny; CI is what closes it, not the regex's own bias —
+    `ansible/tests/deploy/test_denylist_parsers_agree.py` runs the filter against the live tree and
+    fails on exactly that shape, and `REQUIRE_CI` refuses to promote a red tip.
+  - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
+    `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
+    `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
+    on a restart-count delta or a readiness shortfall. (All three lived in
+    `roles/k8s/manifests` until 5eea64e6 batched the rollouts and deferred the soak to
+    end-of-play.) This deployer adds no health-poll phase for
+    k8s: `containers_for()` returns `[]` for a k8s service, which is exactly the 2026-08-08
+    configarr false-rollback. The denylist covers the roles that gate can't protect — see each
+    role's own `roles/k8s/<name>/defaults/main.yml`, where its `k8s_autodeploy_reason` carries
+    the reason.
+  - **A k8s rollback is local-only, and that is not sufficient on its own.** On failure the tick
+    holds the bad SHA, `git reset --hard`es, redeploys the prior pin, and pages. But `skip_hold`
+    matches only while `origin_head == hold_sha`, so **the bad pin is still on master** — the next
+    push past the held commit redeploys it. The Discord page says so; the fix is a revert on the
+    remote (or a Renovate `allowedVersions` pin), not just clearing the hold.
+  - **A clean k8s tick is the second place `hold_sha` clears.** `clear_service_hold()` also sits
+    in the Docker health-gate branch, which an all-k8s host never reaches — without this the
+    first rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
+    It clears a rollback hold only; a BROAD hold survives it, per *Which apply clears a hold*.
+  - **One tick promotes at most `gitops_deploy_k8s_autodeploy_max_per_tick` services (default 3).**
+    Every promoted service shares a single `ansible-playbook` run under one
+    `K8S_DEPLOY_TIMEOUT_S`, and the failure path resets the whole merged range — so an
+    overlong batch discards the good bumps with the bad one. The surplus stays in `ChangeSet.k8s`
+    and defer-and-alerts, which posts a Discord message naming the services to deploy by hand.
+    **It is not retried on a later tick**: the ff-merge runs before the deploy, so a successful
+    tick leaves `local == origin` and every subsequent `next_action()` is a noop. The pilot list
+    used to bound this at one service; since it was cleared (2026-08-16) the cap is the only
+    bound, which is what it was written for.
+  - **The Discord page above is a one-shot detection, not a durable signal (issue #947).**
+    `alert_once` fires it exactly once per origin SHA, and the ff-merge that follows clears
+    `behind_since` — the deployer's own "still behind origin" marker — so a k8s change deferred
+    this way leaves every OTHER monitored marker clean while the cluster keeps running the old
+    manifests. Renovate automerges digest bumps on the 20+ `k8s_autodeploy: false` roles
+    (`renovate.json`), so this path runs unattended with the one Discord line as its entire
+    signal until someone happens to reread it. The `# DECIDED:` at the `cs.k8s` branch of
+    `deploy_alerts.alert_deferred` points here. The durable signal is a daniel-box cron owned by
+    `sys_user`, not root, unlike the two GitHub crons below and `manifest-prune-check` beside it
+    in the same task file: this check reads world-readable release records and runs `git`/`uv`
+    against the primary checkout, which `sys_user` already owns, and running it as root would
+    leave root-owned objects there for `deploy.sh` and other sessions to trip on
+    (`roles/setup/k3s/templates/release-staleness-check.sh.j2`, tag `release-staleness`, every
+    `k3s_release_staleness_cron_minute`) reading `uv run python scripts/diagnostics/probe.py
+    releases --stale-only`: it compares each service's release record (the applied commit
+    `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
+    `origin/master` under that service's own role AND the shared roles that supply bytes to
+    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`,
+    `game-stats-lib` — `scripts/diagnostics/probe_lib/releases.py`'s
+    `manifest_affecting_shared_roles()`), and pushes the "Release Staleness Drift" Kuma monitor
+    down when any service is stale or missing a record entirely. The five entry-less roles that
+    hold only `tasks/` and `defaults/` (`rollout-drain`, `volume-snapshot`, `volume-revert`,
+    `cronjob-gate`, `longhorn-api`) are deliberately OUT of that set: they change how a deploy
+    runs, never what it applies, and their change is live for the next deploy the moment this
+    deployer fast-forwards the primary checkout, so no stamp goes stale. Sweeping them in marked
+    all 53 services stale for a `volume-snapshot` change that rendered no manifest (#1636).
+    The deploy plane is in the census too (#1993): for each changed path under
+    `ansible/inventory/` or `ansible/templates/` since the record, `releases.py` asks
+    `narrow_broad.broad_path_tags` — the per-path rule this deployer's own tick narrows a
+    broad range with — which services the change reaches, and names the key or macro in the
+    reason. A path the rules refuse (a key the play reads, `hosts.ini`) marks every
+    service sharing that record stale, which is the set
+    the tick's full run for that same range re-stamps; so a denied role the broad plane
+    applied reads clean, and one it ever left behind reads stale under the change's own name.
+    No clearing rule is needed: the next real apply of that service rewrites its record, so the
+    flag is derived from state rather than a marker this deployer would have to remember to
+    clear.
+  - **Accepted, not fixed here: the batch-abort blast radius is this branch's most likely bad
+    day.** `K8S_AUTODEPLOY_MAX_PER_TICK` (3) and `ansible/tasks/k8s_batch.yml` share one
+    `ansible-playbook` run with no `rescue` — so one service's revert failing during a rollback
+    aborts the WHOLE batch's rollback, not just that service's. Every co-batched service that had
+    already been reset for its own revert is left mid-rollback: on the manifests of the failed commit
+    (or worse, mid-revert with a volume still attached in maintenance mode) over migrated data —
+    exactly the state this slice exists to prevent, reached in a single tick rather than needing
+    a separate independent failure. The proper fix is per-service invocation on the rollback
+    path (each service's rollback in its own `ansible-playbook` run, so one failure can't abort
+    a sibling's), not attempted in this pass. See the rollback-timeout section below for the
+    same batching mechanism's effect on `K8S_ROLLBACK_TIMEOUT_S`.
+  - **Accepted: a silently skipped snapshot is only an Ansible `debug` line, and that is what
+    makes the batch-abort item above reachable in a single tick.** When
+    `k8s/volume-snapshot`'s maintenance-mode attach fails on a detached volume, the deploy
+    proceeds unprotected with a loud `ansible.builtin.debug` warning — but nothing forwards that
+    warning to Discord, and a later rollback's revert-status note
+    (`rollback_volume_revert_note`) names a service as one the revert targets purely by reading
+    its role DEFAULTS (`k8s_autodeploy_snapshot_pvcs`), not what the snapshot phase actually did
+    on THIS run. So an operator reading the rollback alert has no signal that this particular
+    snapshot never happened, and no reason to suspect the revert that follows fails loudly
+    rather than silently do nothing.
+  - **Accepted: nothing self-heals a volume left attached in Longhorn maintenance mode after a
+    failed rollback, and the seed pod of the next deploy mounts the same RWO claim.** If
+    `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left
+    attached with `disableFrontend: true` and the workload at zero replicas — see
+    `k8s/volume-revert/CLAUDE.md`'s manual-recovery steps. `k8s/volume-claim` runs ahead of
+    `k8s/manifests` on every one of the 13 opted-in roles' NEXT deploy and mounts the same claim
+    to seed it; whether that mount succeeds, hangs, or fails against a volume already attached in
+    maintenance mode by a different (non-pod) attachment is untested — nothing in this repo
+    exercises a real Longhorn revert (see `k8s/volume-revert/CLAUDE.md`'s "What is not covered by
+    tests"). Treat a stuck maintenance-mode attach as blocking the affected service's next deploy
+    until cleared by hand, not as something the pipeline routes around on its own.
+  - **The pilot list is empty, so the denylist alone decides.** `gitops_deploy_k8s_autodeploy_pilot`
+    scoped eligibility to `speedtest` from 2026-08-14 until slice 3 cleared it. An empty list means
+    "every non-denylisted service," not "none" — the opposite of the empty-denylist guard right
+    above it, which disarms the feature. Six services were added to the denylist in the same commit
+    (qbittorrent/bazarr/tdarr, LiveSync, valheim, valheim-stats): each matched a published exclusion
+    class already, and was outside the list only because the pilot made the list non-binding.
+    The `ansible/tests/test_k8s_autodeploy_*.py` family now enforces the three role shapes that must never
+    be eligible — a rendered Deployment whose name isn't in the gated set (a role gating a second
+    Deployment by name via `manifests_extra_rollouts` is fine; a name that can't be resolved
+    statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no
+    `readinessProbe`.
+  - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
+    `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
+    only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
+  - Promotion is refused when the tick also carries Docker services: the k8s branch returns before
+    the Docker deploy would run. No host is mixed today.
+
+  The original rationale, still accurate for every non-eligible k8s change:
+  This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
+  Docker-platform only — it feeds `deploy(cs.services)`, which is a Docker-role concept. On
+  daniel-box, where every `containers_list` entry is `platform: k8s`, a change under
+  `ansible/roles/k8s/**` used to match none of those regexes at all: `services_from_changed_paths`
+  returned an empty `ChangeSet`, and `main()`'s `if not cs.services:` branch took that as a
+  docs-only push — silently `--ff-only` merging a Traefik/Authelia/etc. manifest change with no
+  redeploy and no alert (verified 2026-08-13). `deploy_logic._ACTIVE_K8S` now matches the whole
+  role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site tasks/meta already use,
+  reached on both the no-services branch and after a successful deploy) alerts on it once per SHA
+  (`k8s_alerted_sha` marker) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
+  mechanisms in this doc — `tasks/`, `meta/deps.yml`, `containers_for()`, the health gate — are
+  inert for k8s roles**; they only ever act on `containers/<svc>/docker-compose.yml`, which no k8s
+  role renders. Redeploy a k8s change by hand the same way the alert says:
+  `uv run ansible-playbook ansible/deploy.yml --tags <svc>` (deploy.yml's k8s play picks up
+  `platform: k8s` entries the Docker play filtered out).
+- **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
+  are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
+  `tasks_alerted_sha` / `meta_alerted_sha`) to redeploy the affected services by hand. `tasks/` and
+  the `defaults`/`vars`/`handlers` catch-all (`deploy_logic._ACTIVE_ROLE`) share the `tasks` channel;
+  `*.md` (CLAUDE.md/README) stays a silent ff-merge. This fires whether or not the tick deployed something else: a
+  *combined* push (`svcA`'s template + `svcB`'s `meta/deps.yml`) deploys `svcA` but still flags `svcB`'s
+  unapplied graph change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
+  remainder `cs.tasks|meta - deployed`, run on both branches). A service whose own template changed
+  rode its scoped `--tags` redeploy, so it's not re-flagged. Only fires on a clean deploy — a
+  health-gate rollback git-resets the whole commit, reverting the structural change too.
+- Acts **only when origin is strictly ahead of local** (`is_ancestor(local, origin)` →
+  `next_action(..., origin_ahead=…)`). Un-pushed local commits make origin an *ancestor* of
+  local; that's a no-op, not a deploy — otherwise the tick would diff `local..origin` (the
+  *reverse* of those commits) and mis-fire a redeploy + false rollback. Push to clear it.
+- **Divergence watchdog** (`deploy_logic.is_diverged`): if local and origin differ yet *neither*
+  is an ancestor of the other (for example `secret-rotate` committed locally, its push failed, then origin
+  advanced), the deployer can't fast-forward and every tick noops while origin's new commits — a
+  Renovate/security bump — never deploy. Both other GitOps signals stay green (`last_run` keeps
+  ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
+  (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
+  A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
+- Health-gates **only services deployed on THIS host** — each `has_gitops` host runs its own
+  independent instance of this deployer, own git clone, own state dir, own lock, gating only its
+  own `containers_list`. A changed template for a service deployed on a DIFFERENT host renders no
+  compose here, so `containers_for()` returns `[]` and it's skipped — without this the gate polls
+  a phantom container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
+  - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The Pi
+    has `has_gitops: false`; there is deliberately **no GitOps/CI deploy path to daniel-pi**. A
+    change to a Pi-only service (for example `wg-easy`/`glances` on the Pi) ff-merges and
+    "deploys" as a local no-op, then skips the health gate per the rule above — so the tick reports
+    success while the Pi never actually redeploys ("cross-host phantom-success," review CI-L2). This
+    is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see
+    [[daniel-pi-zero2w-memory-constrained]]), and a Renovate image bump to a Pi service is rare. Push
+    deploys to the Pi by hand: `uv run ansible-playbook ansible/deploy.yml --tags <svc> -e target=daniel-pi`.
+    Revisit (a Pi-side deployer / a CI cross-host gate) only if Pi-service churn ever makes the manual
+    step a real miss.
+
+
+### The `has_gitops` gate, the GitHub crons and the marker module: history
+
+`tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
+everywhere else. The role was gated at the playbook level until 2026-09-09, so a host flipped
+to false skipped the role and kept whatever an earlier true run installed — daniel-server ran
+a live timer that way for three weeks (#1733). `teardown.yml` removes the six units, the polkit
+rule, the two GitHub crons and their scripts, and the three directories `install.yml` creates
+(`/opt`, `/var/lib` and `/etc/gitops-deploy`); the `DECIDED:` at that task says why the state
+directory goes too. `ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py` derives
+both censuses from `install.yml` and fails when the teardown stops covering one.
+
+The code carries the same gate. `deploy_phases.refuse_unless_deployer` reads this host's own
+`host_vars/<hostname>.yml` at the top of `main()`, ahead of the alert drain and every state
+write, and raises `NotTheDeployerHost` on a top-level `has_gitops: false`. `entrypoint()`
+turns that into one journal line and exit 0 — no Discord post, no `last_run` — because the
+webhook and the liveness stamp both belong to a deployer the inventory has retired. It fails
+open on every other shape (no `host_vars` file, the key absent, `true`, an indented or
+commented-out occurrence): a false refusal on daniel-box parks every landing in the fleet.
+`tests/test_gitops_deploy_not_the_deployer.py` pins both halves.
+
+The teardown reaches a non-deployer host only by hand: `roles/setup/` is a broad setup path,
+so the tick applies it on daniel-box, and daniel-server and daniel-pi need
+`uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy` (with `-e
+target=daniel-pi` for the Pi) run by an operator.
+
+Both are daily root crons on the deploy host, each pushing its own Kuma tile through
+`kuma-push-lib.sh`, and both authenticate with the deploy user's `gh auth token`. They differ in
+one way that matters: one alerts, the other reconciles. Both run from kuma-check timers since
+2026-09-19 ([[common]]'s `kuma_check_timer.yml`): each exits 1 on a down verdict and
+`Restart=on-failure` reruns it every 30 min until it exits 0, so a red tile clears when the
+ruleset or limit is fixed rather than at the next day's slot. Two calls an hour at worst stays
+inside GitHub's unauthenticated limit on the anonymous fallback. The timers are
+`Persistent=true`, so a slot missed inside an outage runs at boot; neither script carries a
+boot-grace arm, because both read GitHub rather than the cluster and a boot changes nothing
+they judge. `teardown.yml` imports the
+same names absent, which reaps the units and the crons they replaced on a non-deployer host.
+
+- **`github-ruleset-drift.sh`** compares the live master ruleset against
+  `gitops_deploy_expected_ruleset_contexts`, and checks that the branch-protection ruleset
+  (`gitops_deploy_branch_ruleset_id`) excludes `refs/heads/renovate/**`, alerting on either.
+  Without that exclusion GitHub refuses Renovate's post-merge branch delete and its rebase
+  force-push, and a merged branch's stale green automerges the next PR empty (#1759). It never
+  writes: a ruleset changes because a human changed it, and reconciling would undo that with no
+  signal.
+- **`github-interaction-limit.sh`** re-applies `gitops_deploy_interaction_limit` every day.
+  GitHub grants an interaction limit for six months at most and lets it lapse silently, so the
+  only way it changes without a human is by expiring, and re-applying it restores the declared
+  state rather than overriding a decision. It is what keeps the public repo closed to anyone
+  but a collaborator, chosen on 2026-09-06 over moving the repo into an organization. To
+  change or clear the limit, edit the default; `none` clears it with a DELETE on the next run.
+  A missing token, a failed PUT and a stored value that differs from the declared one all push
+  DOWN with `UNVERIFIED` or `NOT applied`, never `armed` — the tests in
+  `ansible/tests/setup/test_github_interaction_limit.py` drive each of those branches.
+
+**One marker module, copied.** `files/gitops_markers.py` holds the state directory, the
+`MARKERS` table and the parsers for the `behind_since`, `manual_plane` and `contention_since`
+line formats, plus the two clear commands every surface prints. It is the one hand-edited
+source; `deploy_state` imports it. Four other trees read those files and none can import this
+`files/` — monitor-bridge ships its own `files/` into a pod, `deploy-ui` and `renovate-agent`
+run from their own `/opt` directories, and `scripts/lib/deployer_park.py` is imported by the
+SessionStart hook with only `scripts/` on `sys.path` — so until issue #2063 each restated the
+directory and basenames, and three parsed the same lines independently, held together by two
+`test_*_parsers_agree.py` guards. Now `scripts/dev/gen_gitops_markers.py` writes a verbatim
+copy under a `generated_from:` header into each of them (`COPIES` there is the list), and
+`ansible/tests/deploy/test_gitops_markers_copies.py` fails when a committed copy differs from
+what the generator writes, when a consumer role's ship list lacks its copy, or when the
+source grows an import (a copy runs in a pod, a hook and three `/opt` directories, so only
+the stdlib is common ground). To change a basename or a line format: edit the source, run
+the generator, commit every copy in the same PR. The shell and manifest literals that cannot
+import anything — `gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath — are
+pinned to `STATE_DIR` by the same test.
+
+**State is one object.** `deploy_state.DeployerState` wraps the marker files — the
+fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
+the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
+`clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
+rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
+by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
+table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
+beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
+`state_dir` now repoints the one object, and `scripts/deploy_tools/tests/test_tick_ledger_report.py`
+pins the Ansible default against `MARKERS`). `read()` returns None for a missing AND an empty marker —
+a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
+an unreadable state directory must not read as "no hold," or a held host reports converged.
+`tests/test_deployer_state.py` pins all three outcomes.
+
+### Which apply clears a hold
+
+**`hold_sha` clears only when the plane the hold names is applied**
+(`DeployerState.clear_broad_hold` / `DeployerState.clear_service_hold` in `deploy_state.py`,
+deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
+whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
+a superset of, and a tagged run covers an untagged hold not at all.
+
+It was unconditional until 2026-09-02, and that erased the fault. A broad apply of
+`ansible/deploy.yml` failed on `2d25ced3` and wrote both markers; the next tick routed to the
+setup plane, applied successfully, and cleared both within 30 seconds while the deploy plane
+stayed unapplied (issue #878). The k8s and Docker branches did the same through a second door —
+they cleared `hold_sha` and never touched `hold_plane`, orphaning it.
+
+**Why that is worse than a lost diagnostic.** Every consumer gates on `hold_sha` alone:
+`checks.gitops.gitops_status` reads `hold_plane` only to choose which sentence to print,
+`land.sh` reports `deploy-failed` off `hold_sha`, and `renovate_agent.decide` refuses to run a
+session while one is set. So the erasure turned **GitOps Deploy — Status** green over a plane
+nothing had applied.
+
+**The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
+deployer, so it clears nothing — after fixing forward, `rm /var/lib/gitops-deploy/hold_sha
+/var/lib/gitops-deploy/hold_plane`. The Discord alert and the monitor's own message both print
+that. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
+hold whose commits map to no service on this host.
+
+**The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
+`run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane
+is not the moment to land more bumps — but it means the manual clear is load-bearing, not
+cosmetic. It does not park deploys: `skip_hold` matches only while `origin_head == hold_sha`,
+so a stale hold stops nothing once origin advances.
+
+### A failed run's error string
+
+`run()` raises a `RuntimeError` carrying the argv, the exit code, then a bounded tail of
+**stdout followed by stderr**. Stdout is the half that matters: `ansible-playbook` writes the
+failing `TASK` header, the `fatal:` line with its `msg` and the `PLAY RECAP` there, and
+reserves stderr for warnings and deprecation notices. The error string was stderr-only until
+2026-09-02, when a broad apply of `ansible/deploy.yml` failed on `2d25ced3` and left a
+deprecation warning's origin as the only surviving detail (issue #871). That arm is
+forward-only, so the alert it produced told an operator to fix forward with nothing to fix
+forward from, and the only route to the diagnosis was re-running a 20-minute `deploy.yml`.
+
+Both halves are capped at `RUN_ERROR_STDOUT_CHARS` / `RUN_ERROR_STDERR_TAIL` (4000 each), and
+the three Discord failure posts trim further through `_alert_excerpt` (`ALERT_EXCERPT_CHARS`,
+700). That second cap is not belt-and-braces: `host_lib.discord_post` cuts a post at
+`message[:1900]` keeping the **head**, so an unbounded error string does not truncate itself —
+it evicts the remediation prose that follows it. `broad_failure_alert()` is a function rather
+than an inline f-string so `tests/test_gitops_deploy_failure_output.py` can assert the
+assembled post stays under 1900 characters with its `**Action:**` line intact.
+
+**The stdout half is not a positional tail.** `_failure_detail` finds the last task section
+with an un-ignored `fatal:`/`failed:` line, puts that task's header and failure lines first,
+drops `profile_tasks`' `TASKS RECAP` timing table, and spends what is left of the budget on the
+tail (the `PLAY RECAP`). `_alert_excerpt` runs the same finder over the error string, so the
+Discord post carries the task rather than the end of stderr. A plain tail was the #877 fix
+and it lasted one day: the 21:26 broad apply on 2026-09-02 failed one task in 1950, and the
+recap plus twenty timing rows filled the whole window (issue #907). stderr, and stdout with
+no `fatal:` line in it, still get `_tail` — what ansible prints last is the diagnostic part
+there, and a head slice would pass every short-output test and carry nothing on a real run.
+
+### Trap: deploying this role under the shared tree lock self-deadlocks
+
+Do not wrap `initial_setup.yml --tags gitops_deploy` in
+`flock /var/lock/server-git-tree.lock`. `Run gitops-deploy once` is a handler
+(`handlers/main.yml:11`), notified by five tasks in `tasks/main.yml`, and it invokes the
+deployer, whose systemd ExecStart is
+`flock -w 180 -E 75 /var/lock/server-git-tree.lock …`. Holding the lock from outside makes the
+smoke run wait its full 180s and deploy nothing.
+
+**Since 2026-08-23 that failure is silent.** `-E 75` plus `SuccessExitStatus=75`
+(`gitops-deploy.service.j2:101`) make systemd report the unit `Result=success`, so
+`handlers/main.yml:11-16`'s `ansible.builtin.systemd: state: started` returns rc 0 and the play
+recaps green. Nothing deployed, `last_run` untouched, no Discord message (the webhook belongs to
+the deployer, which never started), no `OnFailure`. The first alert of any kind is GitOps-Alive,
+once `last_run` ages past `GITOPS_MAX_AGE_S` — up to 90 minutes later (grep that name in
+`ansible/roles/k8s/monitor-bridge/files/check.py`). The one
+immediate signal is the unit's `ExecStopPost` marker in the journal, `tick skipped (lock
+contention)`, which `scripts/deploy_tools/gitops_tick.sh` also reads to exit 3.
+
+Observed 2026-08-20, *before* that change, when contention still failed the play:
+`PLAY RECAP … changed=2 failed=1`, with `gitops_deploy : Run gitops-deploy once` timing at
+**180.30s** — the flock wait, not a slow task. The config had already rendered, so only the smoke
+run failed. Re-running with no outer flock succeeded (`ok=10 changed=0 failed=0`). That recap is
+kept as the empirical proof of the mechanism: a non-zero flock exit did propagate, which is
+exactly why a zero one now yields `ok`.
+
+Run it unlocked. The deployer takes the lock itself, which is what serializes it against the
+30-minute timer; the outer flock adds nothing and converts serialization into a silent no-op.
+This is a counter-example to the repo-root `CLAUDE.md` guidance that a deploy should take the
+tree lock, and it applies to any role whose tasks re-enter a lock-taking command.
+
+Because the smoke run is a handler, it fires only when something changed. A no-op run
+(`changed=0`) never invokes the deployer and cannot deadlock however it is wrapped —
+verified 2026-08-20 19:22, `ok=10 changed=0 failed=0` with no smoke-run task in the recap.
+So a missing smoke-run step is evidence that nothing needed re-rendering, not evidence of a
+broken or incomplete run.
+
+Separately, **the ff-merge comes before the playbook**, and the reason is that Ansible renders
+from the working tree: a playbook run on the pre-merge tree copies the OLD files and recaps
+`changed=0`, which is indistinguishable from a clean idempotent run. `broad_remediation()` now
+emits the pair in that order, so every message quoting it — the deployer's Discord alert,
+`deploy_tags.py`, `land_tags.py` — prescribes the working sequence. Until 2026-09-01 they all
+printed the reverse, this paragraph documented it as a trap to remember rather than a defect to
+fix, and an operator following the printed order shipped the previous `deploy_logic.py` and only
+caught it by grepping `/opt/gitops-deploy` afterwards.
+`test_broad_remediation_puts_the_ff_merge_before_the_playbook` pins the order.
+
+### Trap: moving a config source changes which remediation the alert prescribes
+
+`/etc/gitops-deploy/config.env` is rendered only by
+`initial_setup.yml --tags gitops_deploy`. `deploy.yml` runs no setup role, so a change that
+must reach that file is unapplied by a `deploy.yml` run — while a plain ff-merge clears the
+divergence and every repo-side check reads green. `broad_remediation()`'s docstring names
+this: *"naming deploy.yml there is a silent no-op that leaves the change unapplied"*
+(2026-07-16 review M1).
+
+The remediation the deployer prescribes is decided by the path you edited, not by what the
+edit affects. Slice 1b (PR #290) derived the k8s auto-deploy denylist from each role's
+`k8s_autodeploy` declaration instead of a CSV in this role's defaults — same value, same
+rendered `config.env` line, different edit site:
+
+| edit site | routes to | alert names | re-renders config.env? |
+|---|---|---|---|
+| `roles/setup/gitops_deploy/defaults/main.yml` (old CSV) | `_BROAD_SETUP_PREFIXES` | `initial_setup.yml --tags <role>` | yes |
+| `roles/k8s/<role>/defaults/main.yml` (declaration) | `ChangeSet.k8s` | `deploy.yml --tags <svc>` | **no** |
+
+So denying a role from auto-deploy leaves it auto-deployable on the host, and the alert names
+the command that cannot fix it. It fails on a safety-tightening edit, which is the worst
+direction. Before moving any value that lands in a host config file, check which `_ACTIVE_*`
+regex its new path matches and what `broad_remediation()` says for that plane.
+
+A second instance appeared during slice 2 (PR #292), a different mechanism with the same
+failure. The stale-denylist alert added in slice 1c split on the direction of the set
+difference: `added` (denied at origin, absent from config) → "config is behind, re-render";
+`removed` (in config, not denied at origin) → "config is ahead — `git push` it". That second
+branch assumed one cause and has two. An operator rendering locally before pushing is one.
+The other is a promotion: a role leaving the denylist at origin shrinks the set, producing
+the identical signature while meaning the opposite. Promoting `node-exporter` was the first
+change to trigger it, so the host would disarm auto-deploy fleet-wide and page with
+`git push`, which does nothing; the alert is throttled per origin SHA, so it re-fires on
+every later push while the host stays stale.
+
+A set difference tells you what diverged, never why, so a remediation inferred from its
+direction is a guess. On a pull-based host origin is the source of truth, so the re-render is
+the right lead in both directions and the push case belongs as a secondary check. Fixed in
+`7f5f629b`. The alert-direction logic lives in `deploy_phases._promote_k8s_auto_deploys`; the
+`test_deploy_*.py` family covers only the decision modules, and the phases run under the
+`settings` fixture in `tests/test_gitops_deploy_phases.py` and under the `tick` fixture in
+`tests/test_gitops_deploy_main_branches.py`.
+
+`test_gitops_deploy_subprocess.py` pins `deploy_k8s()`'s argv. Its two call sites inside
+`main()` are exercised by `test_gitops_deploy_main_branches.py`, which runs the failed-rollout
+branch against the scripted checkout and reads the rollback argv back: it must carry
+`restore_sha=origin[:8]` EXACTLY (not a prefix check — the full 40-char `origin` also starts
+with `"origin"` and would match no snapshot, since volume-snapshot names with `git rev-parse
+--short=8`) and never `local`, under its own `K8S_ROLLBACK_TIMEOUT_S` budget, not the forward
+`K8S_DEPLOY_TIMEOUT_S` of the forward deploy.
+
+**Accepted, docs reconciled rather than code changed: `origin[:8]` is a fixed 8-character slice
+of the full 40-char SHA, and `git rev-parse --short=8` is a MINIMUM width, not a fixed one.**
+`origin = run(["git", "rev-parse", f"origin/{BRANCH}"])` returns the full 40-char SHA (no
+`--short`); `origin[:8]` truncates it to exactly 8 characters, always. `k8s/volume-snapshot`
+names its snapshots from `git rev-parse --short=8 HEAD`'s raw stdout, which is the shortest
+UNAMBIGUOUS abbreviation — 8 characters in the overwhelmingly common case, but MORE when 8
+collides with another object in the repo's history, and both `k8s/volume-revert/CLAUDE.md` and
+`k8s/volume-snapshot/CLAUDE.md` say plainly that the role "uses it verbatim" or "transforms
+nothing," because truncating a longer short-SHA back down to 8 would build a snapshot-name
+prefix that no longer matches. That is exactly what `origin[:8]` does at this one call site.
+Since the longer abbreviation is always a superset-prefix of the shorter one, the two agree in
+the common case (8 chars is already unambiguous) and diverge only in the rare case where it
+isn't — at which point `origin[:8]`'s prefix stops matching one character short of the real
+snapshot name (a literal `-` in the constructed prefix lands where the real name has a ninth hex
+digit instead), and `k8s/volume-revert`'s "no snapshot matches this deploy" assert fires —
+loud, and before the scale-down, the same safe failure mode as every other unmatched-prefix
+case. Probability is negligible for this repo's history size; not changed here because the
+failure mode is already the correct, safe one and `restore_sha=origin[:8]` is pinned by the test
+above — this note exists so the inconsistency between this call site and the two roles' own
+"never truncate" documentation is not mistaken for an oversight.
+
+`deploy_logic.declares_snapshot_claims()` and `rollback_volume_revert_note()` are pure and fully
+unit-tested: they decide the rollback alert's one revert-status line — whether the rollback
+redeploy itself failed (in which case the note says the revert task may never have run, not that
+it was attempted), and, when it succeeded, which of the batch's services actually declare
+`k8s_autodeploy_snapshot_pvcs` (only those revert; the alert must not imply the rest did too).
+`deploy_io.read_local_k8s_default()` is the one line of I/O feeding it — a plain file read
+against the working tree AFTER `git reset --hard local`, matching exactly what
+`roles/k8s/manifests` itself reads for the claim list.
+
+### The rollback timeout, derived
+
+The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
+(`k8s/volume-revert`), which is strictly more work than the forward deploy — per claim, worst
+case is 3 state waits + 3 API calls against Longhorn, and `tdarr`/`code-server` each hold two
+claims. It gets its own timeout rather than sharing `K8S_DEPLOY_TIMEOUT_S`.
+
+**Re-sized (round 2 of this slice's fix pass) from 900s to 1320s: the prior number never named
+the rollout wait of the forward apply itself, and was never checked against the true worst promoted
+service.** The 900s figure (task 6b) budgeted 720s for a two-claim revert plus 180s of
+unnamed "the rest" — which silently assumed the rollout wait of the forward apply
+(`manifests_rollout_timeout`) fit inside that 180s. It defaults to 300s, but `radarr`/`sonarr`
+override it to 660s for first-boot DOCKER_MODS installs — already more than the unnamed
+residual on its own. Computed per promoted (`k8s_autodeploy: true`), claim-declaring
+role, at task 6b's drill-sized `volume_revert_state_timeout`/`api_timeout` (90/30) and
+`volume_snapshot_timeout` (120):
+
+```
+ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout + 3xvolume_revert_api_timeout)
+          + manifests_rollout_timeout + k8s_rollout_stabilise_seconds
+        = claims x 480 + manifests_rollout_timeout + 60
+```
+
+`radarr`/`sonarr` (1 claim, 660s rollout) come to 1200s — the number an earlier draft of this
+fix used as *the* ceiling, because they are the only roles with a non-default rollout timeout
+and so the most visible case. `tdarr` (2 claims, default 300s rollout) is actually worse:
+2x480 + 300 + 60 = **1320s**. `K8S_ROLLBACK_TIMEOUT_S` is set to 1320 to cover the true worst
+case among the promoted services, not the loudest one.
+`ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
+computes this from role sources rather than pinning a number, so a future rollout-timeout bump
+or a new promoted claim-declaring role fails it instead of silently under-sizing the budget.
+
+**NOT covered by this number: two or more claim-declaring services landing in the SAME batch.**
+One tick can promote up to `gitops_deploy_k8s_autodeploy_max_per_tick` (3) services into a single
+`ansible-playbook` run. Inside that run, each role's snapshot+revert phase runs in sequence — only
+the rollout WAIT is deduped/batched across services, via `roles/k8s/rollout-drain`'s
+`max()`-not-`sum()` drain — so a batch with two claim-declaring services stacks their
+snapshot+revert costs additively. Two `radarr`/`sonarr`-shaped services batched together would
+need roughly 2x480 + 660 + 60 = 1680s, already past 1320s. This is the same mechanism as "The
+batch-abort blast radius" below (`K8S_AUTODEPLOY_MAX_PER_TICK` is 3, one shared run, no rescue);
+the proper fix for both is per-service invocation on the rollback path rather than a larger
+constant here — not done in this pass.
+
+**Also newly true at 1320s: a rollback redeploy pays an EXTRA full Recreate cycle.** The revert
+leaves the workload at zero replicas; the apply that follows restores `replicas: 1` from the
+manifest, which starts the pod — but the reset tree (from `git reset --hard local`) makes
+`manifests_render` register as `changed` for every role in the batch, so the "Roll the
+deployment after a config change" task ALSO fires and tears that just-started pod straight back
+down for a `rollout restart`. Roughly a minute (see the scale-down/attach cycle timings in
+`ansible/roles/k8s/volume-revert/CLAUDE.md`), charged exactly when the budget is tightest —
+right after the worst-case cost of the revert itself. Folded into the 60s stabilisation term above only
+by coincidence of rounding, not by design; not separately budgeted.
+
+**Corrected (task 6b, second pass): a failure aborts the play, so failure-driven worst
+cases from different phases cannot stack.** `k8s/volume-revert`'s three waits are `until:` with
+no `ignore_errors` and no `failed_when`, and `k8s/manifests` runs
+snapshot → revert → apply → rollout as one play with no `rescue`. An exhausted wait fails its
+task and the WHOLE PLAY stops there — a snapshot-phase failure means `k8s/volume-revert` never
+runs at all, and a claim-1 failure means claim 2 never runs. So a "snapshot phase fails at its
+240s ceiling AND THEN the revert phase also fails at its 720s ceiling" scenario cannot happen:
+the first failure ends the run. An earlier draft of this note added those two independent
+FAILURE-driven worst cases together and concluded 900s wasn't provably safe — that was wrong,
+for the reason above.
+
+**What 900s does need to cover, and does only partially: a SLOW BUT FULLY SUCCESSFUL run.**
+`worst_case_revert` (720s for two claims) is reached either by every step succeeding right at
+its own ceiling, or by the very last wait failing after everything before it also succeeded
+slowly — both consume the same wall time, so 720s is a real ceiling on "how long before this
+role's fate (success or failure) is decided," not an unreachable one. On a genuinely slow but
+ultimately successful run, the pre-revert snapshot wait (`volume_snapshot_timeout`, up to 120s
+per claim) and the post-apply rollout wait are ADDITIVE to the revert on one continuous
+timeline — nothing fails, so nothing stops the play early. That combined slow-success total for
+a two-claim service (up to 240s snapshot + 720s revert + apply + rollout) can exceed 900s, and
+`K8S_ROLLBACK_TIMEOUT_S` would SIGTERM a run that was genuinely still succeeding, just slowly.
+The 180s left after the 720s revert covers that additive cost only at its REALISTIC size (~38s
+measured for one claim), not at every phase's own ceiling. This is the real, smaller residual:
+not a compounding-failure risk, but a slow-full-success risk, and it is still open.
+
+**The reachable failure mode is bounded by the first exhausted wait, and the timeout was never
+what stood between it and partial state.** When a wait does exhaust, the play stops right there
+— workload at zero, that claim's revert incomplete — which is exactly the manual-recovery case
+`k8s/volume-revert/CLAUDE.md` already documents. Raising or shrinking
+`gitops_deploy_k8s_rollback_timeout_s` does not change whether that failure happens; it only
+changes whether a SLOW SUCCESS gets cut short.
+
+**The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
+unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
+before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
+`K8S_ROLLBACK_TIMEOUT_S` (1320s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
+was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait + 900 + 1320 =
+2400s fits with margin — see that template's own arithmetic comment for both the Docker-path and
+k8s-path budgets it now covers.
+
+**With the staging gate armed, two more budgets join that same sequence, which is why the
+ceiling is 60min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
+`deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
+additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1320 = 3120s
+against 3600s. Both are sized from a measured staging deploy — a full six-service run of the
+whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
+case — and `defaults/main.yml` carries the measurement. Under-sizing them does not fail safe: a
+staging consultation that times out reports NO VERDICT, indistinguishable from a staging that is
+down, and slice 4's entry condition is a measured false-failure rate.
+
+**Consequence for the lock, newly true at 1320s: this unit's own lock hold can now exceed the
+30-minute timer interval, where at 900s it landed exactly at the edge (900 + 900 = 1800s = 30min
+flat) without crossing it.** `ExecStart` wraps the whole run in `flock -w 180
+/var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
+secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
+stalled rollback), this unit can hold that lock for up to 2940s (600 + 120 + 900 + 1320 with the
+staging gate armed, 2220s without it, excluding its own flock wait) — past the 30-minute (1800s)
+timer interval. A concurrent `./scripts/deploy.sh`
+during that window waits `LOCK_WAIT=3000` (`deploy.sh:107`, used at `:282` and `:752`) — **not** the unit's
+own `-w 180`, which governs only the deployer — so it **outlasts the 2940s hold and then
+deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
+the full 3000s. The secret-rotate cron waits on the same lock rather than failing outright,
+which is true only because its `flock -w` is likewise 3000s and so clears that 2940s hold. The
+cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
+matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
+next weekly tick.
+
+**All FOUR waiters on this lock are pinned as a census, not one test each.** `deploy.sh`,
+secret-rotate, docs-refresh and eval-run each wait 3000s, derived from the same four timeouts
+via `_LOCK_WAITERS` and `_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`.
+Only the first two were pinned until 2026-09-05, and the two that were not had drifted: both sat
+at 2700, *inside* the 2940s hold, and docs-refresh's own comment claimed it matched
+secret-rotate while secret-rotate was 3000. PR #585 resized the staging gate and raised the two
+pinned copies; nothing recomputed the unpinned ones. A per-consumer test covers only the
+consumers somebody wrote one for, so the census plus `test_the_lock_waiter_census_is_non_vacuous`
+is what makes a new waiter fail rather than pass silently. Raising any of
+`gitops_deploy_k8s_timeout_s`, `gitops_deploy_k8s_rollback_timeout_s`,
+`gitops_deploy_staging_gate_timeout_s` or `gitops_deploy_staging_expect_timeout_s` fails those tests rather
+than silently shortening an operator's wait, which is how `deploy.sh`'s copy rotted once already
+(it sat at 1500 through two `TimeoutStartSec` bumps).
+
+Neither wait is silently wrong — both correctly report "the lock stayed busy" — but an operator
+seeing exit 75 during this window should check whether `gitops-deploy` is mid double-timeout before
+assuming the lock is stuck.
+
+**Since ADR-0017 the contention is one-directional.** `./scripts/deploy.sh` holds the tree lock
+only long enough to copy `HEAD` into a detached worktree, and runs its playbook from that
+snapshot under one `/var/lock/server-deploy-<tag>.lock` per service — so it no longer holds the
+tree lock for ~20 minutes and this unit no longer queues behind it for that long. This unit is
+unchanged: it still holds the tree lock across its whole run, so an operator deploy launched
+mid-tick still waits, for its snapshot alone. This unit takes the per-service locks too, inside
+that hold, which is what keeps a tick and an operator deploy off the same rollout. The lock
+order is `all` first, then each service in sorted order, and the `# DECIDED:` marker in
+`files/deploy_locks.py` says why the two orders cannot deadlock. There is one statement of
+that order: `deploy.sh` runs `deploy_locks.py plan <tag>...` and takes the locks it prints,
+top to bottom, and refuses (exit 79) rather than order them itself when the plan does not
+arrive (issue #2054).
+
+**A busy service lock is contention, not a failed deploy.** `deploy_locks` raises its own
+`ServiceLockBusy`, each of the three deploy handlers catches it AHEAD of its failure arm, and
+`deploy_defer.for_contention` logs `service lock <tag> busy for <N>s — deferring to the next
+tick`, resets to `local` and returns 0. No `hold_sha`, no `hold_plane`, no rollback and no
+page: nothing was applied, so holding the SHA would park every later tick behind a lock that
+has since been released, and the rollback would redeploy a version that is already live. The
+reset undoes the ff-merge, which is what keeps `local..origin` carrying the range for the next
+tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
+
+**A contention streak IS recorded, in `contention_since`** (issue #1847). The reset leaves no
+other durable trace: `last_run` advances, `hold_sha` stays empty, and `behind_since` ages
+toward a six-hour page sized for a dirty tree, while the lock's legitimate holder is a deploy
+no longer than thirty minutes — so a wedged operator `deploy.sh` deferred every tick silently
+for as long as it lived. `for_contention` writes `"<origin_sha> <lock> <first_seen>
+<last_seen> <count>"`, keeping `first_seen` across the streak and moving the other two;
+`entrypoint()` clears the marker after any tick whose `last_seen` it did not write, which is
+every tick that ended some other way. A crash raises past that clear and keeps the streak: a
+crash is not evidence the lock was released. monitor-bridge pages once `first_seen` is older
+than `GITOPS_CONTENTION_MAX_MIN` (30, the deployer's own longest apply budget), the
+SessionStart banner names the lock past the same threshold (`lib.deployer_park`), and
+`scripts/deploy_tools/gitops_state.py clear-contention` drops the marker by hand. Three readers
+parse it, all through `gitops_markers.parse_contention` (*One marker module, copied*).
+
+**A broad apply takes `all` EXCLUSIVELY, whatever its tags.** `deploy_io.deploy_broad` passes
+`exclusive_all=True`: `initial_setup.yml --tags <role>` names a tag, but what it reconfigures
+is the host every workload runs on, so sharing `all` the way a scoped service deploy does would
+let a host-plane apply overlap a rollout.
+
+**Waiting for a service lock spends the phase's own budget, not a second one.** This unit waits
+while it holds the tree lock, so a wait budgeted separately would add itself to every term in
+`_worst_lock_hold()` — 900s of k8s deploy plus 900s of queueing for it, and the same again for
+the rollback — and the four jobs that size their own tree-lock waits from that sum would start
+giving up and paging for ordinary contention. `deploy_locks.locked_budget` therefore shares one
+deadline between the wait and the playbook: a k8s phase queued behind an operator's deploy runs
+on what is left of `K8S_DEPLOY_TIMEOUT_S`, and holds the tree lock for no longer than a phase
+that never queued. The cost is the other direction — a phase that queues for most of its budget can
+have its playbook SIGTERMed early, which reads as a failed deploy and rolls back. The Docker
+`deploy()` is the one call site with no budget to share, so its wait falls back to
+`deploy_locks.SERVICE_LOCK_WAIT_S` (1800s).
+
+**Consequence for the operator: a pathological double-timeout run can overrun the 30-minute
+timer tick — verified live against the real unit, not inferred from the man page alone.**
+`systemctl show gitops-deploy.service -p ActiveEnterTimestamp` on daniel-box returns EMPTY: a
+`Type=oneshot` service with `RemainAfterExit=no` never enters the "active" state at all — it
+goes inactive → activating → inactive directly. `systemctl show gitops-deploy.timer -p
+LastTriggerUSec` matches this unit's own `ExecMainStartTimestamp` from the same run — so the
+30-min `OnUnitActiveSec` interval is measured from when the timer last STARTED the unit, not
+from when it finished. (An earlier draft of this note claimed the opposite — that the interval
+resets from completion — which this measurement disproves.)
+
+What that means for an overrunning run: the next scheduled elapse (also start-time-based, so it
+recurs every ~30min through the overrun) finds the unit already `activating` and, per `man
+systemd.timer`, "it is not restarted, but simply left running. There is no concept of spawning
+new service instances in this case" — the mechanism is systemd coalescing the new start job into
+the one already in flight, the same behavior whether the man page's literal wording is `active`
+or `activating`. **Proven: an overrun never produces a second, overlapping, or concurrent run.**
+Not verified here: whether each absorbed tick still advances `LastTriggerUSec` (so the next
+elapse keeps recomputing every ~30min throughout the overrun) or whether the schedule is left
+alone until the run finishes — either way, no second execution happens, so the distinction
+doesn't change the safety property, only how quickly the first tick after a long overrun lands.
+Belt and suspenders regardless: `ExecStart` sits behind `flock -w 180`, so even a hypothetical
+second invocation would block up to 180s on the lock and then exit rather than interleave with
+the git tree the first run is still using. **It does not alert.** `-E 75` plus
+`SuccessExitStatus=75` make systemd report `Result=success` on lock contention, so no
+`OnFailure` fires and nothing pages — see the *Deploying this role under the shared tree lock*
+trap above, which documents the same mechanism as a silent no-op. This paragraph said "fail
+cleanly (exit 1, alerting via `OnFailure`)" until 2026-08-24 (review L-4), contradicting the
+corrected text at the head of this file: PR #392 fixed the head and left the tail.

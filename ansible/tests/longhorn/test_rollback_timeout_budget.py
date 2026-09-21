@@ -28,8 +28,8 @@ nothing stops the play early — those are ADDITIVE to `worst_case_revert` on on
 timeline. This test's margin floor is sized against the drill's REALISTIC overhead for those
 (Phase 4: ~5.5s snapshot wait + ~32s rollout-drain wait for one claim), not against a slow
 success in every one of those steps too. That combined slow-success total is not proven to fit
-inside 900s and is an accepted residual risk (see `ansible/roles/setup/gitops_deploy/CLAUDE.md`'s
-rollback-timeout section) — a narrower and smaller risk than a compounding-failure scenario,
+inside 900s and is an accepted residual risk (see `docs/gitops-pipeline.md`'s
+*The rollback timeout, derived* section) — a narrower and smaller risk than a compounding-failure scenario,
 which the abort-on-first-failure semantics above rule out entirely.
 
 Sized against `ansible/roles/k8s/volume-revert/CLAUDE.md`'s task-6 numbers: at
