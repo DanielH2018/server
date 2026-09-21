@@ -11,93 +11,106 @@ dependency-free.
 
 import json
 import shlex
+from collections.abc import Callable
+from typing import Any
+
+# The stage splitter is the dotfiles package's segmenter. `block-protected-bash.py` consumed
+# it first (#2053); the two hand-rolled splitters that lived here — a `;` walker in front of
+# `shlex.split`, blind to newlines and heredoc bodies — went the same way in #2134. The
+# package's `parse` cuts on the same separators, keeps a quoted `;` inside its word, treats a
+# newline as a separator, and lifts heredoc bodies off the segment text. `_claude_guard`
+# raises when the package is not deployed (its DECIDED marker refuses a stale fallback);
+# `segments` turns that into `Unsplittable`, and each consumer decides what a guard that
+# cannot read its input does — an `ask` for a deny guard with a real cost, no decision for
+# the rest. Never a silent "nothing here".
+try:
+    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
+    from claude_guard.segment import parse as _parse
+
+    _PARSE_UNAVAILABLE = ""
+except ImportError as _exc:
+    _parse = None
+    _PARSE_UNAVAILABLE = str(_exc)
 
 
-def _split_top_level_semicolons(command: str) -> list[str]:
-    """`command` cut at every `;` that sits outside quoting, each piece still raw shell text.
+def _deployed_parse(command: str):
+    """The segmenter this host has, read at call time. Raises when the package is absent."""
+    if _parse is None:
+        raise Unsplittable("segmenter-missing", _PARSE_UNAVAILABLE)
+    return _parse(command)
 
-    `shlex.split` leaves an unquoted `;` glued to the word before it (`"hi;"`), so no token
-    it returns is ever exactly `";"` — every rule keyed on that separator is unreachable. This
-    walks the raw string instead, tracking quote/escape state one character at a time, so a
-    `;` inside `'...'`/`"..."` or after a backslash stays part of its piece while a bare one
-    becomes a cut point. `;;` and `;&` (case-statement terminators) collapse into the same cut
-    as a lone `;` — swallowing the second character rather than leaving a stray `&`/`;` glued
-    to the next piece, which would just relocate the same bypass one character over.
+
+class Unsplittable(Exception):
+    """The command could not be read as shell, so no stage of it can be judged.
+
+    Attributes:
+        status: ``segmenter-missing`` when the ``claude_guard`` package is not deployed; the
+            package's own ``unreadable:<why>`` when it refuses the text; ``unreadable:token``
+            for text the package accepts but ``shlex`` cannot tokenise.
+        detail: the ImportError or tokeniser message, for the reason a hook emits.
     """
-    pieces: list[str] = []
-    current: list[str] = []
-    in_single = in_double = escaped = False
-    i, n = 0, len(command)
-    while i < n:
-        ch = command[i]
-        if escaped:
-            current.append(ch)
-            escaped = False
-            i += 1
-            continue
-        if ch == "\\" and not in_single:
-            current.append(ch)
-            escaped = True
-            i += 1
-            continue
-        if ch == "'" and not in_double:
-            in_single = not in_single
-            current.append(ch)
-            i += 1
-            continue
-        if ch == '"' and not in_single:
-            in_double = not in_double
-            current.append(ch)
-            i += 1
-            continue
-        if ch == ";" and not in_single and not in_double:
-            pieces.append("".join(current))
-            current = []
-            i += 1
-            if i < n and command[i] in (";", "&"):
-                i += 1
-            continue
-        current.append(ch)
-        i += 1
-    pieces.append("".join(current))
-    return pieces
+
+    def __init__(self, status: str, detail: str = ""):
+        super().__init__(f"{status} ({detail})" if detail else status)
+        self.status = status
+        self.detail = detail
+
+    @property
+    def missing(self) -> bool:
+        """True when the cause is the package not being deployed, not the command text."""
+        return self.status == "segmenter-missing"
 
 
-def split_stages(command: str) -> list[list[str]]:
+def segments(command: str, parse: Callable[[str], Any] | None = _deployed_parse):
+    """The package's top-level segments of `command`, in order, heredoc bodies lifted.
+
+    Args:
+        command: the raw Bash text from the hook payload.
+        parse: the segmenter. The default is whatever this host has deployed; a test hands
+            `None` to stand on the undeployed host instead of patching this module.
+
+    Raises:
+        Unsplittable: the package is not deployed, or it refused the text (an unbalanced
+            quote, an unclosed substitution). The package's contract is that a non-ok parse
+            is a refusal, never a skip: the caller must ask or decline, not read it as
+            "nothing to see".
+    """
+    if parse is None:
+        raise Unsplittable("segmenter-missing", _PARSE_UNAVAILABLE)
+    parsed = parse(command)
+    if not parsed.ok:
+        raise Unsplittable(parsed.status)
+    return list(parsed.segments)
+
+
+def split_stages(
+    command: str, parse: Callable[[str], Any] | None = _deployed_parse
+) -> list[list[str]]:
     """Every pipeline/sequence stage of `command`, split into argv-ish tokens.
 
     A hook that only inspected the first word would miss `git fetch && gh run watch`, which is
-    how these calls are usually written. Unbalanced quotes return no stages: there is nothing
-    reliable to match on, and a hook that guesses at a command it cannot parse is worse than
-    one that declines to judge it.
+    how these calls are usually written. Each segment `segments` returns is one stage, so a
+    `;`, a newline or a `|` in the text starts a new one and a `;` inside quotes does not.
+    A heredoc body is not a stage: `python3 - <<EOF` yields `["python3", "-", "<<EOF"]` and
+    nothing from the lines that follow.
 
-    `;` is cut out before `shlex.split` ever sees it (see `_split_top_level_semicolons`), so
-    each semicolon-delimited piece is tokenised and flushed as its own stage boundary here,
-    the same as hitting a literal `&&`/`||`/`|`/`&` token below.
+    Raises:
+        Unsplittable: see `segments`; also for a segment `shlex` cannot tokenise.
     """
     stages: list[list[str]] = []
-    current: list[str] = []
-    for piece in _split_top_level_semicolons(command):
+    for segment in segments(command, parse):
         try:
-            words = shlex.split(piece)
-        except ValueError:
-            return []
-        for word in words:
-            if word in ("&&", "||", "|", "&"):
-                if current:
-                    stages.append(current)
-                current = []
-            else:
-                current.append(word)
-        if current:
-            stages.append(current)
-        current = []
+            words = shlex.split(segment.text)
+        except ValueError as exc:
+            raise Unsplittable("unreadable:token", str(exc)) from exc
+        if words:
+            stages.append(words)
     return stages
 
 
-# Words that can precede the real binary in a stage. `shlex.split` leaves `;` attached to the
-# word before it, so `until ! pgrep -f x; do sleep 15; done` arrives as ONE stage whose first
-# word is `until` — a rule testing `stage[0]` would never see the pgrep.
+# Words that can precede the real binary in a stage. `until ! pgrep -f x; do sleep 15; done`
+# splits at each `;`, but its first stage still opens with `until` and `!` — a rule testing
+# `stage[0]` would never see the pgrep.
 _LEADING_KEYWORDS = frozenset(
     {
         "!",
@@ -109,8 +122,6 @@ _LEADING_KEYWORDS = frozenset(
         "do",
         "time",
         "command",
-        "then;",
-        "do;",
     }
 )
 

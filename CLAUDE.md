@@ -212,11 +212,14 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   the dotfiles `claude_guard` package (`~/.local/share/claude-guard`) via
   `.claude/hooks/_claude_guard.py`. A machine without that dotfiles deploy gets no auto-approve
   on that path rather than a stale local copy: the hook prints one `classifier did not run`
-  line to stderr and exits 0 with no stdout, the same fail-open shape as the shims' own cd
-  guard, so the prompt stands. `.claude/hooks/tests/test_claude_guard_import.py` measures that
-  end to end, and diffs the CI stand-in in `tests/conftest.py` against the deployed tables —
-  a diff CI itself cannot run, since CI has no dotfiles deploy; it goes red under `prek run`
-  on a deployed host.
+  line to stderr and exits 0 with no stdout, the same fail-open shape as
+  `auto-approve-readonly.sh`'s own cd guard, so the prompt stands. The four deny guards'
+  shims take the other posture on a failed cd: an **ask** naming the shim, because a bare
+  exit 0 from a deny guard is an allow (#2171).
+  `.claude/hooks/tests/test_claude_guard_import.py` measures the allow side end to end, and
+  diffs the CI stand-in in `tests/conftest.py` against the deployed tables — a diff CI itself
+  cannot run, since CI has no dotfiles deploy; it goes red under `prek run` on a deployed
+  host.
 
 - **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
   a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
@@ -283,6 +286,13 @@ history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file
   The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a
   quoted `;` stays inside its word; text it cannot split — no `claude_guard` deploy on the
   host, or an unbalanced quote — is an **ask** naming the fix, never a silent pass.
+  `block-footguns` and `nudge-land-sh` split with the same segmenter through
+  `_hook_common.split_stages` (#2134), so a newline separates stages for them too, and a
+  heredoc body is never one. On text it cannot split, `block-footguns` asks when the command
+  names a binary one of its rules keys on and stays silent otherwise; `nudge-land-sh` stays
+  silent, since a missed nudge costs one hand-written poll. The allow-side classifier keeps
+  its own tokeniser: the package splits `cmd &>/dev/null` at the `&`, which would turn a
+  redirect the classifier allows into a background job it refuses.
 - **inject-nested-docs** (PreToolUse, Bash) — *adds context*, never a decision. A role's
   `CLAUDE.md` and a `.claude/rules/*.md` load only when Read/Edit/Write touches a matching
   path; a `cat`/`sed -n` through Bash — the form auto mode instructs — loads neither, and 74

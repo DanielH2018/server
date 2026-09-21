@@ -95,6 +95,28 @@ def fenced_calls(_fence_external_binaries):
     return _fence_external_binaries
 
 
+@pytest.fixture
+def segmenter_or_skip(request):
+    """Skip unless the deployed `claude_guard.segment` is importable, or the test opts out.
+
+    `_hook_common.split_stages` is the package's segmenter (#2134), and the stand-in below
+    fakes the package's TABLES, not its parser -- a stand-in splitter would be the second
+    copy the whole change removes. So a module whose rules run through `split_stages` puts
+    itself under this fixture (`pytestmark = pytest.mark.usefixtures(...)`) and skips in CI,
+    the trade `test_block_protected_bash.py`'s `isolation` fixture already made for arm 3;
+    its tests of what the hook does WITHOUT the segmenter carry `@pytest.mark.without_segmenter`
+    and run everywhere. The rules go red under `prek run` on a deployed host.
+    """
+    if request.node.get_closest_marker("without_segmenter"):
+        return
+    import _hook_common
+
+    if _hook_common._parse is None:
+        pytest.skip(
+            "the deployed claude_guard package is not present; rules cannot split"
+        )
+
+
 HOOKS = Path(__file__).resolve().parent.parent
 if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))

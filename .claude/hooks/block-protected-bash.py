@@ -50,20 +50,14 @@ import os
 import re
 import sys
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import Unsplittable, emit_pretooluse_decision, segments
 
-# Arm 3 splits the command with the dotfiles package's segmenter (#2053) -- the same
-# separator set the hand-rolled regex it replaced used, but quote- and nesting-aware, with
-# heredoc bodies lifted off the segment text. `_claude_guard` raises when the package is not
-# deployed (its DECIDED marker refuses a stale fallback); arms 1 and 2 need no segmenter and
-# keep running, and arm 3 turns the missing package into an `ask` rather than silence -- see
+# Arm 3 splits the command with the dotfiles package's segmenter (#2053), through
+# `_hook_common.segments` since every Bash guard consumes it (#2134): the same separator set
+# the hand-rolled regex it replaced used, but quote- and nesting-aware, with heredoc bodies
+# lifted off the segment text. Arms 1 and 2 need no segmenter and keep running when the
+# package is not deployed; arm 3 turns that into an `ask` rather than silence -- see
 # `escaping_write_reason`.
-try:
-    import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
-    from claude_guard.segment import parse as _parse
-except ImportError as _exc:
-    _parse = None
-    _PARSE_UNAVAILABLE = str(_exc)
 
 
 def _load_classify():
@@ -278,7 +272,7 @@ def _could_write(command):
     return "<<" in command or bool(written_paths(command))
 
 
-def escaping_write_reason(command, session_cwd):
+def escaping_write_reason(command, session_cwd, split=segments):
     """(decision, reason) for a write outside the isolated worktree; (None, None) otherwise.
 
     The decision is `deny` for an escape and `ask` where the segmenter cannot say.
@@ -304,29 +298,28 @@ def escaping_write_reason(command, session_cwd):
     """
     if not _in_a_worktree(session_cwd):
         return None, None
-    if _parse is None:
+    try:
+        parsed = split(command)
+    except Unsplittable as exc:
         if not _could_write(command):
             return None, None
-        return (
-            "ask",
-            f"This session is isolated in {session_cwd}, but the worktree-escape guard "
-            f"(#1419) cannot split this command: the `claude_guard` package is not "
-            f"deployed ({_PARSE_UNAVAILABLE}). Run `chezmoi apply` on this host, or "
-            f"confirm the write lands inside the worktree.",
-        )
-    parsed = _parse(command)
-    if not parsed.ok:
-        if not _could_write(command):
-            return None, None
+        if exc.missing:
+            return (
+                "ask",
+                f"This session is isolated in {session_cwd}, but the worktree-escape guard "
+                f"(#1419) cannot split this command: the `claude_guard` package is not "
+                f"deployed ({exc.detail}). Run `chezmoi apply` on this host, or "
+                f"confirm the write lands inside the worktree.",
+            )
         return (
             "ask",
             f"This session is isolated in {session_cwd}, and the worktree-escape guard "
-            f"(#1419) cannot read this command ({parsed.status}), so it cannot tell where "
+            f"(#1419) cannot read this command ({exc.status}), so it cannot tell where "
             f"the write lands. Fix the quoting, or confirm the write stays inside the "
             f"worktree.",
         )
     cwd = os.path.abspath(session_cwd)
-    for segment in (seg.text for seg in parsed.segments):
+    for segment in (seg.text for seg in parsed):
         if not segment.strip():
             continue
         moved = _CD.match(segment)
@@ -366,13 +359,14 @@ def escaping_write_reason(command, session_cwd):
     return None, None
 
 
-def decide(command, repo_root, session_cwd=None):
+def decide(command, repo_root, session_cwd=None, split=segments):
     """Return (decision, reason), or (None, None) for normal permission flow.
 
     `session_cwd` is the directory the tool call runs in, which arm 3 reads to tell an isolated
     session from an ordinary one. It defaults to `repo_root` because the payload supplies one
     value for both; the tests pass them separately so arm 3's scoping is provable in CI, where
-    the checkout is not under `.claude/worktrees/`.
+    the checkout is not under `.claude/worktrees/`. `split` is arm 3's segmenter; the tests
+    hand it one that raises, to stand on the host where the package is not deployed.
     """
     # DECIDED: arm 3 runs FIRST, and denies where arm 1 only asks. `cd /home/ubuntu/server &&
     # sed -i s/a/b/ ansible/vars/secrets.yml` matches both, and an `ask` there would let the
@@ -382,7 +376,7 @@ def decide(command, repo_root, session_cwd=None):
     # a wrong deny costs one re-run from the right directory while a wrong allow parks the
     # deployer for every session. The known cost is that a deliberate edit to the chezmoi
     # checkout from a server worktree is denied; the reason string names the way through.
-    decision, escaped = escaping_write_reason(command, session_cwd or repo_root)
+    decision, escaped = escaping_write_reason(command, session_cwd or repo_root, split)
     if decision:
         return decision, escaped
     reason = read_reason(command, repo_root)
@@ -414,6 +408,15 @@ def main():
     command = (data.get("tool_input") or {}).get("command") or ""
     if not command:
         return 0
+    # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
+    # carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for
+    # a relative write target and for `scripts/secrets_mgmt`, `relpath` inside `classify`
+    # — and an empty prefix resolves against the process cwd implicitly, the same silent
+    # probe `read_cwd`'s docstring refuses for `git -C ""`. Naming the directory says which
+    # checkout those paths resolve in. The shim's `cd /home/ubuntu/server` makes it the
+    # primary checkout, a real repo root, so arms 1 and 2 keep a tree to read; arm 3 reads
+    # the same thing either way, because `_in_a_worktree` of the primary checkout is False
+    # and the escape guard is inert on a missing `cwd` under both spellings. Issue #2135.
     repo_root = data.get("cwd") or os.getcwd()
     decision, reason = decide(command, repo_root)
     if decision:
