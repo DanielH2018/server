@@ -27,28 +27,15 @@ from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 
-from _helpers import K8S_ROLES, SETUP_ROLES, leaf_tasks, load_defaults
+from _helpers import K8S_ROLES, SETUP_ROLES, imported_tasks, load_defaults
 
 K3S = SETUP_ROLES / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
 
 
 def _tasks():
-    """Every task the role runs, in the order it runs them.
-
-    main.yml became a list of import_tasks in the 2026-08-15 split, so the imports are
-    expanded here — in import order, not alphabetically. The ordering assertions below
-    compare task positions, so a wrong order would silently invert what they check.
-    """
-    tasks: list[dict] = []
-    for entry in yaml_fast.safe_load((K3S / "tasks" / "main.yml").read_text()) or []:
-        imported = entry.get("ansible.builtin.import_tasks")
-        if not imported:
-            tasks += leaf_tasks([entry])
-            continue
-        loaded = yaml_fast.safe_load((K3S / "tasks" / imported).read_text()) or []
-        tasks += leaf_tasks(loaded)
-    return tasks
+    """Every task the role runs, in the order it runs them."""
+    return imported_tasks(K3S)
 
 
 def _commands(tasks: list[dict]) -> list[str]:

@@ -118,6 +118,48 @@ def leaf_tasks(tasks) -> list[dict]:
     return out
 
 
+_IMPORT_KEY = "ansible.builtin.import_tasks"
+
+
+def imported_task_files(role: Path) -> list[Path]:
+    """The task files a role's `tasks/main.yml` imports, in import order.
+
+    Follows `ansible.builtin.import_tasks` only — never a glob over `tasks/`. The k3s role's
+    directory holds `agent.yml`, `agent_verify.yml` and `storage_smoke.yml`, which main.yml
+    does not import and which a server-side assertion is not about; a glob would fold them in
+    and put every ordering assertion one file off. A `when:` on an import is ignored, as both
+    readers this replaced ignored it: the file is expanded whether or not the deploy would run
+    it, so an assertion here is about what the role CAN run.
+    """
+    tasks_dir = role / "tasks"
+    return [
+        tasks_dir / entry[_IMPORT_KEY]
+        for entry in load_tasks(tasks_dir / "main.yml")
+        if isinstance(entry, dict) and entry.get(_IMPORT_KEY)
+    ]
+
+
+def imported_tasks(role: Path) -> list[dict]:
+    """`leaf_tasks` of a role's `tasks/main.yml` with every `import_tasks` expanded in place.
+
+    A main.yml that is nothing but imports (the k3s role since its 2026-08-15 split) reads as
+    an empty task list through `load_tasks`, and an ordering or presence assertion over that
+    list passes vacuously. A non-import entry in main.yml keeps its position among the
+    expansions, so the result is the order the role runs in.
+    """
+    tasks_dir = role / "tasks"
+    out: list[dict] = []
+    for entry in load_tasks(tasks_dir / "main.yml"):
+        if not isinstance(entry, dict):
+            continue
+        imported = entry.get(_IMPORT_KEY)
+        if imported:
+            out += leaf_tasks(load_tasks(tasks_dir / imported))
+        else:
+            out += leaf_tasks([entry])
+    return out
+
+
 def command_of(task: dict) -> str:
     """The command a task runs, for either module shape, or "" if it runs neither.
 
