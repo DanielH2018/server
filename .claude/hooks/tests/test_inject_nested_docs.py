@@ -17,7 +17,6 @@ import importlib.util
 import io
 import json
 import os
-import shutil
 import subprocess
 import sys
 import uuid
@@ -284,11 +283,15 @@ def test_the_real_rules_globs_match_their_own_examples():
 
 # ── the real entry point ─────────────────────────────────────────────────────────────
 
-# The `uv` running this suite (`uv run` exports its path as `UV`), PATH as the fallback.
-_UV = os.environ.get("UV") or shutil.which("uv")
+# The shim execs this exact interpreter path after `cd /home/ubuntu/server`, so it only runs
+# end to end on a deployed host. #2208 keyed the skip on `uv` being on PATH instead, and CI
+# has one — the shim there fails its `cd`, exits 0 with no stdout, and the JSON parse fails.
+_SHIM_UV = "/home/ubuntu/.local/bin/uv"
 
 
-@pytest.mark.skipif(_UV is None, reason="no `uv` on PATH to spawn")
+@pytest.mark.skipif(
+    not os.path.exists(_SHIM_UV), reason=f"{_SHIM_UV} is not installed here"
+)
 def test_the_shim_injects_on_the_real_hook_path():
     """Run the .sh with a real payload, the way Claude Code does.
 
