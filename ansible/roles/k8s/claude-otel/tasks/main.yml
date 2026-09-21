@@ -215,12 +215,12 @@
 # runs `Migrate` before it returns, and `HTTPServer` takes the store as a dependency
 # (pkg/services/sqlstore/sqlstore.go, pkg/api/http_server.go), so `/api/health` — the readiness
 # probe the `rollout status` loop above already waited on — answers only after the server's
-# migrations are done. What the retry covers is the CLI: `reset-admin-password` goes through
-# `server.InitializeForCLI` (pkg/cmd/grafana-cli/commands/commands.go), which constructs a
-# SECOND store and runs its own `Migrate` pass on the same SQLite file the live server holds
-# open, so a write the server has in flight at that moment can answer it `database is locked`.
-# That is the mechanism, not a recorded incident — no log names which failure the original
-# 5 x 10s was chasing.
+# migrations are done. What the retry covers is the CLI: `reset-admin-password` runs under
+# `runRunnerCommand` → `initializeRunner` → `server.InitializeForCLI`
+# (pkg/cmd/grafana-cli/commands/commands.go), which constructs a SECOND store and runs its own
+# `Migrate` pass on the same SQLite file the live server holds open, so the two contend for
+# the file and the CLI can lose to a write the server has in flight. That is the mechanism,
+# not a recorded incident — no log names which failure the original 5 x 10s was chasing.
 - name: Sync the live Grafana admin password with SOPS # noqa no-handler
   tags: [deploy]
   ansible.builtin.command:
