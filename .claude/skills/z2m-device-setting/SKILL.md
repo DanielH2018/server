@@ -4,58 +4,51 @@ description: Persist a Zigbee2MQTT device setting (Aqara/Hue tuning like FP300 m
 allowed-tools: Bash
 ---
 
-Set a Zigbee2MQTT **device** setting at runtime. Since slice-5 (2026-08-09) Z2M and Mosquitto
-run **in the k3s cluster on daniel-box**; the broker is reachable LAN-wide at the pinned VIP
-`{{ mqtt_k8s_vip }}` = **10.0.0.242:1883** and requires auth (`allow_anonymous false`).
-`mosquitto_pub`/`mosquitto_sub` come from the `mosquitto-clients` host package (install it if
-missing — there is no Docker mosquitto to `docker exec` into anymore). Run from
-`/home/ubuntu/server` on either host.
+Set a Zigbee2MQTT **device** setting at runtime. Z2M and Mosquitto run in the k3s cluster on
+daniel-box; the broker is reachable LAN-wide at the pinned VIP `mqtt_k8s_vip`
+(`group_vars/all.yml`) and requires auth. The MQTT clients the script runs come from the
+`mosquitto-clients` host package (install it if missing). Run from the repo root on either
+host.
 
 **Important:** these settings live on the device / in Z2M's runtime state, **not** in git. A
-**re-pair resets them**, so every setting you apply must be recorded (see step 4) to be
+**re-pair resets them**, so every setting you apply must be recorded (see step 3) to be
 reproducible. (Contrast: automations/scenes/scripts ARE git-managed — use `ha-edit-automation`.)
 
-## 1. Publish the setting
+## 1. Choose the setting
 
-Creds are in SOPS (`mqtt_username` / `mqtt_password`). Decrypt them into shell vars so they
-never sit in the command literal or history, then publish to `zigbee2mqtt/<Friendly Name>/set`:
+The judgement is here: which device (its Z2M friendly name — exact, spaces and all, e.g.
+`Aqara FP300`, `Tap Dial`), which option, and which value. The option names are the ones Z2M
+exposes for the device (HA shows them as `number`/`select` entities; the Z2M UI lists them
+under the device's *Exposes* tab). Every FP300 value applied so far and why is in
+`ansible/roles/k8s/home-assistant/CLAUDE.md`.
 
-```bash
-u=$(sops -d --extract '["mqtt_username"]' ansible/vars/secrets.yml)
-p=$(sops -d --extract '["mqtt_password"]' ansible/vars/secrets.yml)
-mosquitto_pub -h 10.0.0.242 -u "$u" -P "$p" \
-  -t 'zigbee2mqtt/Aqara FP300/set' -m '{"motion_sensitivity": "high"}'
-```
+## 2. Apply and confirm
 
-- The friendly name is the device's Z2M name (e.g. `Aqara FP300`, `Tap Dial`) — exact, spaces
-  and all, single-quoted.
-- One JSON object; multiple keys are fine: `-m '{"motion_sensitivity":"high","absence_delay_timer":60}'`.
-- `$(...)` forces a permission prompt (and this is a write) — expected. Minor caveat: `-P "$p"`
-  is visible in `ps` for the instant the publish runs (single-user boxes; accepted, and it's
-  the repo's documented recipe).
-
-## 2. Verify it applied
-
-Z2M republishes the device's state after a `/set`. Capture one message to confirm the new value
-is reflected:
+One script does the four steps — read the broker creds from SOPS, subscribe to the device's
+state topic, publish `{"<key>": <value>}` to `zigbee2mqtt/<device>/set`, compare the state Z2M
+republishes against what was asked:
 
 ```bash
-u=$(sops -d --extract '["mqtt_username"]' ansible/vars/secrets.yml)
-p=$(sops -d --extract '["mqtt_password"]' ansible/vars/secrets.yml)
-mosquitto_sub -h 10.0.0.242 -u "$u" -P "$p" \
-  -t 'zigbee2mqtt/Aqara FP300' -C 1
+scripts/z2m/set_device_option.sh 'Aqara FP300' motion_sensitivity high
 ```
 
-If the value isn't in the payload, check Z2M logs for a rejected/unknown option:
-`kubectl -n homelab logs deploy/zigbee2mqtt --tail=40` (from daniel-box). (Battery devices may
-need a wake/poll before the change takes — some Aqara settings apply on the next check-in.)
+A value that parses as JSON is sent as JSON (`60`, `true`), a bare word as a string; to force
+a string that looks like a number, quote it yourself (`'"60"'`). The script is a write, so
+expect a permission prompt.
 
-## 3. Confirm the HA-visible effect (if relevant)
+Read the exit code, not just the output:
 
-If the setting changes what HA sees (e.g. presence hold behavior), verify downstream with
+- `0` — the republished state carries the new value. Done.
+- `1` — Z2M republished a DIFFERENT value: rejected or coerced. The reason is in
+  `kubectl -n homelab logs deploy/zigbee2mqtt --tail=40` (from daniel-box).
+- `2` — no state message came back within the window. Unconfirmed, not rejected: a battery
+  device (FP300, Tap Dial) applies on its next check-in. Wake it, then re-run the same
+  command; the second run's read-back is the confirmation.
+
+If the setting changes what HA sees (e.g. presence hold behaviour), verify downstream with
 `ha-verify-state` — e.g. `probe.py ha state binary_sensor.aqara_fp300_presence`.
 
-## 4. Record it (the part people forget)
+## 3. Record it (the part people forget)
 
 Document the applied setting + value + rationale in
 `ansible/roles/k8s/home-assistant/CLAUDE.md` (the FP300 tuning is already noted there),

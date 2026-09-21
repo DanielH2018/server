@@ -21,7 +21,9 @@ deliberately the same shape: tail the game console out of loki-homelab → fold 
   after that this DB is the only copy of the totals
 - **Scraped by:** claude-otel prometheus, `job_name: valheim-stats`
 - **Dashboard:** `Apps/valheim-stats.json` → "Valheim — Player Stats"
-- **Must sort AFTER `loki-homelab`** in `containers_list`
+- **Must sort AFTER `loki-homelab`** — `depends_on: [loki-homelab]` on its `containers_list`
+  entry, pinned by
+  `ansible/tests/deploy/test_k8s_toposort.py::test_documented_pairwise_ordering_survives_an_adversarial_list`.
 
 ## What it does that terraria-stats cannot
 **Deaths.** Terraria's vanilla console emits no death events (verified in that service's

@@ -135,9 +135,12 @@ containers_list:
   # whatever qbittorrent has downloaded. See the role's tasks/sync.yml.
   - name: media-volume
     platform: k8s
-  # Must follow media-volume: it mounts that claim at /data.
+  # Mounts media-volume's claim at /data, so `depends_on` puts it after that role — as it does
+  # for every other media-data mounter below. ansible/tests/deploy/test_k8s_toposort.py pins
+  # each pair.
   - name: sonarr
     platform: k8s
+    depends_on: [media-volume]
     hostname: "sonarr"
     port: 8989
     use_authelia: true
@@ -146,12 +149,14 @@ containers_list:
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
     platform: k8s
+    depends_on: [media-volume]
     hostname: "qbittorrent"
     port: 8080
     use_authelia: true
     auth_tier: one_factor
   - name: radarr
     platform: k8s
+    depends_on: [media-volume]
     hostname: "radarr"
     port: 7878
     use_authelia: true
@@ -167,6 +172,7 @@ containers_list:
     auth_tier: one_factor
   - name: bazarr
     platform: k8s
+    depends_on: [media-volume]
     hostname: "bazarr"
     port: 6767
     use_authelia: true
@@ -176,6 +182,7 @@ containers_list:
   # clients are TV and phone apps that cannot complete a web SSO flow.
   - name: jellyfin
     platform: k8s
+    depends_on: [media-volume]
     hostname: "jellyfin"
     port: 8096
     use_authelia: false
@@ -185,6 +192,7 @@ containers_list:
   # request. Its /media mount is consequently the only read-write one among the consumers.
   - name: tdarr
     platform: k8s
+    depends_on: [media-volume]
     hostname: "tdarr"
     port: 8265
     use_authelia: true
@@ -200,6 +208,7 @@ containers_list:
   # by bare Service name, and its verify step reads a symlink from inside the jellyfin pod.
   - name: janitorr
     platform: k8s
+    depends_on: [media-volume, sonarr, radarr, jellyfin]
 
   - name: claude-otel
     platform: k8s
@@ -375,6 +384,7 @@ containers_list:
   # coordinator accepts one client, hence `strategy: Recreate` in the role.
   - name: zigbee2mqtt
     platform: k8s
+    depends_on: [mosquitto]
     hostname: "zigbee2mqtt"
     port: 8080
     use_authelia: true
@@ -476,6 +486,7 @@ containers_list:
   # terraria-stats), so no port/route derives.
   - name: terraria-stats
     platform: k8s
+    depends_on: [loki-homelab]
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
   # every metric/API check (same check.py as the Docker remnant, split by
   # CHECKS_SKIP/CHECKS_ONLY); autofix-bridge is the *arr remediation loop.
@@ -508,6 +519,7 @@ containers_list:
   # loki-homelab, so it MUST follow it.
   - name: valheim-stats
     platform: k8s
+    depends_on: [loki-homelab]
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny
