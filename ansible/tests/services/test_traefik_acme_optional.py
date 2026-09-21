@@ -20,43 +20,18 @@ import pytest
 from lib import yaml_fast
 
 from validate.k8s_manifests import (
-    ALL_VARS,
-    ANSIBLE,
-    BASE_CONTEXT,
     K8S_ROLES,
-    SHARED_TPL,
-    k8s_entries,
     load_yaml,
-    make_env,
-    make_lookup,
-    register_ansible_filters,
-    render_or_error,
-    resolve_vars,
-    role_defaults,
 )
+
+from _k8s_render import render_role_template
 
 _ROLE = "traefik"
 _FLAG = "traefik_k8s_manage_acme"
 
 
 def _render(template: str, manage_acme: bool) -> str:
-    base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), "playbook_dir": str(ANSIBLE)}
-    base = resolve_vars(base, base)
-    role_dir = K8S_ROLES / _ROLE
-    ctx = {
-        **base,
-        **role_defaults(_ROLE, base),
-        "container_item": k8s_entries()[_ROLE],
-        _FLAG: manage_acme,
-    }
-    env = make_env([role_dir / "templates", SHARED_TPL])
-    env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
-    rendered, err = render_or_error(env, template, ctx)
-    assert rendered is not None, (
-        f"{template} failed to render with {_FLAG}={manage_acme}: {err}"
-    )
-    return rendered
+    return render_role_template(_ROLE, template, {_FLAG: manage_acme})
 
 
 def _deployment(manage_acme: bool) -> dict:
