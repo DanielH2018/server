@@ -56,7 +56,12 @@ MAX_UNWEIGHTED_FRACTION = 0.2
 # common value would call every directory a pole.
 POLE_SHARE = 0.01
 
-RECORD_MISSING = "uv run python scripts/dev/pytest_shard.py --record-missing"
+# `census()` reads `git ls-files`, so an unstaged test file is in no census: it reads green
+# here and red on CI, and the repair measures nothing until the file is staged.
+RECORD_MISSING = (
+    "stage the new file, then `uv run python scripts/dev/pytest_shard.py --record-missing` "
+    "and commit scripts/dev/pytest_shard_weights.json"
+)
 
 
 def partition_problems(placed: dict[str, int], files, shards: int) -> list[str]:
