@@ -92,8 +92,14 @@ def _defaults() -> dict:
 
 
 def _rendered_dockerfile() -> str:
+    """The Dockerfile as image-builder's `template` lookup renders it.
+
+    `trim_blocks=True` is Ansible's default and a bare `Environment()` is not; the block
+    loop's line endings are the one place the two differ.
+    """
     context = dict(_defaults(), puid=1000, pgid=1000)
-    return Environment().from_string(DOCKERFILE.read_text()).render(**context)
+    env = Environment(trim_blocks=True)
+    return env.from_string(DOCKERFILE.read_text()).render(**context)
 
 
 def test_the_base_image_carries_a_digest() -> None:
