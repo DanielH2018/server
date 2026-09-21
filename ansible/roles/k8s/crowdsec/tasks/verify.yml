@@ -26,7 +26,13 @@
 
 - name: Probe the VIP from the banned Pi — expect 403
   tags: [never, b1-gate]
-  # The plugin polls LAPI in stream mode every 60s; retry across one full interval.
+  # STILL A POLL, and not convertible to `kubectl wait` (#2205). What it waits on is the Traefik
+  # bouncer plugin picking the decision up: `crowdsecMode: stream` with `updateIntervalSeconds:
+  # 60` in roles/k8s/traefik/templates/dynamic.yaml.j2, so the plugin refreshes its in-process
+  # decision cache from LAPI on its own timer. The decision itself lands in LAPI instantly; the
+  # 403 appears when that timer next fires. Nothing about the cache is a cluster object — no
+  # pod condition, no jsonpath field — so there is no condition for `kubectl wait` to name.
+  # 8 x 10s spans one full interval plus slack.
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
@@ -55,6 +61,9 @@
 
 - name: Probe the VIP from the unbanned Pi — expect service to resume
   tags: [never, b1-gate]
+  # The same poll as the banned probe above, for the same reason: the lift is instant at LAPI
+  # and reaches the edge only when the plugin's stream timer next refreshes its cache. No
+  # cluster object carries that, so `kubectl wait` has no condition to name (#2205).
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
