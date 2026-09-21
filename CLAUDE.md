@@ -221,12 +221,11 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   cannot run, since CI has no dotfiles deploy; it goes red under `prek run` on a deployed
   host.
 
-- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** It is a write (it triggers
-  a real deploy), so the auto-mode classifier judges it on its own and denied it once in seven
-  runs on identical text. Measured 2026-08-22. A denial here is the classifier, not a broken
-  script or a missing polkit rule — re-run it, and check `last_run` before assuming nothing
-  happened. `Bash()` allow rules are suspended while `autoMode.classifyAllShell` is on, so the
-  allow-list entry helps only outside auto mode.
+- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed** — it is a write,
+  so the auto-mode classifier judges it on its own text and sometimes denies it. A denial is
+  the classifier, not a broken script: re-run it, and check `last_run` first. The measurement,
+  the retry hook and the `classifyAllShell` caveat are in the **`gitops-tick` skill**, *When it
+  is denied* — the one owner of that paragraph (#2164).
 
 Full tables, hook wiring and measurement history: `docs/claude-shell-permissions.md`.
 
