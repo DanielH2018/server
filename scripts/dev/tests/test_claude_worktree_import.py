@@ -101,6 +101,26 @@ def test_prune_removes_nothing_when_the_deploy_is_missing(tmp_path):
     assert "chezmoi apply" in proc.stderr
 
 
+def test_gc_fails_loudly_rather_than_repairing_without_the_deploy(tmp_path):
+    """`--gc` needs no reader, but the import is module-level, so it is deploy-coupled too.
+
+    The weekly object-store cron (`initial_setup/tasks/crons.yml`) runs exactly this on
+    daniel-box, where the deploy lives beside claude-guard's. Pinned so the coupling is a
+    known exit with the fix on stderr, never a repair that quietly did not run.
+    """
+    proc = subprocess.run(
+        [sys.executable, str(PRUNER), "--gc"],
+        cwd=REPO,
+        env=_without_deploy(tmp_path),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    assert proc.returncode != 0
+    assert proc.stdout == ""
+    assert "chezmoi apply" in proc.stderr
+
+
 @_deployed_only
 def test_the_ci_stand_in_is_the_deployed_module():
     """The stand-in is a second copy by construction; this is what diffs it.
