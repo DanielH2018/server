@@ -88,11 +88,11 @@ jobs:
   # too. Don't read either as the steady state.
   hooks:
     name: hooks (lint + validate + secrets + docs)
-    # A versioned runner label, not `ubuntu-latest`: the `language: system` hooks run whatever
+    # A versioned runner label, not the `-latest` alias: the `language: system` hooks run whatever
     # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
     # new release with no commit here (#2152). The built-in github-actions manager tracks a
     # versioned label through the `github-runners` datasource, so the image moves in a PR that
-    # runs these hooks on it first. `ubuntu-latest` resolved to ubuntu-24.04 when this was
+    # runs these hooks on it first. The alias resolved to ubuntu-24.04 when this was
     # pinned (2026-09-21), so the pin changed nothing on the day. The same reasoning covers
     # `python-version:` and `node-version:` below — a two-part pin resolves to whatever patch
     # the toolcache holds that day, while a three-part one moves only through Renovate.
