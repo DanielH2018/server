@@ -92,6 +92,69 @@ def test_render_empty_says_so_instead_of_an_empty_table():
     assert "No open findings" in md and "|---|" not in md
 
 
+# --- the settled register ---------------------------------------------------------------
+
+
+def _settled(number, ruling, domain="cicd", reason="because", **kw):
+    return _row(
+        number,
+        state="CLOSED",
+        domain=domain,
+        accepted=ruling == "accepted",
+        refuted=ruling == "refuted",
+        reason=reason,
+        **kw,
+    )
+
+
+def test_render_groups_settled_rows_under_their_domain_with_ruling_and_reason():
+    md = g.render_markdown(
+        [
+            _settled(
+                5, "accepted", domain="container", reason="the operator lives with it"
+            ),
+            _settled(6, "refuted", domain="cicd", reason="disproved at a symbol"),
+        ]
+    )
+    settled = md[md.index("## Settled findings") :]
+    assert "### cicd" in settled and "### container" in settled
+    assert (
+        "| [#5](https://github.com/o/r/issues/5) | accepted | t | the operator lives with it |"
+        in settled
+    )
+    assert (
+        "| [#6](https://github.com/o/r/issues/6) | refuted | t | disproved at a symbol |"
+        in settled
+    )
+    # A closed row never leaks into the open table above the register.
+    assert "#5" not in md[: md.index("## Settled findings")]
+
+
+def test_render_orders_settled_domains_as_the_reviewer_list_does_and_unlabelled_last():
+    md = g.render_markdown(
+        [
+            _settled(1, "refuted", domain=None),
+            _settled(2, "refuted", domain="network"),
+            _settled(3, "accepted", domain="backup-observability"),
+        ]
+    )
+    assert (
+        md.index("### backup-observability")
+        < md.index("### network")
+        < md.index("### unlabelled")
+    )
+
+
+def test_render_keeps_a_closed_row_without_a_ruling_out_of_both_tables():
+    md = g.render_markdown([_row(7, state="CLOSED", accepted=False, refuted=False)])
+    assert "#7" not in md and "No settled findings" in md
+
+
+def test_render_shows_a_dash_for_a_settled_row_whose_close_recorded_no_reason():
+    md = g.render_markdown([_settled(8, "refuted", reason=None)])
+    assert "| refuted | t | - |" in md
+
+
 def test_main_writes_the_page_with_a_provenance_banner(tmp_path, monkeypatch):
     monkeypatch.setattr(g, "load_issues", lambda state="open": [])
     out = tmp_path / "backlog.md"
@@ -116,4 +179,4 @@ def test_help_carries_the_docstring_summary(capsys):
     # argparse wraps the description at the terminal width and the formatter colours it, so
     # the rendered text is compared with the escapes stripped and the whitespace collapsed.
     plain = " ".join(re.sub(r"\x1b\[[0-9;]*m", "", capsys.readouterr().out).split())
-    assert "the open findings Claude filed as GitHub Issues" in plain
+    assert "the findings Claude filed as GitHub Issues" in plain

@@ -14,7 +14,7 @@ import re
 import pytest
 from _findings_fakes import Fakes
 from dev import findings
-from dev.findings_lib.gh_calls import run
+from dev.findings_lib.gh_calls import ISSUE_LIST_CAP, load_issues, run
 from dev.findings_lib.issue_model import (
     cited_paths,
     LABELS,
@@ -24,6 +24,7 @@ from dev.findings_lib.issue_model import (
     fingerprint,
     issue_rows,
     reobservations,
+    settled_reason,
     sort_key,
     trailer,
     verify_by_section,
@@ -289,6 +290,35 @@ def test_close_rejects_an_outcome_that_is_not_one_of_the_three():
         plan_close(5, outcome="wontfix", reason="r")
 
 
+def test_settled_reason_reads_back_what_plan_close_wrote(issue):
+    """The reader and the writer share `NOT_PLANNED_PREFIX`; this pins the round trip."""
+    plans = plan_close(5, outcome="accepted", reason="one voter is the trade-off")
+    comment = plans[1][plans[1].index("--comment") + 1]
+    one = issue(5, comments=("Claim: by someone", comment))
+    assert settled_reason(one) == "one voter is the trade-off"
+    (row,) = issue_rows([one])
+    assert row["reason"] == "one voter is the trade-off"
+
+
+def test_settled_reason_takes_the_last_ruling_and_only_its_first_line(issue):
+    one = issue(
+        5,
+        comments=(
+            "Refuted: the first ruling",
+            "Re-observed by review-2026-09-01",
+            "Accepted: the later ruling\nwith a second line the table cell cannot hold",
+        ),
+    )
+    assert settled_reason(one) == "the later ruling"
+
+
+def test_settled_reason_is_none_without_a_ruling_comment(issue):
+    one = issue(
+        5, comments=("Fixed by PR #700.", "prose mentioning Accepted: mid-line")
+    )
+    assert settled_reason(one) is None
+
+
 def test_close_refuted_without_a_reason_is_rejected_before_any_write(make_tools):
     tools, calls = make_tools()
     assert findings.main(["close", "5", "--refuted"], tools) == 2
@@ -434,3 +464,22 @@ def test_cited_paths_ignores_the_trailer_findings_py_writes():
     body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
     assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
     assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []
+
+
+# --- the list cap ---------------------------------------------------------------------------
+
+
+def test_load_issues_warns_when_gh_returns_exactly_its_list_cap(
+    issue, make_tools, capsys
+):
+    """gh truncates silently at --limit; the settled register reads every state, so a cut
+    there drops refuted findings from the table a reviewer reads before flagging."""
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP)]))
+    assert len(load_issues("all", tools)) == ISSUE_LIST_CAP
+    assert "list cap" in capsys.readouterr().err
+
+
+def test_load_issues_is_silent_below_the_list_cap(issue, make_tools, capsys):
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP - 1)]))
+    load_issues("all", tools)
+    assert capsys.readouterr().err == ""

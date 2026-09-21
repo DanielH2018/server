@@ -71,10 +71,10 @@ fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas br
 
 ## Rules
 - Make **no** changes — read-only investigation only. Recommend; don't edit or deploy.
-- Honor accepted designs (don't re-flag): qBittorrent must bind to `wg0` (its TCP healthcheck blind
-  spot is known); configarr's Anime profile scope is deliberately minimal (only 2 local CFs
-  managed, the 52 bespoke CFs are untouched); janitorr deletes for real;
-  meili pinned until karakeep bumps its own pin; the LSIO "unable to set CAP_SETFCAP" warning is
-  cosmetic; a doubled `$$` in a compose `healthcheck`/`command` is CORRECT (Compose `$` escaping),
-  not a bug. **Also honor any "don't re-flag" items provided in your dispatch context.**
+- Honor accepted designs (don't re-flag). Before you flag anything, read the `## container`
+  section of `.claude/skills/homelab-review/accepted-designs.md` and the `### container` table
+  under *Settled findings* in `docs/reference/backlog.md`
+  (grep for the heading rather than reading the whole page); both are generated or
+  shared, so this file carries no list of its own. **Also honor any "don't re-flag" items provided in
+  your dispatch context.**
 - End with a one-line verdict: the single highest-value gap to close.

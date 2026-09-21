@@ -27,7 +27,7 @@ only what runs on the host. Repo-root `CLAUDE.md` has the conventions.
 - **It lived at `ansible/roles/nut_host/` until 2026-09-17.** Outside `roles/setup/` it was
   invisible to the deployer's `_BROAD_SETUP_PREFIXES` and to `land.sh`'s plane note, so PR
   #1915 landed on master with its change unapplied and unreported on both hosts (#1916).
-  `ansible.cfg`'s `roles_path` lists `ansible/roles/setup`, so the bare `role: nut_host` in
+  `ansible.cfg`'s `roles_path` lists `ansible/roles/setup/`, so the bare `role: nut_host` in
   `initial_setup.yml` resolved unchanged across the move.
   `ansible/tests/setup/test_initial_setup_roles_are_visible_to_the_deployer.py` refuses a
   sibling in that position.

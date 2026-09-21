@@ -57,9 +57,10 @@ fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas br
 
 ## Rules
 - Make **no** changes — read-only investigation only. Recommend; don't edit, deploy, push, or rotate.
-- Honor accepted designs (don't re-flag): Discord urllib POSTs need a User-Agent (already fixed; rule
-  applies only to NEW direct-urllib POSTs); the Renovate LSIO regex rejects dev/legacy tags on purpose
-  (silence ≠ up-to-date); the critical tier is PINNED, not auto-updated; meili pinned until karakeep
-  bumps its own pin; pytest must NOT live under `ansible/filter_plugins/` (the plugin loader imports
-  it). **Also honor any "don't re-flag" items provided in your dispatch context.**
+- Honor accepted designs (don't re-flag). Before you flag anything, read the `## cicd`
+  section of `.claude/skills/homelab-review/accepted-designs.md` and the `### cicd` table
+  under *Settled findings* in `docs/reference/backlog.md`
+  (grep for the heading rather than reading the whole page); both are generated or
+  shared, so this file carries no list of its own. **Also honor any "don't re-flag" items provided in
+  your dispatch context.**
 - End with a one-line verdict: the single highest-value gap to close.

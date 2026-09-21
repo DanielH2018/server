@@ -14,7 +14,7 @@ playtime/session/presence metrics for Grafana. See repo-root `CLAUDE.md`.
 - **Reads from Loki, never the docker socket and never the terraria container.** Polls
   `query_range` for `{container="terraria"}` every `POLL_INTERVAL` (20s), cursor-based.
 - **Deaths are NOT tracked** — the vanilla console only emits `has joined`/`has left`
-  (verified Phase 0, 2026-06-15); deaths/chat never reach it. Deaths would require a
+  (measured in Phase 0); deaths/chat never reach it. Deaths would require a
   TShock+SSC migration (rejected). Do not re-add a death metric without that.
 - `files/stats.py` is a **static** stdlib script (env-driven). SQLite (`./data/stats.db`)
   is the durable source of truth; Prometheus/Grafana are the display layer. (No longer

@@ -26,7 +26,7 @@ shared conventions and the `portainer` role for the server side.
      `portainer-agent-firewall.service` systemd oneshot) that lets **only the server's IP** reach
      :9001 and drops the rest. Docker-published ports **bypass ufw**, so this lock canNOT live in
      ufw — it mirrors traefik's `docker-user-rules` mechanism. Reboot-safe (`After=docker.service`).
-- **`cap_drop: ALL` is sufficient** — verified 2026-07-06 the agent starts + serves under it (root's
+- **`cap_drop: ALL` is sufficient** — the agent starts + serves under it (root's
   owner-match on the root:docker socket needs no `DAC_OVERRIDE`; the daemon does the privileged work).
 - **Socket mounted `:ro`** — API send/recv isn't a file write, so exec/console/create still work
   (same as the repo's socket-proxies POSTing through `:ro`). If exec/console ever fails, drop the `:ro`.

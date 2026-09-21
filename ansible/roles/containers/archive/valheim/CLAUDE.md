@@ -1,7 +1,7 @@
 # valheim — Valheim game server (ARCHIVED, superseded)
 
 **Not deployed, and not the rollback path.** Valheim was reactivated on 2026-08-13 as a
-native k8s role — **`ansible/roles/k8s/valheim`** — not by un-archiving this one. Do not
+native k8s role — **`ansible/roles/k8s/valheim/`** — not by un-archiving this one. Do not
 follow `../CLAUDE.md`'s reactivation recipe for it: that recipe restores a service onto the
 Docker edge, which retired at E7.
 

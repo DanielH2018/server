@@ -212,10 +212,11 @@ If mail is down and you need the break-glass path, the file notifier is one edit
 
 The session secret is **`authelia_secret`**. That one SOPS key fills `session.secret` on both
 portals — the retired Docker one (the `configuration.yml` template under
-`ansible/roles/containers/archive/authelia/templates/`, at its line 92) and this one
-(`templates/config-secret.yaml.j2:110`). Every `authelia_session*` string in the tree is a
-**cookie** name instead: `authelia_session` on the Docker portal, `authelia_session_k8s` here
-(`defaults/main.yml:50`). Searching the rotation registry for `authelia_session*` therefore
+`ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
+`ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`). Every `authelia_session*`
+string in the tree is a **cookie** name instead: `authelia_session` on the Docker portal,
+`authelia_session_k8s` here (`ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name`).
+Searching the rotation registry for `authelia_session*` therefore
 finds nothing, which reads as an untracked credential.
 
 That is what the open item standing here until 2026-09-05 had found. It said the Docker

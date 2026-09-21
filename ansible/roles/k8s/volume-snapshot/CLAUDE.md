@@ -35,7 +35,8 @@ task 3 opted in — gets `| default([]) | length == 0`, and the include in `role
 never runs: no extra kubectl call, no extra fact, nothing.
 
 `roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`
-as call-site `vars:` (`roles/k8s/manifests/tasks/main.yml:186`); `volume_snapshot_retain` and
+as call-site `vars:` (the `vars:` of the `Snapshot the stateful volumes` task in
+`ansible/roles/k8s/manifests/tasks/main.yml`); `volume_snapshot_retain` and
 `volume_snapshot_timeout` are not wired there. **Measured, not assumed: a caller CANNOT change
 them by declaring same-named defaults of its own.** `k8s/volume-snapshot`'s own
 `defaults/main.yml` sets both, and it is the role actually executing when they're read — in a
@@ -50,8 +51,8 @@ each of those DOES override `volume_snapshot_retain`/`volume_snapshot_timeout` �
 caller role's own `defaults/main.yml` cannot do is set them. The floor clamp described below holds
 regardless of which of those set the value, including `-e volume_snapshot_retain=0`. The two knobs
 stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
-something else, at which point the fix is adding them to the `vars:` block at
-`roles/k8s/manifests/tasks/main.yml:186`, not a role default.
+something else, at which point the fix is adding them to the `vars:` block of that
+`Snapshot the stateful volumes` task, not a role default.
 
 The one guarantee that holds regardless of what a caller passes: `volume_snapshot_retain` is
 clamped to a floor of 2 at `claim.yml`'s prune (`[volume_snapshot_retain | int, 2] | max`). A
@@ -371,7 +372,8 @@ all in the same position and are guarded internally instead.
 
 A rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert`
 between this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha`
-(`roles/k8s/manifests/tasks/main.yml:212`) — gitops-deploy sets that extra-var only when it
+(the `Revert the stateful volumes` task in `ansible/roles/k8s/manifests/tasks/main.yml`) —
+gitops-deploy sets that extra-var only when it
 redeploys a failed auto-deploy's prior good commit, and it carries the FAILED commit's SHA, not
 the tree's current one (the tree is already reset to the last good commit at that point). The
 claim list comes from the current, rolled-back-to tree's `k8s_autodeploy_snapshot_pvcs`, not

@@ -39,7 +39,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   e.g. the FP300 presence tuning (`presence_detection_options`/`motion_sensitivity`/`absence_delay_timer`,
   see the home-assistant role CLAUDE.md). Re-apply via `zigbee2mqtt/<name>/set` after a re-pair.
 - **Renaming a device keeps its HA entity_ids (sticky, IEEE-based unique_id) but MOVES its raw MQTT
-  topic** to `zigbee2mqtt/<new name>` (verified 2026-06-18). So a rename is zero-cascade for entities
+  topic** to `zigbee2mqtt/<new name>`. So a rename is zero-cascade for entities
   referenced by `entity_id` (e.g. the bulbs in the `light.bedroom_lights` group, the Tap Dial's
   `sensor.0x…_battery`) — only consumers of the *raw topic* break. The Tap Dial automation
   (`bedroom_tap_dial_control`) triggers on `zigbee2mqtt/Tap Dial` (the raw topic) and was the one

@@ -61,10 +61,10 @@ one line each. End with a **3-bullet top-priorities** summary. Few real findings
 
 ## Rules
 - Make **no** changes — read-only investigation only. Recommend; don't edit or deploy.
-- Honor accepted designs (don't re-flag): the B2 free tier IS the offsite; the no-backup volume
-  tier is deliberate (TSDBs, uptime-kuma-data, crowdsec-db, and valheim's SteamCMD install volume —
-  re-downloadable, while its *world* volume IS backed up — see the tiering doc); the push-watchdog
-  "down = no heartbeat" semantics; the Pi monitored via static Kuma labels (do NOT propose a Pi
-  node-exporter — node_* checks are instance-blind). **Also honor any "don't re-flag" items provided
-  in your dispatch context.**
+- Honor accepted designs (don't re-flag). Before you flag anything, read the
+  `## backup-observability` section of `.claude/skills/homelab-review/accepted-designs.md` and
+  the `### backup-observability` table under *Settled findings* in `docs/reference/backlog.md`
+  (grep for the heading rather than reading the whole page); both are generated or
+  shared, so this file carries no list of its own. **Also honor any
+  "don't re-flag" items provided in your dispatch context.**
 - End with a one-line verdict: the single highest-value gap to close.

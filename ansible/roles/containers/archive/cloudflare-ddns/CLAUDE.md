@@ -17,7 +17,7 @@ See repo-root `CLAUDE.md` for shared conventions.
   the compose) — the public, Cloudflare-proxied A records that track the homelab's dynamic IP.
 - **Manually-created, un-managed record — `*.local.<domain>` (grey-cloud / DNS-only):** a
   second, more-specific wildcard in the Cloudflare zone answers every `*.local.<domain>` name with
-  the cluster ingress VIP (`10.0.0.240`) directly (verified 2026-08-14: `dig +short
+  the cluster ingress VIP (`10.0.0.240`) directly (`dig +short
   foo.local.<domain> @1.1.1.1` → `10.0.0.240`; it was repointed from the retired Docker edge
   `10.0.0.161` during the k3s migration). It is **not** managed by this role or any IaC — it's a hand-created zone entry
   and a load-bearing piece of the split-horizon / WireGuard remote-access design

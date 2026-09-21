@@ -20,6 +20,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from dev.findings_lib.issue_model import (
     LABELS,
     NO_REOPEN,
+    NOT_PLANNED_PREFIX,
     NOT_BEFORE_PREFIX,
     NOT_BEFORE_STYLE,
     PROJECT_TITLE,
@@ -34,11 +35,6 @@ from dev.findings_lib.issue_model import (
     trailer,
     verify_by_section,
 )
-
-# The close comment each not-planned outcome opens with, keyed by the outcome name — which is
-# also the label name, so both argv come from the same key. A dict rather than an `if` so a
-# typo raises KeyError instead of planning the wrong write.
-_NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
 
 
 def plan_sync_labels(existing: set[str]) -> list[list[str]]:
@@ -330,7 +326,7 @@ def plan_close(
         by = f" by PR #{pr}" if pr else ""
         text = comment or f"Fixed{by}."
         return [["issue", "close", n, "--reason", "completed", "--comment", text]]
-    prefix = _NOT_PLANNED_PREFIX[outcome]
+    prefix = NOT_PLANNED_PREFIX[outcome]
     return [
         ["issue", "edit", n, "--add-label", outcome],
         [

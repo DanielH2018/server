@@ -49,16 +49,30 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
     return issues
 
 
+# `gh issue list` returns at most this many and says nothing when it truncates. The
+# settled register in docs/reference/backlog.md reads `state="all"`, which stood at 645 of
+# these on 2026-09-21 and only grows, so a silent cut there would drop refuted findings from
+# the table a reviewer reads before flagging -- the harm the register exists to prevent.
+ISSUE_LIST_CAP = 1000
+
+
 def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[dict]:
-    """Fetches every ``claude``-labeled issue from gh, up to 1000.
+    """Fetches every ``claude``-labeled issue from gh, warning when it hits the list cap.
 
     Args:
         state: issue state to filter by (``open``, ``closed`` or ``all``).
         tools: the boundaries to reach gh through; the real ones when omitted, which is how
             `scripts/docs/reference/backlog.py` calls it.
     """
-    argv = ("issue", "list", "--label", "claude", "--state", state, "--limit", "1000")
-    issues = (tools or FindingsTools()).gh_json(*argv, "--json", _LIST_FIELDS) or []
+    argv = ("issue", "list", "--label", "claude", "--state", state, "--limit")
+    issues = (tools or FindingsTools()).gh_json(
+        *argv, str(ISSUE_LIST_CAP), "--json", _LIST_FIELDS
+    ) or []
+    if len(issues) >= ISSUE_LIST_CAP:
+        sys.stderr.write(
+            f"warning: gh returned {ISSUE_LIST_CAP} issues for --state {state}, its list "
+            "cap -- the register past it is missing, not empty\n"
+        )
     return _warn_at_the_comment_cap(issues)
 
 
