@@ -23,8 +23,13 @@ def _mem(tmp_path, index: str, files: dict[str, str]) -> _Path:
     return d
 
 
+# The transcript window is measured back from this epoch; a transcript's mtime is set against
+# the same one, so "60 days old" is exactly that whatever the wall clock reads (#2158).
+NOW = 1_780_000_000.0
+
+
 def _survey(d: _Path, transcripts: _Path | None = None, days: int = 30):
-    return memory_survey.survey(d, transcripts or (d / "__none__"), days)
+    return memory_survey.survey(d, transcripts or (d / "__none__"), days, now=NOW)
 
 
 # --- dead index links: the only condition that fails the run ---------------------
@@ -205,11 +210,10 @@ def test_unreferenced_when_no_transcript_mentions_the_slug(tmp_path):
 
 def test_a_transcript_outside_the_window_does_not_count_as_a_reference(tmp_path):
     import os
-    import time
 
     d = _mem(tmp_path, "- [A](aged-out-entry.md)\n", {"aged-out-entry.md": "x"})
     t = _transcripts(tmp_path, [_assistant("aged-out-entry was useful once")])
-    old = time.time() - 60 * 86400
+    old = NOW - 60 * 86400
     os.utime(t / "session.jsonl", (old, old))
 
     assert _survey(d, t, days=30)["unreferenced"] == ["aged-out-entry.md"]

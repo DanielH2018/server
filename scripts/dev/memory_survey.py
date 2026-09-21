@@ -181,7 +181,7 @@ def _assistant_text(line: str) -> str:
 
 
 def last_referenced(
-    files: list[Path], transcript_dir: Path, days: int
+    files: list[Path], transcript_dir: Path, days: int, now: float | None = None
 ) -> dict[str, str | None]:
     """Map each memory filename to the most recent transcript date that mentions its slug.
 
@@ -212,7 +212,9 @@ def last_referenced(
     if not transcript_dir.is_dir():
         return result
 
-    cutoff = _dt.datetime.now(tz=_dt.UTC).timestamp() - days * 86400
+    cutoff = (
+        now if now is not None else _dt.datetime.now(tz=_dt.UTC).timestamp()
+    ) - days * 86400
     slugs = {f.stem: f.name for f in files}
 
     transcripts = [
@@ -378,6 +380,7 @@ def survey(
     transcript_dir: Path,
     transcript_days: int,
     duplicate_threshold: float = 0.12,
+    now: float | None = None,
 ) -> dict:
     """Measure the memory store's size, staleness, and index health.
 
@@ -392,6 +395,8 @@ def survey(
         transcript_days: how many days back to scan transcripts for citations.
         duplicate_threshold: the similarity ratio above which two entries are flagged as
             near-duplicate candidates.
+        now: the epoch the transcript window and the staleness dates are measured from;
+            None reads the clock. A test passes a fixed one.
 
     Returns:
         A dict with `index`/`store` size stats, `dead_links`, `orphans`, `unreferenced`,
@@ -409,8 +414,9 @@ def survey(
     index_bytes = index_path.stat().st_size if index_path.exists() else 0
     store_bytes = sum(p.stat().st_size for p in files)
 
-    refs = last_referenced(files, transcript_dir, transcript_days)
-    today = _local_datetime(_dt.datetime.now(tz=_dt.UTC).timestamp()).date()
+    now = now if now is not None else _dt.datetime.now(tz=_dt.UTC).timestamp()
+    refs = last_referenced(files, transcript_dir, transcript_days, now=now)
+    today = _local_datetime(now).date()
 
     entries: list[dict[str, Any]] = []
     for p in files:

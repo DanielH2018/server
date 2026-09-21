@@ -2,7 +2,6 @@
 
 import os
 import subprocess
-import time
 
 import pytest
 
@@ -119,8 +118,14 @@ def test_an_ambient_git_dir_cannot_redirect_the_answer(tmp_path, monkeypatch):
 # `git prune` proves the argv and nothing about whether the grace period holds.
 
 
-def _unreachable_object(repo, text, age_days):
-    """Write a loose object no ref points at, aged `age_days`, and return its file.
+# An mtime `git prune --expire=1.day.ago` reads as old under any clock this suite runs on. The
+# fresh case leaves the mtime alone: a file just written is new by construction, so neither
+# half reads time.time() (#2158).
+LONG_AGO = 946_684_800.0  # 2000-01-01T00:00:00Z
+
+
+def _unreachable_object(repo, text, stale):
+    """Write a loose object no ref points at, backdated to LONG_AGO if `stale`, and return its file.
 
     `git prune` decides by the object file's mtime, so backdating the file is what makes an
     object old as far as the grace period is concerned.
@@ -131,8 +136,8 @@ def _unreachable_object(repo, text, age_days):
     blob.unlink()
     path = repo / ".git" / "objects" / sha[:2] / sha[2:]
     assert path.exists(), path
-    when = time.time() - age_days * 86400
-    os.utime(path, (when, when))
+    if stale:
+        os.utime(path, (LONG_AGO, LONG_AGO))
     return path
 
 
@@ -143,7 +148,7 @@ def test_the_repair_drops_an_old_unreachable_object_and_clears_the_gc_log(tmp_pa
     however clean the store has since become.
     """
     _init_repo(tmp_path)
-    stale = _unreachable_object(tmp_path, "left by a removed worktree\n", age_days=3)
+    stale = _unreachable_object(tmp_path, "left by a removed worktree\n", stale=True)
     gc_log = tmp_path / ".git" / "gc.log"
     gc_log.write_text("warning: There are too many unreachable loose objects\n")
 
@@ -162,7 +167,9 @@ def test_the_repair_leaves_an_object_a_live_session_just_wrote(tmp_path):
     work — which is why this prunes on a day's grace rather than immediately.
     """
     _init_repo(tmp_path)
-    fresh = _unreachable_object(tmp_path, "another session is mid-commit\n", age_days=0)
+    fresh = _unreachable_object(
+        tmp_path, "another session is mid-commit\n", stale=False
+    )
 
     repair_object_store(tmp_path)
 

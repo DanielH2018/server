@@ -63,10 +63,10 @@ def test_ha_heartbeat_fresh(state, ok, must_contain):
 # A redeploy makes the HTTP API briefly unreachable AND leaves the automation
 # scheduler a beat behind, so a single cycle can read unreachable OR stale. Like
 # CPU_CONSECUTIVE, only HA_CONSECUTIVE straight down-cycles page; a single blip
-# pushes up with a streak msg. ha_heartbeat_fresh uses the real clock (no `now`
-# override on this path), so payloads are built relative to real now.
+# pushes up with a streak msg. The payload and the check share HB_NOW, so the age the check
+# reads is exactly `age_s` whatever the wall clock (#2158).
 def _ha_payload(age_s):
-    lc = (datetime.now(timezone.utc) - timedelta(seconds=age_s)).isoformat()
+    lc = (HB_NOW - timedelta(seconds=age_s)).isoformat()
     return _ha_state(lc)
 
 
@@ -84,7 +84,7 @@ def _ha_cycle(cfg, monkeypatch, age_s=600, raises=False, banned=0):
         monkeypatch.setattr(bridge.net, "_get_json", boom)
     else:
         monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(age_s))
-    return checks.service.check_ha_heartbeat(cfg)
+    return checks.service.check_ha_heartbeat(cfg, now=HB_NOW)
 
 
 def test_ha_heartbeat_single_stale_cycle_is_suppressed(monkeypatch, cfg):
@@ -172,7 +172,7 @@ def test_ha_ban_arm_fails_open_when_loki_errors(monkeypatch, cfg):
     monkeypatch.setattr(bridge.net, "loki_count", boom)
     cfg = replace(cfg, HA_URL="http://home-assistant:8123", HA_TOKEN="tok")
     monkeypatch.setattr(bridge.net, "_get_json", lambda *a, **k: _ha_payload(60))
-    ok, msg = checks.service.check_ha_heartbeat(cfg)
+    ok, msg = checks.service.check_ha_heartbeat(cfg, now=HB_NOW)
     assert ok
     assert "ip_ban arm unavailable" in msg
 

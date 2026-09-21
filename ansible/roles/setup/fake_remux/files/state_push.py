@@ -43,8 +43,8 @@ def verdict(state, age_s, max_age_s, label):
     return True, "%s ok %.1fh ago: %s" % (label, age_s / 3600.0, state.get("msg", ""))
 
 
-def read_state(path):
-    """(state, age_s) or (None, reason).
+def read_state(path, now=None):
+    """(state, age_s) or (None, reason). `now` dates the age; None reads the clock.
 
     A missing or unparseable file is a failure, not a skip — it is indistinguishable from a cron
     that has never run.
@@ -59,14 +59,16 @@ def read_state(path):
     ts = state.get("ts")
     if not isinstance(ts, (int, float)):
         return None, "state file %s has no usable ts" % path
-    return state, time.time() - ts
+    return state, (now if now is not None else time.time()) - ts
 
 
-def main(argv) -> int:
+def main(argv, now=None) -> int:
     """Print one `up`/`down`-tab-message line per (label, state-file, max-age-hours) triple.
 
     Args:
         argv: sys.argv — argv[0] is ignored, the rest must be triples.
+        now: the epoch every age is measured from; None reads the clock. A test passes a
+            fixed one so a fixture stamped `now` reads as exactly zero seconds old.
 
     Always returns 0: a malformed call or a DOWN verdict are both printed as data for the
     wrapper to push to Kuma, never raised.
@@ -77,7 +79,7 @@ def main(argv) -> int:
         return 0
     for i in range(0, len(args), 3):
         label, path, max_age_h = args[i], args[i + 1], args[i + 2]
-        state, age_or_reason = read_state(path)
+        state, age_or_reason = read_state(path, now)
         if state is None:
             print("down\t%s" % age_or_reason)
             continue

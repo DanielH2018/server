@@ -5,7 +5,6 @@ because an unknown action counted as free is how a breach goes unseen. `r2_usage
 success and reprobes after a failure, so an R2 outage cannot storm the API.
 """
 
-import time
 from datetime import datetime, timezone
 from pathlib import Path
 
@@ -18,6 +17,8 @@ import bridge.net
 import checks.r2
 
 _REPO = Path(__file__).resolve().parents[5]
+# A fixed epoch, not the live clock: the verdict must not move with wall time (#2158).
+R2_NOW = 1_780_000_000.0
 
 
 def _ops(**counts):
@@ -131,12 +132,12 @@ def test_r2_query_parses_storage_and_operations(monkeypatch, cfg):
         operations=_ops(PutObject=2, GetObject=8),
     )
     monkeypatch.setattr(bridge.net, "_post_json", lambda *a, **k: payload)
-    assert checks.r2.r2_query_usage(cfg, time.time()) == (1000, 3, 2, 8, [])
+    assert checks.r2.r2_query_usage(cfg, R2_NOW) == (1000, 3, 2, 8, [])
 
 
 def test_r2_query_treats_an_empty_bucket_as_zero_not_a_fault(monkeypatch, cfg):
     monkeypatch.setattr(bridge.net, "_post_json", lambda *a, **k: _r2_payload())
-    assert checks.r2.r2_query_usage(cfg, time.time()) == (0, 0, 0, 0, [])
+    assert checks.r2.r2_query_usage(cfg, R2_NOW) == (0, 0, 0, 0, [])
 
 
 def test_r2_query_raises_on_graphql_errors(monkeypatch, cfg):
@@ -148,7 +149,7 @@ def test_r2_query_raises_on_graphql_errors(monkeypatch, cfg):
         lambda *a, **k: {"data": None, "errors": [{"message": "unauthorized"}]},
     )
     with pytest.raises(RuntimeError, match="unauthorized"):
-        checks.r2.r2_query_usage(cfg, time.time())
+        checks.r2.r2_query_usage(cfg, R2_NOW)
 
 
 def test_r2_query_raises_when_no_account_matches(monkeypatch, cfg):
@@ -156,7 +157,7 @@ def test_r2_query_raises_when_no_account_matches(monkeypatch, cfg):
         bridge.net, "_post_json", lambda *a, **k: {"data": {"viewer": {"accounts": []}}}
     )
     with pytest.raises(RuntimeError, match="CF_ACCOUNT_ID"):
-        checks.r2.r2_query_usage(cfg, time.time())
+        checks.r2.r2_query_usage(cfg, R2_NOW)
 
 
 def _arm_r2(cfg, monkeypatch):

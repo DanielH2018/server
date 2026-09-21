@@ -6,10 +6,13 @@ machine and SQLite schema; this file covers the parts that moved here.
 
 import json
 import threading
-import time
 from unittest import mock
 
 import stats_lib
+
+# The handler reads this instant on every request and `last_poll_ok` is set against it, so
+# the /healthz verdict is a fixed distance from `health_max_age` (#2158).
+NOW = 1_780_000_000.0
 
 
 def test_env_reads_the_process_environment(monkeypatch):
@@ -245,12 +248,14 @@ def test_make_handler_serves_metrics_and_healthz_over_a_real_socket():
     import http.client
 
     ps = stats_lib.PollState("the-state")
-    ps.last_poll_ok = time.time()
+    ps.last_poll_ok = NOW
 
     def render(state, now):
         return "metric_x 1\n" if state == "the-state" else "wrong-state\n"
 
-    handler_cls = stats_lib.make_handler(ps, render, health_max_age=30)
+    handler_cls = stats_lib.make_handler(
+        ps, render, health_max_age=30, clock=lambda: NOW
+    )
     server = __import__(
         "http.server", fromlist=["ThreadingHTTPServer"]
     ).ThreadingHTTPServer(("127.0.0.1", 0), handler_cls)
@@ -283,9 +288,9 @@ def test_make_handler_healthz_is_stale_past_health_max_age():
     import http.client
 
     ps = stats_lib.PollState("s")
-    ps.last_poll_ok = time.time() - 1000  # long past health_max_age
+    ps.last_poll_ok = NOW - 1000  # long past health_max_age
     handler_cls = stats_lib.make_handler(
-        ps, lambda state, now: "x 1\n", health_max_age=30
+        ps, lambda state, now: "x 1\n", health_max_age=30, clock=lambda: NOW
     )
     server = __import__(
         "http.server", fromlist=["ThreadingHTTPServer"]

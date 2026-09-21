@@ -12,7 +12,6 @@ That failure is invisible standalone — the run that can't see it is the one th
 
 import os
 import subprocess
-import time
 from pathlib import Path
 
 import pytest
@@ -245,12 +244,13 @@ def test_exit_four_names_the_parked_deployer_when_one_is_parked(
 ):
     """A rebase of THIS tree is the wrong repair when the primary checkout is what is stuck.
 
-    Time is not injectable through the CLI, so the stamp is dated against the real clock.
+    Time is not injectable through the CLI, so the stamp is a fixed epoch old enough that the
+    park window has elapsed under any clock this suite runs on (#2158).
     """
     origin, clone = repos
     _commit(origin, "theirs")
     _git(clone, "fetch", "-q", "origin")
-    state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=time.time())
+    state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=1_700_000_000.0)
     rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
     err = capsys.readouterr().err
     assert rc == STALE_EXIT
