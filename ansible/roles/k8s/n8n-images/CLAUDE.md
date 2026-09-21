@@ -28,6 +28,12 @@ role has something to run. It renders no manifest of its own.
 - Since `k8s_autodeploy` is a no-op here, a bad upstream image can still land on `n8n`'s next
   unrelated deploy with nothing here catching it first — see `defaults/main.yml`'s
   `k8s_autodeploy_reason` for the full argument.
+- **The one npm package the n8n image adds, `fuzzball`, is pinned by exact version** (#2213,
+  2026-09-21). A renovate.json regex manager reads the pin over the npm datasource and opens a
+  manual PR in its own `n8n fuzzball` group; a merged bump ships only when
+  `deploy.sh --tags n8n-images,n8n` rebuilds the image.
+  `ansible/tests/services/test_n8n_build_is_pinned.py` refuses a bare or ranged install and
+  asserts the manager's matchString still finds the pin.
 
 ## Every digest bump appends a row to `base-pin-history.tsv`
 

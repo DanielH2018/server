@@ -14,14 +14,19 @@
     # The one file the Dockerfile COPYs (flat — ConfigMap keys cannot contain '/').
     image_builder_context:
       "{{ playbook_dir }}/roles/k8s/code-server/files/extensions.sh": extensions.sh
-    # The extension step fetches five VSIXs from upstream APIs and npm installs the Claude
-    # Code CLI; the default 900 s is not enough for a build that misses the registry layer
-    # cache (first build after any Dockerfile edit, or after the linuxserver base moves). A
-    # cache hit finishes in a fraction of this.
+    # MEASURED, and the measurement says leave it (#2213). This value is the Job's
+    # `activeDeadlineSeconds` (image-builder/templates/build-job.yaml.j2), so exceeding it
+    # kills the build rather than just failing the wait. A cold build on 2026-09-21 — base
+    # bumped to 4.138.0-ls365 the same day, so no layer cache — took 1291 s end to end
+    # (build-code-server, 20:10:06Z -> 20:31:37Z), 72% of this deadline. Where it went, from
+    # the BuildKit log: 690 s pulling the linuxserver base from lscr.io, 247 s building the
+    # pip venv, 197 s fetching the Anthropic.claude-code VSIX from the MS marketplace, 45 s
+    # for Pylance, ~30 s for the rest. The default 900 s would have killed it during the venv.
     #
-    # Kept at 1800 after the TeX Live removal on 2026-08-27 took several hundred MB of apt
-    # out of this build. That should make a cold build materially faster, but the number to
-    # lower this to is a measured one — leave it until a few cold builds have been timed.
+    # Pinning every input (#2149) fixed WHAT a build fetches, not how fast the mirrors serve
+    # it: the base pull alone is a third of this budget and is the term that varies. Lower
+    # this only after a cold build measured under ~900 s. A build that hits the registry
+    # layer cache re-runs only the steps below the first changed one and never approaches it.
     image_builder_timeout: 1800
 
 - name: Create the code-server config volume claim
