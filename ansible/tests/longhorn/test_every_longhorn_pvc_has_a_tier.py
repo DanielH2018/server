@@ -24,7 +24,7 @@ Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py
 import yaml
 from lib import yaml_fast
 
-from _helpers import SETUP_ROLES
+from _helpers import SETUP_ROLES, load_defaults
 from _k8s_render import (
     ALL_VARS,
     ANSIBLE,
@@ -63,10 +63,6 @@ _KNOWN_LONGHORN_PVCS = frozenset(
         "homelab/crowdsec-db",  # own template, nobackup tier
     }
 )
-
-
-def _k3s_defaults() -> dict:
-    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
 def _base_context() -> dict:
@@ -184,7 +180,7 @@ def _uncovered(declared: set[str], lists: dict[str, set[str]]) -> set[str]:
 
 
 def test_every_longhorn_pvc_has_a_tier():
-    defaults = _k3s_defaults()
+    defaults = load_defaults(K3S)
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 25, (

@@ -23,19 +23,14 @@ Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 
 import re
 
-from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
-DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
+DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
 
 # Leading dotted version of a string: "10.11.6.-.ani-sync_4.1.0.0.zip" -> "10.11.6",
 # "10.11.10ubu2404-ls35" -> "10.11.10".
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:
@@ -52,7 +47,7 @@ def test_the_release_url_carries_the_pinned_version():
     skips every subsequent run, and 4.1.0.0 is what is actually on disk. Nothing ever
     reconciles it, because the guard is satisfied.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     version = defaults["jellyfin_k8s_anisync_version"]
     url = defaults["jellyfin_k8s_anisync_url"]
 
@@ -65,7 +60,7 @@ def test_the_release_url_carries_the_pinned_version():
 
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     url = defaults["jellyfin_k8s_anisync_url"]
     image = defaults["jellyfin_k8s_image"]
 
@@ -93,7 +88,7 @@ def test_the_init_container_reads_the_version_from_the_variable():
     anywhere in the script reintroduces the drift the first test guards against.
     """
     template = DEPLOYMENT.read_text()
-    version = _defaults()["jellyfin_k8s_anisync_version"]
+    version = load_defaults(JELLYFIN)["jellyfin_k8s_anisync_version"]
 
     assert "{{ jellyfin_k8s_anisync_version }}" in template, (
         "the install-ani-sync init container no longer templates "

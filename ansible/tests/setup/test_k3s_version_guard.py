@@ -46,12 +46,8 @@ INSTALLS = [
 ]
 
 
-def _tasks(filename: str) -> list[dict]:
-    return load_tasks(K3S_TASKS / filename)
-
-
 def _named(filename: str, name: str) -> dict:
-    for task in _tasks(filename):
+    for task in load_tasks(K3S_TASKS / filename):
         if task.get("name") == name:
             return task
     raise AssertionError(f"{filename} has no task named {name!r}")
@@ -61,7 +57,7 @@ def _version_reads(filename: str) -> list[dict]:
     """Tasks that run `k3s --version`, whatever they are called."""
     return [
         t
-        for t in _tasks(filename)
+        for t in load_tasks(K3S_TASKS / filename)
         if "--version" in str(t.get("ansible.builtin.command", {}).get("cmd", ""))
     ]
 

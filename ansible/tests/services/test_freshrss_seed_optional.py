@@ -26,6 +26,7 @@ import pytest
 from jinja2 import Environment, StrictUndefined
 
 
+from _helpers import load_tasks
 from lib import yaml_fast
 
 from validate.k8s_manifests import (
@@ -40,6 +41,7 @@ from validate.k8s_manifests import (
 )
 
 _ROLE = "freshrss"
+_TASKS = K8S_ROLES / _ROLE / "tasks" / "main.yml"
 _CLAIM = "freshrss-config"
 _HOSTS = ("daniel-box", "daniel-stage")
 
@@ -54,10 +56,6 @@ def _context(host: str) -> dict:
     return {**role_defaults(_ROLE, base), **base}
 
 
-def _tasks() -> list:
-    return yaml_fast.safe_load((K8S_ROLES / _ROLE / "tasks" / "main.yml").read_text())
-
-
 def _include(task: dict) -> dict:
     return task.get("ansible.builtin.include_role") or task.get("include_role") or {}
 
@@ -67,7 +65,7 @@ def seed_runs(host: str) -> bool:
     ctx = _context(host)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
-    for task in _tasks():
+    for task in load_tasks(_TASKS):
         if _include(task).get("name") != "k8s/volume-claim":
             continue
         when = task.get("when")
@@ -82,7 +80,7 @@ def manifest_files(host: str) -> list[str]:
     ctx = _context(host)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
-    for task in _tasks():
+    for task in load_tasks(_TASKS):
         if _include(task).get("name") != "k8s/manifests":
             continue
         value = (task.get("vars") or {}).get("manifests_files")

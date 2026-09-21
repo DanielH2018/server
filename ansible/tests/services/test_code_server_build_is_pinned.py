@@ -16,11 +16,10 @@ import re
 import pytest
 from jinja2 import Environment
 
-from _helpers import K8S_ROLES, load_yaml
+from _helpers import K8S_ROLES, load_defaults
 
 ROLE = K8S_ROLES / "code-server"
 DOCKERFILE = ROLE / "templates" / "Dockerfile.j2"
-DEFAULTS = ROLE / "defaults" / "main.yml"
 
 # The extensions the pin table must carry, so a renamed or emptied list fails as a missing
 # member rather than passing over nothing. The second set names the ones published per
@@ -87,17 +86,13 @@ def floating_pip_packages(dockerfile: str) -> list[str]:
     return floating
 
 
-def _defaults() -> dict:
-    return load_yaml(DEFAULTS)
-
-
 def _rendered_dockerfile() -> str:
     """The Dockerfile as image-builder's `template` lookup renders it.
 
     `trim_blocks=True` is Ansible's default and a bare `Environment()` is not; the block
     loop's line endings are the one place the two differ.
     """
-    context = dict(_defaults(), puid=1000, pgid=1000)
+    context = dict(load_defaults(ROLE), puid=1000, pgid=1000)
     env = Environment(trim_blocks=True)
     return env.from_string(DOCKERFILE.read_text()).render(**context)
 
@@ -112,7 +107,7 @@ def test_the_base_image_carries_a_digest() -> None:
 
 
 def test_every_extension_is_pinned_by_version_and_sha256() -> None:
-    entries = _defaults()["code_server_k8s_extensions"]
+    entries = load_defaults(ROLE)["code_server_k8s_extensions"]
     names = {e["name"] for e in entries}
     missing = KNOWN_EXTENSIONS - names
     assert not missing, f"extension pin table lost {sorted(missing)}"
@@ -129,7 +124,7 @@ def test_the_cli_is_pinned_to_the_extension_release() -> None:
     cli = m.group(1)
     extension = next(
         e
-        for e in _defaults()["code_server_k8s_extensions"]
+        for e in load_defaults(ROLE)["code_server_k8s_extensions"]
         if e["name"] == "Anthropic.claude-code"
     )
     assert cli == str(extension["version"]), (
@@ -139,7 +134,7 @@ def test_the_cli_is_pinned_to_the_extension_release() -> None:
 
 
 def test_node_is_pinned_with_a_checksum() -> None:
-    defaults = _defaults()
+    defaults = load_defaults(ROLE)
     version = str(defaults["code_server_k8s_node_version"])
     assert _RELEASE.match(version), f"node version {version!r} is not an exact release"
     assert _SHA256.match(str(defaults["code_server_k8s_node_sha256"]))
@@ -156,7 +151,7 @@ def test_no_build_step_resolves_a_version_from_the_network() -> None:
 
 def test_the_rendered_build_verifies_every_extension() -> None:
     rendered = _rendered_dockerfile()
-    for e in _defaults()["code_server_k8s_extensions"]:
+    for e in load_defaults(ROLE)["code_server_k8s_extensions"]:
         assert e["url"] in rendered, (
             f"{e['name']}: pinned URL not in the rendered Dockerfile"
         )

@@ -33,9 +33,8 @@ Run: uv run pytest ansible/tests/setup/test_etcd_restore_drill_cron.py
 
 from pathlib import Path
 
-from lib import yaml_fast
 from _helpers import ANSIBLE
-from _helpers import load_yaml
+from _helpers import load_yaml, load_defaults
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
@@ -56,10 +55,6 @@ def _cron_task() -> dict:
         "taken and alarmed but never restore-proven, which is the state this test exists for"
     )
     return task
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 
 
 def test_the_drill_is_scheduled() -> None:
@@ -117,14 +112,16 @@ def test_the_drill_can_be_disarmed_without_deleting_the_task() -> None:
     assert "absent" in state, (
         "the disarmed branch must remove the cron, not leave it installed"
     )
-    assert _defaults()["k3s_etcd_restore_drill_armed"] is True, (
+    assert load_defaults(K3S)["k3s_etcd_restore_drill_armed"] is True, (
         "the drill ships armed; a default-off drill is the unproven state this closes"
     )
 
 
 def test_the_cadence_is_weekly_and_clear_of_every_backup_window() -> None:
     """Contending with a backup window would make the drill the thing that broke the backup."""
-    minute, hour, dom, month, dow = _defaults()["k3s_etcd_restore_drill_cron"].split()
+    minute, hour, dom, month, dow = load_defaults(K3S)[
+        "k3s_etcd_restore_drill_cron"
+    ].split()
     assert (dom, month) == ("*", "*")
     assert dow != "*", (
         "weekly, not daily: the snapshot is daily and alarmed, so this proves the RESTORE leg, "

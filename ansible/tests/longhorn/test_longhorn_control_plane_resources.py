@@ -20,7 +20,7 @@ import json
 import pytest
 from lib import yaml_fast
 
-from _helpers import SETUP_ROLES
+from _helpers import SETUP_ROLES, load_tasks
 
 K3S = SETUP_ROLES / "k3s"
 LONGHORN_TASKS = K3S / "tasks" / "longhorn.yml"
@@ -29,19 +29,15 @@ K3S_DEFAULTS = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
 CSI_SIDECARS = ("csi-attacher", "csi-provisioner", "csi-resizer", "csi-snapshotter")
 
 
-def _tasks():
-    return yaml_fast.safe_load(LONGHORN_TASKS.read_text())
-
-
 def _task_named(name):
-    for task in _tasks():
+    for task in load_tasks(LONGHORN_TASKS):
         if task.get("name") == name:
             return task
     raise AssertionError("no task named %r in %s" % (name, LONGHORN_TASKS))
 
 
 def _index_of(name):
-    names = [t.get("name") for t in _tasks()]
+    names = [t.get("name") for t in load_tasks(LONGHORN_TASKS)]
     assert name in names, "no task named %r in %s" % (name, LONGHORN_TASKS)
     return names.index(name)
 

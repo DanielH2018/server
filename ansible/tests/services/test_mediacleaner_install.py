@@ -27,18 +27,15 @@ import re
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE, REPO
+from _helpers import ANSIBLE, REPO, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
-DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
+DEFAULTS = JELLYFIN / "defaults" / "main.yml"
+DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
 RENOVATE = REPO / "renovate.json"
 
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:
@@ -84,7 +81,7 @@ def test_the_release_tag_in_the_url_carries_the_plugin_release():
     Only the first three segments appear in the tag: the fourth is the ABI suffix, which upstream
     never puts in a tag. The next test covers that half.
     """
-    _assert_release_tag(_defaults())
+    _assert_release_tag(load_defaults(JELLYFIN))
 
 
 def _assert_pin_agrees(defaults: dict) -> None:
@@ -139,12 +136,12 @@ def test_the_version_suffix_decodes_to_the_target_abi():
 
     Derived rather than compared against a literal, so the check survives the next release.
     """
-    _assert_pin_agrees(_defaults())
+    _assert_pin_agrees(load_defaults(JELLYFIN))
 
 
 def test_the_digest_is_the_right_shape():
     """A truncated sha256 is a pin that looks present and compares against nothing useful."""
-    sha = _defaults()["jellyfin_k8s_mediacleaner_sha256"]
+    sha = load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_sha256"]
     assert SHA256.match(sha), (
         f"jellyfin_k8s_mediacleaner_sha256 is not 64 lowercase hex characters: {sha!r}"
     )
@@ -152,7 +149,7 @@ def test_the_digest_is_the_right_shape():
 
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     target_abi = _version_tuple(
         defaults["jellyfin_k8s_mediacleaner_target_abi"],
         "jellyfin_k8s_mediacleaner_target_abi",
@@ -223,7 +220,8 @@ def _assert_install_step(template: str, version: str) -> None:
 
 def test_the_rendered_deployment_carries_the_pinned_install_step():
     _assert_install_step(
-        DEPLOYMENT.read_text(), _defaults()["jellyfin_k8s_mediacleaner_version"]
+        DEPLOYMENT.read_text(),
+        load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"],
     )
 
 
@@ -250,7 +248,9 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
     )
 
     with pytest.raises(AssertionError):
-        _assert_install_step(mutated, _defaults()["jellyfin_k8s_mediacleaner_version"])
+        _assert_install_step(
+            mutated, load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"]
+        )
 
 
 @pytest.mark.parametrize(
@@ -318,7 +318,9 @@ def test_every_manager_pattern_still_matches_the_pinned_release():
     naming a build that was never downloaded.
     """
     text = DEFAULTS.read_text()
-    release = ".".join(_defaults()["jellyfin_k8s_mediacleaner_version"].split(".")[:3])
+    release = ".".join(
+        load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"].split(".")[:3]
+    )
 
     for pattern in _manager()["matchStrings"]:
         found = re.findall(pattern.replace("(?<", "(?P<"), text)
@@ -336,7 +338,9 @@ def test_the_manager_admits_the_pinned_tag():
     """A version template that cannot parse the pin offers nothing, including the pin itself."""
     manager = _manager()
     anchor = re.compile(manager["extractVersionTemplate"].replace("(?<", "(?P<"))
-    release = ".".join(_defaults()["jellyfin_k8s_mediacleaner_version"].split(".")[:3])
+    release = ".".join(
+        load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"].split(".")[:3]
+    )
 
     assert anchor.match(f"v{release}"), (
         f"the Media Cleaner Renovate manager's extractVersionTemplate {anchor.pattern!r} does "

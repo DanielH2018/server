@@ -19,17 +19,12 @@ Run: uv run pytest ansible/tests/longhorn/test_jellyfin_snapshot_max_size.py
 import jinja2
 import pytest
 
-from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 TASKS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "tasks" / "main.yml"
 
 GIB = 1024**3
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _resolve(expression: str, size: str) -> int:
@@ -63,7 +58,7 @@ def test_the_pvc_size_is_still_expressed_in_gi():
     Rewriting the size as `8192Mi` would leave that arithmetic silently wrong, and no other
     assertion in this file would notice — both values move together.
     """
-    size = _defaults()["jellyfin_k8s_size"]
+    size = load_defaults(JELLYFIN)["jellyfin_k8s_size"]
 
     assert size.endswith("Gi") and size.removesuffix("Gi").isdigit(), (
         f"jellyfin_k8s_size is {size!r}. jellyfin_k8s_snapshot_max_size derives itself by "
@@ -73,7 +68,7 @@ def test_the_pvc_size_is_still_expressed_in_gi():
 
 
 def test_the_declared_cap_is_legal_for_the_declared_size():
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     _assert_cap_is_legal(
         defaults["jellyfin_k8s_snapshot_max_size"], defaults["jellyfin_k8s_size"]
     )
@@ -85,7 +80,7 @@ def test_the_cap_stays_legal_when_the_pvc_is_raised():
     A hardcoded cap passes the test above and fails the moment someone raises the PVC. The
     sizes below span the raise that already happened (3Gi to 8Gi) and two beyond it.
     """
-    expression = _defaults()["jellyfin_k8s_snapshot_max_size"]
+    expression = load_defaults(JELLYFIN)["jellyfin_k8s_snapshot_max_size"]
     for size in ("3Gi", "8Gi", "16Gi", "64Gi"):
         _assert_cap_is_legal(expression, size)
 

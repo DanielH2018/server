@@ -20,11 +20,10 @@ import re
 
 import pytest
 
-from lib import yaml_fast
-from _helpers import ANSIBLE, REPO
+from _helpers import ANSIBLE, REPO, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
-DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
+DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
 RENOVATE = REPO / "renovate.json"
 
 
@@ -63,10 +62,6 @@ def _assert_anchor_tracks_the_image(manager: dict, image: str) -> None:
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 
 
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
-
-
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:
     match = LEADING_VERSION.match(text)
     assert match, f"{what} does not start with a dotted version: {text!r}"
@@ -94,7 +89,7 @@ def test_the_release_url_carries_the_pinned_version():
     `jellyfin_k8s_introskipper_version` — so the two drifting apart latches a build that was
     never downloaded, and nothing reconciles it because the guard is satisfied.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     version = defaults["jellyfin_k8s_introskipper_version"]
     url = defaults["jellyfin_k8s_introskipper_url"]
 
@@ -111,7 +106,7 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
     segment is the only place the line is written down. A 12.0 asset against a 10.11 server is
     the silent-rejection case above.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     url = defaults["jellyfin_k8s_introskipper_url"]
     image = defaults["jellyfin_k8s_image"]
 
@@ -128,7 +123,7 @@ def test_the_release_comes_from_the_jellyfin_line_that_is_deployed():
 
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     target_abi = _version_tuple(
         defaults["jellyfin_k8s_introskipper_target_abi"],
         "jellyfin_k8s_introskipper_target_abi",
@@ -188,7 +183,8 @@ def _assert_install_step(template: str, version: str) -> None:
 
 def test_the_rendered_deployment_carries_the_pinned_install_step():
     _assert_install_step(
-        DEPLOYMENT.read_text(), _defaults()["jellyfin_k8s_introskipper_version"]
+        DEPLOYMENT.read_text(),
+        load_defaults(JELLYFIN)["jellyfin_k8s_introskipper_version"],
     )
 
 
@@ -210,7 +206,9 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
     )
 
     with pytest.raises(AssertionError):
-        _assert_install_step(mutated, _defaults()["jellyfin_k8s_introskipper_version"])
+        _assert_install_step(
+            mutated, load_defaults(JELLYFIN)["jellyfin_k8s_introskipper_version"]
+        )
 
 
 def test_renovate_tracks_the_jellyfin_line_that_is_deployed():
@@ -225,7 +223,7 @@ def test_renovate_tracks_the_jellyfin_line_that_is_deployed():
     manager's own description says it was written to avoid.
     """
     _assert_anchor_tracks_the_image(
-        _introskipper_manager(), _defaults()["jellyfin_k8s_image"]
+        _introskipper_manager(), load_defaults(JELLYFIN)["jellyfin_k8s_image"]
     )
 
 
@@ -236,4 +234,6 @@ def test_the_anchor_guard_rejects_a_manager_left_on_the_old_line():
     )
 
     with pytest.raises(AssertionError):
-        _assert_anchor_tracks_the_image(stale, _defaults()["jellyfin_k8s_image"])
+        _assert_anchor_tracks_the_image(
+            stale, load_defaults(JELLYFIN)["jellyfin_k8s_image"]
+        )

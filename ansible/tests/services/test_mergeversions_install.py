@@ -22,20 +22,16 @@ import re
 
 import pytest
 
-from lib import yaml_fast
-from _helpers import ANSIBLE, REPO
+from _helpers import ANSIBLE, REPO, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
-DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
+DEFAULTS = JELLYFIN / "defaults" / "main.yml"
+DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
 RENOVATE = REPO / "renovate.json"
 
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 GUID = re.compile(r"^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:
@@ -61,7 +57,7 @@ def test_the_release_url_carries_the_pinned_version():
     `jellyfin_k8s_mergeversions_version` — so the two drifting apart latches a build that was
     never downloaded, and nothing reconciles it because the installer's own guard is satisfied.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     version = defaults["jellyfin_k8s_mergeversions_version"]
     url = defaults["jellyfin_k8s_mergeversions_url"]
 
@@ -79,7 +75,7 @@ def test_the_digest_and_guid_are_the_right_shape():
     straight into meta.json, and Jellyfin binds the dashboard entry and the plugin's
     configuration directory to whatever is there.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     sha = defaults["jellyfin_k8s_mergeversions_sha256"]
     guid = defaults["jellyfin_k8s_mergeversions_guid"]
 
@@ -95,7 +91,7 @@ def test_the_digest_and_guid_are_the_right_shape():
 
 def test_the_plugin_target_abi_does_not_exceed_the_server():
     """The constraint the pin exists to satisfy, checked rather than remembered."""
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     target_abi = _version_tuple(
         defaults["jellyfin_k8s_mergeversions_target_abi"],
         "jellyfin_k8s_mergeversions_target_abi",
@@ -167,7 +163,8 @@ def _assert_install_step(template: str, version: str) -> None:
 
 def test_the_rendered_deployment_carries_the_pinned_install_step():
     _assert_install_step(
-        DEPLOYMENT.read_text(), _defaults()["jellyfin_k8s_mergeversions_version"]
+        DEPLOYMENT.read_text(),
+        load_defaults(JELLYFIN)["jellyfin_k8s_mergeversions_version"],
     )
 
 
@@ -194,7 +191,9 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
     )
 
     with pytest.raises(AssertionError):
-        _assert_install_step(mutated, _defaults()["jellyfin_k8s_mergeversions_version"])
+        _assert_install_step(
+            mutated, load_defaults(JELLYFIN)["jellyfin_k8s_mergeversions_version"]
+        )
 
 
 # ── Renovate coverage (#1616, the finding #1557 exists for) ──────────────────────────────────
@@ -229,7 +228,7 @@ def test_every_manager_pattern_still_matches_the_pinned_version():
     that was never downloaded.
     """
     text = DEFAULTS.read_text()
-    version = _defaults()["jellyfin_k8s_mergeversions_version"]
+    version = load_defaults(JELLYFIN)["jellyfin_k8s_mergeversions_version"]
 
     for pattern in _manager()["matchStrings"]:
         found = re.findall(pattern.replace("(?<", "(?P<"), text)
@@ -251,7 +250,7 @@ def test_the_manager_anchor_admits_the_pin_and_drops_the_jellyfin_12_line():
     rejects without logging anything.
     """
     anchor = re.compile(_manager()["extractVersionTemplate"].replace("(?<", "(?P<"))
-    version = _defaults()["jellyfin_k8s_mergeversions_version"]
+    version = load_defaults(JELLYFIN)["jellyfin_k8s_mergeversions_version"]
 
     assert anchor.match(version), (
         f"the Merge Versions Renovate manager's extractVersionTemplate {anchor.pattern!r} "

@@ -58,12 +58,12 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from lib import yaml_fast
 from jinja2.nativetypes import NativeEnvironment
-from _helpers import K8S_ROLES, load_tasks, load_yaml
+from _helpers import K8S_ROLES, load_tasks, load_defaults
 from _helpers import task_named
 
 _ROLE = K8S_ROLES / "cronjob-gate"
+_TASKS = _ROLE / "tasks" / "main.yml"
 _READ = "Read the container states of the failed gate run"
 _COLLECT = "Collect the container states read"
 _CLASSIFY = "Classify the gate failure"
@@ -71,16 +71,8 @@ _REPORT = "Report a non-fatal gate failure"
 _FAIL = "Fail on a gate run whose container never started"
 
 
-def _tasks() -> list[dict]:
-    return load_tasks(_ROLE / "tasks/main.yml")
-
-
 def _task(fragment: str) -> dict:
-    return task_named(_tasks(), fragment)
-
-
-def _defaults() -> dict:
-    return load_yaml(_ROLE / "defaults/main.yml") or {}
+    return task_named(load_tasks(_TASKS), fragment)
 
 
 def _classify(stdout_lines: list[str]) -> dict:
@@ -96,7 +88,7 @@ def _classify(stdout_lines: list[str]) -> dict:
     context = {
         "cronjob_gate_states": {"stdout_lines": stdout_lines},
         **{
-            key: _defaults()[key]
+            key: load_defaults(_ROLE)[key]
             for key in (
                 "cronjob_gate_ran_reasons",
                 "cronjob_gate_start_failure_reasons",
@@ -193,7 +185,7 @@ def test_start_failure_reasons_only_choose_the_message_never_the_outcome() -> No
     for payload in (["ImagePullBackOff", ""], ["", "StartError"], ["", "OOMKilled"]):
         rendered = env.from_string(str(facts["cronjob_gate_fatal"])).render(
             cronjob_gate_states={"stdout_lines": payload},
-            cronjob_gate_ran_reasons=_defaults()["cronjob_gate_ran_reasons"],
+            cronjob_gate_ran_reasons=load_defaults(_ROLE)["cronjob_gate_ran_reasons"],
             cronjob_gate_start_failure_reasons=[],
         )
         assert bool(rendered), (
@@ -210,7 +202,10 @@ def test_ran_reasons_is_the_allowlist_and_holds_both_members() -> None:
     failed, so dropping it would make every init-container caller's application failure read
     as fatal — a blanket fail reintroduced by omission rather than by edit.
     """
-    assert set(_defaults()["cronjob_gate_ran_reasons"]) == {"Completed", "Error"}
+    assert set(load_defaults(_ROLE)["cronjob_gate_ran_reasons"]) == {
+        "Completed",
+        "Error",
+    }
 
 
 def test_the_decision_is_wired_to_the_two_outcome_tasks() -> None:
@@ -372,7 +367,7 @@ def _gate_include(role: Path) -> dict | None:
     tasks = role / "tasks/main.yml"
     if not tasks.is_file() or "k8s/cronjob-gate" not in tasks.read_text():
         return None
-    for task in yaml_fast.safe_load(tasks.read_text()) or []:
+    for task in load_tasks(tasks):
         if (task.get("ansible.builtin.include_role") or {}).get("name") == (
             "k8s/cronjob-gate"
         ):
@@ -395,7 +390,7 @@ def _effective_timeout(role: Path) -> int:
     override = ((include or {}).get("vars") or {}).get("cronjob_gate_timeout")
     if override is not None:
         return int(override)
-    return int(_defaults()["cronjob_gate_timeout"])
+    return int(load_defaults(_ROLE)["cronjob_gate_timeout"])
 
 
 _DEADLINE = re.compile(r"^\s*activeDeadlineSeconds:\s*(.+?)\s*$", re.MULTILINE)
@@ -411,7 +406,7 @@ def _active_deadlines(role: Path) -> list[tuple[str, int]]:
     and that is how the rule got broken in the first place.
     """
     out: list[tuple[str, int]] = []
-    role_defaults = yaml_fast.safe_load((role / "defaults/main.yml").read_text()) or {}
+    defaults = load_defaults(role)
     tdir = role / "templates"
     for template in sorted(tdir.glob("*.j2")) if tdir.is_dir() else []:
         for raw in _DEADLINE.findall(template.read_text()):
@@ -419,7 +414,7 @@ def _active_deadlines(role: Path) -> list[tuple[str, int]]:
                 out.append((template.name, int(raw)))
                 continue
             var = _JINJA_VAR.match(raw)
-            resolved = role_defaults.get(var.group(1)) if var else None
+            resolved = defaults.get(var.group(1)) if var else None
             if resolved is None:
                 raise AssertionError(
                     f"{role.name}/{template.name}: activeDeadlineSeconds is {raw!r}, which this "
@@ -518,7 +513,7 @@ def test_no_operator_message_carries_an_embedded_newline() -> None:
     recurring the next time one is edited.
     """
     offenders = []
-    for task in _tasks():
+    for task in load_tasks(_TASKS):
         for module in ("ansible.builtin.fail", "ansible.builtin.debug"):
             msg = (task.get(module) or {}).get("msg", "")
             if "\n" in str(msg):

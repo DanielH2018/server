@@ -29,24 +29,17 @@ Three things can silently break that, and none of them fails a deploy:
 """
 
 from _helpers import REPO as _REPO
-from _helpers import load_tasks, load_yaml
+from _helpers import load_tasks, load_defaults
 from _helpers import command_of as _cmd
 
 
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
+_TASKS = _ROLE / "tasks" / "main.yml"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests"
 
 
-def _tasks() -> list[dict]:
-    return load_tasks(_ROLE / "tasks" / "main.yml")
-
-
-def _defaults() -> dict:
-    return load_yaml(_ROLE / "defaults" / "main.yml") or {}
-
-
 def _index_of(predicate) -> int:
-    for index, task in enumerate(_tasks()):
+    for index, task in enumerate(load_tasks(_TASKS)):
         if predicate(task):
             return index
     return -1
@@ -65,7 +58,7 @@ def _pairs(loop: object) -> set[tuple[str, str]]:
 
 def _literal_workload_loops() -> list[set[tuple[str, str]]]:
     found = []
-    for task in _tasks():
+    for task in load_tasks(_TASKS):
         pairs = _pairs(task.get("loop"))
         # Both workload loops carry otel-collector; nothing else in the role loops over
         # {kind, name} pairs, so this identifies them without matching on task names.
@@ -75,7 +68,7 @@ def _literal_workload_loops() -> list[set[tuple[str, str]]]:
 
 
 def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
-    declared = _pairs(_defaults().get("claude_otel_stabilise_workloads"))
+    declared = _pairs(load_defaults(_ROLE).get("claude_otel_stabilise_workloads"))
     assert declared, (
         "claude_otel_stabilise_workloads is missing from the role's defaults. The stabilisation "
         "snapshot iterates it; without it the play gate watches nothing for this role."
@@ -130,7 +123,7 @@ def test_the_restart_snapshot_is_taken_after_the_wait() -> None:
 def test_the_role_feeds_the_play_level_gate() -> None:
     appends = [
         task
-        for task in _tasks()
+        for task in load_tasks(_TASKS)
         if "k8s_stabilise_watch" in str(task.get("ansible.builtin.set_fact", ""))
     ]
     assert appends, (
