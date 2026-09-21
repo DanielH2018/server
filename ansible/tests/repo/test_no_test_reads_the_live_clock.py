@@ -7,11 +7,11 @@ crossing midnight, a "fresh" marker read after a slow collection, a `1.0 days ag
 that rounds to `1.1`. Every function these tests exercise takes a `now` (or a `clock`), so
 the deterministic form is a fixed epoch per module handed to both sides (#2158).
 
-Three files stay on the live clock and are listed below with the reason: each drives a
+Four files stay on the live clock and are listed below with the reason: each drives a
 cron entry point as a SUBPROCESS, and the only way to hand a subprocess a `now` is an
 environment variable the production script would have to honour — a test-only seam in a
 script that deletes backups is the wrong trade. Their fixtures are dated seconds to hours
-either side of thresholds measured in days, so the straddle cannot happen there.
+away from thresholds measured in hours or days, so the straddle cannot happen there.
 
 Run: uv run pytest ansible/tests/repo/test_no_test_reads_the_live_clock.py
 """
@@ -26,6 +26,7 @@ from _helpers import REPO, is_test_file
 # without a production-side env knob. Remove a line when the file sheds its clock read.
 SUBPROCESS_DRIVEN = frozenset(
     {
+        "ansible/roles/setup/k3s/tests/_longhorn_reader_stubs.py",
         "ansible/roles/setup/k3s/tests/test_longhorn_backup_grace_cron.py",
         "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py",
         "ansible/roles/setup/k3s/tests/test_longhorn_reap_snapshots_cli.py",
@@ -33,9 +34,12 @@ SUBPROCESS_DRIVEN = frozenset(
 )
 
 # Non-vacuity floor: files the census must reach, so a moved `tests/` directory or a renamed
-# module cannot empty it and let the guard pass over nothing.
+# module cannot empty it and let the guard pass over nothing. The census is every tracked
+# module under a `tests/` directory, not just `test_*.py`: a `_*_fixtures.py` helper that
+# stamps `time.time() - age` reproduces the defect behind every test that imports it.
 KNOWN_TEST_FILES = frozenset(
     {
+        "scripts/diagnostics/tests/_alert_fixtures.py",
         "scripts/dev/tests/test_findings_claim_staleness.py",
         "ansible/roles/k8s/monitor-bridge/tests/test_check_r2.py",
         "ansible/roles/setup/k3s/tests/test_longhorn_backup_health_reader.py",
@@ -87,11 +91,7 @@ def _tracked_test_files() -> list[str]:
         text=True,
         check=True,
     ).stdout
-    return sorted(
-        rel
-        for rel in listed.split("\0")
-        if rel and Path(rel).name.startswith("test_") and is_test_file(Path(rel))
-    )
+    return sorted(rel for rel in listed.split("\0") if rel and is_test_file(Path(rel)))
 
 
 def test_no_test_file_reads_the_live_clock():

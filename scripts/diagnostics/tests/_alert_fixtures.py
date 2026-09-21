@@ -1,6 +1,5 @@
 """Fakes shared by the `alerts` tests: a Loki that honours the window, the limit and the cap."""
 
-from datetime import UTC, datetime
 from urllib.parse import parse_qs, urlparse
 
 from diagnostics.probe_lib import core
@@ -17,6 +16,10 @@ def _fake_loki(lines):
 # Loki's own rejection of a `limit` above `max_entries_limit_per_query`: HTTP 400 with this
 # plaintext body, which `curl -sS` returns with exit 0. Copied from a live 2026-09-17 call.
 LOKI_OVER_CAP_BODY = "max entries limit per query exceeded, limit > max_entries_limit_per_query ({limit} > {cap})"
+
+# The two-day log is dated back from this epoch and the tests hand the same one to
+# `run_alerts`, so each row sits a known number of hours inside or outside the window (#2158).
+NOW = 1_780_000_000.0
 
 
 def _route_alert_fetch(
@@ -60,8 +63,8 @@ def _route_alert_fetch(
 
 
 def _two_day_log():
-    """40 hourly DOWN lines ending an hour ago: `old_check` for a day, then `new_check`."""
-    now_ns = int(datetime.now(UTC).timestamp() * 1e9)
+    """40 hourly DOWN lines ending an hour before NOW: `old_check` for a day, then `new_check`."""
+    now_ns = int(NOW * 1e9)
     hour = int(3600 * 1e9)
     return sorted(
         [

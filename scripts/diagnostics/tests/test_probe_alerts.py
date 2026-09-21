@@ -12,7 +12,7 @@ from diagnostics.probe_lib import alerts
 from diagnostics.probe_lib import cli_parser
 from diagnostics.probe_lib import metrics
 from diagnostics.probe_lib import core
-from _alert_fixtures import _query_params, _route_alert_fetch, _two_day_log
+from _alert_fixtures import NOW, _query_params, _route_alert_fetch, _two_day_log
 
 
 def test_loki_query_url_with_range_adds_start_end_direction():
@@ -358,7 +358,7 @@ def test_a_wider_window_lists_every_episode_the_narrower_one_shows(monkeypatch, 
         ns = cli_parser._build_parser().parse_args(
             ["alerts", "--days", days, "--limit", "10"]
         )
-        assert alerts.run_alerts(ns) == 0
+        assert alerts.run_alerts(ns, now=NOW) == 0
         seen.append(capsys.readouterr().out)
     narrow, wide = seen
     assert "new_check" in narrow
@@ -374,7 +374,7 @@ def test_a_truncated_window_says_so_before_it_reports_an_all_clear(monkeypatch, 
     ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "2", "--limit", "10", "--check", "nothing_matches"]
     )
-    assert alerts.run_alerts(ns) == 0
+    assert alerts.run_alerts(ns, now=NOW) == 0
     out = capsys.readouterr().out
     assert "hit --limit 10 log lines" in out
     assert "OLDEST end" in out
@@ -390,7 +390,7 @@ def test_a_truncation_notice_stays_off_stdout_under_json(monkeypatch, capsys):
     ns = cli_parser._build_parser().parse_args(
         ["alerts", "--days", "2", "--limit", "10", "--json"]
     )
-    assert alerts.run_alerts(ns) == 0
+    assert alerts.run_alerts(ns, now=NOW) == 0
     captured = capsys.readouterr()
     assert json.loads(captured.out)
     assert "hit --limit 10" in captured.err
