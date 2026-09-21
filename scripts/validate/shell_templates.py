@@ -36,7 +36,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.cron_checks import cron_kubeconfig_error, cron_path_error
+from lib.cron_checks import (
+    cron_kubeconfig_error,
+    cron_path_error,
+    cron_uv_interpreter_error,
+)
 from lib.cron_targets import cron_job_scripts
 from lib.render_guard import (
     ALL_VARS,
@@ -127,6 +131,10 @@ def check_template(
         return err
 
     err = cron_kubeconfig_error(path, rendered)
+    if err:
+        return err
+
+    err = cron_uv_interpreter_error(path, rendered)
     if err:
         return err
 
