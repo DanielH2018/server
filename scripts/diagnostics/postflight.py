@@ -89,7 +89,19 @@ def get(url, header=None, timeout=TIMEOUT, resolve=None):
     if header:
         argv += ["--config", "-"]
     argv.append(url)
-    out = subprocess.run(argv, input=header or "", capture_output=True, text=True)
+    # `--max-time` bounds curl's own transfer; the subprocess timeout is the backstop for a
+    # curl that never gets that far (a wedged DNS resolver, a stalled TLS handshake). Either
+    # way the check reads as a transport failure rather than hanging the whole postflight.
+    try:
+        out = subprocess.run(
+            argv,
+            input=header or "",
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+    except subprocess.TimeoutExpired:
+        return 0, f"curl did not return within {timeout + 5}s"
     if out.returncode != 0:
         return 0, out.stderr.strip()
     body, _, code = out.stdout.rpartition("\n")

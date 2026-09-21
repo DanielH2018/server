@@ -10,6 +10,10 @@ Run: uv run pytest scripts/deploy_tools/tests/test_await_ci.py
 
 import await_ci
 
+# Resolvable only after `await_ci` has put the deployer's files/ on sys.path; the four
+# token tests below read the helpers from the module that owns them.
+import deploy_git
+
 REQUIRED = frozenset({"prek (lint + validate + tests + secrets)"})
 
 
@@ -114,7 +118,7 @@ def test_env_token_wins_without_running_gh():
     def never(*_a, **_k):
         raise AssertionError("gh must not run when the environment carries a token")
 
-    assert await_ci.github_token({"GH_TOKEN": "ghp_env"}, never) == "ghp_env"
+    assert deploy_git.github_token({"GH_TOKEN": "ghp_env"}, never) == "ghp_env"
 
 
 def test_gh_auth_token_is_used_when_the_environment_has_none():
@@ -124,7 +128,7 @@ def test_gh_auth_token_is_used_when_the_environment_has_none():
         calls.append(cmd)
         return _Proc(0, "gho_cli\n")
 
-    assert await_ci.github_token({}, run) == "gho_cli"
+    assert deploy_git.github_token({}, run) == "gho_cli"
     assert calls == [["gh", "auth", "token"]]
 
 
@@ -134,20 +138,20 @@ def test_no_token_falls_back_to_anonymous():
     A logged-out gh, a missing binary, a hung keyring -- every one of them must degrade to the
     anonymous request this poll made before.
     """
-    assert await_ci.github_token({}, lambda *_a, **_k: _Proc(1, "")) is None
-    assert await_ci.github_token({}, lambda *_a, **_k: _Proc(0, "  \n")) is None
+    assert deploy_git.github_token({}, lambda *_a, **_k: _Proc(1, "")) is None
+    assert deploy_git.github_token({}, lambda *_a, **_k: _Proc(0, "  \n")) is None
 
     def boom(*_a, **_k):
         raise FileNotFoundError("gh")
 
-    assert await_ci.github_token({}, boom) is None
-    assert await_ci.github_token({"GH_TOKEN": "   "}, boom) is None
+    assert deploy_git.github_token({}, boom) is None
+    assert deploy_git.github_token({"GH_TOKEN": "   "}, boom) is None
 
 
 def test_auth_header_is_bearer_or_absent():
-    assert await_ci.github_auth_headers("tok") == {"Authorization": "Bearer tok"}
-    assert await_ci.github_auth_headers(None) == {}
-    assert await_ci.github_auth_headers("") == {}
+    assert deploy_git.github_auth_headers("tok") == {"Authorization": "Bearer tok"}
+    assert deploy_git.github_auth_headers(None) == {}
+    assert deploy_git.github_auth_headers("") == {}
 
 
 def _suite(status, conclusion, runs):

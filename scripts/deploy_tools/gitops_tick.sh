@@ -112,7 +112,7 @@ fi
 # Wall clock for the journal window, monotonic for detecting a NEW activation. The
 # monotonic stamp is what distinguishes "our run finished" from "the unit was already
 # inactive and never started" — ActiveState alone cannot tell those apart.
-since="$(date '+%Y-%m-%d %H:%M:%S')"
+since="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
 started_before="$(show ExecMainStartTimestampMonotonic)"
 
 # A run already in flight is JOINED, not duplicated: systemd coalesces a start request
@@ -222,7 +222,7 @@ if [[ "$joined" == 1 && "$WAIT_S" -gt 0 ]]; then
     # below, and a stamp left at the joined run's start would grade the fresh run by the
     # joined run's lines. `started_before` goes back to a REAL monotonic stamp -- the
     # joined run's -- so the watch can see the new activation replace it.
-    since="$(date '+%Y-%m-%d %H:%M:%S')"
+    since="$(date -u '+%Y-%m-%d %H:%M:%S UTC')"
     started_before="$(show ExecMainStartTimestampMonotonic)"
     if ! systemctl start --no-block "$UNIT"; then
       echo "gitops_tick.sh: could not start $UNIT for the fresh run." >&2
@@ -248,7 +248,7 @@ echo
 echo "── deployer state ───────────────────────────────────────────────────────────"
 if [[ -r "$state_dir/last_run" ]]; then
   last_run="$(cut -d. -f1 <"$state_dir/last_run")"
-  echo "last_run:     $(date -d "@$last_run" '+%Y-%m-%d %H:%M:%S') ($((  $(date +%s) - last_run ))s ago)"
+  echo "last_run:     $(date -u -d "@$last_run" '+%Y-%m-%d %H:%M:%S UTC') ($((  $(date -u +%s) - last_run ))s ago)"
 else
   echo "last_run:     unreadable — the tick did not get far enough to write it"
 fi

@@ -62,7 +62,7 @@ echo "== listing off-box snapshots in s3://${ETCD_S3_BUCKET}/etcd-snapshots"
 listing="$(r2_get "https://${ETCD_S3_ENDPOINT}/${ETCD_S3_BUCKET}/?list-type=2&prefix=etcd-snapshots/offbox-")" \
   || die "the listing leg failed (ListObjectsV2 against ${ETCD_S3_ENDPOINT})"
 snapshot="$(printf '%s\n' "$listing" | grep -o '<Key>etcd-snapshots/offbox-[^<]*</Key>' \
-            | sed 's|<Key>etcd-snapshots/||; s|</Key>||' | sort | tail -1)"
+            | sed 's|<Key>etcd-snapshots/||; s|</Key>||' | LC_ALL=C sort | tail -1)"
 [[ -n "$snapshot" ]] || die "no offbox-* object under etcd-snapshots/ (listing: ${listing:0:300})"
 echo "== newest off-box snapshot: $snapshot"
 

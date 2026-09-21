@@ -20,7 +20,6 @@ Run: uv run python scripts/deploy_tools/await_ci.py <sha>
 """
 
 import argparse
-import json
 import os
 import subprocess
 import sys
@@ -35,12 +34,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import (
-    _CI_NO_VERDICT_CONCLUSIONS,
-    ci_verdict,
-    github_auth_headers,
-    github_token,
-)
+from deploy_logic import _CI_NO_VERDICT_CONCLUSIONS, ci_verdict, github_get
 
 CI_REPO = "DanielH2018/server"
 
@@ -99,16 +93,9 @@ def fetch_check_suites(sha: str) -> list[dict]:
 
 
 def _github_get(path: str) -> dict:
-    req = urllib.request.Request(
-        f"https://api.github.com/repos/{CI_REPO}/{path}",
-        headers={
-            "Accept": "application/vnd.github+json",
-            "User-Agent": "await-ci",
-            **github_auth_headers(github_token(os.environ, subprocess.run)),
-        },
+    return github_get(
+        CI_REPO, path, user_agent="await-ci", environ=os.environ, run=subprocess.run
     )
-    with urllib.request.urlopen(req, timeout=15) as resp:
-        return json.load(resp)
 
 
 def verdict_for(sha: str, fetch=fetch_check_runs, required=None) -> str:

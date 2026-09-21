@@ -113,11 +113,12 @@ def test_detached_head_is_kept_rather_than_guessed_about():
 def test_remove_unlocks_before_removing_a_locked_tree(monkeypatch):
     calls = []
 
-    def fake_run(argv, **kwargs):
+    def fake_git(*args, **kwargs):
+        argv = ["git", *args]
         calls.append(argv)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    monkeypatch.setattr("prune_worktrees.git", fake_git)
     ok, err = remove("/repo", _tree(locked=True))
     assert ok is True and err == ""
     assert calls == [
@@ -129,11 +130,12 @@ def test_remove_unlocks_before_removing_a_locked_tree(monkeypatch):
 def test_remove_skips_unlock_for_a_never_locked_tree(monkeypatch):
     calls = []
 
-    def fake_run(argv, **kwargs):
+    def fake_git(*args, **kwargs):
+        argv = ["git", *args]
         calls.append(argv)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    monkeypatch.setattr("prune_worktrees.git", fake_git)
     remove("/repo", _tree(locked=False))
     assert calls == [["git", "worktree", "remove", "/w"]]
 
@@ -141,11 +143,12 @@ def test_remove_skips_unlock_for_a_never_locked_tree(monkeypatch):
 def test_remove_never_passes_force(monkeypatch):
     calls = []
 
-    def fake_run(argv, **kwargs):
+    def fake_git(*args, **kwargs):
+        argv = ["git", *args]
         calls.append(argv)
         return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
-    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    monkeypatch.setattr("prune_worktrees.git", fake_git)
     remove("/repo", _tree(locked=True))
     # --force (or -f -f) is the escape hatch git's own docs suggest for a locked tree; using
     # it here would remove the safety net that makes auto-unlock acceptable — a REMOVABLE
@@ -261,70 +264,85 @@ def test_pr_head_survives_json_that_is_not_a_list():
 # innocent and a test calling brief(prune=True) would have passed against the broken build.
 
 
-def _main_recording_git(monkeypatch, argv, removable=2):
-    """Run main(argv) over a fabricated survey, returning every argv subprocess.run saw."""
-    calls = []
+def _main_recording_git(monkeypatch, tmp_path, argv, removable=2):
+    """Run main(argv) over a fabricated survey, returning every argv `lib.git.git` saw.
 
-    def fake_run(argv_, **kwargs):
-        calls.append(argv_)
-        return subprocess.CompletedProcess(argv_, 0, stdout="", stderr="")
+    The checkout is `tmp_path`, a real directory: `prune_all` ends with
+    `repair_object_store`, which runs git through lib.git's own binding (out of the stub's
+    reach) and only needs a cwd that exists -- every git failure there is check=False.
+    """
+    calls = []
+    repo = str(tmp_path)
+
+    def fake_git(*args, **kwargs):
+        argv = ["git", *args]
+        calls.append(argv)
+        return subprocess.CompletedProcess(argv, 0, stdout="", stderr="")
 
     trees = [
         Worktree(
-            path=f"/repo/.claude/worktrees/w{i}",
+            path=f"{repo}/.claude/worktrees/w{i}",
             head="abc",
             branch=f"b{i}",
             locked=False,
         )
         for i in range(removable)
     ]
-    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: "/repo")
+    monkeypatch.setattr("prune_worktrees.primary_checkout", lambda: repo)
     monkeypatch.setattr(
         "prune_worktrees.survey", lambda repo: [(REMOVABLE, t, "merged") for t in trees]
     )
     monkeypatch.setattr("prune_worktrees.find_orphan_dirs", lambda *a, **k: [])
     monkeypatch.setattr("prune_worktrees.parse_worktree_list", lambda porcelain: [])
     monkeypatch.setattr("prune_worktrees._git", lambda *a, **k: "")
-    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
+    monkeypatch.setattr("prune_worktrees.git", fake_git)
     return main(argv), calls, trees
 
 
-def test_prune_with_brief_removes_every_removable_worktree(monkeypatch):
+def test_prune_with_brief_removes_every_removable_worktree(monkeypatch, tmp_path):
     # the accepting half: --brief shortens the report, it does not cancel --prune
-    rc, calls, trees = _main_recording_git(monkeypatch, ["--prune", "--brief"])
+    rc, calls, trees = _main_recording_git(
+        monkeypatch, tmp_path, ["--prune", "--brief"]
+    )
     assert rc == 0
     removals = [c for c in calls if c[:3] == ["git", "worktree", "remove"]]
     assert [c[3] for c in removals] == [t.path for t in trees]
 
 
-def test_brief_without_prune_removes_nothing(monkeypatch):
+def test_brief_without_prune_removes_nothing(monkeypatch, tmp_path):
     # the rejecting half: --brief alone is the SessionStart banner and must stay read-only
-    rc, calls, _ = _main_recording_git(monkeypatch, ["--brief"])
+    rc, calls, _ = _main_recording_git(monkeypatch, tmp_path, ["--brief"])
     assert rc == 0
     assert not any(c[:3] == ["git", "worktree", "remove"] for c in calls)
 
 
-def test_prune_with_brief_does_not_tell_the_caller_to_re_run_prune(capsys, monkeypatch):
+def test_prune_with_brief_does_not_tell_the_caller_to_re_run_prune(
+    capsys, monkeypatch, tmp_path
+):
     # the hint that made the no-op read as a report; it must not survive an actual prune
-    _main_recording_git(monkeypatch, ["--prune", "--brief"])
+    _main_recording_git(monkeypatch, tmp_path, ["--prune", "--brief"])
     out = capsys.readouterr().out
     assert "--prune" not in out
-    assert out.count("removed /repo/.claude/worktrees/") == 2
+    assert out.count(f"removed {tmp_path}/.claude/worktrees/") == 2
 
 
-def test_prune_without_brief_still_removes_every_removable_worktree(monkeypatch):
+def test_prune_without_brief_still_removes_every_removable_worktree(
+    monkeypatch, tmp_path
+):
     # the long report is the path that always worked; it must keep working after the refactor
-    _, calls, trees = _main_recording_git(monkeypatch, ["--prune"])
+    _, calls, trees = _main_recording_git(monkeypatch, tmp_path, ["--prune"])
     removals = [c for c in calls if c[:3] == ["git", "worktree", "remove"]]
     assert [c[3] for c in removals] == [t.path for t in trees]
 
 
-def test_prune_all_reports_a_removal_git_refused(capsys, monkeypatch):
-    def fake_run(argv_, **kwargs):
-        return subprocess.CompletedProcess(argv_, 1, stdout="", stderr="is dirty\n")
+def test_prune_all_reports_a_removal_git_refused(capsys, monkeypatch, tmp_path):
+    def fake_git(*args, **kwargs):
+        return subprocess.CompletedProcess(
+            ["git", *args], 1, stdout="", stderr="is dirty\n"
+        )
 
-    monkeypatch.setattr("prune_worktrees.subprocess.run", fake_run)
-    prune_all("/repo", [_tree()])
+    monkeypatch.setattr("prune_worktrees.git", fake_git)
+    prune_all(str(tmp_path), [_tree()])
     assert "could not remove /w: is dirty" in capsys.readouterr().out
 
 

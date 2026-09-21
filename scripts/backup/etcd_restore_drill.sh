@@ -426,7 +426,7 @@ elif [[ -z "$SNAPSHOT" ]]; then
   # The listing is the drill's first assertion in its own right: it exercises the credentials,
   # the bucket and the folder before anything is downloaded.
   SNAPSHOT=$(k3s etcd-snapshot list "${S3_ARGS[@]}" 2>/dev/null \
-             | awk 'NR>1 && $1 ~ /^offbox-/ {print $1}' | sort | tail -1)
+             | awk 'NR>1 && $1 ~ /^offbox-/ {print $1}' | LC_ALL=C sort | tail -1)
   [[ -n "$SNAPSHOT" ]] || die "no offbox-* snapshot found in s3://${ETCD_S3_BUCKET}/etcd-snapshots"
 fi
 log "drilling snapshot: $SNAPSHOT"

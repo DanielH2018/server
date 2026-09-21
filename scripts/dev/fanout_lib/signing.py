@@ -18,7 +18,15 @@ import base64
 import hashlib
 import json
 import re
-import subprocess
+
+# Reach `scripts/lib`: this package is imported through `scripts/dev` (the bootstrap in
+# transport.py and clean.py), but a bootstrap belongs to the module that needs it.
+import sys as _sys
+from pathlib import Path as _Path
+
+_sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
+
+from lib.gh import gh
 
 GH_TIMEOUT_S = 30.0
 # An OpenSSH public key line: type, base64 blob, then an optional comment this ignores —
@@ -81,9 +89,7 @@ def fingerprint(normalized_key: str) -> str:
 
 
 def _gh(args: list[str]) -> str:
-    return subprocess.run(
-        ["gh", *args], capture_output=True, text=True, check=True, timeout=GH_TIMEOUT_S
-    ).stdout
+    return gh(*args, timeout=GH_TIMEOUT_S).stdout
 
 
 def registered_signing_keys() -> frozenset[str]:

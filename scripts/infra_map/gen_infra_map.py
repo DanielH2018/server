@@ -214,7 +214,7 @@ def main(argv: list[str] | None = None) -> int:
         # healthy and reports nothing wrong.
         print(f"error: {exc}; leaving the previous map in place", file=sys.stderr)
         return 2
-    generated_at = datetime.now(timezone.utc).astimezone().strftime("%Y-%m-%d %H:%M %Z")
+    generated_at = datetime.now(timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     model = build_model(
         global_vars, host_vars, live, generated_at, load_roles(), cluster
     )

@@ -314,7 +314,7 @@ reap_dead_snapshots() {
 # rather than classifying it.
 make_snapshot() {
     local stamp dir fd
-    stamp=$(date +%Y%m%d-%H%M%S)
+    stamp=$(date -u +%Y%m%d-%H%M%S)
     # No `,` in the permitted set: ansible-core reads a comma anywhere in the resolved
     # inventory path as an inline host list, and this directory is the playbook's cwd. The
     # label is joined with `+` upstream for that reason; the class is the second line of
@@ -999,7 +999,7 @@ if [[ "$detach" == 1 ]]; then
     # gave up" the way it does without --detach.
     log_dir=/tmp/homelab-deploy-logs
     mkdir -p "$log_dir"
-    log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.-]/_}-$(date +%Y%m%d-%H%M%S)-$$.log"
+    log="$log_dir/deploy-${tag_label//[^A-Za-z0-9_.-]/_}-$(date -u +%Y%m%d-%H%M%S)-$$.log"
 
     exec {lockfd}>"$LOCK"
     # `-E "$LOCK_BUSY"` for the same reason the queued path passes it: without it `flock -n`

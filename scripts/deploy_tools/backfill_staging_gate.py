@@ -69,6 +69,7 @@ from lib import yaml_fast  # noqa: E402
 # shape (join argv onto `git`, capture+strip stdout, raise on a non-zero exit) plus stripping
 # every `GIT_*` env var first, so `cwd` alone would decide the tree even under a hook that
 # sets GIT_DIR/GIT_WORK_TREE (#1230). No `cwd=` at any call site here, matching the original.
+from lib.git import git  # noqa: E402
 from lib.git import git_stdout as run_git  # noqa: E402
 
 import deploy_logic  # noqa: E402
@@ -364,14 +365,7 @@ def staging_head() -> str | None:
 
 def is_ancestor(sha: str, of: str) -> bool:
     """Whether `sha` is an ancestor of `of`."""
-    return (
-        subprocess.run(
-            ["git", "merge-base", "--is-ancestor", sha, of],
-            capture_output=True,
-            check=False,
-        ).returncode
-        == 0
-    )
+    return git("merge-base", "--is-ancestor", sha, of, check=False).returncode == 0
 
 
 def unrunnable(
