@@ -98,6 +98,7 @@ daniel-box and its monitor-bridge tile are unchanged.
 | Date | Snapshot | Where | Result |
 |---|---|---|---|
 | 2026-09-11 | `offbox-daniel-box-1789094702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 51 Secrets; 50 s end to end. First full restore ever performed from these snapshots (#1175). |
+| 2026-09-21 | `offbox-daniel-box-1789958702.zip` | `etcd-drill` guest on daniel-server | **Pass.** 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs, 53 Secrets; 47 s end to end (12:29:35 to 12:30:22 UTC). Run by hand through `etcd-restore-drill-vm`, the first run after the monthly cron was installed. |
 
 ## What these snapshots do and do not cover
 
