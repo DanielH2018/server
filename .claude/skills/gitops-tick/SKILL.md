@@ -42,11 +42,17 @@ deployed and nothing alerted.
 
 `gitops_tick.sh` is allow-listed but not guaranteed. It is a write, so the auto-mode classifier
 judges it on its own text and denied it once in seven runs on identical input (measured
-2026-08-22). A denial is classifier variance, not a broken script or a missing polkit rule.
+2026-08-22). `Bash()` allow rules are suspended while `autoMode.classifyAllShell` is on, so the
+allow-list entry in `.claude/settings.json` decides only outside auto mode. A denial is
+classifier variance, not a broken script or a missing polkit rule.
 `auto-mode-bridge.sh` retries it automatically, twice per session; a compound command that
 merely contains the tick gets no retry, because the classifier judged the whole line.
 
 Re-run it, and **check `last_run` before assuming nothing happened.**
+
+This section is the one owner of that paragraph; the root `CLAUDE.md` bullet points here
+(#2164). Making the decision deterministic — a PreToolUse allow the classifier never
+reaches — is a posture change on the write side, tracked as #2207.
 
 ## Why the wrapper exists rather than `systemctl start`
 

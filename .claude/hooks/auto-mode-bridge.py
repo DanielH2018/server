@@ -5,7 +5,7 @@
 
 `PermissionDenied` — fires only in auto mode, only when the classifier denied the call.
 `./scripts/deploy_tools/gitops_tick.sh` is allow-listed and still denied about 1 run in 7 on
-identical command text (measured 2026-08-22, recorded in CLAUDE.md). The denial is the
+identical command text (measured 2026-08-22, recorded in the `gitops-tick` skill). The denial is the
 classifier's own variance, not a rule, so the fix is to let the model try once more rather than
 to widen anything: `retry: true` tells it the call may be reissued, and the classifier judges the
 reissue exactly as it judged the first. Two retries per session cap it, so a command the
