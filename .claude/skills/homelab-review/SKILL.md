@@ -52,6 +52,12 @@ order:
    standing list was last distilled, and this week's refutations with their evidence. Same-day runs
    carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the later is not a superset.
 3. Any other accepted-decision memory the auto-memory index surfaces for an in-scope area.
+4. **`accepted-designs.md` beside this skill and the *Settled findings* table in
+   `docs/reference/backlog.md`** — the design facts the reviewer agents used to carry inline,
+   one section per domain, and the register `findings.py close --accepted`/`--refuted` writes,
+   rendered by the docs-refresh cron. Each reviewer agent reads its own domain from both
+   before it flags; `ansible/tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py`
+   keeps the inline copies from coming back.
 
 For each area, extract its don't-re-flag items **plus** the discipline: *verify a candidate finding
 against the role's CLAUDE.md, role crons, and monitor-bridge `check.py` BEFORE reporting it.* Pull

@@ -244,6 +244,21 @@ def reobservations(issue: dict) -> int:
     )
 
 
+# What `plan_close` opens a not-planned close comment with, keyed by outcome name (also the
+# label name); `settled_reason` reads it back for the register in docs/reference/backlog.md.
+NOT_PLANNED_PREFIX = {"refuted": "Refuted", "accepted": "Accepted"}
+_SETTLED_PREFIXES = tuple(f"{p}: " for p in NOT_PLANNED_PREFIX.values())
+
+
+def settled_reason(issue: dict) -> str | None:
+    """The `--reason` the last `--accepted`/`--refuted` close recorded, first line only."""
+    for c in reversed(issue.get("comments", [])):
+        body = (c.get("body") or "").strip()
+        if body.startswith(_SETTLED_PREFIXES):
+            return body.split(":", 1)[1].strip().splitlines()[0]
+    return None
+
+
 # A claim is an append-only comment, not a body edit or an assignee. `gh` authenticates as
 # one account, so an assignee names the operator rather than the session; and two sessions
 # editing a body race, where two sessions commenting both succeed and gh returns them in
@@ -518,6 +533,7 @@ def issue_rows(issues: list[dict]) -> list[dict]:
                 "escalated": "escalated" in names,
                 "refuted": "refuted" in names,
                 "accepted": "accepted" in names,
+                "reason": settled_reason(issue),
                 "no_vetted_remediation": "no-vetted-remediation" in names,
                 "verify_by": parse_verify_by(issue.get("body") or "") is not None,
                 "paths": cited_paths(issue.get("body") or ""),
