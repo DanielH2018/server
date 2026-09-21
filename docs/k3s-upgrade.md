@@ -28,25 +28,27 @@ GitOps deployer* below.
 
 ## The gates — before any install
 
-Each one is a stop condition, not a checklist item.
+Each one is a stop condition, not a checklist item. They run as one script, in order, and the
+exit code names the first gate that refused — so a skipped gate is impossible and a failed one
+is a number rather than a paragraph (#2162):
 
 ```bash
-# 1. No degraded Longhorn volume. A degraded volume plus a node restart is how the last
-#    good replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` is not.
-kubectl -n longhorn-system get volumes.longhorn.io \
-  -o custom-columns='NAME:.metadata.name,STATE:.status.state,ROBUST:.status.robustness'
-
-# 2. No Longhorn backup mid-flight — a restart aborts it and the retry storm follows.
-kubectl -n longhorn-system get backups.longhorn.io \
-  -o jsonpath='{range .items[*]}{.status.state}{"\n"}{end}' | sort | uniq -c
-
-# 3. The GitOps deployer holds no SHA. A non-empty hold means a previous deploy already
-#    failed its health gate, and this upgrade would land on top of that.
-ls /var/lib/gitops-deploy/hold_sha
-
-# 4. Both nodes Ready.
-kubectl get nodes -o wide
+uv run python scripts/deploy_tools/k3s_upgrade_gates.py
 ```
+
+Exit 0 means all four passed. Exit 1–4 is the gate that failed, and the script prints what it
+found. Exit 69 means the cluster could not be asked: no readable kubeconfig, or a kubectl that
+serves the staging cluster (`scripts/lib/kubectl.py` refuses that rather than grading it).
+
+1. **No degraded Longhorn volume.** A degraded volume plus a node restart is how the last good
+   replica goes. `detached`/`unknown` is normal for an idle volume; `degraded` (or `faulted`)
+   is not.
+2. **No Longhorn backup mid-flight.** A restart aborts it and the retry storm follows.
+3. **The GitOps deployer holds no SHA.** A non-empty `hold_sha` means a previous deploy already
+   failed its health gate, and this upgrade would land on top of that. The marker lives on
+   daniel-box, so this gate fails on any other host rather than reading an absent directory as
+   a cleared hold.
+4. **Both nodes Ready.**
 
 ## Read the release notes for what this cluster actually runs
 

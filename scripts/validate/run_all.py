@@ -89,13 +89,13 @@ REGISTRY.add(
     module="unit_templates",
 )
 
-# Two modules in this package define a `main()` without being validators, so a blind
+# Three modules in this package define a `main()` without being validators, so a blind
 # `package_entry_points(validate)` census over-counts: `refresh_vendored_schemas.py`
-# re-downloads the vendored schemas (traefik CRDs + Authelia's configuration schema), and
-# `run_all.py` is this dispatcher
-# itself. Neither has a prek hook. This set stays a literal — deriving it at import time would
+# re-downloads the vendored schemas (traefik CRDs + Authelia's configuration schema),
+# `asset_pins.py` fetches every pinned download to check its checksum (network-bound, run from
+# the `renovate-prs` skill), and `run_all.py` is this dispatcher itself. None has a prek hook. This set stays a literal — deriving it at import time would
 # import every module in the package on every run — and the completeness test subtracts those
-# two exclusions BY NAME from the census and requires the remainder to equal it. That test is
+# three exclusions BY NAME from the census and requires the remainder to equal it. That test is
 # what makes an unregistered validator fail rather than pass silently: this set read five names
 # while `unit_templates` and `setup_templates` sat unregistered (GitHub issue #1505), and the
 # test it faced asserted the same five, so nothing disagreed.
