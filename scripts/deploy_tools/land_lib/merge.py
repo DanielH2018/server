@@ -24,6 +24,11 @@ so and trusts the exit code.
 --await-merge polls the PR's state until merged, so `gh pr create` -> `gh pr merge --auto`
 -> one backgrounded land.sh is the whole procedure. Every landing on 2026-09-01 hand-wrote
 that wait.
+
+`opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
+`app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
+agent's contract said "never a PR by another author" and nothing checked (#2170); an
+interactive session leaves the variable unset and is unaffected.
 """
 
 import subprocess
@@ -74,6 +79,27 @@ def _merge_direct(ln: Landing, subject: str) -> None:
     say(f"merged directly: {subject}")
 
 
+def _require_author(ln: Landing) -> None:
+    """Die unless the PR's author is `opts.require_author`; a no-op when it is unset.
+
+    Its own `gh pr view --json author` rather than a field on the state read, so a session
+    with no author requirement makes exactly the calls it made before. `login` is what
+    `gh pr list --author` matches on too (`app/renovate` for the bot), so the unit's value
+    and the wrapper's census name the author the same way.
+    """
+    want = ln.opts.require_author
+    if not want:
+        return
+    have = (ln.view("author").get("author") or {}).get("login", "")
+    if have != want:
+        ln.die(
+            f"authored by {have or '<unknown>'}, not {want} — this session may only arm "
+            f"{want}'s PRs (LAND_REQUIRE_AUTHOR); a session allowed to merge it passes "
+            "--any-author",
+            1,
+        )
+
+
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
@@ -83,6 +109,7 @@ def arm_merge(ln: Landing) -> None:
         return
     if view.get("state") == "CLOSED":
         ln.die(f"PR #{pr} was closed without merging — nothing to arm", 1)
+    _require_author(ln)
     subject = ln.opts.subject or view.get("title", "")
     try:
         ln.tools.gh("pr", "merge", pr, "--squash", "--auto", "--subject", subject)

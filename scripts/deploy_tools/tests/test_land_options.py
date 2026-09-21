@@ -58,6 +58,22 @@ def test_merge_poll_defaults_to_30s(monkeypatch):
     assert options.parse_args(["--pr", "7"], "d").merge_poll == 30
 
 
+def test_land_require_author_names_the_only_author_arm_merge_accepts(monkeypatch):
+    """renovate-agent.service sets it; the agent's landings inherit it (#2170)."""
+    monkeypatch.setenv("LAND_REQUIRE_AUTHOR", "app/renovate")
+    assert options.parse_args(["--pr", "7"], "d").require_author == "app/renovate"
+
+
+def test_require_author_defaults_to_any(monkeypatch):
+    monkeypatch.delenv("LAND_REQUIRE_AUTHOR", raising=False)
+    assert options.parse_args(["--pr", "7"], "d").require_author == ""
+
+
+def test_any_author_overrides_the_env(monkeypatch):
+    monkeypatch.setenv("LAND_REQUIRE_AUTHOR", "app/renovate")
+    assert options.parse_args(["--pr", "7", "--any-author"], "d").require_author == ""
+
+
 def test_help_prints_the_description(capsys):
     with pytest.raises(SystemExit) as exc:
         options.parse_args(["--help"], "Verdicts printed on stdout: settled")

@@ -77,7 +77,11 @@ the caps or the schedule cannot quietly widen it.
 
 - **Scope / exclusions:** the repo's open PRs authored by `app/renovate`, worked through the
   `renovate-prs` skill: finish the manual half of a grouped bump, merge through
-  `land.sh --arm-merge`, land and verify. **Never** a PR by another author, **never** a bare
+  `land.sh --arm-merge`, land and verify. **Never** a PR by another author (ENFORCED: the
+  unit sets `LAND_REQUIRE_AUTHOR=app/renovate`, and `land.sh --arm-merge` refuses any other
+  author before its first merge call — `scripts/deploy_tools/land_lib/merge.py:_require_author`;
+  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_pins_land_sh_to_renovates_prs`
+  pins the value to the wrapper's census), **never** a bare
   `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
   holds unlanded work (the tick skips, posts the path and exits non-zero), and **never a PR whose
   title carries `k8s_autodeploy: false`** (#1939). That phrase is renovate.json's

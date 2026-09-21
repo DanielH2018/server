@@ -445,7 +445,11 @@ def test_the_words_as_a_search_argument_are_clean():
     assert _mod.problem("gh issue list --search 'gh issue create'") is None
 
 
-# --- 9. a leading shell keyword must not slip any rule ----------------------------------------
+# --- 9. deploy.sh --skip-staleness-check: test_block_footguns_skip_staleness.py (this file is
+# at the 500-line test cap).
+
+
+# --- 10. a leading shell keyword must not slip any rule ---------------------------------------
 #
 # Rules 5 and 6 called `strip_shell_keywords` from the day they were written; rules 1-4 predate
 # it and decided on `stage[0]` directly. Measured 2026-08-30, before the strip moved into

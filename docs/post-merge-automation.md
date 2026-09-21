@@ -435,15 +435,13 @@ invocation does not.
 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` | the two apply arms |
 | `ansible/roles/k8s/monitor-bridge/files/checks/service.py` | plane-aware hold message |
 | `CLAUDE.md` | the post-merge section collapses to one command plus the exceptions |
-| `ansible/roles/setup/gitops_deploy/CLAUDE.md` | broad-change behaviour, and the branch-protection correction below |
+| `ansible/roles/setup/gitops_deploy/CLAUDE.md` | broad-change behaviour, and the CI-gate rationale (see *Out of scope, reported*) |
 
 ## Out of scope, reported
 
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` states "This gates the DEPLOY; branch protection
-gates the MERGE" as the reason the CI gate is not redundant. **There is no branch protection on
-`master`** — `gh api repos/DanielH2018/server/branches/master/protection` returns 404 (checked
-2026-08-29).
-
-The CI gate's value is unchanged, because it turns out to be the only gate. The stated rationale is
-false, and the doc line is corrected as part of this work. Adding branch protection is a separate
-decision and is not made here.
+There is no branch protection on `master`: `gh api
+repos/DanielH2018/server/branches/master/protection` returned 404 when this work checked it on
+2026-08-29. Until then `ansible/roles/setup/gitops_deploy/CLAUDE.md` gave branch protection as
+the reason the deployer's CI gate is not redundant. That doc records the settled fact — the
+CI gate is the only gate — and `docs/gitops-pipeline.md` carries the record of the correction.
+Adding branch protection is a separate decision and is not made here.
