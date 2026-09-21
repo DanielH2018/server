@@ -45,7 +45,10 @@
   gather_facts: false
   vars:
     mig_namespace: homelab
-    mig_image: busybox:stable
+    # Version tag plus digest (#2150): `busybox:stable` re-pointed under a data-migration pod.
+    # Renovate's k8s-images manager reads this playbook too (its managerFilePatterns name it),
+    # so the pin moves by PR like the restore drill's in roles/setup/k3s/defaults/main.yml.
+    mig_image: busybox:1.38.0@sha256:dc2d74b28e4cf8984fa52af1f39bc7c3d9c73760b41a74d629f5d11b1ab28616
     mig_temp_claim: "{{ mig_claim }}-blockmig"
     mig_pod: "blockmig-{{ mig_claim }}"
     mig_manifests: /etc/rancher/k3s/blockmig

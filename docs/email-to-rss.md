@@ -22,7 +22,8 @@ new submodule pointer here.
 **Initial setup (already done — for reference):**
 
 1. Fetch the code: `git submodule update --init Email-to-RSS` (originally a plain clone of the repo above)
-2. Run `npm install` in the repo directory.
+2. Run `npm ci` in the repo directory. The submodule commits `package-lock.json`; `npm ci`
+   installs exactly what it records, where `npm install` may rewrite it.
 3. Authenticate with Cloudflare: `npx wrangler login`
 4. Create KV namespaces manually (setup.sh has a bug with namespace title matching):
    `npx wrangler kv namespace create EMAIL_STORAGE`

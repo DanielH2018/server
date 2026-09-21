@@ -50,3 +50,54 @@ code_server_k8s_cpu_limit: "4"
 code_server_k8s_mem_limit: 4096Mi
 code_server_k8s_cpu_request: "100m"
 code_server_k8s_mem_request: 256Mi
+
+# ── Build inputs pinned by version AND sha256 ─────────────────────────────────────────────
+# Renovate has no datasource for a VS Code extension (neither Open VSX nor the MS Marketplace),
+# so these are the inputs the build cannot track automatically. Each is a version plus the
+# sha256 of the exact artifact the Dockerfile downloads; the build verifies the checksum before
+# it keeps the file, so a re-uploaded artifact fails the build instead of reaching the image.
+#
+# To bump one:
+#   Open VSX  — read the version from https://open-vsx.org/api/<publisher>/<name>/linux-x64
+#               (or without the platform segment for a `universal` extension such as ms-python),
+#               and the hash from the `.sha256` link in its `files` block.
+#   Marketplace — query https://marketplace.visualstudio.com/items?itemName=<publisher>.<name>
+#               for the version, download the `vspackage` URL below with `curl -fsSL --compressed`
+#               (the marketplace serves it gzip-encoded; the hash is over the decoded VSIX) and
+#               `sha256sum` it.
+# Then redeploy: the rebuilt image rolls the pod, and extensions.sh installs the new VSIX.
+# A base-image bump PR (the Renovate `k8s base image` group, manual for this role) is the natural
+# moment to refresh these too.
+#
+# THE PLATFORM SEGMENT IS LOAD-BEARING. Before these pins (2026-09-21) the build asked each
+# API for "the" download of the current version, and for a platform-specific extension that is
+# whichever build is listed first: Open VSX returned the alpine-arm64 build of ruff and ty, and
+# the marketplace returned the win32-x64 build of Claude Code, into an image that runs on
+# linux-x64 (verified 2026-09-21 by reading `TargetPlatform` out of each downloaded VSIX's
+# manifest). `linux-x64` in the URL is the fix.
+code_server_k8s_extensions:
+  # Open VSX — universal (one VSIX for every platform).
+  - name: ms-python.python
+    version: 2026.4.0
+    url: https://open-vsx.org/api/ms-python/python/2026.4.0/file/ms-python.python-2026.4.0.vsix
+    sha256: 232aeafb01f069824fdd92d3e628c1c442bbcfa1d3cc945ff97076340bb2b4a6
+  # Open VSX — platform-specific; the URL names linux-x64.
+  - name: charliermarsh.ruff
+    version: 2026.82.0
+    url: https://open-vsx.org/api/charliermarsh/ruff/linux-x64/2026.82.0/file/charliermarsh.ruff-2026.82.0@linux-x64.vsix
+    sha256: b19f5dc0ab023472104039c744b17b53fb2adedb773040838e91303b87a69fa2
+  - name: astral-sh.ty
+    version: 2026.72.0
+    url: https://open-vsx.org/api/astral-sh/ty/linux-x64/2026.72.0/file/astral-sh.ty-2026.72.0@linux-x64.vsix
+    sha256: b2051aa6f40304960685c5b7e4895e40869cc0d96d23691ccfd45e28c6fc3f1c
+  # MS Marketplace — proprietary, not published to Open VSX. Pylance is universal.
+  - name: ms-python.vscode-pylance
+    version: 2026.3.104
+    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/ms-python/vsextensions/vscode-pylance/2026.3.104/vspackage
+    sha256: ab57bc16eb8ed62cfe373a8681bb9355b86f76b16000fcd2033cbd7e359f3e6c
+  # Platform-specific; `?targetPlatform=linux-x64` selects the Linux build. Kept at the same
+  # version as the `@anthropic-ai/claude-code` CLI the Dockerfile installs.
+  - name: Anthropic.claude-code
+    version: 2.1.278
+    url: https://marketplace.visualstudio.com/_apis/public/gallery/publishers/Anthropic/vsextensions/claude-code/2.1.278/vspackage?targetPlatform=linux-x64
+    sha256: 12e1de8156325bcf8845c2ab6cc996ff1c3a536d3cf325fede3ff914e3fb7845
