@@ -12,21 +12,41 @@ this page: a bullet here can describe a check that has since moved or been retir
 *Retired and moved checks* section is exactly that record. If a bullet disagrees with the
 registry, the registry is right.
 
-<!-- vale off -->
-<!-- The text below this line was moved verbatim from the role CLAUDE.md on 2026-09-21
-     (#2126) and is a historical record, unedited except for path fixes — the same
-     reasoning .vale.ini gives for docs/archive/. Lint what is written here fresh;
-     put it above this marker. -->
+
+## How the bridge got here
+
+> **THE bridge since the Docker uninstall (2026-08-14).** Born as the daniel-server
+> sidecar, split at the Phase F drain, whole again in-cluster: this role's
+> `files/` runs every check, entered at `files/cli.py`. The GitOps pair reads daniel-box's own deployer
+> via a hostPath (the pod is pinned there); `disk_prune` retired with the Docker daemon;
+> `pi_peers` and `renovate_alive` dissolved into direct pushers at the host flips
+> (k8s/pi-peer-backup CronJob; `renovate-notify`'s ExecStartPost). check.py still
+> refuses a CHECKS_ONLY/CHECKS_SKIP filter naming an unknown check or a gated check
+> without its gate, and `test_checks_and_env_secret_push_tokens_agree` asserts the
+> env-secret carries exactly the token set the code reads. Much of the per-check
+> documentation below predates the moves — Docker-era plumbing details (compose, bind
+> mounts, networks) are history (`roles/containers/archive/monitor-bridge/`).
+>
+> **`files/registry.py`'s `build_checks()` is the authority on which checks exist.** This file
+> is prose and nothing tests it: until 2026-08-16 the three retired above were still written up
+> here in the present tense, as live checks with unit-tested pure functions, four weeks after
+> the functions were deleted. If a bullet below disagrees with the registry, the registry is
+> right.
+
+A tiny sidecar that turns host-cron state files into Uptime Kuma **push** monitors, so
+threshold problems actually page. See repo-root `CLAUDE.md`. (The kopia backup checks
+retired with kopia on 2026-08-10 — the backup plane is Longhorn;
+`backup-consolidation-longhorn.md`.)
 
 ## Live checks
 
-gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
+gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and pushes
 `status=up|down&msg=…` to one Kuma push monitor each:
 - **Prometheus Reachable** (a trivial `vector(1)` instant query — the root-cause GATE for the
   prom-dependent checks. Evaluated FIRST each cycle: when Prometheus is unreachable, every
   prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
   host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
-  **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" msg so their push-monitor
+  **suppressed** — pushed `up` with a "skipped — Prometheus unreachable" `msg` so their push-monitor
   heartbeats stay alive — and only THIS monitor pages. Without the gate one Prometheus outage
   fires all of them at once: one root cause, one page per dependent check. A single scrape
   target down (Prometheus up, one exporter gone) still surfaces separately on Scrape Targets.
@@ -65,7 +85,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   series PR #1251 added for `claude-rc.service` and `user.slice/user-1000.slice`, on every
   host with `has_claude_code: true` (daniel-box and daniel-server). Because both hosts emit
   the same cgroup names, the two queries group by `(origin, cgroup)` / `(origin, cgroup,
-  event)` and the verdict's message names `origin/cgroup` (e.g. `daniel-server/fleet 40.0%`)
+  event)` and the verdict's message names `origin/cgroup` (for example `daniel-server/fleet 40.0%`)
   rather than the cgroup alone.
   Folded here rather than given its own tile for the reason recorded at `with_pi_ports`: a new
   Kuma monitor costs a new push token in SOPS and a monitor created by hand in the UI, and
@@ -92,15 +112,15 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   offender; supersedes the old host-aggregate OOM that lived in the Memory check)
 - **CPU Throttling** (throttled/total CFS *periods* `> CPU_THROTTLE_PCT` **and** throttled
   *seconds*/s `> CPU_MIN_THROTTLED_CORES`, by name — catches a container pinned at its
-  `deploy.resources` cpu cap, which throttles silently without OOM/restart/5xx. The cores
+  `deploy.resources` CPU cap, which throttles silently without OOM/restart/5xx. The cores
   floor (same volume-floor idea as Traefik's `TRAEFIK_MIN_RPS`) is essential: the period
   ratio alone runs 30–90% for tiny low-limit sidecars that briefly burst over their slice
   while losing negligible absolute CPU — a perpetual false `down`, which Kuma renders as
   "No heartbeat in the time window" since only `up` pushes satisfy a push monitor's
   watchdog. Unlimited containers give 0/0→NaN and are ignored. On top of both gates,
-  `CPU_CONSECUTIVE` (3) adds hysteresis: only the 3rd consecutive breaching cycle
+  `CPU_CONSECUTIVE` (3) adds hysteresis: only the third consecutive breaching cycle
   (~15 min) pushes `down`; shorter bursts push `up` with a "throttling streak n/3"
-  msg naming the offender, and a clean cycle resets the streak — so one-cycle blips
+  `msg` naming the offender, and a clean cycle resets the streak — so one-cycle blips
   (flaresolverr solving a challenge, homepage hugging the cores floor) never page.)
 - **Scrape Targets** (`up == 0` — names the down job)
 - **Traefik 5xx** (5xx ratio over 5m **per service**, naming each offender, gated by a
@@ -176,7 +196,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   2026-09-11 were a fetch error co-timed with a `k8s_workloads ... radarr(1)` episode — one
   rollout reported twice. The streak covers the FETCH only: a queue item needing review pages
   on the cycle it is seen, because a poisoned release sitting in the queue is not a transient.
-  **This REPLACED arr_queue's `STARTUP_GRACE` membership** rather than stacking on it — that
+  **This REPLACED `arr_queue`'s `STARTUP_GRACE` membership** rather than stacking on it — that
   grace covered the same transient at 2 cycles and covered the queue verdict too. Pure
   `queue_warnings()` is unit-tested; the fetch streak has its own accept/reject pair in
   `test_check_service.py`.)
@@ -199,7 +219,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `bazarr_api_key` in SOPS shows up. Pure `bazarr_problems()` is unit-tested both ways.
   **Not an exportarr sidecar, deliberately:** exportarr does speak bazarr, but at the pinned
   v2.3.0 its collector always runs the full episode-subtitle walk — upstream measures it in
-  "tens of seconds", spent *inside* bazarr — and v2.3.0 predates the overlapping-collection
+  "tens of seconds," spent *inside* bazarr — and v2.3.0 predates the overlapping-collection
   skip added upstream for exactly that drainage (their #380). These two endpoints measured
   2-7 ms and 477+13 bytes, 2026-08-29.)
 - **Prowlarr Indexers** (Prowlarr's `/api/v1/indexerstatus` + `/api/v1/indexer` over `media`,
@@ -214,7 +234,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `check_n8n`/`check_bazarr` convention — no grace; `check_arr_queue` left that convention on
   2026-09-11 and now rides `ARR_FETCH_CONSECUTIVE`). Pairs with Prowlarr set to
   `includeHealthWarnings=false` (keeps `onHealthIssue` = the instant all-down red backstop).
-  `PROWLARR_INDEXER_IGNORE` (comma-separated names, case-insensitive) drops chronically-flaky
+  `PROWLARR_INDEXER_IGNORE` (comma-separated names, case-insensitive) drops chronically flaky
   public trackers from the offender list — set to `The Pirate Bay,1337x` — the first after its
   apibay.org backend 503'd/timed-out for hours and flapped this monitor up/down on 2026-07-05,
   the second for the same chronic flapping (the remaining indexers
@@ -222,8 +242,8 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `indexers_down()` is unit-tested. Spec: `docs/superpowers/specs/2026-07-04-prowlarr-indexer-watchdog-design.md`.)
 - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
   `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
-  `GITOPS_MAX_AGE_MIN` — i.e. the deployer stalled / host down. The deployer no longer pushes
-  to Kuma itself — see [[the gitops_deploy CLAUDE.md]])
+  `GITOPS_MAX_AGE_MIN` — that is, the deployer stalled / host down. The deployer no longer pushes
+  to Kuma itself — see `ansible/roles/setup/gitops_deploy/CLAUDE.md`)
 - **GitOps Deploy — Status** (reads `/gitops-state/hold_sha`, `/gitops-state/diverged_sha`,
   `/gitops-state/contention_since`, `/gitops-state/manual_plane` **and
   `/gitops-state/behind_since`**;
@@ -252,7 +272,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
 - **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
   became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
   no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the
-  gap it watches are unchanged: the rsync uses no `--delete`, so a silently-failing pull leaves
+  gap it watches are unchanged: the rsync uses no `--delete`, so a silently failing pull leaves
   the last-good copy in place while the Pi's un-rebuildable WireGuard peer keys go stale.
 - **CrowdSec Home Allowlist** — RETIRED from this container at slice-6 B2 (2026-08-09). `cscli
   allowlists` is LAPI-machine-only, so the updater cron followed the LAPI into the cluster
@@ -261,7 +281,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   its tests are gone. The monitor itself still exists — its AutoKuma label moved to the
   `uptime-kuma` role.
 - **Public origin lock & AppSec verifiers** — RETIRED at E7 (2026-08-13) with the docker-edge
-  public 80/443 origin. The Cloudflare-only-origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
+  public 80/443 origin. The Cloudflare-only origin (`docker-user-verify.sh` cron) and Cloudflare-IP-
   drift checks guarded the legacy Traefik@docker; the CrowdSec AppSec verifier has re-homed to
   daniel-box as a root cron pushing the same "CrowdSec AppSec" Kuma monitor directly from
   `roles/k8s/crowdsec/templates/crowdsec-appsec-verify.sh.j2`.
@@ -325,7 +345,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   budget fills. The durable fix for those is a bucket lifecycle rule (below); this arm is the
   backstop for that rule being absent, deleted, or not working.
   Operation classes are NOT in the API response — Cloudflare returns raw `actionType` names — so
-  the Class A / Class B mapping lives in `check.py` from the pricing page. An actionType in
+  the Class A / Class B mapping lives in `check.py` from the pricing page. An `actionType` in
   neither published list counts toward **Class A** (the tighter, more expensive arm) and is named
   in the message: over-counting reports headroom we do not have, which is the safe direction, and
   the name explains why the numbers moved when Cloudflare adds an operation.
@@ -348,16 +368,16 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   the tile clears one cycle after `cloudflare_ips` is fixed. That is why it moved here from
   k8s/traefik's daily root cron on 2026-09-19: the cron left a red tile until the next 05:25.
   Empty expected list = disabled (stays up). Pure `cloudflare_ips_verdict()` is unit-tested.)
-- **SMART Data / Health** (scrutiny web API `/api/summary` over `monitoring`: every
+- **SMART Data / Health** (Scrutiny's web API `/api/summary` over `monitoring`: every
   non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
   (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to
   "SMART self-assessment FAILED" / "attribute threshold breached"). Freshness catches a
-  silently-dead collector (cron-as-PID1, no usable healthcheck → only shows as aging data); the
+  silently dead collector (cron-as-PID1, no usable healthcheck → only shows as aging data); the
   status check catches a drive that goes SMART-FAILED / breaches a threshold while STILL reporting
   fresh data — nothing else alerts on that (Scrutiny writes to InfluxDB not Prometheus, and its
   own Shoutrrr notifier is unconfigured, so this bridge check is the only drive-failure alert
-  path). Also `down` when scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
-  0 = off) adds an optional early-warning temperature ceiling on top.
+  path). Also `down` when Scrutiny lists no devices at all. `SCRUTINY_TEMP_MAX` (°C, default
+  0 = off) adds an optional early warning temperature ceiling on top.
   **A third arm watches NVMe endurance** (added 2026-08-22): `percentage_used` against
   `SCRUTINY_WEAR_MAX` (default 80). Scrutiny ships that attribute with `thresh=100`, so its own
   evaluation cannot fold a breach into `device_status` until the drive's rated write endurance is
@@ -411,10 +431,10 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   source here, and no code change can turn this specific alert into a declared-limit one. The
   fix that shipped is legibility, not a threshold: the message already said "fallback limit"
   and named the chip before this issue (PR #692), so daniel-box's k10temp/Tctl breach already
-  read as "this chip rates nothing" rather than "this chip is over its own rating".
+  read as "this chip rates nothing" rather than "this chip is over its own rating."
   **The offset half is settled, and a Tdie/Tccd series was never what would have settled it**
   (issue #1003). k10temp reports `Tdie = Tctl - temp_offset` and sets `temp_offset` only for
-  six family-0x17 SKUs, none of them this one, so a Tdie on this chip would carry the SAME
+  six family 0x17 SKUs, none of them this one, so a Tdie on this chip would carry the SAME
   number as its Tctl — reading one would be a no-op, not a correction. The `DECIDED:` marker in
   `verdicts.host.hwmon_temp_limits` holds the driver evidence.
   **The number half is settled too, by a third arm rather than a fourth query** (#1152). AMD
@@ -445,7 +465,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   duty cycle. The derivation and the pages-per-week table are at the `DECIDED: 12 cycles` marker
   in `files/bridge/config_host.py`.
   `crits` is still read for every OTHER sensor,
-  because a driver that skips `max` but declares `crit` (none currently in this estate; added
+  because a driver that skips `max` but declares `crit` (none in this estate as of 2026-09-03; added
   defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`
   wins when a sensor declares a plausible value for both**, not `crit`: hwmon's own convention
   has `crit` as the LATER shutdown point, not an earlier warning — measured live 2026-09-03,
@@ -460,14 +480,14 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   three hosts declare non-excluded sensors (measured 2026-08-29: 9 / 5 / 2), so a floor of 2
   is met by any two of them. Origins are counted over the series that survive
   `HWMON_TEMP_EXCLUDE_CHIP`, through the same predicate `hwmon_temp_limits` uses — a host
-  whose only sensors are nvme is a host this check does not cover, and counting it would
+  whose only sensors are `nvme` is a host this check does not cover, and counting it would
   satisfy the floor with a host nothing watches.
   `HWMON_TEMP_ORIGINS_CONSECUTIVE` (5) is **longer than `HOST_ORIGINS_CONSECUTIVE`** (3) on
   purpose: the third host is the Pi, and over the 7d to 2026-08-29 its hwmon series went
   absent for about 20 minutes (6 of 1054 samples at a 5m step, all daniel-pi), which the
   shared 15-minute grace would have paged on. The two hysteresis mechanisms are never
   compounded — `down_streak` is the thermal-spike grace and applies only to the hot-sensor
-  path, so a missing host pages on its own 5th cycle rather than the 15th.
+  path, so a missing host pages on its own fifth cycle rather than the fifteenth.
   Adding the arm is also why `host_temp` joined `EXPORTER_DEPENDENT` — under **two** job
   keys, `node` and `node-pi`. A dead node-exporter now trips the floor, and without the entry
   one root cause would page twice; the Pi scrapes under its own job (`count by (job, origin)
@@ -560,7 +580,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   numerics report) is a specific entity rename → pages through the streak rather than silently
   monitoring the survivor. The only
   pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
-  Kuma→Discord brain) and nothing trended the battery, so a slowly-degrading battery was invisible
+  Kuma→Discord brain) and nothing trended the battery, so a slowly degrading battery was invisible
   until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
   **Prom-dependent** (queries the `nut` and `home-assistant` scrapes). `UPS_CONSECUTIVE` (2, like
   `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike, a restart blip that
@@ -579,7 +599,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   ran load5/core >1.7 with healthcheck-timeout storms no other monitor saw.
   **It read the Pi's glances API until 2026-09-18** (#2004), when glances retired: 66 MB
   of anonymous memory on a 456 MB host, for facts node-exporter already exported. The
-  thresholds and the Kuma monitor are unchanged; the source moved, and with it the fs arm
+  thresholds and the Kuma monitor are unchanged; the source moved, and with it the filesystem arm
   gained the vfat `/boot/firmware` partition, which glances' container view never saw —
   the same fault Root Disk watches `/boot` for on the nodes. The healthy message names
   the fullest device (`disk /dev/mmcblk0p1 37%`) because a bare percentage reads as the
@@ -631,7 +651,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   entry with a `port`), so `docker-proxy`, `autoheal` and `docker-proxy-lifecycle` — which
   publish nothing forever — fall out by construction rather than by an exclusion list.
   `udp_port` is excluded: there is no TCP-connect equivalent for UDP. `PI_PORTS_CONSECUTIVE`
-  (2) rides out the seconds of closed ports a Pi deploy's container recreate causes.
+  (2) rides out the seconds of closed ports a Pi deploy causes when it recreates a container.
   **This arm adds no reachability coverage — it adds a named port, and that is the whole
   case for it.** Measured 2026-08-27: Kuma HTTP-monitored glances and wg-easy (and dozzle,
   until it retired 2026-08-29), and `alloy` is a Prometheus scrape target (`job=alloy-pi`)
@@ -646,16 +666,16 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   scheduler stuck) that the container healthcheck can't see. **Consecutive-cycle hysteresis
   (`HA_CONSECUTIVE`=2, same idiom as `CPU_CONSECUTIVE`):** a planned redeploy takes the API
   unreachable for ~120 s and then leaves the scheduler a beat behind, so a single cycle reads
-  unreachable OR stale — only the 2nd straight down cycle pages; the first pushes `up` with a
-  "down streak n/N" msg, and one fresh read resets the streak. The unreachable-API error is
+  unreachable OR stale — only the second straight down cycle pages; the first pushes `up` with a
+  "down streak n/N" `msg`, and one fresh read resets the streak. The unreachable-API error is
   caught inside the check (not left to `run_once`) so it rides the SAME grace as staleness — both
   are the deploy, not a wedge; a genuinely wedged/auth-broken HA stays bad across cycles and still
   pages. Empty `HA_URL`/`HA_TOKEN` = disabled (stays up). Pure `ha_heartbeat_fresh()` + the
   streak wrapper are unit-tested.
-  **A second arm watches HA's own ip_ban** (added 2026-08-23): a `count_over_time` LogQL query
+  **A second arm watches HA's own `ip_ban`** (added 2026-08-23): a `count_over_time` LogQL query
   for `Banned IP` lines over `HA_BAN_WINDOW` (1h), keyed on `container="home-assistant"` (see the no-`app`-label trap below), `down` on any hit. HA's ban middleware runs on
   every request and keys on the peer address, so an unauthenticated burst from inside the cluster
-  bans an INFRASTRUCTURE ip — on 2026-08-23 five ad-hoc `curl` calls banned `10.42.0.1`, the
+  bans an INFRASTRUCTURE IP — on 2026-08-23 five ad-hoc `curl` calls banned `10.42.0.1`, the
   node's pod-network gateway, and HA 403'd the kubelet probes arriving from it into a crash loop
   that paged k3s Workload Health. The probes now exec curl to `127.0.0.1` and cannot be banned,
   which fixes the crash loop and makes a ban SILENT — HA keeps serving while whatever shares that
@@ -698,7 +718,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   because an app restart under a deploy is a real transient; `speedtest` is also in
   `STARTUP_GRACE`. Same split as `check_ha_heartbeat`.
   Reaching the app needs `netpol-baseline/templates/networkpolicy-speedtest.yaml.j2` — the
-  baseline admits traefik, prometheus and two cni0 /32s, none of which is this pod.)
+  baseline admits `traefik`, `prometheus` and two cni0 /32s, none of which is this pod.)
 - **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
   The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
   `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
@@ -706,8 +726,8 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.
 - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
   Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
-  unreachable the `LOKI_DEPENDENT` check (loki_ingestion) is
-  **suppressed** — pushed `up` with a "skipped — Loki unreachable" msg — and only THIS monitor
+  unreachable the `LOKI_DEPENDENT` check (`loki_ingestion`) is
+  **suppressed** — pushed `up` with a "skipped — Loki unreachable" `msg` — and only THIS monitor
   pages. It was two until janitorr's watchdog moved to the cluster (2026-08-08); one Loki outage
   firing both at once is why the gate exists. Loki being UP but promtail not
   shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
@@ -717,7 +737,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   because a gate that isn't watching a check's real source reports confidence it doesn't have.
   `PROMETHEUS_URL` and `CLUSTER_PROMETHEUS_URL` used to name two instances on two hosts reached
   by two paths; since the Docker plane retired (2026-08-14) both render to the same cluster
-  Service URL, so the two gates observe ONE instance and `run_once` reuses the prometheus
+  Service URL, so the two gates observe ONE instance and `run_once` reuses the `prometheus`
   gate's verdict here rather than probing twice. Do not read the pair as independent coverage.
   The split survives because it is what lets a second Prometheus be reintroduced without
   re-deciding which gate watches which check — so membership follows the URL a check reads.
@@ -733,8 +753,8 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   is healthy AND when there are no series at all, so the check `count()`s the series FIRST and
   reports `UNKNOWN, not OK` when the count is missing or below `K8S_MIN_WORKLOADS` (5). Reading
   the healthy meaning onto both is how a monitor goes green while blind — the shape of the B2
-  transaction cap (2026-08-02) and the gitops-behind defer (2026-08-07). The floor also covers a
-  partially-loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping `apps`
+  transaction cap (2026-08-02) and the GitOps-behind defer (2026-08-07). The floor also covers a
+  partially loaded kube-state-metrics: its ClusterRole is deliberately scoped, so dropping `apps`
   would take every deployment series away while the pod stays up and Ready. That fault is
   invisible to the reachability gate above, which is why both exist.
   **`K8S_WORKLOADS_CONSECUTIVE` (3) gates the unavailable-replica arm ALONE**, added
@@ -766,7 +786,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   three consecutive ones, so at 3 cycles this arm had no false page in that window. It is also
   longer than the 300s the playbook itself waits. The desired count comes from a SECOND query,
   because a PromQL `<` returns the left-hand series alone — `authelia(0/1)` reads as "zero of
-  one replicas carry the new spec", where a bare `authelia(0)` would read as "zero replicas",
+  one replicas carry the new spec", where a bare `authelia(0)` would read as "zero replicas,"
   a different fault. The stall helpers and BOTH replica streak gates live in
   `checks/cluster_rollout.py` rather than `checks/cluster.py`, which is at the 600-line
   module cap.
@@ -790,7 +810,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   **A second arm covers DaemonSets** (added 2026-08-13):
   `kube_daemonset_status_number_unavailable`, with its own `K8S_MIN_DAEMONSETS` floor (9) and
   the same fail-closed-on-absent-series logic — a Deployment-shaped census cannot see promtail,
-  node-exporter or the otel collector, which run one pod per node and are exactly the workloads
+  node-exporter or the `otel` collector, which run one pod per node and are exactly the workloads
   a node problem takes out first. A third arm reports crash-looping restarts —
   `increase(...[K8S_RESTART_WINDOW]) > K8S_RESTART_MAX` (1h / 3), **and** a restart inside
   `K8S_RESTART_RECENT_WINDOW` (30m). The recency clause is what lets a RECOVERED pod leave the
@@ -804,9 +824,9 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   every name in `K8S_EXTENDED_RESOURCES` (comma-separated, default `devic.es/dri`) must still be
   advertised at non-zero quantity by at least one node, read from
   `kube_node_status_allocatable`. This is the blast radius of a wedged device plugin, not the
-  plugin's own liveness: `dri-device-plugin` has no readinessProbe, and a container without one
+  plugin's own liveness: `dri-device-plugin` has no `readinessProbe`, and a container without one
   is Ready the instant it starts, so a plugin whose gRPC registration hangs keeps a Running,
-  Ready, fully-available DaemonSet while kubelet deregisters `devic.es/dri` — invisible to the
+  Ready, fully available DaemonSet while kubelet deregisters `devic.es/dri` — invisible to the
   DaemonSet arm above. **The obvious socket-stat probe is worse than nothing** (rationale
   recorded in commit `1b2aa497`): the registration socket file persists through the wedge, so
   the probe reads green through the fault, and kubelet clears that directory on restart, so the
@@ -890,8 +910,8 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   so a second capped volume missing from the declaration fails CI rather than going unwatched.
   `"0"` is Longhorn's UNCAPPED value and the fleet default, so it is dropped rather than read
   as a cap of zero; a check treating 0 as a cap would report every volume full. **Usage is a
-  SUPERSET of what the deploy gate sums**: the gate skips `status.markRemoved` snapshots and
-  the metric carries no such label (2026-09-10: 25 of 114 Snapshot CRs were markRemoved and
+  superset of what the deploy gate sums**: the gate skips `status.markRemoved` snapshots and
+  the metric carries no such label (2026-09-10: 25 of 114 Snapshot CRs were `markRemoved` and
   every one still had a series), which errs safely — those blocks are still held until
   Longhorn purges them — but can overstate usage for a cycle after a prune, so a breach rides
   `SNAPSHOT_CAP_CONSECUTIVE`. Deduped by (volume, snapshot) before summing, like PVC
@@ -909,14 +929,14 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   `attached healthy` throughout — Longhorn's own state is structurally blind to a
   filesystem-level fault under it. The metric was already scraped; node-exporter's
   `mount-points-exclude` hid it under a wholesale `var/lib/kubelet` exclusion, narrowed
-  alongside this check to `var/lib/kubelet/pods` (daemonset.yaml.j2) — the per-pod bind
+  alongside this check to `var/lib/kubelet/pods` (`daemonset.yaml.j2`) — the per-pod bind
   mounts stay excluded (unbounded cardinality), the CSI global mounts under `plugins/` do
   not (~40 volumes × ~7 series, ~300 total). **No grace**, unlike Longhorn Volume
   Redundancy: a read-only remount does not self-heal the way a replica rebuild or a kubelet
   restart does, and the schedule (node-exporter's `node` job at 1m, this check on the
   bridge's own 300s cadence) means a streak would only delay a real page, never absorb a
   routine blip. **`host_metric_sel`, not `origin_sel`**, for the same reason check_disk/
-  check_mem use it: `PROM_ORIGIN` resolves to `origin="daniel-server"` in the deployed env,
+  `check_mem` use it: `PROM_ORIGIN` resolves to `origin="daniel-server"` in the deployed env,
   and pinning would hide the identical fault on daniel-box behind a green tile. An absent
   series reads as healthy (no CSI global mount is read-only) rather than as blind — unlike
   Longhorn Volume Redundancy/PVC Fullness, node-exporter being entirely down is
@@ -929,7 +949,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   Prometheus monitor already reports.)
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
   its in-cluster Service, `down`
-  if ANY arm is silent — a silently-dead Alloy→Loki pipeline (docker-proxy break,
+  if ANY arm is silent — a silently dead Alloy→Loki pipeline (docker-proxy break,
   positions-file corruption, relabel regression) that Loki's `/ready` Kuma probe stays green
   through. **Arm 1 — file-tail union** `sum(count_over_time({job=~"authlog|syslog"}[3h]))`:
   (`check.py`'s in-code default also lists `traefik`, but `LOKI_STREAM` in
@@ -937,7 +957,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   named here, so traefik's freshness is NOT covered by this arm.)
   counts the file-tailed streams — not one, so if Alloy dies they ALL fall silent together
   while syslog's routine volume keeps a quiet night alive (no single low-volume file trips it) —
-  over a TOLERANT window. It deliberately EXCLUDES the docker_sd stream: Alloy stamps that
+  over a TOLERANT window. It deliberately EXCLUDES the `docker_sd` stream: Alloy stamps that
   stream `job: docker` (so a bare `{job=~".+"}` would swallow it), and it dwarfs the file-tail
   streams (~all 44 containers' stdout), so including it let a healthy container stream mask a
   total file-tail outage — arm 1 could then only reach zero if Alloy was *totally* dead, which
@@ -945,7 +965,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   window is wider than arm 2's because file-tail volume is low and dips overnight (a lone
   `{job="syslog"}` over 10m false-paged 2026-06-23 — a 15m35s idle gap was observed). **Arm 2 —
   docker stream** `sum(count_over_time({container=~".+"}[30m]))` (`LOKI_DOCKER_STREAM`): the
-  docker_sd stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
+  `docker_sd` stream carries a `container` label, no `job`, so it's exactly the one arm 1 excludes;
   a docker_sd-specific break (docker-proxy down, the docker relabel regressing) silences every
   container log while the file-tail streams keep flowing, and a tight window catches a total
   Alloy death fast. **Arm 3 — daniel-pi** `sum(count_over_time({job="pi"}[3h]))`
@@ -987,7 +1007,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   Pure `shipper_dropped()` is unit-tested; `SHIPPER_DROPPED_WINDOW`/`SHIPPER_DROPPED_MAX` tune
   both arms, `SHIPPER_DROPPED_METRICS`/`SHIPPER_DROPPED_SERVER_METRIC` tune which counters
   they read — both queried by `__name__` regex, not a bare metric name, so a counter rename
-  on either side can't silently read as "0 dropped forever".
+  on either side can't silently read as "0 dropped forever."
   **Reading a `too_far_behind` page:** a shipper's FIRST start re-tails every current file
   from offset 0, and Loki rejects the already-ingested history as "too far behind" — 193,348
   at the 2026-09-02 cluster Alloy cutover, nothing lost, counted client-side under
@@ -1021,17 +1041,17 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   a second time for one cause. That gate is what separates this from the plain count of
   push failures `uptime-kuma/CLAUDE.md` measured and rejected. A swallowed `up` is not
   counted: its tile goes red at the deadline for a cron that ran, which is the library's
-  retry's case (#1010), not a hidden finding. The one push counted whatever its status and
+  case for the library's retry (#1010), not a hidden finding. The one push counted whatever its status and
   company is one Kuma REJECTED — `by=kuma` in the http/rc pair, which the library appends
   when the 404 came back as Kuma's own `application/json` rather than Traefik's `text/plain`
   page (#1803). That is a token no live monitor holds: the edge and Kuma are both up so no
   other tile pages, and there is no tile to reach a deadline, so the verdicts are lost for
   as long as the cron and the static monitors carry different tokens. (The 2026-09-06 3.2h
   burst of 602 `http=404` lines that #1803 read as this was the other kind — Traefik
-  rejecting every router over a missing crowdsec middleware, #1322 — which Traefik 404
+  rejecting every router over a missing CrowdSec middleware, #1322 — which Traefik 404
   Flood owns.) In `LOKI_DEPENDENT`. A fetch that hits the 5000-line cap says so in the
   message rather than deciding on the newest part. **Two pushers used to bypass the reader**
-  (#1943, fixed 2026-09-18): the crowdsec home-allowlist cron keeps its own curl but now logs
+  (#1943, fixed 2026-09-18): the CrowdSec home-allowlist cron keeps its own curl but now logs
   the library's line shape, and pi-peer-backup's CronJob — a pod with no `logger` — echoes
   its `status=` and `push failed (` lines in the syslog prefix shape to stdout, where a
   second, narrow selector (`SWALLOWED_VERDICTS_POD_LOGQL`, `{container="pi-peer-backup"}`) reads them
@@ -1052,10 +1072,10 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   An HTTP reason is reduced to its status before it reaches the tile, because the axios
   message can carry the request URL and Discord's is the webhook secret. Raising Kuma's
   log level is neither needed nor safe (uptime-kuma/CLAUDE.md, the debug-logging trap).
-  **A 400 here was an oversized push msg until #2013 (2026-09-18):** Kuma puts a push
-  monitor's msg into a Discord embed field capped at 1024 chars and never truncates, so a
+  **A 400 here was an oversized push `msg` until #2013 (2026-09-18):** Kuma puts a push
+  monitor's `msg` into a Discord embed field capped at 1024 chars and never truncates, so a
   fleet-wide list from release-staleness-check was rejected whole. `bridge.net.push` and
-  `kuma-push-lib.sh` now cap the msg at 900 chars (`PUSH_MSG_MAX`, keeping a trailing
+  `kuma-push-lib.sh` now cap the `msg` at 900 chars (`PUSH_MSG_MAX`, keeping a trailing
   `(N cycles)`), and that producer pushes names only. The
   window is the whole hysteresis:
   a drop pages for 3h and clears on its own, since nothing is cleared by hand. Its tile
@@ -1065,7 +1085,7 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
 - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
   `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
   `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
-  the `gitops_deploy_discord_webhook`, which delivers the gitops-deploy rollback alert AND every
+  the `gitops_deploy_discord_webhook`, which delivers the `gitops-deploy` rollback alert AND every
   `renovate_notify` digest (its Renovate Notifier — Alive marker greens even when the POST fails —
   no Kuma backstop), and `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr POST their own
   onHealthIssue alerts to via in-app Discord Connect (config lives in the app DBs, not templated —
@@ -1081,15 +1101,15 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
   stays GREEN in the Kuma UI; this is the alert chain's delivery hop that NO other monitor — not
   even the off-box UptimeRobot host dead-man — exercises. A webhook GET returns Discord's metadata (200) when valid
   and 404 once gone, and never posts a message (no channel spam) — unlike a test POST. **It also
-  probes the alert-EMAIL 2nd channel** (`email_backstop`): the Gmail SMTP notification attached
+  probes the alert-EMAIL second channel** (`email_backstop`): the Gmail SMTP notification attached
   (only) to THIS monitor as the escape hatch when the Discord webhook is dead — a throttled SMTP
-  login with the same creds Kuma uses (`SMTP_USER`/`SMTP_PASSWORD`), so a silently-revoked
+  login with the same creds Kuma uses (`SMTP_USER`/`SMTP_PASSWORD`), so a silently revoked
   app-password flips this monitor down and still pages via the working Discord channel. Throttled to
-  `EMAIL_PROBE_INTERVAL_S` (6h — Gmail flags frequent AUTHs): a success is cached, a failure
+  `EMAIL_PROBE_INTERVAL_S` (6h — Gmail flags frequent `AUTH` commands): a success is cached, a failure
   re-probes every cycle. Empty `SMTP_PASSWORD` = that probe disabled. Both webhooks + SMTP reach the
   PUBLIC internet, so `DISCORD_CONSECUTIVE` (2) adds the same streak
   hysteresis as the HA heartbeat: a single transient non-200/network blip pushes `up` with a
-  "down streak n/N" msg and only the 2nd straight failure pages. Empty `DISCORD_WEBHOOK_URL` =
+  "down streak n/N" `msg` and only the second straight failure pages. Empty `DISCORD_WEBHOOK_URL` =
   disabled (stays up), like `N8N_API_KEY`. Pure `discord_webhook_ok()`, `email_backstop()`'s
   throttle + the streak wrapper are unit-tested. NOTE: it verifies the webhook is DELIVERABLE
   (catches a rotated/revoked URL); it does NOT assert Kuma still has the notification *attached* to
@@ -1099,9 +1119,9 @@ gates (prometheus, loki_reachable, b2_reachable, cluster_prometheus) and pushes
 
 The bullets above that read RETIRED or *moved out* are kept in place so the monitor's
 history stays readable beside its successor. The direct pushers that replaced them: the
-`pi-peer-backup` k8s CronJob (WG Pi Peer Backup), the crowdsec role's allowlist cron
+`pi-peer-backup` k8s CronJob (WG Pi Peer Backup), the `crowdsec` role's allowlist cron
 (CrowdSec Home Allowlist), `crowdsec-appsec-verify.sh.j2` (CrowdSec AppSec), the
-`fake_remux` setup role's `state_push.py` (Fake Remux Scan / Replace), renovate-notify's
+`fake_remux` setup role's `state_push.py` (Fake Remux Scan / Replace), `renovate-notify`'s
 `ExecStartPost` (Renovate Notifier — Alive), and the configarr and janitorr roles' health
 crons (Configarr Sync, Janitorr Errors). Disk Autoprune retired with the Docker daemon and has
 no successor.
@@ -1139,9 +1159,9 @@ no successor.
   descriptive message — see the next bullet.
 - **All push monitors set `max_retries=0`** (2026-06-12): with retries, Kuma parks a pushed
   `down` in PENDING and the 60s watchdog — which only `up` pushes satisfy — crosses
-  maxretries first, so every visible DOWN event read "No heartbeat in the time window"
-  instead of the check's named-offender msg. Zero retries means the bridge's own push flips
-  the state and the descriptive msg lands in the event + Discord notification. Trade-off:
+  `maxretries` first, so every visible DOWN event read "No heartbeat in the time window"
+  instead of the check's named-offender `msg`. Zero retries means the bridge's own push flips
+  the state and the descriptive `msg` lands in the event + Discord notification. Trade-off:
   a dead bridge pages after one missed heartbeat window (acceptable — that's the dead-man's
   switch doing its job).
   **This is why post-boot flapping is fixed by widening the window, never by adding retries.**
@@ -1152,7 +1172,7 @@ no successor.
 - **Startup/redeploy grace for the reach-out checks (`STARTUP_GRACE`, 2026-07-12):** the
   checks that poll a live app dependency with **no reachability gate and no per-check hysteresis**
   — **n8n Prod Workflows** (n8n), **Bazarr Health** (bazarr), **Prowlarr Indexers** (prowlarr)
-  and **SMART Data / Health** (scrutiny) (both added 2026-07-14) — get a consecutive-down
+  and **SMART Data / Health** (Scrutiny) (both added 2026-07-14) — get a consecutive-down
   grace applied in
   `run_once` (peer mechanism to `PROM_DEPENDENT`/`LOKI_DEPENDENT`, but a *hysteresis* not a
   *suppression*). Cause: the bridge's first cycle after the **weekly Sunday 07:30 host reboot**
@@ -1163,8 +1183,8 @@ no successor.
   because uptime-kuma wasn't ready yet). `apply_startup_grace()` holds each `up` for the first
   `GRACE_CYCLES`-1 (default 2−1 = 1) consecutive down cycles — the same "down streak n/N" idiom as
   `check_ha_heartbeat`'s `HA_CONSECUTIVE` — so only the `GRACE_CYCLES`'th straight down pages a
-  genuinely-dead dependency (~one extra INTERVAL later), and one `ok` resets the streak. The set is
-  **disjoint from every run_once skip set** (so a graced check reaches the eval path each cycle and
+  genuinely dead dependency (~one extra INTERVAL later), and one `ok` resets the streak. The set is
+  **disjoint from every `run_once` skip set** (so a graced check reaches the evaluation path each cycle and
   its streak advances) — both invariants guarded by a test against `CHECKS`. `GRACE_CYCLES` is
   env-tunable. Pure `bridge.streaks.apply_startup_grace()` is unit-tested.
 - **Liveness probe (2026-06-10, k8s since the migration):** cli.py touches `/tmp/heartbeat`
@@ -1233,8 +1253,62 @@ no successor.
   host-coverage floor:
   `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`, and the thermal check's own pair
   `HWMON_TEMP_ORIGINS_MIN`/`HWMON_TEMP_ORIGINS_CONSECUTIVE`). A failed
-  query/unreachable source makes that monitor `down` with an explanatory msg — a broken
+  query/unreachable source makes that monitor `down` with an explanatory `msg` — a broken
   exporter is surfaced, not silently green.
+
+## Operator prerequisites, as first written
+
+The role file keeps the short form; this is the original, with the Docker-era `media`
+network note that no longer applies to the k8s pod.
+
+1. Add a push token to `secrets.yml` (`sops ansible/vars/secrets.yml`) for every `KUMA_PUSH_*`
+   entry in `templates/env-secret.yaml.j2` — `test_every_push_token_env_is_wired_to_a_monitor`
+   asserts that template's keys match the AutoKuma monitors, so the template is the list. (It
+   does not read this file; the token names quoted above are prose and have drifted before.)
+   **They must
+   be exactly 32 alphanumeric chars** (Kuma rejects others; for example `openssl rand -hex 16`);
+   AutoKuma silently refuses to create the monitor otherwise (`Invalid push_token`).
+2. For the n8n monitor: add `n8n_api_key` to `secrets.yml`. Mint it in the n8n UI
+   (**Settings → n8n API**), scoped to read **Workflow** + **Execution** permissions.
+3. For the Arr Queue Warnings monitor: `sonarr_api_key`/`radarr_api_key` already exist in
+   `secrets.yml` (configarr/janitorr/homepage reference them too — get the plaintext from
+   `sudo k3s kubectl -n homelab exec deploy/sonarr -- cat /config/config.xml` (likewise radarr)
+   if you need to re-derive them — both are k8s pods now, and neither cluster node has had
+   Docker since 2026-08-14, so the `docker exec` this line used to give has no target).
+   monitor-bridge joined the `media` network for this on
+   2026-07-02 (its `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml`);
+   if `media` is ever dropped from that entry, the check pages `down` every cycle
+   (unresolvable host) rather than failing silent.
+4. For the R2 Free Tier Headroom monitor: add `cloudflare_analytics_token` to `secrets.yml`. Mint
+   it at **Cloudflare dashboard → My Profile → API Tokens → Create Token → Custom token**, with
+   exactly one permission: **Account → Account Analytics → Read**, scoped to this account. It is
+   file-mounted (`CF_ANALYTICS_TOKEN_FILE=/etc/bridge-credentials/cf_analytics_token`) for the same
+   H2 reason as `ha_token`. tier `assisted` (rotate = revoke + reissue in the dashboard). The
+   check also reads the existing `r2_account_id` and `r2_bucket`. Run
+   `uv run python scripts/secrets_mgmt/secret_rotation.py sync` after adding both, or the prek registry hook
+   fails. Then smoke-test the query for real —
+   `sudo k3s kubectl -n homelab exec deploy/monitor-bridge -- python /app/cli.py --once` — the
+   unit tests mock the payload, so this is the first thing that proves Cloudflare accepts the
+   query and that the token is scoped correctly.
+
+   **Do NOT give this token write or R2 permissions.** A token that could revoke R2 access would
+   let the bridge hard-stop the bucket at the threshold, but that means parking a strictly more
+   privileged standing credential in the cluster to protect against sub-dollar overage, and its
+   firing would break the backup path it is guarding. Deliberate trade: this monitor pages, and a
+   human decides. If a hard stop is ever wanted, the manual procedure is **R2 → Manage R2 API
+   Tokens → revoke the key** — and the way back is re-minting it and updating `r2_access_key_id` /
+   `r2_secret_access_key`, so treat it as a break-glass step, not a routine one.
+
+   **One-time bucket setting, not codified here:** set an `AbortIncompleteMultipartUpload`
+   lifecycle rule (7 days) on the bucket —
+   `npx wrangler r2 bucket lifecycle add <bucket> --name abort-mpu --abort-multipart-days 7`, or
+   dashboard → R2 → the bucket → Settings → Object Lifecycle Rules. It needs the S3 API or
+   Wrangler, neither of which the stdlib-only bridge has, and hand-rolling a SigV4 signer that
+   could not be tested against the live bucket from here would be worse than a documented step.
+   The monitor's uploads arm is what notices if this is missing.
+5. Notifications attach **automatically** — the `kuma()` macro tags every monitor with
+   `notification_name_list=["{{ kuma_notification_id }}"]`, linking it to the AutoKuma-managed
+   Discord notification defined on the `uptime-kuma` container. No per-monitor UI clicking.
 
 ## The two configuration refactors
 
@@ -1263,7 +1337,7 @@ evidence.
 cluster where both nodes advertise the resource at capacity 4.
 
 A check designed to fail closed on an absent series cannot tell "the resource is
-deregistered" from "I asked the wrong question". Both return an empty vector. The 2026-08-20
+deregistered" from "I asked the wrong question." Both return an empty vector. The 2026-08-20
 extended-resource arm went DOWN every 5 minutes from 18:05 to 18:29 UTC with
 `extended resource(s) advertised by no node: devic.es/dri — the device plugin is Running but
 its resource is deregistered`, while `kubectl get nodes` showed `"devic.es/dri":"4"` on both
@@ -1282,7 +1356,7 @@ landed in PR #286 the same day PR #281 introduced it.
 `kubectl` selects pods with `-l app=home-assistant`, so a LogQL selector written from that habit
 reads naturally and matches nothing. Promtail's k8s stream carries
 `container` / `pod` / `job` / `machine` / `namespace` / `service_name` / `stream` / `filename` —
-no `app`. `LOKI_DOCKER_STREAM` already used `container=~".+"`; the ip_ban arm added 2026-08-23
+no `app`. `LOKI_DOCKER_STREAM` already used `container=~".+"`; the `ip_ban` arm added 2026-08-23
 did not follow it.
 
 `HA_BAN_SELECTOR` shipped as `{namespace="homelab",app="home-assistant"}`, matched no stream, and
@@ -1295,7 +1369,7 @@ a fail-open check goes green on one.**
 Unit tests could not catch it — they mock the payload, so they prove the verdict logic and
 nothing about the selector. What caught it was running the selector against live Loki over a
 window containing a KNOWN event, which is the only check that distinguishes "nothing happened"
-from "nothing matched". Do that before trusting any new log- or metric-backed arm; a green first
+from "nothing matched." Do that before trusting any new log- or metric-backed arm; a green first
 cycle is not evidence. `LOKI_STREAM_LABELS` +
 `test_loki_selectors_use_real_stream_labels` in `test_check_loki.py` now pin the vocabulary
 for all three Loki selectors.
@@ -1310,7 +1384,7 @@ offset rendered the container's local America/Chicago wall clock while looking l
 instant. Verified 2026-08-16: bracketed `07:26:57` paired with kubectl's `12:26:57Z`. Reading
 the brackets as UTC shifted a B2 cap-breach 5h early and pointed the investigation at the wrong
 window — a "03:09 breach" that was really 08:09 UTC, minutes after the 07:30 weekly reboot. The
-stamp was dropped rather than made offset-aware, because the runtime's is already there and two
+stamp was dropped rather than made offset-aware, because the runtime already supplies one and two
 stamps that disagree is the whole fault.
 
 **A log line archived before this change still carries the bracket, and it is still Central.**
