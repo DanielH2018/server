@@ -56,6 +56,13 @@ WAIT_S=540
 # runner. Nothing on a host ever sets it.
 UPTIME_SOURCE="${GITOPS_TICK_UPTIME_SOURCE:-/proc/uptime}"
 
+# How often `watch_run` asks systemd whether the run in flight has ended. A variable for the
+# same reason as UPTIME_SOURCE: the test drives this script against a stubbed systemctl whose
+# run ends within a second, and a fixed 5s poll made each of its wait-mode cases cost more
+# than the whole rest of its module (#2226). Nothing on a host ever sets it; 5s because a
+# healthy tick takes about five and `systemctl show` on every second would be noise.
+POLL_S="${GITOPS_TICK_POLL_S:-5}"
+
 # Emitted by the unit's ExecStopPost when `flock -E 75` fired. Must stay identical to the
 # phrase in roles/setup/gitops_deploy/templates/gitops-deploy.service.j2 — the exit code is
 # unreadable after a oneshot unit goes inactive, so this string is the whole signal.
@@ -171,7 +178,7 @@ watch_run() {
           "$(show ExecMainStartTimestampMonotonic)" != "$started_before" ]]; then
       break
     fi
-    sleep 5
+    sleep "$POLL_S"
   done
 }
 

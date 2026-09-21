@@ -13,7 +13,9 @@ read anywhere.
 Run: uv run pytest ansible/tests/repo/test_pytest_shards_partition_the_suite.py
 """
 
+import math
 import re
+from pathlib import PurePosixPath
 
 import pytest
 import pytest_shard
@@ -38,8 +40,23 @@ KNOWN_TEST_FILES = frozenset(
 
 # How stale the recorded weights may get before the balance is guesswork rather than measurement.
 # Unknown files are given the median weight, so exceeding this costs balance and never
-# correctness — re-record with `uv run python scripts/dev/pytest_shard.py --record`.
+# correctness — re-record with `uv run python scripts/dev/pytest_shard.py --record-missing`.
 MAX_UNWEIGHTED_FRACTION = 0.2
+
+# The count above cannot see the case that matters: cost is concentrated, so one unweighted
+# 30s module is one file to the count and 30s to the shard it lands in (#2225, the shards at
+# 65/99/99/68s against a 43s projection). Its weight is unknowable without running it, but its
+# NEIGHBOURS' weights are on record, and the modules that cost seconds cluster in the
+# directories whose tests drive a subprocess: the 2026-09-17 module landed beside a recorded
+# 27.75s sibling. So an unweighted file in a directory that already holds one of the heaviest
+# 1% of recorded modules fails on its own, however few such files there are. A share of the
+# table rather than a number of seconds, so the bar moves with the suite: the heaviest 1%
+# starts near 4s, where a decile started at 0.29s and named nearly every directory. A share by
+# COUNT rather than a value quantile, because a table whose 99th percentile ties at the
+# common value would call every directory a pole.
+POLE_SHARE = 0.01
+
+RECORD_MISSING = "uv run python scripts/dev/pytest_shard.py --record-missing"
 
 
 def partition_problems(placed: dict[str, int], files, shards: int) -> list[str]:
@@ -139,13 +156,83 @@ def test_an_empty_shard_is_flagged():
     )
 
 
+def pole_directories(weights: dict[str, float], share: float = POLE_SHARE) -> set[str]:
+    """The directories holding one of the heaviest `share` of recorded modules, at least one."""
+    heaviest = sorted(weights, key=lambda f: (-weights[f], f))
+    poles = heaviest[: math.ceil(share * len(heaviest))]
+    return {str(PurePosixPath(f).parent) for f in poles}
+
+
+def coverage_problems(files, weights: dict[str, float]) -> list[str]:
+    """What is wrong with how well the table covers `files`, as readable complaints.
+
+    Two arms. The count arm is the original ratchet: too many unweighted files and the split
+    is guesswork everywhere. The neighbour arm is the one that sees a single heavy module: an
+    unweighted file beside a recorded pole is assumed to cost what its neighbours cost until
+    it is measured. Weights for files outside the census are ignored, so a deleted module
+    does not keep its directory a pole.
+    """
+    problems = []
+    unweighted = [f for f in files if f not in weights]
+    if len(unweighted) > MAX_UNWEIGHTED_FRACTION * len(files):
+        problems.append(
+            f"{len(unweighted)} of {len(files)} test files have no recorded duration, so "
+            "the shard balance is guesswork"
+        )
+    recorded = {f: weights[f] for f in files if f in weights}
+    poles = pole_directories(recorded)
+    if beside := [f for f in unweighted if str(PurePosixPath(f).parent) in poles]:
+        problems.append(
+            f"unweighted beside a recorded pole, so packed as the lightest thing in the "
+            f"suite when its neighbours say otherwise: {beside}"
+        )
+    return problems
+
+
 def test_the_recorded_weights_still_cover_most_of_the_suite():
+    """The ratchet. Its node id is spelled in `pytest_shard.RATCHET_NODE_ID` and deselected by
+    the two crons that commit with hooks on, so it stays ONE test: a second one with the same
+    repair would fail those commits the way #1899 did."""
     files = pytest_shard.census()
-    unweighted = [f for f in files if f not in pytest_shard.load_weights()]
-    assert len(unweighted) <= MAX_UNWEIGHTED_FRACTION * len(files), (
-        f"{len(unweighted)} of {len(files)} test files have no recorded duration, so the shard "
-        "balance is guesswork. Re-record: uv run python scripts/dev/pytest_shard.py --record"
+    problems = coverage_problems(files, pytest_shard.load_weights())
+    assert problems == [], "\n".join([*problems, f"Repair (seconds): {RECORD_MISSING}"])
+
+
+def test_too_many_unweighted_files_are_flagged():
+    """Reject half of the count arm."""
+    files = pytest_shard.census()
+    weights = {f: 0.1 for f in files[: len(files) // 2]}
+    assert any("guesswork" in p for p in coverage_problems(files, weights))
+
+
+def test_a_light_unweighted_file_in_a_quiet_directory_is_clean():
+    """Accept half of the neighbour arm: a new file where nothing recorded is heavy."""
+    weights = {f"ansible/tests/repo/test_{i}.py": 0.1 for i in range(99)}
+    weights["scripts/deploy_tools/tests/test_pole.py"] = 27.75
+    files = [*weights, "ansible/tests/repo/test_new.py"]
+    assert coverage_problems(files, weights) == []
+
+
+def test_an_unweighted_file_beside_a_recorded_pole_is_flagged():
+    """Reject half, and the 2026-09-17 input itself: `test_gitops_tick_wrapper.py` landed
+    unrecorded beside `test_deploy_service_lock_concurrency.py` at 27.75s, and the count arm
+    read one file as one file."""
+    weights = {f"ansible/tests/repo/test_{i}.py": 0.1 for i in range(99)}
+    weights["scripts/deploy_tools/tests/test_deploy_service_lock_concurrency.py"] = (
+        27.75
     )
+    landed = "scripts/deploy_tools/tests/test_gitops_tick_wrapper.py"
+    problems = coverage_problems([*weights, landed], weights)
+    assert len(problems) == 1 and landed in problems[0], problems
+
+
+def test_a_deleted_pole_no_longer_marks_its_directory():
+    """A weight for a file the census no longer holds must not keep the neighbour arm armed."""
+    weights = {f"ansible/tests/repo/test_{i}.py": 0.1 for i in range(99)}
+    weights["scripts/deploy_tools/tests/test_deleted_pole.py"] = 27.75
+    files = [f for f in weights if "deleted" not in f]
+    files.append("scripts/deploy_tools/tests/test_new.py")
+    assert coverage_problems(files, weights) == []
 
 
 def _pytest_job() -> dict:

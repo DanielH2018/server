@@ -32,9 +32,16 @@ from _process_waits import wait_for_exit
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
-# Long enough that the fixed costs (two git worktree adds, two bash startups) stay well under
-# it, short enough that three cases cost under half a minute.
-_SLEEP_S = 4
+# The playbook stub's sleep. The FLAGGED halves below discriminate only while the fixed cost
+# of a pair of runs (two git worktree adds, two bash startups) stays under one sleep: two
+# runs that overlap take one sleep plus that cost, two that serialize take two sleeps plus it,
+# and once the cost reaches a sleep the two are indistinguishable and a wrapper that took no
+# lock at all would pass `..._serialize`. `test_the_fixed_cost_stays_under_half_a_sleep`
+# measures the cost on the machine running the suite and fails before the halves can go
+# vacuous. 2s, down from 4 (#2226): the cost measured 0.1s here and the runner is ~4x slower
+# per test, so 2s keeps a 2x margin over the guard's own bound and halves a module that was
+# the second pole of the sharded suite.
+_SLEEP_S = 2
 
 _UV_STUB = """#!/bin/bash
 case "$*" in
@@ -58,18 +65,22 @@ esac
 """.replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
 
-def _harness(tmp_path: Path, uv_stub: str = _UV_STUB) -> tuple[Path, dict[str, str]]:
+def _harness(
+    tmp_path: Path, uv_stub: str = _UV_STUB, sleep_s: float = _SLEEP_S
+) -> tuple[Path, dict[str, str]]:
     bin_dir = tmp_path / "bin"
     bin_dir.mkdir()
     (bin_dir / "uv").write_text(uv_stub)
     (bin_dir / "uv").chmod(0o755)
     repo = make_snapshot_repo(tmp_path / "repo")
-    return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(_SLEEP_S))
+    return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(sleep_s))
 
 
-def _run_both(tmp_path: Path, first: list[str], second: list[str]) -> float:
+def _run_both(
+    tmp_path: Path, first: list[str], second: list[str], sleep_s: float = _SLEEP_S
+) -> float:
     """Start two deploy.sh runs at once; seconds until both have finished."""
-    repo, env = _harness(tmp_path)
+    repo, env = _harness(tmp_path, sleep_s=sleep_s)
     base = [str(_DEPLOY_SH), "--skip-tag-check", "--skip-staleness-check"]
     started = time.monotonic()
     procs = [
@@ -87,6 +98,23 @@ def _run_both(tmp_path: Path, first: list[str], second: list[str]) -> float:
         out, err = proc.communicate(timeout=300)
         assert proc.returncode == 0, f"{out}\n{err}"
     return time.monotonic() - started
+
+
+def test_the_fixed_cost_stays_under_half_a_sleep(tmp_path):
+    """Non-vacuity for the three wall-clock cases below, measured rather than assumed.
+
+    With the stub's sleep at 0 the elapsed time of a pair is the fixed cost alone. Under half
+    a sleep, the overlap case has a full sleep of headroom under its bound and the serialize
+    cases cannot be satisfied by two runs that merely overlapped. A machine slow enough to
+    fail this is one where the cases below would pass for the wrong reason, and this message
+    is the one that says so.
+    """
+    cost = _run_both(tmp_path, ["--tags", "alpha"], ["--tags", "beta"], sleep_s=0)
+    assert cost < _SLEEP_S / 2, (
+        f"two zero-sleep deploys took {cost:.1f}s of fixed cost, at least half of the "
+        f"{_SLEEP_S}s stub sleep, so the overlap and serialize cases below no longer "
+        "discriminate -- raise _SLEEP_S"
+    )
 
 
 def test_two_deploys_of_different_services_overlap(tmp_path):

@@ -36,12 +36,24 @@ _IN_FLIGHT_S = 300
 _UPTIME_FIXTURE = f"{_UPTIME_S}.00 98765.43\n"
 _MONOTONIC_US = (_UPTIME_S - _IN_FLIGHT_S) * 1_000_000
 
+# The wrapper polls the stub every 5s by default, and every wait-mode case below watches at
+# least one activation end -- at 5s a poll the module took 30s and was the pole of the whole
+# sharded suite (#2226). The stub answers in milliseconds, so the poll can too.
+_POLL_S = "0.2"
+
 # `show <property>` expands to `systemctl show <unit> -p <property> --value`, so the property
 # is $4 here. ActiveState answers `activating` once and then `inactive`, which is a tick that
 # finished while this script was watching it. A joined run that ends cleanly is followed by a
 # FRESH run (issue #1879), so once `start` has been asked the stub runs a second activation
-# under a NEW monotonic stamp -- what the watch loop needs to see that run finish. `sleep 2`
-# on the first `inactive` is the joined run taking a moment to end.
+# under a NEW monotonic stamp -- what the watch loop needs to see that run finish.
+#
+# The joined run takes ONE WHOLE SECOND to end, once, on its first `inactive`. The wrapper
+# books its wait as `$((SECONDS - wait_started))`, whole seconds, and the join test asserts
+# the booked figure is at least 1 -- 0 is also what the parser's fallback yields, so a wait
+# under a second would pass while checking none of the booking. `sleep 1` cannot return
+# early, so the two integer reads always straddle a second boundary. Once, not on every
+# poll: the wrapper reads ActiveState again after the watch to decide on a fresh run, and a
+# pause there is a second the assertions never see.
 _NEW_MONOTONIC_US = _MONOTONIC_US + 60 * 1_000_000
 
 _SYSTEMCTL = f"""#!/bin/bash
@@ -55,7 +67,7 @@ case "$1" in
           if [[ -e "$TICK_STUB_STATE.fresh" ]]; then echo inactive
           else : >"$TICK_STUB_STATE.fresh"; echo activating; fi
         elif [[ -e "$TICK_STUB_STATE" ]]; then
-          sleep 2
+          [[ -e "$TICK_STUB_STATE.ended" ]] || {{ : >"$TICK_STUB_STATE.ended"; sleep 1; }}
           echo inactive
         else : >"$TICK_STUB_STATE"; echo activating; fi
         ;;
@@ -77,16 +89,23 @@ exit 0
 """
 
 
+def _tick_env(tmp_path: Path, systemctl: str, journalctl: str) -> dict[str, str]:
+    """PATH with the two stubs first, the fixed uptime, the fast poll, and the marker paths."""
+    env = _stub_path(tmp_path, {"systemctl": systemctl, "journalctl": journalctl})
+    env["TICK_STUB_STARTED"] = str(tmp_path / "started")
+    env["TICK_STUB_STATE"] = str(tmp_path / "seen-activating")
+    uptime = tmp_path / "uptime"
+    uptime.write_text(_UPTIME_FIXTURE)
+    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
+    env["GITOPS_TICK_POLL_S"] = _POLL_S
+    return env
+
+
 def test_joining_a_tick_in_flight_reports_how_long_it_ran_and_how_long_we_waited(
     tmp_path,
 ):
     """FLAGGED half: the join exits 0, so nothing else in the landing can see the wait."""
-    env = _stub_path(tmp_path, {"systemctl": _SYSTEMCTL, "journalctl": _JOURNALCTL})
-    env["TICK_STUB_STATE"] = str(tmp_path / "seen-activating")
-    env["TICK_STUB_STARTED"] = str(tmp_path / "started")
-    uptime = tmp_path / "uptime"
-    uptime.write_text(_UPTIME_FIXTURE)
-    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
+    env = _tick_env(tmp_path, _SYSTEMCTL, _JOURNALCTL)
     result = subprocess.run(
         [str(_TICK_SH)],
         cwd=_REPO,
@@ -134,12 +153,8 @@ _SYSTEMCTL_IDLE = _SYSTEMCTL_IN_FLIGHT.replace("echo activating", "echo inactive
 
 def _kick(tmp_path: Path, systemctl: str) -> tuple[subprocess.CompletedProcess, bool]:
     """`gitops_tick.sh --no-wait` against a stub; (result, whether `start` was asked)."""
-    env = _stub_path(tmp_path, {"systemctl": systemctl, "journalctl": _JOURNALCTL})
-    started = tmp_path / "started"
-    env["TICK_STUB_STARTED"] = str(started)
-    uptime = tmp_path / "uptime"
-    uptime.write_text(_UPTIME_FIXTURE)
-    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
+    env = _tick_env(tmp_path, systemctl, _JOURNALCTL)
+    started = Path(env["TICK_STUB_STARTED"])
     result = subprocess.run(
         [str(_TICK_SH), "--no-wait"],
         cwd=_REPO,
@@ -188,15 +203,10 @@ def _wait_on_joined(
     status: str = "0",
 ) -> tuple[subprocess.CompletedProcess, int]:
     """`gitops_tick.sh` (wait mode) against a run already in flight; (result, starts asked)."""
-    env = _stub_path(tmp_path, {"systemctl": _SYSTEMCTL, "journalctl": journalctl})
-    started = tmp_path / "started"
-    env["TICK_STUB_STARTED"] = str(started)
-    env["TICK_STUB_STATE"] = str(tmp_path / "seen-activating")
+    env = _tick_env(tmp_path, _SYSTEMCTL, journalctl)
+    started = Path(env["TICK_STUB_STARTED"])
     env["TICK_STUB_RESULT"] = result
     env["TICK_STUB_STATUS"] = status
-    uptime = tmp_path / "uptime"
-    uptime.write_text(_UPTIME_FIXTURE)
-    env["GITOPS_TICK_UPTIME_SOURCE"] = str(uptime)
     proc = subprocess.run(
         [str(_TICK_SH), "--wait", "60"],
         cwd=_REPO,

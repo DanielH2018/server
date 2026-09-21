@@ -24,11 +24,20 @@ in exactly one shard, so a stale table makes CI slower, never wrong.
 `test_pytest_shards_partition_the_suite.py` fails when the recorded table has drifted far
 enough that the balance is guesswork.
 
+THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
+The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
+suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
+module landed that way on 2026-09-17 and skewed the four CI shards to 65/99/99/68s against
+a 43s projection for every one (#2225). `--record-missing` measures only the unweighted files
+-- seconds, not the four-minute full run -- so the ratchet can afford to demand it as soon
+as an unweighted file appears beside a recorded pole.
+
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
+    uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
 """
 
 import argparse
@@ -144,8 +153,8 @@ def shard_files(shard: int, shards: int, files=None, weights=None) -> list[str]:
     return sorted(f for f, i in placed.items() if i == shard - 1)
 
 
-def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
-    """Re-measure per-file seconds from a serial run and write them out.
+def measure_weights(files: list[str] | None = None) -> dict[str, float]:
+    """Per-file seconds from one serial pytest run over `files` (the whole suite when None).
 
     `-n0` so the durations are not distorted by worker contention, and `-vv` so pytest prints
     every duration rather than hiding the ones under 5ms — a file whose tests are all fast
@@ -156,6 +165,11 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     below treats any failure as "not a baseline" — so the suite could never go green and
     `--record` could never write. Measured 2026-09-11: 126 of 629 files unweighted, the
     ratchet red, and two consecutive `--record` runs wrote nothing.
+
+    A file whose every test addopts deselects (`-m 'not ui'`, which CI runs under too) has no
+    durations line and is absent from the result; the callers record it at 0.0, since in the
+    run the shards are balanced for it costs its import and nothing else. A subset made only
+    of such files collects nothing, which pytest reports as exit 5 and is not a failure here.
     """
     proc = subprocess.run(
         [
@@ -169,12 +183,14 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
             "no:cacheprovider",
             "--deselect",
             RATCHET_NODE_ID,
+            *(files or []),
         ],
         cwd=REPO,
         capture_output=True,
         text=True,
     )
-    if proc.returncode != 0:
+    nothing_collected = bool(files) and proc.returncode == 5
+    if proc.returncode != 0 and not nothing_collected:
         raise SystemExit(
             f"the suite did not pass, so its durations are not a baseline:\n{proc.stdout[-4000:]}"
         )
@@ -185,13 +201,41 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
             totals[match.group(3)] = totals.get(match.group(3), 0.0) + float(
                 match.group(1)
             )
-    if not totals:
+    if not totals and not nothing_collected:
         raise SystemExit(
             "parsed no durations out of the run — has the report format changed?"
         )
-    rounded = {k: round(v, 3) for k, v in sorted(totals.items())}
-    path.write_text(json.dumps(rounded, indent=1, sort_keys=True) + "\n")
-    return rounded
+    return {k: round(v, 3) for k, v in totals.items()}
+
+
+def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
+    ordered = dict(sorted(weights.items()))
+    path.write_text(json.dumps(ordered, indent=1, sort_keys=True) + "\n")
+    return ordered
+
+
+def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
+    """Re-measure every file's seconds from a serial run of the whole suite and write them out."""
+    measured = measure_weights()
+    return _write_weights({f: measured.get(f, 0.0) for f in census()}, path)
+
+
+def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
+    """Measure only the census files the table lacks, and write the merged table.
+
+    Seconds rather than the full run's minutes, which is what lets the coverage ratchet
+    demand a record as soon as one unweighted file could matter. A recorded path no longer in
+    the census is dropped on the way through, so the table does not keep a directory looking
+    heavy on the strength of a module that was deleted.
+    """
+    files = census()
+    known = load_weights(path)
+    kept = {f: known[f] for f in files if f in known}
+    missing = [f for f in files if f not in known]
+    if missing:
+        measured = measure_weights(missing)
+        kept |= {f: measured.get(f, 0.0) for f in missing}
+    return _write_weights(kept, path)
 
 
 def _summary(shards: int) -> str:
@@ -222,11 +266,25 @@ def main(argv=None) -> int:
     parser.add_argument(
         "--record", action="store_true", help="re-measure and rewrite the weights"
     )
+    parser.add_argument(
+        "--record-missing",
+        action="store_true",
+        help="measure only the test files with no recorded weight and merge them in",
+    )
     args = parser.parse_args(argv)
 
     if args.record:
         written = record_weights()
         print(f"recorded {len(written)} file weights to {WEIGHTS_PATH}")
+        return 0
+    if args.record_missing:
+        known = load_weights()
+        missing = [f for f in census() if f not in known]
+        written = record_missing_weights()
+        print(
+            f"recorded {len(missing)} unweighted file(s); {len(written)} in the table at "
+            f"{WEIGHTS_PATH}"
+        )
         return 0
     if args.summary:
         print(_summary(args.of))
