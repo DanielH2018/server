@@ -73,7 +73,8 @@ fix, tagged **[GAP] / [IMPROVEMENT] / [ADDITION]**. Note verified-clean areas br
 - Make **no** changes — read-only investigation only. Recommend; don't edit or deploy.
 - Honor accepted designs (don't re-flag). Before you flag anything, read the `## container`
   section of `.claude/skills/homelab-review/accepted-designs.md` and the `### container` table
-  under *Settled findings* in `docs/reference/backlog.md`; both are generated or shared, so
-  this file carries no list of its own. **Also honor any "don't re-flag" items provided in
+  under *Settled findings* in `docs/reference/backlog.md`
+  (grep for the heading rather than reading the whole page); both are generated or
+  shared, so this file carries no list of its own. **Also honor any "don't re-flag" items provided in
   your dispatch context.**
 - End with a one-line verdict: the single highest-value gap to close.

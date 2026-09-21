@@ -80,7 +80,8 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
      daemon, which was uninstalled that day; the template survives only under
      `roles/containers/archive/`, `autofix_disk_threshold_pct`/`autofix_disk_dry_run` are set
      nowhere, and monitor-bridge dropped the matching `disk_prune` check with it
-     (the gate loop in `ansible/roles/k8s/monitor-bridge/files/check.py`). **Nothing prunes disk on the cluster nodes now**
+     (the gate loop in `ansible/roles/k8s/monitor-bridge/files/check.py`). **Nothing prunes
+     disk on the cluster nodes now**
      — containerd's own image GC is the only reclaim, and monitor-bridge's Root Disk threshold
      pager (`DISK_MAX_PCT=90`) is the only signal. That is alerting without remediation, which
      is a deliberate state, not an oversight: revisit if `/` pressure ever becomes routine.

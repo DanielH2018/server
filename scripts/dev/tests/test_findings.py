@@ -14,7 +14,7 @@ import re
 import pytest
 from _findings_fakes import Fakes
 from dev import findings
-from dev.findings_lib.gh_calls import run
+from dev.findings_lib.gh_calls import ISSUE_LIST_CAP, load_issues, run
 from dev.findings_lib.issue_model import (
     cited_paths,
     LABELS,
@@ -464,3 +464,22 @@ def test_cited_paths_ignores_the_trailer_findings_py_writes():
     body = "fix `scripts/dev/fanout_place.py`" + trailer("c0a05de5f0e9", "session")
     assert cited_paths(body) == ["scripts/dev/fanout_place.py"]
     assert cited_paths("nothing" + trailer("c0a05de5f0e9", "review")) == []
+
+
+# --- the list cap ---------------------------------------------------------------------------
+
+
+def test_load_issues_warns_when_gh_returns_exactly_its_list_cap(
+    issue, make_tools, capsys
+):
+    """gh truncates silently at --limit; the settled register reads every state, so a cut
+    there drops refuted findings from the table a reviewer reads before flagging."""
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP)]))
+    assert len(load_issues("all", tools)) == ISSUE_LIST_CAP
+    assert "list cap" in capsys.readouterr().err
+
+
+def test_load_issues_is_silent_below_the_list_cap(issue, make_tools, capsys):
+    tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP - 1)]))
+    load_issues("all", tools)
+    assert capsys.readouterr().err == ""

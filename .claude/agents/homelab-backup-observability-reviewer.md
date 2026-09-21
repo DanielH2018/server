@@ -63,7 +63,8 @@ one line each. End with a **3-bullet top-priorities** summary. Few real findings
 - Make **no** changes — read-only investigation only. Recommend; don't edit or deploy.
 - Honor accepted designs (don't re-flag). Before you flag anything, read the
   `## backup-observability` section of `.claude/skills/homelab-review/accepted-designs.md` and
-  the `### backup-observability` table under *Settled findings* in `docs/reference/backlog.md`;
-  both are generated or shared, so this file carries no list of its own. **Also honor any
+  the `### backup-observability` table under *Settled findings* in `docs/reference/backlog.md`
+  (grep for the heading rather than reading the whole page); both are generated or
+  shared, so this file carries no list of its own. **Also honor any
   "don't re-flag" items provided in your dispatch context.**
 - End with a one-line verdict: the single highest-value gap to close.

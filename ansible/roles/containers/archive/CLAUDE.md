@@ -10,8 +10,9 @@ reactivation. See the repo-root `CLAUDE.md` for shared conventions.
 - **That invariant is not enforced by anything, and it has silently broken once.** From
   `7e6f4453` (2026-08-06) to 2026-08-14, `glances` sat here while `daniel-pi.yml` still
   listed it: the commit retired glances on *daniel-server* and archived the role, but the
-  role is shared and the Pi's copy stayed deployed. The `Run roles` task in `ansible/deploy.yml` resolves roles by
-  **bare name** against `roles_path` in `ansible.cfg`, which does not recurse into
+  role is shared and the Pi's copy stayed deployed. The `Run roles` task in
+  `ansible/deploy.yml` resolves roles by **bare name** against `roles_path` in
+  `ansible.cfg`, which does not recurse into
   `archive/` — so an untagged `-e target=daniel-pi` run would have failed "role not found".
   Tagged deploys narrow `containers_list` and skipped it, which is why it went unnoticed.
   **Before archiving a role, grep every host's `containers_list` for its name**, not just

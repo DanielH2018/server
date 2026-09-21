@@ -57,9 +57,15 @@ def test_every_section_in_the_shared_file_is_a_findings_domain():
 
 
 def test_no_agent_carries_an_inline_reflag_list():
-    offenders = [
-        p.name for p in sorted(AGENTS.glob("*.md")) if INLINE_LIST.search(p.read_text())
-    ]
+    agents = {p.name: p.read_text() for p in AGENTS.glob("*.md")}
+    # Non-vacuity: a glob over a moved directory matches nothing, and an empty offender list
+    # then passes on nothing. The pointed agents are the census this check must find.
+    assert set(POINTED_AGENTS) <= set(agents), (
+        f"agents missing: {set(POINTED_AGENTS) - set(agents)}"
+    )
+    offenders = sorted(
+        name for name, text in agents.items() if INLINE_LIST.search(text)
+    )
     assert not offenders, (
         f"{offenders} carry an inline don't-re-flag list; the list lives once in "
         f"{SHARED.relative_to(REPO)} and the register in {REGISTER}"
