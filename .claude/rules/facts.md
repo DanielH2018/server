@@ -35,10 +35,10 @@ probe.py kuma-drift
 A test node must carry `# fact: <doc>#<heading>` in its body, or the lint warns that the
 support points one way. The examples are fenced because the lint reads every `CLAUDE.md`:
 unfenced, each one would be support for this section rather than an illustration of the
-form. The fence hides them from this lint only. The test node in the example is a real
-one, because `ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists`
-reads fenced text too: a `pytest` command in a runbook's fence is a claim about the tree,
-so that guard cannot skip fences the way this lint does.
+form. The fence hides them from this lint only:
+`ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` reads
+every line of every doc, fenced or not, so the test node in the example names a real test,
+and renaming that test fails the guard here.
 
 A `file:line` citation is rejected: a line number moves under every edit above it. Cite the
 symbol or the marker instead.
