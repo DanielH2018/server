@@ -137,7 +137,7 @@ jobs:
           restore-keys: prek-${{ runner.os }}-
 
       - name: Install prek
-        run: pip install prek==0.5.2  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+        run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
       # is on PATH — unverified on ubuntu-latest before this ran once. This step exists so a
@@ -329,7 +329,7 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
 
       - name: Install prek
-        run: pip install prek==0.5.2  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
+        run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # $RUNNER_TEMP is per-job, so this recomputes the list rather than reading what the `hooks`
       # job wrote. Same merge-base diff and same deletions-force-a-full-sweep rule as there; the
