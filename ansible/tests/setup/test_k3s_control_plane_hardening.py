@@ -30,15 +30,11 @@ import re
 import jinja2
 from lib import yaml_fast
 from _helpers import ANSIBLE
-from _helpers import load_yaml
+from _helpers import load_yaml, load_defaults
 
 
 K3S = ANSIBLE / "roles" / "setup" / "k3s"
 ALL_VARS = ANSIBLE / "inventory" / "group_vars" / "all.yml"
-
-
-def _defaults() -> dict:
-    return load_yaml(K3S / "defaults" / "main.yml")
 
 
 def _all_vars() -> dict:
@@ -68,7 +64,7 @@ def _rendered_server_args(**overrides) -> str:
     variables deliberately live in group_vars — setup/k3s and loki-homelab both read them.
     Building it from role defaults alone raises on the first undefined instead.
     """
-    defaults = _defaults()
+    defaults = load_defaults(K3S)
     context = {
         "server_ip": "10.0.0.215",
         # A stand-in: `domain` is a SOPS value, so no test can read the real one. Only the
@@ -104,7 +100,7 @@ def _task_index(predicate) -> int:
 
 def _audit_policy() -> dict:
     """The policy template rendered with the values the role passes it."""
-    defaults = _defaults()
+    defaults = load_defaults(K3S)
     source = (K3S / "templates" / "audit-policy.yaml.j2").read_text()
     rendered = (
         _env()
@@ -344,7 +340,7 @@ def test_alloy_tails_the_audit_log():
 
 def test_audit_log_vars_are_visible_to_both_roles():
     """A role default cannot be read by another role's template."""
-    shared, role = _all_vars(), _defaults()
+    shared, role = _all_vars(), load_defaults(K3S)
     for name in ("k3s_audit_log_enabled", "k3s_audit_log_dir", "k3s_audit_log_path"):
         assert name in shared, (
             f"{name} must live in group_vars/all.yml. setup/k3s writes the log and "

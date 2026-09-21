@@ -26,11 +26,11 @@ Run: uv run pytest ansible/tests/deploy/test_gitops_deploy_ship_list.py
 
 import ast
 
-from lib import yaml_fast
-from _helpers import REPO
+from _helpers import REPO, load_tasks
 
 
 ROLE = REPO / "ansible" / "roles" / "setup" / "gitops_deploy"
+INSTALL = ROLE / "tasks" / "install.yml"
 FILES = ROLE / "files"
 TESTS = ROLE / "tests"
 ENTRYPOINT = "gitops_deploy.py"
@@ -39,12 +39,8 @@ COPY_TASK = "Install deployer Python files"
 STAMP_TASK = "Record the deployed gitops-deploy code"
 
 
-def _tasks():
-    return yaml_fast.safe_load((ROLE / "tasks" / "install.yml").read_text())
-
-
 def _task(name):
-    matches = [t for t in _tasks() if t.get("name") == name]
+    matches = [t for t in load_tasks(INSTALL) if t.get("name") == name]
     assert len(matches) == 1, (
         f"expected exactly one task named {name!r}, found {len(matches)}"
     )

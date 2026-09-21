@@ -31,7 +31,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import REPO
+from _helpers import REPO, load_tasks
 
 _REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -42,10 +42,6 @@ _DEPLOY_SH = _REPO / "scripts/deploy.sh"
 
 _REAL_DIR = "/etc/rancher/k3s/manifests"
 _GUARD = "not k8s_dry_run | bool"
-
-
-def _tasks(path: Path) -> list[dict]:
-    return yaml_fast.safe_load(path.read_text()) or []
 
 
 def _named(tasks: list[dict], fragment: str) -> dict:
@@ -71,7 +67,7 @@ def _when(task: dict) -> str:
 
 def test_render_and_apply_share_one_directory_fact() -> None:
     """Rendering and applying must never name the directory independently."""
-    tasks = _tasks(_MANIFESTS)
+    tasks = load_tasks(_MANIFESTS)
     for fragment in ("Render manifests", "Render secret manifests"):
         dest = str(_named(tasks, fragment)["ansible.builtin.template"]["dest"])
         assert "manifests_dest_dir" in dest, (
@@ -88,7 +84,7 @@ def test_no_task_hardcodes_the_real_staging_path() -> None:
     """The real path may appear only in the fact that chooses between the two."""
     offenders = [
         t.get("name")
-        for t in _tasks(_MANIFESTS)
+        for t in load_tasks(_MANIFESTS)
         if _REAL_DIR in str(t)
         and "manifests_dest_dir" not in str(t.get("ansible.builtin.set_fact", ""))
     ]
@@ -99,7 +95,7 @@ def test_no_task_hardcodes_the_real_staging_path() -> None:
 
 
 def test_dry_run_renders_to_a_tempdir_and_discards_it() -> None:
-    tasks = _tasks(_MANIFESTS)
+    tasks = load_tasks(_MANIFESTS)
     create = _named(tasks, "throwaway render directory")
     assert "ansible.builtin.tempfile" in create, (
         "the dry-run render dir is no longer a tempfile"
@@ -114,7 +110,7 @@ def test_dry_run_renders_to_a_tempdir_and_discards_it() -> None:
 
 
 def test_apply_is_server_dry_run_under_the_flag() -> None:
-    cmd = _cmd(_named(_tasks(_MANIFESTS), "Apply manifests"))
+    cmd = _cmd(_named(load_tasks(_MANIFESTS), "Apply manifests"))
     assert "--dry-run=server" in cmd, (
         "the apply lost --dry-run=server, so k8s_dry_run now runs a REAL deploy."
     )
@@ -129,7 +125,7 @@ def test_apply_is_server_dry_run_under_the_flag() -> None:
 
 def test_apply_reports_unchanged_under_the_flag() -> None:
     changed_when = str(
-        _named(_tasks(_MANIFESTS), "Apply manifests").get("changed_when", "")
+        _named(load_tasks(_MANIFESTS), "Apply manifests").get("changed_when", "")
     )
     assert "k8s_dry_run" in changed_when, (
         "changed_when no longer excludes dry-run. Dry-run stdout carries the same "
@@ -144,7 +140,7 @@ def test_mutating_downstream_tasks_are_guarded() -> None:
     Explicit, not inherited from the change conditions: a dry run renders into a fresh temp dir
     every time, so `manifests_render is changed` is always true.
     """
-    tasks = _tasks(_MANIFESTS)
+    tasks = load_tasks(_MANIFESTS)
     must_guard = [
         "Reconcile secret keys",
         "Roll the deployment after a config change",
@@ -161,7 +157,7 @@ def test_mutating_downstream_tasks_are_guarded() -> None:
 
 def test_prune_is_skipped_under_the_flag() -> None:
     """The prune loop reads manifests_staged, which is not registered under dry-run."""
-    tasks = _tasks(_MANIFESTS)
+    tasks = load_tasks(_MANIFESTS)
     for fragment in ("Find staged manifests", "Prune staged manifests"):
         assert _GUARD in _when(_named(tasks, fragment)), (
             f"{fragment!r} runs under dry-run; the prune loop would then dereference an "
@@ -177,7 +173,7 @@ def test_the_render_directory_fact_survives_every_tag_selection() -> None:
     renders then die on `'manifests_dest_dir' is undefined`. Measured 2026-08-16 with
     `--tags freshrss --skip-tags deploy`. Only `always` survives all three selections.
     """
-    tasks = _tasks(_MANIFESTS)
+    tasks = load_tasks(_MANIFESTS)
     for fragment in (
         "throwaway render directory",
         "Select the render directory",

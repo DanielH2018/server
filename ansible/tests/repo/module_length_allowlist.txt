@@ -22,8 +22,8 @@ ansible/roles/setup/gitops_deploy/files/deploy_io.py 640
 ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 538
 ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py 701
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 559
-ansible/tests/deploy/test_cronjob_gate_decision.py 560
-ansible/tests/deploy/test_k8s_dry_run.py 573
+ansible/tests/deploy/test_cronjob_gate_decision.py 555
+ansible/tests/deploy/test_k8s_dry_run.py 569
 ansible/tests/deploy/test_setup_render_manifest.py 513
 ansible/tests/longhorn/test_longhorn_restore_drill.py 516
 ansible/tests/repo/test_documented_paths_exist.py 553

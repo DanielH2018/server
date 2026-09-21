@@ -16,20 +16,15 @@ the shipper does not emit and reported "no ip_ban events" through a window conta
 
 import re
 
-from _helpers import REPO
-from lib import yaml_fast
+from _helpers import REPO, load_defaults
 
 _REPO = REPO
-_DEFAULTS = _REPO / "ansible/roles/k8s/claude-otel/defaults/main.yml"
-_GRAFANA = _REPO / "ansible/roles/k8s/claude-otel/templates/grafana.yaml.j2"
-_DASHBOARDS_TASKS = _REPO / "ansible/roles/k8s/claude-otel/tasks/dashboards.yml"
+_ROLE = _REPO / "ansible/roles/k8s/claude-otel"
+_GRAFANA = _ROLE / "templates/grafana.yaml.j2"
+_DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
 _DEPLOY_SH = _REPO / "scripts/deploy.sh"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(_DEFAULTS.read_text())
 
 
 def test_the_query_matches_what_the_deployers_actually_log():
@@ -39,7 +34,7 @@ def test_the_query_matches_what_the_deployers_actually_log():
     the line filter in the expr stops matching the text `logger` writes, every board keeps
     rendering and silently shows no deploys.
     """
-    expr = _defaults()["claude_otel_deploy_annotation_expr"]
+    expr = load_defaults(_ROLE)["claude_otel_deploy_annotation_expr"]
 
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
@@ -62,7 +57,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
 
     import inject_dashboard_annotations as inject
 
-    expr = _defaults()["claude_otel_deploy_annotation_expr"]
+    expr = load_defaults(_ROLE)["claude_otel_deploy_annotation_expr"]
     annotation = inject.build_annotation("x", expr)
 
     field = re.fullmatch(r"\{\{(\w+)\}\}", annotation["textFormat"])
@@ -85,7 +80,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
     Same silent shape as the stale-uid class validate/grafana_dashboards.py guards for panels —
     but an injected annotation never appears in the source JSON, so that validator cannot see it.
     """
-    uid = _defaults()["claude_otel_loki_homelab_uid"]
+    uid = load_defaults(_ROLE)["claude_otel_loki_homelab_uid"]
 
     grafana = _GRAFANA.read_text()
     block = grafana.split("- name: loki-homelab", 1)

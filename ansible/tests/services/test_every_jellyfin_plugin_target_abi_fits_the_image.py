@@ -29,9 +29,10 @@ import re
 import pytest
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_defaults
 
-DEFAULTS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "defaults" / "main.yml"
+JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
+DEFAULTS = JELLYFIN / "defaults" / "main.yml"
 
 TARGET_ABI_VAR = re.compile(r"^jellyfin_k8s_(?P<plugin>[a-z0-9]+)_target_abi$")
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
@@ -43,10 +44,6 @@ LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 REQUIRED_PLUGINS = frozenset(
     {"introskipper", "webhook", "mergeversions", "mediacleaner"}
 )
-
-
-def _defaults() -> dict:
-    return yaml_fast.safe_load(DEFAULTS.read_text())
 
 
 def _version_tuple(text: str, what: str) -> tuple[int, ...]:
@@ -87,7 +84,7 @@ def _declared_abis(defaults: dict) -> dict[str, tuple[int, ...]]:
 
 def test_the_census_still_finds_every_plugin_it_is_meant_to():
     """Non-vacuity. A glob that matches nothing makes every assertion below pass."""
-    found = set(_declared_abis(_defaults()))
+    found = set(_declared_abis(load_defaults(JELLYFIN)))
 
     missing = REQUIRED_PLUGINS - found
     assert not missing, (
@@ -115,7 +112,7 @@ def test_the_image_satisfies_every_plugin_target_abi():
     disk, `GET /Plugins` omits it, the rollout stays green. So a plugin whose targetAbi exceeds
     the image is not a deploy failure, it is a plugin nobody notices is gone.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     abis = _declared_abis(defaults)
     image = defaults["jellyfin_k8s_image"]
     server = _version_tuple(image.rsplit(":", 1)[-1], "the jellyfin image tag")
@@ -142,7 +139,7 @@ def test_the_binding_floor_is_the_slowest_plugin():
     reader consults that before bumping the image, so the claim belongs somewhere a rename or a
     new plugin moves it automatically.
     """
-    defaults = _defaults()
+    defaults = load_defaults(JELLYFIN)
     abis = _declared_abis(defaults)
     floor = max(abis.values())
     holders = sorted(p for p, abi in abis.items() if abi == floor)

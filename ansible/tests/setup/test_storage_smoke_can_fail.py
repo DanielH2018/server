@@ -19,9 +19,8 @@ later edit that removes it fails the suite rather than going quiet.
 """
 
 import pytest
-from lib import yaml_fast
 
-from _helpers import ANSIBLE, ROLES
+from _helpers import ANSIBLE, ROLES, load_tasks
 
 SMOKE = ROLES / "setup" / "k3s" / "tasks" / "storage_smoke.yml"
 WAIT_TASK = "Wait for the PVC to reach Bound"
@@ -29,13 +28,9 @@ ASSERT_TASK = "Report the phase the PVC actually reached"
 DELETE_TASK = "Remove the storage smoke PVC"
 
 
-def _tasks():
-    return yaml_fast.safe_load(SMOKE.read_text())
-
-
 def _block_task():
     """The task carrying the block/always pair, whatever it is named."""
-    for task in _tasks():
+    for task in load_tasks(SMOKE):
         if "block" in task:
             return task
     pytest.fail(

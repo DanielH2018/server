@@ -27,13 +27,9 @@ from pathlib import Path
 from lib import yaml_fast
 
 from _helpers import SETUP_ROLES, leaf_tasks
-from _helpers import load_yaml
+from _helpers import load_defaults
 
 K3S = SETUP_ROLES / "k3s"
-
-
-def _defaults() -> dict:
-    return load_yaml(K3S / "defaults" / "main.yml")
 
 
 # main.yml became a list of import_tasks in the 2026-08-15 split, so expand the imports —
@@ -72,7 +68,7 @@ def _install_task() -> dict:
 
 def test_node_ip_is_pinned_to_the_hosts_canonical_address():
     """Autodetection is what picked the removable NIC."""
-    args = _defaults()["k3s_server_args"]
+    args = load_defaults(K3S)["k3s_server_args"]
     for flag in ("--node-ip", "--advertise-address"):
         assert f"{flag} {{{{ server_ip }}}}" in args, (
             f"k3s_server_args must pass `{flag} {{{{ server_ip }}}}`. Without it k3s "
@@ -83,7 +79,7 @@ def test_node_ip_is_pinned_to_the_hosts_canonical_address():
 
 def test_k3s_version_is_pinned():
     """A reconfigure re-runs the installer; unpinned, that upgrades the control plane."""
-    version = _defaults().get("k3s_version", "")
+    version = load_defaults(K3S).get("k3s_version", "")
     assert re.fullmatch(r"v\d+\.\d+\.\d+\+k3s\d+", str(version)), (
         f"k3s_version must be an explicit version, got {version!r}. The install task "
         "re-runs get.k3s.io whenever k3s_server_args changes, and get.k3s.io installs "

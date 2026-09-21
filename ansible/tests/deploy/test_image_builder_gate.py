@@ -60,12 +60,8 @@ DEREFERENCING = [
 ]
 
 
-def _tasks():
-    return load_tasks(TASKS)
-
-
 def _task(prefix: str):
-    matches = [t for t in _tasks() if t.get("name", "").startswith(prefix)]
+    matches = [t for t in load_tasks(TASKS) if t.get("name", "").startswith(prefix)]
     assert len(matches) == 1, f"{prefix!r} matched {len(matches)} tasks in {TASKS}"
     return matches[0]
 
@@ -76,7 +72,7 @@ def _gate_expression() -> str:
     Read out of the role source rather than restated here, so the tests below exercise what
     actually ships. A restated copy would keep passing after the role changed.
     """
-    for task in _tasks():
+    for task in load_tasks(TASKS):
         fact = task.get("ansible.builtin.set_fact") or {}
         if GATE in fact:
             inner = re.search(r"\{\{(.*)\}\}", fact[GATE], re.S)
@@ -286,7 +282,7 @@ def test_an_undecidable_previous_build_read_builds(previous):
 
 def test_the_previous_build_read_precedes_the_gate_and_is_not_gated_by_it():
     """It feeds the gate, so it has to run before it — and on every run, build or not."""
-    names = [t.get("name", "") for t in _tasks()]
+    names = [t.get("name", "") for t in load_tasks(TASKS)]
     read = next(
         i for i, n in enumerate(names) if n.startswith("Read the previous build")
     )

@@ -131,17 +131,13 @@ def test_only_the_web_service_is_pinned_to_one_instance():
     )
 
 
-def _tasks() -> list[dict]:
-    return load_tasks(_TASKS)
-
-
 def _roll_one_tasks() -> list[dict]:
     return list(_flatten_tasks(yaml_fast.safe_load(_ROLL_ONE.read_text())))
 
 
 def test_the_shared_role_does_not_restart_pihole():
     """`manifests_rollout: ''` is what stops both instances restarting together."""
-    for task in _tasks():
+    for task in load_tasks(_TASKS):
         if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests":
             vars_ = task.get("vars", {})
             assert vars_.get("manifests_rollout") == "", (
@@ -158,7 +154,7 @@ def test_the_shared_role_does_not_restart_pihole():
 def test_the_rollout_is_sequenced_per_instance():
     included = [
         task
-        for task in _tasks()
+        for task in load_tasks(_TASKS)
         if str(task.get("ansible.builtin.include_tasks", "")).endswith("roll_one.yml")
     ]
     assert included, "no per-instance roll_one.yml include — restarts are not sequenced"

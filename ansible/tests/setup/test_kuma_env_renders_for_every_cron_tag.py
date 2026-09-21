@@ -27,12 +27,8 @@ ENV_TASK_NAME = "Deploy the Kuma push credentials for the heartbeat scripts"
 KUMA_ENV_PATH = "/etc/rancher/k3s/kuma-push.env"
 
 
-def _tasks() -> list[dict]:
-    return load_tasks(CRONS)
-
-
 def _env_task_tags() -> set[str]:
-    task = next((t for t in _tasks() if t.get("name") == ENV_TASK_NAME), None)
+    task = next((t for t in load_tasks(CRONS) if t.get("name") == ENV_TASK_NAME), None)
     assert task is not None, (
         f"{ENV_TASK_NAME!r} is missing from health-crons.yml — nothing renders the Kuma push "
         "tokens the heartbeat scripts source"
@@ -83,7 +79,7 @@ def _missing_env_tags(
 
 def test_every_kuma_consuming_cron_tag_renders_the_env_file():
     env_tags = _env_task_tags()
-    violations = _missing_env_tags(_tasks(), env_tags, CRONS)
+    violations = _missing_env_tags(load_tasks(CRONS), env_tags, CRONS)
     assert not violations, (
         "these health-crons.yml tasks render a script that sources kuma-push.env under a tag "
         f"the env task ({ENV_TASK_NAME!r}, tags={sorted(env_tags)}) does not carry, so a "
@@ -101,7 +97,7 @@ def test_census_finds_the_known_cron_families():
     """
     env_tags = _env_task_tags()
     found = set()
-    for task in _tasks():
+    for task in load_tasks(CRONS):
         for path in _script_paths_for_task(task, CRONS):
             if path.is_file() and KUMA_ENV_PATH in path.read_text():
                 found.update(task.get("tags") or [])

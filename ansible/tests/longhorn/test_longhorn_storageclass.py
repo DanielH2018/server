@@ -27,7 +27,7 @@ from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 
-from _helpers import K8S_ROLES, SETUP_ROLES, leaf_tasks
+from _helpers import K8S_ROLES, SETUP_ROLES, leaf_tasks, load_defaults
 
 K3S = SETUP_ROLES / "k3s"
 STORAGECLASS = K3S / "files" / "longhorn-storageclass.yaml"
@@ -172,10 +172,6 @@ _ROUTING_LISTS = (
 )
 
 
-def _k3s_defaults() -> dict:
-    return yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
-
-
 def _declared_pvcs() -> set[str]:
     """Every `namespace/name` a k8s role gets a PersistentVolumeClaim for.
 
@@ -213,7 +209,7 @@ def _declared_pvcs() -> set[str]:
 
 
 def test_backup_routing_lists_are_pairwise_disjoint():
-    defaults = _k3s_defaults()
+    defaults = load_defaults(K3S)
     lists = {name: set(defaults.get(name) or []) for name in _ROUTING_LISTS}
     overlaps = []
     for i, left in enumerate(_ROUTING_LISTS):
@@ -228,7 +224,7 @@ def test_backup_routing_lists_are_pairwise_disjoint():
 
 
 def test_backup_routing_lists_have_no_duplicates():
-    defaults = _k3s_defaults()
+    defaults = load_defaults(K3S)
     for name in _ROUTING_LISTS:
         entries = defaults.get(name) or []
         dupes = sorted({e for e in entries if entries.count(e) > 1})
@@ -238,7 +234,7 @@ def test_backup_routing_lists_have_no_duplicates():
 def test_every_routed_volume_is_a_real_pvc():
     # A typo here does not fail anything at deploy — the label reconcile simply matches no
     # volume and moves on, leaving the PVC on whatever tier it was already in.
-    defaults = _k3s_defaults()
+    defaults = load_defaults(K3S)
     declared = _declared_pvcs()
     assert len(declared) > 20, (
         f"only found {len(declared)} PVC names — the collector stopped matching"

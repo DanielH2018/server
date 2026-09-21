@@ -15,8 +15,8 @@ that follows from them, and the two structural facts it rests on.
 Run: uv run pytest ansible/tests/longhorn/test_daily_group_membership_is_the_r2_list.py
 """
 
-from _helpers import SETUP_ROLES, load_tasks, task_named
-from test_every_longhorn_pvc_has_a_tier import _k3s_defaults, _longhorn_class_pvcs
+from _helpers import SETUP_ROLES, load_defaults, load_tasks, task_named
+from test_every_longhorn_pvc_has_a_tier import _longhorn_class_pvcs
 
 K3S = SETUP_ROLES / "k3s"
 RECURRING_JOB = K3S / "templates" / "longhorn-recurringjob.yaml.j2"
@@ -29,7 +29,7 @@ def daily_members(declared: set[str], defaults: dict) -> set[str]:
 
 
 def test_daily_group_membership_equals_the_r2_list():
-    defaults = _k3s_defaults()
+    defaults = load_defaults(K3S)
     declared = _longhorn_class_pvcs()
     assert len(declared) >= 4
     assert daily_members(declared, defaults) == set(defaults["k3s_longhorn_r2_volumes"])

@@ -39,17 +39,13 @@ STAGED = "/etc/rancher/k3s/dashboards"
 ANNOTATED = "/etc/rancher/k3s/dashboards-annotated"
 
 
-def _tasks() -> list[dict]:
-    return load_tasks(DASHBOARDS)
-
-
 def _loop_of(fragment: str) -> str:
     """The `loop:` expression of the task whose name contains `fragment`.
 
     Returned verbatim — these are folded scalars that already carry their own `{{ }}`, so a
     caller must render the string as-is rather than wrapping it again.
     """
-    loop = task_named(_tasks(), fragment).get("loop")
+    loop = task_named(load_tasks(DASHBOARDS), fragment).get("loop")
     assert isinstance(loop, str), f"{fragment!r} has no templated loop to evaluate"
     return loop
 
@@ -140,7 +136,9 @@ def test_the_annotated_prune_rewrites_the_staged_path_before_comparing() -> None
 
 def _stale_keys(live_json: str, source_files: list[str]) -> list[str]:
     """`stale_keys` as dashboards.yml computes it, through the same two `vars` it derives from."""
-    task = task_named(_tasks(), "Remove dashboard keys with no file behind them")
+    task = task_named(
+        load_tasks(DASHBOARDS), "Remove dashboard keys with no file behind them"
+    )
     v = task["vars"]
     ctx = {
         "claude_otel_dashboard_live_keys": {"results": [{"stdout": live_json}]},
@@ -203,7 +201,7 @@ def test_the_expressions_read_the_registers_the_find_tasks_set() -> None:
         "Find the dashboard files each ConfigMap should carry": "claude_otel_dashboard_source_files",
     }
     for name, expected in registers.items():
-        actual = task_named(_tasks(), name).get("register")
+        actual = task_named(load_tasks(DASHBOARDS), name).get("register")
         assert actual == expected, (
             f"{name!r} registers {actual!r}, but the prune expressions this file exercises read "
             f"{expected!r} — a rename here makes the real prune read an undefined variable and "
@@ -215,9 +213,10 @@ def test_the_expressions_read_the_registers_the_find_tasks_set() -> None:
             _loop_of("Remove staged dashboards with no file behind them"),
             _loop_of("Remove annotated dashboards with no staged source"),
             str(
-                task_named(_tasks(), "Remove dashboard keys with no file behind them")[
-                    "vars"
-                ]
+                task_named(
+                    load_tasks(DASHBOARDS),
+                    "Remove dashboard keys with no file behind them",
+                )["vars"]
             ),
         ]
     )
@@ -237,7 +236,7 @@ def test_the_prune_set_has_not_grown_unguarded() -> None:
     manifest and its ConfigMap) which delete a fixed path and have no set logic to prove. It is
     the difference expressions that can silently select nothing.
     """
-    prunes = [t for t in _tasks() if "difference(" in str(t)]
+    prunes = [t for t in load_tasks(DASHBOARDS) if "difference(" in str(t)]
     names = sorted(str(t.get("name")) for t in prunes)
     assert len(prunes) == 3, (
         f"dashboards.yml has {len(prunes)} difference-based prunes ({names}), expected the 3 "
@@ -251,7 +250,7 @@ def test_the_pruned_tree_is_derived_not_enumerated() -> None:
     Pinned so a future 'simplification' to a literal list cannot pass unnoticed.
     """
     justify = task_named(
-        _tasks(), "Build the staged paths the role's own files justify"
+        load_tasks(DASHBOARDS), "Build the staged paths the role's own files justify"
     )
     expr = str(justify["ansible.builtin.set_fact"]["claude_otel_valid_staged"])
     assert "fileglob" in expr and "role_path" in expr, (
@@ -263,7 +262,9 @@ def test_the_pruned_tree_is_derived_not_enumerated() -> None:
 def test_the_source_of_truth_path_is_what_the_configmap_is_built_from() -> None:
     """Ties the annotated tree this file prunes to the tree the ConfigMap is actually built from,
     so the prune cannot end up cleaning a directory nothing serves."""
-    build = task_named(_tasks(), "Build a ConfigMap manifest per dashboard folder")
+    build = task_named(
+        load_tasks(DASHBOARDS), "Build a ConfigMap manifest per dashboard folder"
+    )
     assert "dashboards-annotated" in str(build), (
         "if the ConfigMap stops being built from the annotated tree, the annotated prune is "
         "cleaning a directory that no longer feeds Grafana"
@@ -274,4 +275,4 @@ def test_dashboards_yml_is_where_the_prunes_live() -> None:
     """A cheap existence check, so a moved file fails here rather than silently emptying every
     assertion above through a zero-task parse."""
     assert Path(DASHBOARDS).is_file()
-    assert len(_tasks()) > 5
+    assert len(load_tasks(DASHBOARDS)) > 5

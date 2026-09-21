@@ -28,7 +28,7 @@ failure. Hence a test rather than a comment.
 import re
 
 from lib import yaml_fast
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_tasks
 
 _ANSIBLE = ANSIBLE
 _GATE = _ANSIBLE / "post_tasks" / "k8s_image_drift_gate.yml"
@@ -38,7 +38,7 @@ _BUILDER = _ANSIBLE / "roles" / "k8s" / "image-builder" / "tasks" / "main.yml"
 
 def _tasks(path):
     """Every task in a task file, as dicts."""
-    return [t for t in yaml_fast.safe_load(path.read_text()) if isinstance(t, dict)]
+    return [t for t in load_tasks(path) if isinstance(t, dict)]
 
 
 def _k8s_play():
