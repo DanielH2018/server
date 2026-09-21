@@ -78,7 +78,14 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
     everything down. The live volume is never touched. Eligibility is the
     `recurring-job-group.longhorn.io/*` label, with the `no-backup` group excluded by name;
     the volume is chosen least-recently-attempted, not least-recently-succeeded, so one
-    permanently broken volume cannot starve the rest.
+    permanently broken volume cannot starve the rest. To drill one volume on demand, pass its
+    PVC name: `sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>` (or `RESTORE_DRILL_PIN=<pvc>`
+    for a caller that cannot pass an argument). A hand run stamps `success/<pvc>` but not
+    `last-success`, so it proves the volume without hiding a dead nightly cron from check 7,
+    and it leaves the published candidate list whole so check 8's coverage window keeps its
+    size. Backdating a stamp under `attempts/` to steer the rotation is no longer the way in
+    (#2183). ENFORCED:
+    `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`.
   - **Off-box etcd snapshot** (`etcd-snapshot-offbox.sh`, daily `k3s_etcd_s3_cron_hour`, as
     root): takes a k3s etcd snapshot and uploads it to R2. It uploads the snapshot only —
     never the cluster token, because the token beside the snapshot would undo
@@ -90,7 +97,10 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
     which `files/longhorn-storageclass-nobackup.yaml` assigns.
 - **Never a cron:** `longhorn-reap-orphan-backups.sh` and `longhorn-reap-orphan-snapshots.sh`
   delete stranded objects and are operator-invoked only, dry-run by default, `--apply` to
-  delete, with a per-run deletion cap. Scheduling either is out of contract.
+  delete, with a per-run deletion cap. Scheduling either is out of contract. ENFORCED:
+  `ansible/tests/longhorn/test_longhorn_reap_orphan_never_scheduled.py::test_no_setup_role_schedules_a_reaper`
+  reads every `cron:` task, `kuma_check_timer.yml` import and systemd unit template under
+  `ansible/roles/setup/` and fails on either name.
 - **Mode / arming:** `k3s_manage_health_crons` (staging: `false`) installs or withholds the
   whole set; `k3s_manage_backup_targets` does the same for the R2/B2 targets and the
   RecurringJobs; `k3s_etcd_restore_drill_armed` gates the weekly `etcd restore drill` cron,
