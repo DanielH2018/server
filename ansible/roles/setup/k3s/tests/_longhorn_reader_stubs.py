@@ -13,11 +13,35 @@ Consumers: `test_longhorn_backup_health_reader.py`, `test_longhorn_backup_grace_
 import os
 import subprocess
 import sys
-import time
 from pathlib import Path
 
 READER = Path(__file__).resolve().parents[1] / "files" / "longhorn_backup_health.py"
 HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
+
+# The epoch every dated fixture here is measured from — the same one test_longhorn_backup_health
+# pins. A fixture stamped `time.time() - age` would measure its age across the suite's own
+# runtime, which is the straddle #2158 removed from the in-process suites (#2220).
+NOW = 1_800_000_000.0
+
+# Runs the reader with main(now=NOW) instead of `python longhorn_backup_health.py`, still as a
+# subprocess: import-time env parsing, the sys.path bootstrap, the stub-kubectl shell-out and
+# the up/down<TAB>msg contract are all the real ones. `-P` keeps the cwd off sys.path, so the
+# bootstrap is what makes `logic` importable, as it is under the cron; `run_name` is not
+# `__main__`, so the file's own entry line does not fire a second, clock-reading run. The one
+# subprocess test that does not date a fixture (`test_reader_pins_the_transport`) keeps the
+# bare `python <reader>` form, so the `__main__` line stays exercised.
+_MAIN_WITH_NOW = (
+    "import runpy, sys; "
+    "g = runpy.run_path(sys.argv[1], run_name='longhorn_backup_health'); "
+    "sys.exit(g['main'](now=float(sys.argv[2])))"
+)
+
+
+def reader_argv(now: float | None = None) -> list[str]:
+    """The subprocess argv that runs the reader — bare, or through main(now=...)."""
+    if now is None:
+        return [sys.executable, str(READER)]
+    return [sys.executable, "-P", "-c", _MAIN_WITH_NOW, str(READER), repr(now)]
 
 
 def _reader_env(tmp_path, **overrides) -> dict:
@@ -130,11 +154,14 @@ sys.stdout.write(body)
 
 
 def _run_reader_against(stub, tmp_path, **env_overrides):
-    """Run the reader against `stub` on an otherwise-green fixture, returning the finished proc."""
-    now = time.time()
+    """Run the reader against `stub` on an otherwise-green fixture, returning the finished proc.
+
+    The reader runs with main(now=NOW), so the drill stamp written here and the snapshot stamp
+    the caller baked into `stub` are both judged against NOW.
+    """
     drill_dir = tmp_path / "drill"
     drill_dir.mkdir(exist_ok=True)
-    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+    (drill_dir / "last-success").write_text(str(int(NOW - 3600)))
     env = _reader_env(
         tmp_path,
         LONGHORN_BACKUP_KUBECTL=str(stub),
@@ -142,7 +169,7 @@ def _run_reader_against(stub, tmp_path, **env_overrides):
         **env_overrides,
     )
     return subprocess.run(
-        [sys.executable, str(READER)],
+        reader_argv(now=NOW),
         capture_output=True,
         text=True,
         env=env,

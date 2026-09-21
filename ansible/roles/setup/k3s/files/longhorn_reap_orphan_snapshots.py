@@ -188,7 +188,14 @@ def _purge(kubectl, node: str, volumes: set[str]) -> int:
     return unpurged
 
 
-def main(argv: list[str]) -> int:
+def main(argv: list[str], now: float | None = None) -> int:
+    """Classify, print, and under --apply delete.
+
+    `now` is the epoch the age floor is measured from; the cron leaves it None and reads the
+    clock. A test hands one in so a fixture dated "one day ago" stays one day old however long
+    the suite has run (#2220) — an argument, not an env var or a flag, so nothing the cron's
+    environment carries can move it.
+    """
     apply = "--apply" in argv
     unknown = [a for a in argv if a != "--apply"]
     if unknown:
@@ -276,7 +283,11 @@ def main(argv: list[str]) -> int:
 
     try:
         result = logic.classify_snapshots(
-            snapshots, owner, attached, min_age_days, time.time()
+            snapshots,
+            owner,
+            attached,
+            min_age_days,
+            time.time() if now is None else now,
         )
     except logic.ReapAbort as e:
         # A volume whose group label named no RecurringJob resolves to owner "", which the

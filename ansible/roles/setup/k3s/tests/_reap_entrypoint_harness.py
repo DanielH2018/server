@@ -37,6 +37,21 @@ COPY_TASK_NAME = "Install the Longhorn reap-orphan classifier scripts"
 BACKUPS_ENTRY = FILES / "longhorn_reap_orphan_backups.py"
 SNAPSHOTS_ENTRY = FILES / "longhorn_reap_orphan_snapshots.py"
 
+# The epoch a dated fixture is measured from when a test passes `now=` to `_run`. Same value as
+# the reader suites' `_longhorn_reader_stubs.NOW`.
+NOW = 1_800_000_000.0
+
+# Runs the staged entry point with main(argv, now=NOW) instead of `python <entry> <args>`,
+# still as a subprocess from the staged directory: the sys.path bootstrap, the stub `k3s` on
+# PATH and the env parsing are the real ones. `-P` keeps the cwd off sys.path, so the bootstrap
+# is what makes `host_lib` importable, as it is under the cron; `run_name` is not `__main__`, so
+# the file's own entry line does not fire a second, clock-reading run.
+_MAIN_WITH_NOW = (
+    "import runpy, sys; "
+    "g = runpy.run_path(sys.argv[1], run_name='longhorn_reap_entry'); "
+    "sys.exit(g['main'](sys.argv[3:], now=float(sys.argv[2])))"
+)
+
 
 def _copy_loop_srcs() -> list[pathlib.Path]:
     """The exact file set health-crons.yml's own copy task installs into /opt/longhorn-reap/,
@@ -151,6 +166,7 @@ def _run(
     readonly_kubeconfig_set=True,
     null_kinds=(),
     extra_env=None,
+    now=None,
 ):
     deployed = _deployed_entry(entry, tmp_path / "opt")
     stub_dir = tmp_path / "bin"
@@ -184,8 +200,20 @@ def _run(
     if extra_env:
         env.update(extra_env)
 
+    if now is None:
+        argv = [sys.executable, str(deployed), *args]
+    else:
+        argv = [
+            sys.executable,
+            "-P",
+            "-c",
+            _MAIN_WITH_NOW,
+            str(deployed),
+            repr(now),
+            *args,
+        ]
     proc = subprocess.run(
-        [sys.executable, str(deployed), *args],
+        argv,
         env=env,
         capture_output=True,
         text=True,
