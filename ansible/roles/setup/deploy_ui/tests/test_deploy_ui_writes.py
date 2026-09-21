@@ -1,9 +1,9 @@
 """Every guard has an accept case and a reject case; the hold clears as a pair."""
 
-import os
 import time
 
 import deploy_ui_writes as w
+from _process_waits import wait_for_exit
 from deploy_ui_reads import Run
 
 L = Run(4321, 10, "land", "1543", "", "land.py --pr 1543", (), ())
@@ -113,10 +113,9 @@ def test_set_override_unknown_action_is_flagged(state_dir):
 
 def test_spawn_logged_writes_output_and_returns_log(tmp_path):
     log = w.spawn_logged(["sh", "-c", "echo hi"], tmp_path, tmp_path / "logs", "land")
-    for _ in range(50):
-        if log.exists() and log.read_text().strip() == "hi":
-            break
-        time.sleep(0.05)
+    assert wait_for_exit(int(log.with_suffix(".pid").read_text())), (
+        "the child never exited"
+    )
     assert log.read_text().strip() == "hi"
     assert log.name.startswith("land-")
 
@@ -145,11 +144,4 @@ def test_terminate_kills_the_pid(tmp_path):
     log = w.spawn_logged(["sh", "-c", "sleep 30"], tmp_path, tmp_path / "logs", "x")
     pid = int(log.with_suffix(".pid").read_text())
     w.terminate(pid)
-    for _ in range(50):
-        try:
-            os.kill(pid, 0)
-        except ProcessLookupError:
-            break
-        time.sleep(0.05)
-    else:
-        raise AssertionError("still alive")
+    assert wait_for_exit(pid), "still alive"

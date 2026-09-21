@@ -15,6 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_service_lock_concurren
 
 import fcntl
 import os
+import select
 import subprocess
 import time
 from pathlib import Path
@@ -23,8 +24,10 @@ from _deploy_sh_fakes import (
     FAKE_RECAP,
     UV_DEPLOY_LOCKS_ARM,
     deploy_sh_env,
+    detached_pid,
     make_snapshot_repo,
 )
+from _process_waits import wait_for_exit
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -205,8 +208,8 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
     playbook was rendering from, and the operator was told "retrying alone will not fix either".
     """
     repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
-    pwd_file = tmp_path / "playbook-pwd"
-    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_file)
+    pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
     # Long enough for a `--check` and a scoped deploy to run inside it, and no longer: the
     # assertions below are on state — the directory still exists, then it does not — rather
     # than on elapsed time, and `--dist loadscope` keeps this whole module on one worker.
@@ -230,8 +233,7 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
             check=False,
         ).returncode
     assert detached == 0, output.read_text()
-    assert _wait_for(pwd_file.exists, 30), "the backgrounded playbook never ran"
-    snapshot = Path(pwd_file.read_text().strip())
+    snapshot = _playbook_cwd(pwd_fd)
 
     # Both concurrent runs finish immediately: only the detached playbook sleeps.
     quick = dict(env, DEPLOY_TEST_SLEEP="0")
@@ -242,9 +244,11 @@ def test_a_live_detached_snapshot_survives_a_concurrent_check_and_deploy(tmp_pat
     )
 
     # And it is the OWNER that cleans up, once the playbook it is running finishes.
-    assert _wait_for(lambda: not snapshot.exists(), 60), (
-        "the detached run left its snapshot behind"
+    assert wait_for_exit(detached_pid(output.read_text())), (
+        "the detached subshell never finished"
     )
+    assert not snapshot.exists(), "the detached run left its snapshot behind"
+    os.close(pwd_fd)
 
 
 def _service_lock_free(path: Path) -> bool:
@@ -259,14 +263,27 @@ def _service_lock_free(path: Path) -> bool:
         os.close(fd)
 
 
-def _wait_for(predicate, limit: float):
-    """Poll `predicate` until it is true or `limit` seconds pass; the final verdict."""
-    deadline = time.monotonic() + limit
-    while time.monotonic() < deadline:
-        if predicate():
-            return True
-        time.sleep(0.05)
-    return predicate()
+def _pwd_fifo(tmp_path: Path) -> tuple[Path, int]:
+    """A fifo for the playbook stub's `pwd`, and a descriptor on it this test holds.
+
+    Opened O_RDWR, so the descriptor is itself a writer: the pipe never reads as closed
+    before the stub has opened it, and `select` in `_playbook_cwd` fires on the stub's line
+    and on nothing else. That line is the signal the backgrounded playbook has started.
+
+    Keep the descriptor open until every run that inherits the fifo's path has finished. A
+    stub's `pwd >` blocks in open() while the fifo has no reader, and this descriptor is the
+    reader; a later run whose line nobody reads writes into the pipe buffer and moves on.
+    """
+    path = tmp_path / "playbook-pwd"
+    os.mkfifo(path)
+    return path, os.open(path, os.O_RDWR)
+
+
+def _playbook_cwd(fd: int, timeout: float = 60) -> Path:
+    """The directory the backgrounded playbook stub ran from, once it has run."""
+    readable, _, _ = select.select([fd], [], [], timeout)
+    assert readable, "the backgrounded playbook never ran"
+    return Path(os.read(fd, 4096).decode().strip())
 
 
 def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_ends(
@@ -281,8 +298,8 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
     Deleting the snapshot too early and leaking it are both invisible to the run that did it.
     """
     repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
-    pwd_file = tmp_path / "playbook-pwd"
-    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_file)
+    pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
     snapshots = tmp_path / "snapshots"
     alpha_lock = tmp_path / "locks" / "server-deploy-alpha.lock"
 
@@ -313,8 +330,7 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
         "--detach waited for the playbook instead of backgrounding it"
     )
 
-    assert _wait_for(pwd_file.exists, _SLEEP_S), "the backgrounded playbook never ran"
-    playbook_cwd = Path(pwd_file.read_text().strip())
+    playbook_cwd = _playbook_cwd(pwd_fd)
     assert snapshots in playbook_cwd.parents, (
         f"the detached playbook ran from {playbook_cwd}, not from a snapshot under {snapshots}"
     )
@@ -326,9 +342,15 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
         "another deploy of alpha could start on top of it"
     )
 
-    assert _wait_for(lambda: _service_lock_free(alpha_lock), 60), (
+    # The subshell releases the lock and removes the snapshot on its way out, so its exit is
+    # the point after which both must hold.
+    assert wait_for_exit(detached_pid(output.read_text())), (
+        "the detached subshell never finished"
+    )
+    assert _service_lock_free(alpha_lock), (
         "the detached run never released its service lock"
     )
-    assert _wait_for(lambda: not any(snapshots.iterdir()), 10), (
+    assert not any(snapshots.iterdir()), (
         f"the detached run left its snapshot behind in {snapshots}"
     )
+    os.close(pwd_fd)

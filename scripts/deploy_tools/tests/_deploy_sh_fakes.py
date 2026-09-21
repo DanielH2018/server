@@ -18,6 +18,7 @@ Typical usage example:
 """
 
 import os
+import re
 import shutil
 import subprocess
 import sys
@@ -149,3 +150,19 @@ def stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
     """`os.environ` with the stubs from `stub_bin` ahead of everything on PATH."""
     bin_dir = stub_bin(tmp_path, stubs)
     return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+
+
+# What `deploy.sh --detach` prints once it has backgrounded the playbook subshell.
+_DETACHED_PID = re.compile(r"running in background \(pid (\d+)\)")
+
+
+def detached_pid(output: str) -> int:
+    """The pid of the subshell a `--detach` run backgrounded, from the wrapper's own output.
+
+    That subshell runs the playbook, the notifier and `remove_snapshot`, then exits — so its
+    exit is the event a test waits on for anything the detached half does, via
+    `_process_waits.wait_for_exit`, rather than polling for its side effects.
+    """
+    match = _DETACHED_PID.search(output)
+    assert match, f"deploy.sh --detach printed no background pid:\n{output}"
+    return int(match.group(1))
