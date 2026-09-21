@@ -212,6 +212,12 @@ def test_roll_one_checks_sibling_readiness_before_restarting():
         ),
         None,
     )
+    # The wait is only a gate while its timeout still fails the play: `command` fails on
+    # rc != 0 unless something swallows it, and an unbounded wait never returns rc != 0.
+    if ready_idx is not None:
+        assert "--timeout=" in _cmd(tasks[ready_idx]) and not tasks[ready_idx].get(
+            "ignore_errors"
+        ), "the sibling-readiness wait must time out loudly, or it gates nothing"
     restart_idx = next(
         (i for i, t in enumerate(tasks) if "rollout restart" in _cmd(t)), None
     )
