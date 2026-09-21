@@ -81,10 +81,13 @@ def test_it_is_skipped():
 
 # The socket probe's half of the same exemption. 192.0.2.1 is TEST-NET-1 (RFC 5737): reserved,
 # never routed, so the exempt half reaches the real syscall without anything leaving the host.
-# A UDP socket, so that syscall is a route lookup and nothing more: a TCP connect here sent a
-# SYN and waited on a timeout, and which errno it returned depended on the host's routing
-# (#2159). The exempt test asserts only that the failure, if any, is NOT the guard's — a host
-# with no route to TEST-NET-1 raises ENETUNREACH, one with a default route returns at once.
+# DECIDED: a real socket, UDP. #2159 asked for the guard's refusal asserted without a live
+# socket, but the exempt half's whole job is proving an exempt test reaches the real syscall;
+# asserting the patch is off would assert the stub, not the effect. UDP makes that syscall a
+# route lookup and nothing more — the TCP connect it replaced sent a SYN and waited on a
+# timeout, and which errno came back depended on the host's routing. The exempt test asserts
+# only that the failure, if any, is NOT the guard's: a host with no route to TEST-NET-1 raises
+# ENETUNREACH, one with a default route returns at once.
 _UI_MARKED_AND_PLAIN_CONNECT = """
 import socket
 
