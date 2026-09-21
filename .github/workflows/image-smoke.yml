@@ -44,7 +44,7 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
           fetch-depth: 0
-          persist-credentials: false  # nothing here pushes
+          persist-credentials: false  # nothing here pushes; the merge-base fetch carries its own token
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
@@ -63,6 +63,7 @@ jobs:
         id: images
         env:
           BASE_REF: ${{ github.base_ref }}  # via env, never interpolated into the shell
+          FETCH_TOKEN: ${{ github.token }}  # contents: read; the checkout drops its own, see the fetch below
           DISPATCH_IMAGES: ${{ inputs.images }}  # same: data, never shell source
         run: |
           set -euo pipefail
@@ -89,7 +90,12 @@ jobs:
           # boundary over origin/$BASE_REF and the merge base becomes unreachable, failing
           # the step with "no merge base". ci.yml's equivalent fetch is depth-less for the
           # same reason.
-          git fetch --no-tags origin "$BASE_REF"
+          # The checkout runs with persist-credentials: false (zizmor artipacked), and the repo is
+          # private, so a bare fetch has no credential and dies on "could not read Username". The
+          # token rides in a one-shot header the way actions/checkout itself sends it; nothing is
+          # written to .git/config.
+          git -c "http.https://github.com/.extraheader=AUTHORIZATION: basic $(printf 'x-access-token:%s' "$FETCH_TOKEN" | base64 -w0)" \
+            fetch --no-tags origin "$BASE_REF"
           # Scope is the k8s image plane: role defaults plus group_vars/all.yml (crowdsec_k8s_image
           # lives there). The compose half was dropped 2026-08-14 — both cluster hosts are drained
           # and daniel-pi has no CI deploy path, so that glob matched nothing deployable.
