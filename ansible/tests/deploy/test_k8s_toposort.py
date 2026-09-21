@@ -277,6 +277,12 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
     if before not in idx or after not in idx:
         pytest.skip(f"host does not deploy both {before} and {after}")
     by_name = {c["name"]: c for c in entries}
+    # The edge must be DECLARED, not merely implied: a pair held only by a transitive edge
+    # elsewhere would pass the sort below whatever this entry says, which is vacuous.
+    assert before in by_name[after].get("depends_on", []), (
+        f"{after}'s containers_list entry declares no `depends_on: [{before}]`; "
+        f"{DOCUMENTED_ORDERINGS[(before, after)]} says it must."
+    )
     others = [c for c in entries if c["name"] not in (before, after)]
     adversarial = [by_name[after], *others, by_name[before]]
 

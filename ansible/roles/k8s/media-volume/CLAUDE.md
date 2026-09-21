@@ -1,6 +1,6 @@
-# media-volume — the shared media library, one filesystem for nine workloads
+# media-volume — the shared media library, one filesystem for seven workloads
 
-Declares `media-data`, the volume nine media-stack roles mount at `/data`. They must all see
+Declares `media-data`, the volume seven media-stack roles mount at `/data`. They must all see
 **one** filesystem or sonarr/radarr imports silently become copies instead of hardlinks. No
 route — infra role, no Deployment of its own.
 
