@@ -16,8 +16,10 @@ A pin is a URL and the digest the role checks the download against. Two shapes c
 
 A URL may reference other keys of the same file (`{{ k3s_version }}`); it is rendered from that
 file alone, and one that does not resolve is reported as a failure, never skipped. A digest key
-with no URL beside it (`optimize_pi_node_exporter_sha256`, whose `get_url` lives in `tasks/`) is
-listed as unpaired so the gap is visible; it does not fail the run.
+with no URL beside it (a `get_url` whose URL is inline in `tasks/`) is listed as unpaired so
+the gap is visible; it does not fail the run. The fix is to move the URL into defaults beside
+the digest, templated from the version key — `optimize_pi_node_exporter_url` is the worked
+example (#2224).
 
 `KNOWN_PINS` names pins the census must find. A scanner that finds its subjects by pattern
 returns an empty set the moment the keys are renamed, and a loop over nothing passes — the
@@ -70,6 +72,8 @@ KNOWN_PINS = frozenset(
         "k3s_install_script",
         "k3s_host_coredns",
         "chezmoi_setup_installer",
+        "optimize_pi_node_exporter",
+        "code_server_k8s_node",
         "valheim_k8s_mods[Server_devcommands]",
     }
 )

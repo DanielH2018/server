@@ -32,6 +32,9 @@ optimize_pi_apt_timers:
 # DaemonSet pins (roles/k8s/node-exporter/defaults/main.yml) and the container ran; noble's
 # prometheus-node-exporter package is 1.7.0, five minors behind, so the upstream tarball keeps
 # the pin. The checksum is the linux-arm64 line of the release's sha256sums.txt. Renovate does
-# not track this; bump it by hand alongside the cluster's.
+# not track this; bump it by hand alongside the cluster's. The URL sits beside the digest, not
+# inline in the get_url task, so `scripts/validate/asset_pins.py` pairs the two and fetches the
+# tarball to check the digest (#2224).
 optimize_pi_node_exporter_version: "1.12.1"
+optimize_pi_node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ optimize_pi_node_exporter_version }}/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
 optimize_pi_node_exporter_sha256: "ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7"

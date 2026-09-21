@@ -90,10 +90,19 @@ def _rendered_dockerfile() -> str:
     """The Dockerfile as image-builder's `template` lookup renders it.
 
     `trim_blocks=True` is Ansible's default and a bare `Environment()` is not; the block
-    loop's line endings are the one place the two differ.
+    loop's line endings are the one place the two differ. A default that references another
+    (`code_server_k8s_node_url` names the version key) is resolved first, as Ansible's lazy
+    templating does — a one-pass render would leave the inner `{{ }}` in the output.
     """
-    context = dict(load_defaults(ROLE), puid=1000, pgid=1000)
     env = Environment(trim_blocks=True)
+    defaults = load_defaults(ROLE)
+    resolved = {
+        key: env.from_string(value).render(**defaults)
+        if isinstance(value, str)
+        else value
+        for key, value in defaults.items()
+    }
+    context = dict(resolved, puid=1000, pgid=1000)
     return env.from_string(DOCKERFILE.read_text()).render(**context)
 
 
