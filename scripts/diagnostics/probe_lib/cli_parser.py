@@ -19,6 +19,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib.arr import ARR_PORTS
+from diagnostics.probe_lib.core import LOKI_STORE_HELP, LOKI_STORES
 from lib.kubectl import CLUSTER_NODES, DEFAULT_CLUSTER
 from diagnostics.probe_lib.longhorn import LONGHORN_PREFIX
 
@@ -115,9 +116,19 @@ def _build_parser():
         help="scope to daniel-pi's declared monitors (by their static-monitors.yaml.j2 key) "
         "instead of the whole cluster's",
     )
-    sub.add_parser("loki-labels", help="Loki label names")
+    ll = sub.add_parser("loki-labels", help="Loki label names")
+    ll.add_argument(
+        "--loki", choices=LOKI_STORES, default="homelab", help=LOKI_STORE_HELP
+    )
     lq = sub.add_parser("loki-query", help="Loki range query")
     lq.add_argument("logql")
+    lq.add_argument(
+        "--loki",
+        choices=LOKI_STORES,
+        default=None,
+        help=LOKI_STORE_HELP
+        + "; unset, `homelab` unless the query is the claude-code selector",
+    )
     lq.add_argument("--limit", type=int, default=100)
     lq.add_argument(
         "--since",

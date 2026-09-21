@@ -75,8 +75,77 @@ def k8s_endpoint(hostname):
     return f"https://{host}", f"{host}:443:{metallb_vip()}"
 
 
-def loki_endpoint():
-    """The cluster Loki (Phase D.2 KL4)."""
+def claude_otel_loki_ip():
+    """claude-otel's Loki ClusterIP, read from the role default that pins it (plaintext).
+
+    That Loki has no IngressRoute: it publishes a `hostPort` on 127.0.0.1 of whichever node
+    it lands on, so the ClusterIP — routed on every node — is the address that works from
+    both hosts. `otelq` carries the same number as its fallback.
+    """
+    with open(CLAUDE_OTEL_DEFAULTS_PATH) as f:
+        for line in f:
+            if line.startswith("claude_otel_loki_cluster_ip:"):
+                return line.split(":", 1)[1].strip()
+    raise SystemExit(
+        f"claude_otel_loki_cluster_ip not found in {CLAUDE_OTEL_DEFAULTS_PATH}"
+    )
+
+
+# The two Loki stores and what each holds. `probe.py loki-query` asked only the first until
+# #2210, and a `{service_name="claude-code"}` query against it returned an empty result that
+# read as "the OTEL stream is gone" while 1.07M lines sat in the second.
+LOKI_STORES = ("homelab", "claude-otel")
+LOKI_STORE_HELP = (
+    "which Loki to ask: `homelab` (loki-homelab: pod, syslog and monitor-bridge logs) or "
+    '`claude-otel` (Claude Code OTEL — every `{service_name="claude-code"}` stream lives '
+    "there and nowhere else)"
+)
+
+# The one stream selector whose store is never in doubt. Matches `service_name="claude-code"`
+# and `=~"claude-code"` with any spacing; a regex wider than the literal name is left alone,
+# since loki-homelab carries a `service_name` label of its own (k8s workload names).
+_CLAUDE_CODE_SELECTOR_RE = re.compile(r'service_name\s*=~?\s*"claude-code"')
+
+
+def pick_loki_store(logql, requested):
+    """(store, note) for a LogQL query: which Loki answers it, and a stderr line saying so.
+
+    Pure. `requested` is the `--loki` value, None when unset. Only the claude-code selector
+    is judged: it has exactly one home, and asking the other store returns a well-formed
+    empty result rather than an error (#2210). Unset, that selector routes to claude-otel
+    with a note; every other query keeps the homelab default with no note.
+
+    Raises:
+        SystemExit: `--loki homelab` was asked for explicitly with the claude-code selector.
+    """
+    claude_code = bool(_CLAUDE_CODE_SELECTOR_RE.search(logql))
+    if requested is None:
+        if claude_code:
+            return "claude-otel", (
+                'loki-query: `service_name="claude-code"` lives only in claude-otel\'s Loki; '
+                "asking that store (pass --loki to choose)."
+            )
+        return "homelab", None
+    if requested == "homelab" and claude_code:
+        raise SystemExit(
+            'loki-query: `service_name="claude-code"` is claude-otel\'s stream, and '
+            "--loki homelab names the store that never holds it. An empty answer here "
+            "means nothing. Re-run with --loki claude-otel, or use `otelq logs '<logql>'`."
+        )
+    return requested, None
+
+
+def loki_endpoint(
+    store="homelab", k8s_endpoint=k8s_endpoint, cluster_ip=claude_otel_loki_ip
+):
+    """(base_url, curl --resolve pin) for one of the two Loki stores.
+
+    `homelab` is the cluster log store (Phase D.2 KL4), behind Traefik with the VIP pin.
+    `claude-otel` is the OTEL stack's Loki, reached by ClusterIP over plain HTTP: no route,
+    so no pin. Both resolvers are injectable so `plan()` stays testable without SOPS.
+    """
+    if store == "claude-otel":
+        return f"http://{cluster_ip()}:3100", None
     return k8s_endpoint("loki-homelab")
 
 
@@ -95,6 +164,17 @@ GROUP_VARS_PATH = os.path.join(
     "inventory",
     "group_vars",
     "all.yml",
+)
+
+# claude-otel role defaults (plaintext) — source of that stack's pinned Loki ClusterIP.
+CLAUDE_OTEL_DEFAULTS_PATH = os.path.join(
+    REPO,
+    "ansible",
+    "roles",
+    "k8s",
+    "claude-otel",
+    "defaults",
+    "main.yml",
 )
 
 # Inventory hosts file (plaintext) — source of daniel-pi's LAN IP.
