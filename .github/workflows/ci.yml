@@ -88,7 +88,17 @@ jobs:
   # too. Don't read either as the steady state.
   hooks:
     name: hooks (lint + validate + secrets + docs)
-    runs-on: ubuntu-latest
+    # A versioned runner label, not `ubuntu-latest`: the `language: system` hooks run whatever
+    # shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls the alias to a
+    # new release with no commit here (#2152). The built-in github-actions manager tracks a
+    # versioned label through the `github-runners` datasource, so the image moves in a PR that
+    # runs these hooks on it first. `ubuntu-latest` resolved to ubuntu-24.04 when this was
+    # pinned (2026-09-21), so the pin changed nothing on the day. The same reasoning covers
+    # `python-version:` and `node-version:` below — a two-part pin resolves to whatever patch
+    # the toolcache holds that day, while a three-part one moves only through Renovate.
+    # Every `runs-on` in .github/workflows agrees with this one, ENFORCED by
+    # ansible/tests/repo/test_workflow_runners_are_pinned.py.
+    runs-on: ubuntu-24.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -98,7 +108,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.14"
+          python-version: "3.14.7"
 
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0  # no floating major tag is published; pin the exact release
@@ -114,7 +124,7 @@ jobs:
       # these caches and 127s after). It is much cheaper on the runner than it is on a
       # workstation: the `gitleaks` hook is `language = "golang"`, and where daniel-box has no
       # Go and makes prek fetch a ~270 MB managed toolchain to build gitleaks from source
-      # (220s cold, for a scan that takes 0.05s), ubuntu-latest ships Go preinstalled and prek
+      # (220s cold, for a scan that takes 0.05s), the runner image ships Go preinstalled and prek
       # uses it. Hence a 45 MB cache rather than a 350 MB one.
       #
       # Only the environment dirs are cached. `~/.cache/prek/cache` is prek's own pip/uv
@@ -140,7 +150,7 @@ jobs:
         run: pip install prek==0.5.3  # pinned for a reproducible hook toolchain; Renovate (pypi) bumps it
 
       # validate-unit-templates is `language = "system"`, so it runs whatever `systemd-analyze`
-      # is on PATH — unverified on ubuntu-latest before this ran once. This step exists so a
+      # is on PATH — unverified on the runner image before this ran once. This step exists so a
       # runner image change that drops the binary fails loud here rather than as an opaque
       # "command not found" inside the hook.
       - name: Check systemd-analyze is available
@@ -295,7 +305,7 @@ jobs:
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     name: ansible-lint
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -305,7 +315,7 @@ jobs:
 
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.14"
+          python-version: "3.14.7"
 
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0  # no floating major tag is published; pin the exact release
@@ -443,7 +453,7 @@ jobs:
   # hide another's.
   pytest:
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -456,7 +466,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7
         with:
-          python-version: "3.14"
+          python-version: "3.14.7"
       - name: Install uv
         uses: astral-sh/setup-uv@bec219d24cd3e171d82865faccec33120bb574f4  # v10.1.0
         with:
@@ -507,7 +517,7 @@ jobs:
   # too, which is the "no verdict" every reader already handles.
   prek:
     name: prek (lint + validate + tests + secrets)
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [hooks, pytest, ansible_lint]
     if: always()
     steps:
@@ -530,7 +540,7 @@ jobs:
     # so it stays on every PR and self-scopes below; merge_group is treated like a PR whose
     # scope step found nothing to diff, the same as every other job here.
     if: github.event_name != 'push'
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -540,7 +550,7 @@ jobs:
 
       - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7
         with:
-          node-version: "24"
+          node-version: "24.21.0"
 
       # The script's `npm install renovate@latest` re-downloads Renovate on every run — 33-39s, and with
       # ansible-lint scoped to changed files this job is the longest in the workflow on a PR that

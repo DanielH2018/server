@@ -4,6 +4,11 @@
 `pyproject.toml` `requires-python` and every CI `python-version:` pin must match it, so bumping one
 copy can't silently leave CI testing a different interpreter than the repo targets (the "same fact
 copied into policy code and fixtures" anti-pattern). Fails the instant any copy drifts.
+
+The comparison is on major.minor. `.python-version` names the minor the repo targets and stays
+two-part; a workflow pin is three-part (#2152), because a two-part `python-version:` has
+setup-python resolve the patch from whatever the runner's toolcache holds that day, and only a
+full literal moves through Renovate. A workflow pin on a different minor still fails here.
 """
 
 import re
@@ -30,8 +35,12 @@ def _workflow_pins():
     return [
         (wf.name, v)
         for wf in sorted(WORKFLOWS.glob("*.yml"))
-        for v in re.findall(r'python-version:\s*"([0-9]+\.[0-9]+)"', wf.read_text())
+        for v in re.findall(r'python-version:\s*"([0-9.]+)"', wf.read_text())
     ]
+
+
+def _minor(version: str) -> str:
+    return ".".join(version.split(".")[:2])
 
 
 def test_pyproject_floor_matches_python_version_file():
@@ -50,8 +59,17 @@ def test_ci_workflows_pin_the_canonical_python():
     assert pins, (
         "no python-version pins found in .github/workflows — regex or layout changed"
     )
-    mismatched = [(wf, v) for wf, v in pins if v != canonical]
+    mismatched = [(wf, v) for wf, v in pins if _minor(v) != _minor(canonical)]
     assert not mismatched, (
         f"CI python-version pins disagree with .python-version ({canonical}): {mismatched} — "
         f"every setup-python step must test the interpreter the repo targets"
+    )
+
+
+def test_ci_workflows_pin_a_full_patch_release():
+    """The rejecting half of #2152: a two-part `python-version: "3.14"` floats on the toolcache."""
+    short = [(wf, v) for wf, v in _workflow_pins() if v.count(".") < 2]
+    assert not short, (
+        f"two-part python-version pins {short} — setup-python resolves the patch from the "
+        f"runner's toolcache that day; pin the full release so it moves only through Renovate"
     )

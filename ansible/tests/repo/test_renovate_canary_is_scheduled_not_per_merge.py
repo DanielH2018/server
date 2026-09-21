@@ -69,3 +69,23 @@ def test_both_workflows_run_the_one_retrying_script():
         assert not any("npx" in line for line in runs), (
             f"{workflow.name} still fetches Renovate through npx, outside the retry"
         )
+
+
+def test_the_canary_runs_one_at_a_time_in_its_own_group():
+    """#2152: a `workflow_dispatch` near 09:00 UTC overlapped the scheduled run.
+
+    The group must be keyed on the workflow alone. The file exists to keep the canary out of
+    ci.yml's head-SHA group, so a key carrying `github.ref` or `github.sha` would undo that.
+    """
+    concurrency = yaml_fast.safe_load(CANARY.read_text()).get("concurrency")
+    assert isinstance(concurrency, dict), "the canary has no concurrency group"
+    group = str(concurrency.get("group", ""))
+    assert "github.workflow" in group, (
+        f"canary concurrency group {group!r} is not the workflow"
+    )
+    assert "github.ref" not in group and "github.sha" not in group, (
+        f"canary concurrency group {group!r} is keyed on a commit; it must never share ci.yml's"
+    )
+    assert concurrency.get("cancel-in-progress") is True, (
+        "a superseded canary run is not a commit's verdict; cancel it rather than queue it"
+    )

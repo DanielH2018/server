@@ -140,6 +140,30 @@ def test_pr_refs_ignores_a_reference_into_another_repository():
     )
 
 
+def test_pr_refs_withholds_a_same_repo_issue_url():
+    """#2189: GitHub closes on the full URL too, and `next` offered an issue written that way."""
+    assert pr_refs(
+        [
+            "Closes https://github.com/DanielH2018/server/issues/7",
+            "fixes http://github.com/danielh2018/SERVER/issues/2078",
+        ]
+    ) == {7, 2078}
+
+
+def test_pr_refs_ignores_an_issue_url_into_another_repository():
+    """The rejecting half: the dotfiles URL is not #558 here, and a fork's URL is not either."""
+    assert (
+        pr_refs(
+            [
+                "Closes https://github.com/DanielH2018/dotfiles/issues/558",
+                "Fixes https://github.com/SomeoneElse/server/issues/558",
+                "Resolves https://github.com/DanielH2018/server/pull/558",
+            ]
+        )
+        == set()
+    )
+
+
 # --- main(["next", ...]): the handler's own plumbing, not just pickable() -----------------
 
 

@@ -374,3 +374,28 @@ def test_python_version_pins_in_lockstep() -> None:
         f"python-version drifted: .python-version {dotver} vs the workflows' {c.group(1)} — bump "
         f"the pyenv .python-version to match (its Renovate PR doesn't automerge, so it can lag)."
     )
+
+
+def test_node_version_pins_in_lockstep() -> None:
+    """ci.yml and renovate-config-canary.yml must pin the same three-part Node release.
+
+    The node customManager scans every workflow file since #2152 (it was ci.yml-only, and the
+    canary's twin pin was untracked from the day it split out). One depName groups both files
+    into one bump PR; this asserts the coupling held, the way the python test above does. Both
+    jobs run the same `renovate_config.sh`, so a skew would validate renovate.json under two
+    Node releases. Three-part, because `\\d+` read the major alone and the runner then
+    installed whatever 24.x the toolcache held that day.
+    """
+    ci = (_REPO / ".github/workflows/ci.yml").read_text()
+    canary = (_REPO / ".github/workflows/renovate-config-canary.yml").read_text()
+    c = re.search(r'node-version:\s*"([^"]+)"', ci)
+    k = re.search(r'node-version:\s*"([^"]+)"', canary)
+    assert c, "node-version pin not found in ci.yml"
+    assert k, "node-version pin not found in renovate-config-canary.yml"
+    assert c.group(1) == k.group(1), (
+        f"node-version pins drifted: ci.yml {c.group(1)} vs renovate-config-canary.yml "
+        f"{k.group(1)} — bump both together (one Renovate group edits both)."
+    )
+    assert c.group(1).count(".") == 2, (
+        f"node-version {c.group(1)} is not a full release — a major alone floats on the toolcache"
+    )
