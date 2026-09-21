@@ -32,6 +32,16 @@
   # the library resolves inside the pod), which is worth evaluating on a dry run rather than
   # skipping into a failed assert.
   check_mode: false
+  # STILL A POLL, and not convertible to `kubectl wait` (#2205). It waits on two things, and
+  # the first is not what #2205 assumed. Nothing has awaited this rollout yet: k8s/manifests
+  # DOES NOT WAIT — it queues the rollout for k8s/rollout-drain at the end of the batch, and
+  # this file runs before the drain. The poll (02ec2454, 2026-08-07) predates that deferral
+  # (5eea64e6, 2026-08-15), so it now covers a pod that may still be rolling. The second is
+  # application state: the API answering 200 with the library loaded. No pod condition
+  # states either — Ready is `/ping`, and `--for=condition=Available` returns on the OLD pod
+  # (rollout-drain/CLAUDE.md). The deterministic form is an inline `rollout status`, the shape
+  # k8s/arr-notification uses on this same Deployment; that is a behaviour change on a deploy
+  # path, filed as #2235 rather than shipped unexercised.
   until: sonarr_k8s_rootfolders.status | default(0) == 200
   retries: 12
   delay: 10
