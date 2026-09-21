@@ -68,7 +68,11 @@ def test_ci_workflows_pin_the_canonical_python():
 
 def test_ci_workflows_pin_a_full_patch_release():
     """The rejecting half of #2152: a two-part `python-version: "3.14"` floats on the toolcache."""
-    short = [(wf, v) for wf, v in _workflow_pins() if v.count(".") < 2]
+    pins = _workflow_pins()
+    assert pins, (
+        "no python-version pins found in .github/workflows — regex or layout changed"
+    )
+    short = [(wf, v) for wf, v in pins if v.count(".") < 2]
     assert not short, (
         f"two-part python-version pins {short} — setup-python resolves the patch from the "
         f"runner's toolcache that day; pin the full release so it moves only through Renovate"

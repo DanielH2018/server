@@ -1,4 +1,4 @@
-"""Every GitHub Actions job runs on a versioned runner image, and they all run on the same one.
+"""Every GitHub Actions job runs on a versioned runner image.
 
 `runs-on: ubuntu-latest` floated in every workflow until #2152. The `language: system` prek
 hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls
@@ -6,9 +6,8 @@ the alias to a new release with no commit in this repo — so a hook could start
 start passing for a different reason, between two runs of the same SHA. A versioned label
 (`ubuntu-24.04`) moves only through Renovate: the built-in github-actions manager reads it via
 the github-runners datasource, and the bump PR runs the hooks on the new image before merge.
-
-One image across the workflows, because the hooks job and image-smoke both read the same
-preinstalled toolset, and a lockstep bump is how Renovate offers it.
+The pins share one depName there, so one PR moves every workflow; nothing here holds them
+to one image, since a job may one day need an arm or larger runner.
 
 Run: uv run pytest ansible/tests/repo/test_workflow_runners_are_pinned.py
 """
@@ -62,12 +61,4 @@ def test_every_workflow_job_runs_on_a_versioned_image():
     assert not floating, (
         f"floating runner labels {floating} — pin a versioned image (`ubuntu-24.04`) so the "
         f"image moves through a Renovate PR rather than under a SHA already merged"
-    )
-
-
-def test_every_workflow_runs_on_the_same_image():
-    labels = {label for labels in _workflow_runners().values() for label in labels}
-    assert len(labels) == 1, (
-        f"workflows disagree on the runner image {sorted(labels)} — the hooks and image-smoke "
-        f"jobs read one preinstalled toolset, and Renovate bumps them as one group"
     )

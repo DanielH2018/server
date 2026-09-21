@@ -363,7 +363,7 @@
       "groupName": "{{depName}}"
     },
     {
-      "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is reading the new image's preinstalled-software list against those hooks before merging. One group for every workflow, because ansible/tests/repo/test_workflow_runners_are_pinned.py holds them to one image.",
+      "description": "The CI runner image (`runs-on: ubuntu-24.04` in every workflow). The built-in github-actions manager reads a versioned `runs-on` label through the github-runners datasource with no custom manager here; `ubuntu-latest` was the pin until #2152, and GitHub rolls that alias to a new release with no commit in this repo. NO automerge: the `language: system` prek hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, so the manual half is reading the new image's preinstalled-software list against those hooks before merging. One group for every workflow: the pins share one depName, so one PR moves all of them, and ansible/tests/repo/test_workflow_runners_are_pinned.py refuses a floating label in any of them.",
       "matchDatasources": [
         "github-runners"
       ],
