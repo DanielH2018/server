@@ -87,6 +87,33 @@ hits it.
 Check mode skips the *ban* task but still runs `Probe the VIP from the banned Pi`, so the
 probe fails. Pre-existing, confirmed by A/B, and not a sign of a broken change.
 
+### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
+The agent sidecar in the traefik pod logs this against a Traefik access-log line cut at a
+random offset (150 to 900+ bytes in, never at a fixed ceiling). It is not the acquisition
+buffer and not the rotate sidecar: crowdsec tails through `nxadm/tail` without
+`CompleteLines`, so when the tailer reaches EOF in the middle of a line Traefik is still
+writing, the library emits the partial line, then seeks to the end of the file. The partial
+line fails the traefik parser with this error; the remainder arrives as a second line that
+does not start with `{` and is dropped silently, or is skipped by the seek. Each occurrence
+is one request the WAF never sees, and the error count is a LOWER bound — upstream's second
+data point measured 389 lines lost against 168 errors.
+
+Measured 2026-09-21 over 24h: 94,043 requests served, 51 errors, 59 parser failures — about
+0.05% of the edge's traffic. The same tailer reads `authelia.log` and both nodes' `auth.log`
+(`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`); a partial syslog line
+fails the parser with no error at all, so nothing here can count that loss.
+
+Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Traefik's
+`bufferingSize` batches entries into a channel and still writes one line per call, and
+`poll_without_inotify` only changes when the reader wakes. The fix is
+crowdsecurity/crowdsec#4678 (sets `CompleteLines: true`, open as of 2026-09-22, not in any
+release). **Re-check #2124 on the next `crowdsec_k8s_image` bump**
+(`ansible/inventory/group_vars/all.yml:crowdsec_k8s_image`): a release carrying that PR
+closes it; verify with
+`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h`
+returning nothing. Building a patched image through `k8s/image-builder` was rejected: it
+would take the WAF binary out of Renovate's view for a 0.05% loss.
+
 ## The Metabase dashboard was removed (2026-08-22)
 
 The engine pod carried a Metabase sidecar (plus a `metabase-seed` initContainer, a
