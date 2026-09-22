@@ -46,6 +46,7 @@ __all__ = [
     "ALL_VARS",
     "ANSIBLE",
     "BASE_CONTEXT",
+    "BUILT_IMAGE_TAG_STUBS",
     "HOST_VARS",
     "HOST_VARS_IN_TREE",
     "INVENTORY",
@@ -68,6 +69,24 @@ __all__ = [
     "service_tags_at_or_none",
 ]
 
+# k8s/image-builder publishes `k8s_built_image_tags` as a play fact at deploy time (image name ->
+# content tag), and every built-image pin reads it as `k8s_built_image_tags.get('<name>',
+# 'latest')`. A render here has no play, so without a seed the fallback fires: every
+# rendered-manifest guard would check `:latest` while production renders the hash — passing, and
+# no longer reading the ref the cluster gets. The digests are arbitrary; their SHAPE and this
+# map's keys are asserted by ansible/tests/k8s/test_built_images_name_the_content_tag.py.
+BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
+    "code-server": "sha-c0de5e2e7000",
+    "homelab-mcp": "sha-70c1ab0e1111",
+    "ical-proxy": "sha-1ca17e2d2222",
+    "n8n": "sha-8a8a8a8a3333",
+    "n8n-runners": "sha-8b8b8b8b4444",
+    "nut": "sha-4a7f6d0e5555",
+    "pi-peer-backup": "sha-b0cca17e6666",
+    "terraria": "sha-7e44a121a777",
+    "valheim": "sha-a1de17ab8888",
+}
+
 # Non-secret fallbacks for host facts not in the plaintext inventory. Anything still missing
 # (SOPS secrets, role vars) renders via StubUndefined — fine for a STRUCTURAL parse/lint check.
 BASE_CONTEXT = {
@@ -80,6 +99,7 @@ BASE_CONTEXT = {
     "domain": "example.com",
     "server_ip": "10.0.0.1",
     "kuma_docker_host": 1,
+    "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
 }
 
 

@@ -222,6 +222,7 @@
  "ansible/tests/k8s/test_alloy_config_labels.py": 0.0,
  "ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py": 0.36,
  "ansible/tests/k8s/test_base_images_digest_pinned.py": 0.0,
+ "ansible/tests/k8s/test_built_images_name_the_content_tag.py": 1.57,
  "ansible/tests/k8s/test_built_images_pull_always.py": 0.0,
  "ansible/tests/k8s/test_checksum_annotation_census.py": 0.0,
  "ansible/tests/k8s/test_checksum_annotations_documented.py": 0.0,

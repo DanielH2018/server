@@ -1,18 +1,19 @@
 ---
-code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:latest"
+code_server_k8s_image: "{{ k8s_registry_pull_host }}/code-server:{{ k8s_built_image_tags.get('code-server', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # code-server is the one migrating-state role slice 7b does NOT promote. `code_server_k8s_image`
-# above is `{{ k8s_registry_pull_host }}/code-server:latest` — an immutable in-cluster registry
-# tag with no version scheme, so Renovate's k8s-defaults manager has nothing to bump: there is
+# above names a tag k8s/image-builder computes from the build inputs — an in-cluster registry
+# ref with no upstream version scheme, so Renovate's k8s-defaults manager has nothing to bump:
+# there is
 # no image update event that could ever trigger an auto-deploy of this role in the first place.
 # The migrating-state shape below (Recreate + two RWO PVCs) is real and is still why a manual
 # redeploy stays worth the same pre-apply snapshot every other role gets — but it is not what
 # blocks auto-deploy here, so it is no longer the reason cited.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "immutable registry/…:latest image with no version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below"  # noqa var-naming[no-role-prefix]
 # Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Both claims — code-server can never auto-deploy (its image is an immutable registry/…:latest
+# Both claims — code-server can never auto-deploy (its image is an in-cluster-built registry
 # ref), but this slice protects a manual deploy too, which carries the same migration risk.
 k8s_autodeploy_snapshot_pvcs: [code-server-config, code-server-workspace]  # noqa var-naming[no-role-prefix]
 

@@ -1,11 +1,21 @@
 ---
 # Does every pod actually run the image the registry serves?
 #
-# WHAT THIS CATCHES, and why nothing else here can. Built images are pushed to a MUTABLE tag, so a
-# rebuild changes what `:latest` resolves to while leaving the Deployment spec byte-identical. The
-# rollout that closes that gap is queued by k8s/manifests off `k8s_rebuilt_images`, which
-# k8s/image-builder fills only when the pre- and post-build digests differ. Every step in that
-# chain reports success independently of whether a pod ever picked the image up.
+# WHAT THIS CATCHES, and why nothing else here can. Every built image carries TWO names for one
+# manifest: an immutable `sha-<12 hex>` content tag, which every pin reads, and the mutable
+# `:latest` alias it is pushed beside. A rebuild that changes the inputs changes the name, so the
+# Deployment spec changes and the apply rolls the pod. Two paths still leave the spec
+# byte-identical while what the registry serves moves: a rebuild whose inputs did not change, and
+# a deploy that skips the building role and falls back to `:latest`. The rollout that closes that
+# gap is queued by k8s/manifests off `k8s_rebuilt_images`, which k8s/image-builder fills only when
+# the pre- and post-build digests differ. Every step in that chain reports success independently
+# of whether a pod ever picked the image up.
+#
+# WHY IT STILL COMPARES DIGESTS RATHER THAN NAMES. #2234 proposed re-deriving this as a name
+# comparison once the content tag existed. Both tags resolve to one manifest, so the digest read
+# is unchanged by the content tag AND strictly stronger than comparing names: it still catches the
+# cached-tag case below, where the node serves old bytes under a name that says otherwise. A name
+# comparison cannot see that at all.
 #
 # Hit for real 2026-08-27, on nut. Run 1 built the new debian-bookworm-slim base, pushed it, and
 # then died at "Read the build result" — before the digest comparison that queues the rollout. Run 2
@@ -19,8 +29,9 @@
 # k8s/manifests and k8s/rollout-drain have not run yet. Putting this in the builder's own role would
 # false-positive on every deploy that changes an image.
 #
-# WHY IT READS PODS RATHER THAN DEPLOYMENTS. The image a Deployment NAMES is `:latest` either way —
-# that is the whole failure. Only a running container reports the digest it actually resolved, as
+# WHY IT READS PODS RATHER THAN DEPLOYMENTS. In both surviving paths the Deployment NAMES the same
+# ref before and after — an unchanged content tag, or `:latest` — so reading the spec proves
+# nothing. Only a running container reports the digest it actually resolved, as
 # `.status.containerStatuses[].imageID`.
 #
 # IMAGE NAME IS NOT WORKLOAD NAME. n8n-images builds `n8n-runners`; the n8n role deploys it. So
@@ -95,8 +106,10 @@
            | list | length == 0
     fail_msg: >-
       {{ item.name }} is stale: the registry serves {{ item.digest }} but at least one running pod
-      resolved something else. A built image is pushed to a mutable tag, so the Deployment spec does
-      not change on a rebuild — and there are TWO ways that ends here, with different fixes.
+      resolved something else. A rebuild that leaves the image's name unchanged — an unchanged
+      content tag, or the `:latest` alias a deploy without the building role falls back to —
+      leaves the Deployment spec unchanged too, and there are TWO ways that ends here, with
+      different fixes.
       (1) NO ROLLOUT WAS QUEUED: the new image sits in the registry unused while every other check
       reads green. Roll it with:
       ./scripts/deploy.sh --tags <role> -e image_builder_force=true

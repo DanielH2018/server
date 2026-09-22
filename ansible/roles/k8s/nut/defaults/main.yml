@@ -3,7 +3,7 @@
 # Docker sidecar's `build: context: .`. Pulled on daniel-server through the agent-side
 # registries.yaml mirror (ClusterIP endpoint); see k8s_registry_cluster_ip in
 # group_vars/all.yml.
-nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:latest"
+nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:{{ k8s_built_image_tags.get('nut', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # NOT probe-less — verified against templates/deployment.yaml.j2, this Deployment DOES render

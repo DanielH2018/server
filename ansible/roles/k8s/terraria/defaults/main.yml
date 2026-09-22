@@ -10,7 +10,7 @@
 # (`./scripts/deploy.sh --tags terraria`) rather than by the deployer applying a pin. That is a
 # small delta here precisely because k8s_autodeploy is already false below — nothing was applying
 # this pin automatically anyway.
-terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:latest"
+terraria_k8s_image: "{{ k8s_registry_pull_host }}/terraria:{{ k8s_built_image_tags.get('terraria', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the Deployment renders no readinessProbe, so

@@ -11,9 +11,9 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 - **Route:** `code-server.<domain>` · `code-server.local.<domain>`, Authelia two_factor
 - **Claims:** `code-server-config` (no backup (listed in k3s_longhorn_nobackup_volumes)),
   `code-server-workspace` (weekly -> B2 (default target))
-- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — immutable registry/…:latest image
-  with no version scheme — Renovate can never generate an update PR for it, so there is no bump
-  event to auto-deploy regardless of the migrating-state PVC shape below
+- **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — in-cluster-built registry image with
+  no upstream version scheme — Renovate can never generate an update PR for it, so there is no
+  bump event to auto-deploy regardless of the migrating-state PVC shape below
 <!-- /generated_from -->
 
 - **Image:** built in-cluster by k8s/image-builder from `templates/Dockerfile.j2`

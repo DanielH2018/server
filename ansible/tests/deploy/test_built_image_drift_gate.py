@@ -1,8 +1,9 @@
 """A built image must be proven to have reached a pod, not just to have reached the registry.
 
-Built images are pushed to a MUTABLE tag, so a rebuild changes what `:latest` resolves to while
-leaving the Deployment spec byte-identical. Nothing in the spec changed, so nothing rolls, and the
-new image sits in the registry unused behind a green deploy.
+A rebuild whose INPUTS did not change keeps the same content tag, and a deploy that skips the
+building role falls back to the `:latest` alias every build is pushed beside. Either way the
+Deployment spec is byte-identical while what the registry serves has moved. Nothing in the spec
+changed, so nothing rolls, and the new image sits in the registry unused behind a green deploy.
 
 Hit for real 2026-08-27, on nut. Run 1 built the new base, pushed it, then died at "Read the build
 result" — before the digest comparison that queues the rollout. Run 2 short-circuited the build,
@@ -160,12 +161,13 @@ def test_the_post_build_digest_read_is_not_gated_on_the_build_running():
 
 
 def test_the_gate_compares_against_the_running_pods_image_id():
-    """imageID, not the Deployment's image: the named image is `:latest` either way."""
+    """imageID, not the Deployment's image: in both drift paths the spec names the same ref."""
     body = _GATE.read_text()
     assert "imageID" in body, (
-        "The gate no longer reads .status.containerStatuses[].imageID. A Deployment's image field "
-        "names a mutable tag, so it matches whether or not the pod picked the new image up — only "
-        "a running container reports the digest it actually resolved."
+        "The gate no longer reads .status.containerStatuses[].imageID. In both paths that reach "
+        "this gate the Deployment's image field is unchanged — an unchanged content tag, or the "
+        "`:latest` alias — so it matches whether or not the pod picked the new image up. Only a "
+        "running container reports the digest it actually resolved."
     )
     assert re.search(r"deletionTimestamp", body), (
         "The gate no longer excludes terminating pods. A pod with deletionTimestamp set still "

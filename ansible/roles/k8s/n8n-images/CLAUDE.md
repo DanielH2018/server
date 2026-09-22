@@ -6,7 +6,7 @@ role has something to run. It renders no manifest of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
-- **Deploy tag:** `--tags "n8n-images"`
+- **Deploy tag:** `--tags "n8n-images,n8n"`
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claims:** none (no PVC)
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
@@ -14,6 +14,10 @@ role has something to run. It renders no manifest of its own.
 
 - **Renders nothing** — two `include_role: k8s/image-builder` calls, ordered rather than
   parallel because n8n and its task runners are version-coupled.
+- **The entry is tagged `n8n` as well as `n8n-images`**, so `--tags n8n` runs this role too.
+  n8n's two pins read the `k8s_built_image_tags` fact only this role publishes; deployed alone,
+  n8n renders `:latest`, which changes the Deployment spec away from the content tag and
+  stop-starts a Recreate pod onto the same digest.
 - **Images:** `templates/Dockerfile.j2` (`n8n`) and `templates/Dockerfile-runners.j2`
   (`n8n-runners`), each `FROM` the upstream `:stable` channel tag with a digest beside it.
   Renovate bumps the digest; the tag holds the channel.
