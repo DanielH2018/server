@@ -262,6 +262,10 @@
         # built, so post_tasks/k8s_image_drift_gate.yml would assert a stale digest against pods a
         # `--tags` run has no business inspecting.
         k8s_built_images: []
+        # A consumer role reads this to build its own image ref. A leftover entry from an earlier
+        # play names a tag the registry may no longer serve, which a `--tags` run that skips the
+        # building role would then render into a manifest and fail to pull.
+        k8s_built_image_tags: {}
       tags: always
 
   tasks:

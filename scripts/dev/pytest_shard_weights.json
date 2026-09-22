@@ -190,6 +190,7 @@
  "ansible/tests/deploy/test_gitops_deploy_ship_list.py": 0.02,
  "ansible/tests/deploy/test_gitops_manual_trigger.py": 0.0,
  "ansible/tests/deploy/test_gitops_markers_copies.py": 0.0,
+ "ansible/tests/deploy/test_image_builder_content_tag.py": 0.1,
  "ansible/tests/deploy/test_image_builder_gate.py": 0.14,
  "ansible/tests/deploy/test_image_builder_wait_returns_promptly.py": 0.01,
  "ansible/tests/deploy/test_inline_rollout_gates.py": 0.03,

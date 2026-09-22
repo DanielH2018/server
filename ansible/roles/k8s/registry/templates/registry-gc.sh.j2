@@ -47,6 +47,13 @@ KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 PUSH_TOKEN="{{ registry_gc_push_token | default('') }}"
 
+# The registry's own HTTP API, reached the way the image-builder role's registry reads reach it:
+# the hostPort on the loopback address. Untagging is an API call, not something the GC binary does.
+REG="http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}"
+MANIFEST_ACCEPT='application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json'
+KEEP_CONTENT_TAGS={{ registry_k8s_keep_content_tags }}
+PRUNED=0
+
 STATUS=down
 MSG="did not complete"
 
@@ -106,6 +113,101 @@ if [[ "$ACTIVE_BUILDS" -gt 0 ]]; then
   exit 0
 fi
 
+# ── Content-tag prune ────────────────────────────────────────────────────────────────────────
+# Every build pushes an immutable `sha-<12 hex>` tag beside `latest` (see k8s/image-builder's
+# --output). A tag is a real manifest reference, so `garbage-collect --delete-untagged` below can
+# never reclaim one: without this step the store gains one permanent manifest per rebuild, and the
+# buildcache comment in build-job.yaml.j2 stops being able to claim that the store is bounded by
+# the NUMBER of built images rather than by how often they are rebuilt.
+#
+# BEFORE the scale-down, not after, and the order is load-bearing. Untagging goes through the
+# SERVING registry (`DELETE /v2/<repo>/manifests/<digest>`, permitted by the
+# REGISTRY_STORAGE_DELETE_ENABLED this file's header describes), while the GC Job runs the binary
+# directly against a store with nothing serving it. Reversed, every prune would fail on a refused
+# connection and only the blob sweep would run — silently, since the prune is best-effort.
+#
+# WHAT IS NEVER UNTAGGED: any tag that is not `sha-<12 hex>`, which is what keeps `latest` and
+# `buildcache` safe; the digest `latest` currently resolves to; and any digest a running pod
+# resolved. The last one matters because every built image runs imagePullPolicy: Always
+# (ansible/tests/k8s/test_built_images_pull_always.py), so a pod re-fetches by tag on each start —
+# untagging the manifest a live pod came from turns its next restart into an ImagePullBackOff.
+#
+# AN UNRANKABLE TAG IS KEPT. Ordering needs each manifest's config-blob `created`, because the tag
+# names are content hashes and carry no chronology, so a tag whose config blob cannot be read has
+# no place in that order. The asymmetry is the one k8s/image-builder's build gate rests on: keeping
+# a superseded tag costs disk, untagging a live one costs an outage.
+
+# The digest a tag resolves to, from the registry's own header rather than from hashing the body.
+manifest_digest() {
+  curl -fsS -I --max-time 10 -H "Accept: ${MANIFEST_ACCEPT}" \
+    "${REG}/v2/${1}/manifests/${2}" 2>/dev/null \
+    | tr -d '\r' | sed -n 's/^[Dd]ocker-[Cc]ontent-[Dd]igest: //p'
+}
+
+# Every image digest a running container resolved, one per line. Scoped to {{ k8s_namespace }},
+# which is where every consumer of this registry runs — a workload in another namespace pulling
+# from here would be invisible to the keep rule below.
+live_digests() {
+  $KUBECTL get pods -o \
+    jsonpath='{range .items[*]}{range .status.containerStatuses[*]}{.imageID}{"\n"}{end}{end}' \
+    2>/dev/null | grep -o 'sha256:[0-9a-f]\{64\}' | sort -u
+}
+
+# `created<TAB>tag<TAB>digest` for every content tag in one repository, newest first. A row whose
+# created or digest could not be read is still emitted — the caller keeps it rather than ranking it.
+content_tag_rows() {
+  local repo=$1 tag body digest cfg created
+  curl -fsS --max-time 10 "${REG}/v2/${repo}/tags/list" 2>/dev/null \
+    | jq -r '.tags[]?' | grep -E '^sha-[0-9a-f]{12}$' \
+    | while read -r tag; do
+        digest=$(manifest_digest "$repo" "$tag")
+        body=$(curl -fsS --max-time 15 -H "Accept: ${MANIFEST_ACCEPT}" \
+                 "${REG}/v2/${repo}/manifests/${tag}" 2>/dev/null)
+        cfg=$(jq -r '.config.digest // empty' <<<"$body" 2>/dev/null)
+        created=""
+        if [[ -n "$cfg" ]]; then
+          created=$(curl -fsS --max-time 15 "${REG}/v2/${repo}/blobs/${cfg}" 2>/dev/null \
+                      | jq -r '.created // empty' 2>/dev/null)
+        fi
+        printf '%s\t%s\t%s\n' "$created" "$tag" "$digest"
+      done | sort -r
+}
+
+prune_content_tags() {
+  local live repos repo keep_digest rank created tag digest
+  live=$(live_digests)
+  repos=$(curl -fsS --max-time 10 "${REG}/v2/_catalog?n=1000" 2>/dev/null | jq -r '.repositories[]?')
+  if [[ -z "$repos" ]]; then
+    logger -t registry-gc "prune: registry catalog unreadable — skipped"
+    return 0
+  fi
+
+  while read -r repo; do
+    [[ -n "$repo" ]] || continue
+    keep_digest=$(manifest_digest "$repo" latest)
+    rank=0
+    while IFS=$'\t' read -r created tag digest; do
+      [[ -n "$tag" ]] || continue
+      rank=$((rank + 1))
+      if [[ -z "$created" || -z "$digest" ]]; then
+        logger -t registry-gc "prune: keeping ${repo}:${tag} — created or digest unreadable"
+        continue
+      fi
+      [[ "$rank" -le "$KEEP_CONTENT_TAGS" ]] && continue
+      [[ -n "$keep_digest" && "$digest" == "$keep_digest" ]] && continue
+      grep -qxF "$digest" <<<"$live" && continue
+      if curl -fsS -X DELETE --max-time 20 \
+           "${REG}/v2/${repo}/manifests/${digest}" >/dev/null 2>&1; then
+        PRUNED=$((PRUNED + 1))
+      else
+        logger -t registry-gc "prune: could not untag ${repo}:${tag} (${digest})"
+      fi
+    done < <(content_tag_rows "$repo")
+  done <<<"$repos"
+}
+
+prune_content_tags
+
 $KUBECTL scale "deploy/${DEPLOY}" --replicas=0 >/dev/null 2>&1
 # Wait for the pod to actually exit. Scaling returns immediately, and GC must not start while
 # the old process still holds the store.
@@ -130,7 +232,7 @@ if $KUBECTL wait --for=condition=complete "job/${JOB}" \
   DELETED=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting blob')
   LINKS=$($KUBECTL logs "job/${JOB}" 2>/dev/null | grep -c 'Deleting layer link')
   STATUS=up
-  MSG="gc completed; ${DELETED} blob(s) and ${LINKS} layer link(s) deleted"
+  MSG="gc completed; ${PRUNED} content tag(s) untagged, ${DELETED} blob(s) and ${LINKS} layer link(s) deleted"
 else
   MSG="gc job did not complete within {{ registry_k8s_gc_deadline_s }}s — see: kubectl -n ${NS} logs job/${JOB}"
   exit 1

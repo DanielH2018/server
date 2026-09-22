@@ -56,8 +56,18 @@ spec:
             # acceptable while it is unreachable off the node (hostPort on
             # {{ k8s_registry_host_ip }}). Pushed to the SERVICE address — `localhost` in here
             # would mean this pod. See group_vars/all.yml for the address pair.
+            #
+            # TWO NAMES for one build. `image_builder_content_tag` is the immutable
+            # `sha-<12 hex>` derived from the build inputs, `image_builder_tag` the mutable
+            # `latest` every consumer still references. One exporter, so the image is built and
+            # pushed once and both names resolve to the same digest — which is what keeps the
+            # digest comparisons in tasks/main.yml and the drift gate reading one object.
+            #
+            # `"name=a,b"` is quoted because buildctl parses the exporter options as CSV: an
+            # unquoted second name would be read as another key=value pair and rejected. The
+            # quotes are literal characters in this argv element, which the CSV reader consumes.
             - --output
-            - type=image,name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }},push=true,registry.insecure=true
+            - type=image,"name={{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_content_tag }},{{ k8s_registry_push_host }}/{{ image_builder_name }}:{{ image_builder_tag }}",push=true,registry.insecure=true
             # Layer cache, kept in the registry beside the image it belongs to. buildkitd's
             # own state is an emptyDir that dies with the Job, so without this EVERY build is
             # cold: re-pull the base, re-run every apt/pip/npm step, re-fetch everything the

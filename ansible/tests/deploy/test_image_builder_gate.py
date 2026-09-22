@@ -14,7 +14,9 @@ that cannot decide must resolve toward BUILDING.
 Three properties have to hold:
 
 1. THE GATE RESOLVES TOWARD BUILDING WHEN IT CANNOT TELL. An undefined or skipped render
-   register, and a registry that answers anything other than 200, all mean build.
+   register, and either registry read answering anything other than 200, all mean build. The
+   second of those reads asks for the CONTENT tag: `:latest` being served says nothing about
+   whether the `sha-<hash>` name a consumer references exists.
 
 2. EVERY BUILD-PATH TASK CARRIES BOTH CLAUSES — the gate, and the separate `not k8s_no_mutate`
    dry-run guard the gate deliberately does not absorb. Dropping the first rebuilds everything
@@ -104,6 +106,7 @@ STEADY = dict(
     image_builder_force=False,
     image_builder_name="demo",
     image_builder_digest_before={"status": 200},
+    image_builder_content_tag_head={"status": 200},
     image_builder_render={"changed": False},
     image_builder_previous={"rc": 0, "stdout": "build-demo=1"},
 )
@@ -134,6 +137,35 @@ def test_a_missing_image_builds():
         "an image absent from the registry must be built regardless of the context, or a "
         "wiped registry never refills and every consuming Deployment fails to pull."
     )
+
+
+def test_a_missing_content_tag_builds():
+    """The clause that makes the content tag load-bearing rather than decorative.
+
+    `:latest` being served says nothing about whether the `sha-<hash>` tag a consumer references
+    exists, and the first deploy after the builder started computing one is exactly that state:
+    unchanged context, `:latest` present, no content tag ever pushed. Skipping there leaves a
+    consumer naming a tag the registry has never seen.
+    """
+    assert (
+        _render(**{**STEADY, "image_builder_content_tag_head": {"status": 404}})
+        == "True"
+    ), (
+        "the registry not serving this content tag no longer forces a build, so the tag every "
+        "consumer references can stay absent indefinitely while the deploy reports success."
+    )
+
+
+@pytest.mark.parametrize(
+    "head",
+    [
+        pytest.param(SKIPPED_REGISTER, id="skipped"),
+        pytest.param({}, id="empty"),
+    ],
+)
+def test_an_undecidable_content_tag_read_builds(head):
+    """Same asymmetry as every other clause: a read that did not come back means build."""
+    assert _render(**{**STEADY, "image_builder_content_tag_head": head}) == "True"
 
 
 def test_force_builds_an_unchanged_context():

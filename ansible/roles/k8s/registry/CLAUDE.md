@@ -30,6 +30,19 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - A weekly garbage collection (`gc-job.yaml.j2`, Sunday 04:20) takes the registry
   offline for up to 20 minutes — nothing else reclaims space, and every rebuild pushing
   the same `latest` tag orphans the previous manifest.
+- **`registry-gc.sh` untags superseded content tags BEFORE it scales the registry down**, and
+  that order is load-bearing. Every build also pushes an immutable `sha-<12 hex>` tag
+  (`k8s/image-builder`), which is a real manifest reference `garbage-collect
+  --delete-untagged` can never reclaim — so without the prune the store gains one permanent
+  manifest per rebuild. Untagging is an HTTP `DELETE` against the SERVING registry, while the
+  GC Job runs the binary against a store with nothing serving it; reversed, every prune fails
+  on a refused connection and only the blob sweep runs.
+  - It keeps `registry_k8s_keep_content_tags` (3) newest per repository, the digest `latest`
+    resolves to, and any digest a running pod resolved. That last one is not belt-and-braces:
+    built images run `imagePullPolicy: Always`, so a pod re-fetches by tag on each start and
+    untagging the manifest it came from turns its next restart into an ImagePullBackOff.
+  - An unrankable tag is KEPT. Ordering needs each manifest's config-blob `created`, because
+    the tag names are content hashes and carry no chronology.
 - The GC run reports twice: the `Registry GC` Kuma push tile (`registry_gc_push_token`,
   static in `k8s/uptime-kuma`, deadline one hour past the weekly period) and the off-site
   healthchecks.io `registry-gc` dead-man. The token existed nowhere but the script until

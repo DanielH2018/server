@@ -8,7 +8,12 @@
 #
 # Callers set image_builder_name / _dockerfile / _context / _tag; see defaults/main.yml.
 #
-# UNDER --check the BUILD is skipped and the three REGISTRY READS still run. Building and pushing
+# EVERY BUILD PUSHES TWO NAMES for one manifest: the mutable `image_builder_tag` (`latest`) every
+# consumer references today, and an immutable `image_builder_content_tag` (`sha-<12 hex>`) derived
+# from the build inputs. Both resolve to the same digest, so the digest comparisons below are
+# unaffected by which one a manifest names.
+#
+# UNDER --check the BUILD is skipped and the REGISTRY READS still run. Building and pushing
 # an image is the most mutating thing in this play, so a dry run must not do it; but the reads
 # are HTTP GETs against the registry, and running them is what keeps check mode honest. With no
 # build, the pre- and post-build digests are read from the same unchanged tag and compare equal,
@@ -32,6 +37,59 @@
     fail_msg: >-
       k8s/image-builder needs image_builder_name and image_builder_dockerfile. Without them it
       would render a Job that builds nothing and reports success.
+
+# The content tag: a second name for the same image, derived from the bytes the build consumes
+# rather than from when the build ran. `<name>:sha-<12 hex>` answers "is the running pod the image
+# this commit describes" by comparing a NAME, where the mutable `:latest` alone can only be
+# answered by reading a registry digest (post_tasks/k8s_image_drift_gate.yml).
+#
+# Computed on the CONTROLLER, and before the render below, for two reasons that both have to hold:
+# build-job.yaml.j2 names the tag, so it cannot be derived from a file that template produces; and
+# a consumer role reads it to build its own image ref, so `--check` and a `--skip-tags deploy` run
+# have to compute the same name a deploy does. Reading the rendered context back off the host
+# would break both.
+#
+# HASHED FROM context-configmap.yaml.j2's OWN RENDER, not from a second list of the inputs. That
+# ConfigMap's `data` is by definition every byte the build reads — the Dockerfile, each
+# `image_builder_context` template and each `image_builder_context_files` file, keyed by the path
+# the Dockerfile's COPY names. A hand-listed set of the same lookups is the drift this cannot
+# afford: add a fourth input to the ConfigMap, forget it here, and the tag holds still across a
+# change to it — a stale image behind a fresh-looking name, which is worse than the mutable tag
+# this adds to. There is no second list to forget.
+#
+# `['data']` only, so the render's own comments and the metadata around it do not enter the hash:
+# rewording a comment in that template must not rebuild all nine images. `dictsort | to_json` for
+# a stable, unambiguous encoding — a plain join could not tell two contexts apart whose files
+# happen to contain the separator.
+#
+# ansible/tests/deploy/test_image_builder_content_tag.py evaluates this expression through
+# Ansible's own templar against real files on disk.
+- name: Compute the content tag for {{ image_builder_name }}
+  # `always`, not `config` or `deploy`. Both slices read this fact — the render below is `config`,
+  # the registry reads and the build are `deploy` — and tagging it with both is the shape
+  # ansible/tests/deploy/test_dual_tagged_producers.py refuses, because `--skip-tags deploy`
+  # removes a task carrying either tag and leaves the consumer reading an undefined variable.
+  tags: [always]
+  ansible.builtin.set_fact:
+    image_builder_content_tag: >-
+      sha-{{ ((lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data']
+              | dictsort | to_json | hash('sha256'))[:12] }}
+
+# Published for the roles that DEPLOY these images, which are not always the role that builds
+# them: n8n-images builds `n8n` and `n8n-runners` in one batch and the n8n role deploys both in a
+# later one. A consumer reads `k8s_built_image_tags.get('<name>', 'latest')` in its own image pin,
+# so a deploy that skips the building role falls back to the mutable alias rather than naming a
+# tag nothing pushed.
+- name: Publish the content tag to the play for {{ image_builder_name }}
+  # `always`, for the same reason as the task above: a consumer role renders its manifests under
+  # `config` and reads this map to build its image ref.
+  tags: [always]
+  ansible.builtin.set_fact:
+    # noqa var-naming[no-role-prefix] — deliberately play-scoped, exactly like k8s_rebuilt_images
+    # and k8s_built_images below: a role prefix would make a fact other roles read look role-local.
+    k8s_built_image_tags: >-
+      {{ (k8s_built_image_tags | default({}))
+         | combine({image_builder_name: image_builder_content_tag}) }}
 
 - name: Create the build manifest directory for {{ image_builder_name }}
   tags: [config]
@@ -85,6 +143,31 @@
   register: image_builder_digest_before
   changed_when: false
   # Reads only, and its counterpart below reads the same tag — see the header.
+  check_mode: false
+
+# Does the registry already serve THIS content tag? The clause that makes the content tag load
+# bearing rather than decorative.
+#
+# The read above asks about `:latest`, and `:latest` being served says nothing about whether the
+# hash tag a consumer references exists. The first deploy after this role started computing a
+# content tag is exactly that state: the context is unchanged, `:latest` is served, every other
+# clause reads "nothing to do" — and no `sha-…` tag has ever been pushed, so a consumer naming one
+# would fail to pull. 404 here forces the build that creates it.
+#
+# It also subsumes the failed-build clause below for the changed-context case: a build that fails
+# never pushes, so the tag stays absent and the next run rebuilds. That clause still earns its
+# place for an UNCHANGED context, where the tag from the last successful build is already there.
+- name: Read whether the registry already serves the content tag of {{ image_builder_name }}
+  tags: [deploy]
+  ansible.builtin.uri:
+    url: "http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}/v2/{{ image_builder_name }}/manifests/{{ image_builder_content_tag }}"
+    method: HEAD
+    headers:
+      Accept: application/vnd.oci.image.manifest.v1+json,application/vnd.docker.distribution.manifest.v2+json
+    status_code: [200, 404]
+  register: image_builder_content_tag_head
+  changed_when: false
+  # A read, like its two siblings — see the header.
   check_mode: false
 
 # Did the LAST build of this image succeed? Nothing else here can tell.
@@ -146,6 +229,7 @@
     image_builder_building: >-
       {{ image_builder_force | bool
          or image_builder_digest_before.status | default(0) != 200
+         or image_builder_content_tag_head.status | default(0) != 200
          or image_builder_render is not defined
          or image_builder_render.skipped | default(false)
          or image_builder_render.changed | default(true)
@@ -285,7 +369,19 @@
     url: "http://{{ k8s_registry_host_ip }}:{{ k8s_registry_port }}/v2/{{ image_builder_name }}/tags/list"
     return_content: true
   register: image_builder_tags
-  failed_when: image_builder_tag not in (image_builder_tags.json.tags | default([]))
+  # Both names the build pushes, so a `--output` that stopped emitting the second one fails here
+  # rather than at the next consumer's pull. The content tag is required only where a build could
+  # have run: `k8s_no_mutate` is `ansible_check_mode or k8s_dry_run` (group_vars/all.yml), and
+  # under either nothing pushed — a changed context legitimately has no `sha-…` tag in the
+  # registry yet, so asserting it there would fail every dry run of an image edit.
+  #
+  # On a real deploy it is required even when the BUILD was skipped, and that is only safe
+  # because of the gate's content-tag clause above: a skipped build means the registry answered
+  # 200 for this tag. Remove that clause as redundant and this task starts failing on the first
+  # steady-state deploy — with every test in the suite still green.
+  failed_when: >-
+    (([image_builder_tag] if k8s_no_mutate else [image_builder_tag, image_builder_content_tag])
+     | difference(image_builder_tags.json.tags | default([]))) | length > 0
   changed_when: false
   # Runs under --check, where it asserts something slightly weaker but still worth knowing: the
   # registry serves the tag the manifests reference. Only a host that has never built this image
