@@ -22,7 +22,7 @@ k8s_autodeploy_snapshot_pvcs: [home-assistant-config]  # noqa var-naming[no-role
 
 # The LSIO image has no `install`; the config-install initContainer needs alpine instead.
 # Same init image peanut and zigbee2mqtt use.
-home_assistant_k8s_init_image: alpine:3.24@sha256:28bd5fe8b56d1bd048e5babf5b10710ebe0bae67db86916198a6eec434943f8b
+home_assistant_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
 # The four lists below name every file the ConfigMaps carry into the pod, one list per tree
 # under files/. Each is the single source of what ships: configmap.yaml.j2 loops over it, the
