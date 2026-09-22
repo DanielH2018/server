@@ -32,12 +32,21 @@ a 43s projection for every one (#2225). `--record-missing` measures only the unw
 -- seconds, not the four-minute full run -- so the ratchet can afford to demand it as soon
 as an unweighted file appears beside a recorded pole.
 
+AND THE NEIGHBOURS CANNOT KNOW EITHER, WHEN THERE ARE NO NEIGHBOURS. That ratchet arm reads a
+directory that already holds a recorded pole. A heavy module landing where every recorded
+sibling is light is invisible to it, and every static proxy tried on the 2026-09-17 module --
+`def test_` count, byte size, directory mean -- failed to separate it from an ordinary file
+(#2238). `--check-durations` closes that: CI's own test step measures the module as a side
+effect of running it, and the gate rejects an unweighted file that cost `RUNNER_HEAVY_SECONDS`
+or more. It is a CI step rather than a pytest test on purpose -- see RATCHET_NODE_ID.
+
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1 --out list.txt
     uv run python scripts/dev/pytest_shard.py --of 4 --summary        # projected balance
     uv run python scripts/dev/pytest_shard.py --record                # re-measure the weights
     uv run python scripts/dev/pytest_shard.py --record-missing        # only the unweighted files
+    uv run python scripts/dev/pytest_shard.py --check-durations ci.log  # CI's measured gate
 """
 
 import argparse
@@ -66,6 +75,12 @@ RATCHET_TEST = "ansible/tests/repo/test_pytest_shards_partition_the_suite.py"
 # the failure path parked the deployer (#1899). CI's sharded job sets no PYTEST_ADDOPTS, so
 # the ratchet stays enforced there. `test_the_crons_deselect_the_ratchet_they_cannot_repair`
 # pins the templates to this string.
+#
+# ONE NODE ID, AND THAT IS WHY `--check-durations` IS A CI STEP. Both crons deselect exactly
+# this one id. A second pytest test that went red on an unweighted file -- which is what a
+# measured gate expressed as a test would be -- would fail those crons' commits again the way
+# #1899 did, and neither cron can run the repair. So the measured verdict lives in `ci.yml` as
+# a `run:` step instead, where no cron's commit passes through it (#2238).
 RATCHET_NODE_ID = (
     f"{RATCHET_TEST}::test_the_recorded_weights_still_cover_most_of_the_suite"
 )
@@ -86,6 +101,33 @@ _PER_FILE_SECONDS = 0.028
 # A line of pytest's durations report: seconds, phase, then a nodeid whose leading segment,
 # up to the first pair of colons, is the test file this weight belongs to.
 _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
+
+# What an unweighted module may measure on the CI runner before the shard gate rejects it.
+#
+# WHY A CI MEASUREMENT AND NOT ANOTHER STATIC ARM. The ratchet's neighbour arm sees an
+# unweighted file only where a recorded pole already sits in its directory. A heavy module
+# landing in a quiet directory is invisible to it, and no static proxy separates the two:
+# `def test_` count, byte size and directory mean were all checked against the 2026-09-17
+# module (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates (#2238).
+# Only running the file says what it costs, and CI already runs it.
+#
+# WHY TEN. The gate reads the runner's own per-test seconds, summed per file, where the table
+# holds workstation seconds — the two are not the same scale, so the number is set against the
+# shard it would skew rather than against the table. A shard projects around 40s at six ways,
+# so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess, which is
+# the #2225 shape. The 2026-09-17 module that prompted all of this measured about 30s. The
+# runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
+# recorded seconds: the gate sits at or below the neighbour arm's own pole cutoff, which was
+# 5.22s on 2026-09-22.
+RUNNER_HEAVY_SECONDS = 10.0
+
+# The repair for every arm of the coverage gate, spelled once and read by the ratchet test
+# too, so the two can never offer different instructions. `census()` reads
+# `git ls-files`, so the file has to be staged before the measurement can see it.
+RECORD_MISSING_HINT = (
+    "stage the new file, then `uv run python scripts/dev/pytest_shard.py "
+    "--record-missing` and commit scripts/dev/pytest_shard_weights.json"
+)
 
 
 def testpaths() -> list[str]:
@@ -194,18 +236,84 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
         raise SystemExit(
             f"the suite did not pass, so its durations are not a baseline:\n{proc.stdout[-4000:]}"
         )
+    totals = parse_durations(proc.stdout)
+    if not totals and not nothing_collected:
+        raise SystemExit(
+            "parsed no durations out of the run — has the report format changed?"
+        )
+    return totals
+
+
+def parse_durations(text: str) -> dict[str, float]:
+    """Per-file seconds summed out of a pytest `--durations` report.
+
+    One parser for both readers: `measure_weights` above, which runs pytest itself, and
+    `heavy_unweighted` below, which reads the log CI's own test step already produced. A
+    second parser would drift from the first and the drift would read green.
+
+    Every phase of every test counts — `setup` and `teardown` are what an expensive
+    module-scoped fixture costs, and `--dist loadscope` exists precisely because those
+    dominate some modules.
+    """
     totals: dict[str, float] = {}
-    for line in proc.stdout.splitlines():
+    for line in text.splitlines():
         match = _DURATION_LINE.match(line.strip())
         if match:
             totals[match.group(3)] = totals.get(match.group(3), 0.0) + float(
                 match.group(1)
             )
-    if not totals and not nothing_collected:
-        raise SystemExit(
-            "parsed no durations out of the run — has the report format changed?"
-        )
     return {k: round(v, 3) for k, v in totals.items()}
+
+
+def heavy_unweighted(
+    text: str,
+    weights: dict[str, float],
+    threshold: float = RUNNER_HEAVY_SECONDS,
+) -> list[tuple[str, float]]:
+    """The modules in a durations report that cost `threshold`+ and have no recorded weight.
+
+    Heaviest first. The report names only the files that shard actually ran, so no shard flags
+    a file it did not run and the caller needs no separate file list.
+
+    A file whose every test measures under pytest's `--durations-min` (0.005s by default)
+    contributes no line and cannot be seen here. It also cannot reach the threshold: 10s of
+    sub-5ms tests is 2000 of them in one module.
+    """
+    measured = parse_durations(text)
+    return sorted(
+        ((f, s) for f, s in measured.items() if f not in weights and s >= threshold),
+        key=lambda item: (-item[1], item[0]),
+    )
+
+
+def durations_problems(
+    text: str,
+    weights: dict[str, float] | None = None,
+    threshold: float = RUNNER_HEAVY_SECONDS,
+) -> list[str]:
+    """What is wrong with a shard's durations report, as readable complaints.
+
+    A function rather than inline asserts in `main`, so the accept and reject halves can hand
+    it a fixed report rather than needing a CI run.
+
+    An EMPTY report is itself a complaint. The gate's whole subject is found by parsing, so a
+    report format change would leave it passing over nothing forever — the vacuous-green shape
+    this repo's rule on pattern-found subjects names.
+    """
+    if not parse_durations(text):
+        return [
+            "parsed no durations out of the report — has the format changed, or did the "
+            "test step drop --durations=0?"
+        ]
+    weights = load_weights() if weights is None else weights
+    heavy = heavy_unweighted(text, weights, threshold)
+    if not heavy:
+        return []
+    listed = ", ".join(f"{f} ({s:.1f}s)" for f, s in heavy)
+    return [
+        f"measured {threshold:.0f}s or more on this runner with no recorded weight, so the "
+        f"shard split packs it as the lightest thing in the suite: {listed}"
+    ]
 
 
 def _write_weights(weights: dict[str, float], path: Path) -> dict[str, float]:
@@ -271,7 +379,31 @@ def main(argv=None) -> int:
         action="store_true",
         help="measure only the test files with no recorded weight and merge them in",
     )
+    parser.add_argument(
+        "--check-durations",
+        type=Path,
+        metavar="LOG",
+        help="read a pytest --durations report and fail on a heavy unweighted module",
+    )
+    parser.add_argument(
+        "--threshold",
+        type=float,
+        default=RUNNER_HEAVY_SECONDS,
+        help="seconds an unweighted module may measure under --check-durations",
+    )
     args = parser.parse_args(argv)
+
+    if args.check_durations:
+        problems = durations_problems(
+            args.check_durations.read_text(errors="replace"), threshold=args.threshold
+        )
+        if problems:
+            print("\n".join([*problems, f"Repair (seconds): {RECORD_MISSING_HINT}"]))
+            return 1
+        print(
+            f"no unweighted module measured {args.threshold:.0f}s or more in this shard"
+        )
+        return 0
 
     if args.record:
         written = record_weights()

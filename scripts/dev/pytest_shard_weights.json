@@ -641,6 +641,7 @@
  "scripts/dev/tests/test_measure_rollout_gap.py": 0.0,
  "scripts/dev/tests/test_memory_survey.py": 0.01,
  "scripts/dev/tests/test_prune_worktrees.py": 0.03,
+ "scripts/dev/tests/test_pytest_shard_durations.py": 0.27,
  "scripts/dev/tests/test_renovate_branch_sweep.py": 0.0,
  "scripts/dev/tests/test_renovate_rebase.py": 0.0,
  "scripts/dev/tests/test_review_metrics.py": 0.0,

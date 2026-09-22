@@ -431,6 +431,16 @@ k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # (2026-09-07) and read as unproven for the rest of the rotation. The drill's `files > 0`
 # check is what rejects an empty mount; this floor only has to reject files that hold nothing.
 k3s_longhorn_restore_drill_min_bytes: 1
+# PVCs whose restore legitimately comes back with no files, so the two content assertions above
+# are waived for them and nothing else is. Everything the drill can still prove for such a volume
+# it does prove: the restore completes, the probe pod mounts it and reports. n8n-files is here
+# because n8n writes to /files only when a workflow does and none has — its actualSize has stayed
+# within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume) for the 30 days to 2026-09-22, and
+# the 2026-08-30 drill restored it to files=0. A volume that starts holding data does NOT need
+# removing from this list for the drill to stay honest, but remove it anyway: the list is a claim
+# about the volume, and the waiver is dead weight once the content assertions can pass.
+k3s_longhorn_restore_drill_empty_ok_pvcs:
+  - n8n-files
 k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 # The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
 # volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
@@ -457,6 +467,10 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
 # time a volume joins the backup set. A volume that fails every time it comes up stays invisible
 # to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
+# It also absorbs the drill's retry (#2270): a failed attempt is re-drilled the next night, and
+# that night is one the rotation does not advance on, so a cycle runs (candidate count + volumes
+# currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
+# state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
