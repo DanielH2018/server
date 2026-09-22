@@ -23,12 +23,17 @@ USER root
 # resolved by default, so a bare `pnpm add` aborted with ERR_PNPM_UNEXPECTED_STORE. Inheriting the
 # base's own pnpm removes that mismatch at the source instead of tracking it.
 #
-# CALLED THROUGH `node`, AND NOT AS `pnpm`, because the base's own `pnpm` is not runnable. Upstream
-# symlinks /usr/local/bin/pnpm to bin/pnpm.cjs — a three-line CommonJS shim kept for older Corepack
-# versions — which ships mode 0644, so a bare `pnpm` dies with `Permission denied` (exit 126).
-# pnpm's package.json maps its `pnpm` bin to bin/pnpm.mjs, which is the real entry point and the
-# only one marked executable. Naming pnpm.mjs through the interpreter depends on neither the
-# upstream symlink nor a mode bit, and still fails loudly if the install path ever moves.
+# CALLED BY ABSOLUTE PATH, AND NOT THROUGH `node`, because the base's pnpm is a native binary.
+# It was `node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs` until 2026-09-22, when n8n 2.40.5
+# stopped installing pnpm as an npm package: the image now carries a single 45 MB executable at
+# /usr/local/bin/pnpm, copied from a build stage, and /usr/local/lib/node_modules/pnpm/ is absent
+# from every layer. The old line died with `Cannot find module` (exit 1) — the loud build failure
+# the previous comment asked for, working as intended.
+#
+# A native binary cannot be named through the interpreter, so the mode-bit reasoning that chose
+# pnpm.mjs no longer applies: this file ships 0755. The absolute path is still deliberate over a
+# bare `pnpm` — it depends on no PATH entry, and it names in the diff the one location upstream
+# has to keep for its own entrypoint to work.
 #
 # `pnpm add`, never `pnpm install`. The 2026-08-06 answer to the store mismatch was
 # `CI=true pnpm install` first, following pnpm's own error text. It was wrong in a way the build
@@ -43,7 +48,7 @@ USER root
 # with ERR_PNPM_UNEXPECTED_STORE, and that is the failure worth having: the bug above was a loud
 # build error traded for a silent runtime one.
 RUN cd /opt/runners/task-runner-javascript \
-    && node /usr/local/lib/node_modules/pnpm/bin/pnpm.mjs add fuzzball
+    && /usr/local/bin/pnpm add fuzzball
 
 # Fails the build if the base's workspace packages or the added one cannot be resolved. One line,
 # and it is the check that would have caught 2026-08-06 at build time instead of in production.
