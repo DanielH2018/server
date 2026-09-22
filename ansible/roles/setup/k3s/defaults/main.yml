@@ -467,6 +467,10 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
 # time a volume joins the backup set. A volume that fails every time it comes up stays invisible
 # to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
+# It also absorbs the drill's retry (#2270): a failed attempt is re-drilled the next night, and
+# that night is one the rotation does not advance on, so a cycle runs (candidate count + volumes
+# currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
+# state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
