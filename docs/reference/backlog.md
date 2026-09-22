@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-21 20:42 UTC
-generated_sha: d71f55381
+generated_at: 2026-09-22 06:17 UTC
+generated_sha: 4b914f620
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,34 +16,16 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2146](https://github.com/DanielH2018/server/issues/2146) | medium | gap | cicd | Turn on pinDigests so the ~52 tag-only image pins get digests | 2026-09-19 | 0 | - | ✓ |
-| [#2157](https://github.com/DanielH2018/server/issues/2157) | medium | improvement | cicd | Sort every iteration that reaches committed JSON, rendered manifests or checksum annotations | 2026-09-19 | 0 | worktree-issue-fanout-2026-09-21 | ✓ |
-| [#2225](https://github.com/DanielH2018/server/issues/2225) | medium | gap | cicd | Shard-weight coverage ratchet counts files, so one unrecorded 30s module skewed CI shards 65/99/99/68s | 2026-09-21 | 0 | - | - |
-| [#1469](https://github.com/DanielH2018/server/issues/1469) | low | gap | container | Restore the Valheim mods disabled by the 1.0 break | 2026-09-09 | 0 | - | ✓ |
+| [#2245](https://github.com/DanielH2018/server/issues/2245) | medium | addition | cicd | Spike: a self-hosted GitHub Actions runner so the repo can be private without Actions minutes | 2026-09-21 | 0 | - | ✓ |
 | [#2081](https://github.com/DanielH2018/server/issues/2081) | low | improvement | container | Apply the dockerd/containerd GOGC=off drop-ins on daniel-pi one a day and grade each the day after | 2026-09-18 | 0 | - | ✓ |
-| [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#2136](https://github.com/DanielH2018/server/issues/2136) | low | improvement | cicd | Route scripts/deploy_tools and scripts/dev raw git/gh subprocess calls through scripts/lib | 2026-09-19 | 0 | - | - |
-| [#2139](https://github.com/DanielH2018/server/issues/2139) | low | improvement | docs | Fact-support lint: 54 prose citations in role CLAUDE.md files fail on edit; deferred minors from slices 1-3 | 2026-09-19 | 0 | worktree-issue-fanout-2026-09-21 | ✓ |
-| [#2154](https://github.com/DanielH2018/server/issues/2154) | low | improvement | cicd | Use UTC stamps and LC_ALL=C sort in deploy.sh, gitops_tick.sh, gen_infra_map and the etcd drills | 2026-09-19 | 0 | - | ✓ |
-| [#2156](https://github.com/DanielH2018/server/issues/2156) | low | improvement | cicd | Replace the deploy plane's sleep-polls with flock, kubectl wait and a bounded timeout | 2026-09-19 | 0 | - | ✓ |
-| [#2164](https://github.com/DanielH2018/server/issues/2164) | low | improvement | docs | Make gitops_tick.sh's permission deterministic and collapse its duplicated classifier paragraph | 2026-09-19 | 0 | - | ✓ |
-| [#2169](https://github.com/DanielH2018/server/issues/2169) | low | improvement | docs | Generate the reviewer agents' don't-re-flag list from the findings register | 2026-09-19 | 0 | worktree-issue-fanout-2026-09-21 | ✓ |
-| [#2170](https://github.com/DanielH2018/server/issues/2170) | low | gap | cicd | Hook --skip-staleness-check (scoped past the staging gate) and check the PR author in land.sh --arm-merge | 2026-09-19 | 0 | - | ✓ |
+| [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | worktree-bridge-cse_01CpUvQt6YhYSNBR3oKsjquy | ✓ |
 | [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
-| [#2196](https://github.com/DanielH2018/server/issues/2196) | low | gap | docs | post-merge-automation.md quotes a gitops_deploy CLAUDE.md sentence that no longer exists | 2026-09-21 | 0 | - | ✓ |
-| [#2198](https://github.com/DanielH2018/server/issues/2198) | low | improvement | cicd | Move auto-approve-readonly's classify onto claude_guard.segment.parse once the package splits &> as a redirect | 2026-09-21 | 0 | - | ✓ |
-| [#2205](https://github.com/DanielH2018/server/issues/2205) | low | improvement | cicd | Five retries/delay polls #2155 named wait on application state no kubectl condition carries | 2026-09-21 | 0 | - | ✓ |
-| [#2207](https://github.com/DanielH2018/server/issues/2207) | low | improvement | cicd | Make gitops_tick.sh auto-approve deterministically with an exact-match PreToolUse allow | 2026-09-21 | 0 | - | ✓ |
-| [#2210](https://github.com/DanielH2018/server/issues/2210) | low | gap | backup-observability | Loki holds no claude-code OTEL stream over 30 days | 2026-09-21 | 0 | - | ✓ |
-| [#2211](https://github.com/DanielH2018/server/issues/2211) | low | gap | container | Pin or snapshot the apt/apk packages the four built images install (code-server, nut, valheim, pi-peer-backup) | 2026-09-21 | 0 | - | ✓ |
-| [#2212](https://github.com/DanielH2018/server/issues/2212) | low | gap | docs | Email-to-RSS submodule docs still say npm install; the fix lives in DanielH2018/Email-to-RSS | 2026-09-21 | 0 | - | ✓ |
-| [#2213](https://github.com/DanielH2018/server/issues/2213) | low | improvement | cicd | image-builder: content-addressed tag, a measured code-server build timeout, and n8n-images' unpinned fuzzball | 2026-09-21 | 0 | - | ✓ |
-| [#2216](https://github.com/DanielH2018/server/issues/2216) | low | improvement | docs | Script the stop-condition gates of the four remaining runbooks | 2026-09-21 | 0 | - | ✓ |
-| [#2218](https://github.com/DanielH2018/server/issues/2218) | low | improvement | cicd | Fold the two import-expanding k3s _tasks() readers into an imported_tasks() helper | 2026-09-21 | 0 | - | - |
-| [#2219](https://github.com/DanielH2018/server/issues/2219) | low | improvement | cicd | Census and fold the repeated _render/_tree/_role helpers in ansible/tests | 2026-09-21 | 0 | - | - |
-| [#2220](https://github.com/DanielH2018/server/issues/2220) | low | gap | - | Four Longhorn subprocess tests still date fixtures against the live clock | 2026-09-21 | 0 | - | ✓ |
-| [#2224](https://github.com/DanielH2018/server/issues/2224) | low | improvement | cicd | Pair the node_exporter sha256 with a URL in defaults so asset_pins.py checks it | 2026-09-21 | 0 | - | ✓ |
-| [#2226](https://github.com/DanielH2018/server/issues/2226) | low | improvement | cicd | Two sleep-driven 30s test modules cap pytest sharding at a 30s pole | 2026-09-21 | 0 | - | - |
+| [#2234](https://github.com/DanielH2018/server/issues/2234) | low | improvement | cicd | image-builder: content-addressed tag instead of :latest (split from #2213) | 2026-09-21 | 0 | - | ✓ |
+| [#2235](https://github.com/DanielH2018/server/issues/2235) | low | improvement | cicd | sonarr verify.yml polls a rollout nothing has waited on; gate it with an inline rollout status like arr-notification | 2026-09-21 | 0 | - | ✓ |
+| [#2238](https://github.com/DanielH2018/server/issues/2238) | low | improvement | cicd | Shard ratchet still cannot see a heavy unweighted module in a directory with no recorded pole | 2026-09-21 | 0 | - | ✓ |
+| [#2239](https://github.com/DanielH2018/server/issues/2239) | low | improvement | cicd | CI pytest matrix could go to 6 shards now that the pole is 17.8s | 2026-09-21 | 0 | - | ✓ |
+| [#2243](https://github.com/DanielH2018/server/issues/2243) | low | gap | backup-observability | Let the read-only ServiceAccount list ETCDSnapshotFile so the etcd-restore gates can check the named snapshot | 2026-09-21 | 0 | - | ✓ |
+| [#2261](https://github.com/DanielH2018/server/issues/2261) | low | gap | cicd | claude_guard.segment drops a trailing & with the trailing-separator collapse, so an allow-side reader loses the backgrounding | 2026-09-22 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -77,6 +59,8 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#1729](https://github.com/DanielH2018/server/issues/1729) | refuted | land.sh asks for a full deploy.yml for a shared role's task-only change | The tasks/ premise is contradicted by two recorded incidents and by the predicate the issue cites. scripts/deploy_tools/tests/test_land_classify.py:110 (#1544): a tasks-only PR adding an unregistered role has no caller and no containers_list entry, so nothing ever applies it — dropping tasks/ silences that case. scripts/deploy_tools/tests/test_land_tags_caller_coverage.py:76 (#1397): a helper role s tasks apply live state per caller (arr-notification seeds a Discord Connect notification into each *arr s own database), so deploying one caller is not the change applied. And _supplies_manifest_bytes in scripts/diagnostics/probe_lib/releases.py — the predicate this issue names as its precedent — classifies volume-claim as a byte supplier because the role ships templates/pvc.yaml.j2, putting the issue s own example in the REPORTED set. Both tests went red against the proposed change and neither was rewritten. The one half that does hold — a role s own tests/ can never be applied — shipped in PR #1734. |
 | [#1846](https://github.com/DanielH2018/server/issues/1846) | refuted | Park thresholds were sized for a landing that waited on the primary; after #1810 they are the only wedged-primary detector | Every fast-forward is git merge --ff-only to a SHA on the first-parent chain, and a wedge leaves HEAD in place, so behind_since already ages from the oldest unreached commit; the 45 min / 6 h thresholds never depended on a landing waiting on the primary. Recorded by PR #1884 and pinned by test_a_parked_range_keeps_its_stamp_while_green_commits_land_above_it; re-derived by worktree-fanout-1846 on 2026-09-17. |
 | [#2131](https://github.com/DanielH2018/server/issues/2131) | accepted | nvidia-smi has no server-side handler, so the shared-verdict replay does not exercise its guard | No host has NVIDIA hardware; porting the nvidia-smi handler widens local auto-approve for a verb nothing runs. Revisit if a GPU node joins. |
+| [#2156](https://github.com/DanielH2018/server/issues/2156) | accepted | Replace the deploy plane's sleep-polls with flock, kubectl wait and a bounded timeout | PR #2233 fixed the one real defect (postflight timeout). The rest are refuted or not worth the rewrite: the LOCK_NB attempt is atomic so no check-then-act window exists and a bounded flock leaks a thread+fd (built 29d5e530c, reverted e969b025b); the deploy_io docker poll is unreachable on the deployer host (containers_for returns []); the tick watch's systemctl start --wait rewrite replaces a 5s poll on a ~5s tick and takes the wrapper grading and its stubbed-systemd tests with it. Operator decision 2026-09-22. |
+| [#2207](https://github.com/DanielH2018/server/issues/2207) | accepted | Make gitops_tick.sh auto-approve deterministically with an exact-match PreToolUse allow | Operator decision 2026-09-22: keep the auto-mode-bridge retry rather than add a write-side PreToolUse allow; proving preemption needs ten fresh sessions and a user-level classifyAllShell change. |
 
 ### container
 
@@ -89,6 +73,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
 | [#826](https://github.com/DanielH2018/server/issues/826) | refuted | gen_reference_scripts.py keys its table by bare filename, so two same-named modules merge into one row | Path keys relocate the ambiguity rather than remove it: invocation evidence comes from free text (a cron job: string, an argv literal, a shell line) that often names a bare filename with no directory, so a path-keyed generator still needs a basename-to-path resolution step — undecidable for exactly the colliding names. #838 enforces basename uniqueness instead, and separately fixed the real nesting blocker (discovery and the reference patterns were both capped at one directory level). |
+| [#2164](https://github.com/DanielH2018/server/issues/2164) | accepted | Make gitops_tick.sh's permission deterministic and collapse its duplicated classifier paragraph | Doc half landed in PR #2209; the determinism half is #2207, which the operator chose to live with (auto-mode-bridge retries the ~1-in-7 denial). |
 
 ### network
 
