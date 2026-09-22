@@ -55,6 +55,17 @@ registry_k8s_gc_deadline_s: 1200
 # what the last one deleted — the Job log is the only authoritative record of that.
 registry_k8s_gc_ttl_s: 604800
 
+# How many superseded `sha-<12 hex>` content tags registry-gc.sh keeps per repository, newest
+# first. Every build pushes one (k8s/image-builder's --output), and a tag is a real manifest
+# reference that `garbage-collect --delete-untagged` will never reclaim — so without a prune the
+# store grows by one manifest per rebuild forever.
+#
+# Three, not one: a content tag is what a rollback names. Keeping only the tag in service would
+# mean the previous build is unnameable the moment the next one lands, which is the whole property
+# a content-addressed tag buys. Three covers the last two rebuilds plus the one running. Nothing
+# in service is ever untagged regardless of this number — see the prune's keep rules.
+registry_k8s_keep_content_tags: 3
+
 # The proof-of-loop pair (see tasks/main.yml). crane rather than docker or skopeo: it is a
 # static binary in a distroless image, needs no daemon, and copies between registries directly
 # without a local store to fill the node's disk.

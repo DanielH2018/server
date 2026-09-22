@@ -20,9 +20,30 @@ while reporting success.
   build here is upstream of all of them.
 
 ## Notable
+- **Every build pushes TWO names for one manifest**, from one `--output`: the mutable
+  `image_builder_tag` (`latest`) and an immutable `image_builder_content_tag`
+  (`sha-<12 hex>`) derived from the build inputs. Both resolve to the same digest, so every
+  digest comparison here reads one object either way. The content tag is what makes "is the
+  running pod the image this commit describes" a comparison of NAMES rather than a registry
+  digest read (`post_tasks/k8s_image_drift_gate.yml`).
+  - The hash is taken over `context-configmap.yaml.j2`'s own render, `data` only — that
+    mapping IS every byte the build reads, so no second list of inputs can fall out of step
+    with it, and a comment edit in that template does not rebuild all nine images.
+  - Computed on the CONTROLLER and before the render, so `--check` and a `--skip-tags deploy`
+    run compute the same name a deploy does.
+  - Published as the play-scoped `k8s_built_image_tags` (name → tag), for the roles that
+    DEPLOY these images. A consumer reads `k8s_built_image_tags.get('<name>', 'latest')`, so
+    a deploy that skips the building role — `--tags n8n` without `n8n-images` — falls back to
+    the mutable alias instead of naming a tag nothing pushed. **No consumer reads it yet**;
+    converting the nine `*_k8s_image` pins is one PR each.
+  - `registry-gc.sh` prunes superseded content tags (`registry_k8s_keep_content_tags`), since
+    a tag is a real manifest reference that `garbage-collect --delete-untagged` never reclaims.
 - Skips the actual build when the rendered context is byte-identical to the last run's and
-  the registry already serves the tag — saved ~106s across the seven original callers.
+  the registry already serves BOTH tags — saved ~106s across the seven original callers.
   `image_builder_force=true` overrides it, for a base-image CVE bump nothing here can see.
+  The content-tag clause is what keeps the tag from being decorative: `:latest` being served
+  says nothing about whether the `sha-…` name exists, and an unchanged context with `:latest`
+  present is exactly the state the first deploy after this landed was in.
 - **A failed build forces the next one.** The gate otherwise reads every input as unchanged
   after a failure — the rendered context is still on disk and the registry still serves the
   previous tag — so the next deploy skipped the rebuild and the workload kept the old image
