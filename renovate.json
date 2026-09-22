@@ -25,6 +25,7 @@
     "**/__fixtures__/**"
   ],
   "prHourlyLimit": 4,
+  "pinDigests": true,
   "rebaseWhen": "auto",
   "osvVulnerabilityAlerts": true,
   "vulnerabilityAlerts": {
