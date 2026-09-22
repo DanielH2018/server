@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-22 06:17 UTC
-generated_sha: 4b914f620
+generated_at: 2026-09-22 18:17 UTC
+generated_sha: cf5317d1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 4b914f620
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-22T06:10:24+0000 | 7m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-21T11:14:55+0000 | 19h2m | 1d | ok | session completed |
-| renovate-notify | 2026-09-21T13:01:05+0000 | 17h16m | 1d | ok | notified |
-| docs-refresh | 2026-09-21T18:17:00+0000 | 12h | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-21T15:41:04+0000 | 14h36m | 7d | ok | last touched by: Gate RENAMED_FROM against the store's history and make the rename carry-over a command |
-| longhorn-restore-drill | 2026-09-22T04:11:58+0000 | 2h5m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-21T10:20:03+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789958702.zip) |
+| gitops-deploy | 2026-09-22T18:11:49+0000 | 5m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-22T11:08:46+0000 | 7h8m | 1d | ok | session completed |
+| renovate-notify | 2026-09-22T13:01:47+0000 | 5h15m | 1d | ok | notified |
+| docs-refresh | 2026-09-22T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-21T15:41:04+0000 | 1d2h | 7d | ok | last touched by: Gate RENAMED_FROM against the store's history and make the rename carry-over a command |
+| longhorn-restore-drill | 2026-09-22T04:11:58+0000 | 14h5m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-21T10:20:03+0000 | 1d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789958702.zip) |

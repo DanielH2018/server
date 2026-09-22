@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-19 02:44 UTC
-generated_sha: f6b5a0d8
+generated_at: 2026-09-22 18:17 UTC
+generated_sha: cf5317d1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -28,7 +28,7 @@ generated_sha: f6b5a0d8
 | bento-pdf | k8s | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | claude-otel | k8s | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | denylisted (observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits) |
 | cloudflare-ddns | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (unprobeable, not merely probe-less — favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist. Both rendered Deployments are therefore ungated: the role sets manifests_rollout: '', which skips the shared rollout wait AND the stability soak, and nothing replaces them.) |
-| code-server | k8s | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | Authelia two_factor | no backup (listed in k3s_longhorn_nobackup_volumes); weekly -> B2 (default target) | denylisted (immutable registry/…:latest image with no version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below) |
+| code-server | k8s | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | Authelia two_factor | no backup (listed in k3s_longhorn_nobackup_volumes); weekly -> B2 (default target) | denylisted (in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below) |
 | configarr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | crowdsec | k8s | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no backup (listed in k3s_longhorn_nobackup_volumes) | denylisted (platform — LAPI/AppSec/decision engine every bouncer queries; a failed deploy can open or close traffic unpredictably fleet-wide. COUPLING NOTE for a future promotion: crowdsec-db also holds LAPI machine registrations; a revert past an agent registration leaves that agent's stored password valid but the machine unknown) |
 | deploy-ui | k8s | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | Authelia two_factor | no PVC (stateless) | denylisted (renders no Deployment — route-only (Service + EndpointSlice + IngressRoute) in front of deploy-ui.service on daniel-box; a bad route change exposes a page that starts deploys and clears the deployer's hold) |
