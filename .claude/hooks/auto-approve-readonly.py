@@ -10,10 +10,15 @@ read-only: a single read-only command, or a pipeline whose every stage is read-o
 Safety model (deny by default):
   * Substitution is rejected outright -- $(...), backticks, ${...} -- because a
     quoted-looking argument can still expand/exec at the real shell.
-  * Shell operators other than a plain pipe are rejected: ; & && || |& < > ( ).
-    No chaining, redirection, backgrounding, or subshells. Tokenizing with
-    shlex(punctuation_chars=True) makes each of these its OWN token, so a
-    redirect or a glued `|rm` can never hide inside an argument.
+  * Stages come from the dotfiles segmenter the deny guards also read
+    (`_hook_common.segments`, #2198): a quoted `;` stays in its word, a heredoc
+    body is lifted off the text. No segmenter, or text it refuses, is no verdict.
+  * Within a stage, shlex(punctuation_chars=True) makes every operator its OWN
+    token, so a redirect, a paren or a glued `|rm` never hides in an argument.
+    Backgrounding, subshells and writes to a real file are rejected.
+  * A heredoc stage is rejected: the body reaches the program's stdin (`ssh host
+    <<EOF` runs it), and the shared corpus pins `cat <<EOF` as not read-only, so
+    widening to TIER1 programs is a corpus change in the dotfiles repo first.
   * Each stage's program must be on an allow-list of commands that cannot write
     or exec under ANY arguments (TIER1), OR pass a per-command guard that rejects
     the program's mutating forms (git, docker, sort, uniq, find, ip, systemctl,
@@ -26,19 +31,24 @@ import re
 import shlex
 import sys
 
-from _hook_common import emit_pretooluse_decision
+from _hook_common import (
+    Unsplittable,
+    _deployed_parse,
+    emit_pretooluse_decision,
+    segments,
+)
 
 # DECIDED: the underscore-prefixed names below cross a module boundary on purpose. The tables
 # and the tokenizer moved out of this file byte-for-byte, changing no verdict; making them
 # public would have turned that move into a rewrite of a security boundary. The underscore
 # still carries what it did before — internal to this classifier, not an API another hook may
 # import. Conventions for a new module: docs/python-code-organization.md.
+from _readonly_sed import _sed
 from _readonly_shell import (
     _FORBIDDEN,
     _OP_TOKEN,
-    _SEQ,
+    _STAGE_SEPS,
     _SUBST,
-    _split,
     _strip_redirects,
 )
 from _readonly_tables import (
@@ -335,104 +345,6 @@ def _awk(argv):
     return "awk"
 
 
-def _sed_dangerous(script):
-    """True if a sed script can write a file or execute a command.
-
-    Walks the script skipping addresses and s///,y/// bodies so the command
-    letters w/W/r/R/e (write-file, read-file, execute) and the s/// e/w flags
-    are only matched in command position. Biased to reject: any parse ambiguity
-    leaves more text to scan, which can only add rejections, never approvals.
-    """
-    i, n = 0, len(script)
-    while i < n:
-        c = script[i]
-        if c in " \t\n;{}!" or c.isdigit() or c in "$,~+-":
-            i += 1  # separators / line addresses
-            continue
-        if c == "/":  # /regex/ address
-            i += 1
-            while i < n and script[i] != "/":
-                i += 2 if script[i] == "\\" else 1
-            i += 1
-            continue
-        if c == "\\" and i + 1 < n:  # \cregexc address (custom delim)
-            delim = script[i + 1]
-            i += 2
-            while i < n and script[i] != delim:
-                i += 2 if script[i] == "\\" else 1
-            i += 1
-            continue
-        if c in ("s", "y"):  # s<d>..<d>..<d>flags / y<d>..<d>..<d>
-            if i + 1 >= n:
-                return True
-            delim = script[i + 1]
-            i += 2
-            fields = 0
-            while i < n and fields < 2:
-                if script[i] == "\\":
-                    i += 2
-                    continue
-                if script[i] == delim:
-                    fields += 1
-                i += 1
-            flags = ""
-            while i < n and script[i] not in " \t\n;}":
-                flags += script[i]
-                i += 1
-            if c == "s" and ("e" in flags or "w" in flags):
-                return True  # s///e executes, s///w writes
-            continue
-        if c in ("w", "W", "r", "R", "e"):
-            return True  # write-file / read-file / execute
-        i += 1  # p d n g h x b t : = l q c a i z ...
-    return False
-
-
-def _sed(argv):
-    script, saw_script = [], False
-    i, n = 1, len(argv)
-    while i < n:
-        a = argv[i]
-        if a == "--":
-            i += 1
-            if not saw_script and i < n:
-                script.append(argv[i])
-                saw_script = True
-                i += 1
-            break
-        if a.startswith("-") and a != "-":
-            if a.startswith("-i") or a.startswith("--in-place"):
-                return None  # in-place edit writes
-            if a == "-f" or a == "--file" or a.startswith("--file="):
-                return None  # program file (uninspectable)
-            if a in ("-e", "--expression"):
-                if i + 1 >= n:
-                    return None
-                script.append(argv[i + 1])
-                saw_script = True
-                i += 2
-                continue
-            if a.startswith("-e"):
-                script.append(a[2:])
-                saw_script = True
-                i += 1
-                continue
-            if a.startswith("--expression="):
-                script.append(a.split("=", 1)[1])
-                saw_script = True
-                i += 1
-                continue
-            i += 1  # safe flags: -n -E -r -s -z ...
-            continue
-        if not saw_script:  # first positional is the script
-            script.append(a)
-            saw_script = True
-        i += 1  # later positionals are input files
-    if not saw_script or _sed_dangerous("\n".join(script)):
-        return None
-    return "sed"
-
-
 # package-manager / host-query guards
 # Same binaries query read-only but mutate under install/remove/etc. actions, so
 # each is gated to its read-only forms (deny by default). The always-read-only
@@ -652,48 +564,50 @@ def _argv_readonly(argv):
     return handler(argv) if handler else None
 
 
-def classify(command):
+def classify(command, parse=_deployed_parse):
     """Return a reason string if the whole command line is read-only, else None.
 
     The command may be a sequence (`;`, `&&`, `||`, or newlines) of pipelines;
     every stage of every pipeline must be read-only. Substitution, subshells,
-    backgrounding, and writes to real files are rejected outright.
+    backgrounding, and writes to real files are rejected outright. A test hands
+    `parse=None` to stand on the undeployed host: no segmenter, no verdict.
     """
-    if not command or command.rstrip().endswith("\\"):
+    stripped = command.rstrip()
+    if not stripped or stripped.endswith("\\"):
         return None
+    if stripped.endswith("&"):
+        return None  # the segmenter drops a trailing separator, so `ls &` reads as `ls` (#2261)
     if any(s in command for s in _SUBST):
         return None
+    try:
+        segs = segments(command, parse)
+    except Unsplittable:
+        return None  # no segmenter, or text it refused: never an allow
     reasons = []
-    # A newline separates statements like ';'. shlex treats it as plain whitespace
-    # (which would merge two commands), so split into lines before tokenizing.
-    for line in command.split("\n"):
-        if not line.strip():
-            continue
+    for seg in segs:
+        if seg.sep == "&":
+            return None  # backgrounding
         try:
-            lex = shlex.shlex(line, posix=True, punctuation_chars=True)
+            lex = shlex.shlex(seg.text, posix=True, punctuation_chars=True)
             lex.whitespace_split = True
-            tokens = list(lex)
+            stage = list(lex)
         except ValueError:
             return None
-        if not tokens:
-            continue
-        for stmt in _split(tokens, _SEQ):  # sequential statements
-            if not stmt:
-                return None  # empty (e.g. ';;' or dangling op)
-            for stage in _split(stmt, {"|"}):  # pipeline stages
-                if not stage:
-                    return None
-                if any(tok in _FORBIDDEN for tok in stage):
-                    return None  # subshell or backgrounding
-                argv = _strip_redirects(stage)
-                if argv is None:
-                    return None
-                if not argv or any(_OP_TOKEN.match(tok) for tok in argv):
-                    return None  # redirect-only stage / stray operator
-                r = _argv_readonly(argv)
-                if not r:
-                    return None
-                reasons.append(r)
+        if not stage:
+            return None  # empty stage (e.g. ';;' or a dangling operator)
+        if any(tok in _FORBIDDEN or tok in _STAGE_SEPS for tok in stage):
+            return None  # subshell, backgrounding, or an uncut separator
+        argv = _strip_redirects(stage)
+        if argv is None:
+            return None
+        if not argv or any(_OP_TOKEN.match(tok) for tok in argv):
+            return None  # redirect-only stage / stray operator
+        if seg.heredocs:
+            return None  # see the module docstring
+        r = _argv_readonly(argv)
+        if not r:
+            return None
+        reasons.append(r)
     if not reasons:
         return None
     return "read-only: " + " | ".join(reasons)
