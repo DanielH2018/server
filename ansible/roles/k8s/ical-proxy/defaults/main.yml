@@ -2,13 +2,13 @@
 # Slice-7 Phase C (2026-08-10). Built in-cluster by this role via k8s/image-builder from this
 # role's own templates/Dockerfile.j2; the app source and its tests live in files/ here too,
 # having moved out of the retired Docker role.
-ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:latest"  # a hand edit to THIS line is the only diff that can promote this role — see k8s_autodeploy_reason
+ical_proxy_k8s_image: "{{ k8s_registry_pull_host }}/ical-proxy:{{ k8s_built_image_tags.get('ical-proxy', 'latest') }}"  # a hand edit to THIS line is the only diff that can promote this role — see k8s_autodeploy_reason
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Stateless RollingUpdate Deployment, no PVC, readinessProbe. Internal-only (no public route),
 # image is in-cluster-built via image-builder, not an upstream tag Renovate bumps blind.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route. NOTHING CAN TRIGGER THIS PROMOTION: ical_proxy_k8s_image is a registry-built <pull-host>/ical-proxy:latest ref, listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer. Only templates/Dockerfile.j2's FROM line moves, which is not the defaults/main.yml-only diff split_k8s_auto_deploy requires. The promotion is correct and harmless, not active"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "stateless RollingUpdate Deployment, no PVC, readinessProbe, in-cluster-built image, internal-only route. NOTHING CAN TRIGGER THIS PROMOTION: ical_proxy_k8s_image is a registry-built <pull-host>/ical-proxy ref, listed in REGISTRY_BUILT_IMAGES (scripts/tests/test_renovate_managers.py) — no upstream ref for Renovate to compare against and no version for it to offer. Only templates/Dockerfile.j2's FROM line moves, which is not the defaults/main.yml-only diff split_k8s_auto_deploy requires. The promotion is correct and harmless, not active"  # noqa var-naming[no-role-prefix]
 
 # Resource caps mirrored from the compose template (M1 values, k8s-native units).
 ical_proxy_k8s_cpu_limit: 500m

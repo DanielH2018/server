@@ -32,7 +32,7 @@ valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}
 # `valheim`, not `valheim-mods`: k8s/manifests keys `k8s_rebuilt_images` on `manifests_service`,
 # so a rebuilt image rolls the Deployment only when the built image's name matches the role's.
 # n8n-runners is the recorded case of that mismatch shipping an image no pod ever ran.
-valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:latest"
+valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
 # ── The mod set, and the four-fifths of it that Valheim 1.0 broke ───────────────────────
 # Every entry is a Thunderstore release, pinned by version AND sha256 — the build verifies the

@@ -32,8 +32,8 @@
 # Renovate cannot track the two vars below (they are local registry refs, not upstream ones) — the
 # FROM lines in the Dockerfiles are what actually moves, and Renovate's built-in dockerfile manager
 # watches those. test_renovate_managers.py exempts these vars by name for that reason.
-n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:latest"
-n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:latest"
+n8n_k8s_image: "{{ k8s_registry_pull_host }}/n8n:{{ k8s_built_image_tags.get('n8n', 'latest') }}"
+n8n_k8s_runners_image: "{{ k8s_registry_pull_host }}/n8n-runners:{{ k8s_built_image_tags.get('n8n-runners', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Two independent reasons: (1) probe-less — the n8n-runners sub-deployment (which executes

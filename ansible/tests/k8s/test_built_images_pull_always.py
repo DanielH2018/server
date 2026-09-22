@@ -1,13 +1,20 @@
 #!/usr/bin/env python3
 """Every container running an in-cluster-built image must declare `imagePullPolicy: Always`.
 
-WHY THIS EXISTS. image-builder pushes every build to the same mutable tag
-(`localhost:5000/<name>:latest`), so a rebuild changes what the registry serves without
-changing the Deployment spec. The rollout that k8s/manifests queues then creates a pod that
-asks the node for `:latest`, and under `IfNotPresent` the node answers from its cache: the
-pod rolls, reads Ready, and runs the OLD bytes. Only the drift gate in
+WHY THIS EXISTS. image-builder pushes every build under TWO names: the mutable
+`localhost:5000/<name>:latest` and an immutable `localhost:5000/<name>:sha-<12 hex>`. Every
+pin reads the content tag (test_built_images_name_the_content_tag.py requires it), so a
+rebuild that changes the inputs changes the Deployment spec too and the apply rolls the pod
+onto a name the node has never cached. That is the path this guard no longer has to protect.
+
+WHAT IS LEFT, and why the line still has to be there. A rebuild whose INPUTS are unchanged
+keeps the same content tag, and `:latest` is still pushed and still the fallback a deploy
+takes when it skips the building role (`--tags n8n` without `n8n-images`). Both leave a pod
+asking the node for a name it already holds, and under `IfNotPresent` the node answers from
+its cache: the pod rolls, reads Ready, and runs the OLD bytes. Only the drift gate in
 post_tasks/k8s_image_drift_gate.yml notices, and it notices after the rollout, as a failed
-deploy.
+deploy. `Always` is what closes that, so the requirement survives the content tag — with a
+narrower reason than the one it was written for.
 
 WHY EXPLICIT rather than trusting the `:latest` default. The API server defaults this field
 only when it is absent at CREATE time. terraria's Deployment was created on 2026-08-31 with an
@@ -72,10 +79,11 @@ def test_every_built_image_container_pulls_always():
 
     bad = offenders(rendered_docs())
     assert not bad, (
-        "in-cluster-built images are pushed to a mutable :latest, so a pod created without "
-        "imagePullPolicy: Always runs whatever the node cached — the rollout reads green and "
-        "the drift gate fails the deploy afterwards. Add the line next to `image:` in: "
-        + ", ".join(bad)
+        "an in-cluster-built image can be rebuilt under a name the node already holds — an "
+        "unchanged context keeps the same content tag, and a deploy that skips the building "
+        "role falls back to the mutable :latest. Without imagePullPolicy: Always the pod runs "
+        "whatever the node cached: the rollout reads green and the drift gate fails the deploy "
+        "afterwards. Add the line next to `image:` in: " + ", ".join(bad)
     )
 
 

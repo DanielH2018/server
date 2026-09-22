@@ -10,7 +10,7 @@ to `image_builder_image` (the BuildKit tool itself) would match no play and depl
 while reporting success.
 
 ## At a glance
-- **Builder image:** `moby/buildkit:v0.32.2-rootless` (`image_builder_image`) — rootless
+- **Builder image:** `moby/buildkit:v0.33.0-rootless` (`image_builder_image`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n-images`, `code-server`,
@@ -33,9 +33,17 @@ while reporting success.
     run compute the same name a deploy does.
   - Published as the play-scoped `k8s_built_image_tags` (name → tag), for the roles that
     DEPLOY these images. A consumer reads `k8s_built_image_tags.get('<name>', 'latest')`, so
-    a deploy that skips the building role — `--tags n8n` without `n8n-images` — falls back to
-    the mutable alias instead of naming a tag nothing pushed. **No consumer reads it yet**;
-    converting the nine `*_k8s_image` pins is one PR each.
+    a deploy that skips the building role falls back to the mutable alias instead of naming a
+    tag nothing pushed. **All nine `*_k8s_image` pins read it**
+    (`ansible/tests/k8s/test_built_images_name_the_content_tag.py` requires it).
+    - Seven consumers include this role themselves, ahead of `k8s/manifests`, so the fact is
+      published before their manifests render. n8n is the exception — `k8s/n8n-images` builds
+      its two images — so the n8n entry declares `depends_on: [n8n-images]` for the full-deploy
+      order, and the n8n-images entry is tagged `n8n` as well so a `--tags n8n` run cannot skip
+      the builder and flip the Deployment spec back to `:latest`.
+    - A render outside a play has no fact at all. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS`
+      seeds one for every rendered-manifest guard, which would otherwise check `:latest` while
+      production renders the hash.
   - `registry-gc.sh` prunes superseded content tags (`registry_k8s_keep_content_tags`), since
     a tag is a real manifest reference that `garbage-collect --delete-untagged` never reclaims.
 - Skips the actual build when the rendered context is byte-identical to the last run's and

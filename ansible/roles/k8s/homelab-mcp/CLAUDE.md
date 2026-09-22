@@ -27,7 +27,7 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
   (#1341). Changing that router to a PathPrefix would open more than `/health`; a test asserts it
   stays an exact Path.
 - **Auto-deploy-eligible, but the promotion cannot actually fire** — the image is a
-  registry-built `:latest` ref with no upstream version for Renovate to compare against;
+  registry-built ref with no upstream version for Renovate to compare against;
   only `templates/Dockerfile.j2`'s `FROM` line moves. Stateless RollingUpdate Deployment.
 - **RBAC:** `templates/rbac.yaml.j2` grants a dedicated `homelab-mcp` ServiceAccount
   `get`/`list` on pods, `pods/log`, nodes, deployments and daemonsets — no `watch`, no

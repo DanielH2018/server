@@ -17,6 +17,7 @@ import pytest
 from jinja2 import Environment
 
 from _helpers import K8S_ROLES, load_defaults
+from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 
 ROLE = K8S_ROLES / "code-server"
 DOCKERFILE = ROLE / "templates" / "Dockerfile.j2"
@@ -95,7 +96,14 @@ def _rendered_dockerfile() -> str:
     templating does — a one-pass render would leave the inner `{{ }}` in the output.
     """
     env = Environment(trim_blocks=True)
-    defaults = load_defaults(ROLE)
+    # `code_server_k8s_image` reads `k8s_built_image_tags`, a play fact k8s/image-builder
+    # publishes at deploy time. The Dockerfile never touches it, but the loop below resolves
+    # EVERY default, so it has to be defined. `BUILT_IMAGE_TAG_STUBS` is the same map the
+    # manifest guards render against.
+    defaults = {
+        "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
+        **load_defaults(ROLE),
+    }
     resolved = {
         key: env.from_string(value).render(**defaults)
         if isinstance(value, str)

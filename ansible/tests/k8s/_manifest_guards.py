@@ -9,6 +9,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from lib.ansible_jinja_compat import ansible_bool
+from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 from jinja2 import Environment, FileSystemLoader
 
 from validate.k8s_manifests import make_lookup, register_ansible_filters
@@ -58,13 +59,18 @@ def _k8s_entries() -> list[dict]:
 def _role_defaults(role: str) -> dict:
     """A role's defaults with `{{ ... }}` inside VALUES expanded, as Ansible expands them.
 
-    n8n's image defaults are `"{{ k8s_registry_pull_host }}/n8n:latest"`, and that var is
-    itself `"localhost:{{ k8s_registry_port }}"` — so the raw YAML carries braces two levels
-    deep. Passed through unexpanded they reach the rendered manifest, where `{` opens a flow
-    mapping and the whole document fails to parse for a reason that has nothing to do with the
-    template being tested.
+    n8n's image default is `"{{ k8s_registry_pull_host }}/n8n:{{ k8s_built_image_tags.get(...)
+    }}"`, and `k8s_registry_pull_host` is itself `"localhost:{{ k8s_registry_port }}"` — so the
+    raw YAML carries braces two levels deep. Passed through unexpanded they reach the rendered
+    manifest, where `{` opens a flow mapping and the whole document fails to parse for a reason
+    that has nothing to do with the template being tested.
+
+    `k8s_built_image_tags` is a play fact k8s/image-builder publishes at deploy time, so it
+    reaches no defaults file; `BUILT_IMAGE_TAG_STUBS` stands in, the same map `_k8s_render.py`
+    renders against through BASE_CONTEXT.
     """
     values = {
+        "k8s_built_image_tags": BUILT_IMAGE_TAG_STUBS,
         **ALL_VARS,
         **yaml_fast.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
     }
