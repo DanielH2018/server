@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-22 06:17 UTC
-generated_sha: 4b914f620
+generated_at: 2026-09-22 18:18 UTC
+generated_sha: cf5317d1f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,16 +16,14 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2245](https://github.com/DanielH2018/server/issues/2245) | medium | addition | cicd | Spike: a self-hosted GitHub Actions runner so the repo can be private without Actions minutes | 2026-09-21 | 0 | - | ✓ |
+| [#2291](https://github.com/DanielH2018/server/issues/2291) | high | gap | cicd | Every dotfiles Actions run has failed before its first step since 2026-09-22, leaving that repo with no server-side gate | 2026-09-22 | 0 | - | ✓ |
+| [#2290](https://github.com/DanielH2018/server/issues/2290) | medium | gap | cicd | A background job cannot isolate for a dotfiles-only change: EnterWorktree is bound to the session's repo | 2026-09-22 | 0 | - | ✓ |
+| [#2294](https://github.com/DanielH2018/server/issues/2294) | medium | improvement | cicd | needs-manual-apply names the whole k3s role tag, which restarts k3s and re-encrypts etcd for a one-line RBAC change | 2026-09-22 | 0 | - | ✓ |
 | [#2081](https://github.com/DanielH2018/server/issues/2081) | low | improvement | container | Apply the dockerd/containerd GOGC=off drop-ins on daniel-pi one a day and grade each the day after | 2026-09-18 | 0 | - | ✓ |
-| [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | worktree-bridge-cse_01CpUvQt6YhYSNBR3oKsjquy | ✓ |
+| [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
-| [#2234](https://github.com/DanielH2018/server/issues/2234) | low | improvement | cicd | image-builder: content-addressed tag instead of :latest (split from #2213) | 2026-09-21 | 0 | - | ✓ |
-| [#2235](https://github.com/DanielH2018/server/issues/2235) | low | improvement | cicd | sonarr verify.yml polls a rollout nothing has waited on; gate it with an inline rollout status like arr-notification | 2026-09-21 | 0 | - | ✓ |
-| [#2238](https://github.com/DanielH2018/server/issues/2238) | low | improvement | cicd | Shard ratchet still cannot see a heavy unweighted module in a directory with no recorded pole | 2026-09-21 | 0 | - | ✓ |
-| [#2239](https://github.com/DanielH2018/server/issues/2239) | low | improvement | cicd | CI pytest matrix could go to 6 shards now that the pole is 17.8s | 2026-09-21 | 0 | - | ✓ |
-| [#2243](https://github.com/DanielH2018/server/issues/2243) | low | gap | backup-observability | Let the read-only ServiceAccount list ETCDSnapshotFile so the etcd-restore gates can check the named snapshot | 2026-09-21 | 0 | - | ✓ |
-| [#2261](https://github.com/DanielH2018/server/issues/2261) | low | gap | cicd | claude_guard.segment drops a trailing & with the trailing-separator collapse, so an allow-side reader loses the backgrounding | 2026-09-22 | 0 | - | ✓ |
+| [#2279](https://github.com/DanielH2018/server/issues/2279) | low | gap | container | sonarr's new inline rollout gate has never waited on a real roll | 2026-09-22 | 1 | - | ✓ |
+| [#2293](https://github.com/DanielH2018/server/issues/2293) | low | gap | cicd | A --check of k3s-bringup's kubeconfig tag always fails: a retried command task counts check mode's skip as failure | 2026-09-22 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -61,6 +59,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2131](https://github.com/DanielH2018/server/issues/2131) | accepted | nvidia-smi has no server-side handler, so the shared-verdict replay does not exercise its guard | No host has NVIDIA hardware; porting the nvidia-smi handler widens local auto-approve for a verb nothing runs. Revisit if a GPU node joins. |
 | [#2156](https://github.com/DanielH2018/server/issues/2156) | accepted | Replace the deploy plane's sleep-polls with flock, kubectl wait and a bounded timeout | PR #2233 fixed the one real defect (postflight timeout). The rest are refuted or not worth the rewrite: the LOCK_NB attempt is atomic so no check-then-act window exists and a bounded flock leaks a thread+fd (built 29d5e530c, reverted e969b025b); the deploy_io docker poll is unreachable on the deployer host (containers_for returns []); the tick watch's systemctl start --wait rewrite replaces a 5s poll on a ~5s tick and takes the wrapper grading and its stubbed-systemd tests with it. Operator decision 2026-09-22. |
 | [#2207](https://github.com/DanielH2018/server/issues/2207) | accepted | Make gitops_tick.sh auto-approve deterministically with an exact-match PreToolUse allow | Operator decision 2026-09-22: keep the auto-mode-bridge retry rather than add a write-side PreToolUse allow; proving preemption needs ten fresh sessions and a user-level classifyAllShell change. |
+| [#2280](https://github.com/DanielH2018/server/issues/2280) | accepted | The 4-shard pytest matrix costs a quarter of every CI run's billed minutes | Operator decision 2026-09-22: keep the 6-shard matrix. The repo is public, so the billed-minutes cost is zero and the wall-clock argument wins outright. Measured that day: the matrix costs +7 billed minutes per run (18 total), and ansible-lint at 106s is now the run pole rather than pytest at 86s, so collapsing would add roughly 160s over the ansible-lint wall. The trade only turns if the repo goes private; the revisit trigger is visibility, not a date. If it ever does turn, drop 6 to 4 shards first, which recovers 4 billed minutes at no wall-clock cost. |
 
 ### container
 
