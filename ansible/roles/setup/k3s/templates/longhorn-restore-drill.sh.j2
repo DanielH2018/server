@@ -44,6 +44,9 @@ STAMP="${STAMP_DIR}/last-success"
 ATTEMPT_DIR="${STAMP_DIR}/attempts"
 SUCCESS_DIR="${STAMP_DIR}/success"
 SEEN_DIR="${STAMP_DIR}/seen"
+# One marker per volume whose failed attempt has already been re-drilled, which is what bounds
+# the retry below to once per failure.
+RETRY_DIR="${STAMP_DIR}/retries"
 # The eligible set, refreshed every run for the heartbeat's coverage check to read. Check 8 has
 # no cluster credential worth the name, so the drill — which already computes this — publishes it.
 CANDIDATES="${STAMP_DIR}/candidates"
@@ -114,8 +117,8 @@ ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
       | [.pvc, .ns, .vol, .size, .bs, .target] | @tsv')
 [[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
 
-mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR"
-chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR"
+mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
+chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
 # DECIDED: the candidate list is published from the FULL eligible set, and the pin is applied
 # only after it. Filtering in the jq above — the shape until 2026-09-21 — wrote a one-line
 # candidates file on a pinned run, and check 8 sizes its coverage window from that count and
@@ -149,6 +152,40 @@ CHOICE=$(while IFS=$'\t' read -r pvc rest; do
   printf '%s\t%s\t%s\n' "$at" "$pvc" "$rest"
 done <<<"$ELIGIBLE" | sort -n -k1,1 | head -1 | cut -f2-)
 
+# A volume whose last attempt FAILED jumps the queue, once. Without this its next slot is a
+# whole rotation away — 26 nights, against check 8's 31-day coverage window — so a single bad
+# night is near-certain to page before the volume gets another chance, and an operator fixing
+# the cause has no way to prove the fix but a root shell. Both observed failures went that way:
+# tdarr-configs on 2026-09-07 (byte floor) and n8n-files on 2026-08-30 (empty volume, #2269).
+#
+# The bound is one retry per failed attempt, held by a marker in RETRY_DIR stamped right after
+# the attempt. A volume that fails again is not retried again until its next rotation slot
+# refreshes its attempt stamp, so a permanently broken volume costs 2 nights per cycle rather
+# than every night — the same starvation property the attempt-stamp selection above exists for.
+# Each retry lengthens the cycle by one night, which is what
+# `k3s_longhorn_restore_drill_coverage_slack_days` absorbs: 5 nights of slack, so check 8 stays
+# correct until 5 volumes are failing at once.
+#
+# Freshest failure first, so last night's failure is tonight's retry. A pinned run never spends
+# the budget: ELIGIBLE holds only the pinned volume by then, so the scan would always name it.
+RETRY=""
+if [[ -z "$PIN" ]]; then
+  RETRY=$(while IFS=$'\t' read -r pvc rest; do
+    [[ -n "$pvc" && -f "${ATTEMPT_DIR}/${pvc}" ]] || continue
+    at=$(stat -c %Y "${ATTEMPT_DIR}/${pvc}" 2>/dev/null || echo 0)
+    # SUCCESS_DIR holds the epoch the drill passed at, so a success at or after the attempt is
+    # that attempt's own success. A volume that has never succeeded reads 0 and qualifies.
+    ok=0
+    [[ -f "${SUCCESS_DIR}/${pvc}" ]] && ok=$(cat "${SUCCESS_DIR}/${pvc}" 2>/dev/null || echo 0)
+    (( ok >= at )) && continue
+    rt=0
+    [[ -f "${RETRY_DIR}/${pvc}" ]] && rt=$(stat -c %Y "${RETRY_DIR}/${pvc}" 2>/dev/null || echo 0)
+    (( rt >= at )) && continue
+    printf '%s\t%s\t%s\n' "$at" "$pvc" "$rest"
+  done <<<"$ELIGIBLE" | sort -rn -k1,1 | head -1 | cut -f2-)
+fi
+[[ -n "$RETRY" ]] && CHOICE="$RETRY"
+
 IFS=$'\t' read -r PVC PVC_NS VOL SIZE BLOCKSIZE TARGET <<<"$CHOICE"
 [[ -n "$PVC" && -n "$VOL" && -n "$SIZE" ]] || fail "could not select a volume to drill"
 PVC_NS="${PVC_NS:-$FALLBACK_NS}"
@@ -159,6 +196,15 @@ DRILL="restore-drill-${PVC}"
 # picked every night and the other 24 would never be drilled again.
 touch "${ATTEMPT_DIR}/${PVC}"
 chmod 0644 "${ATTEMPT_DIR}/${PVC}"
+
+# Stamped AFTER the attempt, so this marker is never older than the attempt it answers for and
+# the retry cannot repeat on the same failure. Written whatever the run goes on to do: a retry
+# that fails is still a retry spent.
+if [[ -n "$RETRY" ]]; then
+  touch "${RETRY_DIR}/${PVC}"
+  chmod 0644 "${RETRY_DIR}/${PVC}"
+  logger -t longhorn-restore-drill "RETRY: ${PVC} failed its last attempt — re-drilling ahead of the rotation"
+fi
 
 # Newest Completed backup, by snapshot time. `sort_by` over a string is fine here: these are
 # RFC3339 stamps in a fixed zone, so lexical and chronological order agree.
