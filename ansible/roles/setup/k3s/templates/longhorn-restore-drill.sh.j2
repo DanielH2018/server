@@ -275,10 +275,24 @@ PROBE=$($KUBECTL -n "$PVC_NS" logs "${DRILL}-probe" 2>&1)
 FILES=$(sed -n 's/.*files=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
 BYTES=$(sed -n 's/.*bytes=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
 
-[[ -n "$FILES" && "$FILES" -gt 0 ]] || fail "restored volume has no files: ${PROBE}"
+# A volume whose CONTENT is legitimately empty still has a restore path worth proving, and the
+# two data assertions below can never pass on it. n8n-files is the case: n8n writes to /files
+# only when a workflow does, nothing has, and the drill failed it on 2026-08-30 with
+# `files=0 bytes=0`, could not be re-drilled for another 26-night rotation, and check 8 paged
+# `not restore-proven in 31d`. Waiving the content assertions for a DECLARED volume leaves the
+# rest of the proof intact — the restore reached `detached false` inside the timeout, the probe
+# pod mounted it and reached Succeeded, and it produced output, which is what separates "this
+# volume is empty" from "the volume could not be read". The name is declared per volume so the
+# waiver cannot widen: a volume not on the list that restores empty still fails.
+EMPTY_OK="{{ k3s_longhorn_restore_drill_empty_ok_pvcs | join(' ') }}"
+DECLARED_EMPTY=""
+[[ " ${EMPTY_OK} " == *" ${PVC} "* ]] && DECLARED_EMPTY=1
+
+[[ -n "$FILES" && ( "$FILES" -gt 0 || -n "$DECLARED_EMPTY" ) ]] \
+  || fail "restored volume for ${PVC} has no files: ${PROBE}"
 MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
-[[ -n "$BYTES" && "$BYTES" -ge "$MIN_BYTES" ]] \
-  || fail "restored volume holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}"
+[[ -n "$BYTES" && ( "$BYTES" -ge "$MIN_BYTES" || -n "$DECLARED_EMPTY" ) ]] \
+  || fail "restored volume for ${PVC} holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}"
 
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.
@@ -302,4 +316,6 @@ fi
 # question — a green global stamp now means one of 25 volumes restored, not all of them.
 date +%s >"${SUCCESS_DIR}/${PVC}"
 chmod 0644 "${SUCCESS_DIR}/${PVC}"
-logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})"
+NOTE=""
+[[ -n "$DECLARED_EMPTY" && "$FILES" == "0" ]] && NOTE=" — declared may-be-empty, content assertions waived"
+logger -t longhorn-restore-drill "PASS: ${PVC} restored from ${BACKUP} (files=${FILES}, bytes=${BYTES})${NOTE}"
