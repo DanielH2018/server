@@ -54,7 +54,8 @@ jobs:
   #     the gate waits on the MAX of its dependencies, not their sum, and its own step is 4s.
   #   - The revert's case was PR wall time, where both halves are changed-files-scoped and a
   #     second job's ~15-20s of fixed setup dwarfs ~7s of scoped lint. The PR wall is now set by
-  #     `pytest`, which runs UNSCOPED by design (prek.toml says why) at ~61s across four shards.
+  #     `pytest`, which runs UNSCOPED by design (prek.toml says why) at ~61s across the shards
+  #     (four when this was measured; six since #2239).
   #     Both scoped hook halves finish well inside that, so on a PR this split is free rather
   #     than cheap.
   #
