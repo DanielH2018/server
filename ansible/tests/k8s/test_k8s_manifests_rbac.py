@@ -8,6 +8,7 @@ homepage Kubernetes widget carry their own cluster identities and are held to th
 import copy
 import re
 
+from deploy_tools import k3s_etcd_restore_gates
 from lib import yaml_fast
 from _helpers import ANSIBLE
 from _manifest_guards import (
@@ -338,4 +339,16 @@ def test_readonly_role_covers_the_crd_groups_this_homelab_deploys():
     # Exact match, not `in`: see ansible/tests/repo/test_no_host_shaped_membership_literal.py
     assert any(g == "traefik.io" for g in groups), (
         "IngressRoute/Middleware unreadable without sudo"
+    )
+    # Both sides, so dropping the group OR dropping the gate that needs it breaks this. The
+    # group is derived from the gate script's own resource argument rather than restated
+    # here, and the argument is pinned: a rename has to move the defaults with it.
+    dotted = [a for a in k3s_etcd_restore_gates.SNAPSHOT_FILES_ARGS if "." in a]
+    assert dotted == ["etcdsnapshotfiles.k3s.cattle.io"], (
+        "the etcd restore gate no longer reads one fully-qualified CRD — re-derive its group"
+    )
+    gate_group = dotted[0].split(".", 1)[1]
+    assert any(g == gate_group for g in groups), (
+        "ETCDSnapshotFile unreadable without sudo, so k3s_etcd_restore_gates.py gate 3 "
+        "cannot check the snapshot it is about to restore (#2243)"
     )
