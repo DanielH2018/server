@@ -340,11 +340,18 @@ fi
 # would be left unstaged in the primary checkout, which deploy_git.py reads as dirty and which
 # parks every deploy on the box.
 #
-# A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT. `measure_weights` exits non-zero
-# when its sub-run does not pass, and publishing the docs is worth doing on a day the suite is
-# red — so this takes build_docs.py's GENERATORS_OK path rather than an early exit. `timeout`
-# bounds it for a related reason: this script holds /var/lock/server-git-tree.lock for its whole
-# life, so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
+# A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT — build_docs.py's GENERATORS_OK
+# path rather than an early exit.
+#
+# WHAT THAT ACTUALLY BUYS IS NARROWER THAN IT LOOKS. `measure_weights` exits non-zero when its
+# sub-run does not pass, but a genuinely red suite stops this cron further down anyway: the prek
+# `pytest` hook is `always_run` and takes no filenames, so the commit below needs the whole suite
+# green. The cases this path saves are the ones where the suite is fine and the measurement alone
+# is not — the `timeout` firing, or a durations report that parses to nothing. There the pages are
+# still worth publishing, and the run still reports DOWN with the reason named.
+#
+# `timeout` bounds it because this script holds /var/lock/server-git-tree.lock for its whole life,
+# so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
 #
 # No PYTEST_ADDOPTS here. `measure_weights` passes `--deselect RATCHET_NODE_ID` to its own
 # pytest, and a second assignment would break the one-commit-line rule
