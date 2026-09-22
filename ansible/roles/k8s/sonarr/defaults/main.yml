@@ -23,6 +23,12 @@ k8s_autodeploy_snapshot_pvcs: [sonarr-config]  # noqa var-naming[no-role-prefix]
 # what this role creates can see the coupling (2026-08-22 review M2).
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
+# The rollout budget, declared once. Read by BOTH the `manifests_rollout_timeout` passed to
+# k8s/manifests in tasks/main.yml and the inline `rollout status` gate in tasks/verify.yml, so
+# the two cannot drift. A first boot installing DOCKER_MODS takes up to 10 minutes; the 300s
+# k8s/manifests default times out against the startupProbe that allows it.
+sonarr_k8s_rollout_timeout: 660s
+
 # ── the config database ─────────────────────────────────────────────────────────────────────
 # 85 M / 221 files at B3. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
 # absolute root-folder paths that this whole slice is careful about — it is exactly the state

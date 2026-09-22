@@ -52,7 +52,7 @@ batches them).
 """
 
 from lib import yaml_fast
-from _helpers import REPO as _REPO
+from _helpers import REPO as _REPO, manifests_rollout_timeout_s
 
 
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
@@ -122,18 +122,13 @@ def test_rollback_timeout_covers_the_worst_case_revert_with_realistic_overhead_m
 
 
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
-_MANIFESTS_ROLLOUT_DEFAULT_S = (
-    300  # k8s/manifests: manifests_rollout_timeout | default('300s')
-)
 
 
 def _rollout_timeout_s(role: str) -> int:
-    import re
-
-    tasks = _K8S_ROLES / role / "tasks/main.yml"
-    text = tasks.read_text() if tasks.exists() else ""
-    m = re.search(r"manifests_rollout_timeout:\s*(\d+)s", text)
-    return int(m.group(1)) if m else _MANIFESTS_ROLLOUT_DEFAULT_S
+    # Shared with the gitops_deploy budget test and the inline-gate census, because the literal
+    # read this replaced returned the 300s default for a role that names its budget in a
+    # variable (sonarr) — sizing a 660s service as a 300s one, green.
+    return manifests_rollout_timeout_s(_K8S_ROLES / role)
 
 
 def _promoted_claim_roles() -> list[tuple[str, int]]:

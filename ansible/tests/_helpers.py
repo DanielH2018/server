@@ -13,6 +13,7 @@ way.
 
 import ast
 import os
+import re
 import subprocess
 from pathlib import Path
 from typing import Iterator
@@ -81,6 +82,68 @@ def load_defaults(role: Path) -> dict:
     generator's own raw read.
     """
     return load_yaml(role / "defaults" / "main.yml") or {}
+
+
+# --- the k8s rollout budget, wherever a role spells it ---------------------------------------
+
+# `k8s/manifests` waits `manifests_rollout_timeout | default('300s')`, and three guards size
+# themselves against it: the two rollback-budget tests, which read a role's call site, and the
+# inline-gate budget census, which reads a `rollout status --timeout=`. All three read the
+# literal text, so a role that moved its number into a variable — sonarr, which needs the SAME
+# budget at its manifests call site and in its verify.yml gate — silently read as the 300s
+# default. Resolving the reference here, once, is what keeps that from being a green no-op.
+MANIFESTS_ROLLOUT_DEFAULT_S = 300
+
+_SECONDS = re.compile(r"^(\d+)s$")
+_ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
+
+
+def rollout_seconds(value, role: Path) -> int | None:
+    """`"660s"` or `"{{ sonarr_k8s_rollout_timeout }}"` -> 660; None for anything else.
+
+    `role` is the role DIRECTORY, because a `{{ var }}` is resolved against that role's own
+    `defaults/main.yml`. One level of reference only: a default that names another variable is
+    unresolved rather than chased, so a guard reading this gets None and says so.
+    """
+    text = str(value).strip().strip("\"'")
+    literal = _SECONDS.match(text)
+    if literal:
+        return int(literal.group(1))
+    reference = _ROLE_VAR.match(text)
+    if not reference:
+        return None
+    resolved = _SECONDS.match(
+        str(load_defaults(role).get(reference.group(1), "")).strip()
+    )
+    return int(resolved.group(1)) if resolved else None
+
+
+_ROLLOUT_TIMEOUT_CALL_SITE = re.compile(
+    r"^\s*manifests_rollout_timeout:\s*(.+?)\s*$", re.MULTILINE
+)
+
+
+def manifests_rollout_timeout_s(role: Path) -> int:
+    """The seconds a role's `k8s/manifests` include waits for its rollout.
+
+    `MANIFESTS_ROLLOUT_DEFAULT_S` when the role passes no override. A role that passes one this
+    reader cannot resolve RAISES: the whole point is that an unreadable budget must not read as
+    the default, which is how a 660s service would be sized as a 300s one.
+    """
+    tasks = role / "tasks" / "main.yml"
+    match = _ROLLOUT_TIMEOUT_CALL_SITE.search(
+        tasks.read_text() if tasks.is_file() else ""
+    )
+    if not match:
+        return MANIFESTS_ROLLOUT_DEFAULT_S
+    seconds = rollout_seconds(match.group(1), role)
+    if seconds is None:
+        raise AssertionError(
+            f"{role.name} passes manifests_rollout_timeout: {match.group(1)}, which this "
+            "reader cannot resolve to a number of seconds. Spell it as `<n>s` or as a "
+            "`{{ role_var }}` whose defaults/main.yml value is `<n>s`."
+        )
+    return seconds
 
 
 def walk_tasks(tasks) -> Iterator[dict]:

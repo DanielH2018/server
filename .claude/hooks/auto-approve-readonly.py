@@ -575,8 +575,6 @@ def classify(command, parse=_deployed_parse):
     stripped = command.rstrip()
     if not stripped or stripped.endswith("\\"):
         return None
-    if stripped.endswith("&"):
-        return None  # the segmenter drops a trailing separator, so `ls &` reads as `ls` (#2261)
     if any(s in command for s in _SUBST):
         return None
     try:
@@ -586,7 +584,8 @@ def classify(command, parse=_deployed_parse):
     reasons = []
     for seg in segs:
         if seg.sep == "&":
-            return None  # backgrounding
+            # The trailing form too: the collapse keeps the `&` on the survivor (#2261).
+            return None
         try:
             lex = shlex.shlex(seg.text, posix=True, punctuation_chars=True)
             lex.whitespace_split = True

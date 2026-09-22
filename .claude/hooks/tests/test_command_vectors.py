@@ -49,9 +49,9 @@ _DOTFILES_COPY = (
 # say "the vendored one", and an empty value must not resolve to `Path("")`.
 FIXTURE = Path(os.environ.get("COMMAND_VECTORS") or VENDORED)
 
-# The count vendored on 2026-09-21. A vendored file that shrinks fails here instead of
+# The count vendored on 2026-09-22. A vendored file that shrinks fails here instead of
 # collecting fewer tests; raise this when a vector is added.
-_VENDORED_VECTOR_COUNT = 15
+_VENDORED_VECTOR_COUNT = 16
 
 
 def _load_classifier():

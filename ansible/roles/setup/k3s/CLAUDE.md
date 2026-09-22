@@ -86,6 +86,13 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
     size. Backdating a stamp under `attempts/` to steer the rotation is no longer the way in
     (#2183). ENFORCED:
     `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`.
+    A volume whose content is legitimately EMPTY is declared in
+    `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and
+    the drill waives its two content assertions for that name alone — everything else it
+    proves for that volume it still proves. n8n-files restored to `files=0` on 2026-08-30,
+    could not be re-drilled for another rotation, and check 8 paged `not restore-proven in
+    31d`. ENFORCED:
+    `ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files`.
   - **Off-box etcd snapshot** (`etcd-snapshot-offbox.sh`, daily `k3s_etcd_s3_cron_hour`, as
     root): takes a k3s etcd snapshot and uploads it to R2. It uploads the snapshot only —
     never the cluster token, because the token beside the snapshot would undo

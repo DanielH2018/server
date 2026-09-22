@@ -38,3 +38,9 @@ conventions.
 - `tasks/verify.yml` reads the Sonarr API through the Service ClusterIP (not the
   ingress, which Authelia would intercept) to check the library actually loaded — a
   running pod alone proves nothing about a broken import.
+- **`verify.yml` opens with its own `rollout status` gate**, because `k8s/manifests` queues
+  the rollout for `k8s/rollout-drain` at the end of the batch rather than waiting. Until
+  2026-09-22 the rootfolder read covered that rollout with a 12-sample `until:` poll, whose
+  120s budget was a fifth of the rollout's own — so a slow first boot failed a rollout that
+  would have succeeded (#2235). `sonarr_k8s_rollout_timeout` is the one place that budget is
+  written; both the gate and `manifests_rollout_timeout` read it.
