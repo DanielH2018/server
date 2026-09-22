@@ -4,7 +4,8 @@
   "fields": {
     "command": "the raw Bash tool input",
     "readonly": "auto-approve-readonly.py classify() must return a reason when true, and None when false",
-    "cmdparse": "cmdparse.sh --json contract: status, plus top-level segments after trimming and dropping empties"
+    "cmdparse": "cmdparse.sh --json contract: status, plus top-level segments after trimming and dropping empties",
+    "cmdparse.seps": "optional: the separator that terminated each segment, in order (&& || ; | & newline eof). Pinned where the separator IS the verdict, as for a trailing `&`"
   },
 
   "vectors": [
@@ -108,6 +109,13 @@
       "command": "git status",
       "readonly": true,
       "cmdparse": { "status": "ok", "segments": ["git status"] }
+    },
+    {
+      "name": "a trailing ampersand still reads as backgrounding",
+      "why": "the trailing-separator collapse used to rewrite the surviving segment sep to `eof`, so `ls &` parsed as a bare `ls` and the classifier needed a textual endswith ampersand rule to refuse it (DanielH2018/server#2261). The segments alone cannot pin this — both sides return [\"ls\"] — so the sep is what this vector asserts",
+      "command": "ls &",
+      "readonly": false,
+      "cmdparse": { "status": "ok", "segments": ["ls"], "seps": ["&"] }
     }
   ]
 }
