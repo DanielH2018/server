@@ -10,6 +10,8 @@
 # versions and checksums live in defaults/main.yml, so a mod bump is a reviewed repo change that
 # rebuilds this image — the same posture terraria's build has.
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6 AS fetch
+# DECIDED: apk packages resolve at build time — an `=version` pin 404s once the branch
+# supersedes it and nothing bumps it; the base digest is the pin. See #2211.
 RUN apk add --no-cache curl unzip
 WORKDIR /dl
 RUN mkdir -p /out
