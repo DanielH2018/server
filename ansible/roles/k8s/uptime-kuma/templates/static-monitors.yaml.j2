@@ -396,7 +396,7 @@ stringData:
    that merely takes a minute fires DOWN with nothing wrong. #}
 {% if docs_refresh_push_token | default('') %}
   docs-refresh.json: |
-    {"type": "push", "name": "Docs Refresh", "description": "A daniel-box cron at 06:17 and 18:17 regenerates docs/reference, rebuilds the MkDocs site and opens a PR for any change under the tree lock. DOWN means a generator or site build failed, a previous run is unlanded or left the tree dirty, or the PR could not be published. Run journalctl -t docs-refresh first.", "interval": 46800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Docs Refresh", "description": "A daniel-box cron at 06:17 and 18:17 regenerates docs/reference, records a weight for every unweighted test module, rebuilds the MkDocs site and opens a PR for any change under the tree lock. DOWN means a generator, the shard-weight measurement or the site build failed, a previous run is unlanded or left the tree dirty, or the PR could not be published. Run journalctl -t docs-refresh first.", "interval": 46800, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ docs_refresh_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {% if manifest_prune_push_token | default('') %}
   manifest-prune-check.json: |

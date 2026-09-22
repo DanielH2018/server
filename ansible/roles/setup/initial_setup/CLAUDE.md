@@ -248,6 +248,40 @@ Both tokens are in `CROSS_HOST_PUSH_TOKENS` (`scripts/secrets_mgmt/consumers.py`
 here, in a role with no deploy tag, and the tile deploys from `k8s/uptime-kuma`, so no single
 `rotate --deploy` can move both halves.
 
+## Autonomous-role contract — Generated docs refresh (`crons` tag)
+Twice daily (06:17 and 18:17, daniel-box only): `docs-refresh.sh.j2` regenerates
+`docs/reference/` and the infra map, records a weight for every test module the shard table
+lacks, rebuilds the MkDocs site, and publishes any diff through a PR that auto-merges. Its own
+header carries the derivations; this is the authority statement a later edit must not widen
+quietly.
+- **Scope:** three derived paths, and nothing else — `docs/reference/`,
+  `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`. Each is reproducible
+  from the tree by a generator whose output is itself tested, which is what makes a review-free
+  auto-merge acceptable. A generator that writes outside the three is a defect: the write is
+  unstaged, and an unstaged file in the primary checkout parks every deploy on the box.
+- **Why it weights test modules at all (#2274).** CI's `pytest_shard.py --check-durations` step
+  rejects the PR that introduces an unweighted module costing `RUNNER_HEAVY_SECONDS` or more
+  and leaves the repair to a human. It says nothing about a lighter one, and an unweighted file
+  is packed at the suite median of 0.0s — so without the cron the split is un-skewed rather
+  than measured. `--record-missing`, never `--record`: it measures only the files the table
+  lacks, and writes the same bytes back when there are none, so an ordinary run leaves no diff.
+- **Mode:** degrade, never abort. A failing generator and a failing measurement both set
+  `GENERATORS_OK=0` and let the run publish what did succeed, then report the push DOWN with
+  the reason named — the same "act, but don't launder the result" split the eval sweep uses
+  below. The measurement is `timeout`-bounded because this script holds the git-tree lock for
+  its whole life.
+- **Abort valves:** the shared `/var/lock/server-git-tree.lock`; the dirty-tree gate at the top
+  (build the site, change no file); the unlanded-branch guard (`publish_pr.py unlanded`, read
+  against origin rather than the open-PR list); the commit-failure stamp under
+  `/var/lib/homelab/docs-refresh.d`, which is what lets the next run tell its own leftover dirt
+  from a human's.
+- **Required evidence:** every run logs `status=<up|down> <msg>` via `logger -t docs-refresh`
+  and pushes the "Docs Refresh" Kuma monitor. `PUSH_STATUS` defaults to `down`, so a path added
+  later that forgets to set it reports a failure rather than a silent success.
+- **Next-run review:** before adding a fourth staged path, or a prek hook matching one of the
+  three, check the hook cannot fail on generator output — a hook that can wedges this cron on
+  every run, and `end-of-file-fixer` and Vale have both already tried.
+
 ## Autonomous-role contract — Homelab eval sweep (`evals` tag)
 Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/` against the
 homelab agents/skills and rolls the result into `evals/history.json` (`evals/trend.py`), then

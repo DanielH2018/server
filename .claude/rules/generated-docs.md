@@ -25,8 +25,16 @@ image repositories, `containers_list` facts, `meta/deps.yml` ordering and
 role's defaults, templates, tasks, playbook entry or `containers_list` entry — or, for a
 claim's tier, its StorageClass or the k3s role's `k3s_longhorn_*_volumes` lists — fails
 `scripts/docs/tests/test_gen_role_glance.py` until you re-run the generator and commit the
-block. The docs-refresh cron does not run it: the cron stages only the two generated trees,
-and a write under `ansible/roles/` would leave the primary checkout dirty.
+block. The docs-refresh cron does not run it: a write under `ansible/roles/` is outside the
+paths the cron stages, so it would leave the primary checkout dirty.
+
+**What the cron DOES stage is a closed list, and a generator outside it dirties the tree.**
+Three paths: `docs/reference/`, `docs/assets/generated/`, and `scripts/dev/pytest_shard_weights.json`
+(the test shard-weights table, recorded by `pytest_shard.py --record-missing` since #2274).
+Adding a fourth means editing the cron's `git add`, the porcelain check in its
+`restore_generated_tree`, and `ansible/tests/setup/test_docs_refresh_records_shard_weights.py`,
+which holds the first two against each other. A path written but not staged parks the GitOps
+deployer, which reads any porcelain output on the primary checkout as dirty.
 
 **Why this one gate is not left to the cron**, when a stale `docs/reference/` page is. A
 reference page carries a `generated_at` banner, so a stale one announces itself on the page.
