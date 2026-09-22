@@ -498,6 +498,14 @@ k3s_readonly_crd_api_groups:
   - traefik.io
   - metallb.io
   - longhorn.io
+  # k3s's own CRDs. `scripts/deploy_tools/k3s_etcd_restore_gates.py` gate 3 reads
+  # ETCDSnapshotFile to check that the snapshot an operator is about to restore exists and
+  # reports `status.readyToUse` — the one cluster-side answer to that question. The template
+  # grants `resources: ["*"]` per group, so this also grants read on `Addon`, the group's only
+  # other resource. Both are safe to read: ETCDSnapshotFile's `spec.s3` records the bucket,
+  # endpoint, folder and region but no keys (those stay in the 0600 root-only
+  # /etc/rancher/k3s/etcd-s3.env), and an Addon records a manifest's path and checksum.
+  - k3s.cattle.io
 
 # Longhorn writes under this prefix inside the existing Kopia B2 bucket, so the two tools
 # never share a namespace and a lifecycle rule written for one cannot expire the other's

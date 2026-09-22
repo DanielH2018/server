@@ -21,18 +21,27 @@ The gates, in the order the runbook gives them:
      the daily off-box cron reports DOWN when the live token stops matching it. The stamp is
      root-only by design, so this gate checks that it EXISTS; the match is the cron's verdict
      and the Kuma tile is where to read it.
+  3. The snapshot you named is one the cluster knows and calls restorable. k3s records every
+     local and S3 snapshot as an `ETCDSnapshotFile`, whose `spec.snapshotName` is exactly what
+     `--cluster-reset-restore-path` takes and whose `status.readyToUse` says whether it can be
+     restored at all. A name carrying `/` is refused before the cluster is asked: k3s reads
+     that flag as a NAME, so a path there resolves to nothing and the restore fails after k3s
+     is already stopped (#2243).
 
-No gate here reads the cluster: both stop conditions are about what survives daniel-box, not
-about what runs on it. Both stamps live on daniel-box, so the gates fail on any other host
-rather than reading an absent directory as a pass. `ETCD_DRILL_STATE_DIR` and
-`HOMELAB_STATE_DIR` point them elsewhere.
+Gates 1 and 2 read only daniel-box: both stop conditions are about what survives the host, not
+about what runs on it, so they fail on any other host rather than reading an absent directory
+as a pass. `ETCD_DRILL_STATE_DIR` and `HOMELAB_STATE_DIR` point them elsewhere. Gate 3 is the
+one cluster read, through `lib.kubectl` naming `prod`, so a staging kubectl is refused here too
+(#1663) — run it before `systemctl stop k3s`, while the API server still answers.
 
 Exit codes:
   0      every gate passed
-  1..2   the first gate that failed, by its number above
+  1..3   the first gate that failed, by its number above
+  69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
+         or a list that returned nothing parseable)
 
 Usage:
-    uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py
+    uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py <snapshot-name>
 """
 
 import os
@@ -45,9 +54,13 @@ from pathlib import Path as _Path
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from deploy_tools import runbook_gates
-from deploy_tools.runbook_gates import Gate, stamp_dir_missing
+from deploy_tools.runbook_gates import Gate, cluster_doc, items, stamp_dir_missing
+from lib.kubectl import DEFAULT_TOOLS, Tools
 
+CLUSTER = "prod"
 RUNBOOK = "docs/k3s-etcd-restore.md"
+
+SNAPSHOT_FILES_ARGS = ("get", "etcdsnapshotfiles.k3s.cattle.io", "-o", "json")
 
 DRILL_STATE_DIR = "/var/lib/etcd-restore-drill"
 DRILL_STAMP = "last-success-list-only"
@@ -128,28 +141,95 @@ def missing_token_baseline(state_dir: str | os.PathLike) -> list[str]:
     ]
 
 
+def unusable_snapshot_name(name: str) -> list[str]:
+    """Why the name cannot go to `--cluster-reset-restore-path` at all. Asks nothing.
+
+    k3s reads that flag as a NAME and resolves it against the snapshot directory and the S3
+    folder itself, so a path there names no snapshot — and the restore only says so after k3s
+    has already been stopped. Refused here, before the cluster is asked, because neither
+    failure depends on what the cluster holds.
+    """
+    if not name.strip():
+        return ["<no snapshot name given — pass the one you intend to restore>"]
+    if "/" in name:
+        return [
+            f"{name} is a path, and --cluster-reset-restore-path takes a NAME — pass the "
+            "bare name `k3s etcd-snapshot list --s3` printed, not a file:// or s3:// location"
+        ]
+    return []
+
+
+def snapshot_not_restorable(name: str, doc) -> list[str]:
+    """Why the cluster's `ETCDSnapshotFile` for `name` does not clear a restore.
+
+    Unknown and not-`readyToUse` are separate offenders. An unknown name lists what the
+    cluster DOES record, because the two ways to get here need different fixes: a typo, or a
+    bucket whose snapshots k3s has not reconciled into CRs.
+    """
+    known: dict[str, dict] = {}
+    for item in items(doc):
+        snapshot = str((item.get("spec") or {}).get("snapshotName") or "")
+        if snapshot:
+            known[snapshot] = item
+    record = known.get(name)
+    if record is None:
+        recorded = ", ".join(sorted(known)) if known else "no snapshots at all"
+        return [
+            f"no ETCDSnapshotFile records {name} — the cluster records {recorded}. "
+            "A snapshot k3s has not reconciled into a CR has no verdict here; "
+            "`k3s etcd-snapshot list --s3` as root is the other listing"
+        ]
+    status = record.get("status") or {}
+    if status.get("readyToUse") is not True:
+        message = str((status.get("error") or {}).get("message") or "").strip()
+        location = str((record.get("spec") or {}).get("location") or "?")
+        return [
+            f"{name} reports readyToUse={status.get('readyToUse')} (location {location})"
+            + (f": {message}" if message else "")
+        ]
+    return []
+
+
 # ── the runner ──────────────────────────────────────────────────────────────────────────────
 
 
-def _gate_listing(drill_dir: str, homelab_dir: str, now: float) -> list[str]:
+def _gate_listing(
+    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+) -> list[str]:
     return unproven_listing(drill_dir, now)
 
 
-def _gate_token(drill_dir: str, homelab_dir: str, now: float) -> list[str]:
+def _gate_token(
+    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+) -> list[str]:
     return missing_token_baseline(homelab_dir)
+
+
+def _gate_snapshot(
+    drill_dir: str, homelab_dir: str, now: float, snapshot: str, tools: Tools
+) -> list[str]:
+    unusable = unusable_snapshot_name(snapshot)
+    if unusable:
+        return unusable
+    return snapshot_not_restorable(
+        snapshot, cluster_doc(CLUSTER, tools, SNAPSHOT_FILES_ARGS)
+    )
 
 
 # Order is the runbook's, and the exit code is the position. Append; never reorder.
 GATES = (
     Gate(1, "the off-box listing leg is proven", _gate_listing),
     Gate(2, "the cluster token has an off-box baseline", _gate_token),
+    Gate(3, "the named snapshot exists and is restorable", _gate_snapshot),
 )
 
 
 def run_gates(
+    snapshot: str,
     drill_dir: str | None = None,
     homelab_dir: str | None = None,
     now: float | None = None,
+    tools: Tools = DEFAULT_TOOLS,
     out=sys.stdout,
 ) -> int:
     """Run every gate in order, print one line per gate, and return the exit code."""
@@ -158,11 +238,13 @@ def run_gates(
         homelab_dir or os.environ.get("HOMELAB_STATE_DIR") or HOMELAB_STATE_DIR
     )
     now = time.time() if now is None else now
-    return runbook_gates.run_gates(GATES, RUNBOOK, drill_dir, homelab_dir, now, out=out)
+    return runbook_gates.run_gates(
+        GATES, RUNBOOK, drill_dir, homelab_dir, now, snapshot, tools, out=out
+    )
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates)
+    return runbook_gates.cli(__doc__, argv, run_gates, takes=1)
 
 
 if __name__ == "__main__":

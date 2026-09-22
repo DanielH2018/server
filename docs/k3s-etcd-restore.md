@@ -222,17 +222,21 @@ command line.
 
 ## The gates — before stopping k3s
 
-Two conditions decide whether the snapshot you are about to restore is a backup at all, and
-both are recorded on daniel-box by crons rather than checked by hand. They run as one script,
-in order, and the exit code names the first gate that refused (#2216, the shape
-`docs/k3s-upgrade.md` set):
+Three conditions decide whether the snapshot you are about to restore is a backup at all. Two
+are recorded on daniel-box by crons rather than checked by hand; the third is the cluster's own
+record of the snapshot you name. They run as one script, in order, and the exit code names the
+first gate that refused (#2216, the shape `docs/k3s-upgrade.md` set):
 
 ```bash
-uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py
+uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py <snapshot-name>
 ```
 
-Exit 0 means both passed; exit 1 or 2 is the gate that failed, and the script prints what it
-found. Run it on daniel-box, before `systemctl stop k3s`.
+The snapshot name is the one from *Listing what is available* above — the same value
+`--cluster-reset-restore-path` takes below, so the gates grade the snapshot you actually
+restore. Exit 0 means all three passed; exit 1, 2 or 3 is the gate that failed and the script
+prints what it found; exit 69 means gate 3 could not ask the cluster, which is not a verdict on
+the snapshot (see the note under gate 3). Run it on daniel-box, before `systemctl stop k3s` —
+gate 3 needs the API server up.
 
 1. **The off-box listing leg is proven.** The weekly `--list-only` drill's stamp
    (`/var/lib/etcd-restore-drill/last-success-list-only`) must say `mode=list-only` and be
@@ -244,6 +248,22 @@ found. Run it on daniel-box, before `systemctl stop k3s`.
    so the gate checks that it exists; whether the live token still matches it is the daily
    cron's verdict, on the **Off-box etcd Snapshot** tile. A missing stamp means no baseline was
    ever taken, and every snapshot since 2026-08-20 is undecryptable without that copy.
+3. **The snapshot you named exists and the cluster calls it restorable.** k3s records every
+   local and S3 snapshot as an `ETCDSnapshotFile`; the gate matches `spec.snapshotName` against
+   the name you passed and refuses anything whose `status.readyToUse` is not `true`. It also
+   refuses a name containing `/` before it asks the cluster: `--cluster-reset-restore-path`
+   takes a NAME, so a path there names no snapshot and k3s says so only after it has been
+   stopped. An unknown name is reported with the snapshots the cluster does record, which
+   separates a typo from a bucket k3s has not reconciled into CRs — `k3s etcd-snapshot list
+   --s3` as root is the other listing. The read needs `k3s.cattle.io` in
+   `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
+
+   **Exit 69 is the expected path when the API server is already down**, which is a large
+   share of the reasons to be reading this page at all. It means gate 3 could not look, not
+   that the snapshot is bad. Gates 1 and 2 are the ones that still bind — they read daniel-box,
+   not the cluster, and the script prints them before it reaches gate 3 — and
+   `k3s etcd-snapshot list --s3` as root is how you confirm the name without an API server.
+   Proceed on those two.
 
 ## Restoring
 

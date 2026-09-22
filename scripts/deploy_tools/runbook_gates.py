@@ -148,10 +148,18 @@ def run_gates(gates: Sequence[Gate], runbook: str, *context, out=sys.stdout) -> 
     return 0
 
 
-def cli(doc: str, argv: list[str] | None, run: Callable[[], int]) -> int:
-    """The argument-free entry point every gate script shares: any argument prints `doc`."""
+def cli(
+    doc: str, argv: list[str] | None, run: Callable[..., int], *, takes: int = 0
+) -> int:
+    """The entry point every gate script shares: the wrong argument count prints `doc`.
+
+    `takes` is how many positional arguments the runbook's own invocation carries — 0 for a
+    script whose gates read only the host and the cluster, 1 for the etcd restore gates,
+    where the snapshot name is the subject gate 3 grades. An argument starting with `-` is a
+    flag, and no gate script has one, so it is usage rather than a positional.
+    """
     argv = sys.argv[1:] if argv is None else argv
-    if argv:
+    if len(argv) != takes or any(arg.startswith("-") for arg in argv):
         print(doc, file=sys.stderr)
         return EX_USAGE
-    return run()
+    return run(*argv)
