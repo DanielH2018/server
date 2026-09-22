@@ -23,7 +23,8 @@ FROM lscr.io/linuxserver/code-server:4.138.0-ls365@sha256:3ca0faa2891c694dab184a
 #    `pkg=version` pin breaks the build the day noble-updates supersedes the version — the
 #    archive pool keeps only the current one — and a snapshot.ubuntu.com timestamp has no
 #    Renovate datasource, so it would freeze the security updates for git/curl/python3 with
-#    nothing raising a PR. Both are recorded against #2149; neither is an oversight.
+#    nothing raising a PR. DECIDED: build-time apt resolution stays, on those grounds —
+#    operator decision on #2211 (2026-09-22), which holds the snapshot-mirror evidence.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     git \
     python3 \

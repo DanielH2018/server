@@ -10,6 +10,8 @@
 # falsified by the next bump, which is what happened to the 3.22 text this replaces.
 FROM alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
+# DECIDED: apk packages resolve at build time — an `=version` pin 404s once the branch
+# supersedes it and nothing bumps it; the base digest is the pin. See #2211.
 RUN apk add --no-cache bash rsync openssh-client curl
 # ssh refuses to run as a uid with no passwd entry ("No user exists for uid 1000") —
 # the pod runs as {{ puid }} via securityContext, so give that uid a name.

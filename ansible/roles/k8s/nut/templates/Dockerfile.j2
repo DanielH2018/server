@@ -4,6 +4,10 @@
 # bookworm, and a bare digest would let a bump cross into trixie unremarked.
 FROM debian:bookworm-slim@sha256:3783cc01769c7b2b1b83a5c5ad96c815348e28ed7da68e2e3687004faa906251
 
+# DECIDED: these apt packages resolve at build time. A `pkg=version` pin 404s the day the
+# archive supersedes it (the pool keeps only the current deb) and nothing bumps it, and a
+# snapshot mirror freezes security updates with no Renovate datasource to raise a PR. The
+# base digest above is the pin; #2211 holds the evidence and the operator's decision.
 RUN apt-get update && apt-get install -y --no-install-recommends \
     nut \
     nut-client \
