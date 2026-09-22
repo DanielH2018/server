@@ -10,8 +10,8 @@ first re-enable by making the repository private again.
 The numbers below say that configuration works but costs latency. `daniel-server` carries the
 whole suite in 148s on an idle host against the hosted runner's 105-109s, and in 294.5s while
 two fan-out agents run their own `pytest` — which is the condition that holds on a landing day.
-It also says the 4-shard matrix is the wrong shape on one host, that concurrent jobs need one
-work directory each, and that the runner needs its own systemd slice.
+It also says the 4-shard matrix is the wrong shape on one host, that one runner instance runs
+one job at a time, and that the runner needs its own systemd slice.
 
 Filed as #2245. Nothing here changes CI.
 
@@ -52,6 +52,11 @@ this session, at a 1-minute load of 14.3 on 8 cores.
 The last two rows are the proposed self-hosted shape, measured twice. The second is the
 condition that actually holds on a landing day, and it doubles the wall clock.
 
+The `hooks` and `ansible-lint` jobs exited non-zero in that second sample, on
+`files were modified by this hook` rather than on any lint finding — this session was editing
+the tree while the sample ran. The wall-clock and memory figures stand, because a few text
+writes cost no CPU, but do not read those two exit codes as a result.
+
 ### On GitHub's hosted runners
 
 Two pushes to master the same day, from `gh api .../actions/runs/<id>/jobs`:
@@ -80,19 +85,13 @@ A self-hosted runner executes a single job and then takes the next, so `hooks`, 
 and `pytest` do not overlap on one runner. Serially they cost the sum of their solo
 measurements: 110.4 + 62.8 + 36.9 = 210.1s, against the hosted 105-109s.
 
-Getting them to overlap means registering several runner instances on the one machine, which
-raises a problem the measurements found by accident.
-
-### Concurrent jobs need separate work directories
-
-Both the `hooks` and the `ansible-lint` job failed in the contended sample, and neither failure
-was a lint finding. Each reported `files were modified by this hook` — `ty` printed
-`All checks passed!` and prek failed it anyway — because a concurrent `pytest` was running
-`uv run` against the same `.venv` in the same workspace.
-
-So several runner instances on one machine each need their own work directory. That is
-configuration rather than a blocker, but it is not the default and it is invisible until a
-green hook starts failing for a reason its own output denies.
+Getting them to overlap means registering several runner instances on the one machine. Whether
+those instances can share one work directory was not settled here: `hooks` and `ansible-lint`
+both failed the contended sample with `files were modified by this hook`, but this session was
+editing the tree while that sample ran, which is sufficient on its own to produce that failure.
+A clean-tree rerun with a concurrent `uv run python -m pytest` passed both hooks, so no
+shared-workspace collision was demonstrated. **Treat it as unmeasured**, and give each instance
+its own work directory until someone measures it.
 
 ### The matrix is the wrong shape on one host
 
@@ -243,9 +242,8 @@ The operator decides whether the repository goes private again. Nothing else in 
 is blocking:
 
 - **Private, and the cost matters** — the follow-up role issue is worth opening. Accept 1.4x
-  the CI wall clock on an idle host and 2.8x on a landing day, a collapsed `pytest` matrix,
-  one work directory per runner instance, a runner in its own slice, and a fleet-cap margin of
-  about 0.8 GiB.
+  the CI wall clock on an idle host and 2.8x on a landing day, a collapsed `pytest` matrix, a
+  runner in its own slice, and a fleet-cap margin of about 0.8 GiB.
 - **Public stays** — close this. A runner costs security and buys nothing.
 
 The matrix-collapse lever is worth considering on its own merits either way, and is a separate
