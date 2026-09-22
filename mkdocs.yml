@@ -195,6 +195,10 @@ nav:
       - Staging Phase C (drafted): staging-phase-c.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
+      # The #2245 spike: measured CI wall clock, billed minutes and peak memory for
+      # carrying this repo's CI on daniel-server. Listed because its verdict turns on a
+      # repository-visibility decision the operator has to make, not on anything built.
+      - Self-hosted runner spike: self-hosted-runner-spike.md
       - Claude tooling reference: claude-tooling.md
       - Failure classes: failure-classes.md
       # Layout decisions, module conventions and the ranked structural findings from the

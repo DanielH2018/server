@@ -472,3 +472,8 @@ Tdie
 [Uu]pdater
 [Vv]fat
 [Ww]ebsocket
+
+# Self-hosted runner spike (docs/self-hosted-runner-spike.md)
+[Tt]oolchains?
+[Dd]atasources?
+gitleaks
