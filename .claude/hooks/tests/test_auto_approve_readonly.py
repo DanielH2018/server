@@ -88,6 +88,8 @@ APPROVE_LOCAL = [
         "the wireguard redaction sed",
     ),
     ("grep foo file >/dev/null 2>&1", "combined >/dev/null 2>&1"),
+    ("ls &>/dev/null", "combined-stream redirect to /dev/null (#2198)"),
+    ("grep -r 'a; rm -rf /' .", "a quoted separator stays inside its word"),
     ('echo "a; rm b"', "operators inside quotes are data, not syntax"),
     ('echo "x && y | z"', "quoted pipe/and is data"),
     (
@@ -179,6 +181,12 @@ REJECT_LOCAL = [
     ("ls > out.txt", "redirect writes a real file"),
     ("cat a >> log.txt", "append writes a real file"),
     ("ls &", "backgrounding"),
+    ("ls & pwd", "backgrounding mid-line"),
+    ("cat <<EOF\nhello\nEOF", "heredoc into a TIER1 program (corpus pins it)"),
+    (
+        "sed -n 1p - <<EOF\nx\nEOF",
+        "heredoc into a program that reads scripts from stdin",
+    ),
     ("(cat a)", "subshell"),
     ("cat a; rm b", "one bad stage in a ; sequence"),
     ("ls && rm -rf x", "bad stage after &&"),
@@ -322,22 +330,39 @@ def _reject_report(bad):
     )
 
 
+# `classify` cuts the command with the dotfiles segmenter (#2198), which conftest.py's
+# stand-in does not fake, so the verdict tests run only where the package is deployed --
+# the trade test_block_footguns.py made. `prek run` on a deployed host runs them.
+_needs_segmenter = pytest.mark.usefixtures("segmenter_or_skip")
+
+
+@_needs_segmenter
 def test_approves_read_only_commands():
     assert not (bad := _failures_approve(APPROVE_LOCAL)), _approve_report(bad)
 
 
+@_needs_segmenter
 def test_rejects_unsafe_commands():
     assert not (bad := _failures_reject(REJECT_LOCAL)), _reject_report(bad)
 
 
+@_needs_segmenter
 @needs_deployed_tables
 def test_approves_read_only_commands_over_ssh():
     assert not (bad := _failures_approve(APPROVE_SSH)), _approve_report(bad)
 
 
+@_needs_segmenter
 @needs_deployed_tables
 def test_rejects_unsafe_commands_over_ssh():
     assert not (bad := _failures_reject(REJECT_SSH)), _reject_report(bad)
+
+
+@pytest.mark.without_segmenter
+def test_no_segmenter_means_no_verdict():
+    """A host without the package gets no auto-approve rather than a stdlib re-split:
+    the hook can only ever reduce prompts, and a second splitter is what #2198 removed."""
+    assert classify("ls", parse=None) is None
 
 
 def misplaced_vectors(local, ssh):

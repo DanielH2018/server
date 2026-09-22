@@ -45,7 +45,7 @@ PreToolUse entry point. `.claude/hooks/_readonly_tables.py` holds the allow-list
 the trusted-host set and the secret-path pattern — those are `claude_guard.tables`'s
 `TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE`, defined once in the dotfiles `claude_guard` package
 (deployed to `~/.local/share/claude-guard`) and imported through `.claude/hooks/_claude_guard.py`.
-`.claude/hooks/_readonly_shell.py` holds the token splitting and the redirect rules. Tests:
+`.claude/hooks/_readonly_shell.py` holds the operator tokens and the redirect rules, `.claude/hooks/_readonly_sed.py` the `sed` guard; the command is cut into stages by the same `claude_guard.segment` the deny guards read, through `_hook_common.segments` (#2198), so a host without the package gets no auto-approve at all. Tests:
 `.claude/hooks/tests/test_auto_approve_readonly.py`, `.claude/hooks/tests/test_claude_guard_import.py`.
 The ssh case on **PermissionRequest** is the user-level `guard-permission-request.sh` (the dotfiles
 `claude_guard` judge), and only that, since 2026-09-18 — the paragraph below has the history. Claude

@@ -23,6 +23,12 @@ side edits, so `test_the_vendored_corpus_matches_the_dotfiles_copy` diffs the tw
 the dotfiles checkout exists — the same shape as the claude_guard stand-in diff in
 test_claude_guard_import.py — and `prek run` runs it before every commit from such a host.
 Point COMMAND_VECTORS at another copy to replay against it instead.
+
+The replay itself runs only where the dotfiles segmenter is deployed: `classify` reads its
+stages from `claude_guard.segment` (#2198), conftest.py's stand-in fakes the package's
+tables but not its parser, and a second splitter is what that change removed. So the case
+set is still collected everywhere (the vendored corpus), and the verdicts are asserted on a
+deployed host under `prek run` — the trade test_block_footguns.py made in #2200.
 """
 
 import importlib.util
@@ -87,6 +93,7 @@ def test_corpus_has_both_polarities():
     assert any(not v["readonly"] for v in VECTORS), "no dangerous vectors in corpus"
 
 
+@pytest.mark.usefixtures("segmenter_or_skip")
 @pytest.mark.parametrize("vector", VECTORS, ids=_ids(VECTORS))
 def test_classify_matches_corpus(vector):
     classify = _load_classifier()

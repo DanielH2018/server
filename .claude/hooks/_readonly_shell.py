@@ -3,10 +3,10 @@
 #   reason: imported by auto-approve-readonly.py
 """Shell-structure helpers for the auto-approve-readonly Bash classifier.
 
-The part that reads an already-tokenized command line as shell: the substitution prefixes
-and operator tokens the classifier refuses outright, the separators it splits statements and
-pipeline stages on, and the redirect rules that decide whether a stage writes. The verdict
-itself stays in `classify`, which calls these.
+The part that reads an already-tokenized stage as shell: the substitution prefixes and
+operator tokens the classifier refuses outright, and the redirect rules that decide whether
+a stage writes. Cutting the command into stages is the dotfiles segmenter's job
+(`_hook_common.segments`, #2198); the verdict itself stays in `classify`, which calls these.
 
 Imported by bare name from `auto-approve-readonly.py`; see `_hook_common.py` for why that
 resolves both under the hook shim and under the tests. Stdlib-only.
@@ -17,22 +17,11 @@ import re
 
 _SUBST = ("`", "$(", "${")
 _OP_TOKEN = re.compile(r"[();<>&|]+\Z")  # a token made ENTIRELY of shell operators
-_SEQ = {";", "&&", "||"}  # sequential separators (each side a pipeline)
 _FORBIDDEN = {"(", ")", "&"}  # subshell / backgrounding -- never read-only
+# Separators the segmenter cuts on. One surviving as a token means it did not (a quoted
+# `;` stays inside its word and never gets here), which is a refusal, not a second stage.
+_STAGE_SEPS = frozenset({";", "&&", "||", "|", "|&"})
 _SAFE_REDIR_TARGETS = {"/dev/null"}  # the only write target we trust
-
-
-def _split(tokens, seps):
-    """Split a token list on any separator token in `seps`."""
-    out, cur = [], []
-    for t in tokens:
-        if t in seps:
-            out.append(cur)
-            cur = []
-        else:
-            cur.append(t)
-    out.append(cur)
-    return out
 
 
 def _is_redirect(tok):
