@@ -23,6 +23,8 @@ import re
 import pytest
 import yaml
 
+from _helpers import manifests_rollout_timeout_s
+
 # "The rollback survives max flock contention" is an invariant split across two templates:
 #   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
 #   gitops-deploy.service.j2 -> flock -w <N> (max lock wait) + TimeoutStartSec (systemd hard kill)
@@ -257,16 +259,14 @@ def test_a_short_lock_waiter_is_flagged():
 
 _K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
 _ALL_VARS = pathlib.Path(__file__).parents[4] / "inventory" / "group_vars" / "all.yml"
-_MANIFESTS_ROLLOUT_DEFAULT_S = (
-    300  # k8s/manifests default: manifests_rollout_timeout | default('300s')
-)
 
 
 def _rollout_timeout_s(role: str) -> int:
-    tasks_path = _K8S_ROLES_DIR / role / "tasks" / "main.yml"
-    text = tasks_path.read_text() if tasks_path.exists() else ""
-    m = re.search(r"manifests_rollout_timeout:\s*(\d+)s", text)
-    return int(m.group(1)) if m else _MANIFESTS_ROLLOUT_DEFAULT_S
+    # Shared with ansible/tests/longhorn/test_rollback_timeout_budget.py and the inline-gate
+    # census. The literal read this replaced returned the 300s default for a role that names
+    # its budget in a variable (sonarr), sizing a 660s service as a 300s one with every test
+    # green.
+    return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
 
 
 def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
