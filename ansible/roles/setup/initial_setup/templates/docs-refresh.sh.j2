@@ -193,9 +193,17 @@ EOF
   # in docs/reference) inside the run window. That window is small -- the top-of-script gate exits
   # on any dirty tree, so everything tracked and modified here arrived during this run -- and
   # fail-closed is the direction this script's own header demands.
-  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the two generated trees, untracked
-  # counted within them — the one of the three scopes limited by paths rather than by tracked-ness.
-  [ -z "$(git status --porcelain -- docs/reference docs/assets/generated)" ] || rc=1
+  # SCOPE (see lib.git.git_dirty, #1223): path-scoped to the three trees this script writes,
+  # untracked counted within them — the one of the three scopes limited by paths rather than by
+  # tracked-ness.
+  #
+  # THE WEIGHTS TABLE IS IN THIS LIST FOR THE SAME REASON IT IS IN THE `git add`. The per-path
+  # restore above already covers it, because it arrives in $1 like any other staged path. This
+  # check is what says the restore WORKED, and a check scoped to the two doc trees would report
+  # "tree restored" over a weights table left modified under scripts/dev/ — which parks the
+  # GitOps deployer exactly as a leftover page does (#2274).
+  [ -z "$(git status --porcelain -- docs/reference docs/assets/generated \
+    scripts/dev/pytest_shard_weights.json)" ] || rc=1
   return "$rc"
 }
 
@@ -316,9 +324,58 @@ if ! "$UV" run --frozen python scripts/docs/build_docs.py --site-dir "$SITE_DIR"
   GENERATORS_OK=0
 fi
 
-# Only the generated trees. A generator that wrote elsewhere would otherwise be committed
-# silently by a cron, which is exactly the class of change that must go through a PR.
-git add docs/reference docs/assets/generated
+# WEIGHT EVERY NEW TEST MODULE, heavy or light, with nobody in the loop (#2274). CI's measured
+# gate (`pytest_shard.py --check-durations`) rejects the PR that introduces an unweighted module
+# costing RUNNER_HEAVY_SECONDS or more and leaves the repair to a human. It says nothing about a
+# module under that bar, and an unweighted file is packed at the suite median of 0.0s — so
+# without this the split stays merely un-skewed rather than measured.
+#
+# --record-missing, NEVER --record. It runs pytest over only the files the table lacks, which is
+# seconds and usually no files at all, where --record re-measures the whole suite and rewrites
+# every weight — churning the table twice a day for measurement noise. It also writes the same
+# bytes back when nothing is missing, so an ordinary run leaves no diff to publish.
+#
+# IT RUNS BEFORE THE `git diff --cached --quiet` GATE BELOW. That is what lets a weights-only
+# change reach a PR: most runs regenerate no page at all, and a table written after the gate
+# would be left unstaged in the primary checkout, which deploy_git.py reads as dirty and which
+# parks every deploy on the box.
+#
+# A FAILING MEASUREMENT DEGRADES THE RUN, IT DOES NOT ABORT IT — build_docs.py's GENERATORS_OK
+# path rather than an early exit.
+#
+# WHAT THAT ACTUALLY BUYS IS NARROWER THAN IT LOOKS. `measure_weights` exits non-zero when its
+# sub-run does not pass, but a genuinely red suite stops this cron further down anyway: the prek
+# `pytest` hook is `always_run` and takes no filenames, so the commit below needs the whole suite
+# green. The cases this path saves are the ones where the suite is fine and the measurement alone
+# is not — the `timeout` firing, or a durations report that parses to nothing. There the pages are
+# still worth publishing, and the run still reports DOWN with the reason named.
+#
+# `timeout` bounds it because this script holds /var/lock/server-git-tree.lock for its whole life,
+# so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
+#
+# No PYTEST_ADDOPTS here. `measure_weights` passes `--deselect RATCHET_NODE_ID` to its own
+# pytest, and a second assignment would break the one-commit-line rule
+# `test_crons_deselect_the_weights_ratchet.py` enforces.
+WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py \
+  --record-missing 2>&1)"
+WEIGHTS_RC=$?
+if [ "$WEIGHTS_RC" -ne 0 ]; then
+  # Same flatten-and-cap as say_failure: logger and Kuma each take one line, and a pytest
+  # failure's first few hundred characters carry the reason.
+  alert "docs-refresh: recording shard weights failed (exit ${WEIGHTS_RC}); $(printf '%s' \
+    "$WEIGHTS_MSG" | tr '\n' ' ' | tail -c 300)"
+  GENERATORS_OK=0
+fi
+
+# The two generated trees, plus the shard-weights table the step above writes. Nothing else: a
+# generator that wrote outside this list would otherwise be committed silently by a cron, which
+# is exactly the class of change that must go through a PR.
+#
+# THE WEIGHTS TABLE IS A SANCTIONED THIRD PATH, not a generated tree. It is derived output like
+# the pages are — `pytest_shard.py --record-missing` reproduces it — and staging it is what keeps
+# it out of the primary checkout as dirt. restore_generated_tree's per-tree check names the same
+# path for that reason.
+git add docs/reference docs/assets/generated scripts/dev/pytest_shard_weights.json
 
 if git diff --cached --quiet; then
   # The common outcome: the inputs are repo files and they only move when a PR merges, so most
@@ -372,7 +429,7 @@ STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 # of this cron's commits (#1899). CI's sharded pytest job sets no PYTEST_ADDOPTS and still
 # enforces it. The node id is pytest_shard.RATCHET_NODE_ID; a test pins the two to each other.
 PYTEST_ADDOPTS="--deselect ansible/tests/repo/test_pytest_shards_partition_the_suite.py::test_the_recorded_weights_still_cover_most_of_the_suite" \
-  git commit -m "docs: refresh generated reference pages" >"$LOG" 2>&1
+  git commit -m "docs: refresh generated reference pages and test shard weights" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
@@ -394,8 +451,8 @@ fi
 # prints one line to alert with, and its exit code says where the commit is: 1 while it is
 # still local on master, 2 once the branch is on origin without a PR.
 PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
-  --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages" \
-  --body "Generated output only, from the twice-daily docs-refresh cron: the pages under docs/reference/ and the infra map. Both are reproducible by scripts/docs/build_docs.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
+  --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
+  --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, and the pytest shard-weights table. The first two are reproducible by scripts/docs/build_docs.py and the third by scripts/dev/pytest_shard.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"
 PUB_RC=$?
 # The publisher prints one line, but 2>&1 also captures uv's own resolver chatter after a lock
