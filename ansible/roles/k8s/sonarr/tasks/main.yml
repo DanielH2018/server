@@ -25,8 +25,9 @@
     manifests_service: sonarr
     # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install
     # (2026-08-09); the default 300s rollout wait times out against it and aborts
-    # the whole deploy while the pod is still coming up healthy.
-    manifests_rollout_timeout: 660s
+    # the whole deploy while the pod is still coming up healthy. The number lives in
+    # defaults/main.yml because verify.yml's own rollout gate waits the same budget.
+    manifests_rollout_timeout: "{{ sonarr_k8s_rollout_timeout }}"
     manifests_files:
       # The policy is listed FIRST so it exists before the pod can be scheduled. `kubectl apply
       # -f <dir>` does not guarantee that ordering, which is why the gap is also survivable: the

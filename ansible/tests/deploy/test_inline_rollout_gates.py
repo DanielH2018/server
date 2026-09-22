@@ -18,7 +18,7 @@ rollout that has not started.
 
 WHAT THIS FILE PROMISES
 -----------------------
-Two halves. `_MUST_GATE` is a hand-written pair; the derived half below finds the rest from
+Two halves. `_MUST_GATE` is a hand-written set; the derived half below finds the rest from
 their own shape, so the next role written this way fails the suite rather than waiting for an
 incident.
 
@@ -72,6 +72,7 @@ assertions.
 
 import re
 
+from _helpers import rollout_seconds
 from _inline_rollout_tasks import _K8S_ROLES, _Task, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,
@@ -89,6 +90,11 @@ from _inline_rollout_targets import (
 _MUST_GATE = {
     "crowdsec": "crowdsec",
     "registry": "registry",
+    # sonarr reads its library over the Service ClusterIP with `uri`, not through kubectl, so
+    # the derived half below cannot see the inspection at all — the same blind spot registry is
+    # here for. Its gate replaced a 120s `until:` poll that was covering the rollout by
+    # accident and timing out inside a 660s first boot (#2235).
+    "sonarr": "sonarr",
 }
 
 
@@ -101,10 +107,10 @@ _MUST_GATE = {
 # ── reading a command's workload ────────────────────────────────────────────────────────────
 
 
-# ── the hand-written pair ───────────────────────────────────────────────────────────────────
+# ── the hand-written set ───────────────────────────────────────────────────────────────────
 
 
-def test_both_roles_gate_on_their_own_rollout() -> None:
+def test_every_hand_written_role_gates_on_its_own_rollout() -> None:
     for role, workload in _MUST_GATE.items():
         assert _gate_indexes(_tasks(role)).get(workload) is not None, (
             f"{role} no longer waits for {workload} before using it. k8s/manifests queues the "
@@ -149,7 +155,7 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
     # ANY tag, so a dual-tagged gate vanishes under the documented `--skip-tags deploy` and the
     # config-only run silently loses it.
     #
-    # Only the hand-written pair. The derived roles reach their gate through an include or a
+    # Only the hand-written set. The derived roles reach their gate through an include or a
     # block that carries the tag for them, so the tag is not on the task this file returns.
     for role, workload in _MUST_GATE.items():
         tasks = _tasks(role)
@@ -169,7 +175,7 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # shape dropped an entry while reading as a widening.
 #
 # crowdsec is in BOTH halves, and that is the point: it is the one role whose shape the
-# derivation and the hand-written pair agree on, so the two halves are checked against each
+# derivation and the hand-written set agree on, so the two halves are checked against each
 # other on every run.
 _KNOWN_SELF_POD_ROLES = {
     "claude-otel",
@@ -321,10 +327,15 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # role -> (seconds, why it is not the default). Every inline gate's `--timeout=` declared once,
 # with its reason.
 #
-# WHY A TABLE AND NOT A SHARED CONSTANT. `manifests_rollout_timeout` is passed as a var to the
-# `k8s/manifests` include at each role's own call site, never declared in a role's defaults, so
-# it is out of scope in the `verify.yml` where these gates live. There is no variable to
-# reference, and introducing one would mean plumbing it through six roles to remove one literal.
+# WHY A TABLE AND NOT A SHARED CONSTANT. These budgets are per-role, not one number six roles
+# share: a gate waits as long as ITS workload's first boot takes. `manifests_rollout_timeout` is
+# passed as a var at each role's own call site, so for most roles there is nothing in scope for
+# the `verify.yml` where the gate lives to reference, and inventing a shared constant would mean
+# plumbing it through six roles to remove one literal. sonarr is the exception and shows the
+# shape when it IS worth it: the same budget is needed twice in one role, so it declares
+# `sonarr_k8s_rollout_timeout` in its own defaults and both readers take it from there. The
+# census below resolves that reference (`_helpers.rollout_seconds`), so a role spelling its
+# budget as a variable stays inside this check rather than dropping out of it.
 #
 # What was actually missing is the reason the values differ. Everything else about these gates
 # is already pinned above — that one exists, that it precedes the pod inspection, that it is
@@ -360,10 +371,27 @@ _GATE_BUDGETS = {
         "is at the call site in roles/k8s/qbittorrent/tasks/verify.yml",
     ),
     "registry": (300, "default"),
+    "arr-notification": (
+        660,
+        "`arr_notification_rollout_timeout`, matching sonarr's budget because the seed it "
+        "gates talks HTTP to that same Deployment. It entered this census on 2026-09-22: the "
+        "literal-only `--timeout=` regex could not see a templated budget, so this gate sat "
+        "outside the check from the day it was written",
+    ),
+    "sonarr": (
+        660,
+        "declared once as `sonarr_k8s_rollout_timeout` and read by this gate AND by the "
+        "manifests call site; a first boot installing the striptracks DOCKER_MODS takes up "
+        "to 10 minutes, which is also why radarr's manifests wait is 660s",
+    ),
     "tdarr": (300, "default"),
 }
 
-_TIMEOUT = re.compile(r"--timeout=(\d+)s")
+# `--timeout=660s` or `--timeout={{ sonarr_k8s_rollout_timeout }}`. The literal-only form this
+# replaced matched nothing on the templated spelling, and `_inline_gate_budgets` drops a role
+# with no budgets — so a gate naming its budget in a variable left the census silently, and
+# `test_the_gate_budget_census_is_non_vacuous` passed because it was no longer looking at it.
+_TIMEOUT = re.compile(r"--timeout=(\d+s|\{\{\s*\w+\s*\}\})")
 
 
 def _inline_gate_budgets() -> dict[str, set[int]]:
@@ -379,9 +407,15 @@ def _inline_gate_budgets() -> dict[str, set[int]]:
         for task in _tasks(role_dir.name):
             if "rollout status" not in task.cmd:
                 continue
-            found.setdefault(role_dir.name, set()).update(
-                int(m) for m in _TIMEOUT.findall(task.cmd)
-            )
+            for spelling in _TIMEOUT.findall(task.cmd):
+                seconds = rollout_seconds(spelling, role_dir)
+                assert seconds is not None, (
+                    f"{role_dir.name}'s inline gate waits `--timeout={spelling}`, which "
+                    "resolves to no number of seconds. A budget this census cannot read is a "
+                    "budget nothing checks: spell it `<n>s`, or as a `{{ role_var }}` whose "
+                    "defaults/main.yml value is `<n>s`."
+                )
+                found.setdefault(role_dir.name, set()).add(seconds)
     return {role: budgets for role, budgets in found.items() if budgets}
 
 
@@ -403,6 +437,15 @@ def test_every_inline_gate_waits_its_declared_budget() -> None:
             f"{expected}s ({reason}). Change the declaration and its reason together, or "
             "change the gate back."
         )
+
+
+def test_a_templated_gate_budget_resolves_and_a_bad_one_does_not() -> None:
+    # Red proof for the resolution above, which is only ever observed succeeding. The accept
+    # half is sonarr's live spelling; the reject half is what a budget nothing can read must
+    # return, so the assertion in `_inline_gate_budgets` can actually fire.
+    sonarr = _K8S_ROLES / "sonarr"
+    assert rollout_seconds("{{ sonarr_k8s_rollout_timeout }}", sonarr) == 660
+    assert rollout_seconds("{{ sonarr_k8s_no_such_timeout }}", sonarr) is None
 
 
 def test_a_drifted_gate_budget_is_flagged() -> None:

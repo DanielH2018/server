@@ -6,6 +6,28 @@
 # Read over the Service ClusterIP, not the ingress hostname: the route is behind Authelia, which
 # answers an API call carrying X-Api-Key with a 302 to a login page.
 
+# WAIT FOR THE NEW POD BEFORE READING ANYTHING FROM IT.
+#
+# k8s/manifests does NOT wait — it QUEUES the rollout for k8s/rollout-drain, which drains the
+# whole batch at the end of the play (5eea64e6, 2026-08-15). This file runs straight after the
+# manifests include, so without this gate the reads below race a pod that is still rolling, and
+# `Recreate` means there is a window with no pod at all where they fail by connection refused.
+#
+# `rollout status`, never `wait --for=condition=Available`: this Deployment is single-replica,
+# so the OLD pod satisfies Available and the wait returns instantly. k8s/arr-notification does
+# exactly this on this same Deployment before its own HTTP call.
+# ansible/tests/deploy/test_inline_rollout_gates.py is the contract.
+- name: Wait for the sonarr rollout before reading its library
+  tags: [deploy]
+  ansible.builtin.command:
+    cmd: >-
+      k3s kubectl -n {{ k8s_namespace }} rollout status deploy/sonarr
+      --timeout={{ sonarr_k8s_rollout_timeout }}
+  become: true
+  changed_when: false
+  check_mode: false
+  when: not k8s_dry_run | bool
+
 - name: Resolve the sonarr Service address
   tags: [deploy]
   ansible.builtin.command:
@@ -32,19 +54,10 @@
   # the library resolves inside the pod), which is worth evaluating on a dry run rather than
   # skipping into a failed assert.
   check_mode: false
-  # STILL A POLL, and not convertible to `kubectl wait` (#2205). It waits on two things, and
-  # the first is not what #2205 assumed. Nothing has awaited this rollout yet: k8s/manifests
-  # DOES NOT WAIT — it queues the rollout for k8s/rollout-drain at the end of the batch, and
-  # this file runs before the drain. The poll (02ec2454, 2026-08-07) predates that deferral
-  # (5eea64e6, 2026-08-15), so it now covers a pod that may still be rolling. The second is
-  # application state: the API answering 200 with the library loaded. No pod condition
-  # states either — Ready is `/ping`, and `--for=condition=Available` returns on the OLD pod
-  # (rollout-drain/CLAUDE.md). The deterministic form is an inline `rollout status`, the shape
-  # k8s/arr-notification uses on this same Deployment; that is a behaviour change on a deploy
-  # path, filed as #2235 rather than shipped unexercised.
-  until: sonarr_k8s_rootfolders.status | default(0) == 200
-  retries: 12
-  delay: 10
+  # NO `until:`/`retries:` (#2235). The 12-sample poll this replaced was covering the rollout
+  # the gate at the top of this file now names — and covering it badly, since its 120s budget
+  # was a fifth of sonarr_k8s_rollout_timeout, so a slow first boot failed a rollout that would
+  # have succeeded. A named wait for a named thing, then one read.
 
 - name: Fail if a root folder does not resolve inside the pod
   tags: [deploy]
