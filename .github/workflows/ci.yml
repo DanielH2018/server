@@ -457,8 +457,22 @@ jobs:
     timeout-minutes: 20
     strategy:
       fail-fast: false
+      # Six, not four, since 2026-09-22 (#2239). Changing this list is the whole edit: the
+      # select step below reads `strategy.job-total` for `--of`, and the required context is
+      # the `prek` gate, not any individual leg — nothing outside this file counts the legs.
+      #
+      # The trade is close to even and was taken on a projection, so it is reversible on
+      # evidence. `pytest_shard.py --of N --summary` projected 59.5s per shard at four and
+      # 39.7s at six (measured 2026-09-22, local serial seconds, which are NOT the runner's
+      # step time — the runner runs each shard under xdist). Against that, two more legs pay
+      # ~20s of setup each in runner minutes. Keep six only if a master run's per-shard step
+      # times say the run wall dropped by more than the extra setup costs; the `--durations`
+      # report on every leg is what to read that off.
+      #
+      # Six is feasible at all only because the heaviest single module is 17.8s: a shard can
+      # never finish faster than its largest member, so the floor rises as the matrix grows.
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -496,18 +510,42 @@ jobs:
           uv run python scripts/dev/pytest_shard.py --of "$SHARDS" --shard "$SHARD" --out "$RUNNER_TEMP/shard.txt"
           echo "$(wc -l < "$RUNNER_TEMP/shard.txt") test file(s) in this shard"
 
-      # --durations=15 because this job is the pole of the whole landing: unsharded, its test step
+      # --durations because this job is the pole of the whole landing: unsharded, its test step
       # measured 267s against the `hooks` job beside it at 29-46s, and a landing waits on CI twice.
-      # The runner is ~4x slower per test than the workstation, so a local `--durations` run does
+      # The runner is slower per test than the workstation, so a local `--durations` run does
       # not tell you which tests dominate HERE. Printing it on every run means the next person to
       # attack this reads the answer off a green build instead of guessing at the shape. It is
       # also the signal that the shards have gone lopsided: `pytest_shard.py --record` re-measures
       # the weights locally, and these per-shard step times say when that is worth doing.
+      #
+      # `=0` rather than `=15` since #2238, and the log is teed because the next step reads it.
+      # A per-file total cannot be summed out of the top 15 lines: a module costing 30s across
+      # 200 sub-second tests contributes nothing to them. `=0` prints every duration above
+      # pytest's own 0.005s floor — 355 lines and 76 KB for one shard of six, measured
+      # 2026-09-22 — and the report is still sorted descending, so the top-15 reading above
+      # survives as its first fifteen lines.
+      #
+      # pipefail is what makes the tee safe: without it the pipeline reports tee's exit status
+      # and a failing suite would read green.
       - name: Run the test suite
         run: |
           set -euo pipefail
           mapfile -t files < "$RUNNER_TEMP/shard.txt"
-          uv run python -m pytest --color yes --durations=15 "${files[@]}"
+          uv run python -m pytest --color yes --durations=0 "${files[@]}" \
+            | tee "$RUNNER_TEMP/durations.log"
+
+      # The measured half of the shard-weight coverage gate (#2238). The ratchet in
+      # `test_pytest_shards_partition_the_suite.py` is static: it catches an unweighted file
+      # only where a recorded pole already sits in the same directory, and no static proxy
+      # separates a heavy module from a light one elsewhere. This step has the measurement,
+      # because the shard just ran the file.
+      #
+      # A `run:` step and NOT a pytest test. The docs-refresh and eval-run crons commit with
+      # the prek chain on and deselect exactly one ratchet node id; a second test that went red
+      # on an unweighted file would fail their commits the way #1899 did, and neither cron can
+      # run the repair. Nothing a cron commits passes through a workflow step.
+      - name: Check no heavy module ran unweighted
+        run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
   # and the ruleset-drift cron all name "prek (lint + validate + tests + secrets)", so that name

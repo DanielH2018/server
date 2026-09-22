@@ -2,7 +2,7 @@
 
 `scripts/dev/pytest_shard.py` decides which test modules each matrix leg runs (#1270). Two
 failures here are silent from the passing side: a file assigned to no shard is never run, and
-CI still reports four green legs; a file assigned to two shards costs time and hides nothing,
+CI still reports a green leg for every shard; a file assigned to two shards costs time and hides nothing,
 but says the split is not a partition and the first failure is a coin flip away.
 
 The workflow half matters as much as the helper. The `pytest` job passes `strategy.job-total`
@@ -57,11 +57,10 @@ MAX_UNWEIGHTED_FRACTION = 0.2
 POLE_SHARE = 0.01
 
 # `census()` reads `git ls-files`, so an unstaged test file is in no census: it reads green
-# here and red on CI, and the repair measures nothing until the file is staged.
-RECORD_MISSING = (
-    "stage the new file, then `uv run python scripts/dev/pytest_shard.py --record-missing` "
-    "and commit scripts/dev/pytest_shard_weights.json"
-)
+# here and red on CI, and the repair measures nothing until the file is staged. Taken from the
+# helper rather than spelled again: CI's `--check-durations` step prints the same line, and two
+# copies would drift.
+RECORD_MISSING = pytest_shard.RECORD_MISSING_HINT
 
 
 def partition_problems(placed: dict[str, int], files, shards: int) -> list[str]:
@@ -85,7 +84,7 @@ def partition_problems(placed: dict[str, int], files, shards: int) -> list[str]:
     return problems
 
 
-@pytest.mark.parametrize("shards", [1, 2, 3, 4, 5, 8])
+@pytest.mark.parametrize("shards", [1, 2, 3, 4, 5, 6, 8])
 def test_every_test_file_lands_in_exactly_one_shard(shards):
     files = pytest_shard.census()
     placed = pytest_shard.assign(files, shards, pytest_shard.load_weights())
@@ -254,12 +253,41 @@ def test_the_matrix_is_a_contiguous_one_based_range():
     )
 
 
+def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
+    """The measured coverage gate is a workflow step, so nothing in the suite makes it run.
+
+    Three things have to hold together or the gate is green over nothing: the test step asks
+    for every duration, it keeps the report, and a later step reads that same report. A step
+    dropped or a path typed differently leaves `--check-durations` reading an absent file --
+    which fails loudly -- or, worse, leaves the gate out of the job entirely with every leg
+    still passing. It is a `run:` step rather than a pytest test because both commit-time
+    crons deselect one ratchet node id and cannot repair a second one (#2238, #1899).
+    """
+    runs = [str(s.get("run", "")) for s in _pytest_job()["steps"]]
+    suite = [r for r in runs if "-m pytest" in r]
+    assert len(suite) == 1, "expected exactly one step to run the suite"
+    assert "--durations=0" in suite[0], (
+        "the gate sums per-file durations, which a truncated --durations=N cannot support"
+    )
+    log = "$RUNNER_TEMP/durations.log"
+    assert log in suite[0], f"the test step must keep its report at {log}"
+    gates = [r for r in runs if "--check-durations" in r]
+    assert len(gates) == 1, "expected exactly one step to run the coverage gate"
+    assert log in gates[0], (
+        f"the gate must read the report the test step wrote at {log}"
+    )
+
+
 def test_the_workflow_derives_the_shard_count_from_the_matrix():
     """The drift this guard exists for. A literal `--of 4` beside a matrix of any other length
     silently drops or double-runs part of the suite, and every leg still reports green."""
     steps = _pytest_job()["steps"]
-    selects = [s for s in steps if "pytest_shard.py" in str(s.get("run", ""))]
-    assert len(selects) == 1, "expected exactly one step to invoke pytest_shard.py"
+    # By `--of`, not by the script name: the job invokes the same helper twice, once to select
+    # this shard's files and once for the measured coverage gate (`--check-durations`, #2238).
+    selects = [s for s in steps if "--of" in str(s.get("run", ""))]
+    assert len(selects) == 1, (
+        "expected exactly one step to pass --of to pytest_shard.py"
+    )
     step = selects[0]
     assert re.search(r'--of\s+"\$SHARDS"', step["run"]), (
         "the shard-selection step must pass --of from the environment, not a literal count"
