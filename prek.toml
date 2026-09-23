@@ -278,6 +278,9 @@ files = "^(ansible/roles/setup/.*\\.(j2|yml)|ansible/inventory/(group_vars/all|h
 # Via the actionlint-py wheel + `uv run`, matching the other local hooks, NOT the upstream
 # rhysd/actionlint pre-commit repo: that hook is `language = "golang"`, which on a machine
 # without Go (daniel-box) makes prek fetch a ~270 MB managed toolchain and build from source.
+#
+# It reads `.github/actionlint.yaml`, which declares the one hosted runner label actionlint's
+# own hard-coded list does not carry yet. That file says which, and when to delete it.
 [[repos.hooks]]
 id = "actionlint"
 name = "Lint GitHub Actions workflows"
