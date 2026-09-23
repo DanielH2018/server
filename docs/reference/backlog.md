@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-22 18:18 UTC
-generated_sha: cf5317d1f
+generated_at: 2026-09-23 18:17 UTC
+generated_sha: 710e420f1
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,6 +24,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
 | [#2279](https://github.com/DanielH2018/server/issues/2279) | low | gap | container | sonarr's new inline rollout gate has never waited on a real roll | 2026-09-22 | 1 | - | ✓ |
 | [#2293](https://github.com/DanielH2018/server/issues/2293) | low | gap | cicd | A --check of k3s-bringup's kubeconfig tag always fails: a retried command task counts check mode's skip as failure | 2026-09-22 | 0 | - | ✓ |
+| [#2301](https://github.com/DanielH2018/server/issues/2301) | low | gap | cicd | Renovate #2297 (uv 0.12.15) needs the installer sha256 the unattended agent cannot fetch | 2026-09-23 | 0 | - | - |
+| [#2302](https://github.com/DanielH2018/server/issues/2302) | low | gap | cicd | Renovate #2259 (CI runner ubuntu-26.04) fails actionlint and the systemd-verify red-proof tests | 2026-09-23 | 0 | - | - |
 
 ## Settled findings — do not re-flag
 
