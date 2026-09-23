@@ -72,6 +72,7 @@ KNOWN_PINS = frozenset(
         "k3s_install_script",
         "k3s_host_coredns",
         "chezmoi_setup_installer",
+        "initial_setup_uv_installer",
         "optimize_pi_node_exporter",
         "code_server_k8s_node",
         "valheim_k8s_mods[Server_devcommands]",

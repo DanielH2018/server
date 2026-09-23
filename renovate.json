@@ -113,9 +113,9 @@
     },
     {
       "customType": "regex",
-      "description": "The uv release the hosts install (`initial_setup_uv_version` in initial_setup's host-basics.yml, #2148). The role fetched `astral.sh/uv/install.sh`, which installs the newest release at run time, so daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5. It now fetches the versioned installer with a sha256 -- and that installer embeds and verifies the sha256 of the release tarball, so the one hash pins the binary. The hash is a MANUAL finish on the bump PR (packageRule below, no automerge), the same class as the SOPS binary.",
+      "description": "The uv release the hosts install (`initial_setup_uv_version` in initial_setup's defaults/main.yml, #2148; it moved out of host-basics.yml in #2301). The role fetched `astral.sh/uv/install.sh`, which installs the newest release at run time, so daniel-box and daniel-server were provisioned onto 0.12.1 and 0.12.5. It now fetches the versioned installer with a sha256 -- and that installer embeds and verifies the sha256 of the release tarball, so the one hash pins the binary. The hash is a MANUAL finish on the bump PR (packageRule below, no automerge), the same class as the SOPS binary. `uv run python scripts/validate/asset_pins.py --only initial_setup_uv_installer` fetches the installer and prints the hash, which is why the version and the digest sit in defaults beside `initial_setup_uv_installer_url`.",
       "managerFilePatterns": [
-        "/(^|/)ansible/roles/setup/initial_setup/tasks/host-basics\\.yml$/"
+        "/(^|/)ansible/roles/setup/initial_setup/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "initial_setup_uv_version:\\s*\"(?<currentValue>[\\d.]+)\""
@@ -645,14 +645,14 @@
       "groupName": "ansible-lint (lockstep: prek.toml + host-basics.yml)"
     },
     {
-      "description": "uv (astral-sh/uv) — the versioned installer's sha256 in host-basics.yml is a manual finish, so NO automerge; own group so it overrides the `{{depName}}` file-scoped rule and the non-major automerge rule above.",
+      "description": "uv (astral-sh/uv) — the versioned installer's sha256 in initial_setup's defaults/main.yml is a manual finish, so NO automerge; own group so it overrides the `{{depName}}` file-scoped rule and the non-major automerge rule above. The group name names the command that produces the hash: an unattended renovate_agent run has no raw `curl` (the classifier denies it) and stalled on #2297 for want of one (#2301).",
       "matchDatasources": [
         "github-releases"
       ],
       "matchPackageNames": [
         "astral-sh/uv"
       ],
-      "groupName": "uv (manual — finish the installer sha256 from astral.sh/uv/<ver>/install.sh)",
+      "groupName": "uv (manual — finish initial_setup_uv_installer_sha256: asset_pins.py --only initial_setup_uv_installer)",
       "automerge": false
     },
     {
