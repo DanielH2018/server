@@ -190,8 +190,8 @@
   # That script embeds the sha256 of every release artifact it downloads and verifies the
   # tarball against it, so pinning the script's hash pins the binary too.
   ansible.builtin.set_fact:
-    initial_setup_uv_version: "0.12.14"
-    initial_setup_uv_installer_sha256: fd0163716801bf4c48c89cd96ea6bbcb836b99a75e633ff4b72a016b55aa137b
+    initial_setup_uv_version: "0.12.15"
+    initial_setup_uv_installer_sha256: 716a1d6844740756c68770fcec2f79c2013fb9b03869a113f61e15f6f482a6a1
   when: inventory_hostname in dev_tooling_hosts
 
 - name: Create the connecting user's installers directory
