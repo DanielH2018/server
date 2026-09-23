@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-22 18:17 UTC
-generated_sha: cf5317d1f
+generated_at: 2026-09-23 18:17 UTC
+generated_sha: 710e420f1
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,7 +17,7 @@ generated_sha: cf5317d1f
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [python-code-organization.md](../python-code-organization.md) | 2026-09-18 | 67 | 18 | `pyproject.toml` (2026-09-22) |
-| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 12 | `docs/k3s-etcd-restore.md` (2026-09-22) |
+| [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 12 | `docs/reference/secrets.md` (2026-09-23) |
 | [gitops-argo-flux-evaluation.md](../gitops-argo-flux-evaluation.md) | 2026-09-02 | 13 | 11 | `ansible/deploy.yml` (2026-09-22) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 11 | `ansible/roles/k8s/sonarr/tasks/verify.yml` (2026-09-22) |
 | [staging-phase-c.md](../staging-phase-c.md) | 2026-09-05 | 16 | 10 | `ansible/deploy.yml` (2026-09-22) |
