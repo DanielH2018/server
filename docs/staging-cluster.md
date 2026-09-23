@@ -569,7 +569,7 @@ Everything else is genuinely gated or genuinely portable. `access.yml`, `network
 `audit-and-kernel.yml`, `accounting.yml`, `integrity.yml` and `host-basics.yml` are clean; the
 host-specific branches (`daniel-server`, `daniel-pi`, `daniel-box`) and the `has_gitops` /
 `has_docker` / `has_hypervisor` gates all resolve false on `daniel-stage` and skip correctly.
-`host-basics.yml:165-198` installs `uv`/`prek`/`ansible-core` **onto** the target rather than
+`host-basics.yml`'s tooling block installs `uv`/`prek`/`ansible-core` **onto** the target rather than
 assuming them, so it is not a hit despite naming them. `stamp_render.yml`'s
 `lookup('file', playbook_dir ~ …)` is not a hit either — a `lookup()` runs on the controller
 whatever the target's connection type, which is the distinction that separates it from the
