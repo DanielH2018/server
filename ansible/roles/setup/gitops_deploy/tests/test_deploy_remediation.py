@@ -17,6 +17,8 @@ from deploy_remediation import (
     broad_remediation,
     deferred_service_alerts,
     k8s_remediation,
+    manual_plane_remediation,
+    maximal_tag_warning,
 )
 
 _K8S_ROLES_DIR = pathlib.Path(__file__).parents[3] / "k8s"
@@ -368,4 +370,60 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
     ), (
         "the re-derivation above says a broad rollback now fits at 60min; if this goes red the "
         "note in this docstring is stale and forward-only needs re-arguing from the budget again"
+    )
+
+
+# ── #2294: the role tag is the maximal apply, and the printed command says so ──────────────
+# A three-line RBAC addition to `k3s_readonly_crd_api_groups` was answered with
+# `ansible-playbook ansible/k3s-bringup.yml --tags k3s` on 2026-09-22. That command restarts
+# k3s and re-encrypts etcd; the change needed `--tags kubeconfig` (ok=15 changed=2).
+
+
+def test_the_k3s_role_tag_carries_what_running_it_does():
+    cmd = broad_remediation(False, True, {"k3s"})
+    assert "ansible/k3s-bringup.yml --tags k3s" in cmd
+    assert "WARNING" in cmd
+    assert "restarts k3s" in cmd
+    assert "re-encrypts every Secret in etcd" in cmd
+
+
+def test_a_role_whose_tag_is_not_maximal_carries_no_warning():
+    """The rejecting half: the warning must not ride every setup command."""
+    assert "WARNING" not in broad_remediation(False, True, {"chezmoi_setup"})
+    assert maximal_tag_warning("chezmoi_setup") == ""
+
+
+def test_the_manual_plane_remediation_carries_the_warning_too():
+    """The journal line, the Discord alert and land.sh all quote one composer."""
+    cmd = manual_plane_remediation({"k3s"})
+    assert "WARNING" in cmd
+    assert "--tags kubeconfig" not in cmd.split("WARNING")[0]
+
+
+def test_every_narrower_tag_the_warning_names_exists_in_the_role():
+    """The warning points at real tags, or it sends an operator after a no-op.
+
+    `--tags <nothing>` makes Ansible exit 0 having run no task, which is the silent-success
+    failure `setup_tags_for` and `k8s_remediation` both exist to avoid. Asserting the tag
+    identifiers against the role's own task files — not the warning's prose — means a tag
+    renamed in `tasks/` breaks this and a reworded warning does not.
+    """
+    import re
+
+    tasks_dir = pathlib.Path(__file__).parents[2] / "k3s" / "tasks"
+    task_files = sorted(tasks_dir.glob("*.yml"))
+    assert len(task_files) >= 10, f"only {len(task_files)} k3s task files found"
+    declared = set()
+    for path in task_files:
+        for block in re.findall(r"tags:\s*\[([^\]]*)\]", path.read_text()):
+            declared.update(t.strip() for t in block.split(",") if t.strip())
+    assert "kubeconfig" in declared, (
+        "the k3s role no longer declares a `kubeconfig` tag"
+    )
+
+    # `[a-z0-9_]` leading, so a backticked flag (`--list-tasks`) is not read as a tag.
+    named = set(re.findall(r"`([a-z0-9_][a-z0-9_-]*)`", maximal_tag_warning("k3s")))
+    assert named, "the k3s warning names no narrower tag at all"
+    assert named <= declared, (
+        f"the k3s warning points at tags the role does not declare: {sorted(named - declared)}"
     )
