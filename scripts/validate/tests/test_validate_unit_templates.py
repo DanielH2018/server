@@ -49,8 +49,39 @@ def test_systemd_verify_is_flagged_for_a_typo_d_key(tmp_path):
     )
     err = v.systemd_verify(unit, "systemd-analyze")
     assert err is not None
-    assert "Unknown key name" in err
+    assert "Unknown key" in err
     assert "SuccessExitStatuss" in err
+
+
+# systemd v257 reworded the unknown-key diagnostic, so the wording a runner image prints
+# depends on which systemd it ships: 255 on ubuntu-24.04, 259 on ubuntu-26.04. This is the
+# half of the red proof that runs on every image — the test above shells out to whichever
+# systemd-analyze is on PATH and can only ever exercise one wording per host.
+@pytest.mark.parametrize(
+    ("line", "flagged"),
+    [
+        pytest.param(
+            "/tmp/typo.service:6: Unknown key name 'SuccessExitStatuss' in section "
+            "'Service', ignoring.",
+            True,
+            id="unknown-key-systemd-255",
+        ),
+        pytest.param(
+            "/tmp/typo.service:6: Unknown key 'SuccessExitStatuss' in section [Service], "
+            "ignoring.",
+            True,
+            id="unknown-key-systemd-259",
+        ),
+        pytest.param(
+            "notreal.service: Command /usr/local/bin/notreal is not executable: "
+            "No such file or directory",
+            False,
+            id="missing-execstart-binary",
+        ),
+    ],
+)
+def test_fail_message_matches_every_unknown_key_wording(line, flagged):
+    assert bool(v._FAIL_MESSAGE.search(line)) is flagged
 
 
 @requires_systemd_analyze

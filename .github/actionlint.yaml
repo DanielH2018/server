@@ -1,0 +1,17 @@
+# actionlint config. https://github.com/rhysd/actionlint/blob/main/docs/config.md
+#
+# `ubuntu-26.04` is a GitHub-HOSTED runner label (actions/runner-images README lists it, x64,
+# alongside `ubuntu-26.04-arm`), not a self-hosted one. It sits here because actionlint carries
+# its own hard-coded list of hosted labels in `rule_runner_label.go`, and that list stops at
+# `ubuntu-24.04` — on actionlint 1.7.12, the newest release actionlint-py ships. So a workflow
+# moved to `ubuntu-26.04` fails the `Lint GitHub Actions workflows` prek hook with
+# `label "ubuntu-26.04" is unknown`, and no version bump fixes it. `self-hosted-runner.labels`
+# is the escape hatch actionlint's own error message names, and declaring a label here only
+# adds it to the known set — every other runner-label check stays armed.
+#
+# Drop this file once actionlint's hosted-label list carries `ubuntu-26.04`: the hook then
+# knows the label on its own, and leaving a hosted label declared as self-hosted would hide a
+# real typo in it.
+self-hosted-runner:
+  labels:
+    - ubuntu-26.04

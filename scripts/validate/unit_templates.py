@@ -25,7 +25,10 @@ depend on what's inside it).
 `SuccessExitStatuss=75` (a typo'd key) and on `TimeoutStartSec=6zz0min` (an unparsable value) on
 at least one host, even though both print a diagnostic line. The only reliable signal is stderr:
 a line attributed to the rendered unit's own path (`<tmp>/<unit>:<line>: ...`) matching
-`Unknown key name|Failed to parse|Assignment outside of section`. `--man=no --recursive-errors=no`
+`Unknown key|Failed to parse|Assignment outside of section` — `Unknown key`, not the
+`Unknown key name` systemd 255 prints, because v257 reworded that one message and the narrower
+pattern silently matched nothing on the systemd 259 the ubuntu-26.04 runner carries.
+`--man=no --recursive-errors=no`
 drops `k3s.service: Failed to open ... Permission denied` noise from a followed `After=`/`Wants=`
 target that systemd-analyze cannot read outside its normal unit search path, and a bare
 `Command ... is not executable` (no `path:line:` prefix, so it never matches the attribution
@@ -91,9 +94,15 @@ RULES_TEMPLATE = (
 # "<path>:<lineno>: <message>". A line about a followed unit ("k3s.service: Failed to open...")
 # or an ExecStart binary check ("notreal.service: Command ... is not executable") carries no
 # ":<lineno>:" — that shape difference is what keeps this from flagging either.
-_FAIL_MESSAGE = re.compile(
-    r"Unknown key name|Failed to parse|Assignment outside of section"
-)
+#
+# `Unknown key` matches both wordings systemd has used for a typo'd directive key. systemd
+# v257 dropped the ` name` and squared the section brackets
+# (src/shared/conf-parser.c: "Unknown key name '%s' in section '%s', ignoring." →
+# "Unknown key '%s' in section [%s], ignoring."), so the old `Unknown key name` alternative
+# matched nothing on systemd 259 — the version the ubuntu-26.04 runner image carries — and
+# this check went vacuous for the exact class it exists to catch (GitHub issue #2302).
+# The other two alternatives are unchanged from v255 through v259.
+_FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of section")
 
 
 def discover_templates() -> list[Path]:
