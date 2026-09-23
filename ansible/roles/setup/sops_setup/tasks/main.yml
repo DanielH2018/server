@@ -10,23 +10,19 @@
 - name: Download and install SOPS binary
   tags: [sops-install]
   ansible.builtin.get_url:
-    url: "{{ sops_binary_url }}"
+    url: "{{ sops_setup_binary_url }}"
     dest: /usr/local/bin/sops
     mode: "0755"
-    # SOPS is the root of the whole secret-decryption trust chain (every deploy's
-    # community.sops decrypt runs through it), so the download is checksum-pinned —
-    # an unverified binary here is a supply-chain hole. Renovate tracks sops_version
-    # (customManager -> getsops/sops, no-automerge) and opens the version-bump PR, but the
-    # per-arch sops_sha256 is a MANUAL finish — bump BOTH in lockstep from the release's
-    # sops-<ver>.checksums.txt.
-    checksum: "sha256:{{ sops_sha256 }}"
+    # The version, both URLs and both digests are `defaults/main.yml`'s, beside each other,
+    # so `scripts/validate/asset_pins.py` can render them and fetch the hash a Renovate bump
+    # leaves for a human to finish (#2313). That file carries the full argument.
+    checksum: "sha256:{{ sops_setup_binary_sha256 }}"
   vars:
-    # You can check https://github.com/getsops/sops/releases for the latest
-    sops_version: "v3.13.3"
-    sops_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
-    sops_binary_url: "https://github.com/getsops/sops/releases/download/{{ sops_version }}/sops-{{ sops_version }}.linux.{{ sops_arch }}"
-    # sha256 of sops-v3.13.3.linux.{amd64,arm64} from the upstream checksums.txt.
-    sops_sha256: "{{ 'e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b' if ansible_facts.architecture == 'x86_64' else '53b0abacd38ef1b12a66d6c100956691b9cefce018d91f81e73ddf7438b94d77' }}"
+    # ONE selection of the architecture, read twice. The pins themselves are role defaults —
+    # a copy here would outrank them, letting the checked pin and the installed pin drift.
+    sops_setup_arch: "{{ 'amd64' if ansible_facts.architecture == 'x86_64' else 'arm64' }}"
+    sops_setup_binary_url: "{{ sops_setup_binary_amd64_url if sops_setup_arch == 'amd64' else sops_setup_binary_arm64_url }}"
+    sops_setup_binary_sha256: "{{ sops_setup_binary_amd64_sha256 if sops_setup_arch == 'amd64' else sops_setup_binary_arm64_sha256 }}"
 
 - name: Install pinned Ansible collections from requirements.yml
   tags: [collections]

@@ -1,0 +1,32 @@
+---
+# Role defaults for sops_setup. The SOPS binary pin lives here, not in `tasks/main.yml`, so
+# that `scripts/validate/asset_pins.py` can see it: that checker reads `defaults/main.yml`
+# alone, and a URL inline in `tasks/` leaves the digest unpaired and unfetchable (#2313).
+
+# The SOPS release every host installs, and the per-arch binary it is fetched as.
+#
+# SOPS is the root of the whole secret-decryption trust chain — every deploy's
+# `community.sops` decrypt runs through it — so the download is checksum-pinned; an
+# unverified binary here is a supply-chain hole.
+#
+# Renovate tracks the version (customManager -> getsops/sops, github-releases, no automerge)
+# and opens the bump PR. The two sha256s are a MANUAL finish, in lockstep with the version:
+#   uv run python scripts/validate/asset_pins.py --only sops_setup_binary_amd64,sops_setup_binary_arm64
+# fetches both URLs below and prints the hash that does not match. The release's
+# `sops-<ver>.checksums.txt` is the same answer from upstream. An unattended renovate_agent
+# run has no raw `curl … | sha256sum` to produce either with — the auto-mode classifier
+# denies it, which is what stalled the uv bump in #2297 (#2301, #2313).
+#
+# ONE url + digest pair per architecture, rather than one pair whose digest is a Jinja
+# conditional on `ansible_facts.architecture`: `asset_pins.py` renders a pin against this
+# file alone under `StrictUndefined`, so a fact reference would render as an unresolved
+# template and be reported as a failure. Flat pairs also mean the arm64 hash is fetched and
+# checked from an amd64 host, which a fact-conditional never would be.
+#
+# Keep the leading `v`: Renovate's matchString captures `v[^"]+`, so a bare `3.13.3` makes
+# that manager inert with no error.
+sops_setup_version: "v3.13.3"
+sops_setup_binary_amd64_url: "https://github.com/getsops/sops/releases/download/{{ sops_setup_version }}/sops-{{ sops_setup_version }}.linux.amd64"
+sops_setup_binary_amd64_sha256: e5bec3346a873ae91d871550f3e698c1aad962aff462a080e40f25fde17fef6b
+sops_setup_binary_arm64_url: "https://github.com/getsops/sops/releases/download/{{ sops_setup_version }}/sops-{{ sops_setup_version }}.linux.arm64"
+sops_setup_binary_arm64_sha256: 53b0abacd38ef1b12a66d6c100956691b9cefce018d91f81e73ddf7438b94d77

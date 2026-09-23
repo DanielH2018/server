@@ -64,7 +64,7 @@ CHUNK = 1 << 20
 
 # Pins the census must find, by name. A member going missing names what moved. Cover every
 # shape and every plane: a flat `_md5` pair, a flat `_sha256` pair whose URL is templated, a
-# setup-role pin and a list-shaped pin.
+# setup-role pin, a list-shaped pin, and one pin per architecture of the same download.
 KNOWN_PINS = frozenset(
     {
         "jellyfin_k8s_anisync",
@@ -74,6 +74,8 @@ KNOWN_PINS = frozenset(
         "chezmoi_setup_installer",
         "initial_setup_uv_installer",
         "optimize_pi_node_exporter",
+        "sops_setup_binary_amd64",
+        "sops_setup_binary_arm64",
         "code_server_k8s_node",
         "valheim_k8s_mods[Server_devcommands]",
     }
