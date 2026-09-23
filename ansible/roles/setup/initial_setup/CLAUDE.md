@@ -58,8 +58,12 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
 - **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
   24.04+) and the Python CLI tooling as uv tools. **All of it is pinned** (#2148): uv is
-  `initial_setup_uv_version`, fetched as the versioned installer with a sha256 (that script
-  verifies the tarball it downloads, so one hash pins the binary), and the tools are
+  `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_uv_version`, fetched as
+  the versioned installer with a sha256 (that script verifies the tarball it downloads, so one
+  hash pins the binary). Version, URL and digest sit together in `defaults/main.yml` so that
+  `scripts/validate/asset_pins.py` can render the URL and fetch it — `--only
+  initial_setup_uv_installer` is how a bump's hash is produced, and an unattended
+  renovate_agent run has no raw `curl` to produce it with (#2301). The tools are
   `ansible-core==`, `ansible-lint==`, `prek==` loop items — each equal to a twin elsewhere
   (pyproject.toml's dev group, prek.toml's rev, ci.yml's `pip install`), which
   `ansible/tests/repo/test_host_tool_pins_match_their_twins.py` holds. Before the pins, the

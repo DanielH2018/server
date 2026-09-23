@@ -1,0 +1,24 @@
+---
+# Role defaults for initial_setup. Most of this role's tunables live in `group_vars/all.yml`,
+# because other roles read them; what lives here is the uv pin, which nothing outside this
+# role reads and which `scripts/validate/asset_pins.py` has to see.
+
+# The uv release this host installs, and the versioned installer it is fetched with.
+#
+# ONE copy of the version, here rather than in group_vars: Renovate's uv custom manager reads
+# this file (github-releases, astral-sh/uv, no automerge), and a version in group_vars/all.yml
+# would land in the k8s image group instead. The sha256 is the installer script's, and a bump
+# finishes it by hand — `uv run python scripts/validate/asset_pins.py --only
+# initial_setup_uv_installer` fetches the URL below and prints the hash that does not match.
+# Run it twice before you trust the answer: astral.sh serves copies that have hashed
+# differently, and the `get_url` on a host re-fetches rather than reusing what CI saw.
+# That script embeds the sha256 of every release artifact it downloads and verifies the
+# tarball against it, so pinning the script's hash pins the binary too.
+#
+# The URL sits beside the digest rather than inline in `tasks/host-basics.yml` so that
+# `asset_pins.py` can render it: the checker reads `defaults/main.yml` alone, and an inline
+# URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
+# without a raw `curl` (#2301).
+initial_setup_uv_version: "0.12.15"
+initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
+initial_setup_uv_installer_sha256: 716a1d6844740756c68770fcec2f79c2013fb9b03869a113f61e15f6f482a6a1
