@@ -39,7 +39,7 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
 - **Scope / exclusions:** *arr queue remediation, host disk hygiene, fake-remux replacement — and
   nothing else. **Never** `docker prune -a`, **never** volumes, **never** a delete before the
   replacement is ffprobe-verified genuine, **never** a legit in-progress download. The sidecar acts
-  on a bare `trackedDownloadStatus=error`, which at the pinned Sonarr 4.0.19.2979 / Radarr
+  on a bare `trackedDownloadStatus=error`, which at Sonarr 4.0.19.2979 through 4.0.20.3014 / Radarr
   6.3.0.10514 only `RejectedImportService` writes (a dangerous file); a client/VPN outage empties
   the queue instead, so an in-progress download never reaches that status.
 - **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · fake-remux
