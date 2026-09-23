@@ -4,9 +4,9 @@ requires-python = ">=3.14"
 
 [[package]]
 name = "actionlint-py"
-version = "1.7.12.24"
+version = "1.7.12.25"
 source = { registry = "https://pypi.org/simple" }
-sdist = { url = "https://files.pythonhosted.org/packages/6f/0b/3f29683dfbe94208fb5c3806806a6ef419972892e25c3c4f95198f68c978/actionlint_py-1.7.12.24.tar.gz", hash = "sha256:7571b0724fde79b2572b98b2b53792c470249d4db29951b57fc49b9cd3eaf11e", size = 12071, upload-time = "2026-03-31T06:21:35.015Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/33/75/36ee89db39bb3620d1e46fe1f6ec77d6000d30ff45345699e51b4c850e83/actionlint_py-1.7.12.25.tar.gz", hash = "sha256:83f83be4cd317c79b15cbb7022787513a6994f00bfb2dd8da02fa4e62b4f640d", size = 12438, upload-time = "2026-09-22T16:24:42.477Z" }
 
 [[package]]
 name = "ansible-core"
@@ -620,15 +620,15 @@ wheels = [
 
 [[package]]
 name = "pymdown-extensions"
-version = "12.0.1"
+version = "12.1"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "markdown" },
     { name = "pyyaml" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/eb/7e/53144b512818c75d459523e3a91d9bf7b65cd6a1dfb964fe690adc8b3670/pymdown_extensions-12.0.1.tar.gz", hash = "sha256:88fe2c97fb9153b9f2cc1da59f1d7c7cb74971110daf33cccb2a5514e0f7e970", size = 866904, upload-time = "2026-09-15T23:20:33.187Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/2a/94/858e0163cb4d83d6d8234018a01792c749a56daee41794cac7d6c46661e8/pymdown_extensions-12.1.tar.gz", hash = "sha256:fdb8f47f5d7fd069d10ef2a7d8908e613d7865ff0419d544a0ffd3984e884f11", size = 868245, upload-time = "2026-09-23T00:08:42Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/8c/30/c866b3ca8ad5cca79a3ee1a55c12d61d3e72381e5eadbfdaceb6006ebc84/pymdown_extensions-12.0.1-py3-none-any.whl", hash = "sha256:15d629e8035892b93d788a8424ccea754d4aa3cec247a64cbfe7b15089c9ad7f", size = 276957, upload-time = "2026-09-15T23:20:31.551Z" },
+    { url = "https://files.pythonhosted.org/packages/36/d1/98313da89960a604402266a115311b510254900ff1295ea426403f9423cc/pymdown_extensions-12.1-py3-none-any.whl", hash = "sha256:4a254b771acfcddc6c110a7f4590d818f1f849e2d5aacf69b4b07c8dd2a9700d", size = 277069, upload-time = "2026-09-23T00:08:40.069Z" },
 ]
 
 [[package]]
@@ -674,7 +674,7 @@ wheels = [
 
 [[package]]
 name = "python-liquid"
-version = "2.3.1"
+version = "2.3.2"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "babel" },
@@ -683,9 +683,9 @@ dependencies = [
     { name = "python-dateutil" },
     { name = "pytz" },
 ]
-sdist = { url = "https://files.pythonhosted.org/packages/0f/03/66f47583db72f8c5360a7e90424c7821041569e1939f930cd094f5845335/python_liquid-2.3.1.tar.gz", hash = "sha256:884586b7884bb804767fa4f03d3eb4dfaa9979a7f445152aa016402d220dd97b", size = 95610, upload-time = "2026-08-08T07:48:44.952Z" }
+sdist = { url = "https://files.pythonhosted.org/packages/22/33/63c8e95c908a581d0d9c2d3dad2c629660780844a67e14b659b116a8c361/python_liquid-2.3.2.tar.gz", hash = "sha256:4bf0462275d1293ca8983b6d2448752ff1057c3ba3ca4858f8bbb6544e4f15ad", size = 95561, upload-time = "2026-09-22T07:29:26.761Z" }
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/f8/b0/70b1b7347bd6d0474b6a11a46d8e601540cd16596e4a20f0731344c3ede0/python_liquid-2.3.1-py3-none-any.whl", hash = "sha256:b935e4e3b29a9b8176909539bc5803a84fd88afed02792de989ccea06956999f", size = 141549, upload-time = "2026-08-08T07:48:43.402Z" },
+    { url = "https://files.pythonhosted.org/packages/e6/12/40d61bec511b39b610c631f78d42e6f21138621ca59448c87d05ba97cb29/python_liquid-2.3.2-py3-none-any.whl", hash = "sha256:85b13b6933abed63d40f3d71c18384df886fc3be2d9c24d7d7264586e2b9c3f1", size = 141485, upload-time = "2026-09-22T07:29:25.521Z" },
 ]
 
 [[package]]
