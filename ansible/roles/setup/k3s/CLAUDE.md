@@ -11,14 +11,23 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
 (`setup/hypervisor`), whose `host_vars` turn the backup targets and the health crons off (`k3s_manage_backup_targets`,
 `k3s_manage_health_crons`), because both would push to prod's Kuma and B2.
 
-**`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It re-runs the k3s
-installer, restarts k3s, rotates the secrets-encryption key and re-encrypts every Secret in
-etcd, then reapplies MetalLB and Longhorn. Every task file here carries its own tag, so most
-changes want one of those instead: a change to the read-only identity wants `--tags
-kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig.yml`, applied 2026-09-22 with ok=15
-changed=2), a backup-target change wants `--tags longhorn_backup`. To see what a candidate
-tag selects before running it, add `--list-tasks`. The GitOps deployer prints this warning
-beside the command it suggests, from
+**`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It runs every task in the
+role: MetalLB, Longhorn, the backup targets, the health crons, CoreDNS and the node config
+all reapply, and three tasks that touch the control plane become reachable. Each of the three
+is gated, so the tag CAN take the control plane down rather than always doing so — read the
+gate before you run it. `Install or reconfigure the k3s server` runs the installer, which
+restarts k3s, when `k3s_server_args` gained an argument or `k3s_version` moved. `Restart k3s
+so the log drop-in takes effect` restarts the unit when the drop-in changed and the installer
+did not run. `Rotate the encryption key and re-encrypt Secrets already stored in etcd` runs
+`k3s secrets-encrypt rotate-keys` when the cluster has never reached `reencrypt_finished`,
+which on a converged cluster it has.
+
+Every task file here carries its own tag, so most changes want one of those instead: a change
+to the read-only identity wants `--tags kubeconfig`
+(`ansible/roles/setup/k3s/tasks/kubeconfig.yml`, applied 2026-09-22 with ok=15 changed=2), a
+backup-target change wants `--tags longhorn_backup`. To see what a candidate tag selects
+before running it, add `--list-tasks`. The GitOps deployer prints this warning beside the
+command it suggests, from
 `ansible/roles/setup/gitops_deploy/files/deploy_remediation.py:maximal_tag_warning`.
 
 ## At a glance
