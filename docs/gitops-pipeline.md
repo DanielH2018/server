@@ -523,10 +523,14 @@ stay).
     user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
     cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
     by hand with its apply still owed, and the marker's truncation was the only write).
-  - **The command a deferral prints is the ROLE tag, and for `k3s` that is the most
-    disruptive command in the repo.** `--tags k3s` re-runs the k3s installer, restarts k3s,
-    rotates the secrets-encryption key, re-encrypts every Secret in etcd, then reapplies
-    MetalLB and Longhorn. It was printed for PR #2275, a three-line RBAC addition to
+  - **The command a deferral prints is the ROLE tag, and for `k3s` that is the widest apply
+    in the repo.** `--tags k3s` runs every task in the role — MetalLB, Longhorn, the backup
+    targets, the health crons, CoreDNS and the node config all reapply — and it arms three
+    gated tasks that touch the control plane: the k3s installer (which restarts k3s when
+    `k3s_server_args` or `k3s_version` has moved), a `systemd` restart when the log drop-in
+    changed, and `k3s secrets-encrypt rotate-keys`, which re-encrypts every Secret in etcd
+    and fires when the cluster has never reached `reencrypt_finished`. It was printed for PR
+    #2275, a three-line RBAC addition to
     `k3s_readonly_crd_api_groups`; the change needed `--tags kubeconfig`, applied 2026-09-22
     with ok=15 changed=2 (#2294). `deploy_remediation.maximal_tag_warning` now annotates that
     command with what running it does, from `_setup_commands` — the one composer land.sh's

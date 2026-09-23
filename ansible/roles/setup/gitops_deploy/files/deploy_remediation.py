@@ -153,14 +153,37 @@ def manual_plane_remediation(setup_roles: set[str]) -> str:
 #
 # Keyed by ROLE NAME, which is what every caller passes — `setup_role_tag` maps that to the
 # `--tags` value, and the two differ for `chezmoi_setup`.
+# The narrower tags the k3s warning offers instead. A tuple rather than prose, so
+# `test_every_narrower_tag_the_warning_names_exists_in_the_role` can check it against the
+# role's own `tasks/` — a tag that matches nothing makes Ansible exit 0 having applied
+# nothing, which is the silent-success failure `setup_tags_for` also guards against.
+_K3S_NARROWER_TAGS = (
+    "kubeconfig",
+    "longhorn",
+    "longhorn_backup",
+    "coredns",
+    "node-dns",
+    "backup-health",
+    "metallb",
+)
+
+# The gates that decide whether `--tags k3s` actually takes the control plane down. Each is a
+# variable or a status string `roles/setup/k3s/tasks/server.yml` reads, pinned by
+# `test_every_gate_the_warning_names_is_read_by_the_role` so the warning cannot outlive the
+# task it describes.
+_K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "k3s_version", "reencrypt_finished")
+
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     "k3s": (
-        "**this tag is the whole role**: it re-runs the k3s installer, restarts k3s, rotates "
-        "the secrets-encryption key and re-encrypts every Secret in etcd, then reapplies "
-        "MetalLB and Longhorn. Most changes here need one of its narrower tags instead "
-        "(`kubeconfig`, `longhorn`, `longhorn_backup`, `coredns`, `node-dns`, "
-        "`backup-health`, `metallb`) — `--list-tasks` with a candidate tag shows what it "
-        "selects before you run it"
+        "that tag is the WHOLE role. It reapplies MetalLB, Longhorn, the backup targets, the "
+        "crons, CoreDNS and the node config, and arms three gated control-plane tasks: the "
+        f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
+        f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; a systemd restart when the log "
+        "drop-in changed; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every "
+        "Secret in etcd unless the cluster already reached "
+        f"`{_K3S_CONTROL_PLANE_GATES[2]}`. Narrower tags, one per task file: "
+        + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)
+        + "; `--list-tasks` shows what one selects"
     ),
 }
 
@@ -202,7 +225,10 @@ def _setup_commands(setup_roles: set[str] | None) -> list[str]:
             continue
         cmd = f"`ansible-playbook {playbook} --tags {setup_role_tag(role)}`"
         warning = maximal_tag_warning(role)
-        cmds.append(f"{cmd} — WARNING: {warning}" if warning else cmd)
+        # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
+        # <clear command>" after this list, and an unbracketed warning made that clause read
+        # as a continuation of the warning's own last sentence.
+        cmds.append(f"{cmd} (WARNING: {warning})" if warning else cmd)
     return cmds
 
 
