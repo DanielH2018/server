@@ -83,9 +83,18 @@ Metabase dashboard was removed on 2026-08-22), then re-run —
 the second pass rolls nothing and succeeds. A deploy that changes no crowdsec manifest never
 hits it.
 
-### `--check` on this role always fails at the banned-Pi probe
-Check mode skips the *ban* task but still runs `Probe the VIP from the banned Pi`, so the
-probe fails. Pre-existing, confirmed by A/B, and not a sign of a broken change.
+### `--check` skips the whole b1-gate rather than failing in it
+The gate is unprovable in check mode by construction: you cannot demonstrate a ban is
+enforced without taking the ban. Check mode skips the *ban* task, so the probe that follows
+it can never see a 403. `ansible/roles/k8s/crowdsec/tasks/main.yml` therefore gates its
+`import_tasks: verify.yml` on `not ansible_check_mode`, and a `when` on an import propagates
+to every task in the imported file — so one line covers all four tasks in
+`ansible/roles/k8s/crowdsec/tasks/verify.yml`. Keep that guard when adding a task there.
+
+Before the guard, check mode ran the probe against an un-banned host and it burned all eight
+retries on every `--check` of this role. A dry run that always reports red trains an operator
+to skip the check, which is what `.claude/rules/ansible.md` asks for before touching
+production state.
 
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
 The agent sidecar in the traefik pod logs this against a Traefik access-log line cut at a

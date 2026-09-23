@@ -96,7 +96,13 @@
   retries: 12
   delay: 10
   until: k3s_backup_available.stdout == "true"
-  when: k3s_longhorn_backup_armed | bool
+  when:
+    # Skipped under `--check`, not opted out of it. The two tasks above that point Longhorn
+    # at the target and its credential are themselves skipped, so a dry run on a cluster that
+    # has not been armed yet would spend all 12 retries waiting for a target nothing set.
+    # Nothing downstream reads this register — `until` is the whole verdict. #2305.
+    - not ansible_check_mode
+    - k3s_longhorn_backup_armed | bool
 
 - name: Reconcile the Longhorn R2 credential
   tags: [longhorn_backup, longhorn_r2]

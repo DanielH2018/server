@@ -170,7 +170,13 @@
   until: k3s_host_coredns_probe.stdout | trim | length > 0
   retries: "{{ k3s_coredns_probe_retries | int }}"
   delay: 2
-  when: k3s_host_coredns_enabled
+  when:
+    # Skipped under `--check`, not opted out of it. The unit and Corefile above are written
+    # and started by tasks a dry run only simulates, so on a host that has never run this
+    # role the probe would poll 127.0.0.1 for a forwarder nothing started. Nothing downstream
+    # reads this register — `until` is the whole verdict. #2305.
+    - not ansible_check_mode
+    - k3s_host_coredns_enabled
 
 # TASK ORDER IS THE SAFETY PROPERTY HERE. The real file is written BEFORE systemd-resolved is
 # stopped, so a run that dies midway leaves a working resolv.conf rather than a symlink to a

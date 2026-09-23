@@ -40,10 +40,16 @@
 # releases, and a task keyed on it reports changed forever the day it moves again.
 - name: Read the live Corefile
   tags: [coredns]
+  # `check_mode: false` because "Point cluster DNS at Pi-hole first" below compares this
+  # register's `stdout` in its `when`. Check mode skips `command` and the skip result carries
+  # no `stdout`, so under `--check` that conditional errors before the probe further down is
+  # ever reached — the tag fails for a reason that says nothing about the tree. This reads a
+  # ConfigMap and writes nothing, so running it for real keeps the dry run's promise. #2305.
   ansible.builtin.command:
     cmd: k3s kubectl -n kube-system get configmap coredns -o jsonpath={.data.Corefile}
   register: k3s_coredns_live
   become: true
+  check_mode: false
   changed_when: false
 
 - name: Stage the CoreDNS Corefile patch
@@ -107,5 +113,10 @@
   delay: 5
   until: k3s_coredns_probe.stdout | trim | length > 0
   when:
+    # Skipped under `--check`, not opted out of it. The patch above that points cluster DNS
+    # at Pi-hole is itself skipped, so a dry run would poll for an upstream nothing has been
+    # told to forward to — burning every retry on state the run deliberately did not create.
+    # A probe is unprovable in check mode by construction. #2305.
+    - not ansible_check_mode
     - k3s_coredns_dig.stat.exists
     - k3s_coredns_probe_name | length > 0

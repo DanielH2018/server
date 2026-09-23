@@ -193,10 +193,18 @@
   #
   # `failed_when: false` keeps the unreadable case flowing to the assert, which reports it far
   # better than a bare non-zero exit; `until` is what stops a transient from getting there.
+  #
+  # `check_mode: false` because the three tasks below read this register — two asserts and
+  # the rotate-keys `when`. Check mode skips `command` and the skip result carries no
+  # `stdout`, so under `--check` this task burns all 12 retries against a skip and fails the
+  # play, and the assert that follows would error on the missing `stdout` if it did not.
+  # `status` reads the supervisor and writes nothing, so running it for real keeps the dry
+  # run's promise. #2305.
   ansible.builtin.command:
     cmd: k3s secrets-encrypt status
   register: k3s_secrets_encrypt_status
   become: true
+  check_mode: false
   changed_when: false
   failed_when: false
   until: "'Encryption Status:' in k3s_secrets_encrypt_status.stdout"
@@ -272,6 +280,11 @@
   retries: 30
   delay: 10
   when:
+    # Skipped under `--check`, not opted out of it. The rotate-keys above is the thing this
+    # waits on and a dry run only simulates it, so running the wait for real would spend 30
+    # retries at 10s on a rotation nobody asked for. Unlike the status read above, nothing
+    # downstream reads this register. #2305.
+    - not ansible_check_mode
     - k3s_secrets_encryption | bool
     - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
 

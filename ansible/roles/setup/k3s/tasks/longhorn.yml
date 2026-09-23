@@ -134,6 +134,11 @@
   retries: 12
   delay: 10
   until: k3s_longhorn_csi_resources.rc == 0
+  # Skipped under `--check`, not opted out of it. This task PATCHES four Deployments, so
+  # `check_mode: false` would have a dry run write to the cluster — the one thing `--check`
+  # promises it will not do. Left unguarded it fails instead: check mode skips `command`, the
+  # skip result carries no `rc`, and the `until` above then burns all 12 retries. #2305.
+  when: not ansible_check_mode
 
 - name: Set the default Longhorn replica count
   tags: [longhorn]

@@ -40,6 +40,15 @@
 - name: Bind a Longhorn volume and remove it again
   tags: [storage_smoke]
   become: true
+  # Skipped whole under `--check`, not opted out of it. A `when` on a block propagates to
+  # every task in its `block` and its `always`, so this one line covers the create, the wait,
+  # the assert and the two cleanups. The smoke test proves provisioning by MUTATING — it
+  # creates a PVC and destroys it — so `check_mode: false` would have a dry run write to the
+  # cluster. Left unguarded it fails instead: check mode skips the create, then skips the
+  # `command` in "Wait for the PVC to reach Bound", whose skip result carries no `stdout`, so
+  # the wait burns every retry and the assert below it errors on the missing key. There is
+  # nothing for `--check` to drift-detect here: the PVC exists only inside this block. #2305.
+  when: not ansible_check_mode
   block:
     - name: Create the storage smoke PVC
       ansible.builtin.command:
