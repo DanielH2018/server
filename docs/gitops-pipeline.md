@@ -523,6 +523,17 @@ stay).
     user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
     cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
     by hand with its apply still owed, and the marker's truncation was the only write).
+  - **The command a deferral prints is the ROLE tag, and for `k3s` that is the most
+    disruptive command in the repo.** `--tags k3s` re-runs the k3s installer, restarts k3s,
+    rotates the secrets-encryption key, re-encrypts every Secret in etcd, then reapplies
+    MetalLB and Longhorn. It was printed for PR #2275, a three-line RBAC addition to
+    `k3s_readonly_crd_api_groups`; the change needed `--tags kubeconfig`, applied 2026-09-22
+    with ok=15 changed=2 (#2294). `deploy_remediation.maximal_tag_warning` now annotates that
+    command with what running it does, from `_setup_commands` — the one composer land.sh's
+    `needs-manual-apply` note, the journal line and the Discord alert all quote.
+    Printing the NARROWEST tag instead is #2307 and is a bigger change: `manual_plane`
+    records a role and no paths, so every reader of the marker would need the paths carried
+    in it, which means a format change across the five copies of `gitops_markers.py`.
     Parking was the signal only because nothing else was, and it charged every other
     session: ten park episodes over the seven days to 2026-09-11 spanned 30 ticks, the longest
     about forty minutes, and every landing behind one exits 4 from `deploy.sh` until a hand

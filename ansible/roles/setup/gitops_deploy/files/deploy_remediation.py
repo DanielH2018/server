@@ -138,8 +138,52 @@ def manual_plane_remediation(setup_roles: set[str]) -> str:
     )
 
 
+# Setup roles whose role tag applies far more than any one change to them needs, and what
+# running it actually does. The command printed beside a role in this map carries the warning.
+#
+# WHY A WARNING AND NOT A NARROWER TAG. The right answer is to map the changed file to the
+# tags of the tasks that read it and print the narrowest — `--tags kubeconfig` for a
+# readonly-rbac change, not `--tags k3s`. This composer cannot do that: `manual_plane`
+# records `<origin_sha> <playbook-or-none> <role> <ts>`, the ROLE and no paths, so
+# `manual_plane_remediation` has nothing to narrow from and the journal, the Discord alert
+# and the SessionStart banner all read that marker. Carrying paths to them means changing the
+# marker format in five copies of `gitops_markers.py` and the test that holds them together.
+# Filed as #2307; this closes the half that is dangerous today, which is an operator reading
+# a printed command and running it as written.
+#
+# Keyed by ROLE NAME, which is what every caller passes — `setup_role_tag` maps that to the
+# `--tags` value, and the two differ for `chezmoi_setup`.
+_MAXIMAL_ROLE_TAGS: dict[str, str] = {
+    "k3s": (
+        "**this tag is the whole role**: it re-runs the k3s installer, restarts k3s, rotates "
+        "the secrets-encryption key and re-encrypts every Secret in etcd, then reapplies "
+        "MetalLB and Longhorn. Most changes here need one of its narrower tags instead "
+        "(`kubeconfig`, `longhorn`, `longhorn_backup`, `coredns`, `node-dns`, "
+        "`backup-health`, `metallb`) — `--list-tasks` with a candidate tag shows what it "
+        "selects before you run it"
+    ),
+}
+
+
+def maximal_tag_warning(role: str) -> str:
+    """What running `role`'s whole-role tag does, or '' when its tag is not a blunt instrument.
+
+    A three-line RBAC addition to `k3s_readonly_crd_api_groups` was answered with
+    `ansible-playbook ansible/k3s-bringup.yml --tags k3s` on 2026-09-22 (#2294). That command
+    restarts the control plane; the change needed `--tags kubeconfig`, which was applied
+    instead with ok=15 changed=2. An operator following the printed command as written takes
+    the restart, and a session on the default follow-through path takes it unattended.
+    """
+    return _MAXIMAL_ROLE_TAGS.get(role, "")
+
+
 def _setup_commands(setup_roles: set[str] | None) -> list[str]:
-    """One command per setup role, or the generic placeholder when no roles are known."""
+    """One command per setup role, or the generic placeholder when no roles are known.
+
+    A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
+    every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
+    journal, the `manual_plane` Discord alert — carries the warning from one place.
+    """
     if not setup_roles:
         return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
     cmds = []
@@ -156,7 +200,9 @@ def _setup_commands(setup_roles: set[str] | None) -> list[str]:
                 "optimize_pi -e target=daniel-pi` on daniel-pi)"
             )
             continue
-        cmds.append(f"`ansible-playbook {playbook} --tags {setup_role_tag(role)}`")
+        cmd = f"`ansible-playbook {playbook} --tags {setup_role_tag(role)}`"
+        warning = maximal_tag_warning(role)
+        cmds.append(f"{cmd} — WARNING: {warning}" if warning else cmd)
     return cmds
 
 

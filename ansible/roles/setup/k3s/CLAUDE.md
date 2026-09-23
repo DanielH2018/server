@@ -11,6 +11,16 @@ here is a hand apply. `daniel-box` is the server; `daniel-server` joined as an a
 (`setup/hypervisor`), whose `host_vars` turn the backup targets and the health crons off (`k3s_manage_backup_targets`,
 `k3s_manage_health_crons`), because both would push to prod's Kuma and B2.
 
+**`--tags k3s` is the MAXIMAL apply, not the one to reach for.** It re-runs the k3s
+installer, restarts k3s, rotates the secrets-encryption key and re-encrypts every Secret in
+etcd, then reapplies MetalLB and Longhorn. Every task file here carries its own tag, so most
+changes want one of those instead: a change to the read-only identity wants `--tags
+kubeconfig` (`ansible/roles/setup/k3s/tasks/kubeconfig.yml`, applied 2026-09-22 with ok=15
+changed=2), a backup-target change wants `--tags longhorn_backup`. To see what a candidate
+tag selects before running it, add `--list-tasks`. The GitOps deployer prints this warning
+beside the command it suggests, from
+`ansible/roles/setup/gitops_deploy/files/deploy_remediation.py:maximal_tag_warning`.
+
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `k3s-bringup.yml --tags "k3s"`; `k3s-bringup.yml --tags "k3s_agent"`
