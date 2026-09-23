@@ -21,10 +21,17 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
   (the `.bashrc` export).
 
 ## What it does (`tasks/main.yml`)
-1. **Install** `age` (apt) and the `sops` binary (pinned `v3.9.2`, arch-mapped amd64/arm64)
-   to `/usr/local/bin`. The `get_url` is **sha256-checksum-pinned** (SOPS is the root of the
-   secret-decryption trust chain — an unverified binary would be a supply-chain hole). Bump
-   the version and the per-arch sha256 **together** from the release's `sops-<ver>.checksums.txt`.
+1. **Install** `age` (apt) and the `sops` binary to `/usr/local/bin`, at
+   `defaults/main.yml:sops_setup_version` and arch-mapped amd64/arm64. The `get_url` is
+   **sha256-checksum-pinned** (SOPS is the root of the secret-decryption trust chain — an
+   unverified binary would be a supply-chain hole). Bump the version and both per-arch
+   sha256s **together**: `uv run python scripts/validate/asset_pins.py --only
+   sops_setup_binary_amd64,sops_setup_binary_arm64` fetches each URL and prints the hash that
+   does not match, and the release's `sops-<ver>.checksums.txt` is the same answer upstream.
+   The pin lives in `defaults/main.yml` so `asset_pins.py` can see it at all — that checker
+   reads defaults alone, and the URL was inline in `tasks/` until #2313. One url+digest pair
+   per architecture, because a digest conditional on `ansible_facts.architecture` renders as
+   an unresolved template under the checker's `StrictUndefined`.
 2. **Install pinned collections** from `requirements.yml` into `ansible/collections` (the
    path `ansible.cfg` loads from, matching the prek lint hook) — run as the repo owner
    (`become: false`) so `community.sops` etc. land for the user who runs deploys.
