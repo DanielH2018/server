@@ -6,10 +6,11 @@ flow), which is defensible for a permission hook — a broken guard must not bri
 call. But two of the three failure paths already write a line to stderr on their own (`uv`
 missing, the `.py` missing), and the `cd` arm did not, so it disarmed the guard with nothing
 to notice. Issue #2171: for the four DENY/ASK guards a silent exit 0 is still an allow, so
-their `cd` arm now emits an `ask` decision naming the shim. The allow-side classifier, the
-context injector, the linter and the bridge keep exit 0 with no stdout: a missed approval is
-a prompt, not a bypass, and the bridge's events have no `ask` to emit. This test proves per
-shim:
+their `cd` arm now emits an `ask` decision naming the shim. The linter and the bridge keep
+exit 0 with no stdout: a missed approval is a prompt, not a bypass, and the bridge's events
+have no `ask` to emit. Issue #2394 merged five PreToolUse:Bash shims into `bash-pretool.sh`,
+three of them deny guards and two of them silent, so that one shim carries the `ask` and its
+reason names all three guards. This test proves per shim:
 
   1. the `# DECIDED:` marker recording the trade-off is present (so a future session does
      not read either posture as an oversight and "fix" it the other way),
@@ -35,17 +36,21 @@ HOOKS = Path(__file__).resolve().parent.parent
 
 _CD_GUARD = "cd /home/ubuntu/server || "
 
-# The four shims issue #1014 originally fixed, and the four whose `cd` arm asks since #2171:
-# every PreToolUse guard whose only decisions are `deny` and `ask`. Only these carry the
-# `# DECIDED:` block, which records the trade-off once for the whole class.
+# The shims whose `cd` arm asks since #2171: every PreToolUse guard whose only decisions are
+# `deny` and `ask`. Only these carry the `# DECIDED:` block, which records the trade-off once
+# for the whole class. Three of the four became arms of `bash-pretool.sh` in #2394, so that one
+# shim now answers for all three — and its `ask` reason names each of them, because an operator
+# reading one line needs to know which guards did not run.
 DENY_GUARD_SHIMS = frozenset(
     {
-        "block-protected-bash.sh",
-        "block-footguns.sh",
-        "nudge-land-sh.sh",
+        "bash-pretool.sh",
         "block-protected-edits.sh",
     }
 )
+
+# The guards `bash-pretool.sh` stands in front of. Named rather than counted: the shim can only
+# ask once for all of them, so the one thing its reason string has to keep true is which ones.
+MERGED_DENY_GUARDS = ("block-protected-bash", "nudge-land-sh", "block-footguns")
 
 
 def _cd_guarded_shims() -> list[str]:
@@ -83,13 +88,9 @@ def test_the_shim_census_is_non_vacuous():
     # anchor could not see because it pinned the size of a hand-written list instead.
     assert set(SHIM_NAMES) == {
         "ansible-lint.sh",
-        "auto-approve-readonly.sh",
         "auto-mode-bridge.sh",
-        "block-footguns.sh",
-        "block-protected-bash.sh",
+        "bash-pretool.sh",
         "block-protected-edits.sh",
-        "inject-nested-docs.sh",
-        "nudge-land-sh.sh",
     }
     assert DENY_GUARD_SHIMS <= set(SHIM_NAMES)
     # ansible-lint.sh is the only one that does not exec into a paired .py.
@@ -125,6 +126,16 @@ def test_decided_marker_documents_the_trade_off(hook_name):
     assert "#2171" in text
 
 
+def test_the_merged_shim_names_every_guard_that_did_not_run(tmp_path):
+    """#2394: one shim replaced three deny guards and two silent ones. The silent pair cost a
+    prompt and a re-read, so the merged posture is the `ask` — and the operator can only act
+    on it if the reason says which guards it covers."""
+    proc = _run(tmp_path, "bash-pretool.sh", str(tmp_path / "does-not-exist"))
+    reason = json.loads(proc.stdout)["hookSpecificOutput"]["permissionDecisionReason"]
+    for guard in MERGED_DENY_GUARDS:
+        assert guard in reason, guard
+
+
 @pytest.mark.parametrize("hook_name", SHIM_NAMES)
 def test_reject_a_missing_cd_target_now_reports_on_stderr(tmp_path, hook_name):
     """The failure this issue is about: `cd` fails, and until now nothing said so."""
@@ -151,9 +162,8 @@ def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path, hook_name):
 
 @pytest.mark.parametrize("hook_name", sorted(set(SHIM_NAMES) - DENY_GUARD_SHIMS))
 def test_reject_a_non_deny_shim_that_cannot_run_stays_silent(tmp_path, hook_name):
-    """The near miss: the allow-side classifier, the linter, the bridge and the context
-    injector keep no stdout on a failed `cd` — an `ask` from any of them would be a prompt
-    where the design is a pass-through."""
+    """The near miss: the linter and the bridge keep no stdout on a failed `cd` — an `ask`
+    from either would be a prompt where the design is a pass-through."""
     proc = _run(tmp_path, hook_name, str(tmp_path / "does-not-exist"))
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout == ""

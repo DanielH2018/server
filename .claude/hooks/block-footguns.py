@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: run by block-footguns.sh through `uv run python`
+#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """PreToolUse(Bash) guard: nine commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
@@ -399,8 +399,21 @@ def decide(command: str, split=split_stages) -> tuple[str, str] | tuple[None, No
     return None, None
 
 
+def decision(payload) -> tuple[str, str] | None:
+    """The `(decision, reason)` pair `decide` returns for this payload, or None.
+
+    The arm entry point `bash-pretool.py` calls. `main()` below is the same arm run as its
+    own process, which is what the tests and a hand invocation use.
+    """
+    command = (payload.get("tool_input") or {}).get("command", "")
+    if not command:
+        return None
+    verdict, reason = decide(command)
+    return (verdict, reason) if verdict and reason else None
+
+
 def main() -> int:
-    """Read the hook payload from stdin and emit the decision `decide` returns.
+    """Read the hook payload from stdin and emit the decision `decision` returns.
 
     A deny names the flagged footgun and its fix; an ask names why the rules could not run.
     Otherwise emits nothing. Always returns 0 (a decision is expressed through emitted JSON,
@@ -410,12 +423,9 @@ def main() -> int:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return 0
-    command = (payload.get("tool_input") or {}).get("command", "")
-    if not command:
-        return 0
-    decision, reason = decide(command)
-    if decision and reason:
-        emit_pretooluse_decision(decision, reason)
+    verdict = decision(payload)
+    if verdict:
+        emit_pretooluse_decision(*verdict)
     return 0
 
 

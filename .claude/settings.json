@@ -27,27 +27,12 @@
         "hooks": [
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/auto-approve-readonly.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/uv-python.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/block-protected-bash.sh",
+            "command": "~/server/.claude/hooks/bash-pretool.sh",
             "timeout": 15
           },
           {
             "type": "command",
-            "command": "~/server/.claude/hooks/nudge-land-sh.sh",
-            "timeout": 10
-          },
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/block-footguns.sh",
+            "command": "~/server/.claude/hooks/uv-python.sh",
             "timeout": 10
           }
         ]
@@ -58,16 +43,6 @@
           {
             "type": "command",
             "command": "~/server/.claude/hooks/block-protected-edits.sh",
-            "timeout": 10
-          }
-        ]
-      },
-      {
-        "matcher": "Bash",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/inject-nested-docs.sh",
             "timeout": 10
           }
         ]

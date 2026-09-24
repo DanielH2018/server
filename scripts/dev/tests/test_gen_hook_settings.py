@@ -24,11 +24,8 @@ import gen_hook_settings as g
 # by its `.sh` shim through `uv run python`, or imported by a sibling, never registered).
 KNOWN_REGISTERED = frozenset(
     {
-        "auto-approve-readonly.sh",
+        "bash-pretool.sh",
         "uv-python.sh",
-        "block-protected-bash.sh",
-        "nudge-land-sh.sh",
-        "block-footguns.sh",
         "block-protected-edits.sh",
         "ansible-lint.sh",
         "validate-compose.sh",
@@ -44,6 +41,7 @@ KNOWN_LIBRARIES = frozenset(
         "_readonly_shell.py",
         "_readonly_tables.py",
         "auto-approve-readonly.py",
+        "bash-pretool.py",
         "session-health.py",
     }
 )

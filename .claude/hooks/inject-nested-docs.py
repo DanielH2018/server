@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: run by inject-nested-docs.sh through `uv run python`
+#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """PreToolUse(Bash): load the nested CLAUDE.md and `.claude/rules` a Bash read would skip.
 
 WHY. Claude Code loads a role's `CLAUDE.md` (`nested_traversal`) and a `.claude/rules/*.md`
@@ -307,25 +307,37 @@ def build_context(command, cwd, session_id, log_path=None):
     return preamble + "\n".join(blocks), chosen
 
 
+def context(payload):
+    """The docs `build_context` chooses for this payload, as injectable text, or None.
+
+    Records each chosen doc in `instructions.log` as it goes, which is the side effect that
+    keeps the injection once-per-session. The arm entry point `bash-pretool.py` calls;
+    `main()` below is the same arm run as its own process.
+    """
+    if payload.get("tool_name") != "Bash":
+        return None
+    command = (payload.get("tool_input") or {}).get("command") or ""
+    if "/" not in command:
+        return None
+    cwd = payload.get("cwd") or os.getcwd()
+    session_id = payload.get("session_id") or ""
+    text, chosen = build_context(command, cwd, session_id)
+    if not chosen:
+        return None
+    for doc, trigger in chosen:
+        _logger.append_row(REASON, "Project", doc, session_id, " trigger=" + trigger)
+    return text
+
+
 def main():
-    """Read the hook payload from stdin and inject the docs `build_context` chooses."""
+    """Read the hook payload from stdin and inject the docs `context` chooses."""
     try:
         data = json.load(sys.stdin)
     except Exception:
         return 0
-    if data.get("tool_name") != "Bash":
-        return 0
-    command = (data.get("tool_input") or {}).get("command") or ""
-    if "/" not in command:
-        return 0
-    cwd = data.get("cwd") or os.getcwd()
-    session_id = data.get("session_id") or ""
-    context, chosen = build_context(command, cwd, session_id)
-    if not chosen:
-        return 0
-    for doc, trigger in chosen:
-        _logger.append_row(REASON, "Project", doc, session_id, " trigger=" + trigger)
-    emit_pretooluse_context(context)
+    text = context(data)
+    if text:
+        emit_pretooluse_context(text)
     return 0
 
 

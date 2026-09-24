@@ -27,7 +27,7 @@ file a sibling invokes and no event registers carries `library` with the reason 
     #   statusMessage: Formatting...    optional
 
     # gen-hooks: library
-    #   reason: run by block-footguns.sh through `uv run python`
+    #   reason: run by bash-pretool.sh through `uv run python`
 
 The opener is the only delimiter: a block runs from its `# gen-hooks:` line to the first line
 that is not a `#   key: value` continuation. In a Python hook the block sits between the

@@ -12,7 +12,7 @@ read-only commands to fit it. Anything that writes or executes still prompts —
 **Auto-approves (no prompt):**
 - Single read-only commands and pipelines: `grep … | sort | head`
 - `rg` on the same terms as `grep` — the classifier answers `allow · read-only: rg`, verified
-  2026-08-23 by piping both through `auto-approve-readonly.sh`. Worth knowing because usage is
+  2026-08-23 by piping both through the classifier's shim. Worth knowing because usage is
   lopsided: 9 `rg` calls against 10,092 `grep` over the 7 days to 2026-08-23. Neither is better
   for permissions; pick on merit, not on fear of a prompt.
 - Read-only stages sequenced with `;`, `&&`, `||`, or newlines: `cd dir && grep … *.j2`
@@ -54,9 +54,10 @@ reaches an ask-listed command; this repo registers no PermissionRequest hook of 
 
 **A machine without the dotfiles deploy gets no auto-approve on the remote-ssh path, rather than a
 stale local copy.** The hook prints one `classifier did not run` line to stderr and exits 0 with no
-stdout, the same fail-open shape as `auto-approve-readonly.sh`'s own cd guard, so the prompt stands.
-The four deny guards' shims take the other posture on a failed cd: an **ask** naming the shim,
-because a bare exit 0 from a deny guard is an allow (#2171).
+stdout, and the prompt stands. The two PreToolUse shims take the other posture on a failed cd —
+`bash-pretool.sh`, which carries the three Bash deny guards since #2394, and
+`block-protected-edits.sh`: an **ask** naming the guards that did not run, because a bare exit 0
+from a deny guard is an allow (#2171).
 `.claude/hooks/tests/test_claude_guard_import.py` measures the allow side end to end, and diffs the
 CI stand-in in `tests/conftest.py` against the deployed tables — a diff CI itself cannot run, since
 CI has no dotfiles deploy; it goes red under `prek run` on a deployed host.
