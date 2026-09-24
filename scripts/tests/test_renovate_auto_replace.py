@@ -25,11 +25,12 @@ from _renovate import (
 
 # A bare pin is the shape the template exists for (#2392): without one, Renovate substitutes
 # currentValue -> newValue inside the matched text and there is no digest to substitute, so
-# `pinDigests: true` never added an @sha256 suffix to a tag-only pin. Both named pins below are
-# the ones that issue's verify-by step names, so a rename breaks these guards loudly rather
-# than leaving them asserting over an empty set.
+# `pinDigests: true` never added an @sha256 suffix to a tag-only pin. Each shape is named rather
+# than counted, so a rename breaks these guards loudly instead of leaving them asserting over an
+# empty set. The bare pin is the one #2392's verify-by step names; the digest pin is a k8s role
+# default rather than the one in roles/setup/k3s, which several sessions edit at once.
 TEMPLATE_BARE_PIN = "bazarr_k8s_image"
-TEMPLATE_DIGEST_PIN = "k3s_longhorn_restore_drill_image"
+TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
 
 
 def _live_k8s_image_spans(tracked: list[str]) -> list[tuple[str, str, re.Match[str]]]:
@@ -60,14 +61,17 @@ def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -
     case, so this asserts an invariant rather than a copy of the config.
     """
     spans = _live_k8s_image_spans(tracked)
-    names = {line.split(":", 1)[0].strip() for _, line, _ in spans}
-    assert TEMPLATE_BARE_PIN in names, (
+    by_name = {line.split(":", 1)[0].strip(): m for _, line, m in spans}
+    assert TEMPLATE_BARE_PIN in by_name, (
         f"{TEMPLATE_BARE_PIN} no longer matches the k8s-images manager — this guard is "
         "asserting over a set that no longer contains the pin shape it was written for."
     )
-    assert TEMPLATE_DIGEST_PIN in names, (
-        f"{TEMPLATE_DIGEST_PIN} no longer matches the k8s-images manager — the digest-carrying "
-        "half of this guard has nothing to exercise."
+    assert (
+        TEMPLATE_DIGEST_PIN in by_name
+        and by_name[TEMPLATE_DIGEST_PIN].group("currentDigest") is not None
+    ), (
+        f"{TEMPLATE_DIGEST_PIN} no longer matches the k8s-images manager as a digest-carrying "
+        "pin — the half of this guard that exercises the #if branch has nothing to run on."
     )
 
     template = _k8s_image_manager()["autoReplaceStringTemplate"]
