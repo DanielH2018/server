@@ -619,6 +619,7 @@
  "scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py": 0.05,
  "scripts/deploy_tools/tests/test_narrow_setup.py": 0.79,
  "scripts/deploy_tools/tests/test_narrow_setup_edges.py": 0.75,
+ "scripts/deploy_tools/tests/test_narrow_setup_vars_walk.py": 0.76,
  "scripts/deploy_tools/tests/test_pinned_rotation_gates.py": 0.05,
  "scripts/deploy_tools/tests/test_prune_releases.py": 0.02,
  "scripts/deploy_tools/tests/test_publish_pr.py": 0.27,

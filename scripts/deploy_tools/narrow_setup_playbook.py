@@ -60,8 +60,8 @@ def declared_tags(tasks) -> set[str]:
 
     A block's own `tags:` counts: it is a tag an operator can select, whichever tasks it
     reaches. Used only to find a tag TWO roles declare, so it is deliberately wider than
-    `narrow_setup._task_tags` — it asks "does this name exist over there", not "what does it
-    select".
+    `narrow_setup_index._task_tags` — it asks "does this name exist over there", not "what
+    does it select".
     """
     out: set[str] = set()
     for task in tasks or []:
