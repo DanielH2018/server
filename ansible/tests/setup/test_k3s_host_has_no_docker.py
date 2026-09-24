@@ -1,9 +1,13 @@
 #!/usr/bin/env python3
-"""Guards that the k3s node never gets Docker installed on it.
+"""Guards that the k3s nodes never get Docker installed on them.
 
-The failure this encodes actually happened (daniel-box, 2026-08-01). k3s ships its
-own containerd plus flannel/kube-proxy iptables rules, and daniel-box was chosen to
-host the cluster first precisely because it had no container runtime — see
+One invariant, pinned at both layers: the inventory must not ask for Docker on a k3s node,
+and the k3s role must refuse to install onto a host that already has it. Two incidents, one
+per layer, and each is the reason the other is not enough on its own.
+
+THE INVENTORY LAYER (daniel-box, 2026-08-01). k3s ships its own containerd plus
+flannel/kube-proxy iptables rules, and daniel-box was chosen to host the cluster
+first precisely because it had no container runtime — see
 docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 
 A bare `initial_setup.yml` run (no --tags) then installed Docker there, because
@@ -21,9 +25,24 @@ already on the host. `has_docker` is the half that stops it landing in the first
 place — the original note said to remember `--tags`, and relying on that is exactly
 what let it happen.
 
+THE ROLE LAYER (daniel-server, 2026-08-19). That install-time guard existed in
+tasks/server.yml from the start, carrying a comment that named the hazard exactly.
+tasks/agent.yml listed the same assert as *deliberately* omitted, which was correct
+while the Docker drain was in progress and wrong the moment it finished.
+
+Nothing noticed the difference. daniel-server — the agent — had docker-ce purged on
+2026-08-14 and reinstalled on 2026-08-19 at 22:37, then ran a second container runtime
+for eight days. Every repo-side check read green throughout, because the only host the
+guard covered was the one that never had Docker.
+
+A guard on one of two symmetric paths is not a guard. The last two tests assert both
+node roles carry it, so removing either one fails the suite instead of quietly halving
+the coverage.
+
 Run: uv run pytest ansible/tests/setup/test_k3s_host_has_no_docker.py
 """
 
+import re
 from pathlib import Path
 
 import pytest
@@ -36,6 +55,13 @@ from _helpers import ANSIBLE
 # daniel-server joined as an agent node on 2026-08-14, when its Docker workload
 # finished draining and Docker was uninstalled — both nodes must stay Docker-free.
 K3S_HOSTS = ("daniel-box", "daniel-server")
+
+K3S_TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks"
+
+# The two node roles. Named explicitly rather than globbed: a new tasks file in this role
+# is not automatically a node-install path, and globbing would make this test fail for
+# reasons that have nothing to do with the guard.
+NODE_TASK_FILES = ["server.yml", "agent.yml"]
 
 
 def _load(path: Path):
@@ -135,3 +161,23 @@ def test_docker_entry_detector_flags_a_docker_platform_and_an_absent_one():
             {"name": "c", "platform": "k8s"},
         ]
     ) == ["a", "b"]
+
+
+@pytest.mark.parametrize("task_file", NODE_TASK_FILES)
+def test_node_role_stats_the_docker_binary(task_file):
+    text = (K3S_TASKS / task_file).read_text()
+    assert "/usr/bin/docker" in text, (
+        f"{task_file} does not stat /usr/bin/docker. Both k3s node roles must refuse to "
+        f"install onto a host running Docker -- see this module's docstring for the "
+        f"eight days that cost."
+    )
+
+
+@pytest.mark.parametrize("task_file", NODE_TASK_FILES)
+def test_node_role_asserts_docker_is_absent(task_file):
+    """The stat alone proves nothing -- it is the assert that fails the run."""
+    text = (K3S_TASKS / task_file).read_text()
+    assert re.search(r"that:\s*not \w*docker\w*\.stat\.exists", text), (
+        f"{task_file} stats the Docker binary but does not assert on the result. A "
+        f"registered stat with no assert reads like a guard and enforces nothing."
+    )

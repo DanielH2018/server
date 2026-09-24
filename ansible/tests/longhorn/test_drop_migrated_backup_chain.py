@@ -56,9 +56,35 @@ def test_only_backups_of_vanished_volumes_are_considered() -> None:
         "kubectl custom-columns pads names to the column width, and a padded name matches "
         "nothing — every backup would then classify as an orphan"
     )
-    assert "Refuse to classify orphans against an unusable volume list" in text, (
-        "an empty or malformed volume list makes the orphan test vacuously true, so it must "
-        "be proven usable before anything is classified"
+    tasks = _tasks()
+    guard = next(
+        (
+            task
+            for task in tasks
+            if "drop_live_volumes"
+            in str(task.get("ansible.builtin.assert", {}).get("that", ""))
+        ),
+        None,
+    )
+    assert guard is not None, (
+        "an empty or malformed volume list makes the orphan test vacuously true, so an "
+        "ansible.builtin.assert whose `that:` reads drop_live_volumes must prove the list "
+        "usable. Asserted on the task's structure rather than on its name: the fail_msg is "
+        "prose the playbook is free to reword, and pinning prose goes red on an edit that "
+        "changed nothing"
+    )
+    classify = next(
+        task
+        for task in tasks
+        if "drop_orphans" in (task.get("ansible.builtin.set_fact") or {})
+    )
+    assert "drop_current_pv" in str(guard["ansible.builtin.assert"]["that"]), (
+        "the guard must prove the list usable by finding the claim's OWN volume in it — a "
+        "weaker condition over drop_live_volumes, an rc check say, passes on a list that "
+        "parsed into nothing and makes every backup an orphan"
+    )
+    assert tasks.index(guard) < tasks.index(classify), (
+        "the volume list is classified into orphans before it is proven usable"
     )
     assert "'equalto', 'Completed'" in text, (
         "only Completed backups belong here; Error backups are the reaper's path"

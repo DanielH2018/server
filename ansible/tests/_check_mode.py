@@ -9,8 +9,8 @@ until-condition against the skip result, burns every retry and fails the play) a
 and errors on the missing key).
 
 Two halves. `SKIPPED_IN_CHECK_MODE`, `skips_in_check_mode`, `excludes_check_mode`,
-`importer_guards` and `walk_with_inherited_when` answer "does a `--check` run reach this task at
-all". `SKIP_MISSING`, `unguarded_deref` and `lazily_guarded` answer "does this expression survive
+`importer_guards`, `walk_with_inherited` and `walk_with_inherited_when` answer "does a `--check`
+run reach this task at all". `SKIP_MISSING`, `unguarded_deref` and `lazily_guarded` answer "does this expression survive
 meeting a skip result". `POST_MODULE_KEYS` names the third question, "does Ansible evaluate this
 expression at all on the run that produced the skip result". #2315.
 
@@ -57,21 +57,24 @@ SKIPPED_IN_CHECK_MODE = frozenset(
 POST_MODULE_KEYS = ("failed_when", "changed_when")
 
 
-def skips_in_check_mode(task: dict) -> bool:
+def skips_in_check_mode(task: dict, inherited_check_mode=None) -> bool:
     """True when a `--check` run skips this task for its module alone.
 
     `check_mode: false` is the opt-out: the task runs for real under `--check`. A `when:` is
     not consulted here — a task whose `when:` is false is skipped for a different reason, and
     the two callers ask that question separately through `excludes_check_mode`.
 
-    LIMIT: `check_mode: false` on an enclosing `block:` propagates to its children, and
-    `walk_with_inherited_when` carries only `when:`, so a child under such a block reads as
-    skipped here when it actually runs. No `block:` in the roles tree carries `check_mode:`,
-    and `_check_mode_producers` has had the same blind spot since #2315.
+    `inherited_check_mode` is the value an enclosing `block:` declared, as
+    `walk_with_inherited` resolves it. Ansible propagates `check_mode:` from a block to its
+    children, so a child under `check_mode: false` runs under `--check` without carrying the
+    key. Unlike `when:`, the nearest declaration WINS rather than accumulating: a task's own
+    `check_mode:` overrides its block's, so the task's key is read first and the inherited
+    value is consulted only when the task declares none (#2379).
     """
     if not SKIPPED_IN_CHECK_MODE & set(task):
         return False
-    return task.get("check_mode") is not False
+    effective = task["check_mode"] if "check_mode" in task else inherited_check_mode
+    return effective is not False
 
 
 _INCLUDE_KEYS = frozenset(
@@ -134,22 +137,41 @@ def importer_guards(tasks_dir: Path) -> dict[str, list]:
     return guards
 
 
-def walk_with_inherited_when(tasks, inherited=()) -> Iterator[tuple[dict, list]]:
-    """Every task, paired with the `when:` of each enclosing `block:`.
+def walk_with_inherited(
+    tasks, when=(), check_mode=None
+) -> Iterator[tuple[dict, list, object]]:
+    """Every task, paired with the `when:` of each enclosing `block:` and the `check_mode:`
+    it inherits from the nearest enclosing `block:` that declared one.
 
     `walk_tasks` yields the wrapper and its children side by side, which loses the
-    relationship between them — and a `when:` on a block is exactly a condition the children
-    are governed by without carrying it. Ansible applies it to `rescue:` and `always:` too,
-    so all three nest the same way here. `setup/k3s/tasks/storage_smoke.yml` is why: one
-    guard on its block covers the create, the wait, the assert and both cleanups.
+    relationship between them — and both of these are things a block imposes on children
+    that do not carry them. Ansible applies both to `rescue:` and `always:` too, so all three
+    nest the same way here. `setup/k3s/tasks/storage_smoke.yml` is why the `when:` half
+    exists: one guard on its block covers the create, the wait, the assert and both cleanups.
+
+    The two are carried differently, because Ansible combines them differently. `when:`
+    clauses AND together, so every enclosing condition stays live and the caller gets a list.
+    `check_mode:` is an override — the innermost declaration wins — so the caller gets one
+    scalar, replaced only where a node actually declares the key. `None` therefore means
+    "nobody declared one", which is why a declared `check_mode: null` is not propagated: the
+    two are indistinguishable downstream and only the declared one should override (#2379).
     """
     for task in tasks or []:
         if not isinstance(task, dict):
             continue
-        yield task, list(inherited)
-        nested = [*inherited, task.get("when")]
+        yield task, list(when), check_mode
+        nested_when = [*when, task.get("when")]
+        nested_check_mode = task["check_mode"] if "check_mode" in task else check_mode
         for key in _NESTING_KEYS:
-            yield from walk_with_inherited_when(task.get(key), nested)
+            yield from walk_with_inherited(
+                task.get(key), nested_when, nested_check_mode
+            )
+
+
+def walk_with_inherited_when(tasks, inherited=()) -> Iterator[tuple[dict, list]]:
+    """`walk_with_inherited` for a caller that asks only about `when:`."""
+    for task, when, _ in walk_with_inherited(tasks, inherited):
+        yield task, when
 
 
 # Attributes a skip result does not carry. `results` is deliberately absent: a skipped
