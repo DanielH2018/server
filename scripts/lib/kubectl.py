@@ -244,8 +244,8 @@ def _resolve(tools: Tools) -> tuple[str, Path]:
 _SERVED: dict[tuple[Tools, str, str], str] = {}
 
 # The identity read's own budget. It is a different question from the caller's query and must
-# not inherit the caller's timeout: measure_rollout_gap polls at a 2s budget while a rollout
-# is in flight, which is exactly when `get nodes` is slowest.
+# not inherit the caller's timeout: a caller polling at a short budget while a rollout is in
+# flight would hand it that budget exactly when `get nodes` is slowest.
 IDENTITY_TIMEOUT = 30.0
 
 

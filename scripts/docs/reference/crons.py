@@ -176,7 +176,7 @@ def _rel(path: Path, roles: Path) -> str:
 def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
     """Collect every active cron task under `roles` into one row per job.
 
-    Skips archived roles and any task whose cron spec sets `state: absent`.
+    Skips any task whose cron spec sets `state: absent`.
 
     Args:
         roles: Root directory to search for `tasks/*.yml` files.
@@ -186,8 +186,6 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
     """
     rows = []
     for path in sorted(roles.rglob("tasks/*.yml")):
-        if "/archive/" in path.as_posix():
-            continue
         for task in _cron_tasks(path):
             spec = task["ansible.builtin.cron"] or {}
             if str(spec.get("state", "present")) == "absent":

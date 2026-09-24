@@ -62,10 +62,6 @@ has_repo_checkout: true
 
 # Optional overrides
 
-# Default: traefik. Use `lan` on a host that should publish web UIs bound to server_ip
-# instead of routing through Traefik (how daniel-pi is set up).
-# expose_mode: lan
-
 # Unset by default — each compose template falls back to its own value (10s/30s). Raise it
 # on a slow/constrained host: every probe costs 2 runc invocations. Timeout and retries are
 # tunable the same way (templates fall back to 5-10s / 3): widen them where a probe's exec

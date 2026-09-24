@@ -45,7 +45,6 @@
 !/.gitattributes
 # Make sure these are ignored
 ansible/.env
-scripts/availability_bots/.env
 ansible/.aws
 ansible/.ansible
 ansible/collections

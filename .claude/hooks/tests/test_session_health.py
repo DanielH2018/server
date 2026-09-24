@@ -13,10 +13,12 @@ Run: uv run pytest .claude/hooks
 import functools
 import importlib.util
 import io
+import json
 import os
 import subprocess
 import sys
 import types
+from pathlib import Path
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "session-health.py"
@@ -252,6 +254,50 @@ def test_stale_worktree_lines_swallows_a_timeout(monkeypatch):
 
     monkeypatch.setattr(_mod, "_run", boom)
     assert _mod.stale_worktree_lines() == []
+
+
+# settings.json kills the hook at its `timeout`, and a kill discards whatever Python still
+# buffers — the whole banner, parked-deployer warning included (#2388). The worktree read is
+# the slow step (it reaches GitHub), so it is bounded inside that budget and runs after a flush.
+
+
+def test_the_worktree_read_is_bounded_well_inside_the_hook_budget():
+    settings = json.loads(
+        Path(_HOOK).parent.parent.joinpath("settings.json").read_text(encoding="utf-8")
+    )
+    budgets = [
+        hook["timeout"]
+        for group in settings["hooks"]["SessionStart"]
+        for hook in group["hooks"]
+        if hook["command"].endswith("session-health.sh")
+    ]
+    assert budgets, "settings.json registers no session-health.sh SessionStart hook"
+    assert _mod.WORKTREE_TIMEOUT_S <= min(budgets) / 2
+
+
+class _FlushRecorder(io.StringIO):
+    """A stdout that snapshots everything written so far each time it is flushed."""
+
+    def __init__(self):
+        super().__init__()
+        self.flushed = []
+
+    def flush(self):
+        self.flushed.append(self.getvalue())
+        super().flush()
+
+
+def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
+    out = _FlushRecorder()
+    monkeypatch.setattr(sys, "stdout", out)
+    run_main = _run_main(
+        monkeypatch,
+        '{"source":"startup"}',
+        dock=["  ✗ jellyfin — unhealthy (x)"],
+        worktrees=["  old-thing — worktree-old-thing merged"],
+    )
+    assert run_main() == 0
+    assert any("jellyfin" in s and "old-thing" not in s for s in out.flushed)
 
 
 # `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path pointed at

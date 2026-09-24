@@ -1,6 +1,6 @@
 """The B2 spend ledger: what maintenance tools spent, since B2 publishes no usage API.
 
-Backs the `b2-spend` and `b2-record` subcommands. B2 charges per transaction class and
+Backs the `b2-spend` and `b2-deletions` subcommands. B2 charges per transaction class and
 reports the totals nowhere an API can reach: the Native API has no usage operation, and the
 per-class Usage Reports are Partner-tier. Backup spend is recoverable from Longhorn's logs
 (see BACKUP_BLOCKS_RE), but MAINTENANCE spend — the drains, inventories and verification
@@ -238,21 +238,6 @@ def run_b2_spend(ns):
     return 0
 
 
-def run_b2_record(ns):
-    """Record a tool's B2 spend in today's ledger.
-
-    Exists so scripts outside this repo — the one-shot drains and inventories an operator writes
-    during an incident — can contribute to the same tally instead of scrolling past in a terminal
-    and being reconstructed from memory afterwards.
-    """
-    record_b2_spend(ns.tool, ns.class_a, ns.class_b, ns.class_c, ns.note)
-    print(
-        "recorded %s: %d Class A, %d Class B, %d Class C -> %s"
-        % (ns.tool, ns.class_a, ns.class_b, ns.class_c, b2_ledger_path())
-    )
-    return 0
-
-
 # --- b2-deletions: charge a deletion that already happened -------------------------------------
 
 # Longhorn logs a pair per deleted backup — `Start deleting backup` (backups.go:302) and
@@ -458,7 +443,7 @@ def run_b2_deletions(ns):
     listing commands, so the one class of operation it exists to capture — a deletion, which
     walks a whole block tree at ~1.28 Class C per stored block — wrote no line at all. Deriving
     it from `longhorn-manager`'s own logs needs no cooperation from whoever ran the deletion,
-    which is the property a `b2-record` call inside each drop playbook would still lack.
+    which is the property a manual record call inside each drop playbook would still lack.
 
     Reads Loki and the Kubernetes API only. It spends nothing on B2, so it is safe on a timer.
     """

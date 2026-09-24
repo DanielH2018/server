@@ -151,24 +151,6 @@ def test_discover_templates_finds_the_known_set():
     assert len(names) == 23
 
 
-def test_discover_templates_excludes_archive():
-    assert not any(
-        "archive" in p.relative_to(v.ROLES).parts for p in v.discover_templates()
-    )
-    happy_daemon = (
-        v.ROLES
-        / "containers"
-        / "archive"
-        / "happy"
-        / "templates"
-        / "happy-daemon.service.j2"
-    )
-    assert happy_daemon.exists(), (
-        "fixture assumption broke — the archived template moved"
-    )
-    assert happy_daemon not in v.discover_templates()
-
-
 def test_owning_role_defaults_resolves_the_role_directory():
     defaults = v.owning_role_defaults(GITOPS_DEPLOY_UNIT)
     assert defaults == v.ROLES / "setup" / "gitops_deploy" / "defaults" / "main.yml"

@@ -3,8 +3,9 @@
 node-exporter left Docker on daniel-pi for a systemd unit (#2005). Two things must not
 drift silently: the collector flags, which monitor-bridge's Pi verdicts read series from
 (`node_hwmon_*`, `node_filesystem_*`, `node_memory_*`), and the version, which the cluster's
-DaemonSet pins and the two should share. Both have a real oracle in the tree -- the archived
-compose template for the flags, `roles/k8s/node-exporter/defaults/main.yml` for the version.
+DaemonSet pins and the two should share. The version's oracle is in the tree:
+`roles/k8s/node-exporter/defaults/main.yml`. The flags' oracle is `CONTAINER_FLAGS` below, a
+record of what the retired container ran.
 
 Run: uv run pytest ansible/tests/setup/test_pi_node_exporter_host_unit.py
 """
@@ -12,16 +13,21 @@ Run: uv run pytest ansible/tests/setup/test_pi_node_exporter_host_unit.py
 import re
 
 from lib import yaml_fast
-from _helpers import CONTAINER_ROLES, K8S_ROLES, SETUP_ROLES
+from _helpers import K8S_ROLES, SETUP_ROLES
 
 UNIT = SETUP_ROLES / "optimize_pi" / "templates" / "node_exporter.service.j2"
 DEFAULTS = SETUP_ROLES / "optimize_pi" / "defaults" / "main.yml"
-ARCHIVED_COMPOSE = (
-    CONTAINER_ROLES
-    / "archive"
-    / "node-exporter"
-    / "templates"
-    / "docker-compose.yml.j2"
+# The container's collector flags, minus its `--path.*` remaps, as `collector_flags` parsed them
+# from the retired compose template. #2385 deleted that template; read it with
+# `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/templates/docker-compose.yml.j2`.
+CONTAINER_FLAGS = frozenset(
+    {
+        "--collector.filesystem.mount-points-exclude=^/(dev|proc|sys|run|var/lib/docker/.+)($|/)",
+        "--no-collector.arp",
+        "--no-collector.netclass",
+        "--no-collector.textfile",
+        "--no-collector.wifi",
+    }
 )
 CLUSTER_DEFAULTS = K8S_ROLES / "node-exporter" / "defaults" / "main.yml"
 
@@ -42,10 +48,9 @@ def collector_flags(text: str, drop: re.Pattern[str]) -> frozenset[str]:
 
 def test_the_unit_runs_the_collector_set_the_container_ran() -> None:
     unit_flags = collector_flags(UNIT.read_text(), UNIT_ONLY)
-    container_flags = collector_flags(ARCHIVED_COMPOSE.read_text(), CONTAINER_ONLY)
-    assert unit_flags == container_flags, (
-        f"unit-only: {sorted(unit_flags - container_flags)}; "
-        f"container-only: {sorted(container_flags - unit_flags)}"
+    assert unit_flags == CONTAINER_FLAGS, (
+        f"unit-only: {sorted(unit_flags - CONTAINER_FLAGS)}; "
+        f"container-only: {sorted(CONTAINER_FLAGS - unit_flags)}"
     )
 
 

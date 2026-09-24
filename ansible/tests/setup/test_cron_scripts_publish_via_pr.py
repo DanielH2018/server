@@ -470,16 +470,11 @@ _MIN_CORPUS = 23
 
 
 def push_corpus() -> list[Path]:
-    """Every non-archive template that mentions a push URL, whatever its extension.
-
-    `ansible/roles/containers/archive/` is excluded: those roles deploy nothing, and
-    docker-fleet-health.sh.j2 there still carries the pre-library form.
-    """
+    """Every template that mentions a push URL, whatever its extension."""
     return sorted(
         path
         for path in ROLES.rglob("*.j2")
-        if "/archive/" not in str(path)
-        and (PUSH_LITERAL in path.read_text() or "PUSH_URL" in path.read_text())
+        if PUSH_LITERAL in path.read_text() or "PUSH_URL" in path.read_text()
     )
 
 

@@ -20,7 +20,6 @@ def make_repo(tmp_path):
     write(
         host_vars / "box.yml",
         """\
-        expose_mode: traefik
         containers_list:
           - name: jellyfin
             platform: k8s
@@ -34,7 +33,6 @@ def make_repo(tmp_path):
     write(
         host_vars / "pi.yml",
         """\
-        expose_mode: lan
         has_gitops: false
         containers_list:
           - name: dozzle

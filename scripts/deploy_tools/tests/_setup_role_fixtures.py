@@ -1,9 +1,11 @@
-"""The throwaway setup role the `narrow_setup` suites drive, shared by the two modules.
+"""The throwaway setup role the `narrow_setup` suites drive, shared by the three modules.
 
-`test_narrow_setup.py` (the rules `narrow_setup.role_tags` states in its own docstring) and
-`test_narrow_setup_edges.py` (the scan edges underneath them) both need a role with the shape
-every real setup role has: an untagged `tasks/main.yml` importing one task file per tag, a
-template each task renders, and a `defaults/` structure naming a template no `src:` mentions.
+`test_narrow_setup.py` (the rules `narrow_setup.role_tags` states in its own docstring),
+`test_narrow_setup_edges.py` (the scan edges underneath them) and
+`test_narrow_setup_vars_walk.py` (the `defaults/` and `vars/` walk) all need a role with
+the shape every real setup role has: an untagged `tasks/main.yml` importing one task file
+per tag, a template each task renders, and a `defaults/` structure naming a template no
+`src:` mentions.
 
 `Tree` itself comes from `_narrow_fixtures.py` beside this, which strips every inherited
 `GIT_*` variable — under a prek hook an unscrubbed fixture writes the REAL repository's

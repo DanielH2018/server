@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Render every configured container's docker-compose.yml.j2 and assert it parses as YAML.
 
-This guards against template edits — especially to the shared ``traefik.yml.j2``
-and ``autokuma.yml.j2`` label macros — that silently produce malformed YAML or
+This guards against template edits — especially to the shared ``autokuma.yml.j2``
+and ``networks.yml.j2`` macros — that silently produce malformed YAML or
 broken indentation. It renders structure, not values: secrets and other runtime
 variables are stubbed, so no access to the SOPS-encrypted ``secrets.yml`` is
 needed.

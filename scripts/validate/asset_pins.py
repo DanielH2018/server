@@ -25,8 +25,8 @@ example (#2224).
 returns an empty set the moment the keys are renamed, and a loop over nothing passes — the
 non-vacuity rule in CLAUDE.md's *Python & Tests*.
 
-This is NOT a pytest and not in `run_all.py`: the suite runs under `-p leakguard`, which fails
-any test that reaches the network, and `run_all` is what a broad change runs offline. The
+This is NOT a pytest and has no prek hook: the suite runs under `-p leakguard`, which fails
+any test that reaches the network, and prek is what a change runs offline. The
 census (`discover_pins`) is what the tests cover; the fetch is what you run by hand or from
 the skill.
 

@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-09-19 06:17 UTC
-generated_sha: f9b05e4ae
+generated_at: 2026-09-24 13:53 UTC
+generated_sha: 2460d0675
 ---
 
 !!! warning "Generated file — do not edit"
@@ -23,7 +23,6 @@ k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, 
 |---|---|
 | LAN address | `10.0.0.215` |
 | Ansible connection | `local` |
-| Service exposure | traefik (default) |
 | Services declared | 59 |
 | Runs the GitOps timer | yes |
 | Has Docker | no |
@@ -36,7 +35,6 @@ Raspberry Pi, and the only remaining Docker host. LAN-only utilities.
 |---|---|
 | LAN address | `10.0.0.139` |
 | Ansible connection | `ssh` |
-| Service exposure | lan |
 | Services declared | 4 |
 | Runs the GitOps timer | no |
 | Has Docker | yes (group default) |
@@ -49,7 +47,6 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 |---|---|
 | LAN address | `10.0.0.161` |
 | Ansible connection | `local` |
-| Service exposure | traefik (default) |
 | Services declared | 0 |
 | Runs the GitOps timer | no |
 | Has Docker | no |
@@ -62,7 +59,6 @@ unknown (no description recorded)
 |---|---|
 | LAN address | `{{ staging_vm_ip }}` |
 | Ansible connection | `ssh` |
-| Service exposure | traefik (default) |
 | Services declared | 6 |
 | Runs the GitOps timer | no |
 | Has Docker | no |

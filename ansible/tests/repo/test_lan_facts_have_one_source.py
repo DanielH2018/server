@@ -116,10 +116,6 @@ ALLOWLIST: list[tuple[str, str]] = [
         r"^ansible/roles/k8s/traefik/templates/service\.yaml\.j2$",
         "comment citing the broad 10.0.0.0/8 RFC1918 supernet, not the /24 lan_subnet",
     ),
-    (
-        r"^scripts/dev/measure_rollout_gap\.py$",
-        "CLI default for a manual diagnostic tool, overridable via --server; not a source",
-    ),
 ]
 _ALLOWLIST_RE = [(re.compile(pattern), reason) for pattern, reason in ALLOWLIST]
 

@@ -1,10 +1,43 @@
 ---
+# The three documents below are one unit, and the same unit is copied into the other two
+# namespaces with protected routes (roles/k8s/longhorn-ui/templates/middlewares.yaml.j2,
+# roles/k8s/claude-otel/templates/middlewares.yaml.j2). Keep the copies in lockstep;
+# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every one.
+#
+# Order matters for the apply: `kubectl apply` walks this file top to bottom, so both chain
+# members exist before the `authelia` chain at the bottom starts naming them.
+#
+# DECIDED: forwardAuth keeps `trustForwardHeader: true`, and the request-target headers are
+# cleared ahead of it instead. Traefik fills X-Forwarded-Host/-Uri/-Method on the auth request
+# only when the incoming request lacks them, and Authelia authorizes the object those three
+# headers name. An empty value in `customRequestHeaders` deletes the header (Traefik
+# pkg/middlewares/headers), so forwardAuth always rebuilds them from the request itself.
+# X-Forwarded-For and X-Forwarded-Proto are deliberately NOT cleared:
+#   - X-Forwarded-For carries the client address past Cloudflare, which Authelia's
+#     regulation and network rules key on. An empty value would also leave the key present
+#     and break forwardAuth's append to it.
+#   - X-Forwarded-Proto is set by `default-headers` on the https entrypoint before any router
+#     middleware runs; clearing it here would make Authelia see `http`.
+# Turning trustForwardHeader off instead would collapse every public client to its Cloudflare
+# edge address for Authelia. The backend also stops receiving X-Forwarded-Host; apps fall
+# back to the Host header, which carries the same value.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  # Referenced by name from every protected IngressRoute the ingressroute() macro emits, so
-  # this name is load-bearing across all ~33 services that follow in slice 2.
-  name: authelia
+  name: authelia-strip-forwarded-target
+  namespace: {{ k8s_namespace }}
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Host: ""
+      X-Forwarded-Uri: ""
+      X-Forwarded-Method: ""
+---
+# Never reference this directly from a route: only the `authelia` chain below may name it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia-forwardauth
   namespace: {{ k8s_namespace }}
 spec:
   forwardAuth:
@@ -16,3 +49,18 @@ spec:
       - Remote-Name
       - Remote-Email
     maxResponseBodySize: 1048576
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  # Referenced by name from every protected IngressRoute the ingressroute() macro emits, from
+  # the Traefik dashboard route, and as `{{ k8s_namespace }}-authelia@kubernetescrd` from the
+  # livesync file-provider routers, so this name is load-bearing across the fleet. Chain
+  # members resolve in this Middleware's own namespace.
+  name: authelia
+  namespace: {{ k8s_namespace }}
+spec:
+  chain:
+    middlewares:
+      - name: authelia-strip-forwarded-target
+      - name: authelia-forwardauth

@@ -56,6 +56,22 @@ Look" table's note that this role must render before anything referencing its CR
     `selfcheck=200`, and 302/200 on the LAN routes. Total edge outage 11:53Z–11:57Z.
   - Expected boot noise, not a defect: the selfcheck route has no `Host()`, so Traefik logs
     `No domain found in rule PathPrefix(...)` and falls back to the default TLSOption for it.
+- **The https entrypoint rewrites a Cloudflare request's X-Forwarded-For to
+  CF-Connecting-IP, first in its chain.** Cloudflare appends the client address to any XFF
+  the client sent, so without it the leftmost entry is client-chosen. Authelia logs that
+  entry as `remote_ip`, and the CrowdSec agent bans on it. The `cloudflare-realip`
+  Middleware is an in-repo Traefik **local** plugin (`files/cloudflare-realip/`), projected
+  from the `traefik-cloudflare-realip` ConfigMap to `/plugins-local/src/<module>/`. It is
+  deliberately not a downloaded plugin, so it adds no second startup download beside the
+  bouncer's. It is gated with the bouncer, so the startupProbe that catches a failed plugin
+  load covers it too. A name mismatch between `experimental.localPlugins`, the Middleware,
+  the ConfigMap items and the manifest's `import` disables every plugin at startup. `--dry-run`
+  cannot see that, so `ansible/tests/k8s/test_traefik_cloudflare_realip.py` pins the names.
+  To change the Go source, run it first under the release binary of `traefik_k8s_image`'s
+  version with a local `plugins-local/` tree: a Yaegi error appears only at Traefik startup,
+  as `Plugins are disabled because an error has occurred`.
+- **Only Cloudflare is a trusted forwarder** (`forwardedHeaders.trustedIPs`). `lan_subnet`
+  was dropped on 2026-09-24; the `DECIDED:` comment in `static-config.yaml.j2` has why.
 - **Every public `x.<domain>` router requires Cloudflare's origin-pull client certificate
   (#1990).** `ansible/templates/origin-pull.yml.j2` renders the `cloudflare-origin-pull`
   TLSOption (`modern` plus `clientAuth: RequireAndVerifyClientCert`) and the

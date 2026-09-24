@@ -171,7 +171,6 @@ pythonpath = [
   # alone, and leaving the directory listed would let a bare sibling import resolve here while
   # failing for the directly-invoked script that is how both actually run in production.
   "scripts",
-  "scripts/availability_bots",
   "scripts/backup",
   "scripts/deploy_tools",
   # its tests share _land_fakes.py the way ansible/tests share _helpers.py
@@ -312,7 +311,6 @@ extra-paths = [
   "ansible/roles/k8s/uptime-kuma/files",
   "ansible/roles/k8s/karakeep/files",
   "scripts",
-  "scripts/availability_bots",
   "scripts/backup",
   "scripts/deploy_tools",
   "scripts/dev",

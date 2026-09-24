@@ -1,6 +1,0 @@
----
-# Which resolver daniel-server's /etc/resolv.conf leads with (1.1.1.1 stays as fallback in
-# the template). Flipped to the in-cluster DNS VIP at the slice-6 B3 cutover (2026-08-09,
-# per D8) — previously this host's own Docker Pi-hole ({{ server_ip }}). The 1.1.1.1
-# fallback is what keeps this host resolving when the cluster is down (A1 cold-boot gate).
-pihole_host_dns_primary: "{{ dns_k8s_vip }}"

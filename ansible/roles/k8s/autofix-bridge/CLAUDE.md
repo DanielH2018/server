@@ -5,8 +5,8 @@
 > cron — retired with the daemon it pruned, and `files/autofix.py` (+ its tests) moved
 > into this role. Sections below describing Docker-era plumbing (networks, compose,
 > containers_list) are the loop's HISTORY; the behavior and contract they document are
-> unchanged in the pod. Doc-path pointers: the Docker role is archived at
-> `roles/containers/archive/autofix-bridge/`.
+> unchanged in the pod. Doc-path pointers: the Docker role was deleted in #2385 and is at
+> `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/autofix-bridge/`.
 
 The homelab's **auto-remediation home** — where a read-only monitor-bridge signal earns a
 sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop proliferating a
@@ -77,8 +77,8 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
    daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
    reads. Both run as `sys_user` ∈ docker group (no root).
    - **disk-autoprune — RETIRED 2026-08-14, no successor.** It pruned daniel-server's Docker
-     daemon, which was uninstalled that day; the template survives only under
-     `roles/containers/archive/`, `autofix_disk_threshold_pct`/`autofix_disk_dry_run` are set
+     daemon, which was uninstalled that day; the template survives only in git history,
+     `autofix_disk_threshold_pct`/`autofix_disk_dry_run` are set
      nowhere, and monitor-bridge dropped the matching `disk_prune` check with it
      (the gate loop in `ansible/roles/k8s/monitor-bridge/files/check.py`). **Nothing prunes
      disk on the cluster nodes now**

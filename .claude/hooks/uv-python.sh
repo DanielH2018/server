@@ -43,8 +43,9 @@ ANSIBLE_PROGS='ansible(-playbook|-vault|-galaxy|-console|-doc|-config|-inventory
 
 # The programs that must not run on the system interpreter. `*.py` covers a script
 # invoked by its shebang (`./scripts/diagnostics/probe.py`), which names no interpreter at all and so
-# would otherwise slip past every python-named pattern here.
-PROGS="(python3?|pytest|py\.test|$ANSIBLE_PROGS|[^[:space:]]*\.py)"
+# would otherwise slip past every python-named pattern here. The path excludes `=`: a word
+# like `P=x.py` is a shell assignment, and wrapping it made `uv run P=x.py` (#2388).
+PROGS="(python3?|pytest|py\.test|$ANSIBLE_PROGS|[^[:space:]=]*\.py)"
 
 # Every ansible CLI refuses to start on a non-blocking stdout or stderr:
 # `ansible/cli/__init__.py` calls check_blocking_io() at import time and exits with

@@ -106,7 +106,6 @@ def test_no_built_image_floats_on_an_unpinned_base(tracked: list[str]) -> None:
         for f in tracked
         if f.startswith("ansible/")
         and not f.endswith(".md")
-        and not f.startswith("ansible/roles/containers/archive/")
         and _FROM_RE.search((_REPO / f).read_text(errors="ignore"))
     ]
     assert build_files, (

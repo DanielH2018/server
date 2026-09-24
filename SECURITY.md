@@ -21,8 +21,8 @@ like any other change, gated on CI.
 ## Scope
 
 The interesting parts are the Ansible roles, the rendered Kubernetes manifests, and the Python
-under `scripts/`. Anything under `ansible/roles/containers/archive/` deploys nothing — it is kept
-for git history and is out of scope.
+under `scripts/`. Roles retired by the k3s migration were deleted from the tree and live only in
+git history, which is out of scope.
 
 The homelab itself is not a target. Nothing here authorizes probing, scanning, or reaching the
 live hosts or their public hostnames; findings must come from reading this repository.

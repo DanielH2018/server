@@ -9,12 +9,8 @@ on it.
 | --- | --- |
 | `cert_expiry.py` | TLS leaf-cert expiry on every publicly-routed hostname |
 
-This is a sibling of `scripts/availability_bots/`, not a replacement for it: the
-availability bots notify on *every* run that finds an open slot (an open slot found twice
-is still worth two alerts), where a watcher here notifies only when its state *changes* (a
-cert crossing the expiry threshold is one event, not one alert per day it stays crossed).
-`availability_bots/common.py` re-exports the low-level pieces (`send_discord_notification`,
-`ping_healthcheck`, ...) from `lib/watcher.py`, so both directories share one implementation.
+A watcher here notifies only when its state *changes*: a cert crossing the expiry threshold
+is one event, not one alert per day it stays crossed.
 
 ## Adding a watcher
 
