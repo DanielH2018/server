@@ -178,6 +178,18 @@ Each arm below is a rule and the function that holds it. The record page has the
     or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
     (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
+    - **A BUDGET deferral is also recorded in `k8s_deferred`** (#2449), one line per service
+      as `"<origin_sha> <service> <unix_ts>"`. The post names it once and the range is merged,
+      so no later tick's `local..origin` carries the bump — `Release Staleness Drift` reads
+      the unapplied pin, but that monitor is DOWN for any stale record in the fleet, so a new
+      deferral adds nothing to an already-red tile. `gitops_status` pages on the marker's own
+      age at the six hours `manual_plane` uses. It is scoped to the budget deferral and to
+      nothing else on the defer-and-alert channel: a hand-edited or denylisted k8s role is
+      merged by a person who is landing it, and forty of the fifty-four k8s roles are
+      denylisted, so recording those would hold Status red as normal operation. Any tick that
+      deploys the service clears the line (`deploy_defer.clear_applied_k8s_deferred`, called from both
+      k8s deploy paths and from the plane-covered set); an operator's own `deploy.sh` is
+      invisible to the deployer, so it clears with `gitops_state.py clear-k8s-deferred <svc>`.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
     the park's reason every tick (`deploy_remediation.broad_park_reason`). **A setup ROLE whose

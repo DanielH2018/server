@@ -28,6 +28,7 @@ from _broad_k8s_range import (
     SECRETS,
     marker,
     mixed,
+    plane_applies_radarr,
 )
 
 
@@ -169,12 +170,81 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     BECAUSE no plan applied it — so it can never be plane-covered. Losing it from the post
     would leave the bump merged, unapplied and named nowhere.
     """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert any("sonarr" in post for post in tick.posts)
+
+
+# ── the k8s_deferred marker: the durable half of a budget deferral (#2449) ────────────────
+
+
+def _out_of_budget(settings, tick):
+    """A mixed range whose deploy plane leaves too little budget for the sonarr bump.
+
+    The plane is narrowed to a service the range does not carry, so it applies and covers
+    nothing — the bump is left to `apply_broad_k8s`, which finds the broad deadline already
+    inside `k8s_deploy_timeout_s` and defers.
+    """
     config = dataclasses.replace(
         mixed(settings, tick, DEPLOY_PLANE),
         broad_deploy_timeout_s=60,
         k8s_deploy_timeout_s=900,
     )
     tick.narrow = (0, "jellyfin")
+    return config
+
+
+def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The post fires once and the range is merged, so the marker is the durable half.
+
+    `Release Staleness Drift` reads the unapplied pin too, but that monitor goes DOWN for any
+    stale record in the fleet — a new deferral adds nothing an operator can see on a tile that
+    is already red. The marker pages GitOps Deploy — Status on its own age instead.
+    """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    origin, service, stamp = marker(state_dir, "k8s_deferred").split()
+    assert (origin, service) == (ORIGIN, "sonarr")
+    assert float(stamp) > 0, "the first-seen stamp is what monitor-bridge pages on"
+
+
+def test_a_bump_the_tick_deployed_is_not_recorded(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The rejecting half: recording every promoted bump would page on the happy path."""
+    config = mixed(settings, tick, DEPLOY_PLANE)
+    tick.narrow = (0, "jellyfin")
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
-    assert any("sonarr" in post for post in tick.posts)
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "the bump was deployed, not deferred"
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The way out the deployer owns. Without it the page never stops (#2449).
+
+    An operator's own `./scripts/deploy.sh` is invisible here, which is what
+    `gitops_state.py clear-k8s-deferred` exists for; a deploy the TICK runs is not.
+    """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert marker(state_dir, "k8s_deferred") is not None
+    tick.head = LOCAL
+    assert gitops_deploy.main(tick.tools, mixed(settings, tick)) == 0
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "the retry deployed the bump"
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The second way out: a later broad range's plane applies the service on its own.
+
+    The pending set is asked rather than the range, because the tick that deferred the bump
+    merged it — no later `local..origin` carries that commit.
+    """
+    (state_dir / "k8s_deferred").write_text(f"{'9' * 40} radarr 1000.0\n")
+    assert gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick)) == 0
+    assert tick.playbooks[0] == [*DEPLOY_SONARR[:-1], "radarr"], "the plane ran"
+    assert marker(state_dir, "k8s_deferred") is None

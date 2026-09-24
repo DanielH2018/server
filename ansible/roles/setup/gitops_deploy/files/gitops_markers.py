@@ -63,6 +63,16 @@ MARKERS: dict[str, str] = {
     # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
     # consecutive ticks defer on one busy service lock. See `parse_contention`.
     "contention": "contention_since",
+    # One line per promoted k8s image bump a BROAD tick fast-forwarded and then deferred for
+    # lack of budget, `"<origin_sha> <service> <unix_ts>"`. See `parse_k8s_deferred`.
+    #
+    # Scoped to that one deferral (#2449). The tick has already merged the bump, so no later
+    # tick's range carries it again, and the defer-and-alert post names it exactly once. Every
+    # other k8s defer-and-alert change — a hand-edited role, a denylisted one — is merged by a
+    # person who is landing it and can deploy it, and forty of the fifty-four k8s roles are
+    # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
+    # A budget deferral has no such person: nothing chose it, and nothing reports it again.
+    "k8s_deferred": "k8s_deferred",
     # The unix time the last tick completed; monitor-bridge's GitOps Alive reads its age.
     "last_run": "last_run",
     # Origin SHA recorded while local and origin have DIVERGED (`deploy_logic.is_diverged`):
@@ -171,6 +181,24 @@ MANUAL_PLANE_CLEAR_CMD = (
 CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
+K8S_DEFERRED_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-k8s-deferred <service>"
+)
+
+
+def k8s_deferred_clear_cmd(service: str = "<service>") -> str:
+    """The clear command to print beside a deferred bump's own deploy command."""
+    return K8S_DEFERRED_CLEAR_CMD.replace("<service>", service)
+
+
+def k8s_deferred_deploy_cmd(services) -> str:
+    """The deploy an operator runs to apply the deferred bumps in `services`.
+
+    `./scripts/deploy.sh` rather than a bare `ansible-playbook`: the wrapper takes the service
+    lock the tick takes, and a budget deferral means the tick ran out of wall clock, not that
+    the pin is bad.
+    """
+    return './scripts/deploy.sh --tags "%s"' % ",".join(sorted(services))
 
 
 def manual_plane_clear_cmd(role: str = "<role>", tags=()) -> str:
@@ -269,6 +297,22 @@ class ManualPlaneEntry(NamedTuple):
     at: float
 
 
+class K8sDeferredEntry(NamedTuple):
+    """One pending line of the `k8s_deferred` marker.
+
+    Attributes:
+        origin: the origin SHA whose range carried the bump. The tick merged it, so this is
+            the commit an operator's deploy applies.
+        service: the k8s service, under the `--tags` value that selects it.
+        at: when the deployer first deferred it, in `time.time()` terms. Never refreshed for
+            a service already listed, for the reason `ManualPlaneEntry.at` gives.
+    """
+
+    origin: str
+    service: str
+    at: float
+
+
 class ContentionEntry(NamedTuple):
     """The `contention_since` marker: consecutive ticks deferred on a busy service lock.
 
@@ -362,6 +406,26 @@ def format_manual_plane_tags(tags: dict[str, frozenset[str]]) -> str | None:
         f"{role} {','.join(sorted(tags[role])) or NARROWED_TO_ROLE}"
         for role in sorted(tags)
     )
+
+
+def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
+    """Every pending bump in the `k8s_deferred` marker, in the order the lines stand.
+
+    A line this cannot parse is SKIPPED, never guessed at, for the reason
+    `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot
+    be cleared.
+    """
+    entries = []
+    for line in (marker or "").splitlines():
+        parts = line.split()
+        if len(parts) != 3:
+            continue
+        try:
+            at = float(parts[2])
+        except ValueError:
+            continue
+        entries.append(K8sDeferredEntry(parts[0], parts[1], at))
+    return entries
 
 
 def parse_contention(marker: str | None) -> ContentionEntry | None:

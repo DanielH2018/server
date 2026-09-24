@@ -599,9 +599,20 @@ stay).
       budget a k8s-only tick grants the same bump. With less left, the run would die at the
       timeout (a hold and a page, often for a healthy service) or its lock wait would raise
       `ServiceLockBusy` and reset the tree under planes that applied. So it defers instead,
-      with no hold and no reset: the bump joins `ChangeSet.k8s`, the defer-and-alert post
-      names it, and `Release Staleness Drift` reads the unapplied pin from the release
-      records until something deploys it.
+      with no hold and no reset: the bump joins `ChangeSet.k8s` and the defer-and-alert post
+      names it. That post fires **once**, and the tick has already merged the bump, so no
+      later tick's range carries it. `Release Staleness Drift` reads the unapplied pin from
+      the release records, and it is not a dependable backstop on its own: the monitor is DOWN
+      for any stale record anywhere in the fleet, so a new deferral adds nothing an operator
+      can see on a tile that is already red (the state PR #2381's second review found it in).
+      So the deferral is also written to **`k8s_deferred`**, one line per service, and
+      `gitops_status` pages on the oldest line's age at the six hours `manual_plane` uses
+      (#2449). Scoped to the BUDGET deferral: a hand-edited or denylisted k8s role on the same
+      channel is merged by a person who is landing it, and forty of the fifty-four k8s roles
+      are denylisted, so recording those would hold GitOps Deploy — Status red as normal
+      operation. Any tick that deploys the service clears the line; an operator's own
+      `./scripts/deploy.sh` is invisible to the deployer, so it clears with
+      `gitops_state.py clear-k8s-deferred <svc>`, the same shape `clear-manual-plane` has.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,
       the run that failed, beside any plane already held. With no plane recorded, the next unrelated service deploy cleared the hold
       through `clear_service_hold`, and GitOps Deploy — Status went green over the failed pin.

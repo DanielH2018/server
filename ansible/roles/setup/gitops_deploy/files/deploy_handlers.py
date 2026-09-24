@@ -324,6 +324,9 @@ def handle_k8s(
     # without this the first rollback would leave GitOps Deploy — Status red forever and
     # need a manual rm (the trap this role's CLAUDE.md documents).
     state.clear_service_hold(cs.k8s_deploy)
+    # A bump an earlier broad tick deferred for budget is applied by its own later deploy,
+    # which is the ordinary way out of the marker (#2449).
+    deploy_defer.clear_applied_k8s_deferred(state, cs.k8s_deploy)
     # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
     # from inside the try would mark a deploy that the rollout gate went on to reject.
     tools.emit_deploy_annotation(cs.k8s_deploy, origin)

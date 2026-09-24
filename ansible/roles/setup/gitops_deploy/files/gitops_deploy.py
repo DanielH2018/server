@@ -312,6 +312,9 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # the broad arm never again. Without a line here the journal would say nothing at all
     # about a role nobody has applied yet.
     deploy_defer.log_pending(STATE)
+    # Same shape, one plane over: a promoted image bump a broad tick deferred for lack of
+    # budget is merged, so no later tick's range carries it either (#2449).
+    deploy_defer.log_k8s_deferred(STATE)
 
     target = deploy_phases.assess(tools, STATE, config)
     if target.action == "dirty":

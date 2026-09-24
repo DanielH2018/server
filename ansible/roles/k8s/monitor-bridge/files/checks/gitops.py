@@ -22,10 +22,13 @@ from gitops_markers import (
     MARKERS,
     STATE_DIR,
     NO_PLAYBOOK,
+    k8s_deferred_clear_cmd,
+    k8s_deferred_deploy_cmd,
     manual_plane_clear_cmd,
     maximal_apply_warning,
     parse_behind,
     parse_contention,
+    parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
@@ -80,14 +83,16 @@ def gitops_status(
     contention_since: str | None = None,
     max_contention_s: float | None = None,
     manual_plane_tags: str | None = None,
+    k8s_deferred: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
-    Five down states share this monitor: a rolled-back commit HELD pending a revert, a
+    Six down states share this monitor: a rolled-back commit HELD pending a revert, a
     local↔origin DIVERGENCE where the deployer can't fast-forward and silently noops forever
     while origin's new commits never deploy (2026-07-15 review L3), the host simply sitting
-    BEHIND origin for too long, consecutive ticks deferred on one busy service LOCK, and a
-    setup role the deployer fast-forwarded past and cannot apply itself.
+    BEHIND origin for too long, consecutive ticks deferred on one busy service LOCK, a
+    setup role the deployer fast-forwarded past and cannot apply itself, and a promoted image
+    BUMP a broad tick fast-forwarded and then deferred for lack of budget.
 
     The lock arm is a specific instance of behind, reported ahead of it because it names the
     cause and the fix (issue #1847): a contention defer resets the tree, so the host is
@@ -131,6 +136,12 @@ def gitops_status(
       contention_since: the deployer's `contention_since` marker, or None.
       max_contention_s: how long a contention streak may run before this pages. None reads
         cfg.GITOPS_CONTENTION_MAX_S, for the reason `max_behind_s` does.
+      k8s_deferred: the deployer's `k8s_deferred` marker, or None. Reported LAST and age-gated
+        on `max_behind_s`, for the reasons the `manual_plane` arm above it is: a bump deferred
+        ten minutes ago is a tick that ran out of wall clock rather than a fault, and a bump
+        nobody has deployed blocks no other session's landing. It is here at all because the
+        deferring tick MERGED the bump, so `behind_since` is empty and no later tick's range
+        carries it — the failure mode `manual_plane` closed one plane over (#2449).
     """
     max_behind_s = cfg.GITOPS_BEHIND_MAX_S if max_behind_s is None else max_behind_s
     max_contention_s = (
@@ -210,6 +221,24 @@ def gitops_status(
                     _apply_and_clear(pending, narrow),
                 )
             )
+    deferred = parse_k8s_deferred(k8s_deferred)
+    if deferred:
+        oldest = min(e.at for e in deferred)
+        age_s = (time.time() if now is None else now) - oldest
+        if age_s > max_behind_s:
+            services = sorted({e.service for e in deferred})
+            return False, (
+                "%s merged but not deployed for %.0fh (> %.0fh) — a broad tick ran out of "
+                "budget for the image bump and fast-forwarded past it, so no later range "
+                "carries it; deploy `%s`, then `%s`"
+                % (
+                    ", ".join(services),
+                    age_s / 3600,
+                    max_behind_s / 3600,
+                    k8s_deferred_deploy_cmd(services),
+                    k8s_deferred_clear_cmd(services[0]),
+                )
+            )
     return True, "no held deploy"
 
 
@@ -277,4 +306,5 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
         manual_plane_tags=_read_manual_plane_tags(cfg),
+        k8s_deferred=_read_gitops_marker(cfg, MARKERS["k8s_deferred"]),
     )
