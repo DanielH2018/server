@@ -70,6 +70,22 @@ Look" table's note that this role must render before anything referencing its CR
   To change the Go source, run it first under the release binary of `traefik_k8s_image`'s
   version with a local `plugins-local/` tree: a Yaegi error appears only at Traefik startup,
   as `Plugins are disabled because an error has occurred`.
+- **The access log's `ClientHost` is the whole X-Forwarded-For chain, and every reader takes
+  its rightmost entry (#2446).** The access-log handler wraps outside the entrypoint
+  middlewares, so it records `ClientHost` before `cloudflare-realip` runs. From a Cloudflare
+  source the field reads `<client-sent>, <client>`. Cloudflare merges any client-sent header
+  lines and appends the address it saw, so only the rightmost entry is not client-chosen. From
+  any other source forwardedHeaders has already dropped the header, which leaves the
+  connection address. The CrowdSec agent sidecar's `crowdsecurity/traefik-logs` parser takes
+  the rightmost entry from hub version 1.5 (hub PR #1665). The sidecar's `hub upgrade` floats
+  that version at every start rather than pinning it.
+  `ansible/roles/k8s/crowdsec/files/remote_allowlist.py:authenticated_clients` takes the same
+  entry, so the allowlist holds the address CrowdSec bans. On 2026-09-22 a scanner sent
+  `X-Forwarded-For: 127.0.0.1` through Cloudflare, and Traefik logged
+  `127.0.0.1,195.178.110.72`. The agent's single-event alert on that line named
+  195.178.110.72. A harness that sends X-Forwarded-For straight from a trusted source skips
+  Cloudflare's append, so its leftmost entry is also its rightmost and proves nothing about
+  either reader.
 - **Only Cloudflare is a trusted forwarder** (`forwardedHeaders.trustedIPs`). `lan_subnet`
   was dropped on 2026-09-24; the `DECIDED:` comment in `static-config.yaml.j2` has why.
 - **Every public `x.<domain>` router requires Cloudflare's origin-pull client certificate

@@ -72,6 +72,13 @@ def test_a_2xx_on_an_authelia_router_from_a_public_address_is_clean():
     assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"173.249.254.219"}
 
 
+def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent_one():
+    # The shape measured on 2026-09-24: the client sent XFF, Cloudflare appended the address
+    # it saw, and Traefik logged the whole header (#2446).
+    lines = [_line(AUTH_ROUTER, 200, "8.8.8.8, 9.9.9.9,173.249.254.219")]
+    assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"173.249.254.219"}
+
+
 @pytest.mark.parametrize(
     "line",
     [
@@ -86,6 +93,7 @@ def test_a_2xx_on_an_authelia_router_from_a_public_address_is_clean():
             AUTH_ROUTER, 200, "10.0.0.50"
         ),  # LAN — an Authelia bypass rule could pass this
         _line(AUTH_ROUTER, 200, "100.64.3.9"),  # CGNAT
+        _line(AUTH_ROUTER, 200, "173.249.254.219,10.0.0.50"),  # chain ending in the LAN
         _line(AUTH_ROUTER, 200, "not-an-ip"),
         "not json at all",
     ],
