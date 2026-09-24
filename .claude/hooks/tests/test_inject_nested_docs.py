@@ -301,9 +301,10 @@ def test_the_shim_injects_on_the_real_hook_path():
     `readlink -f "$0"` keeps it on this checkout's `.py`, so the row it appends lands in
     this checkout's gitignored `.claude/logs/instructions.log`.
 
-    The shim is the dispatcher's since #2394, so the object also carries whatever the four
-    decision arms said about the same command — here an `allow`, because `sed -n` on a file
-    is read-only. That the two keys ride together is the merge this hook now depends on.
+    The shim is the dispatcher's since #2394, so the object also carries whatever the
+    decision arms said about the same command. `sed -n` on a file is a read, which none of
+    them decides since the read-only arm moved to the dotfiles hook (dotfiles #628), so the
+    object carries the context alone.
     """
     session = f"e2e-{uuid.uuid4().hex}"
     payload = {
@@ -323,7 +324,7 @@ def test_the_shim_injects_on_the_real_hook_path():
     assert run.returncode == 0, run.stderr
     out = json.loads(run.stdout)["hookSpecificOutput"]
     assert out["hookEventName"] == "PreToolUse"
-    assert out["permissionDecision"] == "allow"
+    assert "permissionDecision" not in out
     assert f"{KNOWN_ROLE}/CLAUDE.md" in out["additionalContext"]
     log = os.path.join(_HERE, "..", "logs", "instructions.log")
     with open(log, encoding="utf-8") as fh:

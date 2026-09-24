@@ -53,11 +53,12 @@ DENY_GUARD_SHIMS = frozenset(
     }
 )
 
-# The five pre-#2394 shims, kept as `# gen-hooks: library` files so a session started before
-# the dispatcher does not find its deny guards missing. Delete them, and this set, together.
+# The pre-#2394 shims, kept as `# gen-hooks: library` files so a session started before the
+# dispatcher does not find its deny guards missing. Delete them, and this set, together.
+# `auto-approve-readonly.sh` went first, with its classifier (dotfiles #628): it is an allow
+# hook, so a stale session that still names it loses approvals, never a deny.
 TRANSITION_SHIMS = frozenset(
     {
-        "auto-approve-readonly.sh",
         "block-footguns.sh",
         "block-protected-bash.sh",
         "inject-nested-docs.sh",

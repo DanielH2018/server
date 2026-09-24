@@ -463,19 +463,15 @@ unresolved-import = "ignore"
 # at runtime; `test_claude_guard_import.py::test_deployed_import_reaches_both_trusted_hosts` is
 # what actually proves the import resolves, on a host where the package is deployed.
 #
-# Same collateral as above: `_readonly_tables.py` and `test_claude_guard_import.py` also lose
+# Same collateral as above: `test_claude_guard_import.py` also loses
 # the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
 # `_hook_common.py` (#2053, moved there from `block-protected-bash.py` by #2134) imports only
 # `_claude_guard` first-party, and every hook test module imports it, so a typo there fails
 # those suites at collection instead.
-# `tests/conftest.py` (#2078) probes `claude_guard.tables` for a name the hooks read before it
-# decides between the real package and its stand-in; it imports nothing else first-party.
 include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_hook_common.py",
-  ".claude/hooks/_readonly_tables.py",
-  ".claude/hooks/tests/conftest.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
 ]
 [tool.ty.overrides.rules]

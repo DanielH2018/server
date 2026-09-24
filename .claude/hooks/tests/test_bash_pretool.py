@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Tests for the one-process PreToolUse:Bash dispatcher (issue #2394).
 
-Five hooks became five arms of one process, so the question these answer is whether each arm
+Separate hooks became arms of one process, so the question these answer is whether each arm
 still reaches its verdict THROUGH the dispatcher. Every arm therefore carries an accept/reject
 pair driven through `main()` — the entry point the shim execs — and not through the arm's own
 `decision()`, which the per-arm suites already cover. A dispatcher that returned every arm's
@@ -9,7 +9,7 @@ verdict and one that returned none look identical from the accepting side alone.
 
 Two failures are specific to the merge and have their own tests: a command two arms both flag
 must surface the higher decision with the earlier arm's reason, and an arm that raises must
-lose its own verdict without taking the other four down with it.
+lose its own verdict without taking the others down with it.
 
 Run: uv run pytest .claude/hooks/tests/test_bash_pretool.py
 """
@@ -47,7 +47,6 @@ pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
 # is a tuple of filenames, and a renamed arm would otherwise leave every test below passing
 # against four arms while the fifth judged nothing (`.claude/rules/python-layout.md`).
 EXPECTED_ARMS = (
-    "auto-approve-readonly",
     "block-protected-bash",
     "nudge-land-sh",
     "block-footguns",
@@ -94,25 +93,11 @@ def dispatch(command, load, monkeypatch, capsys, cwd=_REPO):
     return json.loads(out)["hookSpecificOutput"] if out.strip() else None
 
 
-def test_the_arm_census_is_the_five_hooks_that_were_merged():
+def test_the_arm_census_is_the_hooks_that_were_merged():
     names = tuple(name for name, _ in _mod._DECISION_ARMS) + (_mod._CONTEXT_ARM[0],)
     assert names == EXPECTED_ARMS
     for name in names:
         assert os.path.exists(os.path.join(_HOOKS, f"{name}.py")), name
-
-
-# ── arm 1: auto-approve-readonly ─────────────────────────────────────────────────────
-
-
-def test_accept_a_read_only_command_is_allowed(sandbox, monkeypatch, capsys):
-    out = dispatch("ls -la", sandbox, monkeypatch, capsys)
-    assert out["permissionDecision"] == "allow"
-    assert "read-only" in out["permissionDecisionReason"]
-
-
-def test_reject_a_writing_command_gets_no_allow(sandbox, monkeypatch, capsys):
-    out = dispatch("rm -rf /tmp/nothing-here", sandbox, monkeypatch, capsys)
-    assert out is None
 
 
 # ── arm 2: block-protected-bash ──────────────────────────────────────────────────────
@@ -182,16 +167,6 @@ def test_reject_a_command_naming_no_path_injects_nothing(sandbox, monkeypatch, c
 # ── the merge ────────────────────────────────────────────────────────────────────────
 
 
-def test_a_deny_outranks_an_allow_on_the_same_command(sandbox, monkeypatch, capsys):
-    """A remote `git log` with no `cd` is read-only to arm 1 and a footgun to arm 4. Five
-    separate hooks let the harness rank them; one process has to do it here, and ranking it the other way would
-    auto-approve the exact command the footgun guard exists to stop."""
-    out = dispatch(
-        "ssh daniel-server 'git log --oneline -1'", sandbox, monkeypatch, capsys
-    )
-    assert out["permissionDecision"] == "deny"
-
-
 def test_the_earliest_arm_at_the_winning_level_keeps_the_reason():
     """What the harness does across hooks: the first deny wins the surfaced reason."""
     verdicts = [("allow", "first"), ("deny", "from arm 2"), ("deny", "from arm 4")]
@@ -224,10 +199,10 @@ def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, 
 
 
 def test_an_arm_that_raises_loses_only_its_own_verdict(sandbox, monkeypatch, capsys):
-    """The failure this file is most able to hide: four clean verdicts and one dead arm."""
+    """The failure this file is most able to hide: clean verdicts and one dead arm."""
 
     def load(filename, module_name):
-        if filename == "block-footguns":
+        if filename == "block-protected-bash":
             raise RuntimeError("arm is broken")
         return sandbox(filename, module_name)
 
@@ -235,15 +210,15 @@ def test_an_arm_that_raises_loses_only_its_own_verdict(sandbox, monkeypatch, cap
         "tool_name": "Bash",
         "cwd": _REPO,
         "session_id": f"test-{uuid.uuid4()}",
-        "tool_input": {"command": "ssh daniel-server 'git log --oneline -1'"},
+        "tool_input": {"command": "kubectl rollout restart deploy/x"},
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main(load=load) == 0
     captured = capsys.readouterr()
-    # Arm 4's deny is gone, but arm 1 still judged the same command.
+    # Arm 2 is gone, but arm 4 still judged the same command.
     assert (
-        json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "allow"
+        json.loads(captured.out)["hookSpecificOutput"]["permissionDecision"] == "deny"
     )
-    # And it said so, naming the arm: a dead arm behind four clean verdicts must not be silent.
-    assert "block-footguns" in captured.err
+    # And it said so, naming the arm: a dead arm behind clean verdicts must not be silent.
+    assert "block-protected-bash" in captured.err
     assert "arm is broken" in captured.err

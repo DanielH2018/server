@@ -210,10 +210,11 @@ denies prints its own reason.
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
   service's UI — the half `probe.py health` structurally cannot cover.
-- **bash-pretool** — the one process that runs the five Bash arms below
-  (`auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`, `block-footguns`,
-  `inject-nested-docs`). It merges their verdicts `deny > ask > allow` and decides nothing
-  itself. Edit the arm, not the dispatcher.
+- **bash-pretool** — the one process that runs the four Bash arms below
+  (`block-protected-bash`, `nudge-land-sh`, `block-footguns`, `inject-nested-docs`). It
+  merges their verdicts `deny > ask` and decides nothing itself. Edit the arm, not the
+  dispatcher. The read-only auto-approve is the dotfiles `claude_guard` hook's
+  `readonly.py`, which allows in this repo, the dotfiles checkout and `$HOME` only.
 - **block-protected-edits** and **block-protected-bash** — guard anything under `containers/`,
   SOPS-encrypted files and generated pages. Edit the `ansible/roles/containers/<svc>/templates/`
   source, use `sops` / the `/add-secret` skill, or change the generator. The Bash guard also

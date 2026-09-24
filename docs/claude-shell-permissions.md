@@ -5,8 +5,12 @@ denied. The repo-root `CLAUDE.md` carries the short always-on summary; this file
 behind it — the tables, the measured dates, and the caveats.
 
 ## Shell Commands — Shape Them to Auto-Approve
-A PreToolUse hook (`.claude/hooks/auto-approve-readonly.py`) auto-approves Bash it can
-**prove is read-only**, so those run without a permission prompt. Write exploratory/
+The user-level PreToolUse hook (`guard-pre-tool-use.sh`, the dotfiles `claude_guard`
+package's `readonly.py`) auto-approves Bash it can **prove is read-only**, so those run
+without a permission prompt. It applies only when the session's cwd is `$HOME` itself or
+inside this repo or the dotfiles checkout, because `git` runs a repo's own `core.fsmonitor`
+and pager config; the same rule refuses `git -C`, `--git-dir` or a `cd` that points git
+anywhere else. Write exploratory/
 read-only commands to fit it. Anything that writes or executes still prompts — that's intended.
 
 **Auto-approves (no prompt):**
@@ -17,7 +21,9 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   for permissions; pick on merit, not on fear of a prompt.
 - Read-only stages sequenced with `;`, `&&`, `||`, or newlines: `cd dir && grep … *.j2`
 - Write-free redirects: `… 2>/dev/null`, `>/dev/null 2>&1`
-- Read-only `git`/`docker`/`find` (no `-exec`/`-delete`) and read-only `awk`/`sed`
+- Read-only `git`/`docker`/`find` (no `-exec`/`-delete`) and read-only `awk`/`sed`.
+  `printenv`, `docker inspect` and `systemctl show`/`cat` prompt: each prints environment
+  values (dotfiles #628).
 - Read-only host/package queries: `apt list`/`apt show`/`apt policy`, `apt-cache …`,
   `dpkg -l`/`-L`/`-s`/`-S`, `dpkg-query …`, `apt-mark showmanual`, `pipx list`,
   `lsb_release`, `sensors`, `mailq`, `crontab -l` (the write forms — `dpkg -i`,
@@ -40,27 +46,25 @@ read-only commands to fit it. Anything that writes or executes still prompts —
   subshells `(…)`, backgrounding `&`. (Note: `awk` programs containing `>` — even as a
   numeric comparison — are conservatively rejected; use a different test or accept the prompt.)
 
-Source of truth: `.claude/hooks/auto-approve-readonly.py` holds the per-command guards and the
-PreToolUse entry point. `.claude/hooks/_readonly_tables.py` holds the allow-list and the ssh gate, except
-the trusted-host set and the secret-path pattern — those are `claude_guard.tables`'s
-`TRUSTED_SSH_HOSTS` and `SECRET_PATH_RE`, defined once in the dotfiles `claude_guard` package
-(deployed to `~/.local/share/claude-guard`) and imported through `.claude/hooks/_claude_guard.py`.
-`.claude/hooks/_readonly_shell.py` holds the operator tokens and the redirect rules, `.claude/hooks/_readonly_sed.py` the `sed` guard; the command is cut into stages by the same `claude_guard.segment` the deny guards read, through `_hook_common.segments` (#2198), so a host without the package gets no auto-approve at all. Tests:
-`.claude/hooks/tests/test_auto_approve_readonly.py`, `.claude/hooks/tests/test_claude_guard_import.py`.
+Source of truth: the dotfiles `claude_guard` package, deployed to
+`~/.local/share/claude-guard`. `claude_guard/readonly.py` holds the stage walk, the redirect
+rules and the `ssh`, `docker`, `systemctl` and `ip` handlers; `checks/remote_guards.py` holds the
+per-verb guards and `tables.py` the verb table, the trusted hosts and the secret-path
+pattern. Its tests are `tests/test_readonly.py` in that package, which carries this repo's
+old approve/reject tables whole. Until 2026-09-24 this repo ran its own copy as
+`.claude/hooks/auto-approve-readonly.py`; slice 3 of dotfiles #628 deleted it after a replay
+of 211 commands through both copies on both nodes differed only on `git -C /srv log`.
 The ssh case on **PermissionRequest** is the user-level `guard-permission-request.sh` (the dotfiles
 `claude_guard` judge), and only that, since 2026-09-18 — the paragraph below has the history. Claude
 Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone never
 reaches an ask-listed command; this repo registers no PermissionRequest hook of its own.
 
-**A machine without the dotfiles deploy gets no auto-approve on the remote-ssh path, rather than a
-stale local copy.** The hook prints one `classifier did not run` line to stderr and exits 0 with no
-stdout, and the prompt stands. The two PreToolUse shims take the other posture on a failed cd —
+**A machine without the dotfiles deploy gets no auto-approve at all, rather than a stale local
+copy:** the classifier is part of the deployed hook. This repo's two PreToolUse shims take the
+other posture on a failed cd —
 `bash-pretool.sh`, which carries the three Bash deny guards since #2394, and
 `block-protected-edits.sh`: an **ask** naming the guards that did not run, because a bare exit 0
 from a deny guard is an allow (#2171).
-`.claude/hooks/tests/test_claude_guard_import.py` measures the allow side end to end, and diffs the
-CI stand-in in `tests/conftest.py` against the deployed tables — a diff CI itself cannot run, since
-CI has no dotfiles deploy; it goes red under `prek run` on a deployed host.
 
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts
@@ -103,10 +107,10 @@ script `1` — so `readonly_remote_safe` now splits words the way ssh and the re
 `_ssh` handler and the guards stay in `auto-approve-readonly.py` for the PreToolUse path
 (local commands, and ssh under Manual mode's PreToolUse allow); the package holds the copy
 that judges a PermissionRequest.
-`.claude/hooks/tests/test_claude_guard_import.py::test_every_guard_carried_on_both_sides_reaches_the_same_verdict`
-replays this suite's local vectors through both copies, so they cannot drift apart unnoticed;
-`test_no_verb_is_guarded_on_one_side_of_the_boundary_and_bare_on_the_other` reads the package's
-`REMOTE_GUARDED_VERBS` for the placement half. The verb tables converged on every guard-free
+A shared-verdict test in `.claude/hooks/tests/test_claude_guard_import.py` replayed this
+suite's local vectors through both copies, so they could not drift apart unnoticed, and a
+boundary test read the package's `REMOTE_GUARDED_VERBS` for the placement half; both went
+with the server copy (below). The verb tables converged on every guard-free
 name that morning — 29 `TIER1` readers into `REMOTE_READONLY_VERBS` (dotfiles PR #520) and
 `ping`, `ping6`, `tracepath`, `traceroute`, `uptimed` into `TIER1` — and a guarded verb moves
 only with its guard, because the replay corpus cannot see a remote fail-open (4 of 1058
@@ -129,6 +133,13 @@ stand-in in `tests/conftest.py` carries a copy of `READONLY_BASE` for the runner
 no dotfiles deploy; `test_the_ci_stand_in_matches_the_deployed_tables` diffs it on every
 deployed-host commit. Measured demand is low either way: 800 of the 1064 ssh-led Bash
 decisions in the 28 days to 2026-09-18 were settled by a settings rule with no hook involved.
+
+**Retired 2026-09-24 (dotfiles #628).** The PreToolUse copy moved into the package too, as
+`claude_guard/readonly.py`, so one classifier serves every trusted checkout. The server
+copy, its three helper modules, the CI stand-in in `tests/conftest.py` and the replay and
+boundary tests between the two copies were deleted with it. The paragraphs above are the
+record of how the two copies converged; the package's module docstring lists the four
+deliberate differences the port made.
 
 ### `kubectl` — what actually decides
 **Read this before trusting the per-verb allow-list below: in a normal session that list decides

@@ -91,9 +91,10 @@ git rev-parse --abbrev-ref HEAD
 ```
 
 **`rev-parse` is the form that auto-approves; `git branch --show-current` is not.**
-`.claude/hooks/auto-approve-readonly.py` allows `rev-parse` (`read-only: git rev-parse`) and
-deliberately omits `git branch`, because the bare form lists while `git branch <name>` and
-`-D` mutate. Measured 2026-09-06 by feeding each command to that hook on stdin.
+The dotfiles `claude_guard` hook's read-only classifier (`claude_guard/readonly.py`) allows
+`git rev-parse` and deliberately omits `git branch`, because the bare form lists while
+`git branch <name>` and `-D` mutate. Measured 2026-09-06 against the server copy it was
+ported from (dotfiles #628), and re-checked 2026-09-24 through `guard-pre-tool-use.sh`.
 
 Keep the name on its own line rather than substituting it into the `claim` call. Two separate
 mechanisms punish substitution, and neither is the read-only hook: the auto-mode classifier

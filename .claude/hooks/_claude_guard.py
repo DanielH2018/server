@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: imported by block-protected-bash.py and _readonly_tables.py to bootstrap the claude_guard package
+#   reason: imported by _hook_common.py to bootstrap the claude_guard package
 """Bootstrap that puts the deployed `claude_guard` package on `sys.path` and imports it.
 
 The seed of the future `homelab_guard/__init__.py` — the dotfiles repo's design spec
 (`docs/specs/2026-09-06-claude-guard-design.md`, slice 5) plans a package by that name
 consolidating this repo's Bash hooks around `claude_guard.segment` and `claude_guard.tables`.
-This module carries the import path only. `_readonly_tables.py` reads `claude_guard.tables`
-(the ssh tables, and since #2052 the verb table `TIER1` is derived from), and
-`block-protected-bash.py` reads `claude_guard.segment` (#2053). The rest of the consolidation
-is a later slice.
+This module carries the import path only. `_hook_common.py` reads `claude_guard.segment`
+(#2053, #2134), which every Bash guard here cuts its stages with. The read-only classifier
+that also read `claude_guard.tables` moved into the package itself (dotfiles #628).
 
 `claude_guard` is not on the repo's `uv` environment — it lives outside this repo, deployed by
 chezmoi to `~/.local/share/claude-guard`. Import this module before anything from
@@ -22,12 +21,9 @@ package is not already importable, then imports `claude_guard` itself so a calle
 # progress.md) is why: a machine mid-deploy can have the new hook code without yet having the
 # dotfiles package behind it, and a private fallback copy would keep serving a permission
 # decision that looks current but was pinned at whatever the fallback last held — nobody sees
-# that it fell behind. Crashing here is what the allow-side hook's contract requires:
-# `SSH_HOSTS`/`_SSH_SECRET` gate an auto-approve, and a hook that cannot import its own tables
-# must not approve anything at all. This module raises; `_readonly_tables.py`, the module
-# every allow-side entry point imports, turns that into the shims' own fail-open shape (one
-# stderr line, exit 0, no stdout). `test_the_hook_fails_open_when_the_deploy_is_missing`
-# measures that end to end.
+# that it fell behind. This module raises; `_hook_common.py` catches it and reports the
+# segmenter as missing, and each guard turns that into its own posture on an unreadable
+# command.
 """
 
 import sys

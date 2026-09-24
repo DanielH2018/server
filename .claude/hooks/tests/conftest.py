@@ -1,4 +1,4 @@
-"""Shared fixtures for the SessionStart hook tests, plus a `claude_guard` stand-in for CI.
+"""Shared fixtures for the SessionStart hook tests and the Bash guards' segmenter gate.
 
 `test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess` runs session-health.py
 as a real subprocess (deliberately -- see that test's own docstring), which means `main()`
@@ -15,46 +15,10 @@ Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path` and
 `_helpers.py` is importable from this directory only through `pyproject.toml`'s global
 `pythonpath` setting, and generalizing it into a shared multi-binary stub is a separate
 change from fencing this suite's leak.
-
-The module-level block below is unrelated to the fixtures above: it is an in-process
-stand-in for `claude_guard` when the real package is not deployed. Every CI runner hits
-this -- `_readonly_tables.py` now imports `claude_guard.tables` through `_claude_guard.py`,
-which raises `ImportError` when `~/.local/share/claude-guard` is absent (see
-`_claude_guard.py`'s own docstring for why that is the correct behaviour for the deployed
-hook). CI never runs chezmoi, so without this stand-in every test that merely imports
-`_readonly_tables.py` or `auto-approve-readonly.py` -- not just the ssh-specific ones --
-would fail at collection, including the 155-vector table this suite calls a security
-boundary.
-
-This is NOT the fallback `_claude_guard.py` refuses to add. It never touches
-site-packages, it is built fresh in THIS pytest process and never written to disk, and it
-never reaches the hook's own runtime: `auto-approve-readonly.sh` execs a fresh
-`uv run --no-sync python <script>.py` subprocess per command, which starts with its own
-`sys.modules` and never sees anything
-this conftest did. A host missing the real deploy still gets `_claude_guard.py`'s hard
-`ImportError` the moment Claude Code actually runs the hook; only this test session is
-padded, and only when the real package is unreachable from it.
-
-`test_claude_guard_import.py::test_deployed_import_reaches_both_trusted_hosts` is the one
-test this stand-in cannot help -- it runs the real subprocess invocation, so it skips
-(rather than passing on faked data) wherever the real package is absent.
-
-DECIDED: the `STAND_IN_*` values below are a second copy, by construction -- this
-stand-in exists only because CI cannot reach the real one. The verb table is the large one:
-`_readonly_tables.py` derives `TIER1` from the package's `READONLY_BASE` (#2052, #2078), so
-the 89 names the hook no longer carries sit here instead, where the diff test reads them and
-the hook's runtime never does; the two remote-only names sit beside them so the diff test
-also sees the package's `REMOTE_READONLY_VERBS` move. They are module constants rather
-than literals inside the `except` so that a machine WITH the real package can diff them:
-`test_claude_guard_import.py::test_the_ci_stand_in_matches_the_deployed_tables` does, and
-`prek run` executes that test on every commit from a deployed host. CI itself cannot see the
-drift; the deployed hosts' own runs are where it goes red.
 """
 
 import os
-import re
 import sys
-import types
 from pathlib import Path
 
 import pytest
@@ -99,9 +63,8 @@ def fenced_calls(_fence_external_binaries):
 def segmenter_or_skip(request):
     """Skip unless the deployed `claude_guard.segment` is importable, or the test opts out.
 
-    `_hook_common.split_stages` is the package's segmenter (#2134), and the stand-in below
-    fakes the package's TABLES, not its parser -- a stand-in splitter would be the second
-    copy the whole change removes. So a module whose rules run through `split_stages` puts
+    `_hook_common.split_stages` is the package's segmenter (#2134), and a stand-in splitter
+    would be the second copy the whole change removed. So a module whose rules run through `split_stages` puts
     itself under this fixture (`pytestmark = pytest.mark.usefixtures(...)`) and skips in CI,
     the trade `test_block_protected_bash.py`'s `isolation` fixture already made for arm 3;
     its tests of what the hook does WITHOUT the segmenter carry `@pytest.mark.without_segmenter`
@@ -120,71 +83,3 @@ def segmenter_or_skip(request):
 HOOKS = Path(__file__).resolve().parent.parent
 if str(HOOKS) not in sys.path:
     sys.path.insert(0, str(HOOKS))
-
-STAND_IN_TRUSTED_SSH_HOSTS = frozenset({"daniel-server", "daniel-pi"})
-# Byte-for-byte the deployed pattern: the diff test compares `.pattern`, not behaviour.
-STAND_IN_SECRET_PATH_RE = re.compile(
-    r"(\.env|\.ssh(/|\s|$)|id_rsa|id_ed25519|id_ecdsa|\.aws/credentials|\.aws/config|"
-    r"\.gnupg(/|\s|$)|\.netrc|\.pypirc|\.npmrc|/secrets(/|\s|$)|\.git-credentials|"
-    r"\.kube/config|\.docker/config\.json|\.config/gh/hosts\.yml|\.config/gcloud/|"
-    r"\.config/rclone/rclone\.conf|terraform\.tfstate|\.bash_history|\.claude\.json|"
-    r"/etc/shadow|/etc/gshadow|/proc/\S*environ|\.pem($|[^a-z])|\.key($|[^a-z])|"
-    r"\.p12($|[^a-z])|\.pfx($|[^a-z]))",
-    re.IGNORECASE,
-)
-# The deployed `READONLY_BASE`, name for name; the diff test compares the sets. These are the
-# names read-only under any argument on BOTH sides of the ssh boundary (#2078). The package's
-# `REMOTE_READONLY_VERBS` adds `htop`; `TIER1` adds `cd`, `false` and `printenv`; the
-# flag-guarded verbs (`journalctl`, `dmesg`, `ss`, `rg`, `sensors`, and `nvidia-smi` since
-# dotfiles #559) are in neither, each side reaching them through its own guard.
-STAND_IN_READONLY_BASE = frozenset(
-    """
-    true uptime uptimed whoami hostname id date uname arch pwd which type df free du ps top
-    vmstat iostat w who last lscpu lsblk lsof lsmod getent ls
-    cat head tail wc stat file tree readlink realpath basename dirname grep egrep fgrep
-    echo printf cut tr jq od md5sum sha1sum sha256sum cksum netstat ping ping6 dig host
-    nslookup traceroute tracepath apt-cache b2sum blkid column comm dpkg-query
-    findmnt fold getconf groups hexdump lastlog locale lsattr lsb_release lspci lsusb mailq
-    mpstat nl nproc rev sar seq sha512sum strings tac zcat zgrep
-    """.split()
-)
-# The remote-only name, so the stand-in composes `REMOTE_READONLY_VERBS` the way the
-# package does rather than carrying a second literal of the union.
-STAND_IN_REMOTE_ONLY = frozenset({"htop"})
-STAND_IN_REMOTE_READONLY_VERBS = STAND_IN_READONLY_BASE | STAND_IN_REMOTE_ONLY
-
-
-@pytest.fixture
-def claude_guard_stand_in():
-    """The stand-in's four values, for the test that diffs them against the deployed tables."""
-    return (
-        STAND_IN_TRUSTED_SSH_HOSTS,
-        STAND_IN_SECRET_PATH_RE,
-        STAND_IN_READONLY_BASE,
-        STAND_IN_REMOTE_READONLY_VERBS,
-    )
-
-
-try:
-    import _claude_guard  # noqa: F401  (real bootstrap; populates sys.modules on success)
-
-    # A deployed package that predates a name the hooks read -- the dotfiles change landed
-    # but `chezmoi apply` has not run on this host -- is unreachable for this session the
-    # same way a missing one is: the hook itself fails open against it (#2078), and without
-    # this the suite dies at collection with an xdist INTERNALERROR that names no test. The
-    # stand-in feeds the tables instead, and the deployed-only tests skip on its marker.
-    from claude_guard.tables import READONLY_BASE  # noqa: F401
-except ImportError:
-    _fake_pkg = types.ModuleType("claude_guard")
-    _fake_pkg.__path__ = []  # marks it as a package so `claude_guard.tables` resolves
-    # The signal the ssh-dependent tests skip on. The real package never carries this
-    # attribute, and a directory check would not say what actually fed the tables.
-    _fake_pkg.__claude_guard_stand_in__ = True
-    _fake_tables = types.ModuleType("claude_guard.tables")
-    _fake_tables.TRUSTED_SSH_HOSTS = STAND_IN_TRUSTED_SSH_HOSTS
-    _fake_tables.SECRET_PATH_RE = STAND_IN_SECRET_PATH_RE
-    _fake_tables.READONLY_BASE = STAND_IN_READONLY_BASE
-    _fake_tables.REMOTE_READONLY_VERBS = STAND_IN_REMOTE_READONLY_VERBS
-    _fake_pkg.tables = _fake_tables
-    sys.modules["claude_guard"] = _fake_pkg
-    sys.modules["claude_guard.tables"] = _fake_tables
