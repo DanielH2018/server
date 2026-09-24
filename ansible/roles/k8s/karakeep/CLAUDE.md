@@ -55,7 +55,7 @@ loop to auto-tag bookmarks.
   itself gets the new one.
 - `files/karakeep-time-tagger.py` is vendored (not fetched at render time) because CI renders
   every template on a machine that has never deployed; `test_karakeep_time_tagger_script.py`
-  pins it to the Docker role's checksum.
+  pins it to the commit URL and sha256 the retired Docker role verified.
 - The snapshot/revert pair (`k8s/volume-snapshot`/`k8s/volume-revert`) covers `karakeep-data`
   only — reverting it alone desyncs the search index until a manual reindex.
 - `karakeep-chrome` runs on a read-only root, so every path headless chromium writes needs its

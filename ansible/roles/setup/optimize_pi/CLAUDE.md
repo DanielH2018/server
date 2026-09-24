@@ -109,7 +109,7 @@ See repo-root `CLAUDE.md` for conventions.
     which restarts `node_exporter.service`), running as the `node_exporter` system user on
     the LAN IP's port 9100 with the collector flags the container ran, plus a UFW allow
     from `lan_subnet`. It replaced the `node-exporter` container on 2026-09-18 (#2005;
-    the role is in `roles/containers/archive/`): one containerd shim (~5 MB) fewer on a
+    the role is at `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/node-exporter/`): one containerd shim (~5 MB) fewer on a
     host that keeps 10-25 MB free, and the one container whose host form changes no
     decision. `ansible/tests/setup/test_pi_node_exporter_host_unit.py` holds the unit to
     the archived compose's collector set and the version to the cluster DaemonSet's.

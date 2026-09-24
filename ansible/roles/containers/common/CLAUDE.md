@@ -12,14 +12,6 @@ Utility role (not a container). Every container role calls into it via
   then runs `community.docker.docker_compose_v2` with `build: always`,
   `recreate: "{{ 'always' if common_config_changed | default(false) else 'auto' }}"`,
   `remove_orphans: true`. **This is why `containers/` is generated/read-only.**
-- **`redeploy_cron.yml`** — weekly Sunday-06:00 redeploy cron for roles with locally-built
-  images (code-server :00, n8n :05, peanut :15, ical-proxy :20 — the :10 slot was crowdsec's
-  Metabase build, archived at slice-6 B2 when the dashboard moved to the cluster); Watchtower
-  can't update those, and the GitOps deployer only redeploys *changed* roles. Callers pass
-  `common_redeploy_cron_minute` to stagger the jobs. The job runs through
-  `~/.local/bin/uv run` (absolute path — cron's PATH has no ansible-playbook, and the bare
-  uv-tool shim lacks the `community.docker` deps) and logs failures via
-  `logger -t redeploy-cron`.
 
 > **Why `recreate` is conditional (not hardcoded `always`).** Deploys are idempotent: a
 > no-op `deploy.yml` recreates nothing; editing one config recreates only that service.
@@ -29,14 +21,9 @@ Utility role (not a container). Every container role calls into it via
 > config changed → `recreate: always` picks it up; otherwise `recreate: auto`. `auto` alone
 > would silently *not* apply a config-file-only edit (the compose config-hash is unchanged),
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
-> and `docker-compose.yml` edits. Wired roles (current set:
-> `grep -rl common_config_changed roles/containers/*/tasks/`): authelia, traefik, homepage,
-> grafana, prometheus, janitorr, livesync, peanut, pihole (kopia's entrypoint.sh was a consumer until the role retired 2026-08-13)
-> (resolver configs; its former `absent`→`present` exemption was removed 2026-06-09),
-> freshrss (nginx feed-cache conf), home-assistant, monitor-bridge, mosquitto, terraria,
-> terraria-stats, zigbee2mqtt, autofix-bridge (files/autofix.py bind-mount), and
-> cloudflare-ddns, qbittorrent, scrutiny, uptime-kuma (their 2026-07-15 file-mounted secret
-> tasks). This list drifts — trust the grep above over the enumeration. Design:
+> and `docker-compose.yml` edits. Wired roles: `grep -rl common_config_changed
+> roles/containers/*/tasks/` lists them. When #2385 deleted the retired Compose roles, alloy
+> (its bind-mounted `config.alloy`) was the only one left. Design:
 > `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a

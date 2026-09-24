@@ -97,7 +97,10 @@ Then create the following files:
 - Use Jinja2 variables for all configurable values
 - **Use the shared macros** (in `ansible/templates/`) — don't hand-roll the boilerplate
   they cover:
-  - `traefik.yml.j2` → `labels(...)` — reverse-proxy routing labels
+  - `expose.yml.j2` → `web_ui_ports_block(internal_port)` — publishes the UI port bound to
+    the Pi's LAN IP. The Pi has no Traefik in front of it, so a Docker service gets no routing
+    labels. Call it at column 0. A service that also publishes a non-UI port writes a
+    `server_ip`-bound UI line into its own `ports:` list instead, as wg-easy does.
   - `autokuma.yml.j2` → `labels as kuma` — Uptime Kuma monitor labels
   - `networks.yml.j2` → `service_networks()` / `external_networks()` — the per-service
     `networks:` list and the top-level external declaration. **Always use these instead
@@ -110,7 +113,7 @@ Then create the following files:
 - Set `restart: unless-stopped`, PUID/PGID, TZ, and a `deploy.resources.limits` cap
 - Canonical skeleton:
   ```jinja
-  {% raw %}{% from 'traefik.yml.j2' import labels with context %}
+  {% raw %}{% from 'expose.yml.j2' import web_ui_ports_block with context %}
   {% from 'autokuma.yml.j2' import labels as kuma with context %}
   {% from 'networks.yml.j2' import service_networks, external_networks with context %}
   {% from 'resources.yml.j2' import resources %}
@@ -127,6 +130,7 @@ Then create the following files:
         - TZ={{ tz }}
       volumes:
         - ./config:/config
+  {{ web_ui_ports_block('<port>') }}
       security_opt:
         - no-new-privileges:true
       cap_drop:
@@ -139,13 +143,6 @@ Then create the following files:
         retries: 3
         start_period: 30s
       labels:
-        {{ labels(
-            container_item.hostname | default(container_item.name),
-            container_item.port | string,
-            (container_item.networks | default([docker_network]))[0],
-            container_item.use_authelia
-          )
-        }}
         {{ kuma(container_item.name) }}
       {{ resources('1.0', '512M', '0.10', '64M') }}
 

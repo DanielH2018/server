@@ -17,7 +17,6 @@ Docker + k3s homelab managed with Ansible. ~50 containerized services deployed a
 ansible/          # Ansible playbooks, roles, inventory, templates  ← EDIT HERE
   roles/k8s/        # One role per k3s workload (rendered manifests) — where most services live
   roles/containers/ # One role per Docker service (the Pi's) + the shared `common` role
-    archive/        # Roles retired by the k3s migration, kept for reference
 scripts/          # Helper scripts, grouped by what they act on
   lib/              # The helpers everything else imports: repo_paths, render_guard, docs_provenance
   availability_bots/ backup/ deploy_tools/ diagnostics/ docs/ grafana/
@@ -26,7 +25,7 @@ docs/             # Runbooks, design specs, security notes
   archive/          # Superseded planning docs, incl. the completed Docker → k3s migration
 ```
 
-> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 some roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
+> **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 some roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 
 ## Where to Look (task → start here)
 Route to the source of truth by what you're doing, before reading linearly. A task a skill

@@ -1,8 +1,8 @@
 # terraria (k8s) — Vanilla Terraria server
 
 Moved from Docker 2026-08-10 (backup consolidation BL1 — its worlds were the only
-irreplaceable data kopia still uniquely protected; the Docker role is in
-`roles/containers/archive/terraria`). See repo-root `CLAUDE.md`.
+irreplaceable data kopia still uniquely protected; the Docker role is in git history at
+`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/terraria/`). See repo-root `CLAUDE.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->

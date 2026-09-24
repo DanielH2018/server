@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-21 18:17 UTC
-generated_sha: 80b72a462
+generated_at: 2026-09-24 13:53 UTC
+generated_sha: 2460d0675
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 80b72a462
 
 # Scheduled jobs
 
-40 cron entrie(s) installed across the roles.
+39 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -35,7 +35,6 @@ generated_sha: 80b72a462
 | Off-box etcd snapshot | `{{ k3s_etcd_s3_cron_minute }} {{ k3s_etcd_s3_cron_hour }} * * *` | every host in the play | `root` | yes (snapshot) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Pi SD-card health heartbeat | `*/5 * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
 | Pi container-recovery heartbeat | `*/5 * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/optimize_pi/tasks/main.yml` |
-| Redeploy {{ container_item.name }} | `{{ common_redeploy_cron_minute }} 6 * * 0` | every host in the play | `{{ sys_user }}` | yes (deploy) | `ansible/roles/containers/common/tasks/redeploy_cron.yml` |
 | Refresh generated docs | `17 6,18 * * *` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Release staleness drift check | `{{ k3s_release_staleness_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |

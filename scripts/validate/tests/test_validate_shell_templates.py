@@ -154,7 +154,6 @@ def test_discover_templates_finds_the_known_set():
     # caught, not just "fewer templates checked" sliding by unnoticed.
     names = {p.name for p in v.discover_templates()}
     assert names == {
-        "entrypoint.sh.j2",
         "prefs-check.sh.j2",
         "crowdsec-update-home-allowlist.sh.j2",
         "crowdsec-update-remote-allowlist.sh.j2",
@@ -171,10 +170,6 @@ def test_discover_templates_finds_the_known_set():
         "staging-gate-dispatch.sh.j2",
         "etcd-restore-drill-vm.sh.j2",
         "sync-artifacts.sh.j2",
-        "portainer-agent-firewall.sh.j2",
-        "nut-lan-firewall.sh.j2",
-        "prometheus-exporters-lan-firewall.sh.j2",
-        "autofix-disk-prune.sh.j2",
         "longhorn-backup-health.sh.j2",
         "longhorn-reap-orphan-backups.sh.j2",
         "longhorn-restore-drill.sh.j2",
@@ -192,7 +187,6 @@ def test_discover_templates_finds_the_known_set():
         "configarr-health.sh.j2",
         "janitorr-health.sh.j2",
         "fake-remux-health.sh.j2",
-        "docker-fleet-health.sh.j2",
         "registry-gc.sh.j2",
     }
 

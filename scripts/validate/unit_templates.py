@@ -106,13 +106,8 @@ _FAIL_MESSAGE = re.compile(r"Unknown key|Failed to parse|Assignment outside of s
 
 
 def discover_templates() -> list[Path]:
-    """Return every live *.service.j2 / *.timer.j2 under ansible/roles/.
-
-    Excludes ansible/roles/containers/archive/ — nothing there is installed by any play, the
-    same exclusion `lib.cron_targets.cron_job_scripts` applies to archived cron targets.
-    """
-    templates = [*ROLES.rglob("*.service.j2"), *ROLES.rglob("*.timer.j2")]
-    return sorted(p for p in templates if "archive" not in p.relative_to(ROLES).parts)
+    """Return every *.service.j2 / *.timer.j2 under ansible/roles/."""
+    return sorted([*ROLES.rglob("*.service.j2"), *ROLES.rglob("*.timer.j2")])
 
 
 def owning_role_defaults(template: Path) -> Path:

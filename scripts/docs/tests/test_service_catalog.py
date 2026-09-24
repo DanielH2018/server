@@ -28,7 +28,6 @@ def test_auth_tier_true_false_and_missing(tmp_path):
     write(
         paths["host_vars"] / "box.yml",
         """\
-        expose_mode: traefik
         containers_list:
           - name: jellyfin
             platform: k8s
@@ -60,7 +59,7 @@ def test_k8s_route_uses_hostname_default_name_when_ingressroute_exists(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "jellyfin")
     assert row.route.startswith("jellyfin.local.<domain>")
     entry = {"name": "jellyfin", "hostname": "jellyfin"}
-    direct = route_for(entry, "k8s", {}, paths["k8s_roles"], paths["all_vars"])
+    direct = route_for(entry, "k8s", paths["k8s_roles"], paths["all_vars"])
     assert direct == row.route
 
 
@@ -109,27 +108,10 @@ def test_k8s_route_is_no_route_when_role_has_no_ingressroute_template(tmp_path):
     assert row.route == "no route (infra role)"
 
 
-def test_docker_route_is_lan_direct_when_expose_mode_lan(tmp_path):
+def test_docker_route_is_lan_direct(tmp_path):
     paths = make_repo(tmp_path)
     row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
     assert row.route == "LAN-direct (no Traefik route)"
-
-
-def test_docker_route_is_unknown_when_expose_mode_not_lan(tmp_path):
-    paths = make_repo(tmp_path)
-    write(
-        paths["host_vars"] / "pi.yml",
-        """\
-        expose_mode: traefik
-        has_gitops: false
-        containers_list:
-          - name: dozzle
-            port: 8080
-            use_authelia: false
-        """,
-    )
-    row = next(r for r in service_catalog.build_rows(**paths) if r.name == "dozzle")
-    assert row.route.startswith("unknown")
 
 
 def test_autodeploy_eligible_true(tmp_path):

@@ -187,7 +187,7 @@ def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
 
 
 def test_a_deploy_plane_change_is_the_ticks_to_apply():
-    files = ["ansible/templates/traefik.yml.j2"]
+    files = ["ansible/templates/resources.yml.j2"]
     assert land_tags.plane_note(files) == ""
     assert land_tags.self_applied(files) is True
 

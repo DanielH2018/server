@@ -25,7 +25,7 @@ registry, the registry is right.
 > without its gate, and `test_checks_and_env_secret_push_tokens_agree` asserts the
 > env-secret carries exactly the token set the code reads. Much of the per-check
 > documentation below predates the moves — Docker-era plumbing details (compose, bind
-> mounts, networks) are history (`roles/containers/archive/monitor-bridge/`).
+> mounts, networks) are history: `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/monitor-bridge/`.
 >
 > **`files/registry.py`'s `build_checks()` is the authority on which checks exist.** This file
 > is prose and nothing tests it: until 2026-08-16 the three retired above were still written up

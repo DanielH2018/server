@@ -112,8 +112,7 @@ must include:
 - the **repo conventions** — nearly every service is a k3s workload, so cite the
   `ansible/roles/k8s/<svc>/templates/` source; for the Pi's Docker services cite
   `ansible/roles/containers/<svc>/templates/`, never the generated `containers/` tree
-  (which is untracked and exists only on the Pi). `roles/containers/archive/` is retired
-  code — out of scope;
+  (which is untracked and exists only on the Pi);
 - its **domain don't-re-flag list** (from step 2) + the verify-first discipline;
 - the **falsify-before-flag rule**: cite the specific `file:line` that makes a finding true, and cite
   the `file:line` of the defense when clearing one — a comment, a reassuring name (`*_valid`,
