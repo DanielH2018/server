@@ -14,7 +14,87 @@ interpreter inside its own digest-pinned image, which has nothing to do with the
 """
 
 import re
-from _helpers import REPO as _REPO
+from _helpers import REPO as _REPO, load_tasks, walk_tasks
+
+
+# The same export the root crons' templates carry (cron_checks.py enforces it there). A task
+# with `become: true` runs with HOME=/root, and uv finds no managed Python under /root: the pin
+# is installed `become: false` under the connecting user. #2490: the release prune found 3.14.6
+# only through a `.venv` above the cwd, and lost it when a patch install moved that venv's link.
+_ROOT_UV_ENV = "UV_PYTHON_INSTALL_DIR"
+_COMMAND_MODULES = ("ansible.builtin.command", "ansible.builtin.shell")
+
+
+def _command_text(task: dict) -> str:
+    """The command a task runs, for the string, `cmd:` and `argv:` shapes alike."""
+    for key in _COMMAND_MODULES:
+        module = task.get(key)
+        if isinstance(module, str):
+            return module
+        if isinstance(module, dict):
+            return str(
+                module.get("cmd") or " ".join(map(str, module.get("argv") or []))
+            )
+    return ""
+
+
+def _root_uv_task_missing_install_dir(task: dict) -> bool:
+    """A `become: true` task that runs a pinned `uv run` without pointing uv at the user's
+    interpreters. Only the task's own `become:` is read; no task file here sets it on a block
+    that wraps a uv command."""
+    command = _command_text(task)
+    if (
+        task.get("become") is not True
+        or "uv" not in command
+        or "--python" not in command
+    ):
+        return False
+    return _ROOT_UV_ENV not in (task.get("environment") or {})
+
+
+def _root_uv_tasks():
+    for path in sorted((_REPO / "ansible/roles").glob("*/*/tasks/*.yml")):
+        for task in walk_tasks(load_tasks(path)):
+            command = _command_text(task)
+            if task.get("become") is True and "uv" in command and "--python" in command:
+                yield path.relative_to(_REPO), task
+
+
+def test_root_uv_tasks_point_uv_at_the_user_interpreters():
+    found = list(_root_uv_tasks())
+    names = {task.get("name", "") for _, task in found}
+    # Non-vacuous: the task #2490 was about must be in the census.
+    assert "Prune superseded releases for {{ release_bin_group }}" in names
+    offenders = [
+        f"{path}: {task.get('name')}"
+        for path, task in found
+        if _root_uv_task_missing_install_dir(task)
+    ]
+    assert not offenders, (
+        f"these run a pinned `uv run` as root without `environment: {_ROOT_UV_ENV}`, so uv "
+        "searches /root and finds no interpreter:\n  " + "\n  ".join(offenders)
+    )
+
+
+def test_root_uv_task_with_the_install_dir_is_clean():
+    task = {
+        "ansible.builtin.command": {
+            "argv": ["/usr/local/bin/uv", "run", "--python", "3.14.6"]
+        },
+        "become": True,
+        "environment": {_ROOT_UV_ENV: "/home/ubuntu/.local/share/uv/python"},
+    }
+    assert not _root_uv_task_missing_install_dir(task)
+
+
+def test_root_uv_task_without_the_install_dir_is_flagged():
+    task = {
+        "ansible.builtin.command": {
+            "argv": ["/usr/local/bin/uv", "run", "--python", "3.14.6"]
+        },
+        "become": True,
+    }
+    assert _root_uv_task_missing_install_dir(task)
 
 
 _SEARCH_ROOTS = [_REPO / "ansible/roles", _REPO / ".claude/hooks"]

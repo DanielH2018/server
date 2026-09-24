@@ -240,4 +240,11 @@
       - --apply
   register: common_release_prune
   changed_when: "'removing ' in common_release_prune.stdout"
+  # become resets HOME to /root, where uv keeps no managed Pythons: the pin is installed
+  # `become: false` under the connecting user (initial_setup/tasks/host-basics.yml). Without
+  # this, root found 3.14.6 only through a `.venv` above the cwd, and lost it the day a patch
+  # install moved that venv's minor-version link (#2490). Same export as the root crons'
+  # templates, which cron_checks.py enforces.
+  environment:
+    UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
   become: true
