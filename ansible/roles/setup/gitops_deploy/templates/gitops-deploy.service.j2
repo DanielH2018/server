@@ -100,7 +100,7 @@ SyslogLevel=notice
 # exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
 # before the deployer started. Raising -w cannot fix it — this unit's own worst case is
 # STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S + K8S_DEPLOY_TIMEOUT_S +
-# K8S_ROLLBACK_TIMEOUT_S = 2940s against TimeoutStartSec 3600s, so the largest legal -w is 660s,
+# K8S_ROLLBACK_TIMEOUT_S = 3240s against TimeoutStartSec 3600s, so the largest legal -w is 360s,
 # still short of a routine 20-minute deploy; test_gitops_discord_contract.py::test_k8s_deploy_
 # timeout_budget_survives_max_flock_contention asserts that bound and goes red if you try. So
 # -E 75 + SuccessExitStatus=75

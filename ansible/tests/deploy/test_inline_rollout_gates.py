@@ -63,7 +63,7 @@ WHAT IT DOES NOT COVER, deliberately:
   * `when:` conditions. A gate that is skipped at runtime still counts as a gate here. pihole's
     is conditional on the manifests having changed, which is also the only run that rolls it.
 
-WHERE THE MACHINERY LIVES. `_inline_rollout_tasks.py` expands a role's tasks — includes
+WHERE THE MACHINERY LIVES. `_role_tasks.py` expands a role's tasks — includes
 followed, blocks flattened, literal loops unrolled. `_inline_rollout_targets.py` resolves a
 task's target and a gate's target to workload names off the rendered manifests. This file is
 the contract above, the hand-written `_MUST_GATE`, the excused `_UNRESOLVED_TARGETS`, and the
@@ -73,7 +73,7 @@ assertions.
 import re
 
 from _helpers import rollout_seconds
-from _inline_rollout_tasks import _K8S_ROLES, _Task, _tasks
+from _role_tasks import _K8S_ROLES, _Task, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,
     _exec_target,

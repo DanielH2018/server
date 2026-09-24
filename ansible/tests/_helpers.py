@@ -86,16 +86,42 @@ def load_defaults(role: Path) -> dict:
 
 # --- the k8s rollout budget, wherever a role spells it ---------------------------------------
 
-# `k8s/manifests` waits `manifests_rollout_timeout | default('300s')`, and three guards size
-# themselves against it: the two rollback-budget tests, which read a role's call site, and the
-# inline-gate budget census, which reads a `rollout status --timeout=`. All three read the
-# literal text, so a role that moved its number into a variable — sonarr, which needs the SAME
-# budget at its manifests call site and in its verify.yml gate — silently read as the 300s
-# default. Resolving the reference here, once, is what keeps that from being a green no-op.
-MANIFESTS_ROLLOUT_DEFAULT_S = 300
 
+# `k8s/manifests` waits `manifests_rollout_timeout | default(manifests_rollout_timeout_default)`,
+# and three guards size themselves against it: the two rollback-budget tests, which read a role's
+# call site, and the inline-gate budget census, which reads a `rollout status --timeout=`. All
+# three read the literal text, so a role that moved its number into a variable — sonarr, which
+# needs the SAME budget at its manifests call site and in its verify.yml gate — silently read as
+# the shared default. Resolving the reference here, once, is what keeps that from being a green
+# no-op.
 _SECONDS = re.compile(r"^(\d+)s$")
 _ROLE_VAR = re.compile(r"^\{\{\s*(\w+)\s*\}\}$")
+
+
+# The shared default is READ from `k8s/manifests`'s own defaults rather than pinned here. It was
+# pinned at 300 while that role said 300, so the two agreed by coincidence; #2377 moved the shared
+# default to 600, and a pinned copy would have sized every unoverridden role at half its real
+# budget with every guard green.
+def _manifests_rollout_default_s() -> int:
+    """`manifests_rollout_timeout_default` from `roles/k8s/manifests/defaults/main.yml`.
+
+    RAISES when that default is gone or is not spelled `<n>s`: a reader that fell back to a
+    literal of its own would re-create the drift this function exists to remove.
+    """
+    declared = load_defaults(K8S_ROLES / "manifests").get(
+        "manifests_rollout_timeout_default"
+    )
+    seconds = _SECONDS.match(str(declared).strip())
+    if not seconds:
+        raise AssertionError(
+            "roles/k8s/manifests/defaults/main.yml must declare "
+            f"manifests_rollout_timeout_default as `<n>s`; read {declared!r}. Every guard that "
+            "sizes a role's rollout budget reads it from there."
+        )
+    return int(seconds.group(1))
+
+
+MANIFESTS_ROLLOUT_DEFAULT_S = _manifests_rollout_default_s()
 
 
 def rollout_seconds(value, role: Path) -> int | None:

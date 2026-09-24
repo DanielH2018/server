@@ -5,7 +5,12 @@ expanded task list rather than the file: an `include_tasks` is followed into its
 blocks are flattened, a `loop:` whose values can be read statically is unrolled, and the loop
 variable in each unrolled command is substituted with its value so a target can be resolved.
 The result is memoised per role. Split from `test_inline_rollout_gates.py` on 2026-09-02; that
-module's docstring is the contract.
+module's docstring is the contract for the inline-gate half.
+
+It sits at the `ansible/tests/` root rather than under `deploy/` because a second suite reads
+it: `in_role_wait_s` below feeds gitops_deploy's rollback budget, whose tests live in the
+role (#2399). Both callers need the same expansion — prowlarr's isolation probe and sonarr's
+gate are each several include levels down from `main.yml`.
 """
 
 import re
@@ -13,7 +18,7 @@ from dataclasses import dataclass
 from pathlib import Path
 
 from lib import yaml_fast
-from _helpers import REPO
+from _helpers import REPO, rollout_seconds
 
 
 _REPO = REPO
@@ -56,6 +61,12 @@ def _cmd(task: dict) -> str:
     ):
         module = task.get(key)
         if isinstance(module, dict):
+            # `argv:` is joined rather than skipped. A task spelling its command as a list is
+            # the same command; jellyfin's PVC wait carries its `--timeout=` only there, so a
+            # cmd-only reader scored that role's in-role wait 30s short.
+            argv = module.get("argv")
+            if isinstance(argv, list):
+                return " ".join(str(word) for word in argv)
             return str(module.get("cmd", ""))
         if isinstance(module, str):
             return module
@@ -190,3 +201,49 @@ def _tasks(role: str) -> list[_Task]:
         tasks_dir = _K8S_ROLES / role / "tasks"
         _TASKS_CACHE[role] = _expand(role, _load(tasks_dir / "main.yml"), tasks_dir, {})
     return _TASKS_CACHE[role]
+
+
+_WAIT_TIMEOUT = re.compile(r"--timeout=(\S+)")
+
+
+def in_role_wait_s(role: str) -> int:
+    """Seconds this role waits in its OWN tasks, ON TOP OF the batch drain's rollout wait.
+
+    `k8s/rollout-drain` runs once at the end of a batch, so everything a role waits for in its
+    own `tasks/` is spent before the drain starts and adds to it. Two budget derivations size
+    themselves against a role's cost and both used to count the drain alone, which scored
+    prowlarr 300s short: its flaresolverr isolation probe waits `--timeout=300s` for a Job that
+    has nothing to do with any rollout (#2399).
+
+    An inline `rollout status` gate is EXCLUDED, and that is the only exclusion. Such a gate
+    waits for a rollout the drain also waits for, so the two are alternatives on one timeline —
+    once the gate returns, the drain's `rollout status` on the same workload returns at once.
+    Counting sonarr's 660s gate as well as its 660s drain wait would size that role at 1320s of
+    rollout for a rollout that takes 660s.
+
+    Args:
+        role: the directory name under `ansible/roles/k8s/`.
+
+    Returns:
+        The summed `--timeout=` of every other `kubectl` wait the role runs. 0 for a role that
+        waits for nothing of its own, which is most of them.
+
+    Raises:
+        AssertionError: a `--timeout=` this reader cannot resolve to seconds. An unreadable
+            wait must not read as zero — that is the same silent under-sizing this exists to
+            stop.
+    """
+    total = 0
+    for task in _tasks(role):
+        if "kubectl" not in task.cmd or "rollout status" in task.cmd:
+            continue
+        for raw in _WAIT_TIMEOUT.findall(task.cmd):
+            seconds = rollout_seconds(raw, _K8S_ROLES / role)
+            if seconds is None:
+                raise AssertionError(
+                    f"{role}: `{task.raw_name}` waits --timeout={raw}, which this reader "
+                    "cannot resolve to seconds. Spell it as `<n>s` or as a `{{ role_var }}` "
+                    "whose defaults/main.yml value is `<n>s`."
+                )
+            total += seconds
+    return total

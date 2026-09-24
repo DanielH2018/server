@@ -1369,15 +1369,25 @@ role, at task 6b's drill-sized `volume_revert_state_timeout`/`api_timeout` (90/3
 
 ```
 ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout + 3xvolume_revert_api_timeout)
-          + manifests_rollout_timeout + k8s_rollout_stabilise_seconds
-        = claims x 480 + manifests_rollout_timeout + 60
+          + in-role waits + manifests_rollout_timeout + k8s_rollout_stabilise_seconds
+        = claims x 480 + in-role waits + manifests_rollout_timeout + 60
 ```
 
 `radarr`/`sonarr` (1 claim, 660s rollout) come to 1200s — the number an earlier draft of this
 fix used as *the* ceiling, because they are the only roles with a non-default rollout timeout
-and so the most visible case. `tdarr` (2 claims, default 300s rollout) is actually worse:
-2x480 + 300 + 60 = **1320s**. `K8S_ROLLBACK_TIMEOUT_S` is set to 1320 to cover the true worst
-case among the promoted services, not the loudest one.
+and so the most visible case. `tdarr` (2 claims, the shared rollout default) was worse at
+2x480 + 300 + 60 = 1320s, which is where the 1320 came from; it has since been re-denied
+(`k8s_autodeploy: false`, 2026-08-22) and left the promoted set.
+
+**The in-role term arrived with #2399, and it moved the worst case again.** A role's own
+`tasks/` all run before `k8s/rollout-drain`, so anything they wait for adds to the drain rather
+than overlapping it, and the derivation counted the drain alone. prowlarr waits
+`--timeout=300s` for its flaresolverr isolation probe Job on top of its 780s rollout, which
+makes it the worst promoted service at 480 + 300 + 780 + 60 = **1620s**.
+`K8S_ROLLBACK_TIMEOUT_S` is set to 1620 to cover it. An inline `rollout status` gate is
+excluded from the term: sonarr's 660s gate waits for the rollout the drain also waits for, so
+the two are alternatives on one timeline rather than additions, and counting both would demand
+a budget for 1320s of a rollout that takes 660s.
 `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py::test_k8s_rollback_budget_covers_the_worst_single_promoted_service`
 computes this from role sources rather than pinning a number, so a future rollout-timeout bump
 or a new promoted claim-declaring role fails it instead of silently under-sizing the budget.
@@ -1388,7 +1398,7 @@ One tick can promote up to `gitops_deploy_k8s_autodeploy_max_per_tick` (3) servi
 the rollout WAIT is deduped/batched across services, via `roles/k8s/rollout-drain`'s
 `max()`-not-`sum()` drain — so a batch with two claim-declaring services stacks their
 snapshot+revert costs additively. Two `radarr`/`sonarr`-shaped services batched together would
-need roughly 2x480 + 660 + 60 = 1680s, already past 1320s. This is the same mechanism as "The
+need roughly 2x480 + 660 + 60 = 1680s, already past 1620s. This is the same mechanism as "The
 batch-abort blast radius" below (`K8S_AUTODEPLOY_MAX_PER_TICK` is 3, one shared run, no rescue);
 the proper fix for both is per-service invocation on the rollback path rather than a larger
 constant here — not done in this pass.
@@ -1438,40 +1448,40 @@ changes whether a SLOW SUCCESS gets cut short.
 **The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
 unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
 before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
-`K8S_ROLLBACK_TIMEOUT_S` (1320s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
+`K8S_ROLLBACK_TIMEOUT_S` (1620s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
 was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait + 900 + 1320 =
-2400s fits with margin — see that template's own arithmetic comment for both the Docker-path and
+2400s fitted with margin — see that template's own arithmetic comment for both the Docker-path and
 k8s-path budgets it now covers.
 
 **With the staging gate armed, two more budgets join that same sequence, which is why the
 ceiling is 60min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
 `deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
-additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1320 = 3120s
+additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1620 = 3420s
 against 3600s. Both are sized from a measured staging deploy — a full six-service run of the
 whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
 case — and `defaults/main.yml` carries the measurement. Under-sizing them does not fail safe: a
 staging consultation that times out reports NO VERDICT, indistinguishable from a staging that is
 down, and slice 4's entry condition is a measured false-failure rate.
 
-**Consequence for the lock, newly true at 1320s: this unit's own lock hold can now exceed the
-30-minute timer interval, where at 900s it landed exactly at the edge (900 + 900 = 1800s = 30min
-flat) without crossing it.** `ExecStart` wraps the whole run in `flock -w 180
+**Consequence for the lock: this unit's own hold exceeds the 30-minute timer interval, where
+at a 900s rollback budget it landed exactly at the edge (900 + 900 = 1800s = 30min flat) without
+crossing it.** `ExecStart` wraps the whole run in `flock -w 180
 /var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
 secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
-stalled rollback), this unit can hold that lock for up to 2940s (600 + 120 + 900 + 1320 with the
-staging gate armed, 2220s without it, excluding its own flock wait) — past the 30-minute (1800s)
+stalled rollback), this unit can hold that lock for up to 3240s (600 + 120 + 900 + 1620 with the
+staging gate armed, 2520s without it, excluding its own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits `LOCK_WAIT=3000` (`deploy.sh:107`, used at `:282` and `:752`) — **not** the unit's
-own `-w 180`, which governs only the deployer — so it **outlasts the 2940s hold and then
+during that window waits `LOCK_WAIT=3300` — **not** the unit's
+own `-w 180`, which governs only the deployer — so it **outlasts the 3240s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
-the full 3000s. The secret-rotate cron waits on the same lock rather than failing outright,
-which is true only because its `flock -w` is likewise 3000s and so clears that 2940s hold. The
+the full 3300s. The secret-rotate cron waits on the same lock rather than failing outright,
+which is true only because its `flock -w` is likewise 3300s and so clears that 3240s hold. The
 cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
 matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
 next weekly tick.
 
 **All FOUR waiters on this lock are pinned as a census, not one test each.** `deploy.sh`,
-secret-rotate, docs-refresh and eval-run each wait 3000s, derived from the same four timeouts
+secret-rotate, docs-refresh and eval-run each wait 3300s, derived from the same four timeouts
 via `_LOCK_WAITERS` and `_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`.
 Only the first two were pinned until 2026-09-05, and the two that were not had drifted: both sat
 at 2700, *inside* the 2940s hold, and docs-refresh's own comment claimed it matched

@@ -20,7 +20,7 @@
     name: k8s/manifests
   vars:
     manifests_service: prowlarr
-    # A cold image pull on either node outlasts the 300s default (#2369). The number lives in
+    # A cold image pull on either node outlasts the shared default (#2369). The number lives in
     # defaults/main.yml because both templates' progressDeadlineSeconds read it too, and this
     # budget also covers the flaresolverr entry below: the drain gives every extra rollout the
     # role's timeout.

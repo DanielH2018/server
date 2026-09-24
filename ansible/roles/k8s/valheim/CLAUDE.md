@@ -71,8 +71,12 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   pod-restart alerting instead. Do not "fix" this by adding a port monitor; it would probe a
   closed TCP port and be permanently red.
 - **First rollout is slow.** An empty install PVC means SteamCMD downloads ~1.8 G before
-  anything binds, hence `manifests_rollout_timeout: 900s` and `failureThreshold: 60` on the
-  startupProbe. Later boots are a delta check plus world load and clear in under a minute.
+  anything binds, hence `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout`
+  and `failureThreshold: 60` on the startupProbe. That one default is the whole budget: the
+  drain's `rollout status --timeout` and the Deployment's `progressDeadlineSeconds` both read
+  it, because a deadline below the budget fails the rollout on ProgressDeadlineExceeded whatever
+  the timeout says (#2409). Later boots are a delta check plus world load and clear in under a
+  minute.
 - **`/opt/valheim` is a PVC, not an emptyDir**, purely so that download happens once.
 - **No `DAC_OVERRIDE`**, unlike terraria: `PUID`/`PGID` default to 0, the seed pod restores
   uid 0 with `tar -p --numeric-owner`, and root writing root-owned files needs no override.

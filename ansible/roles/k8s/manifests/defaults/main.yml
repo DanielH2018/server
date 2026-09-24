@@ -28,3 +28,33 @@ manifests_release_dir: /var/lib/homelab/k8s-releases.d
 # Secret or PersistentVolumeClaim — see the guard test on that.
 manifests_prune: false
 manifests_prune_kinds: []
+
+# The rollout budget `k8s/rollout-drain` waits for a workload whose role passes no
+# `manifests_rollout_timeout` of its own — the ONE place that number is written, so a role that
+# needs more overrides it rather than the shared value drifting per call site.
+#
+# 600s, raised from 300s on 2026-09-24 (#2377). 300s bounded a rollout that had to pull its
+# image cold over a domestic line, and three roles bought their way out of it one incident at a
+# time: prowlarr 780s (#2369, an 8m54s pull of the 292 MB flaresolverr image), sonarr and radarr
+# 660s (#2370), then bazarr, whose drain gave up at 300.27s while the pod it was waiting for
+# entered `running` 34 seconds later. Every other role carried the same exposure, decided by
+# image size and registry weather rather than by anything in the repo.
+#
+# WHY 600 AND NOT MORE. `rollout status` exits non-zero the moment Kubernetes marks a Deployment
+# ProgressDeadlineExceeded, which it does after `progressDeadlineSeconds` — default 600 — without
+# progress. A shared budget above 600 is therefore unreachable until every role's template
+# renders a matching deadline, which is a change across ~23 roles rather than this one line.
+# 600s is the most this default can be worth on its own, and it covers the bazarr case with
+# 266s to spare. A role that genuinely needs more raises BOTH numbers, the way prowlarr,
+# sonarr, radarr and valheim do.
+#
+# WHY NOT DERIVE IT FROM THE IMAGE SIZE. #2377 weighed reading the compressed size off the
+# registry manifest and scaling the budget by it. It is not taken here: the size the registry
+# reports is the pull's numerator only, the denominator is the link, and a budget that reads a
+# remote manifest makes every k8s role's rollout depend on a registry round-trip that can itself
+# fail. The cost of the flat value is a slower failure on a genuinely stuck rollout; the health
+# gate reports that either way.
+#
+# Read by `ansible/tests/_helpers.py:MANIFESTS_ROLLOUT_DEFAULT_S`, which is what the two budget
+# guards and the inline-gate census size themselves against — so raising this re-derives them.
+manifests_rollout_timeout_default: 600s

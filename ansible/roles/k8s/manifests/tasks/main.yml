@@ -502,7 +502,7 @@
            'name': manifests_rollout | default(manifests_service),
            'namespace': k8s_namespace,
            'kind': manifests_rollout_kind | default('deploy'),
-           'timeout': manifests_rollout_timeout | default('300s'),
+           'timeout': manifests_rollout_timeout | default(manifests_rollout_timeout_default),
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or manifests_image_changed,
          }] }}
@@ -557,7 +557,7 @@
            'name': item.name,
            'namespace': k8s_namespace,
            'kind': item.kind | default(manifests_rollout_kind | default('deploy')),
-           'timeout': manifests_rollout_timeout | default('300s'),
+           'timeout': manifests_rollout_timeout | default(manifests_rollout_timeout_default),
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or ((item.image | default(item.name)) in (k8s_rebuilt_images | default([]))),
          }] }}
