@@ -29,7 +29,6 @@ setup/hypervisor/tasks/guest.yml	Define the guest
 setup/hypervisor/tasks/guest.yml	Read the running guest's live interface
 setup/hypervisor/tasks/guest.yml	Start the guest
 setup/hypervisor/tasks/guest.yml	Stop a running guest whose live interface carries no egress fence
-setup/hypervisor/tasks/install.yml	Assert the CPU supports hardware virtualisation
 setup/hypervisor/tasks/install.yml	Stop libvirt's built-in default network
 setup/hypervisor/tasks/install.yml	Stop libvirt's built-in default network from autostarting
 setup/hypervisor/tasks/network.yml	Autostart the staging network
@@ -40,6 +39,5 @@ setup/hypervisor/tasks/network.yml	Start the staging network
 setup/initial_setup/tasks/system-tuning.yml	Keep the info-level forwarding out of /var/log/syslog
 setup/k3s/tasks/agent_verify.yml	Fail if the node registered an address the host does not own
 setup/k3s/tasks/server.yml	Fail if the bundled Traefik, servicelb or local-path provisioner is running
-setup/k3s/tasks/server.yml	Fail if the node registered an address the host does not own
 setup/sops_setup/tasks/main.yml	Seed ansible/.sops.yaml (first-host bootstrap only)
 setup/sops_setup/tasks/main.yml	Show the Public Key to user
