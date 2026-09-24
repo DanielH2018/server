@@ -243,7 +243,7 @@ native `!secret` indirection backed by an Ansible-generated `secrets.yaml`.
        fan.tower_fan: {name: Bedroom Fan, expose: true}
    ```
    Both files are already carried by the role's ConfigMap/Secret, so editing them rolls the pod
-   on the next deploy. Deploy: `ha-deploy`.
+   on the next deploy. Deploy: `ha-verify-state`.
 4. **Finish in the Google Home app:** link the `[test] <action>` (§10b step 5), then say
    "Hey Google, sync my devices". Expose another device later = one more `entity_config` entry with
    `expose: true`, redeploy, resync.
@@ -264,7 +264,7 @@ left, and it's a one-time UI step:
 > Max resolves `home-assistant.daniel-hunter.com`, or fall back to the LAN `internal_url`.
 
 ### 10e. Verify
-- `uv run python scripts/home_assistant/validate_ha_config.py` passes; deploy with `ha-deploy` (gates on health).
+- `uv run python scripts/home_assistant/validate_ha_config.py` passes; deploy with `ha-verify-state` (gates on health).
 - `scripts/diagnostics/probe.py ha get error_log` shows no `google_assistant` setup errors (it loads with no
   entities — it's cloud-fulfillment). After adding Cast in the UI,
   `scripts/diagnostics/probe.py ha get states | grep media_player` shows the Hub.

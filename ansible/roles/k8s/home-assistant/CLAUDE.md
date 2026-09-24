@@ -119,8 +119,8 @@ every task in this directory whether or not it is needed.
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
   these conventions + traps; delegate HA authoring/debugging to it.
 - **Skills** (`.claude/skills/`): `ha-edit-automation` (the authoring workflow — copy-not-template,
-  math-in-a-tested-macro, validate→deploy→verify), `ha-deploy` (deploy + confirm-loaded),
-  `ha-verify-state` (live state via the API; the recorder + alias-slug traps), `z2m-device-setting`
+  math-in-a-tested-macro, validate→deploy→verify), `ha-verify-state` (deploy + confirm-loaded,
+  then live state via the API; the recorder + alias-slug traps), `z2m-device-setting`
   (persist a Zigbee device setting via `mosquitto_pub`).
 - **`scripts/diagnostics/probe.py ha`** — read-only live HA state (allow-listed, no prompt), authed with the
   SOPS `claude_ha_token`: `probe.py ha state <entity>` · `ha automation <id-or-alias>` (resolves
@@ -147,7 +147,7 @@ every task in this directory whether or not it is needed.
 - HA cfg: `files/` (shipped into the cluster by `roles/k8s/home-assistant`; only
   `templates/config/secrets.yaml.j2` is rendered)
 - Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
-  — or the `/ha-deploy` skill, which adds the health + loaded-config gates
+  — or the `/ha-verify-state` skill, which adds the health + loaded-config gates
 
 ## Traps
 

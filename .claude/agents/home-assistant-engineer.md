@@ -101,8 +101,8 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
   the edit, not an afterthought.
 - **`uv run pytest ansible/roles/k8s/home-assistant/tests`** — the Jinja macro unit tests.
 - **The skills** (invoke them; they encode the procedure): `ha-edit-automation` (authoring
-  workflow), `ha-verify-state` (live-state + the recorder traps), `ha-deploy`
-  (deploy + load-verify), `z2m-device-setting` (persist a Zigbee device setting).
+  workflow), `ha-verify-state` (deploy + load-verify, then live-state + the recorder traps),
+  `z2m-device-setting` (persist a Zigbee device setting).
 
 ## Method
 
@@ -119,7 +119,7 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
    or override tripwire fires, declare the writer in `sanctioned_writers.yml` /
    `expected_override_writers.yml` deliberately — don't silence it by widening the list on reflex.
 5. **Validate** (`validate_ha_config.py` + `pytest` if you touched a macro).
-6. **Deploy** via `ha-deploy` — `./scripts/deploy.sh --tags home-assistant` **on daniel-box**
+6. **Deploy** via `ha-verify-state` — `./scripts/deploy.sh --tags home-assistant` **on daniel-box**
    (a rollout, ~60-120s), gated on `kubectl -n homelab rollout status deploy/home-assistant`.
    `rollout status`, not `kubectl wait --for=condition=Available` — single-replica Deployments
    satisfy Available on the *old* pod and it returns instantly. `probe.py health` reads the

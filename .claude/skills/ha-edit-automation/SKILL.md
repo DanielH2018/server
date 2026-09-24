@@ -12,7 +12,7 @@ interdependent logic. Run everything from `/home/ubuntu/server`.
 HA itself moved to the k3s cluster at slice-5 B3, but **the edit path did not change**: the
 `ansible/roles/k8s/home-assistant/` role copies these same files verbatim into ConfigMaps, so
 this role stays the only place to change config. What changed is where you deploy from
-(daniel-box) and how you verify (a rollout and the pod, not a container) — see `ha-deploy`.
+(daniel-box) and how you verify (a rollout and the pod, not a container) — see `ha-verify-state`.
 
 ## 1. Pick the right file
 
@@ -89,14 +89,14 @@ validation catches Jinja-syntax and structural errors, but NOT HA schema or enti
 
 ## 5. Deploy + confirm it loaded
 
-Invoke **`ha-deploy`** (deploy via Ansible on daniel-box → gate on the rollout → confirm the
-automation/entity actually loaded). Then invoke **`ha-verify-state`** to prove behavior: `probe.py ha automation
-<id-or-alias>` exists and `last_triggered` advances when triggered. "Ansible ok" is not done —
-the live evidence is.
+Invoke **`ha-verify-state`** (deploy via Ansible on daniel-box → gate on the rollout → confirm
+the automation/entity actually loaded, then prove behavior: `probe.py ha automation <id-or-alias>`
+exists and `last_triggered` advances when triggered). "Ansible ok" is not done — the live evidence
+is.
 
 ## 6. Commit
 
-Commit the changed file(s) under the role. Don't deploy from the commit — `ha-deploy` owns that.
+Commit the changed file(s) under the role. Don't deploy from the commit — `ha-verify-state` owns that.
 Note any non-templated side-effects (e.g. a Z2M device setting via `z2m-device-setting`) in the
 role `CLAUDE.md` so they survive a re-pair.
 
