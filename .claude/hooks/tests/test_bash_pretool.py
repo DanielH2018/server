@@ -19,6 +19,7 @@ import io
 import json
 import os
 import sys
+import tempfile
 import uuid
 
 import pytest
@@ -55,19 +56,23 @@ EXPECTED_ARMS = (
 
 
 @pytest.fixture
-def sandbox(tmp_path):
+def sandbox(tmp_path, monkeypatch):
     """A loader that returns the real arms with their per-session state under tmp_path.
 
     Each arm is loaded fresh inside `collect`, so there is no module object to monkeypatch
     from here. Patching the freshly loaded one is the same fix one level in: `nudge-land-sh`
     counts CI reads in a file under the temp dir, and `inject-nested-docs` keys its
     once-per-session state the same way and appends a row to the instructions log.
+
+    Every arm reads the same stdlib `tempfile`, so one patch on the singleton redirects all of
+    them — and it goes through `monkeypatch` because a plain assignment would leave every later
+    `gettempdir()` in this xdist worker pointing at a torn-down `tmp_path`. `_logger` IS
+    per-arm, since `load_arm` execs a fresh `log_instructions` for each call.
     """
+    monkeypatch.setattr(tempfile, "gettempdir", lambda: str(tmp_path))
 
     def load(filename, module_name):
         module = _mod.load_arm(filename, module_name)
-        if hasattr(module, "tempfile"):
-            module.tempfile.gettempdir = lambda: str(tmp_path)
         if hasattr(module, "_logger"):
             module._logger.LOG = str(tmp_path / "instructions.log")
         return module
