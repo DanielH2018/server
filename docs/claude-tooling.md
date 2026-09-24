@@ -504,11 +504,14 @@ CLAUDE.md paragraph became a hook.
 ### `block-footguns` (a `bash-pretool` arm)
 
 It *denies* a growing set of commands that return a plausible wrong answer rather than an error,
-each with a deterministic signature and a recorded incident. Two of them: `grep -Z`/`-z` (this
-host's grep is `ugrep`, where those mean `--fuzzy` and `--decompress`, not the NUL flags — use
-`--null`/`--null-data`), and a bare `git stash pop`/`apply` (the stash stack is per-repository,
-so it can take another session's WIP). The docstring of `.claude/hooks/block-footguns.py` is the
-full list.
+each with a deterministic signature and a recorded incident. One of them: `kubectl rollout
+restart`, which the read-only ServiceAccount is Forbidden from and which prints success anyway.
+The docstring of `.claude/hooks/block-footguns.py` is the full list.
+
+Four rules that key on a host tool or on GitHub rather than on this repo moved to the dotfiles
+`claude_guard.footguns` module (dotfiles #628), which the user-level PreToolUse hook runs in
+every repo: `grep -Z`/`-z` where grep is `ugrep`, a bare `git stash pop`/`apply`, a
+self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 
 ### `validate-compose` (PostToolUse)
 

@@ -222,9 +222,10 @@ denies prints its own reason.
   when a Bash command names their paths. It never makes a decision.
 - **nudge-land-sh** — denies a command that blocks on CI and the third CI-status read in one
   session. Use `land.sh --pr <n> --since <sha>` instead.
-- **block-footguns** — denies commands that return a plausible wrong answer rather than an
-  error, such as `grep -Z` (this host's grep is `ugrep`) and a bare `git stash pop`. Its
-  docstring is the full list.
+- **block-footguns** — denies this repo's commands that return a plausible wrong answer
+  rather than an error, such as a `kubectl rollout restart` that prints success while
+  Forbidden. Its docstring is the full list. The host-generic ones (`grep -Z` under `ugrep`, a
+  bare `git stash pop`) are denied by the dotfiles `claude_guard` hook in every repo.
 - **validate-compose** — re-renders the compose templates after a template or vars edit. Shell
   `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.
 - **auto-mode-bridge** — retries a denied `gitops_tick.sh` and decodes a `deploy.sh` exit.

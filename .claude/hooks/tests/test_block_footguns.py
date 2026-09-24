@@ -1,9 +1,10 @@
 #!/usr/bin/env python3
-"""Tests for the four-footgun PreToolUse guard.
+"""Tests for the footgun PreToolUse guard.
 
 Each rule is an accept/reject pair: the command it must refuse, and the near-miss it must let
 through. A guard that fires on everything and one that fires on nothing are indistinguishable
-from the passing side alone, and three of these four rules key on a single flag or word.
+from the passing side alone. The four rules dotfiles #628 moved into claude_guard took their
+pairs with them (claude-guard's tests/test_footguns.py).
 
 Run: uv run pytest .claude/hooks
 """
@@ -28,59 +29,6 @@ _spec.loader.exec_module(_mod)
 from _hook_common import Unsplittable  # noqa: E402
 
 pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
-
-
-# --- 1. ugrep's -Z and -z ---------------------------------------------------------------------
-
-
-def test_grep_dash_Z_is_denied():
-    assert "--fuzzy" in _mod.problem("grep -Z foo .")
-
-
-def test_a_bundled_dash_Z_is_denied():
-    """The incident was written `grep -lZ ... | xargs -0`, so bundling must be unbundled."""
-    assert _mod.problem("grep -rlZ foo . | xargs -0 sed -i s/a/b/")
-
-
-def test_grep_dash_z_is_denied():
-    assert "--decompress" in _mod.problem("grep -z foo .")
-
-
-def test_grep_with_null_is_clean():
-    assert _mod.problem("grep -rl --null foo . | xargs -0 ls") is None
-
-
-def test_an_ordinary_grep_is_clean():
-    assert _mod.problem("grep -rn foo .") is None
-
-
-def test_a_dash_Z_on_another_binary_is_clean():
-    """`-Z` means something else again elsewhere; this rule is about grep."""
-    assert _mod.problem("tar -Z -cf out.tar dir") is None
-
-
-# --- 2. a bare git stash pop --------------------------------------------------------------------
-
-
-def test_bare_stash_pop_is_denied():
-    assert "per-repository" in _mod.problem("git stash pop")
-
-
-def test_bare_stash_apply_is_denied():
-    assert _mod.problem("git stash apply")
-
-
-def test_stash_pop_with_an_explicit_ref_is_clean():
-    assert _mod.problem("git stash pop 'stash@{2}'") is None
-
-
-def test_git_stash_push_is_clean():
-    """Pushing is safe — it adds to the shared stack rather than taking from it."""
-    assert _mod.problem("git stash push -m wip") is None
-
-
-def test_git_stash_list_is_clean():
-    assert _mod.problem("git stash list") is None
 
 
 # --- 3. kubectl rollout restart ------------------------------------------------------------------
@@ -138,9 +86,9 @@ def _run(monkeypatch, capsys, command):
 
 
 def test_main_denies_with_the_fix(monkeypatch, capsys):
-    decision = _run(monkeypatch, capsys, "git stash pop")
+    decision = _run(monkeypatch, capsys, "kubectl rollout restart deploy/x")
     assert decision["hookSpecificOutput"]["permissionDecision"] == "deny"
-    assert "stash@" in decision["hookSpecificOutput"]["permissionDecisionReason"]
+    assert "deploy.sh" in decision["hookSpecificOutput"]["permissionDecisionReason"]
 
 
 def test_main_is_silent_on_an_ordinary_command(monkeypatch, capsys):
@@ -159,7 +107,7 @@ def test_malformed_payload_is_ignored(monkeypatch, capsys):
 def test_an_unreadable_command_naming_a_rule_binary_asks():
     """The package's contract: a non-ok parse is a refusal, never "nothing here". Until #2134
     `split_stages` returned `[]` for this and the hook stayed silent."""
-    decision, reason = _mod.decide("git stash pop 'oops")
+    decision, reason = _mod.decide("kubectl rollout restart 'oops")
     assert decision == "ask"
     assert "unbalanced-quote" in reason
 
@@ -170,7 +118,7 @@ def test_an_unreadable_command_naming_no_rule_binary_is_left_alone():
 
 
 def test_could_fire_matches_a_binary_as_a_word():
-    assert _mod.could_fire("cd x && git stash pop")
+    assert _mod.could_fire("cd x && kubectl rollout restart deploy/x")
     assert _mod.could_fire("ssh daniel-pi 'git status'")
     # A word merely containing one, or a path component, is not a command.
     assert not _mod.could_fire("highlight run watch")
@@ -179,10 +127,10 @@ def test_could_fire_matches_a_binary_as_a_word():
 
 
 def test_the_gate_is_exactly_as_wide_as_the_rules_on_an_absolute_path():
-    """Every rule compares the stage's first word to the bare binary, so `/usr/bin/git stash
-    pop` denies nothing — and the gate must not ask about a form the rules cannot judge."""
-    assert _mod.problem("/usr/bin/git stash pop") is None
-    assert not _mod.could_fire("/usr/bin/git stash pop")
+    """Every rule compares the stage's first word to the bare binary, so `/usr/bin/kubectl
+    rollout restart` denies nothing — and the gate must not ask about a form the rules cannot judge."""
+    assert _mod.problem("/usr/bin/kubectl rollout restart deploy/x") is None
+    assert not _mod.could_fire("/usr/bin/kubectl rollout restart deploy/x")
 
 
 def test_every_rule_binary_reaches_a_rule():
@@ -190,11 +138,8 @@ def test_every_rule_binary_reaches_a_rule():
     new binary from being an `ask` the gate never opens. Each name here must be the command
     word of something `problem` denies."""
     denied_by = {
-        "grep": "grep -Z x",
-        "git": "git stash pop",
         "kubectl": "kubectl rollout restart deploy/x",
         "ssh": "ssh daniel-pi 'git status'",
-        "pgrep": "pgrep -f land.sh",
         "gh": "gh issue create --title x",
         "ab": "ab -n 100 https://sonarr.daniel-hunter.com/",
     }
@@ -212,7 +157,9 @@ def _missing_segmenter(command):
 def test_a_missing_segmenter_asks_for_a_rule_shaped_command():
     """A silent fail-open here would retire every rule on exactly the host `_claude_guard`'s
     DECIDED marker was written about, so it is an `ask` that names the fix."""
-    decision, reason = _mod.decide("git stash pop", split=_missing_segmenter)
+    decision, reason = _mod.decide(
+        "kubectl rollout restart deploy/x", split=_missing_segmenter
+    )
     assert decision == "ask"
     assert "chezmoi apply" in reason
 
@@ -223,17 +170,21 @@ def test_a_missing_segmenter_leaves_an_unrelated_command_alone():
 
 
 def test_a_later_pipeline_stage_is_still_judged():
-    assert _mod.problem("git fetch && git stash pop") is not None
+    assert (
+        _mod.problem("kubectl get pods && kubectl rollout restart deploy/x") is not None
+    )
 
 
 def test_a_semicolon_joined_later_stage_is_still_judged():
     """Issue #1020: `;` joined the same way as `&&` above must still be caught.
 
-    This is the live incident's shape — `git stash && prek run ... | tail -5; git stash pop`
-    was ALLOWED before the fix, because `shlex.split` glued the `;` onto `-5` and the
-    `git stash pop` after it was never its own stage.
+    The live incident was `git stash && prek run ... | tail -5; git stash pop`, ALLOWED
+    before the fix because `shlex.split` glued the `;` onto `-5`. That rule now lives in
+    claude_guard (dotfiles #628); a rule that stays here proves the same splitting.
     """
-    assert _mod.problem("git fetch; git stash pop") is not None
+    assert (
+        _mod.problem("kubectl get pods; kubectl rollout restart deploy/x") is not None
+    )
 
 
 # --- 5. a load generator aimed at the public hostname ------------------------------------------
@@ -312,45 +263,6 @@ def test_a_burst_against_an_unrelated_host_is_clean():
     assert _mod.problem("ab -n 100 https://example.com/") is None
 
 
-# --- 6. pgrep -f matching the shell that runs it -----------------------------------------------
-
-
-def test_a_pgrep_dash_f_waiter_loop_is_denied():
-    """The 2026-08-17 shape. shlex leaves `;` attached, so the whole loop is ONE stage."""
-    assert (
-        _mod.problem("until ! pgrep -f b2_wipe_prefixes; do sleep 15; done") is not None
-    )
-
-
-def test_a_bare_pgrep_dash_f_is_denied():
-    assert _mod.problem("pgrep -f b2_wipe_prefixes") is not None
-
-
-def test_a_bundled_pgrep_flag_is_denied():
-    """`-cf` is `-c` and `-f`; the memory records `pgrep -c` carrying the same flaw."""
-    assert _mod.problem("pgrep -cf b2_wipe_prefixes") is not None
-
-
-def test_a_character_class_pattern_is_clean():
-    """The documented fix. Its presence is the signal the author knows about the self-match."""
-    assert _mod.problem("pgrep -f 'b2_[w]ipe_prefixes'") is None
-
-
-def test_pgrep_without_dash_f_is_clean():
-    """Without -f, pgrep matches process NAMES, so a shell running the string is not a match."""
-    assert _mod.problem("pgrep sshd") is None
-
-
-def test_a_pid_wait_loop_is_clean():
-    """The prescribed alternative must not itself trip the rule."""
-    assert _mod.problem("while kill -0 12345 2>/dev/null; do sleep 1; done") is None
-
-
-def test_the_word_pgrep_as_a_grep_argument_is_clean():
-    """`pgrep` appearing as data, not as the command being run."""
-    assert _mod.problem("grep -rn pgrep .claude/hooks") is None
-
-
 # --- the shared keyword stripper ---------------------------------------------------------------
 
 
@@ -373,40 +285,6 @@ def test_stripping_a_stage_that_is_all_keywords_is_empty_not_an_error():
     from _hook_common import strip_shell_keywords
 
     assert strip_shell_keywords(["until", "!"]) == []
-
-
-# --- 7. a partial security_and_analysis PATCH ---------------------------------------------------
-
-
-def test_a_partial_security_and_analysis_patch_is_denied():
-    found = _mod.problem(
-        "gh api -X PATCH repos/o/r -f security_and_analysis[secret_scanning][status]=enabled"
-    )
-    assert found is not None
-    assert "dependabot_security_updates" in found
-
-
-def test_a_patch_naming_all_five_members_is_clean():
-    """The safe partial edit. The rule exists to send you here, so it must not fire on it."""
-    members = " ".join(
-        f"-f security_and_analysis[{m}][status]=enabled"
-        for m in _mod._SECURITY_ANALYSIS_MEMBERS
-    )
-    assert _mod.problem(f"gh api -X PATCH repos/o/r {members}") is None
-
-
-def test_the_dedicated_endpoint_is_clean():
-    """The other documented way to change one setting without touching the rest."""
-    assert _mod.problem("gh api -X PUT repos/o/r/vulnerability-alerts") is None
-
-
-def test_a_read_of_security_and_analysis_is_clean():
-    """A GET cannot reset anything, so reading the object must stay unblocked."""
-    assert _mod.problem("gh api repos/o/r --jq .security_and_analysis") is None
-
-
-def test_an_unrelated_gh_api_patch_is_clean():
-    assert _mod.problem("gh api -X PATCH repos/o/r -f description=hi") is None
 
 
 # --- 8. gh issue create by hand ------------------------------------------------------------------
@@ -455,25 +333,12 @@ def test_the_words_as_a_search_argument_are_clean():
 # it and decided on `stage[0]` directly. Measured 2026-08-30, before the strip moved into
 # `problem()`: each of the four commands below was ALLOWED while its bare form was denied.
 #
-# `! git stash pop` is the one that matters. A bare pop can apply another session's
-# work-in-progress into this tree — it has, 25 files of it — and a negation is exactly what
-# someone writes when they expect the pop to fail and want the pipeline to continue.
-
-
-def test_a_negated_stash_pop_is_denied():
-    assert _mod.problem("! git stash pop")
-
-
-def test_a_timed_stash_pop_is_denied():
-    assert _mod.problem("time git stash pop")
+# The stash and ugrep cases of this measurement moved to claude_guard with their rules
+# (dotfiles #628), which strips the same keywords.
 
 
 def test_a_negated_rollout_restart_is_denied():
     assert _mod.problem("! kubectl rollout restart deploy/sonarr")
-
-
-def test_a_command_prefixed_ugrep_flag_is_denied():
-    assert "--fuzzy" in _mod.problem("command grep -Z foo .")
 
 
 def test_a_negated_remote_git_is_denied():
@@ -487,9 +352,7 @@ def test_a_keyword_prefix_does_not_invent_a_denial():
     deny — not a false allow. These are the near-misses each rule must still pass once the
     prefix is gone.
     """
-    assert _mod.problem("! git stash list") is None
     assert _mod.problem("time git status") is None
-    assert _mod.problem("command grep -rn foo .") is None
     assert _mod.problem("! kubectl get pods") is None
 
 
@@ -497,4 +360,4 @@ def test_a_keyword_in_argument_position_is_not_stripped():
     """`strip_shell_keywords` only strips from the front, so an argument named `time` or
     `command` stays an argument. Stripping one mid-stage would shift every later position."""
     assert _mod.problem("grep -rn time .") is None
-    assert _mod.problem("git stash list command") is None
+    assert _mod.problem("kubectl get pods command") is None

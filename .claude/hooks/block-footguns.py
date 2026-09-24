@@ -1,55 +1,35 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: nine commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: five commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
 them worth a hook rather than a paragraph. What they share is that none of them ERRORS: seven
 produce a plausible-looking result that is wrong, and the last two succeed outright while
 bypassing a gate the repo requires, so nothing downstream notices either way.
 
-  1. `grep -Z` / `grep -z`. This host's grep is ugrep 7.8, where `-Z` is `--fuzzy` (approximate
-     matching, not a NUL separator) and `-z` is `--decompress` (not `--null-data`). A
-     `grep -lZ ... | xargs -0` therefore reads as a NUL-safe sweep and is neither: it fuzzy-
-     matches, and emits newline-separated names. One such sweep rewrote part of this tree and
-     left 49 stale paths behind, with every gate green. The NUL flags here are `--null` and
-     `--null-data`.
-
-  2. `git stash pop` / `apply` with no ref. The stash stack is per-REPOSITORY, not per-worktree,
-     so a bare pop in one worktree takes whatever another session pushed last. It applied
-     another session's 25-file work-in-progress into the wrong tree. Pop by explicit ref.
-
-  3. `kubectl rollout restart`. Plain kubectl authenticates as the read-only ServiceAccount,
+  1. `kubectl rollout restart`. Plain kubectl authenticates as the read-only ServiceAccount,
      which is Forbidden on this verb — and a Forbidden restart still prints "successfully
      rolled out". The refusal and the success read identically. Ansible is the write path.
 
-  4. `ssh daniel-<host> '<git ...>'` with no `cd`. A non-interactive ssh lands in $HOME, not the
+  2. `ssh daniel-<host> '<git ...>'` with no `cd`. A non-interactive ssh lands in $HOME, not the
      repo, so the git command runs somewhere else entirely — usually reporting "not a git
      repository", sometimes finding a different repo.
 
-  5. A load generator aimed at the PUBLIC hostname. That name egresses to Cloudflare and comes
+  3. A load generator aimed at the PUBLIC hostname. That name egresses to Cloudflare and comes
      back through the homelab's own CrowdSec edge, so a burst looks like an attack from this
      address. 120 requests on 2026-08-06 tripped two scenarios at once and 403'd every
      `*.daniel-hunter.com` for everyone at home. The `.local.` name stays on the LAN and still
      traverses the full route.
 
-  6. `pgrep -f <pattern>`. The shell running the check has the pattern in its own /proc cmdline,
-     so pgrep matches the waiter itself and the check reads as "still running" forever. Five
-     such waiters were left spinning on 2026-08-17 and none ever fired — two of them created
-     because the earlier ones seemed not to work.
-
-  7. A partial `security_and_analysis` PATCH. GitHub REPLACES the object, so every member left
-     out is reset rather than preserved, and the call returns 200 either way. One such PATCH
-     disabled Dependabot alerts and enabled nothing.
-
-  8. `gh issue create` by hand. The issue lands, but without the `claude` label, the
+  4. `gh issue create` by hand. The issue lands, but without the `claude` label, the
      fingerprint trailer and the title/file dedup that `findings.py open` supplies — so the
      register's `list`, `next` and re-observation matching never see it, and a second session
      files the same finding again. CLAUDE.md said "never by hand" and nothing enforced it
      (#2160). `findings.py` itself calls `gh` from Python, which never reaches this hook, so
      there is no exemption to write.
 
-  9. `deploy.sh --skip-staleness-check` typed by a session. deploy.sh refuses a tree behind
+  5. `deploy.sh --skip-staleness-check` typed by a session. deploy.sh refuses a tree behind
      `origin/master` (exit 4, nothing deployed) because a stale tree renders stale templates
      and reverts live config while every repo-side check reads green — and the flag makes that
      deploy succeed with a green recap. The deploy skill and `docs/deploying.md` said "never";
@@ -57,6 +37,11 @@ bypassing a gate the repo requires, so nothing downstream notices either way.
      INSIDE `scripts/deploy_tools/staging_gate_remote.sh`, whose tree is pinned behind master
      by construction: that flag is in the script's own text, never in a Bash tool command, so
      the script's invocation needs no exemption here.
+
+Four more rules lived here until dotfiles #628 moved them into `claude_guard.footguns`, which
+every repo's PreToolUse hook runs: ugrep's `-Z`/`-z`, a bare `git stash pop`, a self-matching
+`pgrep -f` and a partial `security_and_analysis` PATCH. They key on a host tool or on
+GitHub, not on this repo.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision carrying the fix; otherwise no
 output -> normal permission flow. The hook can only ever DENY.
@@ -71,16 +56,9 @@ from _hook_common import (
     Unsplittable,
     emit_pretooluse_decision,
     invokes,
-    short_flags,
     split_stages,
     strip_shell_keywords,
 )
-
-# ugrep's spelling of each GNU flag people reach for. The values are what to write instead.
-_UGREP_FLAG_FIXES = {
-    "Z": "-Z is --fuzzy here (approximate matching), not a NUL separator. Use --null (-0).",
-    "z": "-z is --decompress here, not --null-data. Use --null-data.",
-}
 
 _SSH_HOSTS = ("daniel-server", "daniel-pi", "daniel-box", "daniel-stage")
 _REPO_PATH = "/home/ubuntu/server"
@@ -102,16 +80,6 @@ _BURST_TOOLS = frozenset(
         "locust",
     }
 )
-# Every member of GitHub's `security_and_analysis` object. A PATCH REPLACES the object, so any
-# member left out is reset rather than preserved — naming all five is the only safe partial edit.
-_SECURITY_ANALYSIS_MEMBERS = (
-    "advanced_security",
-    "secret_scanning",
-    "secret_scanning_push_protection",
-    "dependabot_security_updates",
-    "secret_scanning_validity_checks",
-)
-
 _PUBLIC_SUFFIX = ".daniel-hunter.com"
 _LAN_SUFFIX = ".local" + _PUBLIC_SUFFIX
 
@@ -132,31 +100,6 @@ def _host_of(word: str) -> str:
 def _is_public_target(word: str) -> bool:
     host = _host_of(word)
     return host.endswith(_PUBLIC_SUFFIX) and not host.endswith(_LAN_SUFFIX)
-
-
-def ugrep_flag_problem(stage: list[str]) -> str | None:
-    """A GNU grep flag whose ugrep meaning is different and silent."""
-    if not stage or stage[0] != "grep":
-        return None
-    for letter in sorted(short_flags(stage) & set(_UGREP_FLAG_FIXES)):
-        return f"This host's grep is ugrep, not GNU grep. {_UGREP_FLAG_FIXES[letter]}"
-    return None
-
-
-def bare_stash_problem(stage: list[str]) -> str | None:
-    """`git stash pop`/`apply` with no explicit stash ref."""
-    if not (
-        invokes(stage, ("git", "stash", "pop"))
-        or invokes(stage, ("git", "stash", "apply"))
-    ):
-        return None
-    if any(word.startswith("stash@") for word in stage):
-        return None
-    return (
-        "The git stash stack is per-repository, not per-worktree, so a bare pop can apply "
-        "another session's work-in-progress into this tree. Run `git stash list` and pop the "
-        "ref you meant: `git stash pop 'stash@{0}'`."
-    )
 
 
 def rollout_restart_problem(stage: list[str]) -> str | None:
@@ -206,55 +149,6 @@ def burst_public_hostname_problem(stage: list[str]) -> str | None:
         "requests tripped http-crawl-non_statics and http-probing at once and 403'd every "
         f"*{_PUBLIC_SUFFIX} for everyone at home. Use the `.local.` name, which stays on the LAN "
         "and still traverses the full route: " + fixed
-    )
-
-
-def pgrep_self_match_problem(stage: list[str]) -> str | None:
-    """`pgrep -f <pattern>` whose pattern matches the shell running it."""
-    words = strip_shell_keywords(stage)
-    if not words or words[0] != "pgrep":
-        return None
-    if "f" not in short_flags(words):
-        return None
-    # A character class breaks the self-match, which is the documented fix. Its presence is
-    # the signal the author already knows about this.
-    if any("[" in word for word in words):
-        return None
-    return (
-        "`pgrep -f` matches the shell running it, because this command's own /proc cmdline "
-        "contains the pattern — so the check reads as 'still running' forever. Five such "
-        "waiters were left spinning on 2026-08-17 and none ever fired. Wait on the thing "
-        "itself: prefer `run_in_background: true` and let the harness notify on exit, or match "
-        "the PID (`while kill -0 <pid> 2>/dev/null`), or break the self-match with a character "
-        "class: `pgrep -f 'b2_[w]ipe_prefixes'`."
-    )
-
-
-def security_and_analysis_problem(stage: list[str]) -> str | None:
-    """A `security_and_analysis` PATCH naming fewer than all five members.
-
-    GitHub REPLACES the whole object, so an omitted member is RESET rather than left alone.
-    Sending only `secret_scanning` disabled Dependabot alerts and enabled nothing, and the call
-    returns 200 either way.
-    """
-    words = strip_shell_keywords(stage)
-    if not invokes(words, ("gh", "api")):
-        return None
-    text = " ".join(words)
-    if "security_and_analysis" not in text:
-        return None
-    if "PATCH" not in text and "-X" not in text:
-        return None
-    missing = [m for m in _SECURITY_ANALYSIS_MEMBERS if m not in text]
-    if not missing:
-        return None
-    return (
-        "A `security_and_analysis` PATCH REPLACES the object — every member you omit is reset, "
-        "and the call returns 200 either way. This one omits: "
-        + ", ".join(missing)
-        + ". Send all five, or use the dedicated endpoints "
-        "(`PUT /repos/{o}/{r}/vulnerability-alerts`, `.../automated-security-fixes`), which "
-        "change one setting without touching the rest."
     )
 
 
@@ -313,13 +207,9 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
 
 
 _RULES = (
-    ugrep_flag_problem,
-    bare_stash_problem,
     rollout_restart_problem,
     remote_git_problem,
     burst_public_hostname_problem,
-    pgrep_self_match_problem,
-    security_and_analysis_problem,
     issue_create_by_hand_problem,
     skip_staleness_problem,
 )
@@ -329,9 +219,7 @@ _RULES = (
 # splitter cannot read the command: text naming none of them cannot reach a rule however it
 # is split, so a typo in a command about something else costs no prompt, and a host without
 # the `claude_guard` deploy prompts only on the commands this hook exists for.
-_RULE_BINARIES = (
-    frozenset({"grep", "git", "kubectl", "ssh", "pgrep", "gh"}) | _BURST_TOOLS
-)
+_RULE_BINARIES = frozenset({"kubectl", "ssh", "gh"}) | _BURST_TOOLS
 _RULE_BINARY_RE = re.compile(
     r"(?<![\w/.-])(" + "|".join(sorted(_RULE_BINARIES)) + r")(?![\w.-])"
 )
