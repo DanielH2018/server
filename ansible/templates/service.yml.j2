@@ -19,8 +19,13 @@
                       macro has no `{% call %}` slot, so converting tdarr can only move that
                       reasoning off the line it governs. Same refusal pvc() makes for
                       pi-peer-backup and valheim.
-    extra labels      registry and deploy-ui carry metadata labels the macro does not emit.
-    LoadBalancer      the macro is ClusterIP-only (it emits no `type:`).
+    extra metadata    registry's Service carries a `homelab/role` label (the --prune selector
+                      keys on it) and a pinned `clusterIP`. The macro emits neither.
+    no selector AT ALL  deploy-ui's Service is selector-less on purpose — its backend is a host
+                      process reached through a hand-written EndpointSlice, not a pod.
+    LoadBalancer      the macro is ClusterIP-only (it emits no `type:`), which rules out
+                      jellyfin's service-lan, mosquitto, pihole, valheim, terraria, traefik and
+                      wg-easy.
 
   Arguments mirror ingressroute()'s style:
     name       Service (and selector `app` label) name; matches the Deployment's own label and
