@@ -32,6 +32,23 @@ prowlarr_k8s_claim: prowlarr-config
 prowlarr_k8s_storage_class: longhorn
 prowlarr_k8s_size: 2Gi
 
+# The rollout budget for BOTH Deployments, declared once. Read by the `manifests_rollout_timeout`
+# passed to k8s/manifests in tasks/main.yml (the drain's `rollout status --timeout`) and by
+# `progressDeadlineSeconds` in both deployment templates. The deadline has to move with the
+# timeout: at the 600s Kubernetes default, `rollout status` fails on ProgressDeadlineExceeded
+# whatever `--timeout` says (the valheim role measured exactly that).
+# Sized from a cold pull (#2369): on 2026-09-24 daniel-server pulled the 292 MB flaresolverr
+# digest in 8m53.87s while it pulled prowlarr's own 80 MB image in 3m40.96s, both uncached.
+# The 300s default failed that deploy after its apply while the old flaresolverr pod served
+# throughout. That pod started 535s after it was scheduled.
+# DECIDED: 780s, the most the rollback budget allows. A failed auto-deploy's rollback run must fit
+# the snapshot, the revert, this wait and the stabilisation soak inside
+# gitops_deploy_k8s_rollback_timeout_s (1320s), and those other terms take 540s.
+# test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that sum. 780s leaves
+# 245s over the one measured pull. A slower link needs the rollback budget raised first. A cached
+# image rolls in seconds, so the budget costs time only on a real hang.
+prowlarr_k8s_rollout_timeout: 780s
+
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES
 # in a headless browser. Under Compose it sits on its own `prowlarr-flaresolverr` network,
