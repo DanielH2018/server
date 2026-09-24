@@ -111,7 +111,16 @@ if (( PINNED > 0 )); then
   echo "        /usr/local/bin/longhorn-reap-orphan-snapshots.sh          # dry run, read it"
   echo "        sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
 fi
-# A failure here is worth a non-zero exit so a cron mail or a Kuma push notices, but it is never
-# urgent: the next run retries from scratch and nothing accumulates in the meantime.
+# A failure here is worth a non-zero exit, but the exit code is not what anyone reads: cron
+# discards it and mails stdout to /var/mail/ubuntu, which nothing opens. The reader is check 9 of
+# longhorn-backup-health.sh, which runs every 10 minutes and pushes the `k3s Longhorn Backup`
+# tile DOWN on the ABORT line above or on a `N failed` above zero in the summary line. That
+# claim was unbacked until 2026-09-24 — this comment named a Kuma push that did not exist
+# (#2418). Neither case is urgent: the next run retries from scratch and nothing accumulates in
+# the meantime.
+#
+# Both lines the reader matches are logged above, and it matches them AS WRITTEN. Rewording
+# either one silently blinds the check, so change `ansible/roles/setup/k3s/files/
+# longhorn_backup_health_logic.py`'s `_TRIM_SUMMARY_RE` / `_TRIM_ABORT_RE` in the same edit.
 (( FAILED > 0 )) && exit 1
 exit 0

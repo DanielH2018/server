@@ -483,6 +483,14 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
 
+# How far back check 9 of longhorn-backup-health.sh reads the `longhorn-trim` and `b2-deletions`
+# journal tags. Both crons run daily, so 26h holds the last run under either DST offset with a
+# couple of hours of jitter to spare. It is also how long a reported fault stays RED: the trim
+# arm reads only the NEWEST run, so a fixed trim goes green on its next run whatever this is,
+# while an UNPRICED deletion — a permanent event, not a state — ages out after this window.
+# Shrinking it below one cron period leaves the check with nothing to read on most ticks.
+k3s_longhorn_cron_evidence_window_hours: 26
+
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every
 # volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->

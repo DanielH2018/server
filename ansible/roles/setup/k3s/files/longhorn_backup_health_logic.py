@@ -433,6 +433,101 @@ def check_restore_coverage(
     )
 
 
+# ── check 9: do the trim and B2-accounting crons have a reader? ─────────────────────────────
+
+# `trimmed 41 volume(s), 3 skipped, 0 failed` — longhorn-trim-volumes.sh's unconditional summary
+# line, matched as written rather than by field position. The abort arm logs no summary at all,
+# which is why both shapes are searched and the newest of either decides.
+_TRIM_SUMMARY_RE = re.compile(r"trimmed \d+ volume\(s\), \d+ skipped, (\d+) failed")
+_TRIM_ABORT_RE = re.compile(r"^ABORT: (.*)")
+
+
+def _newest_trim_verdict(lines: list[str]) -> tuple[int, str] | None:
+    """The trim's last run, read backwards from the newest journal line.
+
+    Returns None when no line in the window carries either shape. That is "no reading", not
+    "healthy": whether the trim cron is still running at all is a separate alarm, and this check
+    deliberately does not claim it (#2443).
+    """
+    for line in reversed(lines):
+        text = line.strip()
+        abort = _TRIM_ABORT_RE.match(text)
+        if abort:
+            return (4, f"longhorn-trim aborted its last run: {abort.group(1)[:160]}")
+        summary = _TRIM_SUMMARY_RE.search(text)
+        if summary:
+            failed = int(summary.group(1))
+            if failed:
+                return (
+                    4,
+                    f"longhorn-trim failed on {failed} volume(s) on its last run — "
+                    "freed blocks are still being backed up",
+                )
+            return None
+    return None
+
+
+def check_cron_evidence(
+    trim_lines: list[str] | None,
+    deletion_lines: list[str] | None,
+    window_hours: int,
+) -> list[tuple[int, str]]:
+    """Whether the trim and B2-deletion-accounting crons reported anything worth a page.
+
+    Both crons write their verdict through `logger` and nothing read it (#2418). The trim's own
+    comment claimed "a cron mail or a Kuma push notices" a failure; no Kuma push existed, and the
+    cron mail lands in /var/mail/ubuntu among thousands of unread success lines. This check is
+    that reader.
+
+    `trim_lines` / `deletion_lines` are the journal lines for each tag over the last
+    `window_hours`, or None when the read itself failed.
+
+    Rank 4 throughout, where `_fetch_text` uses rank 1 for a failed kubectl read. That asymmetry
+    is deliberate: a kubectl failure means the backup plane is unreadable, while everything here
+    is the evidence plane. A trim that reclaimed nothing and a deletion nobody could price are
+    both real and neither is urgent, so they must not displace a stale backup from the push slot.
+    """
+    problems: list[tuple[int, str]] = []
+
+    if trim_lines is None:
+        problems.append(
+            (
+                4,
+                "could not read the longhorn-trim journal — a trim failure has no reader",
+            )
+        )
+    else:
+        trim_problem = _newest_trim_verdict(trim_lines)
+        if trim_problem:
+            problems.append(trim_problem)
+
+    if deletion_lines is None:
+        problems.append(
+            (
+                4,
+                "could not read the b2-deletions journal — an UNPRICED deletion has no reader",
+            )
+        )
+    else:
+        # The whole window is searched, not just the newest run, for two reasons. `logger` writes
+        # one journal entry per line and probe.py's UNPRICED report is a multi-line block, so
+        # "the newest run" cannot be reconstructed from the lines alone. And an unpriced deletion
+        # is a permanent EVENT rather than a current state — the transactions it spent cannot be
+        # recovered by any later run — so the right behaviour is to report it once and let it age
+        # out of the window, which it does on its own.
+        unpriced = [line for line in deletion_lines if "UNPRICED" in line]
+        if unpriced:
+            problems.append(
+                (
+                    4,
+                    f"b2-deletions reported UNPRICED in the last {window_hours}h "
+                    f"(Class C spent that no later run can price): {unpriced[0].strip()[:160]}",
+                )
+            )
+
+    return problems
+
+
 # ── final verdict assembly ───────────────────────────────────────────────────────────────────
 
 

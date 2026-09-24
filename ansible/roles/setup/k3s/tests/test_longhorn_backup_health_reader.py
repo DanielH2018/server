@@ -55,6 +55,44 @@ def test_reader_pins_the_transport(tmp_path):
     assert "STUB_KUBECTL_MARKER" in proc.stdout
 
 
+def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
+    """Check 9 shells out to journalctl correctly, which no pure-function test can see.
+
+    The stub asserts the argv the reader builds — the `-t <tag>` selector, the `--since -Nh`
+    window from LONGHORN_CRON_EVIDENCE_WINDOW_HOURS, and `--output=cat`, which is what makes each
+    stdout line one journal message. Get any of those wrong against the real journalctl and the
+    read still exits 0 with output the parse silently finds nothing in, so this is the seam.
+    """
+    stub = tmp_path / "stub-journalctl"
+    stub.write_text(
+        "#!/usr/bin/env bash\n"
+        'printf "%s\\n" "$*" | grep -q -- "--since -26h" || exit 64\n'
+        'printf "%s\\n" "$*" | grep -q -- "--output=cat" || exit 64\n'
+        'case "$*" in\n'
+        '  *"-t longhorn-trim"*) echo "trimmed 38 volume(s), 3 skipped, 3 failed" ;;\n'
+        '  *"-t b2-deletions"*) : ;;\n'
+        "  *) exit 64 ;;\n"
+        "esac\n"
+    )
+    stub.chmod(0o755)
+
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL="/bin/false",
+        LONGHORN_JOURNALCTL=str(stub),
+    )
+
+    proc = subprocess.run(
+        reader_argv(), capture_output=True, text=True, env=env, timeout=30
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.returncode == 0, proc.stderr
+    # The rank-1 kubectl failures win the push slot, so the trim verdict is in the FULL message
+    # the reader logs rather than on stdout. That is where to read it, and its presence there is
+    # what proves the journal read reached a verdict rather than being dropped.
+    assert "longhorn-trim failed on 3 volume(s)" in logger_calls.read_text()
+
+
 def test_reader_syslog_line_is_intercepted(tmp_path, logger_calls):
     """The reader's own `logger` call reaches the conftest stub, not the host's syslog.
 

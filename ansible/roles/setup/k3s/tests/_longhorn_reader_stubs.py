@@ -71,6 +71,13 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR": "30 4",
             "LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS": "3",
             "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS": "5",
+            # /bin/true — rc 0 with no output, which check 9 reads as "the window held nothing"
+            # and is silent about. It must not be the real journalctl: the verdict would then
+            # depend on whatever the machine running the suite happens to have logged. A test
+            # about check 9 overrides this with /bin/false or a stub that prints lines.
+            "LONGHORN_JOURNALCTL": "/bin/true",
+            "LONGHORN_JOURNAL_TIMEOUT_S": "10",
+            "LONGHORN_CRON_EVIDENCE_WINDOW_HOURS": "26",
         }
     )
     env.update(overrides)

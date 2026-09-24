@@ -311,7 +311,14 @@
     #               only ever fails unattended.
     # The script defends itself against both as well (find_tool / find_kubeconfig); these
     # are the second layer, kept because they are also the documentation.
-    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/infra_map/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html"
+    #
+    # STDOUT ONLY is discarded, and not via `MAILTO=""` (#2418). This job lands in the sys user's
+    # crontab rather than a file of its own, so a MAILTO there would also silence the weekly
+    # secret rotation and the TLS cert-expiry watch beside it. Every run of this one printed
+    # `Wrote …homelab-infra-map.html`, and at */15 that is 4,602 of the 5,678 messages sitting
+    # unread in /var/mail/ubuntu since 2026-08-03 — enough to bury a real one. stderr is left
+    # alone so a failing run still mails, which is the whole value of the mbox.
+    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/infra_map/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html >/dev/null"
     user: "{{ sys_user }}"
   become: true
 
