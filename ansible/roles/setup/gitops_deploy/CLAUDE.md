@@ -167,7 +167,9 @@ Each arm below is a rule and the function that holds it. The record page has the
     every arm here is FORWARD-ONLY.** A failure writes `hold_sha` — and `hold_plane` for a
     plane, never for a service — alerts saying nothing was rolled back, and leaves the tree
     fast-forwarded: no `git reset`, which would leave the tree claiming the old commit over
-    half-new live state. `deploy_handlers._apply_broad_k8s` says why it gates on nothing;
+    half-new live state. The bumps go through the staging gate first and a block DEMOTES them
+    into the defer-and-alert channel rather than holding the range
+    (`deploy_broad_k8s.gate_broad_k8s`); they share the plans' budget, so the ceiling holds.
     `deploy_logic.broad_budget_ok` has no production caller.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
@@ -281,7 +283,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
-| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; the staging gate's I/O shell; what the broad arm does with the half it will not apply |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,

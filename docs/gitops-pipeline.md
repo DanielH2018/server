@@ -553,18 +553,29 @@ stay).
     `flaresolverr`, `homepage`, `freshrss`, `home-assistant`, `speedtest`, `radarr`,
     `prowlarr`, `bazarr`) behind one `roles/setup/k3s` commit; the 01:48 tick's range began
     after them, and every one of the nine pods was still serving its old image when `kubectl`
-    was read. `deploy_handlers._apply_broad_k8s` runs after the plan loop, so a broad apply
+    was read. `deploy_broad_k8s.apply_broad_k8s` runs after the plan loop, so a broad apply
     that failed or hit a busy lock has already returned and the bumps are re-derived by the
     next tick's range.
-    - **Forward-only, with no staging gate**, and each has its own reason. `_rollback_k8s`
-      resets the tree to `local`, which here would undo the ff-merge under a setup plane this
-      tick already applied — the tree would claim the old commit while the host runs the new
-      one, which is the state the broad arm's own no-reset rule exists to prevent.
-      `consult_staging` has to run BEFORE the ff-merge or a process death inside its window
-      strands the range, and this arm ff-merges first by construction so an unrelated commit
-      lands even when the apply fails; the two cannot both hold, and the gate is off on every
-      host. The budget agrees with both: 180 flock + 1800 broad + 900 k8s = 2880s fits the
-      unit's 3600s ceiling, and adding the 1320s rollback budget would not.
+    - **The staging gate decides first, and a rejection DEMOTES rather than holds.**
+      `deploy_broad_k8s.gate_broad_k8s` consults it before the ff-merge, which is where
+      `handle_k8s`'s own `DECIDED:` says it has to run. The gate is armed and blocking on
+      daniel-box, the only host running this deployer, so deploying past it in this arm would
+      be a way around an abort valve a k8s-only tick honours and would leave a mixed range out
+      of the tick ledger the Phase-C evidence is made of. On a block the promoted set is folded
+      back into `ChangeSet.k8s` — the defer-and-alert channel any change the promotion
+      refuses takes — and the broad half still applies. Holding instead would park the setup plane and
+      whatever else shared the push behind one service's verdict, which is the cost
+      `deploy_defer`'s `DECIDED:` measured; and the range merges below, so `skip_hold` could
+      never match it again and the hold would stick. The one-tick
+      `staging_gate_override` is honoured here exactly as `handle_k8s` honours it.
+    - **Forward-only, and on the broad budget.** `_rollback_k8s` resets the tree to `local`,
+      which here would undo the ff-merge under a setup plane this tick already applied — the
+      tree would claim the old commit while the host runs the new one, which is the state the
+      broad arm's own no-reset rule exists to prevent. The bumps share the plans'
+      `BROAD_DEPLOY_TIMEOUT_S` rather than taking a `K8S_DEPLOY_TIMEOUT_S` of their own, for
+      the reason the plans share it: the broad path's worst case is then 180 flock + 720
+      staging + 1800 apply = 2700s, still under the k8s path's 3120s, so the unit's ceiling
+      does not move. A budget per phase would have put a mixed range past it.
     - **A failure writes `hold_sha` and no `hold_plane`.** `clear_broad_hold` matches a hold's
       plane against the playbook and tags an apply ran, and a service tag is not a plane — a
       `hold_plane` written here would be one no broad apply could ever clear.

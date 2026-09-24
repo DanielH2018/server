@@ -46,7 +46,7 @@ MAX_LINES = 400
 # docs/ page, or split the file instead.
 OVER_CEILING: dict[str, str] = {
     "gitops_deploy": (
-        "402 lines on 2026-09-24. It sat at exactly 400 and #2348 added a fourth broad-plane "
+        "404 lines on 2026-09-24. It sat at exactly 400 and #2348 added a fourth broad-plane "
         "rule — that a broad range deploys the promoted image bumps riding on it — which is "
         "an operating rule, not history: its record is already in docs/gitops-pipeline.md. "
         "Trim two lines of an existing rule before adding to it."

@@ -88,17 +88,19 @@ def _mixed(settings, tick, *broad_paths, promote: bool = True):
 def test_a_mixed_range_applies_the_setup_plane_then_deploys_the_bump(
     gitops_deploy, tick, settings, state_dir
 ):
-    """Both applies run, in that order, and the bump gets the k8s budget rather than the broad one.
+    """Both applies run, in that order, and both come out of the one broad budget.
 
     The order is the one `main()`'s broad-before-k8s branch exists to hold: a workload applied
-    onto a host whose setup plane has not applied is the state the ordering prevents.
+    onto a host whose setup plane has not applied is the state the ordering prevents. The
+    shared budget is what keeps the unit's ceiling reading this arm as a single apply, so the
+    bump must NOT get a `K8S_DEPLOY_TIMEOUT_S` of its own on top of it.
     """
     config = _mixed(settings, tick, APPLYABLE_ROLE)
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [APPLY_GITOPS_DEPLOY, DEPLOY_SONARR]
     assert tick.index("git", "merge") < tick.index("playbook", "sonarr")
     deployed = tick.log[tick.index("playbook", "sonarr")][2]
-    assert fits_budget(deployed, gitops_deploy.K8S_DEPLOY_TIMEOUT_S)
+    assert fits_budget(deployed, gitops_deploy.BROAD_DEPLOY_TIMEOUT_S)
     assert ("annotation", {"sonarr"}) in tick.log
     assert _marker(state_dir, "hold_sha") is None
 
@@ -145,6 +147,58 @@ def test_a_bump_auto_deploy_never_promoted_is_deferred_not_deployed(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == []
     assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+
+
+# ── the staging gate decides, before the ff-merge ─────────────────────────────────────────
+
+
+def _blocking(settings, tick, *broad_paths):
+    """A mixed range whose staging consultation rejects, with blocking armed as on daniel-box."""
+    config = _mixed(settings, tick, *broad_paths)
+    tick.staging_verdict = "rejected"
+    return dataclasses.replace(config, staging_gate_blocking=True)
+
+
+def test_a_staging_rejection_defers_the_bump_and_still_applies_the_plane(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The gate is armed AND blocking on daniel-box, so this arm may not deploy past it.
+
+    It demotes rather than holds: the range carries the setup plane and whatever else shared
+    the push, and parking all of that behind one service's staging verdict is the cost
+    `deploy_defer`'s `DECIDED:` measured. So the plane applies, the range merges, and the bump
+    takes the defer-and-alert channel any unpromotable change takes.
+    """
+    config = _blocking(settings, tick, APPLYABLE_ROLE)
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [APPLY_GITOPS_DEPLOY], "the bump was not deployed"
+    assert tick.merges == [ORIGIN], "the plane's range still merges"
+    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert _marker(state_dir, "hold_sha") is None, (
+        "the range merged, so skip_hold could never match it again and the hold would stick"
+    )
+
+
+def test_the_staging_override_lets_the_bump_through(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The rejecting half: the documented one-tick escape hatch works here too.
+
+    An override this arm ignored would be a trap — the operator arms one marker and two
+    handlers read it.
+    """
+    config = _blocking(settings, tick, APPLYABLE_ROLE)
+    tick.staging_override = True
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [APPLY_GITOPS_DEPLOY, DEPLOY_SONARR]
+    assert not tick.staging_override, "the override is spent, not left armed"
+
+
+def test_the_gate_is_consulted_before_the_ff_merge(gitops_deploy, tick, settings):
+    """A death inside the gate's window must leave `local` behind origin, or the range strands."""
+    config = _mixed(settings, tick, APPLYABLE_ROLE)
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.log.index(("staging", {"sonarr"})) < tick.index("git", "merge")
 
 
 # ── a failed bump holds the SHA and rolls nothing back ────────────────────────────────────
