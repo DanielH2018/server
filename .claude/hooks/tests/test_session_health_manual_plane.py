@@ -137,3 +137,39 @@ def test_a_role_with_no_narrowing_still_names_the_role_tag():
     for tags in (None, "k3s -"):
         (line,) = _problems(manual=_K3S, manual_tags=tags)
         assert "ansible/k3s-bringup.yml --tags k3s" in line
+
+
+# ── #2345: the banner warns about a command that arms the control plane ─────────────────
+
+
+def test_a_whole_role_apply_carries_the_control_plane_warning():
+    """`--tags k3s` arms the installer restart and the key re-encryption.
+
+    The journal line, the Discord alert and `land.sh` all carry this through
+    `deploy_remediation`. The banner built its own command and carried nothing, so a session
+    reading it took the widest, most destructive form of the apply with no notice.
+    """
+    for tags in (None, "k3s -"):
+        (line,) = _problems(manual=_K3S, manual_tags=tags)
+        assert "--tags k3s`" in line
+        assert "rotate-keys" in line, "the warning names the irreversible half"
+
+
+def test_a_narrowed_apply_reaching_the_gated_tasks_keeps_the_warning():
+    """`k3s_server` selects every task in `tasks/server.yml`, restart and re-encryption both."""
+    (line,) = _problems(manual=_K3S, manual_tags="k3s k3s_server")
+    assert "--tags k3s_server" in line
+    assert "rotate-keys" in line
+
+
+def test_a_narrowed_apply_reaching_nothing_gated_carries_no_warning():
+    """The rejecting half: a warning printed beside every command is one nobody reads."""
+    (line,) = _problems(manual=_K3S, manual_tags="k3s kubeconfig")
+    assert "--tags kubeconfig" in line
+    assert "WARNING" not in line and "rotate-keys" not in line
+
+
+def test_a_role_with_no_gated_tasks_carries_no_warning():
+    """`common` is applied by no playbook, and nothing about it takes the cluster down."""
+    (line,) = _problems(manual=_COMMON)
+    assert "WARNING" not in line

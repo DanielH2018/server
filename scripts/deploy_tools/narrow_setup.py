@@ -511,6 +511,11 @@ def role_tags(
         got = path_tags(rel, index, old, new, repo)
         print(f"narrow-setup: {rel} -> {','.join(sorted(got))}", file=sys.stderr)
         tags |= got
+    if not tags:
+        # Every changed path reaches no host. The deployer should not have deferred this range
+        # at all, so there is no narrowing to offer — and an empty `--tags` value runs the
+        # whole playbook, which is the opposite of what an empty answer means here.
+        raise CannotNarrow("every changed path reaches no host, so no tag applies")
     if role_tag in tags:
         raise CannotNarrow(f"the derivation lands on {role_tag}, the whole-role tag")
     # Read the other roles only once a tag is in hand: `initial_setup.yml` lists fifteen roles
@@ -521,11 +526,6 @@ def role_tags(
             f"{', '.join(sorted(shared))} is also declared by another role {playbook} "
             "applies, so that tag would run the other role's tasks too"
         )
-    if not tags:
-        # Every changed path reaches no host. The deployer should not have deferred this range
-        # at all, so there is no narrowing to offer — and an empty `--tags` value runs the
-        # whole playbook, which is the opposite of what an empty answer means here.
-        raise CannotNarrow("every changed path reaches no host, so no tag applies")
     return frozenset(tags)
 
 

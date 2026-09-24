@@ -10,7 +10,11 @@ apart in what order they name the ff-merge and the playbook.
 from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
-from gitops_markers import CONTENTION_CLEAR_CMD, MANUAL_PLANE_CLEAR_CMD  # noqa: F401
+from gitops_markers import (  # noqa: F401
+    CONTENTION_CLEAR_CMD,
+    MANUAL_PLANE_CLEAR_CMD,
+    MAXIMAL_ROLE_GATED_TAGS,
+)
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
 # real one from config.env and passes it; the repo-side callers (deploy_tags, land_tags) run
@@ -201,14 +205,9 @@ _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     ),
 }
 
-# The narrower tags that still reach a role's gated tasks, and what they arm. A narrowed
-# `--tags` naming one keeps a warning: every task in `roles/setup/k3s/tasks/server.yml`
-# carries `k3s_server`, the restart and the re-encryption included, so a range touching that
-# file narrows to the tag that arms them. A constant because this module cannot import yaml;
-# `test_the_gated_tags_are_every_tag_the_gated_tasks_carry` derives it from the role.
-_MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {
-    "k3s": frozenset({"k3s_server"}),
-}
+# The narrower tags that still reach a role's gated tasks live in `gitops_markers`, imported
+# above: the SessionStart banner needs the same set and cannot reach this module (#2345). What
+# stays here is the long prose, which only the surfaces with room for it print.
 _MAXIMAL_ROLE_GATED_WARNING: dict[str, str] = {
     "k3s": f"that tag list reaches tasks/server.yml, which arms {_K3S_GATED_TASKS}",
 }
@@ -267,7 +266,7 @@ def _setup_commands(
         cmd = f"`ansible-playbook {playbook} --tags {tags}`"
         if not narrowed:
             warning = maximal_tag_warning(role)
-        elif narrowed & _MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
+        elif narrowed & MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
             warning = _MAXIMAL_ROLE_GATED_WARNING[role]
         else:
             warning = ""

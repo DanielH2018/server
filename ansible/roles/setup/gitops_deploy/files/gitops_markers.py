@@ -174,6 +174,53 @@ CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
 
+# The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
+# reach the tasks that make it one. `--tags k3s` reapplies MetalLB, Longhorn, the backup
+# targets, the crons, CoreDNS and the node config; every task in `roles/setup/k3s/tasks/
+# server.yml` carries `k3s_server`, so a narrowing that lands on that tag arms the installer
+# restart and the key re-encryption as surely as the whole-role tag does.
+#
+# The DATA lives here because three surfaces need it and two of them cannot reach the
+# deployer's tree: `deploy_remediation` composes the long prose for the journal, the Discord
+# alert and `land.sh`, while `scripts/lib/deployer_park.py` renders the SessionStart banner
+# with only `scripts/` on `sys.path` (#2345). `test_the_gated_tags_are_every_tag_the_gated_
+# tasks_carry` derives the set from the role itself.
+MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {
+    "k3s": frozenset({"k3s_server"}),
+}
+
+# The one-line version of what such an apply arms, for a surface with no room for the prose.
+# It names `rotate-keys` because that is the irreversible half: the restart costs a few
+# seconds of API server, the re-encryption rewrites every Secret in etcd.
+MAXIMAL_ROLE_WARNING: dict[str, str] = {
+    "k3s": (
+        "that command restarts the k3s control plane and arms `k3s secrets-encrypt "
+        "rotate-keys`, which re-encrypts every Secret in etcd"
+    ),
+}
+
+
+def maximal_apply_warning(role: str, tags) -> str:
+    """What a printed `--tags` value for `role` arms, or "" when it arms nothing gated.
+
+    Args:
+        role: the role, under the `--tags` value that selects it.
+        tags: the tags the surface is about to print, as an iterable of strings.
+
+    Two shapes carry the warning. The WHOLE-role tag, which is what a surface prints when the
+    deployer could not narrow the change. And a narrowed list that still reaches the role's
+    gated tasks — `MAXIMAL_ROLE_GATED_TAGS`. A narrowed list reaching neither gets nothing:
+    a warning printed beside every command is one nobody reads.
+    """
+    if role not in MAXIMAL_ROLE_WARNING:
+        return ""
+    tags = frozenset(tags)
+    gated = MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset())
+    if tags == frozenset({role}) or (tags & gated):
+        return MAXIMAL_ROLE_WARNING[role]
+    return ""
+
+
 # How long a contention streak may run before monitor-bridge pages on it and the SessionStart
 # banner names it: the deployer's longest apply budget, `gitops_deploy_broad_timeout_s` =
 # 1800 s, so a holder past it has outlived every legitimate deploy. The bridge's own default

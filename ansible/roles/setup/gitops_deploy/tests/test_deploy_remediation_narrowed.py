@@ -159,7 +159,7 @@ def test_a_narrowed_tag_reaching_the_gated_tasks_keeps_the_warning():
 def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     """Derived from the whole ROLE, so a gated task retagged or moved cannot slip the warning.
 
-    The deployer's venv cannot import yaml, so `_MAXIMAL_ROLE_GATED_TAGS` is a constant there;
+    The deployer's venv cannot import yaml, so `MAXIMAL_ROLE_GATED_TAGS` is a constant there;
     this is where it is checked against the role. The walk covers every task file rather than
     `server.yml` alone: nothing else notifies `Restart k3s` today, and the day one does, a
     narrowed `--tags` naming its tag would take the control plane down silently (#2350).
@@ -174,7 +174,7 @@ def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     )
     carried = set().union(*(tags for _, tags in gated))
     assert "k3s_server" in carried, sorted(carried)
-    watched = deploy_remediation._MAXIMAL_ROLE_GATED_TAGS["k3s"]
+    watched = deploy_remediation.MAXIMAL_ROLE_GATED_TAGS["k3s"]
     unwatched = {name: sorted(tags - watched) for name, tags in gated if tags - watched}
     assert not unwatched, (
         f"gated tasks carry tags the warning does not watch: {unwatched}"
