@@ -63,8 +63,24 @@ and one each for containerd.io, the compose plugin and the buildx plugin — and
 into apt's `name=5:29.8.1-1~ubuntu.24.04~noble` form as `docker_install_package_specs`.
 Before the pins, a fresh install took whatever `download.docker.com` served that day and
 the deliberate bump moved to whatever it served on the day it ran. Renovate tracks the four
-on github-releases (moby/moby, containerd/containerd, docker/compose, docker/buildx) in one
-manual group. Merging that PR moves nothing on the Pi: `install.yml` reads the installed
+on the `deb` datasource against download.docker.com's own noble/arm64 index (docker-ce,
+containerd.io, docker-compose-plugin, docker-buildx-plugin) in one manual group.
+
+**The manager tracks what apt installs, not what upstream tagged** (#2341). Until
+2026-09-24 the four read GitHub releases, and Docker packages a release days-to-weeks after
+upstream tags it: PR #2327 offered containerd 2.4.0 while the index topped out at 2.3.5, so
+`docker-engine-upgrade` would have failed at apt *after* stopping every Compose project on
+the Pi. Reading the index means the PR opens only once the Pi can install the version.
+Two limits survive that. The manager strips apt's Debian revision, so `2.3.4-1` and
+`2.3.4-2` are one version and a revision-only repackage offers no PR. And
+`docker_install_apt_suffix` hardcodes revision `-1`, so a version Docker publishes only as
+`-2` renders a spec apt cannot resolve — true of nothing pinned today, but not something
+the manager can prove. ENFORCED by
+`scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin`
+and its siblings: the depName is the apt package the spec renders, the registryUrl is
+Docker's index, and the group stays out of the automerging catch-all.
+
+Merging that PR moves nothing on the Pi: `install.yml` reads the installed
 docker-ce version first and installs only where there is none (an explicit
 `apt-get install pkg=ver` moves a held package, so `state: present` alone would not have
 protected a running engine from a pin bump); on an installed host it reports the gap and
