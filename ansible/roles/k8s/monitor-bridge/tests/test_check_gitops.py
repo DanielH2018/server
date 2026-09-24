@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 import checks.gitops
+import gates
 
 # The last_run marker is written against this epoch and the check reads the same one, so
 # "fresh" and "stale" are exact distances from the 90m default rather than a race with the
@@ -430,7 +431,7 @@ def test_a_role_no_playbook_applies_is_not_told_to_run_none(cfg):
 
 
 def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
-    """A marker that does not decode reads as absent, not as a check error (#2371).
+    """An undecodable `manual_plane_tags` sidecar is not a check error (#2371).
 
     Raising here turned `gitops_status` into DOWN "check error" every cycle, which masks the
     hold, diverged, behind and contention arms — the four this monitor exists to raise.
@@ -443,11 +444,35 @@ def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
     assert "deploy held at held123a" in msg
 
 
-def test_a_decodable_sidecar_is_still_read(tmp_path, cfg):
-    """The accepting half: degrading to absent must not become "never read"."""
+def test_an_undecodable_sidecar_line_is_skipped_and_the_rest_is_read(tmp_path, cfg):
+    """The sidecar's accepting half: one torn line must not cost the valid line beside it.
+
+    `common kube\\xffconfig` still splits into two fields once decoded with replacement, so
+    the skip is per line, which also keeps a tag that selects nothing out of the page.
+    """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
-    _gw(tmp_path, "manual_plane_tags", "k3s kubeconfig")
+    (tmp_path / "manual_plane_tags").write_bytes(
+        b"common kube\xffconfig\nk3s kubeconfig\n"
+    )
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
-    assert "--tags kubeconfig" in msg
+    assert "k3s --applied kubeconfig" in msg
+    assert "�" not in msg
+
+
+@pytest.mark.parametrize("marker", ["hold_sha", "manual_plane"])
+def test_an_undecodable_marker_other_than_the_sidecar_is_a_check_error(
+    tmp_path, cfg, marker
+):
+    """The decode tolerance is the sidecar's alone: a torn hold is NOT "no held deploy".
+
+    A `hold_sha` or `manual_plane` the check cannot decode says nothing about whether a
+    deploy is held, so it raises and `_evaluate` reports DOWN "check error" — the rule
+    `deploy_state.py` states for an unreadable state directory.
+    """
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    (tmp_path / marker).write_bytes(b"held\xff123abc456789\n")
+    ok, msg = gates._evaluate(cfg, "gitops_status", checks.gitops.check_gitops_status)
+    assert not ok
+    assert "gitops_status check error" in msg

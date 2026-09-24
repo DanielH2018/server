@@ -226,19 +226,39 @@ def check_gitops_alive(cfg: Config, now: float | None = None) -> tuple[bool, str
 
 
 def _read_gitops_marker(cfg: Config, name: str) -> str | None:
-    """One marker's text, or None when it is absent or unreadable.
+    """One marker's text, or None when it is absent.
 
-    A marker that does not decode reads as ABSENT, the same doctrine every parser in
-    `gitops_markers` states: garbage is nothing rather than a guess. It used to raise, which
-    `gate_lib._evaluate` turned into `gitops_status` DOWN "check error" every cycle — and that
-    masks the hold, diverged, behind and contention arms, which are the four this monitor
-    exists to raise (#2371). Losing one arm to a torn file beats losing all five.
+    Any other failure to read it raises, and `gates._evaluate` reports DOWN "check error". A
+    `hold_sha` or `manual_plane` the check cannot read is NOT "no hold" — the rule
+    `deploy_state.py` states for an unreadable state directory.
     """
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, name)) as fh:
             return fh.read().strip() or None
-    except OSError, UnicodeDecodeError:
+    except FileNotFoundError:
         return None
+
+
+def _read_manual_plane_tags(cfg: Config) -> str | None:
+    """The `manual_plane_tags` sidecar, with every line that does not decode dropped.
+
+    The sidecar alone tolerates a decode error, because it only narrows the remediation a
+    page prints; a role with no line falls back to the whole-role tag. Raising on it turned
+    `gitops_status` into DOWN "check error" every cycle, masking the hold, diverged, behind and
+    contention arms this monitor exists to raise (#2371). The skip is per line, as in every
+    parser in `gitops_markers`: a torn `k3s kube\\xffconfig` still splits into two fields, and
+    printing its tag would select nothing.
+    """
+    try:
+        with open(
+            os.path.join(cfg.GITOPS_STATE_DIR, MARKERS["manual_plane_tags"]),
+            errors="replace",
+        ) as fh:
+            text = fh.read()
+    except FileNotFoundError:
+        return None
+    kept = [line for line in text.splitlines() if "�" not in line]
+    return "\n".join(kept).strip() or None
 
 
 def check_gitops_status(cfg: Config) -> tuple[bool, str]:
@@ -250,5 +270,5 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
         manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
-        manual_plane_tags=_read_gitops_marker(cfg, MARKERS["manual_plane_tags"]),
+        manual_plane_tags=_read_manual_plane_tags(cfg),
     )

@@ -109,7 +109,12 @@ def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
         raise CannotNarrow(f"{path} does not parse: {exc}") from exc
     if not isinstance(a, dict) or not isinstance(b, dict):
         raise CannotNarrow(f"{path} is not a mapping of keys")
-    return {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
+    try:
+        return {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
+    except RecursionError as exc:
+        # A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and `!=`
+        # recurses into it until the stack runs out.
+        raise CannotNarrow(f"{path} holds a recursive alias") from exc
 
 
 def path_tags(

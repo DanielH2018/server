@@ -218,6 +218,21 @@ def _top_level_keys_naming(doc: dict, name: str | re.Pattern) -> set[str]:
     }
 
 
+# The names Ansible loads from a role's `defaults/` and `vars/`, read off its own source:
+# `Role._load_role_yaml` tries `main` with `.yml`, `.yaml`, `.json` and no extension, and
+# `DataLoader._get_dir_vars_files` takes the same four from a `main/` directory, skipping
+# hidden names and `~` backups. A README or a `.j2` there is not a vars file, and parsing it
+# would refuse the whole role over a file Ansible never loads either.
+_VARS_EXTENSIONS = (".yml", ".yaml", ".json", "")
+
+
+def _is_vars_file(rel: str) -> bool:
+    name = posixpath.basename(rel)
+    if name.startswith(".") or name.endswith("~"):
+        return False
+    return posixpath.splitext(name)[1] in _VARS_EXTENSIONS
+
+
 def _tracked(ref: str, prefix: str, repo: str) -> list[str]:
     """Every tracked path under `prefix` at `ref`."""
     r = git("ls-tree", "-r", "--name-only", ref, "--", prefix, cwd=repo, check=False)
@@ -262,12 +277,7 @@ class RoleIndex:
                 self.tags[rel] = file_tags(text)
             elif rel.startswith("templates/"):
                 self.template_text[rel] = text
-            elif rel.startswith(("defaults/", "vars/")) and rel.endswith(
-                (".yml", ".yaml")
-            ):
-                # The extension filter matches the `tasks/` branch above: a README or a
-                # `.j2` sitting in `defaults/` is not a vars file, and parsing it would
-                # refuse the whole role over a file Ansible never loads either.
+            elif rel.startswith(("defaults/", "vars/")) and _is_vars_file(rel):
                 self.vars_doc[rel] = self._vars_mapping(rel, text)
         if not self.tags:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
@@ -462,9 +472,10 @@ class RoleIndex:
         for rel, text in self.template_text.items():
             if mention.search(text):
                 hit = True
-                # No empty-answer guard here, unlike the key branch above: `readers_of`
-                # raises on a template branch of its own that reaches nothing, so the only
-                # empty it can return is the walk's own terminator.
+                # No empty-answer guard here, unlike the key branch above. `readers_of`
+                # raises on a branch of its own that reaches nothing. It returns empty only
+                # when the name, or every reader it found, is already on the walk, and the
+                # frame that put it there supplies those tags, so the union stays complete.
                 tags |= self.readers_of(rel.rsplit("/", 1)[-1], seen)
         if not hit:
             raise CannotNarrow(f"nothing in this role reads {key}")
