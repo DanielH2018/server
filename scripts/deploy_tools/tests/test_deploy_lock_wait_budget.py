@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`deploy_locked.sh`'s LOCK_WAIT must outlast the deployer's worst-case hold of the tree lock.
+"""The wrapper's LOCK_WAIT must outlast the deployer's worst-case hold of the tree lock.
 
 `deploy.sh` queues behind `gitops-deploy.service` rather than giving up, so its wait has to
 cover the longest that unit can legitimately hold the lock: the staging gate, the staging
@@ -10,21 +10,21 @@ gitops run gave up having deployed nothing.
 The comment at LOCK_WAIT named this guard from 2026-09-02 and no such test existed
 (issue #1775). The four values are read from the role defaults the unit renders its
 `config.env` from, not copied here, so raising any one of them fails this rather than
-silently shortening the wait again.
+silently shortening the wait again. The value read is `deploy_under_locks.LOCK_WAIT`, the
+foreground's since slice 3 of #2412; `test_deploy_locked_halves_agree.py` pins the
+`--detach` arm's copy in `deploy_locked.sh` to it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py
 """
 
-import re
 from pathlib import Path
 
 import pytest
 
+from deploy_tools import deploy_under_locks
 from lib import yaml_fast
 
 _REPO = Path(__file__).resolve().parents[3]
-# The locked half holds LOCK_WAIT until #2412 ports it into deploy_run.py.
-_DEPLOY_SH = _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh"
 _DEFAULTS = (
     _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
 )
@@ -56,9 +56,7 @@ def _worst_case_hold(defaults: dict) -> int:
 
 
 def _lock_wait() -> int:
-    m = re.search(r"^LOCK_WAIT=(\d+)$", _DEPLOY_SH.read_text(), re.M)
-    assert m, "deploy_locked.sh no longer assigns LOCK_WAIT as a bare integer"
-    return int(m[1])
+    return deploy_under_locks.LOCK_WAIT
 
 
 @pytest.fixture(scope="module")

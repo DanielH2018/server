@@ -190,6 +190,10 @@ _LOCK_WAITERS = {
         _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh",
         r"^LOCK_WAIT=(\d+)",
     ),
+    "deploy_under_locks.py": (
+        _REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
+        r"^LOCK_WAIT = (\d+)$",
+    ),
 }
 
 
@@ -203,6 +207,7 @@ def test_the_lock_waiter_census_is_non_vacuous():
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
         "deploy_locked.sh",
+        "deploy_under_locks.py",
     }
     for name, (path, _) in _LOCK_WAITERS.items():
         assert path.is_file(), (

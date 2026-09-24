@@ -9,14 +9,20 @@ lines that close that gap, asserted together with the parser that reads them: a 
 change on either side that the other does not follow is exactly the drift this file catches.
 
 No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
-syslog. `flock`, `fuser`, `ps`, `uv`, `logger`, `systemctl` and `journalctl` are all stubbed
-on PATH, the way test_deploy_exit_codes.py stubs `flock` and `uv`. The only live reads are
+syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
+real `flock` holder; `--detach` is still bash and still reads a stubbed `flock`. `fuser`,
+`ps`, `uv`, `logger`, `systemctl` and `journalctl` are stubbed on PATH. The only live reads are
 gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 """
 
+import contextlib
+import fcntl
+import os
+import shutil
 import subprocess
+import time
 from pathlib import Path
 
 from _deploy_sh_fakes import (
@@ -45,25 +51,6 @@ def _deploy_repo_env(tmp_path: Path, bin_dir: Path) -> tuple[Path, dict[str, str
     """
     return make_snapshot_repo(tmp_path / "repo"), deploy_sh_env(tmp_path, bin_dir)
 
-
-# deploy.sh's three flock shapes, and only two of them are the tree lock: `-n <fd>` is its
-# uncontended probe, `-w` its timed acquire, and `-n -x <fd>` the snapshot's own owner lock,
-# which nothing here contends. Refusing the probe and sleeping in the acquire is a held tree
-# lock as far as the script can tell, with nothing actually held.
-_FLOCK_CONTENDED = """#!/bin/bash
-case "$1 $2" in
-  "-n -x") exit 0 ;;
-esac
-case "$1" in
-  -n) exit 1 ;;
-  -w) sleep 1; exit 0 ;;
-esac
-exit 0
-"""
-
-_FLOCK_FREE = """#!/bin/bash
-exit 0
-"""
 
 # Records how many descriptors the CALLER already has on the lock file, which is the thing
 # real `fuser` would have reported as a holder. Measured on 2026-09-11: `fuser` scans every
@@ -98,19 +85,14 @@ exit 0
 """
 
 
-def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
+def _run_deploy(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess:
+    """A foreground deploy. Its locks are real flock(2) on tmp_path files (#2412 slice 3)."""
     bin_dir = stub_bin(
-        tmp_path,
-        {
-            "flock": flock,
-            "fuser": _FUSER,
-            "ps": _PS,
-            "uv": _UV,
-            "logger": _LOGGER,
-        },
+        tmp_path, {"fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER}
     )
     repo, env = _deploy_repo_env(tmp_path, bin_dir)
     env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
+    env.update(env_extra)
     return subprocess.run(
         [
             str(_DEPLOY_SH),
@@ -128,9 +110,36 @@ def _run_deploy(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
     )
 
 
+@contextlib.contextmanager
+def _held(path: Path, seconds: float):
+    """Another process holding `path` for `seconds`, with the lock taken before this yields."""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    holder = subprocess.Popen(
+        [shutil.which("flock") or "flock", str(path), "sleep", str(seconds)]
+    )
+    try:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT)
+        try:
+            deadline = time.monotonic() + 10
+            while time.monotonic() < deadline:
+                try:
+                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
+                    fcntl.flock(fd, fcntl.LOCK_UN)
+                except BlockingIOError:
+                    break
+                time.sleep(0.02)
+        finally:
+            os.close(fd)
+        yield
+    finally:
+        holder.kill()
+        holder.wait()
+
+
 def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_path):
-    """FLAGGED half: the wait deploy.sh rides out inside `flock -w` must reach the log."""
-    result = _run_deploy(tmp_path, _FLOCK_CONTENDED)
+    """FLAGGED half: the wait deploy.sh rides out on the tree lock must reach the log."""
+    with _held(tmp_path / "locks" / "server-git-tree.lock", 1.5):
+        result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "lock acquired" in x), "")
     assert line, result.stderr
@@ -146,56 +155,15 @@ def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_pat
 
 
 def test_an_uncontended_acquire_says_nothing(tmp_path):
-    """CLEAN half: a line on every deploy would make `lock=0` rows unreadable as evidence."""
-    result = _run_deploy(tmp_path, _FLOCK_FREE)
+    """CLEAN half: a line on every deploy would make `lock=0` rows unreadable as evidence.
+
+    A lock taken at once reports no wait whatever the clock says (#1881): `flock -n`
+    succeeding is 0s by construction, so a slow fork cannot book a phantom `lock=1`.
+    """
+    result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
     assert "lock acquired" not in result.stderr
     assert "service lock" not in result.stderr
-
-
-# Every acquire succeeds at once, but the uncontended probe and each service acquire take a
-# moment to do it -- a slow runner's fork, exaggerated. `-n` sleeps a whole second so that,
-# read off `$SECONDS`, the tree lock's "wait" is 1s on EVERY run rather than on the runs where
-# the fork straddled a second boundary; `-w` sleeps under a second, which `$SECONDS` reads as 1
-# whenever a boundary falls inside it.
-_FLOCK_SLOW_BUT_FREE = """#!/bin/bash
-case "$1" in
-  -n) sleep 1; exit 0 ;;
-  -s) sleep 0.2; exit 0 ;;
-  -w) sleep 0.2; exit 0 ;;
-esac
-exit 0
-"""
-
-
-def test_a_slow_uncontended_acquire_is_still_not_a_wait(tmp_path):
-    """FLAGGED half for #1881: the clock, not the lock, produced `lock acquired after 1s`.
-
-    deploy.sh measured both acquires with `$SECONDS`, which is the wall clock's integer
-    second, so an immediate `flock -n` whose fork straddled a boundary reported a 1s wait for
-    a lock nobody held -- and land.py booked it as `lock=1`. On CI run 35225029652 that
-    turned the sibling service-lock test red on a merge commit, which is permanent for that
-    SHA. `-n` succeeding is 0s by construction now, and the `-w` acquires are measured in
-    microseconds and floored, so only a wait that really lasted a second reports one.
-    """
-    result = _run_deploy(tmp_path, _FLOCK_SLOW_BUT_FREE)
-    assert result.returncode == 0, result.stderr
-    assert "deploy: lock acquired after" not in result.stderr
-    assert "service lock" not in result.stderr
-
-
-# The tree lock is free (`-n` succeeds at once) and the per-tag lock is not: `-w` sleeps before
-# it grants. That is a deploy of the SAME service already running, which is the only thing a
-# service lock ever waits for, and the wait that used to be invisible because the tree lock had
-# already been paid by then.
-_FLOCK_SERVICE_CONTENDED = """#!/bin/bash
-case "$1" in
-  -n) exit 0 ;;
-  -s) exit 0 ;;
-  -w) sleep 1; exit 0 ;;
-esac
-exit 0
-"""
 
 
 def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
@@ -204,7 +172,8 @@ def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
     Without this line a landing behind another deploy of the same service books `lock=0` and
     charges the wait to `deploy` — the same gap the tree-lock line closed for the tree lock.
     """
-    result = _run_deploy(tmp_path, _FLOCK_SERVICE_CONTENDED)
+    with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock", 1.5):
+        result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "service lock" in x), "")
     assert line, result.stderr
@@ -230,39 +199,31 @@ def test_the_service_lock_refusal_is_not_booked_as_a_wait():
     )
 
 
-# against real flock on a descriptor: a timeout with `-E 75` exits 75, without it exits 1, and
-# a bad descriptor exits 65 — so the flag is what keeps the two apart.
-_FLOCK_TIMES_OUT = """#!/bin/bash
-case "$1" in
-  -n) exit 1 ;;
-  -w) exit 75 ;;
-esac
-exit 0
-"""
-
-_FLOCK_ERRORS = """#!/bin/bash
-case "$1" in
-  -n) exit 1 ;;
-  -w) echo "flock: bad things" >&2; exit 1 ;;
-esac
-exit 0
-"""
-
-
 def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
     """CLEAN half for exit 75: the wait really did elapse, so nothing was deployed."""
-    result = _run_deploy(tmp_path, _FLOCK_TIMES_OUT)
+    with _held(tmp_path / "locks" / "server-git-tree.lock", 10):
+        result = _run_deploy(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == 75, result.stderr
     assert "nothing was deployed" in result.stderr
+    assert "A deploy is already running" in result.stderr
+
+
+def _unopenable_tree_lock(tmp_path: Path) -> str:
+    """A tree-lock path that is a directory: open(2) refuses it, and nothing holds it."""
+    path = tmp_path / "locks" / "server-git-tree.lock"
+    path.mkdir(parents=True)
+    return str(path)
 
 
 def test_any_other_flock_failure_is_not_reported_as_contention(tmp_path):
-    """FLAGGED half: dropping `-E` made every flock failure read as a busy lock.
+    """FLAGGED half: reading every lock failure as a busy lock.
 
     That tells an operator "a deploy is already running, retry shortly" for a lock file the
     wrapper could not open at all, which is a resume point that never resumes.
     """
-    result = _run_deploy(tmp_path, _FLOCK_ERRORS)
+    result = _run_deploy(
+        tmp_path, HOMELAB_DEPLOY_TREE_LOCK=_unopenable_tree_lock(tmp_path)
+    )
     assert result.returncode != 75, result.stderr
     assert "A deploy is already running" not in result.stderr
 
@@ -273,9 +234,11 @@ def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
     20 promises "a task failed AFTER applying; some changes are live", which land.py prints
     verbatim — for a run that never started ansible. 76 says what happened instead.
     """
-    result = _run_deploy(tmp_path, _FLOCK_ERRORS)
+    result = _run_deploy(
+        tmp_path, HOMELAB_DEPLOY_TREE_LOCK=_unopenable_tree_lock(tmp_path)
+    )
     assert result.returncode == ec.DEPLOY_LOCK_UNAVAILABLE, result.stderr
-    assert "flock exit 1" in result.stderr
+    assert "Is a directory" in result.stderr
     assert "the playbook ran and failed" not in result.stderr
     assert ec.DEPLOY_LOCK_UNAVAILABLE in ec.DEPLOY_SH_NO_VERDICT
 

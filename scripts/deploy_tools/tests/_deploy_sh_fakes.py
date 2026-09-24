@@ -235,7 +235,8 @@ def run_front_half(
 
     Returns the refusal code (None when the run reached its exec) and the calls in order:
     `("staleness", tags, at_sha)`, `("validate", tags, at_sha)`, `("changed", ref)`,
-    `("fact_cache",)` and `("exec", argv)`.
+    `("fact_cache",)` and, once the run reaches its deploy, `("deploy", what)`: the
+    argv an exec'd mode became, or `["in-process", tags_csv]` for the locked half.
     """
     import deploy_run
 
@@ -258,7 +259,12 @@ def run_front_half(
         return changed
 
     def fake_exec(target):
-        calls.append(("exec", target))
+        calls.append(("deploy", target))
+        raise Execed(target)
+
+    def fake_locked(plan):
+        target = ["in-process", plan.tags_csv]
+        calls.append(("deploy", target))
         raise Execed(target)
 
     tools = deploy_run.Tools(
@@ -267,6 +273,7 @@ def run_front_half(
         changed=derive,
         clear_fact_cache=lambda plan: calls.append(("fact_cache",)),
         exec_argv=fake_exec,
+        locked_run=fake_locked,
     )
     try:
         return deploy_run.run(list(argv), tools), calls

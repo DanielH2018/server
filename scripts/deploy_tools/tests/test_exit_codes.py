@@ -69,17 +69,24 @@ def test_the_locked_half_values_match_the_wrapper_itself():
     assert f"LOCK_UNAVAILABLE={ec.DEPLOY_LOCK_UNAVAILABLE}" in text
     assert f"SNAPSHOT_FAILED={ec.DEPLOY_SNAPSHOT_FAILED}" in text
     assert f"NO_HOSTS_MATCHED={ec.DEPLOY_NO_HOSTS}" in text
-    assert f"PLAYBOOK_FAILED={ec.DEPLOY_PLAYBOOK_FAILED}" in text
+    assert (
+        f"PLAYBOOK_FAILED={ec.DEPLOY_PLAYBOOK_FAILED}" not in text
+    )  # the Python half returns 20
     assert f"LOCK_PLAN_FAILED={ec.DEPLOY_LOCK_PLAN_FAILED}" in text
 
 
 def test_the_front_half_refuses_with_the_named_codes():
-    """`deploy_run.py` imports its refusals rather than restating them."""
+    """Both Python halves import their codes rather than restating them."""
     import deploy_run
 
     assert deploy_run.DEPLOY_TAG_MISS is ec.DEPLOY_TAG_MISS
     assert deploy_run.DEPLOY_STALE is ec.DEPLOY_STALE
     assert deploy_run.DEPLOY_BAD_FLAGS is ec.DEPLOY_BAD_FLAGS
+    import deploy_under_locks as locked
+
+    assert locked.DEPLOY_PLAYBOOK_FAILED is ec.DEPLOY_PLAYBOOK_FAILED
+    assert locked.DEPLOY_NO_HOSTS is ec.DEPLOY_NO_HOSTS
+    assert locked.DEPLOY_LOCK_PLAN_FAILED is ec.DEPLOY_LOCK_PLAN_FAILED
 
 
 def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():

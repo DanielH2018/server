@@ -1,6 +1,6 @@
 # Porting deploy.sh to Python behind a thin shim
 
-Issue #2412. **Status: slices 1 and 2 landed 2026-09-24; slices 3 and 4 are not started.**
+Issue #2412. **Status: slices 1, 2 and 3 landed 2026-09-24; slice 4 is not started.**
 This page decides how `scripts/deploy.sh` becomes a thin exec shim, as
 `scripts/deploy_tools/land.sh` already is, over a Python module that imports the deploy
 helpers instead of spawning them. Since slice 2 the shim execs `deploy_run.py`, which runs
@@ -135,7 +135,7 @@ passes a root explicitly. Each helper is decided separately:
 
 | Helper | Before the port | Port | Why |
 |---|---|---|---|
-| `deploy_locks.plan` | `uv run` subprocess, bounded by `LOCK_PLAN_TIMEOUT` | Import | Stdlib-only and pure. The timeout existed to bound a hung interpreter start, which an import cannot have. `LOCK_PLAN_TIMEOUT` and its test are retired. Exit 79 stays, for a plan that raises or names no lock. |
+| `deploy_locks.plan` | `uv run` subprocess, bounded by `LOCK_PLAN_TIMEOUT` | Import | Stdlib-only and pure. The timeout existed to bound a hung interpreter start, which an import cannot have. `LOCK_PLAN_TIMEOUT` and its test retire with `deploy_locked.sh` in slice 4, since the `--detach` arm still runs `plan` as a subprocess until then. Exit 79 stays, for a plan that raises or names no lock. |
 | `deploy_staleness` | A subprocess, cwd is the caller's checkout | Import `main(argv)` with `--repo <repo_root>` | `--repo` already exists and defaults to cwd, so passing it keeps the answer identical. |
 | `deploy_tags validate` | A subprocess, `--at <sha>` optional | Import | With `--at` it reads the commit through `git show`. Without it, it reads `HOST_VARS` from the module's checkout, which equals `repo_root` in every real invocation. |
 | `deploy_tags changed` | A subprocess | Import | As `validate`. It keeps exit 3 on a broad change. |
@@ -283,8 +283,11 @@ response to any failed deploy after a slice lands.
    reads the resolved arguments from its argv. The shim flips in this slice. The
    `UV_DEPLOY_RUN_ARM` fake and the unit rewrites for the gate-ordering tests land here.
 3. **Foreground locked half.** Port the tree lock, snapshot, reaper, `deploy_tags list`
-   enumeration, service locks, playbook run, recap check and annotation. `deploy_locked.sh`
-   keeps only the `--detach` arm.
+   enumeration, service locks, playbook run, recap check and annotation into
+   `scripts/deploy_tools/deploy_under_locks.py` (the playbook run and annotation in
+   `deploy_playbook.py` beside it). `deploy_locked.sh` keeps only the
+   `--detach` arm, and `test_deploy_locked_halves_agree.py` pins the values both halves
+   share until slice 4 deletes the bash.
 4. **`--detach`.** Port the fork, the detached child and the notifier import, then delete
    `deploy_locked.sh`. Re-point ADR-0017's anchors and the remaining text-reading tests, fix
    the registries, and close #2412.

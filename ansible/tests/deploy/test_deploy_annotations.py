@@ -14,6 +14,7 @@ This is the same failure class as HA_BAN_SELECTOR, which shipped selecting on an
 the shipper does not emit and reported "no ip_ban events" through a window containing a real ban.
 """
 
+import ast
 import re
 
 from _helpers import REPO, load_defaults
@@ -22,7 +23,10 @@ _REPO = REPO
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
 _GRAFANA = _ROLE / "templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
-# The locked half behind the deploy.sh shim, which emits the annotation until #2412 ports it.
+# deploy.sh's two locked halves: the foreground's (Python since slice 3 of #2412) and the
+# --detach arm's, still bash until slice 4 ports it.
+_DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_under_locks.py"
+_DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_playbook.py"
 _DEPLOY_SH = _REPO / "scripts/deploy_tools/deploy_locked.sh"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
@@ -40,7 +44,7 @@ def test_the_query_matches_what_the_deployers_actually_log():
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
 
-    for emitter in (_DEPLOY_SH, _GITOPS):
+    for emitter in (_DEPLOY_PLAYBOOK, _DEPLOY_SH, _GITOPS):
         text = emitter.read_text()
         for literal in literals:
             assert literal in text, (
@@ -68,7 +72,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     )
 
     key = field.group(1)
-    for emitter in (_DEPLOY_SH, _GITOPS):
+    for emitter in (_DEPLOY_PLAYBOOK, _DEPLOY_SH, _GITOPS):
         assert f"{key}=" in emitter.read_text(), (
             f"{emitter.name} does not emit a `{key}=` field, so the annotation text would be "
             f"blank on every marker"
@@ -101,6 +105,7 @@ def test_both_deploy_paths_annotate():
     """One emitter alone means the dashboards show half the deploys, which is worse than none —
     an operator would read the gaps as "nothing was deployed then"."""
     assert "emit_deploy_annotation" in _DEPLOY_SH.read_text()
+    assert "def annotate(" in _DEPLOY_PLAYBOOK.read_text()
     assert "emit_deploy_annotation" in _GITOPS.read_text()
 
 
@@ -114,6 +119,35 @@ def test_deploy_sh_annotates_only_on_success():
     )
 
 
+def _annotate_guards(source: str) -> list[str]:
+    """The test of the `if` enclosing each `annotate(...)` call in `run`."""
+    tree = ast.parse(source)
+    run = next(
+        node
+        for node in ast.walk(tree)
+        if isinstance(node, ast.FunctionDef) and node.name == "run"
+    )
+    return [
+        ast.unparse(branch.test)
+        for branch in ast.walk(run)
+        if isinstance(branch, ast.If)
+        for stmt in branch.body
+        for call in ast.walk(stmt)
+        if isinstance(call, ast.Call)
+        and isinstance(call.func, ast.Name)
+        and call.func.id == "annotate"
+    ]
+
+
+def test_the_python_locked_half_annotates_only_on_success():
+    """The same rule for the foreground: one `annotate` call, behind `status == 0`."""
+    assert _annotate_guards(_DEPLOY_UNDER_LOCKS.read_text()) == ["status == 0"]
+
+
+def test_an_unconditional_annotation_is_flagged():
+    assert _annotate_guards("def run(s):\n    status = go(s)\n    annotate(s)\n") == []
+
+
 def test_annotating_can_never_fail_a_good_deploy():
     """`logger` is absent in a container and can fail on a full disk.
 
@@ -122,6 +156,12 @@ def test_annotating_can_never_fail_a_good_deploy():
     body = _DEPLOY_SH.read_text()
     func = body.split("emit_deploy_annotation() {", 1)[1].split("\n}", 1)[0]
     assert "|| true" in func, "the logger call must be fire-and-forget"
+
+    python = _DEPLOY_PLAYBOOK.read_text()
+    annotate = python.split("def annotate(", 1)[1].split("\ndef ", 1)[0]
+    assert "contextlib.suppress(OSError)" in annotate, (
+        "the foreground emitter must swallow a missing or failing logger"
+    )
 
     gitops = _GITOPS.read_text()
     impl = gitops.split("def emit_deploy_annotation(", 1)[1].split("\ndef ", 1)[0]

@@ -6,6 +6,8 @@ date: 2026-09-11
 governs:
   - "scripts/deploy_tools/deploy_locked.sh#the lock order is"
   - "scripts/deploy_tools/deploy_locked.sh#ownership is this lock"
+  - "scripts/deploy_tools/deploy_under_locks.py#the lock order is"
+  - "scripts/deploy_tools/deploy_under_locks.py#ownership is this lock"
   - "ansible/roles/setup/gitops_deploy/files/deploy_locks.py#the lock order is"
 ---
 

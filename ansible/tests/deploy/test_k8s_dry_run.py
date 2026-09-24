@@ -565,5 +565,5 @@ def test_wrapper_translates_dry_run_and_skips_the_lock() -> None:
     deploy_run.parse_wrapper_flags(["--tags", "n8n"], plain)
     assert dry.args[:2] == ["-e", "k8s_dry_run=true"]
     # ansible-playbook has no --dry-run, and a run that writes nothing takes no lock.
-    assert deploy_run.exec_target(dry)[:3] == ["uv", "run", "ansible-playbook"]
-    assert deploy_run.exec_target(plain)[0] == str(deploy_run.DEPLOY_LOCKED)
+    assert (deploy_run.exec_target(dry) or [])[:3] == ["uv", "run", "ansible-playbook"]
+    assert deploy_run.exec_target(plain) is None  # locked, in process
