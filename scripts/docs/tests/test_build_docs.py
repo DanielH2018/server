@@ -6,6 +6,7 @@ run leaves every page stale, and the site build never happens at all.
 Run: uv run pytest scripts/docs/tests/test_build_docs.py
 """
 
+import importlib.util
 import subprocess
 from pathlib import Path
 
@@ -14,15 +15,20 @@ import json
 import build_docs
 
 
+def _fail_on_service_catalog(monkeypatch, calls=None):
+    """Stand in for the driver: every generator succeeds except service_catalog.py."""
+
+    def fake_run_one(argv, out):
+        if calls is not None:
+            calls.append(argv)
+        return 1 if "service_catalog.py" in argv[0] else 0
+
+    monkeypatch.setattr(build_docs, "run_one", fake_run_one)
+
+
 def test_a_failing_generator_does_not_stop_the_others(monkeypatch):
     calls: list[list[str]] = []
-
-    def fake_run(argv, **kwargs):
-        calls.append(argv)
-        code = 1 if "service_catalog.py" in " ".join(argv) else 0
-        return subprocess.CompletedProcess(argv, code, "", "boom")
-
-    monkeypatch.setattr(build_docs.subprocess, "run", fake_run)
+    _fail_on_service_catalog(monkeypatch, calls)
     build_docs.run_generators()
 
     ran = " ".join(" ".join(c) for c in calls)
@@ -32,14 +38,63 @@ def test_a_failing_generator_does_not_stop_the_others(monkeypatch):
 
 
 def test_run_generators_reports_which_failed(monkeypatch):
-    def fake_run(argv, **kwargs):
-        code = 1 if "service_catalog.py" in " ".join(argv) else 0
-        return subprocess.CompletedProcess(argv, code, "", "boom")
-
-    monkeypatch.setattr(build_docs.subprocess, "run", fake_run)
+    _fail_on_service_catalog(monkeypatch)
     failed = build_docs.run_generators()
     assert len(failed) == 1
     assert "service_catalog.py" in failed[0]
+
+
+def test_a_generator_that_raises_is_one_failure_not_an_aborted_run():
+    """The reject half of the in-process driver (#2406).
+
+    A subprocess could only fail by exiting non-zero. An imported generator can raise, and
+    an uncaught exception would abort every generator after it -- the failure mode process
+    isolation used to make impossible.
+    """
+
+    def boom():
+        raise RuntimeError("boom")
+
+    assert build_docs.guarded("scripts/docs/x.py", boom) == 1
+
+
+def test_a_generator_that_exits_is_one_failure_not_an_aborted_run():
+    """`SystemExit` is not an `Exception`, so it needs its own arm.
+
+    A module-level `raise SystemExit` or an argparse rejection unwinds straight through a
+    bare `except Exception` and takes the other eleven generators with it.
+    """
+
+    def bail():
+        raise SystemExit(2)
+
+    assert build_docs.guarded("scripts/docs/x.py", bail) == 2
+
+
+def test_a_generator_that_succeeds_keeps_its_exit_code():
+    """The accept half: the guard must not turn a clean run into a failure."""
+    assert build_docs.guarded("scripts/docs/x.py", lambda: 0) == 0
+
+
+def test_each_generator_is_told_an_absolute_output_path():
+    """`cwd=REPO` went away with the subprocess; the relative paths must not follow it."""
+    argv = build_docs._absolute_out(
+        ["scripts/docs/reference/hosts.py", "--out", "docs/reference/hosts.md"],
+        "docs/reference/hosts.md",
+    )
+    assert argv[-1] == str(build_docs.REPO / "docs/reference/hosts.md")
+
+
+def test_every_generator_resolves_to_an_importable_module():
+    """The driver derives the module from the path; a moved generator must fail HERE.
+
+    Without this the failure surfaces as a stale page twelve hours later, reported by
+    nothing but the freshness table.
+    """
+    for argv, _out in build_docs.GENERATORS:
+        module = build_docs._module_name(argv[0])
+        assert importlib.util.find_spec(module) is not None, f"{argv[0]} -> {module}"
+        assert module.count(".") >= 1
 
 
 def test_main_exits_nonzero_when_a_generator_failed(monkeypatch):

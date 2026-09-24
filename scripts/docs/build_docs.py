@@ -5,6 +5,13 @@ WHY ONE SCRIPT. The docs-refresh cron calls this and nothing else. Every decisio
 what to generate, in what order, and what to do when one fails lives here in Python,
 where it is testable -- not in a cron job line, where it is not.
 
+ONE PROCESS. Each generator is imported and its `main` called here, rather than spawned as
+`uv run python <script>`. Twelve interpreter starts plus twelve `uv` environment
+resolutions cost more than the generators do, and process isolation was never what made
+the failure policy below work -- `run_one` catching each generator's exception is (#2406).
+Each keeps its own `--out` argparse `main`, because docs and skills run several of them by
+hand.
+
 FAILURE POLICY. A generator that fails is logged and skipped, and the site is built
 anyway. This is the same reasoning the infra-map cron already records: a failed run
 leaves the previous page in place rather than corrupting anything, and every page carries
@@ -29,10 +36,13 @@ Usage::
 
 import argparse
 import datetime as dt
+import importlib
 import json
 import shutil
+import signal
 import subprocess
 import sys
+import traceback
 from pathlib import Path
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
@@ -127,26 +137,121 @@ GENERATORS: list[tuple[list[str], str]] = [
 ]
 
 
+GENERATOR_TIMEOUT = 300
+
+
+def _absolute_out(argv: list[str], out: str) -> list[str]:
+    """`argv` with its `--out`/`--out-dir` value made absolute under `REPO`.
+
+    The generators ran under `cwd=REPO`, which is what made the relative paths in
+    `GENERATORS` land in the repo. In-process there is no cwd to set, and only
+    `gen_doc_fragments` resolves its own output against `REPO`. The table keeps relative
+    paths -- `test_every_generator_output_lands_under_docs` reads them -- so the driver
+    absolutises them on the way in instead.
+    """
+    argv = list(argv)
+    for flag in ("--out", "--out-dir"):
+        if flag in argv:
+            argv[argv.index(flag) + 1] = str(REPO / out)
+    return argv
+
+
+def _module_name(script: str) -> str:
+    """`scripts/docs/reference/hosts.py` -> `docs.reference.hosts`.
+
+    Derived rather than listed so that `GENERATORS` keeps each script's path as a bare
+    string literal. `lib.script_classify` reads those literals to decide that a generator
+    is reached from the docs cron; a table of dotted module names would classify all
+    twelve as `adhoc` and the generated scripts reference would say so.
+    """
+    return script.removeprefix("scripts/").removesuffix(".py").replace("/", ".")
+
+
+def _timeout(seconds: int):
+    """SIGALRM after `seconds`, restored on exit. A no-op off the main thread.
+
+    Replaces `subprocess.run(timeout=...)`, which went away with the subprocess. It is
+    still needed: `reference/backlog.py` calls `gh` over the network, and an `http.client`
+    read with no deadline would hang the whole cron -- which holds the git-tree lock for
+    its lifetime -- rather than costing one stale page.
+    """
+
+    class _Guard:
+        def __enter__(self):
+            def fire(signum, frame):
+                raise TimeoutError(f"generator exceeded {seconds}s")
+
+            try:
+                self.previous = signal.signal(signal.SIGALRM, fire)
+            except ValueError:
+                self.previous = None  # Not the main thread; no alarm available.
+                return self
+            signal.alarm(seconds)
+            return self
+
+        def __exit__(self, *exc):
+            if self.previous is not None:
+                signal.alarm(0)
+                signal.signal(signal.SIGALRM, self.previous)
+            return False
+
+    return _Guard()
+
+
+def guarded(script: str, invoke) -> int:
+    """Call `invoke` under the timeout, converting any failure into an exit code.
+
+    This is the whole of the failure policy now that the generators share a process.
+
+    `SystemExit` is caught explicitly because it is not an `Exception` -- a generator that
+    calls `sys.exit()` or whose argparse rejects its arguments would otherwise abort every
+    generator after it. `KeyboardInterrupt` is deliberately NOT caught: an operator
+    interrupting the run means the run, not this generator.
+
+    Args:
+        script: the generator's repo-relative path, for the failure line.
+        invoke: a no-argument callable returning the generator's exit code.
+
+    Returns:
+        The generator's exit code, or 1 if it raised.
+    """
+    try:
+        with _timeout(GENERATOR_TIMEOUT):
+            return int(invoke() or 0)
+    except SystemExit as exc:
+        return int(exc.code or 0)
+    except Exception as exc:
+        traceback.print_exc()
+        print(f"build_docs: {script} raised {type(exc).__name__}", file=sys.stderr)
+        return 1
+
+
+def run_one(argv: list[str], out: str) -> int:
+    """Import one generator and call its `main`. Returns its exit code; never raises.
+
+    The import sits inside `guarded` with the call: a module-level `sys.path` insert or a
+    missing dependency fails before `main` is ever reached, and that is a failure of this
+    generator rather than of the run.
+    """
+    script = argv[0]
+
+    def invoke() -> int:
+        module = importlib.import_module(_module_name(script))
+        return module.main(_absolute_out(argv, out)[1:])
+
+    return guarded(script, invoke)
+
+
 def run_generators() -> list[str]:
     """Run every generator. Returns the scripts that failed; never raises."""
     failed: list[str] = []
     for argv, out in GENERATORS:
         script = argv[0]
         (REPO / out).parent.mkdir(parents=True, exist_ok=True)
-        result = subprocess.run(
-            ["uv", "run", "python", *argv],
-            cwd=REPO,
-            capture_output=True,
-            text=True,
-            timeout=300,
-            check=False,
-        )
-        if result.returncode != 0:
+        code = run_one(argv, out)
+        if code != 0:
             failed.append(script)
-            print(
-                f"build_docs: {script} FAILED rc={result.returncode}", file=sys.stderr
-            )
-            print(result.stderr.strip()[:2000], file=sys.stderr)
+            print(f"build_docs: {script} FAILED rc={code}", file=sys.stderr)
         else:
             print(f"build_docs: {script} ok -> {out}")
     return failed
