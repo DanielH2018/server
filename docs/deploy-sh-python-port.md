@@ -1,14 +1,16 @@
 # Porting deploy.sh to Python behind a thin shim
 
-Issue #2412. **Status: specified 2026-09-24, not started.** This page decides how
-`scripts/deploy.sh` becomes a thin exec shim, as `scripts/deploy_tools/land.sh` already is,
-over a Python module that imports the deploy helpers instead of spawning them. Implementation
-waits on operator approval of this page.
+Issue #2412. **Status: slices 1 and 2 landed 2026-09-24; slices 3 and 4 are not started.**
+This page decides how `scripts/deploy.sh` becomes a thin exec shim, as
+`scripts/deploy_tools/land.sh` already is, over a Python module that imports the deploy
+helpers instead of spawning them. Since slice 2 the shim execs `deploy_run.py`, which runs
+every gate before the tree lock and then execs `deploy_locked.sh`, the bash that slices 3
+and 4 port.
 
 ## Why
 
-`scripts/deploy.sh` is 1,293 lines of bash with 19 functions and nine `uv run python`
-hand-offs. Each hand-off carries its own timeout, exit-status capture and failure message.
+Before the port, `scripts/deploy.sh` was 1,293 lines of bash with 19 functions and nine `uv run python`
+hand-offs. Each hand-off carried its own timeout, exit-status capture and failure message.
 Three of the wrapper's defects were bash-shaped rather than logic-shaped:
 
 - `$?` read after `if ! take_service_locks` was the status of the negation. Both refusal
@@ -108,9 +110,10 @@ refuses a second `deploy.py` beside `land_lib/deploy.py`.
 
 ```bash
 #!/usr/bin/env bash
-# deploy.sh — the entry point every doc, skill and hook names; it execs deploy_run.py.
-here="$(dirname "$(readlink -f "$0")")"
-exec uv run --project "$here/.." python "$here/deploy_tools/deploy_run.py" "$@"
+# deploy.sh — the entry point every doc, skill, hook and consumer names; it execs deploy_run.py.
+set -u
+root=$(dirname "$(dirname "$(readlink -f "$0")")")
+exec uv run --project "$root" python "$root/scripts/deploy_tools/deploy_run.py" "$@"
 ```
 
 It does **not** `cd`. The caller's working directory decides which checkout is deployed, and
@@ -130,7 +133,7 @@ The issue asks for imports. Each helper binds `REPO` to its own file's checkout
 (`lib/repo_paths.py:REPO`), so importing changes *which tree* a helper reads unless the call
 passes a root explicitly. Each helper is decided separately:
 
-| Helper | Today | Port | Why |
+| Helper | Before the port | Port | Why |
 |---|---|---|---|
 | `deploy_locks.plan` | `uv run` subprocess, bounded by `LOCK_PLAN_TIMEOUT` | Import | Stdlib-only and pure. The timeout existed to bound a hung interpreter start, which an import cannot have. `LOCK_PLAN_TIMEOUT` and its test are retired. Exit 79 stays, for a plan that raises or names no lock. |
 | `deploy_staleness` | A subprocess, cwd is the caller's checkout | Import `main(argv)` with `--repo <repo_root>` | `--repo` already exists and defaults to cwd, so passing it keeps the answer identical. |
@@ -145,7 +148,7 @@ passes a root explicitly. Each helper is decided separately:
 
 `fcntl.flock` and `flock(1)` both call flock(2), so they contend on the same lock. The
 GitOps deployer already takes the service locks with `fcntl.flock` in
-`deploy_locks.service_locks` while `deploy.sh` takes them with `flock(1)`. That is the
+`deploy_locks.service_locks` while `deploy_locked.sh` takes them with `flock(1)`. That is the
 existing proof that a Python wrapper and a bash wrapper exclude each other during rollout.
 
 The Python module takes each lock as follows:

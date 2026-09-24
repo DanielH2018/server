@@ -4,8 +4,8 @@ title: The tree lock guards the tree, and per-service locks guard the cluster
 status: Accepted
 date: 2026-09-11
 governs:
-  - "scripts/deploy.sh#the lock order is"
-  - "scripts/deploy.sh#ownership is this lock"
+  - "scripts/deploy_tools/deploy_locked.sh#the lock order is"
+  - "scripts/deploy_tools/deploy_locked.sh#ownership is this lock"
   - "ansible/roles/setup/gitops_deploy/files/deploy_locks.py#the lock order is"
 ---
 
@@ -122,7 +122,8 @@ root or the object store.
 
 **The hold is bounded in code, not only by argument.** Two calls run inside it besides the
 snapshot: the full run's tag enumeration (`deploy_tags.py list` through `uv run`, which a cold
-`uv sync` can stretch to minutes) and the reaper's removal of dead snapshots. `deploy.sh` puts
+`uv sync` can stretch to minutes) and the reaper's removal of dead snapshots. `deploy_locked.sh`, the locked half of
+`deploy.sh`, puts
 `timeout` on the first (`TAG_LIST_TIMEOUT`, exit 77 with its own message) and caps the second
 per run (`REAP_MAX_PER_RUN`; the rest wait for the next locked run), so a slow venv or a root
 full of dead directories cannot turn "seconds" into the deployer's whole `TimeoutStartSec`.
@@ -130,10 +131,10 @@ full of dead directories cannot turn "seconds" into the deployer's whole `Timeou
 ## Governs
 
 The `# DECIDED:` marker recording the lock order in
-`ansible/roles/setup/gitops_deploy/files/deploy_locks.py`, the one in `scripts/deploy.sh`
-recording that the wrapper takes that order off `deploy_locks.py plan` rather than carry a
+`ansible/roles/setup/gitops_deploy/files/deploy_locks.py`, the one in
+`scripts/deploy_tools/deploy_locked.sh` recording that the wrapper takes that order off `deploy_locks.py plan` rather than carry a
 copy of it (issue #2054 — the shell's own copy agreed with the deployer's only through a test,
-and a disagreement is a deadlock), and the one in `scripts/deploy.sh` recording that a
+and a disagreement is a deadlock), and the one in `deploy_locked.sh` recording that a
 snapshot's owner is an advisory lock rather than the pid in its name. The anchors are the
 markers' own text: a line number is wrong the moment anything above it moves, and these three
 moved twice while this record was being written.

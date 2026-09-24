@@ -186,7 +186,10 @@ _LOCK_WAITERS = {
         _INITIAL_SETUP_TEMPLATES / "eval-run.sh.j2",
         r"^flock\s+-w\s+(\d+)\s+9",
     ),
-    "deploy.sh": (_REPO / "scripts" / "deploy.sh", r"^LOCK_WAIT=(\d+)"),
+    "deploy_locked.sh": (
+        _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh",
+        r"^LOCK_WAIT=(\d+)",
+    ),
 }
 
 
@@ -199,7 +202,7 @@ def test_the_lock_waiter_census_is_non_vacuous():
         "secret-rotate.sh.j2",
         "docs-refresh.sh.j2",
         "eval-run.sh.j2",
-        "deploy.sh",
+        "deploy_locked.sh",
     }
     for name, (path, _) in _LOCK_WAITERS.items():
         assert path.is_file(), (

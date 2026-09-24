@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Every `date` that stamps a deploy artifact or bounds a journal window reads UTC.
 
-`deploy.sh` names its snapshot worktree and its log after a `date` stamp, and
+`deploy_locked.sh` (the locked half behind `deploy.sh`) names its snapshot worktree and its log after a `date` stamp, and
 `gitops_tick.sh` builds the `journalctl --since` window from one. A stamp in host-local time
 is ambiguous across a DST fold and the window shifts with the host's zone; `-u` makes both
 independent of where the script runs (issue #2154). Both hosts run `Etc/UTC` today, so this
@@ -17,7 +17,7 @@ import pytest
 
 _REPO = Path(__file__).resolve().parents[3]
 _SCRIPTS = (
-    _REPO / "scripts" / "deploy.sh",
+    _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh",
     _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",
 )
 # A `date` invocation that formats or converts a time: `date +FMT`, `date -d @N +FMT`, and

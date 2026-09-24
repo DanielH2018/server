@@ -21,11 +21,12 @@ from pathlib import Path
 from _deploy_sh_fakes import (
     FAKE_RECAP,
     FLOCK_STUB,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     detached_pid,
     git_free_env,
     make_snapshot_repo,
+    run_front_half,
 )
 from _process_waits import wait_for_exit
 
@@ -54,7 +55,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 # `logger` is absent from most test environments, and deploy.sh swallows that with `|| true`,
 # so the annotation is unobservable without a stub. Prefixed, because it shares the call log.
@@ -131,7 +132,12 @@ def _run(
     )
     return (
         result,
-        [ln for ln in calls.read_text().splitlines() if ln.strip()],
+        # The shim's own `uv run … deploy_run.py` is the wrapper starting, not a helper call.
+        [
+            ln
+            for ln in calls.read_text().splitlines()
+            if ln.strip() and "deploy_run.py" not in ln
+        ],
         deployed.read_text().strip() if deployed.exists() else "",
     )
 
@@ -192,34 +198,46 @@ def test_at_with_changed_is_refused(tmp_path):
     assert calls == [] and deployed == ""
 
 
-def test_the_staleness_gate_is_asked_about_the_named_commit(tmp_path):
+def _gate_calls(tmp_path, monkeypatch, *argv: str) -> tuple[str, dict[str, tuple]]:
+    """(first sha, the staleness and validate calls) for a front-half run of `argv`.
+
+    The gates run in process (#2412), so what they are asked is read off the harness rather
+    than off a helper's argv.
+    """
+    repo, first, _second = _prepared(tmp_path)
+    argv_list = [a.replace("{first}", first) for a in argv]
+    _code, calls = run_front_half(monkeypatch, repo, argv_list)
+    return first, {c[0]: c for c in calls if c[0] in ("staleness", "validate")}
+
+
+def test_the_staleness_gate_is_asked_about_the_named_commit(tmp_path, monkeypatch):
     """The gate reads HEAD unless told otherwise, and under --at HEAD is the wrong commit."""
-    repo, first, _second = _prepared(tmp_path)
-    _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr", "--at", first)
-    gate = next(c for c in calls if "deploy_staleness.py" in c)
-    assert f"--sha {first}" in gate, calls
+    first, gates = _gate_calls(
+        tmp_path, monkeypatch, "--tags", "sonarr", "--at", "{first}"
+    )
+    assert gates["staleness"][2] == first, gates
 
 
-def test_without_at_the_staleness_gate_is_asked_about_head(tmp_path):
+def test_without_at_the_staleness_gate_is_asked_about_head(tmp_path, monkeypatch):
     """CLEAN half: no --sha on the ordinary path, where HEAD is what renders."""
-    repo, _first, _second = _prepared(tmp_path)
-    _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr")
-    assert "--sha" not in next(c for c in calls if "deploy_staleness.py" in c)
+    _first, gates = _gate_calls(tmp_path, monkeypatch, "--tags", "sonarr")
+    assert gates["staleness"][2] == "", gates
 
 
-def test_tag_validation_reads_containers_list_at_the_named_commit(tmp_path):
+def test_tag_validation_reads_containers_list_at_the_named_commit(
+    tmp_path, monkeypatch
+):
     """A PR that adds a role and its containers_list entry declares its tag in no working tree."""
-    repo, first, _second = _prepared(tmp_path)
-    _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr", "--at", first)
-    validate = next(c for c in calls if "deploy_tags.py validate" in c)
-    assert f"--at {first}" in validate, calls
+    first, gates = _gate_calls(
+        tmp_path, monkeypatch, "--tags", "sonarr", "--at", "{first}"
+    )
+    assert gates["validate"][2] == first, gates
 
 
-def test_without_at_tag_validation_reads_the_working_tree(tmp_path):
-    """CLEAN half: the flag is forwarded only when it was given."""
-    repo, _first, _second = _prepared(tmp_path)
-    _result, calls, _deployed = _run(tmp_path, repo, "--tags", "sonarr")
-    assert "--at" not in next(c for c in calls if "deploy_tags.py validate" in c)
+def test_without_at_tag_validation_reads_the_working_tree(tmp_path, monkeypatch):
+    """CLEAN half: the commit is passed only when it was given."""
+    _first, gates = _gate_calls(tmp_path, monkeypatch, "--tags", "sonarr")
+    assert gates["validate"][2] == "", gates
 
 
 def test_an_at_with_no_value_is_refused(tmp_path):

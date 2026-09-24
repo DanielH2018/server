@@ -21,7 +21,8 @@ WHAT COUNTS AS VALID. The union of:
   - the block tags every container role is tagged with: config, deploy, cron
   - `always`, which Ansible treats specially
 
-Used by scripts/deploy.sh. `list`'s flat sorted output is meant to be stable enough to back a
+Used by scripts/deploy.sh: its front half `deploy_run.py` imports `validate` and `changed`,
+and its locked half runs `list`. `list`'s flat sorted output is meant to be stable enough to back a
 shell completion script one day (so the completion list and this validator couldn't disagree —
 they'd be one function) — no such completion script exists yet, here or in the chezmoi dotfiles
 repo that owns this machine's shell config, so today that's just the intent `list`'s shape was
@@ -229,13 +230,18 @@ def suggest(tag: str, host_vars: Path = HOST_VARS, at: str = "") -> list[str]:
     )
 
 
-def _cmd_validate(args: argparse.Namespace) -> int:
-    bad = unknown_tags(args.tags, at=args.at)
+def validate(tags: list[str], at: str = "", host_vars: Path = HOST_VARS) -> int:
+    """0 when every tag names a service or block tag, else 2 with a refusal on stderr.
+
+    `host_vars` is a parameter because `deploy_run.py` asks about the checkout it deploys,
+    which is its caller's working tree rather than this module's own checkout.
+    """
+    bad = unknown_tags(tags, host_vars, at)
     if not bad:
         return 0
     for tag in bad:
         print(f"deploy: no service or block tag named '{tag}'.", file=sys.stderr)
-        matches = suggest(tag, at=args.at)
+        matches = suggest(tag, host_vars, at)
         if matches:
             print(f"  Did you mean: {', '.join(matches)}?", file=sys.stderr)
     print(
@@ -409,11 +415,12 @@ def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]
     return comment_only_broad_changes(paths, old_ref, new_ref, _git_show)
 
 
-def _cmd_changed(args: argparse.Namespace) -> int:
+def changed(ref: str, cwd: Path = REPO) -> int:
     """Print, on stdout, the comma-joined --tags value for every service changed vs `ref`.
 
-    `ref` defaults to origin/master. Nothing else goes to stdout, so scripts/deploy.sh can
-    capture it directly. Everything explaining the derivation goes to stderr.
+    Nothing else goes to stdout, so `deploy_run.py` can capture it directly. Everything
+    explaining the derivation goes to stderr. `cwd` is the checkout whose diff is read:
+    `deploy_run.py` passes its caller's working tree rather than this module's checkout.
     """
     (
         services_from_changed_paths,
@@ -422,24 +429,23 @@ def _cmd_changed(args: argparse.Namespace) -> int:
         k8s_remediation,
     ) = _load_deploy_logic()
     try:
-        paths = _git_diff_paths(args.ref)
+        paths = _git_diff_paths(ref, cwd)
     except subprocess.CalledProcessError as exc:
         print(
-            f"deploy --changed: `git diff {args.ref}...HEAD` failed: "
-            f"{exc.stderr.strip()}",
+            f"deploy --changed: `git diff {ref}...HEAD` failed: {exc.stderr.strip()}",
             file=sys.stderr,
         )
         return 1
 
     if not paths:
-        print(f"deploy --changed: no files differ from {args.ref}.", file=sys.stderr)
+        print(f"deploy --changed: no files differ from {ref}.", file=sys.stderr)
         return 0
 
     cs = services_from_changed_paths(paths)
 
     if cs.broad:
         print(
-            f"deploy --changed: refusing. {len(paths)} file(s) changed vs {args.ref} include "
+            f"deploy --changed: refusing. {len(paths)} file(s) changed vs {ref} include "
             "a broad path (shared template, inventory, or setup-plane) --changed cannot scope "
             "to a service list — guessing which services that touches would be worse than "
             "asking.",
@@ -491,13 +497,13 @@ def _cmd_changed(args: argparse.Namespace) -> int:
             return DEPLOY_BROAD
     if not tags:
         print(
-            f"deploy --changed: no deployable service changed vs {args.ref}.",
+            f"deploy --changed: no deployable service changed vs {ref}.",
             file=sys.stderr,
         )
         return 0
 
     print(
-        f"deploy --changed: {len(tags)} service(s) changed vs {args.ref}: {', '.join(tags)}",
+        f"deploy --changed: {len(tags)} service(s) changed vs {ref}: {', '.join(tags)}",
         file=sys.stderr,
     )
     print(",".join(tags))
@@ -547,7 +553,7 @@ def main(argv: list[str] | None = None) -> int:
         default="",
         help="read containers_list at this committish, not from the working tree",
     )
-    v.set_defaults(func=_cmd_validate)
+    v.set_defaults(func=lambda a: validate(a.tags, a.at))
 
     lst = sub.add_parser("list", help="print every valid tag, one per line")
     lst.set_defaults(func=_cmd_list)
@@ -563,7 +569,7 @@ def main(argv: list[str] | None = None) -> int:
         "exit 3 refuses a broad change",
     )
     ch.add_argument("ref", nargs="?", default="origin/master")
-    ch.set_defaults(func=_cmd_changed)
+    ch.set_defaults(func=lambda a: changed(a.ref))
 
     bl = sub.add_parser(
         "blockers",

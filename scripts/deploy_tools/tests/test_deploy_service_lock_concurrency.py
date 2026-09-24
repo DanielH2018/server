@@ -22,7 +22,7 @@ from pathlib import Path
 
 from _deploy_sh_fakes import (
     FAKE_RECAP,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     detached_pid,
     make_snapshot_repo,
@@ -50,7 +50,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 # The same stub, recording where the playbook was run from before it sleeps. `--detach` is the
 # only arm whose cleanup happens after the parent has exited, so where it ran and what it left
@@ -62,7 +62,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 
 def _harness(

@@ -446,7 +446,11 @@ def test_content_length_non_numeric_is_flagged():
     assert deploy_ui.content_length({"Content-Length": "-1"}) is None
 
 
-DEPLOY_SH = pathlib.Path(__file__).resolve().parents[5] / "scripts/deploy.sh"
+# The locked half behind the deploy.sh shim holds the tree-lock path until #2412 ports it.
+DEPLOY_LOCKED = (
+    pathlib.Path(__file__).resolve().parents[5]
+    / "scripts/deploy_tools/deploy_locked.sh"
+)
 
 
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
@@ -459,7 +463,7 @@ def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
     assert deploy_locks.TREE_LOCK == f"/var/lock/{deploy_ui.TREE_LOCK}"
     assert f'"${{HOMELAB_DEPLOY_TREE_LOCK:-{deploy_locks.TREE_LOCK}}}"' in (
-        DEPLOY_SH.read_text()
+        DEPLOY_LOCKED.read_text()
     )
     lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
     assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"

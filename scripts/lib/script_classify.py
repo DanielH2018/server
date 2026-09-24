@@ -96,7 +96,7 @@ def _invoked_in(text: str) -> set[str]:
     Three exclusions carry the precision. A comment line is a mention. A line carrying a
     backtick is prose citing a command, which is how every CLAUDE.md and half the role
     defaults name these scripts. A line starting with `echo` is a message about a command —
-    `deploy.sh` prints "or another Claude session (uv run python scripts/dev/prune_worktrees.py)"
+    `deploy_locked.sh` prints "or another Claude session (uv run python scripts/dev/prune_worktrees.py)"
     on lock contention, and reading that as an invocation would make an interactive tool
     look like part of the deploy path.
     """
@@ -293,6 +293,21 @@ def importers(scripts: Path) -> dict[str, set[str]]:
     return found
 
 
+def _has_main_guard(text: str) -> bool:
+    """Whether Python source has a module-level `if __name__ == ...` block of its own."""
+    try:
+        tree = ast.parse(text)
+    except SyntaxError, ValueError:
+        return False
+    return any(
+        isinstance(node, ast.If)
+        and isinstance(node.test, ast.Compare)
+        and isinstance(node.test.left, ast.Name)
+        and node.test.left.id == "__name__"
+        for node in tree.body
+    )
+
+
 def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str, str]]:
     """Script filename -> (how it runs, the evidence for saying so)."""
     verdicts: dict[str, tuple[str, str]] = {}
@@ -311,14 +326,33 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
         for script in _invoked_by(path, scripts):
             record(script, kind, evidence)
 
-    for stem, callers in importers(scripts).items():
+    imported = importers(scripts)
+    for stem, callers in imported.items():
         record(f"{stem}.py", "library", f"imported by {', '.join(sorted(callers))}")
+
+    # A SCRIPT another one imports and calls in process -- `deploy_run.py` running
+    # `deploy_staleness.main` on every deploy -- runs as often as that caller does, exactly as
+    # it did when the caller spawned it. Only a module with its own `__main__` guard counts:
+    # a plain library module has no run of its own to inherit.
+    by_path = by_name(scripts)
+    entry_points = {
+        stem
+        for stem in imported
+        if f"{stem}.py" in by_path and _has_main_guard(file_text(by_path[f"{stem}.py"]))
+    }
+    runs_in_process: dict[str, set[str]] = {}
+    for stem in entry_points:
+        for caller in imported[stem]:
+            runs_in_process.setdefault(caller, set()).add(f"{stem}.py")
 
     # One script running another inherits the caller's kind, so the six reference
     # generators are scheduled by way of `build_docs.py` and its cron rather than reading
     # as things nobody runs. Iterated to a fixpoint: the chain is cron → build_docs.py →
     # generator, and a longer one would otherwise resolve only as far as it was walked.
-    callers = {path: _invoked_by(path, scripts) for path in candidates(scripts)}
+    callers = {
+        path: _invoked_by(path, scripts) | runs_in_process.get(path.name, set())
+        for path in candidates(scripts)
+    }
     while True:
         settled = True
         for path, targets in callers.items():

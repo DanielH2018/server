@@ -284,7 +284,7 @@ def main(argv: list[str] | None = None, tools: NotifyTools | None = None) -> int
         "--cwd",
         default="",
         help=(
-            "the checkout to render the deployed role's manifests from; deploy.sh passes "
+            "the checkout to render the deployed role's manifests from; deploy_locked.sh passes "
             "its snapshot, so the gate enumerates the workloads of the commit that was "
             "deployed rather than of whatever this working tree holds"
         ),

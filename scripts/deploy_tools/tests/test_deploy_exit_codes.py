@@ -23,7 +23,7 @@ import pytest
 from _deploy_sh_fakes import (
     FAKE_RECAP,
     FLOCK_STUB,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
 )
@@ -45,7 +45,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{locks}", UV_WRAPPER_ARMS)
 
 # What ansible prints when no play matched a host: the banner, and nothing under it. It exits
 # 0 for this, which is the whole reason the wrapper reads the recap (issue #1814).

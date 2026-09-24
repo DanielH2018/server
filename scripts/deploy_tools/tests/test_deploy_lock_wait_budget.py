@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""`deploy.sh`'s LOCK_WAIT must outlast the deployer's worst-case hold of the tree lock.
+"""`deploy_locked.sh`'s LOCK_WAIT must outlast the deployer's worst-case hold of the tree lock.
 
 `deploy.sh` queues behind `gitops-deploy.service` rather than giving up, so its wait has to
 cover the longest that unit can legitimately hold the lock: the staging gate, the staging
@@ -23,7 +23,8 @@ import pytest
 from lib import yaml_fast
 
 _REPO = Path(__file__).resolve().parents[3]
-_DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
+# The locked half holds LOCK_WAIT until #2412 ports it into deploy_run.py.
+_DEPLOY_SH = _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh"
 _DEFAULTS = (
     _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
 )
@@ -56,7 +57,7 @@ def _worst_case_hold(defaults: dict) -> int:
 
 def _lock_wait() -> int:
     m = re.search(r"^LOCK_WAIT=(\d+)$", _DEPLOY_SH.read_text(), re.M)
-    assert m, "deploy.sh no longer assigns LOCK_WAIT as a bare integer"
+    assert m, "deploy_locked.sh no longer assigns LOCK_WAIT as a bare integer"
     return int(m[1])
 
 

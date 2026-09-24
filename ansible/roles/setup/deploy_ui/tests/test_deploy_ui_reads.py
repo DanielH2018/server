@@ -88,11 +88,13 @@ def test_runs_ignore_grep_shells_and_list_services_is_flagged():
     assert not {412, 5200, 7000} & set(_rows())
 
 
-# The same queued deploy after #2412: the shim has exec'd `uv run … deploy_run.py`, whose
-# python child blocks in flock(2) itself rather than through a `flock` child.
+# The same queued deploy after #2412: the shim has exec'd `uv run … deploy_run.py`, which
+# stays the family root (measured 2026-09-24: `uv run` spawns, it does not exec), and its
+# python child has exec'd the locked half, which blocks through a `flock` child.
 PORTED_PS = """\
  8000     1    30 uv run --project /s/scripts/.. python /s/scripts/deploy_tools/deploy_run.py --tags n8n
- 8001  8000    29 /x/python3 /s/scripts/deploy_tools/deploy_run.py --tags n8n
+ 8001  8000    29 /bin/bash /s/scripts/deploy_tools/deploy_locked.sh  0 n8n -- --tags n8n
+ 8002  8001    28 flock -w 3300 -E 75 11
  8100     1     2 grep deploy_run.py
 """
 PORTED_N8N = "/var/lock/server-deploy-n8n.lock"
@@ -101,8 +103,8 @@ PORTED_N8N = "/var/lock/server-deploy-n8n.lock"
 def test_runs_ported_deploy_is_one_waiting_row_is_clean():
     rows = reads.runs(
         reads.parse_ps(PORTED_PS),
-        {PORTED_N8N: {8000, 8001}},
-        {PORTED_N8N: reads.FileLock(True, frozenset({8001}))},
+        {PORTED_N8N: {8000, 8001, 8002}},
+        {PORTED_N8N: reads.FileLock(True, frozenset({8002}))},
     )
     assert [(r.pid, r.kind, r.tag) for r in rows] == [(8000, "deploy", "n8n")]
     assert rows[0].waiting_on == ("server-deploy-n8n.lock",)

@@ -44,6 +44,35 @@ def test_the_rule_ignores_the_flag_behind_another_binary():
     )
 
 
+def test_the_rule_denies_the_python_module_the_shim_execs():
+    """`deploy.sh` execs `deploy_run.py` (#2412); running it directly is the same deploy."""
+    assert _mod.skip_staleness_problem(
+        [
+            "uv",
+            "run",
+            "python",
+            "scripts/deploy_tools/deploy_run.py",
+            "--tags",
+            "sonarr",
+            "--skip-staleness-check",
+        ]
+    )
+
+
+def test_the_rule_ignores_a_grep_naming_the_module_and_the_flag():
+    assert (
+        _mod.skip_staleness_problem(
+            [
+                "grep",
+                "--",
+                "--skip-staleness-check",
+                "scripts/deploy_tools/deploy_run.py",
+            ]
+        )
+        is None
+    )
+
+
 def test_the_rule_is_registered():
     assert _mod.skip_staleness_problem in _mod._RULES
 

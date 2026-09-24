@@ -5,9 +5,10 @@ the working tree instead of the snapshot, or one that skips its service lock, wo
 until something else deploys at the same moment. Neither failure has a symptom on the run that
 caused it, which is why they are pinned at the source.
 
-`scripts/deploy.sh`: every locked invocation goes through `run_playbook_in_snapshot`, which
-cds into the snapshot. `--check` and `--dry-run` are the exceptions and are named as such —
-they exec out above the lock and read the working tree on purpose.
+`scripts/deploy.sh`: every locked invocation goes through `run_playbook_in_snapshot` in
+`deploy_locked.sh`, which cds into the snapshot. `--check` and `--dry-run` are the exceptions:
+`deploy_run.py` execs them above the lock, from the working tree on purpose, and names
+ansible-playbook nowhere else.
 
 `deploy_io.py`: every function that runs a playbook wraps it in `service_locks`. The set of
 such functions is asserted by name, so one added later without a lock fails here rather than
@@ -21,13 +22,12 @@ import re
 
 from _helpers import REPO
 
-_DEPLOY_SH = REPO / "scripts/deploy.sh"
+# The locked half behind the deploy.sh shim, and the Python front half that execs it.
+_DEPLOY_SH = REPO / "scripts/deploy_tools/deploy_locked.sh"
+_DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_run.py"
 _DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 
-# The one shape allowed to name ansible-playbook outside the snapshot runner. Both --check and
-# --dry-run exec this, above the lock, from the working tree.
-_UNLOCKED_EXEC = 'exec uv run ansible-playbook ansible/deploy.yml "$@"'
 _SNAPSHOT_RUNNER = "run_playbook_in_snapshot"
 # The deployer's playbook call sites. Named rather than discovered so that a fourth one added
 # without a lock fails this file instead of joining a vacuously-true census.
@@ -62,12 +62,8 @@ def _runner_line_range(text: str) -> tuple[int, int]:
     return first, last
 
 
-def test_deploy_sh_names_ansible_playbook_only_where_adr_0017_allows():
-    """A fourth invocation, or a locked one that bypasses the runner, fails here.
-
-    The count is asserted as well as the shape: a rewrite that dropped the snapshot runner
-    entirely would otherwise leave two conforming `--check` lines and read green.
-    """
+def test_the_locked_half_names_ansible_playbook_only_in_the_runner():
+    """A locked invocation that bypasses the runner fails here."""
     text = _DEPLOY_SH.read_text()
     first, last = _runner_line_range(text)
     naming = [
@@ -79,21 +75,56 @@ def test_deploy_sh_names_ansible_playbook_only_where_adr_0017_allows():
         and not (first <= n <= last)
         and not line.lstrip().startswith("echo ")
     ]
-    assert len(naming) == 2, (
-        f"expected exactly the two unlocked exec arms to name ansible-playbook, got {naming}"
+    assert naming == [], (
+        f"{naming} run ansible-playbook outside {_SNAPSHOT_RUNNER}; a locked deploy must "
+        "render from the snapshot, not the working tree"
     )
-    for _, line in naming:
-        assert line == _UNLOCKED_EXEC, (
-            f"{line!r} runs ansible-playbook outside {_SNAPSHOT_RUNNER}; a locked "
-            "deploy must render from the snapshot, not the working tree"
-        )
+
+
+def _unlocked_playbook_calls(source: str) -> list[str]:
+    """The test of the `if` enclosing each "ansible-playbook" literal in `source`.
+
+    An empty string stands for a literal no `if` encloses.
+    """
+    tree = ast.parse(source)
+    parents = {
+        child: node for node in ast.walk(tree) for child in ast.iter_child_nodes(node)
+    }
+    found = []
+    for node in ast.walk(tree):
+        if isinstance(node, ast.Constant) and node.value == "ansible-playbook":
+            guard, cur = "", node
+            while cur in parents:
+                cur = parents[cur]
+                if isinstance(cur, ast.If):
+                    guard = ast.unparse(cur.test)
+                    break
+            found.append(guard)
+    return found
+
+
+def test_deploy_run_execs_ansible_playbook_only_for_check_and_dry_run():
+    """The front half runs no playbook of its own except the two unlocked modes.
+
+    The count is asserted as well as the guard: a rewrite that dropped the exec would
+    otherwise leave nothing to check and read green.
+    """
+    assert _unlocked_playbook_calls(_DEPLOY_RUN.read_text()) == [
+        "plan.check or plan.dry_run"
+    ]
+
+
+def test_an_unguarded_playbook_call_is_flagged():
+    assert _unlocked_playbook_calls(
+        'def run(plan):\n    exec_argv(["uv", "run", "ansible-playbook"])\n'
+    ) == [""]
 
 
 def test_the_snapshot_runner_is_the_only_locked_path_and_it_cds_into_the_snapshot():
     """The runner has to actually enter the snapshot, and both locked arms have to use it."""
     text = _DEPLOY_SH.read_text()
     body = text.split(f"{_SNAPSHOT_RUNNER}() {{", 1)
-    assert len(body) == 2, f"{_SNAPSHOT_RUNNER} is gone from deploy.sh"
+    assert len(body) == 2, f"{_SNAPSHOT_RUNNER} is gone from {_DEPLOY_SH.name}"
     definition = body[1].split("\n}", 1)[0]
     assert 'cd "$snapshot"' in definition, (
         f"{_SNAPSHOT_RUNNER} no longer changes into the snapshot, so a locked deploy renders "
@@ -118,7 +149,7 @@ def test_deploy_sh_takes_a_service_lock_before_it_runs_anything():
         n for n, line in _code_lines(text) if f"{_SNAPSHOT_RUNNER} " in line
     )
     assert first_lock < first_run, (
-        "deploy.sh reaches the playbook before it takes a service lock"
+        f"{_DEPLOY_SH.name} reaches the playbook before it takes a service lock"
     )
 
 

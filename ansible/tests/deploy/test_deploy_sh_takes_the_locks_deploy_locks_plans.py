@@ -30,7 +30,8 @@ import deploy_locks
 import pytest
 from _deploy_sh_fakes import (
     FAKE_RECAP,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_DEPLOY_RUN_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
     stub_bin,
@@ -39,6 +40,8 @@ from _helpers import REPO
 from deploy_tools.exit_codes import DEPLOY_LOCK_PLAN_FAILED, DEPLOY_SH_NO_VERDICT
 
 _DEPLOY_SH = REPO / "scripts" / "deploy.sh"
+# The shell the text checks below read: the locked half behind the shim (#2412).
+_DEPLOY_LOCKED = REPO / "scripts" / "deploy_tools" / "deploy_locked.sh"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 # The pair `sort` under a UTF-8 locale and Python's `sorted` order differently. Both are live
 # roles, and a census that stopped finding them would prove the order on nothing.
@@ -202,6 +205,7 @@ exit 0
 # of its own accord, would take a different order from the one the deployer walks.
 _UV_REVERSED_PLAN = """#!/bin/bash
 case "$*" in
+{run}
   *ansible-playbook*) {recap}; exit 0 ;;
   *deploy_locks.py*)
     printf 'zeta\\texclusive\\t%s/server-deploy-zeta.lock\\n' "$HOMELAB_DEPLOY_LOCK_DIR"
@@ -210,23 +214,25 @@ case "$*" in
     exit 0 ;;
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
 
 _UV_PLAN_EXITS_NONZERO = """#!/bin/bash
 case "$*" in
+{run}
   *ansible-playbook*) touch "$DEPLOY_TEST_PLAYBOOK_RAN"; {recap}; exit 0 ;;
   *deploy_locks.py*) echo "deploy_locks.py: broken on purpose" >&2; exit 1 ;;
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
 
 _UV_PLAN_PRINTS_NOTHING = """#!/bin/bash
 case "$*" in
+{run}
   *ansible-playbook*) touch "$DEPLOY_TEST_PLAYBOOK_RAN"; {recap}; exit 0 ;;
   *deploy_locks.py*) exit 0 ;;
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP)
+""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
 
 _UV_REAL_PLAN = """#!/bin/bash
 case "$*" in
@@ -234,7 +240,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 
 # A finished run annotates itself through `logger`, which the leak guard shims: a fixture
@@ -322,10 +328,11 @@ def test_deploy_sh_refuses_with_79_when_plan_hangs(tmp_path):
     it runs, so the cost is this run alone -- but the run must still end."""
     hung = """#!/bin/bash
 case "$*" in
+{run}
   *deploy_locks.py*) sleep 30 ;;
   *) exit 0 ;;
 esac
-"""
+""".replace("{run}", UV_DEPLOY_RUN_ARM)
     result, service_flocks = _run_wrapper(
         tmp_path, hung, "--tags", "alpha", HOMELAB_DEPLOY_LOCK_PLAN_TIMEOUT="1"
     )
@@ -348,7 +355,7 @@ def _code_lines(text: str) -> list[str]:
 def test_deploy_sh_neither_names_a_service_lock_nor_sorts_a_tag_list():
     """The verify line of issue #2054: only comments may say `server-deploy-`, and no `sort`
     of a tag list -- with or without `LC_ALL` -- is left for a locale to disagree with."""
-    code = _code_lines(_DEPLOY_SH.read_text())
+    code = _code_lines(_DEPLOY_LOCKED.read_text())
     naming = [line for line in code if "server-deploy-" in line]
     assert naming == [], f"deploy.sh still names a service lock itself: {naming}"
     sorting = [line for line in code if "LC_ALL" in line or "sort -u" in line]
@@ -359,9 +366,11 @@ def test_deploy_sh_default_tree_lock_is_the_module_constant():
     """The one lock the shell still names by literal -- it takes it before any Python runs --
     pinned to the constant every Python reader imports."""
     line = next(
-        line for line in _code_lines(_DEPLOY_SH.read_text()) if line.startswith("LOCK=")
+        line
+        for line in _code_lines(_DEPLOY_LOCKED.read_text())
+        if line.startswith("LOCK=")
     )
     assert deploy_locks.TREE_LOCK in line, (
-        f"deploy.sh's tree lock ({line}) is not deploy_locks.TREE_LOCK "
+        f"deploy_locked.sh's tree lock ({line}) is not deploy_locks.TREE_LOCK "
         f"({deploy_locks.TREE_LOCK}); the wrapper and the deployer would guard different files"
     )
