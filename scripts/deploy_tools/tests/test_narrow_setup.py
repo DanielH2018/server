@@ -300,6 +300,24 @@ def test_a_role_the_printed_playbook_does_not_list_is_flagged(tree):
         narrow(tree, *_refs(tree))
 
 
+def test_the_real_playbooks_list_the_roles_they_apply():
+    """The playbook lookup finds its subject by pattern, so it names real members.
+
+    A playbook reshaped to `import_role` would make every narrowing refuse, silently. Both
+    entry shapes are covered: the inline `{ role: k3s }` and `nut_host`'s multi-line
+    `- role:` form.
+    """
+    for playbook, role in (
+        ("ansible/k3s-bringup.yml", "k3s"),
+        ("ansible/initial_setup.yml", "nut_host"),
+        ("ansible/initial_setup.yml", "gitops_deploy"),
+    ):
+        text = (REPO / playbook).read_text()
+        assert narrow_setup._playbook_applies_role(text, role), f"{playbook}: {role}"
+    text = (REPO / "ansible/initial_setup.yml").read_text()
+    assert not narrow_setup._playbook_applies_role(text, "k3s")
+
+
 def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():
     """Named members both ways, so a walk that went empty or all-inclusive fails by name.
 

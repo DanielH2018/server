@@ -34,6 +34,8 @@ runs under `uv run --no-project`, which cannot import yaml — the boundary
 `narrow_deploy_plane` already established for the deploy plane. The tags it returns are
 stored in the `manual_plane_tags` marker, so the journal line, the Discord alert, the
 SessionStart banner and `land.sh` all quote ONE derivation rather than each repeating it.
+`land_tags.confirmed_narrow_tags` also calls `role_tags` in-process, over one PR's own range,
+but only as a guard: `land.sh` prints the stored row, and only when it contains that answer.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py
 """
