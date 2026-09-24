@@ -27,18 +27,33 @@ docker_install_containerd_version: "2.3.5"
 docker_install_compose_plugin_version: "5.5.1"
 docker_install_buildx_plugin_version: "0.37.1"
 
-# Docker's apt versions are `<upstream>-1~ubuntu.<release>~<codename>` for every package, and
-# the two Moby packages carry a `5:` epoch on top. Keys are exactly docker_engine_packages
+# Docker's apt versions are `<upstream>-<rev>~ubuntu.<release>~<codename>` for every package,
+# and the two Moby packages carry a `5:` epoch on top. Keys are exactly docker_engine_packages
 # (group_vars/all.yml, the hold list); ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
 # refuses a package on one list and not the other, so nothing is installed the hold never sees.
-docker_install_apt_suffix: "-1~ubuntu.{{ ansible_facts.distribution_version }}~{{ ansible_facts.distribution_release }}"
+#
+# DECIDED: the Debian revision is a GLOB, never a literal `-1` (#2357). A pin here names an
+# UPSTREAM version -- Renovate strips the revision from the version space it reads
+# (renovate.json), so it cannot propose one, nor prove that `-1` exists for what it proposes.
+# Docker publishes several revisions of one upstream version: the noble/arm64 index carries
+# `containerd.io 2.3.4-1~ubuntu.24.04~noble` and `2.3.4-2~ubuntu.24.04~noble` side by side. A
+# hardcoded `-1` therefore asserted a revision nothing verifies, and a repackage superseding a
+# withdrawn `-1` rendered a spec apt cannot resolve -- `no available installation candidate`
+# from the fresh install and from the deliberate upgrade's pending check.
+# ansible.builtin.apt fnmatches the version in a `name=version` spec (its own
+# `package_best_match` pins the pattern at priority 1001) and hands apt-get the concrete
+# newest match, so apt chooses the revision. Measured on daniel-pi 2026-09-24 in check
+# mode: `containerd.io=2.3.4-*~ubuntu.24.04~noble` built
+# `apt-get --simulate install 'containerd.io=2.3.4-2~ubuntu.24.04~noble'`, the newer revision of
+# the two. Long form in this role's CLAUDE.md.
+docker_install_apt_suffix: "-*~ubuntu.{{ ansible_facts.distribution_version }}~{{ ansible_facts.distribution_release }}"
 docker_install_package_versions:
   docker-ce: "5:{{ docker_install_engine_version }}"
   docker-ce-cli: "5:{{ docker_install_engine_version }}"
   containerd.io: "{{ docker_install_containerd_version }}"
   docker-compose-plugin: "{{ docker_install_compose_plugin_version }}"
   docker-buildx-plugin: "{{ docker_install_buildx_plugin_version }}"
-# The `name=version` specs apt receives: `docker-ce=5:29.8.1-1~ubuntu.24.04~noble`.
+# The `name=version` specs apt receives: `docker-ce=5:29.8.1-*~ubuntu.24.04~noble`.
 docker_install_package_specs: >-
   {{ docker_install_package_versions | dict2items
      | map(attribute='key') | zip(docker_install_package_versions | dict2items | map(attribute='value'))

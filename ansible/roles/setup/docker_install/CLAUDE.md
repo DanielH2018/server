@@ -60,7 +60,7 @@ run. Run it from a LAN session, not over the tunnel.
 **The versions are pinned, and Renovate carries the signal** (#2153). `defaults/main.yml`
 names four upstream versions — `docker_install_engine_version` for docker-ce and its cli,
 and one each for containerd.io, the compose plugin and the buildx plugin — and renders them
-into apt's `name=5:29.8.1-1~ubuntu.24.04~noble` form as `docker_install_package_specs`.
+into apt's `name=5:29.8.1-*~ubuntu.24.04~noble` form as `docker_install_package_specs`.
 Before the pins, a fresh install took whatever `download.docker.com` served that day and
 the deliberate bump moved to whatever it served on the day it ran. Renovate tracks the four
 on the `deb` datasource against download.docker.com's own noble/arm64 index (docker-ce,
@@ -71,14 +71,33 @@ containerd.io, docker-compose-plugin, docker-buildx-plugin) in one manual group.
 upstream tags it: PR #2327 offered containerd 2.4.0 while the index topped out at 2.3.5, so
 `docker-engine-upgrade` would have failed at apt *after* stopping every Compose project on
 the Pi. Reading the index means the PR opens only once the Pi can install the version.
-Two limits survive that. The manager strips apt's Debian revision, so `2.3.4-1` and
-`2.3.4-2` are one version and a revision-only repackage offers no PR. And
-`docker_install_apt_suffix` hardcodes revision `-1`, so a version Docker publishes only as
-`-2` renders a spec apt cannot resolve — true of nothing pinned today, but not something
-the manager can prove. ENFORCED by
+One limit survives that. The manager strips apt's Debian revision, so `2.3.4-1` and
+`2.3.4-2` are one version and a revision-only repackage offers no PR. ENFORCED by
 `scripts/tests/test_renovate_docker_engine_pins.py::test_managers_name_the_apt_packages_they_pin`
 and its siblings: the depName is the apt package the spec renders, the registryUrl is
 Docker's index, and the group stays out of the automerging catch-all.
+
+**The spec globs the Debian revision** (#2357). `docker_install_apt_suffix` renders
+`-*~ubuntu.24.04~noble`, so a pin installs whichever revision Docker published. It hardcoded
+`-1` until 2026-09-24, and that asserted a revision nothing here verifies: the manager strips
+the revision (above), and Docker publishes several revisions of one upstream version —
+`containerd.io 2.3.4-1~ubuntu.24.04~noble` and `2.3.4-2~ubuntu.24.04~noble` both sit in the
+noble/arm64 index. A version published only at `-2`, a repackage superseding a withdrawn `-1`,
+therefore rendered a spec apt cannot resolve. That blocks the fresh install and the pending
+check that opens the deliberate upgrade, which are the two paths that install a pin at all.
+
+`ansible.builtin.apt` fnmatches the version in a `name=version` spec and hands apt-get the
+newest match, so apt chooses the revision. Measured on daniel-pi 2026-09-24 in check mode:
+`containerd.io=2.3.4-*~ubuntu.24.04~noble` built `apt-get --simulate install
+'containerd.io=2.3.4-2~ubuntu.24.04~noble'`, the newer of the two revisions, while a spec
+naming a revision the index lacks answered `E: Version '2.3.4-9~ubuntu.24.04~noble' for
+'containerd.io' was not found`. ENFORCED by
+`ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py::test_the_apt_spec_globs_the_debian_revision`.
+
+**Cost accepted:** the pending check reads a revision-only repackage as pending, so a run of
+the deliberate upgrade stops and recreates every Compose project to move `-1` to `-2`. No
+Renovate PR announces that, and nothing reaches the Pi until someone runs the play, so the
+cost lands only on a run the operator already chose.
 
 Merging that PR moves nothing on the Pi: `install.yml` reads the installed
 docker-ce version first and installs only where there is none (an explicit
