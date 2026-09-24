@@ -8,18 +8,17 @@ names, which is what makes an operator deploy and this unit exclude each other o
 rather than on the whole tree.
 
 THIS MODULE IS THE ONLY PLACE THAT NAMES AND ORDERS THEM. The wrapper does not build a lock
-name or sort a tag list of its own: a foreground run calls `plan` in process
-(`scripts/deploy_tools/deploy_under_locks.py`), `--detach` runs `deploy_locks.py plan <tag>...`,
-and each takes the locks it is handed, in that order. Until 2026-09-18 the shell carried its own copy of both, and
+name or sort a tag list of its own: it calls `plan` in process
+(`scripts/deploy_tools/deploy_under_locks.py`) and takes the locks it is handed, in that
+order. Until 2026-09-18 the shell carried its own copy of both, and
 the two agreed only because a test compared them -- `sort` and Python's `sorted` disagree on
 `pihole` against `pi-peer-backup` unless the shell pins `LC_ALL=C`, and a disagreement there
 is a deadlock between a hand deploy and a tick (issue #2054).
 
 A leaf: it imports nothing from the rest of the deployer, so a test can drive it directly.
 
-Stdlib only: the unit runs it under `uv run --no-project`, `deploy_under_locks.py` imports it,
-and `deploy_locked.sh` (the `--detach` arm) runs the CLI below through the repo's own
-`uv run python`.
+Stdlib only: the unit runs it under `uv run --no-project`, and `deploy_under_locks.py`
+imports it. The CLI below is for reading a plan by hand.
 
 Typical usage example:
 
@@ -51,8 +50,8 @@ from typing import NamedTuple
 
 # The tree lock (ADR-0011): what the deployer unit's `flock` ExecStart, `deploy.sh` and the
 # `gitops_state.py` rewrite all take. Named here so the Python readers share one literal;
-# `deploy_under_locks.py` imports it; `deploy_locked.sh` cannot, and carries its own default,
-# pinned to this one by `scripts/deploy_tools/tests/test_deploy_locked_halves_agree.py`.
+# `deploy_under_locks.py` imports it, and the deploy UI, which cannot, is pinned to it by
+# `test_lock_names_agree_with_deploy_locks_is_clean`.
 TREE_LOCK = "/var/lock/server-git-tree.lock"
 # The lock a run with no tags takes exclusively, and every scoped run takes shared.
 SERVICE_LOCK_ALL = "all"
@@ -121,8 +120,7 @@ def plan(services: Iterable[str], exclusive_all: bool = False) -> list[PlannedLo
 
     The DECIDED note above is the whole rule: `all` first, then each tag once, in code-point
     order. `service_locks` walks this list rather than restating it, and `deploy.sh` takes it
-    as returned (or, under `--detach`, as the `plan` subcommand prints it), so there is one
-    ordering for a deploy to disagree with.
+    as returned, so there is one ordering for a deploy to disagree with.
 
     Args:
         services: the tags the deploy names. Empty means the whole playbook, which takes
@@ -231,7 +229,7 @@ def locked_budget(services: Iterable[str], timeout: float, exclusive_all: bool =
         yield max(MIN_RUN_BUDGET_S, deadline - time.monotonic())
 
 
-# -- the CLI `deploy.sh --detach` reads its locks from ------------------------------------
+# -- the CLI, for reading a plan by hand ---------------------------------------------------
 
 USAGE = """usage: deploy_locks.py plan [--exclusive-all] TAG [TAG ...]
 

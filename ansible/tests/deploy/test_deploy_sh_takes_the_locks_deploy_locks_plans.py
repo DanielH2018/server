@@ -4,9 +4,9 @@
 Until 2026-09-18 both sides carried the naming and the order -- bash at
 `take_service_locks`, Python at `service_locks` -- and a test compared the two, because
 `sort` and Python's `sorted` disagree on `pihole` against `pi-peer-backup` unless the shell
-pins `LC_ALL=C`, and a disagreement is a deadlock between a hand deploy and a tick. Now the
-shell runs `deploy_locks.py plan` and takes what it prints, in the order printed, so there is
-one ordering to test rather than two to reconcile (issue #2054).
+pins `LC_ALL=C`, and a disagreement is a deadlock between a hand deploy and a tick. Since
+#2054 the wrapper takes what `deploy_locks.plan` returns, in that order, so there is one
+ordering to test rather than two to reconcile; since #2412 the wrapper is Python.
 
 Three things are measured, each driven rather than read off the source:
 
@@ -17,9 +17,9 @@ Three things are measured, each driven rather than read off the source:
   same order, so a reordering inside it fails here.
 - The wrapper takes exactly what `plan` says, WITHOUT sorting: fed a plan in reverse order,
   it flocks the files in that order. And the red half -- a `plan` that fails, or names
-  nothing, leaves the wrapper refusing with exit 79 and no lock touched. A foreground run takes
-  its locks in process (`deploy_under_locks.py`, handed a `plan`); `--detach` runs `deploy_locks.py
-  plan` from bash, measured through a recording `flock`, until slice 4 of #2412.
+  nothing, leaves the wrapper refusing with exit 79 and no lock touched. Measured in process
+  on `deploy_under_locks.take_service_locks`, handed a `plan`; `--detach` takes its locks
+  through the same call, which a structural check pins.
 
 Run: uv run pytest ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py
 """
@@ -32,22 +32,12 @@ import sys
 import deploy_locks
 import deploy_under_locks
 import pytest
-from _deploy_sh_fakes import (
-    FAKE_RECAP,
-    UV_DEPLOY_RUN_ARM,
-    UV_WRAPPER_ARMS,
-    deploy_sh_env,
-    make_snapshot_repo,
-    stub_bin,
-)
 from _helpers import REPO
 from deploy_tools.exit_codes import DEPLOY_LOCK_PLAN_FAILED, DEPLOY_SH_NO_VERDICT
 
-_DEPLOY_SH = REPO / "scripts" / "deploy.sh"
-# The shell the text checks below read: the locked half behind the shim (#2412).
-_DEPLOY_LOCKED = REPO / "scripts" / "deploy_tools" / "deploy_locked.sh"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
+_DEPLOY_DETACH = REPO / "scripts" / "deploy_tools" / "deploy_detach.py"
 # The pair `sort` under a UTF-8 locale and Python's `sorted` order differently. Both are live
 # roles, and a census that stopped finding them would prove the order on nothing.
 _DISAGREEING_PAIR = ("pi-peer-backup", "pihole")
@@ -267,185 +257,7 @@ def test_the_foreground_refuses_with_79_and_takes_nothing_when_plan_fails(plan, 
     assert "deploy_locks.plan" in err
 
 
-# -- the --detach arm takes what plan says ------------------------------------------------
-
-# Records the file behind every descriptor `flock` is handed, then takes no lock. The wrapper
-# flocks a DESCRIPTOR (`exec {fd}>"$path"; flock ... "$fd"`), so the path is readable only
-# through /proc from inside the child, and this is the one place both the order and the names
-# the wrapper really used can be observed.
-_FLOCK_RECORDER = """#!/bin/bash
-for arg in "$@"; do
-  [[ "$arg" =~ ^[0-9]+$ ]] || continue
-  readlink "/proc/$$/fd/$arg" >> "$DEPLOY_TEST_FLOCKS"
-done
-exit 0
-"""
-
-# A plan in the order NO sort would produce: `zeta` before `alpha`, and `all` last. The
-# wrapper must take it as printed -- a wrapper that still sorted, or still put `all` first
-# of its own accord, would take a different order from the one the deployer walks.
-_UV_REVERSED_PLAN = """#!/bin/bash
-case "$*" in
-{run}
-  *ansible-playbook*) {recap}; exit 0 ;;
-  *deploy_locks.py*)
-    printf 'zeta\\texclusive\\t%s/server-deploy-zeta.lock\\n' "$HOMELAB_DEPLOY_LOCK_DIR"
-    printf 'alpha\\texclusive\\t%s/server-deploy-alpha.lock\\n' "$HOMELAB_DEPLOY_LOCK_DIR"
-    printf 'all\\tshared\\t%s/server-deploy-all.lock\\n' "$HOMELAB_DEPLOY_LOCK_DIR"
-    exit 0 ;;
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
-
-_UV_PLAN_EXITS_NONZERO = """#!/bin/bash
-case "$*" in
-{run}
-  *ansible-playbook*) touch "$DEPLOY_TEST_PLAYBOOK_RAN"; {recap}; exit 0 ;;
-  *deploy_locks.py*) echo "deploy_locks.py: broken on purpose" >&2; exit 1 ;;
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
-
-_UV_PLAN_PRINTS_NOTHING = """#!/bin/bash
-case "$*" in
-{run}
-  *ansible-playbook*) touch "$DEPLOY_TEST_PLAYBOOK_RAN"; {recap}; exit 0 ;;
-  *deploy_locks.py*) exit 0 ;;
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{run}", UV_DEPLOY_RUN_ARM)
-
-_UV_REAL_PLAN = """#!/bin/bash
-case "$*" in
-  *ansible-playbook*) {recap}; exit 0 ;;
-{locks}
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
-
-
-# A finished run annotates itself through `logger`, which the leak guard shims: a fixture
-# deploy must not land on the Landings board beside real ones.
-_LOGGER_STUB = "#!/bin/bash\nexit 0\n"
-
-
-def _run_detach(tmp_path, uv_stub: str, *args: str, **env: str):
-    """`deploy.sh --detach`: the one arm still in bash, which runs `plan` as a subprocess."""
-    bin_dir = stub_bin(
-        tmp_path, {"uv": uv_stub, "flock": _FLOCK_RECORDER, "logger": _LOGGER_STUB}
-    )
-    repo = make_snapshot_repo(tmp_path / "repo")
-    flocks = tmp_path / "flocks"
-    flocks.touch()
-    full_env = deploy_sh_env(
-        tmp_path,
-        bin_dir,
-        DEPLOY_TEST_FLOCKS=str(flocks),
-        DEPLOY_TEST_PLAYBOOK_RAN=str(tmp_path / "playbook-ran"),
-        **env,
-    )
-    result = subprocess.run(
-        [
-            str(_DEPLOY_SH),
-            "--detach",
-            "--skip-tag-check",
-            "--skip-staleness-check",
-            *args,
-        ],
-        cwd=repo,
-        env=full_env,
-        capture_output=True,
-        text=True,
-        check=False,
-    )
-    service_flocks = [
-        os.path.basename(line)
-        for line in flocks.read_text().splitlines()
-        if "server-deploy-" in line
-    ]
-    return result, service_flocks
-
-
-def test_detach_takes_the_locks_in_the_order_plan_printed_them(tmp_path):
-    """The bash arm's half of the reversed-plan test above."""
-    result, service_flocks = _run_detach(tmp_path, _UV_REVERSED_PLAN, "--tags", "alpha")
-    assert result.returncode == 0, result.stderr
-    assert service_flocks == [
-        "server-deploy-zeta.lock",
-        "server-deploy-alpha.lock",
-        "server-deploy-all.lock",
-    ], "deploy.sh --detach reordered the plan, so its lock order is not the deployer's"
-
-
-def test_detach_takes_the_real_plan_all_first_then_the_tags(tmp_path):
-    """The bash arm on the real module: what a scoped --detach of two tags really flocks."""
-    result, service_flocks = _run_detach(
-        tmp_path, _UV_REAL_PLAN, "--tags", "pihole,pi-peer-backup"
-    )
-    assert result.returncode == 0, result.stderr
-    assert service_flocks == [
-        "server-deploy-all.lock",
-        "server-deploy-pi-peer-backup.lock",
-        "server-deploy-pihole.lock",
-    ]
-
-
-@pytest.mark.parametrize(
-    "uv_stub",
-    [_UV_PLAN_EXITS_NONZERO, _UV_PLAN_PRINTS_NOTHING],
-    ids=["plan-exits-nonzero", "plan-prints-nothing"],
-)
-def test_detach_refuses_with_79_and_takes_nothing_when_plan_fails(tmp_path, uv_stub):
-    """FLAGGED half: no plan, no locks, no playbook -- never a fallback order of its own."""
-    result, service_flocks = _run_detach(tmp_path, uv_stub, "--tags", "alpha")
-    assert result.returncode == DEPLOY_LOCK_PLAN_FAILED, (result.stdout, result.stderr)
-    assert DEPLOY_LOCK_PLAN_FAILED in DEPLOY_SH_NO_VERDICT
-    assert service_flocks == [], (
-        "deploy.sh took a service lock with no plan to take it from"
-    )
-    assert not (tmp_path / "playbook-ran").exists()
-    assert "nothing was deployed" in result.stderr
-    assert "deploy_locks.py plan" in result.stderr
-
-
-def test_detach_refuses_with_79_when_plan_hangs(tmp_path):
-    """The bound: a plan that never answers is refused, not waited on. No lock is held while
-    it runs, so the cost is this run alone -- but the run must still end. Bash only: the
-    foreground imports `plan`, so there is no interpreter start left to hang."""
-    hung = """#!/bin/bash
-case "$*" in
-{run}
-  *deploy_locks.py*) sleep 30 ;;
-  *) exit 0 ;;
-esac
-""".replace("{run}", UV_DEPLOY_RUN_ARM)
-    result, service_flocks = _run_detach(
-        tmp_path, hung, "--tags", "alpha", HOMELAB_DEPLOY_LOCK_PLAN_TIMEOUT="1"
-    )
-    assert result.returncode == DEPLOY_LOCK_PLAN_FAILED, (result.stdout, result.stderr)
-    assert service_flocks == []
-    assert "longer than 1s" in result.stderr
-
-
-# -- what the shell no longer carries ------------------------------------------------------
-
-
-def _code_lines(text: str) -> list[str]:
-    return [
-        line
-        for line in text.splitlines()
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-
-
-def test_deploy_sh_neither_names_a_service_lock_nor_sorts_a_tag_list():
-    """The verify line of issue #2054: only comments may say `server-deploy-`, and no `sort`
-    of a tag list -- with or without `LC_ALL` -- is left for a locale to disagree with."""
-    code = _code_lines(_DEPLOY_LOCKED.read_text())
-    naming = [line for line in code if "server-deploy-" in line]
-    assert naming == [], f"deploy.sh still names a service lock itself: {naming}"
-    sorting = [line for line in code if "LC_ALL" in line or "sort -u" in line]
-    assert sorting == [], f"deploy.sh still sorts a tag list itself: {sorting}"
+# -- what the wrapper no longer carries -------------------------------------------------
 
 
 def _non_docstring_strings(source: str) -> list[str]:
@@ -486,15 +298,32 @@ def test_the_string_census_sees_a_service_lock_literal():
     ) == ["server-deploy-all.lock"]
 
 
-def test_deploy_sh_default_tree_lock_is_the_module_constant():
-    """The one lock the shell still names by literal -- it takes it before any Python runs --
-    pinned to the constant every Python reader imports."""
-    line = next(
-        line
-        for line in _code_lines(_DEPLOY_LOCKED.read_text())
-        if line.startswith("LOCK=")
-    )
-    assert deploy_locks.TREE_LOCK in line, (
-        f"deploy_locked.sh's tree lock ({line}) is not deploy_locks.TREE_LOCK "
-        f"({deploy_locks.TREE_LOCK}); the wrapper and the deployer would guard different files"
-    )
+def test_the_tree_lock_default_is_the_module_constant(monkeypatch):
+    """The wrapper and the deployer must guard one file; driven, with no override set."""
+    monkeypatch.delenv("HOMELAB_DEPLOY_TREE_LOCK", raising=False)
+    assert deploy_under_locks.tree_lock_path() == deploy_locks.TREE_LOCK
+
+
+def _service_lock_calls(source: str) -> dict[str, int]:
+    """How often `source` calls `take_service_locks` and `plan` by any spelling."""
+    counts = {"take_service_locks": 0, "plan": 0}
+    for node in ast.walk(ast.parse(source)):
+        if isinstance(node, ast.Call):
+            name = getattr(node.func, "attr", getattr(node.func, "id", ""))
+            if name in counts:
+                counts[name] += 1
+    return counts
+
+
+def test_detach_takes_its_service_locks_through_the_foregrounds_helper():
+    """`--detach` plans nothing itself: the order tests above cover it through this call."""
+    assert _service_lock_calls(_DEPLOY_DETACH.read_text()) == {
+        "take_service_locks": 1,
+        "plan": 0,
+    }
+
+
+def test_a_detach_that_plans_its_own_locks_is_flagged():
+    assert _service_lock_calls(
+        "def run(s):\n    for lock in deploy_locks.plan(s.tags):\n        take(lock)\n"
+    ) == {"take_service_locks": 0, "plan": 1}

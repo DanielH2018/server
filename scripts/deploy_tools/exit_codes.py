@@ -22,7 +22,7 @@ Typical usage example:
 
 # -- scripts/deploy.sh ------------------------------------------------------------------
 # The wrapper's own contract: 2, 3, 4 and 64 are refused by its front half `deploy_run.py`,
-# 20 and 75-79 by its locked half `deploy_locked.sh` (each file's header and `exit` sites). `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed --
+# 20 and 75-79 by its locked half `deploy_under_locks.py` (and `deploy_detach.py`). `DEPLOY_SH_NO_VERDICT` below is the set that means NOTHING was deployed --
 # 2, 3, 4, 75, 76, 77, 78 and 79 -- and every member is a resume point. Read the frozenset rather
 # than this sentence: it enumerated five of them until 77 was added. 20 is the inverse -- the
 # playbook RAN and a task failed, so whatever applied before it is live. ansible-playbook's own

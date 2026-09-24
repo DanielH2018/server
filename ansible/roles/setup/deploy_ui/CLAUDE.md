@@ -58,8 +58,9 @@ waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files 
 `ps` with `ppid` folds each process family — a landing with the `deploy.sh` it spawned, a
 `deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. The run
 pattern also matches `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`,
-which stays the family root while `deploy_locked.sh` runs under it
-(`docs/deploy-sh-python-port.md`), so no process names `deploy.sh`. A
+which stays the family root while its python child takes the locks and runs the playbook
+(`docs/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
+forked child is reparented to 1 and is its own root, still matching `deploy_run.py`. A
 holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
 than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy
 POST, is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can
@@ -68,8 +69,8 @@ read; every deployer here runs as `{{ sys_user }}`, the daemon's own user.
 Only a `land` row is cancellable. SIGTERM to a deploy mid-play leaves whatever applied
 before it live (`deploy.sh` exit 20), which is not a cancel.
 
-`test_lock_names_agree_with_deploy_locks_is_clean` pins the lock names to `deploy_locks.py`
-and to the tree-lock default in `deploy_locked.sh`, because the daemon runs outside the venv and cannot import them.
+`test_lock_names_agree_with_deploy_locks_is_clean` pins the lock names to `deploy_locks.py`,
+because the daemon runs outside the venv and cannot import them.
 
 ## Writes
 

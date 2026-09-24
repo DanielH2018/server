@@ -23,11 +23,10 @@ _REPO = REPO
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
 _GRAFANA = _ROLE / "templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
-# deploy.sh's two locked halves: the foreground's (Python since slice 3 of #2412) and the
-# --detach arm's, still bash until slice 4 ports it.
+# deploy.sh's locked halves: the foreground's and --detach's both call `annotate` (#2412).
 _DEPLOY_UNDER_LOCKS = _REPO / "scripts/deploy_tools/deploy_under_locks.py"
 _DEPLOY_PLAYBOOK = _REPO / "scripts/deploy_tools/deploy_playbook.py"
-_DEPLOY_SH = _REPO / "scripts/deploy_tools/deploy_locked.sh"
+_DEPLOY_DETACH = _REPO / "scripts/deploy_tools/deploy_detach.py"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 
@@ -44,7 +43,7 @@ def test_the_query_matches_what_the_deployers_actually_log():
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
 
-    for emitter in (_DEPLOY_PLAYBOOK, _DEPLOY_SH, _GITOPS):
+    for emitter in (_DEPLOY_PLAYBOOK, _GITOPS):
         text = emitter.read_text()
         for literal in literals:
             assert literal in text, (
@@ -72,7 +71,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
     )
 
     key = field.group(1)
-    for emitter in (_DEPLOY_PLAYBOOK, _DEPLOY_SH, _GITOPS):
+    for emitter in (_DEPLOY_PLAYBOOK, _GITOPS):
         assert f"{key}=" in emitter.read_text(), (
             f"{emitter.name} does not emit a `{key}=` field, so the annotation text would be "
             f"blank on every marker"
@@ -104,28 +103,17 @@ def test_the_datasource_uid_matches_the_provisioned_one():
 def test_both_deploy_paths_annotate():
     """One emitter alone means the dashboards show half the deploys, which is worse than none —
     an operator would read the gaps as "nothing was deployed then"."""
-    assert "emit_deploy_annotation" in _DEPLOY_SH.read_text()
     assert "def annotate(" in _DEPLOY_PLAYBOOK.read_text()
     assert "emit_deploy_annotation" in _GITOPS.read_text()
 
 
-def test_deploy_sh_annotates_only_on_success():
-    """A failed deploy must not leave a marker saying it happened."""
-    body = _DEPLOY_SH.read_text()
-    func = body.split("emit_deploy_annotation() {", 1)[1].split("\n}", 1)[0]
-
-    assert re.search(r'\[\[\s*"\$status"\s*==\s*0\s*\]\]', func), (
-        "emit_deploy_annotation must return early unless the deploy exited 0"
-    )
-
-
-def _annotate_guards(source: str) -> list[str]:
-    """The test of the `if` enclosing each `annotate(...)` call in `run`."""
+def _annotate_guards(source: str, function: str = "run") -> list[str]:
+    """The test of the `if` enclosing each `annotate(...)` call in `function`."""
     tree = ast.parse(source)
     run = next(
         node
         for node in ast.walk(tree)
-        if isinstance(node, ast.FunctionDef) and node.name == "run"
+        if isinstance(node, ast.FunctionDef) and node.name == function
     )
     return [
         ast.unparse(branch.test)
@@ -140,8 +128,10 @@ def _annotate_guards(source: str) -> list[str]:
 
 
 def test_the_python_locked_half_annotates_only_on_success():
-    """The same rule for the foreground: one `annotate` call, behind `status == 0`."""
+    """A failed deploy must not leave a marker saying it happened: one `annotate` call per
+    mode, behind `status == 0` -- the foreground's `run` and the detached `child`."""
     assert _annotate_guards(_DEPLOY_UNDER_LOCKS.read_text()) == ["status == 0"]
+    assert _annotate_guards(_DEPLOY_DETACH.read_text(), "child") == ["status == 0"]
 
 
 def test_an_unconditional_annotation_is_flagged():
@@ -153,14 +143,10 @@ def test_annotating_can_never_fail_a_good_deploy():
 
     Neither may turn a successful deploy into a reported failure.
     """
-    body = _DEPLOY_SH.read_text()
-    func = body.split("emit_deploy_annotation() {", 1)[1].split("\n}", 1)[0]
-    assert "|| true" in func, "the logger call must be fire-and-forget"
-
     python = _DEPLOY_PLAYBOOK.read_text()
     annotate = python.split("def annotate(", 1)[1].split("\ndef ", 1)[0]
     assert "contextlib.suppress(OSError)" in annotate, (
-        "the foreground emitter must swallow a missing or failing logger"
+        "the wrapper's emitter must swallow a missing or failing logger"
     )
 
     gitops = _GITOPS.read_text()

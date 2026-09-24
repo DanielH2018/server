@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Every `date` that stamps a deploy artifact or bounds a journal window reads UTC.
 
-`deploy_locked.sh` (the locked half behind `deploy.sh`) names its snapshot worktree and its log after a `date` stamp, and
-`gitops_tick.sh` builds the `journalctl --since` window from one. A stamp in host-local time
+`deploy.sh`'s Python halves name its snapshot worktree and its `--detach` log after a stamp,
+and `gitops_tick.sh` builds the `journalctl --since` window from a `date` one. A stamp in host-local time
 is ambiguous across a DST fold and the window shifts with the host's zone; `-u` makes both
 independent of where the script runs (issue #2154). Both hosts run `Etc/UTC` today, so this
 guards a future zone change rather than a live defect.
@@ -16,10 +16,7 @@ from pathlib import Path
 import pytest
 
 _REPO = Path(__file__).resolve().parents[3]
-_SCRIPTS = (
-    _REPO / "scripts" / "deploy_tools" / "deploy_locked.sh",
-    _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",
-)
+_SCRIPTS = (_REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",)
 # A `date` invocation that formats or converts a time: `date +FMT`, `date -d @N +FMT`, and
 # the `-u` form of each. Comment lines are skipped so prose naming the flag does not count.
 _DATE_CALL = re.compile(r"\bdate\b((?:\s+-\S+(?:\s+\S+)?)*)\s+'?\+")
@@ -52,14 +49,18 @@ def test_the_pattern_flags_a_local_time_stamp():
     assert not _DATE_UTC.search(local)
 
 
-# The foreground's locked half stamps its snapshot in Python since slice 3 of #2412.
-_DEPLOY_UNDER_LOCKS = _REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
+# deploy.sh stamps its snapshot and its --detach log in Python since #2412.
+_PYTHON_STAMPERS = (
+    _REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
+    _REPO / "scripts" / "deploy_tools" / "deploy_detach.py",
+)
 _NOW_CALL = re.compile(r"\bdatetime\.now\(([^)]*)\)")
 
 
-def test_every_python_stamp_is_utc():
-    calls = _NOW_CALL.findall(_DEPLOY_UNDER_LOCKS.read_text())
-    assert calls, "deploy_under_locks.py: found no datetime.now() call to check"
+@pytest.mark.parametrize("path", _PYTHON_STAMPERS, ids=lambda p: p.name)
+def test_every_python_stamp_is_utc(path: Path):
+    calls = _NOW_CALL.findall(path.read_text())
+    assert calls, f"{path.name}: found no datetime.now() call to check"
     assert all(arg == "UTC" for arg in calls), f"datetime.now() without UTC: {calls}"
 
 

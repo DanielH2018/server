@@ -7,10 +7,10 @@ caused it, which is why they are pinned at the source.
 
 `scripts/deploy.sh`: a foreground run's playbook is `run_playbook` in `deploy_playbook.py`,
 which runs it with the snapshot as its cwd, called by `deploy_under_locks.run` after
-`take_service_locks`. `--detach` still goes through `run_playbook_in_snapshot` in
-`deploy_locked.sh`, which cds into the snapshot. `--check` and `--dry-run` are the
-exceptions: `deploy_run.py` execs them above the lock, from the working tree on purpose,
-and names ansible-playbook nowhere else.
+`take_service_locks`; `deploy_detach.run` takes the same locks before it forks the child
+that calls `run_playbook`. `--check` and `--dry-run` are the exceptions: `deploy_run.py`
+execs them above the lock, from the working tree on purpose, and names ansible-playbook
+nowhere else.
 
 `deploy_io.py`: every function that runs a playbook wraps it in `service_locks`. The set of
 such functions is asserted by name, so one added later without a lock fails here rather than
@@ -24,15 +24,14 @@ import re
 
 from _helpers import REPO
 
-# The locked half behind the deploy.sh shim, and the Python front half that execs it.
-_DEPLOY_SH = REPO / "scripts/deploy_tools/deploy_locked.sh"
+# deploy.sh's Python halves.
 _DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_run.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_under_locks.py"
 _DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_playbook.py"
+_DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_detach.py"
 _DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 
-_SNAPSHOT_RUNNER = "run_playbook_in_snapshot"
 # The deployer's playbook call sites. Named rather than discovered so that a fourth one added
 # without a lock fails this file instead of joining a vacuously-true census.
 _LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy", "deploy_k8s", "deploy_broad"})
@@ -41,48 +40,6 @@ _LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy", "deploy_k8s", "deploy_broad"})
 _BUDGET_HELPER = "locked_budget"
 _LOCK_HELPERS = frozenset({"service_locks", _BUDGET_HELPER})
 _BUDGETED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})
-
-
-def _code_lines(text: str) -> list[tuple[int, str]]:
-    """(1-indexed line number, text) for every line that is not a comment or blank."""
-    return [
-        (i, line)
-        for i, line in enumerate(text.splitlines(), start=1)
-        if line.strip() and not line.lstrip().startswith("#")
-    ]
-
-
-def _runner_line_range(text: str) -> tuple[int, int]:
-    """The 1-indexed first and last line of `run_playbook_in_snapshot`'s definition."""
-    lines = text.splitlines()
-    first = next(
-        i
-        for i, line in enumerate(lines, start=1)
-        if line.startswith(f"{_SNAPSHOT_RUNNER}()")
-    )
-    last = next(
-        i for i, line in enumerate(lines[first:], start=first + 1) if line == "}"
-    )
-    return first, last
-
-
-def test_the_locked_half_names_ansible_playbook_only_in_the_runner():
-    """A locked invocation that bypasses the runner fails here."""
-    text = _DEPLOY_SH.read_text()
-    first, last = _runner_line_range(text)
-    naming = [
-        (n, line.strip())
-        for n, line in _code_lines(text)
-        if "ansible-playbook" in line
-        # The runner's own invocation is the compliant one, and an error message naming the
-        # command is prose rather than a call site.
-        and not (first <= n <= last)
-        and not line.lstrip().startswith("echo ")
-    ]
-    assert naming == [], (
-        f"{naming} run ansible-playbook outside {_SNAPSHOT_RUNNER}; a locked deploy must "
-        "render from the snapshot, not the working tree"
-    )
 
 
 def _unlocked_playbook_calls(source: str) -> list[str]:
@@ -124,27 +81,6 @@ def test_an_unguarded_playbook_call_is_flagged():
     ) == [""]
 
 
-def test_the_snapshot_runner_is_the_only_locked_path_and_it_cds_into_the_snapshot():
-    """The runner has to actually enter the snapshot, and the --detach arm has to use it."""
-    text = _DEPLOY_SH.read_text()
-    body = text.split(f"{_SNAPSHOT_RUNNER}() {{", 1)
-    assert len(body) == 2, f"{_SNAPSHOT_RUNNER} is gone from {_DEPLOY_SH.name}"
-    definition = body[1].split("\n}", 1)[0]
-    assert 'cd "$snapshot"' in definition, (
-        f"{_SNAPSHOT_RUNNER} no longer changes into the snapshot, so a locked deploy renders "
-        "from whatever tree the wrapper happens to be sitting in"
-    )
-    assert "UV_PROJECT_ENVIRONMENT=" in definition, (
-        f"{_SNAPSHOT_RUNNER} must pin the caller's venv; a snapshot has none and uv would "
-        "build one in a directory this run deletes"
-    )
-    calls = [n for n, line in _code_lines(text) if f"{_SNAPSHOT_RUNNER} " in line]
-    assert len(calls) == 1, (
-        f"expected the --detach arm alone to call {_SNAPSHOT_RUNNER} (the foreground runs in "
-        f"deploy_under_locks.py since #2412 slice 3), found {len(calls)} call sites"
-    )
-
-
 def _playbook_literal_owners(source: str) -> list[str]:
     """The enclosing function of each "ansible-playbook" constant in `source`, in order."""
     tree = ast.parse(source)
@@ -162,6 +98,7 @@ def test_the_python_locked_half_runs_ansible_playbook_only_in_run_playbook():
     source = _DEPLOY_PLAYBOOK.read_text()
     assert _playbook_literal_owners(source) == ["run_playbook"]
     assert _playbook_literal_owners(_DEPLOY_UNDER_LOCKS.read_text()) == []
+    assert _playbook_literal_owners(_DEPLOY_DETACH.read_text()) == []
     runner = ast.unparse(_functions(source)["run_playbook"])
     assert "cwd=run.snapshot" in runner, (
         "run_playbook no longer runs from the snapshot, so a locked deploy renders from "
@@ -181,24 +118,27 @@ def test_a_second_playbook_call_site_is_flagged():
 
 
 def _call_order(function: ast.FunctionDef) -> list[str]:
-    """The names of the plain calls in `function`, in source order."""
+    """The names of the calls in `function`, `f(...)` or `mod.f(...)`, in source order."""
     calls = [
         node
         for node in ast.walk(function)
-        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+        if isinstance(node, ast.Call)
+        and isinstance(node.func, ast.Name | ast.Attribute)
     ]
     return [
-        call.func.id
+        call.func.id if isinstance(call.func, ast.Name) else call.func.attr
         for call in sorted(calls, key=lambda c: (c.lineno, c.col_offset))
-        if isinstance(call.func, ast.Name)
+        if isinstance(call.func, ast.Name | ast.Attribute)
     ]
 
 
-def _locks_before_playbook(function: ast.FunctionDef) -> bool:
+def _locks_before_playbook(
+    function: ast.FunctionDef, playbook: str = "run_playbook"
+) -> bool:
     order = _call_order(function)
-    if "take_service_locks" not in order or "run_playbook" not in order:
+    if "take_service_locks" not in order or playbook not in order:
         return False
-    return order.index("take_service_locks") < order.index("run_playbook")
+    return order.index("take_service_locks") < order.index(playbook)
 
 
 def test_the_python_locked_half_takes_its_service_locks_before_the_playbook():
@@ -209,21 +149,18 @@ def test_the_python_locked_half_takes_its_service_locks_before_the_playbook():
     )
 
 
+def test_detach_takes_its_service_locks_before_it_forks_the_playbook():
+    """The same ordering for `--detach`: the child that runs the playbook is forked after."""
+    functions = _functions(_DEPLOY_DETACH.read_text())
+    assert _locks_before_playbook(functions["run"], playbook="fork"), (
+        "deploy_detach.run forks the playbook child before it takes a service lock"
+    )
+    assert "run_playbook" in _call_order(functions["child"])
+
+
 def test_a_playbook_before_its_locks_is_flagged():
     assert not _locks_before_playbook(
         _one_function("def run(s):\n    run_playbook(s)\n    take_service_locks(s)\n")
-    )
-
-
-def test_deploy_sh_takes_a_service_lock_before_it_runs_anything():
-    """The ordering ADR-0017 fixes, read off the file: locks first, then the playbook."""
-    text = _DEPLOY_SH.read_text()
-    first_lock = min(n for n, line in _code_lines(text) if "take_service_locks" in line)
-    first_run = min(
-        n for n, line in _code_lines(text) if f"{_SNAPSHOT_RUNNER} " in line
-    )
-    assert first_lock < first_run, (
-        f"{_DEPLOY_SH.name} reaches the playbook before it takes a service lock"
     )
 
 
