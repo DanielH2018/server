@@ -225,23 +225,47 @@ REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 # here is circular and would fail on a host where the drill has never passed. Gate 2 checks a
 # stamp the operator takes out of band.
 #
+# THE OBVIOUS FALSE FAILURE DOES NOT HAPPEN, and the two measurements are why. The drill names the
+# newest `offbox-*` object in the bucket, and gate 3 matches `spec.snapshotName` EXACTLY against
+# the CRs — so a name mismatch, or a CR k3s had not yet written, would fail the drill on a
+# snapshot that is fine. Measured on daniel-box 2026-09-24: an off-box snapshot gets TWO CRs, one
+# `file://` and one `s3://`, carrying the same bare `offbox-<node>-<epoch>.zip` name the S3
+# listing's first column prints; and `metadata.creationTimestamp` runs 3 seconds behind
+# `status.creationTime` on all four of the last four s3 records, so the CR is written at upload
+# rather than reconciled later. The weekly drill runs 7.6 hours after the 02:45 upload.
+#
 # ANY NON-ZERO IS A FAILURE, exit 69 included. 69 is "could not ask the cluster" — no kubectl, an
 # unreadable kubeconfig, the wrong cluster, or a Forbidden read. That is the RBAC half of what
 # this call exists to exercise, so passing the drill on it would leave the same blind spot the
 # call closes. Same fail-closed posture as `stamp_dir_missing` in runbook_gates.py.
 #
-# `--no-project` because the gate's import closure is stdlib plus `lib.kubectl` and
-# `deploy_tools.runbook_gates`, neither of which needs a dependency: a root cron must not sync
-# the sys_user-owned .venv in the checkout. The python version comes from the repo's own
-# `.python-version`, not from a second copy of the number here.
+# THE CHECKOUT'S OWN INTERPRETER, not `uv run`, and that is measured rather than stylistic. This
+# cron runs as ROOT with `PATH=/usr/local/bin:/usr/bin:/bin`, and on daniel-box (2026-09-24) root
+# has no uv-managed python at all — `/root/.local/share/uv/python/` does not exist, `python3` on
+# that PATH is 3.12.3, and the only `python3.14` is `/home/ubuntu/.local/bin/python3.14`, which is
+# not on it. So `uv run --no-python-downloads --python 3.14` as root resolves nothing and would
+# fail every week. The `/opt/...` host scripts that do use that form run as {{ sys_user }}, whose
+# uv python dir is the one it finds. `.venv/bin/python` here is a symlink INTO that dir
+# (3.14.7 on daniel-box), root can read it, and running it directly syncs nothing — a root cron
+# must not write to the sys_user-owned .venv.
+#
+# The uv form is the fallback because `.venv` is gitignored, so a fresh checkout has none. The
+# gate's import closure is stdlib plus `lib.kubectl` and `deploy_tools.runbook_gates`, so
+# `--no-project` is enough for it and the python version comes from the repo's own
+# `.python-version` rather than a second copy of the number here.
 #
 # GATE_CMD is an array so the test can stub it — ansible/tests/setup/test_etcd_restore_drill_gate.py
 # drives a refusal and a pass through it without a cluster.
-GATE_CMD=(
-  /usr/local/bin/uv run --no-project --no-python-downloads
-  --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
-  "$REPO_ROOT/scripts/deploy_tools/k3s_etcd_restore_gates.py" --gate 3
-)
+GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/k3s_etcd_restore_gates.py"
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" --gate 3)
+else
+  GATE_CMD=(
+    /usr/local/bin/uv run --no-project --no-python-downloads
+    --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
+    "$GATE_SCRIPT" --gate 3
+  )
+fi
 
 require_snapshot_restorable() {
   local snapshot="$1" rc=0

@@ -22,7 +22,9 @@ credentials, so sourcing it runs none of the drill.
 Run: uv run pytest ansible/tests/setup/test_etcd_restore_drill_gate.py
 """
 
+import os
 import subprocess
+from pathlib import Path
 
 import pytest
 
@@ -35,9 +37,9 @@ _SNAPSHOT = "offbox-daniel-box-1789958702.zip"
 def _finish_list_only(gate_exit: int, stamp_dir) -> subprocess.CompletedProcess:
     """Source the drill and run its `--list-only` tail against a gate stub exiting `gate_exit`.
 
-    The stub stands in for the whole `uv run … k3s_etcd_restore_gates.py --gate 3` invocation,
-    so nothing here needs a cluster, a kubeconfig or uv — the same way the verify test's stub
-    `k3s` stands in for the real kubectl pipeline.
+    The stub stands in for the whole `k3s_etcd_restore_gates.py --gate 3` invocation, so nothing
+    here needs a cluster, a kubeconfig or an interpreter of its own — the same way the verify
+    test's stub `k3s` stands in for the real kubectl pipeline.
     """
     script = f"""
     STAMP_DIR="{stamp_dir}"
@@ -85,12 +87,14 @@ def test_a_refusing_gate_fails_the_drill_and_leaves_no_stamp(tmp_path, gate_exit
     )
 
 
-def test_the_gate_command_names_the_gate_the_drill_can_actually_run(tmp_path):
+def test_the_gate_command_names_the_gate_the_drill_can_actually_run():
     """Non-vacuity: `GATE_CMD` must name the real script and gate 3, not just any command.
 
-    A stub-driven pair passes whatever `GATE_CMD` holds, so this reads the shipped array and
-    checks the file it names exists and that the gate number is the snapshot gate. Without it
-    the two tests above would stay green against a `GATE_CMD` that pointed at nothing.
+    The two tests above pass against whatever `GATE_CMD` holds, so without this they would stay
+    green against an array pointing at nothing. This reads the SHIPPED array — whichever of its
+    two branches this checkout takes, the `.venv` interpreter or the `uv run` fallback — and
+    checks that its interpreter is executable and the script it names exists. The branch not
+    taken is not exercised; `.venv` is gitignored, so which one runs depends on the checkout.
     """
     out = subprocess.run(
         ["bash", "-c", f'source "{_SCRIPT}"; printf "%s\\n" "${{GATE_CMD[@]}}"', "_"],
@@ -102,9 +106,10 @@ def test_the_gate_command_names_the_gate_the_drill_can_actually_run(tmp_path):
     assert out[out.index("--gate") + 1] == "3"
     named = [a for a in out if a.endswith("k3s_etcd_restore_gates.py")]
     assert len(named) == 1, out
-    from pathlib import Path
-
     assert Path(named[0]).is_file(), named
+    assert os.access(out[0], os.X_OK), (
+        f"GATE_CMD's interpreter {out[0]} is not executable, so the gate would never run"
+    )
     from deploy_tools import k3s_etcd_restore_gates as gates
 
     assert gates.GATES[2].check is gates._gate_snapshot, (
