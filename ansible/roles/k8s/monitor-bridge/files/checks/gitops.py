@@ -19,12 +19,13 @@ import time
 from bridge.config import Config
 from gitops_markers import (
     CONTENTION_CLEAR_CMD,
-    MANUAL_PLANE_CLEAR_CMD,
     MARKERS,
     STATE_DIR,
     parse_behind,
     parse_contention,
+    manual_plane_clear_cmd,
     parse_manual_plane,
+    parse_manual_plane_tags,
 )
 from verdicts.service import gitops_alive
 
@@ -40,6 +41,7 @@ def gitops_status(
     manual_plane: str | None = None,
     contention_since: str | None = None,
     max_contention_s: float | None = None,
+    manual_plane_tags: str | None = None,
 ) -> tuple[bool, str]:
     """Pure: is the deploy pipeline in a state needing operator action? Returns (ok, msg).
 
@@ -59,7 +61,9 @@ def gitops_status(
     back for a role only a hand can apply — that parked every other session's landing too — so
     it merges, records the role in `manual_plane`, and this pages once the OLDEST pending role
     is older than the same threshold. Age-gated for the same reason the behind arm is: a role
-    recorded ten minutes ago is an ordinary merge, not a fault.
+    recorded ten minutes ago is an ordinary merge, not a fault. Its clear names each role and,
+    from the `manual_plane_tags` row, the `--applied` tags a narrowed apply needs — the same
+    derivation the SessionStart banner prints (#2349).
 
     It is reported LAST, behind rather than ahead of the behind arm, and the two are
     independent faults rather than a cause and its symptom — so specificity does not order
@@ -151,6 +155,11 @@ def gitops_status(
         age_s = (time.time() if now is None else now) - oldest
         if age_s > max_behind_s:
             roles = ", ".join(sorted({e.role for e in pending}))
+            narrow = parse_manual_plane_tags(manual_plane_tags)
+            clears = " && ".join(
+                manual_plane_clear_cmd(r, narrow.get(r) or {r})
+                for r in sorted({e.role for e in pending})
+            )
             return False, (
                 "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; apply by hand, "
                 "then `%s`"
@@ -159,7 +168,7 @@ def gitops_status(
                     age_s / 3600,
                     max_behind_s / 3600,
                     "it" if len(pending) == 1 else "them",
-                    MANUAL_PLANE_CLEAR_CMD,
+                    clears,
                 )
             )
     return True, "no held deploy"
@@ -200,4 +209,5 @@ def check_gitops_status(cfg: Config) -> tuple[bool, str]:
         hold_plane=_read_gitops_marker(cfg, MARKERS["hold_plane"]),
         manual_plane=_read_gitops_marker(cfg, MARKERS["manual_plane"]),
         contention_since=_read_gitops_marker(cfg, MARKERS["contention"]),
+        manual_plane_tags=_read_gitops_marker(cfg, MARKERS["manual_plane_tags"]),
     )
