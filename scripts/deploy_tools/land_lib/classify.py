@@ -169,7 +169,10 @@ def narrow_plane(ln: Landing) -> None:
     finding 1).
 
     Every failure keeps the note as step 1 wrote it, with the whole-role tag: an unreadable
-    or absent sidecar, no PR range, a derivation that refuses or raises.
+    or absent sidecar, no PR range, a derivation that refuses or raises. The re-render is
+    INSIDE the try for the same reason (#2350): step 1 already called `plane_note` on these
+    inputs, so a raise here is unlikely — and if one happened, `land.py` would end in a
+    traceback instead of a verdict, which is a worse answer than the role tag.
     """
     if not ln.plane or not ln.pr_range:
         return
@@ -180,13 +183,13 @@ def narrow_plane(ln: Landing) -> None:
         narrow = ln.tools.confirm_narrowing(
             ln.pr_paths, ln.pr_range, ln.opts.primary, sidecar
         )
+        if narrow:
+            ln.plane = ln.classifier.plane_note(
+                ln.pr_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
+            )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")
         return
-    if narrow:
-        ln.plane = ln.classifier.plane_note(
-            ln.pr_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
-        )
 
 
 def shortcut_if_nothing(ln: Landing) -> None:

@@ -15,10 +15,88 @@ import pathlib
 import yaml
 
 import deploy_remediation
+import narrow_setup
 
 from deploy_remediation import broad_remediation, manual_plane_remediation
 
-_K3S_TASKS = pathlib.Path(__file__).parents[2] / "k3s" / "tasks"
+_K3S_ROLE = pathlib.Path(__file__).parents[2] / "k3s"
+_K3S_TASKS = _K3S_ROLE / "tasks"
+
+
+def _tagged_tasks(tasks, inherited=frozenset()):
+    """Every task in a parsed task list, with the tags that select it, blocks walked through.
+
+    A block is not a task: its `tags:` apply to the tasks inside it, so the walk carries them
+    down rather than yielding the block itself.
+    """
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        own = task.get("tags") or []
+        own = [own] if isinstance(own, str) else own
+        effective = inherited | {str(t) for t in own}
+        nested = [task.get(k) for k in ("block", "rescue", "always") if task.get(k)]
+        if nested:
+            for inner in nested:
+                yield from _tagged_tasks(inner, effective)
+        else:
+            yield task, effective
+
+
+def _restart_handlers() -> set[str]:
+    """The role's handler names that restart a service, read from `handlers/main.yml`."""
+    handlers = yaml.safe_load((_K3S_ROLE / "handlers" / "main.yml").read_text())
+    return {h["name"] for h in handlers if "restarted" in yaml.safe_dump(h)}
+
+
+def _reachable_task_files() -> list[pathlib.Path]:
+    """The task files `tasks/main.yml` statically imports, itself included, transitively.
+
+    The scope the warning has to cover, and no wider. `tasks/agent.yml` notifies a restart of
+    its own and carries `k3s_agent`, but no `--tags` this derivation prints can ever select it
+    — `main.yml` does not import it, and `narrow_setup.RoleIndex.reachable` refuses a tag read
+    off such a file. `_static_imports` is shared with that module so the two walks agree.
+    """
+    seen: list[pathlib.Path] = []
+    todo = [_K3S_TASKS / "main.yml"]
+    while todo:
+        path = todo.pop()
+        if path in seen or not path.is_file():
+            continue
+        seen.append(path)
+        doc = yaml.safe_load(path.read_text())
+        for name in narrow_setup._static_imports(doc if isinstance(doc, list) else []):
+            todo.append(_K3S_TASKS / name)
+    return sorted(seen)
+
+
+def _gated_tasks() -> list[tuple[str, frozenset[str]]]:
+    """Every reachable task in the role that a narrowed `--tags` must warn about, with its tags.
+
+    Two ways to qualify. A task naming a control-plane gate, `rotate-keys` or the log drop-in
+    restart — the markers the warning's own prose names. And a task that NOTIFIES a restart
+    handler, whichever file it sits in: that is the half a server.yml-only walk could not see,
+    so a `notify: Restart k3s` added to `node.yml` would have let a narrowed `node-sysctl`
+    take the control plane down with no warning (#2350).
+    """
+    markers = (
+        *deploy_remediation._K3S_CONTROL_PLANE_GATES,
+        "rotate-keys",
+        "Restart k3s",
+    )
+    restarts = _restart_handlers()
+    out = []
+    for path in _reachable_task_files():
+        doc = yaml.safe_load(path.read_text())
+        if not isinstance(doc, list):
+            continue
+        for task, tags in _tagged_tasks(doc):
+            notify = task.get("notify") or []
+            notify = [notify] if isinstance(notify, str) else notify
+            dumped = yaml.safe_dump(task)
+            if any(m in dumped for m in markers) or (set(notify) & restarts):
+                out.append((f"{path.name}:{task.get('name')}", frozenset(tags)))
+    return out
 
 
 # ── #2307: a derived narrow tag replaces the role tag, and the warning with it ──────────────
@@ -79,23 +157,48 @@ def test_a_narrowed_tag_reaching_the_gated_tasks_keeps_the_warning():
 
 
 def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
-    """Derived from `tasks/server.yml`, so a gated task retagged cannot slip the warning.
+    """Derived from the whole ROLE, so a gated task retagged or moved cannot slip the warning.
 
-    The deployer's venv cannot import yaml, so the set is a constant there; this is where it
-    is checked against the role. A gated task is one reading a control-plane gate, the
-    rotate-keys command, or the log drop-in restart.
+    The deployer's venv cannot import yaml, so `_MAXIMAL_ROLE_GATED_TAGS` is a constant there;
+    this is where it is checked against the role. The walk covers every task file rather than
+    `server.yml` alone: nothing else notifies `Restart k3s` today, and the day one does, a
+    narrowed `--tags` naming its tag would take the control plane down silently (#2350).
     """
+    reachable = {p.name for p in _reachable_task_files()}
+    assert {"main.yml", "server.yml", "node.yml"} <= reachable, sorted(reachable)
+    assert "agent.yml" not in reachable, "agent.yml is not reached by the role's entry"
+    gated = _gated_tasks()
+    assert len(gated) >= 3, f"only {len(gated)} gated tasks found in the role"
+    assert any(name.startswith("server.yml:") for name, _ in gated), (
+        "the walk found no gated task in tasks/server.yml, so it is scanning nothing"
+    )
+    carried = set().union(*(tags for _, tags in gated))
+    assert "k3s_server" in carried, sorted(carried)
+    watched = deploy_remediation._MAXIMAL_ROLE_GATED_TAGS["k3s"]
+    unwatched = {name: sorted(tags - watched) for name, tags in gated if tags - watched}
+    assert not unwatched, (
+        f"gated tasks carry tags the warning does not watch: {unwatched}"
+    )
 
-    tasks = yaml.safe_load((_K3S_TASKS / "server.yml").read_text())
+
+def test_a_task_notifying_a_restart_outside_server_yml_would_be_found():
+    """The rejecting half: the notify arm fires on a task the marker arm does not match.
+
+    Without it the walk would pass on markers alone, and the server.yml-only gap #2350 names
+    would still be open.
+    """
+    task = {
+        "name": "Raise the inotify instance limit",
+        "ansible.builtin.sysctl": {"name": "fs.inotify.max_user_instances"},
+        "notify": sorted(_restart_handlers())[:1],
+        "tags": ["node-sysctl"],
+    }
+    assert _restart_handlers(), "the role declares no restart handler"
     markers = (
         *deploy_remediation._K3S_CONTROL_PLANE_GATES,
         "rotate-keys",
         "Restart k3s",
     )
-    gated = [t for t in tasks if any(m in yaml.safe_dump(t) for m in markers)]
-    assert len(gated) >= 3, f"only {len(gated)} gated tasks found in tasks/server.yml"
-    carried = set().union(*(set(t.get("tags") or []) for t in gated))
-    assert carried, "the gated tasks carry no tags at all"
-    assert carried <= deploy_remediation._MAXIMAL_ROLE_GATED_TAGS["k3s"], (
-        f"gated tasks carry tags the warning does not watch: {sorted(carried)}"
-    )
+    dumped = yaml.safe_dump({k: v for k, v in task.items() if k != "notify"})
+    assert not any(m in dumped for m in markers), "the marker arm would have caught it"
+    assert set(task["notify"]) & _restart_handlers()

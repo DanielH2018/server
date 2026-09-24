@@ -145,3 +145,33 @@ def test_a_confirmed_narrowing_reaches_the_verdict_after_the_tick(land_run):
 def test_an_unconfirmed_narrowing_leaves_the_role_tag_in_the_verdict(land_run):
     _rc, out, _err, _calls, _ = _landing(land_run, {})
     assert "ansible/k3s-bringup.yml --tags k3s`" in out
+
+
+def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
+    """A raise in the re-render ends in the step 1 note, not in a traceback (#2350).
+
+    `plane_note` already ran on these inputs in step 1, so this is unlikely — which is exactly
+    why it was outside the `try`. `land.py` returning a traceback instead of a VERDICT costs
+    the operator the whole landing; the role tag costs them a wider apply.
+    """
+    calls_made = []
+
+    def plane_note(paths, declared=None, *, quiet=False, narrow_tags=None):
+        calls_made.append(narrow_tags)
+        if narrow_tags:
+            raise RuntimeError("the re-render blew up")
+        return land_tags.plane_note(paths, declared, quiet=quiet)
+
+    f = Fakes(
+        gh_views={"files,changedFiles": _RBAC_PR},
+        derived=([], "pr"),
+        state={"manual_plane_tags": "k3s kubeconfig"},
+        narrowing={"k3s": frozenset({"kubeconfig"})},
+    )
+    classifier = dataclasses.replace(build_classifier(f), plane_note=plane_note)
+    _rc, out, _err, _calls, _ = land_run([], f, classifier=classifier)
+    assert calls_made[-1] == {"k3s": frozenset({"kubeconfig"})}, (
+        "the re-render was tried"
+    )
+    assert "VERDICT" in out
+    assert "ansible/k3s-bringup.yml --tags k3s`" in out
