@@ -155,7 +155,7 @@ Each arm below is a rule and the function that holds it. The record page has the
     `narrowed-to-nothing`; any refusal → the full `deploy.yml` (the `# DECIDED:` at the
     fallback in `deploy_narrow.py`). The narrowed list is not filtered through
     `K8S_AUTODEPLOY_DENYLIST` (the `# DECIDED:` on `deploy_narrow.denylisted_in`). A failed
-    narrowed apply writes `hold_plane` naming its tags. The caller graph is read from the
+    narrowed apply adds a `hold_plane` entry naming its tags. The caller graph is read from the
     WORKING TREE, still on `local`, so a range adding a caller of a shared role refuses.
   - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`**: the
     playbook may not include the role (`k3s`, `common`) and the tag may not be the directory
@@ -163,9 +163,13 @@ Each arm below is a rule and the function that holds it. The record page has the
     routing; `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth.
   - **The ff-merge happens BEFORE the apply** — applying first renders from the pre-merge tree
     and deploys nothing. `test_broad_remediation_puts_the_ff_merge_before_the_playbook`.
-  - **Both arms are FORWARD-ONLY.** A failure writes `hold_sha` and `hold_plane`, alerts
-    saying nothing was rolled back, and leaves the tree fast-forwarded — no `git reset`, which
-    would leave the tree claiming the old commit over half-new live state.
+  - **A broad range also deploys the promoted image bumps that rode in on it (#2348), and
+    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` and a `hold_plane` entry (a bump's
+    is `ansible/deploy.yml <tags>`), says nothing was rolled back, and leaves the tree
+    fast-forwarded: a `git reset` would claim the old commit over half-new live state. A bump
+    the deploy plane covers deploys once, ungated; the rest pass the staging gate, and a block
+    or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
+    (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
@@ -279,7 +283,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
 | transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
-| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; the staging gate's I/O shell; what the broad arm does with the half it will not apply |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,
@@ -323,14 +327,14 @@ import and `state_dir` repoints every marker at `tmp_path`. Run:
 
 ## Which apply clears a hold
 
-**`hold_sha` clears only when the plane the hold names is applied**
-(`DeployerState.clear_broad_hold` / `clear_service_hold`, through
-`deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run covers any tag
-set, a tagged run covers a held tag set it is a superset of, never an untagged hold. Every
+**`hold_sha` clears only once every plane `hold_plane` lists is applied** — one `; `-joined
+entry per failed apply, each dropped by an apply covering it (`clear_broad_hold` /
+`clear_service_hold`, through `deploy_logic.broad_hold_cleared_by`): an untagged run covers any
+tag set, a tagged run a held tag set it is a superset of, never an untagged hold. Every
 consumer gates on `hold_sha` alone — `gitops_status`, `land.sh`, `renovate_agent.decide` — so
 an early clear turns the tile green over an unapplied plane (#878). A hand `ansible-playbook`
-run clears nothing: after fixing forward, `rm /var/lib/gitops-deploy/hold_sha
-/var/lib/gitops-deploy/hold_plane`, as the alert and the monitor both print.
+run clears nothing: once every entry is applied, `rm /var/lib/gitops-deploy/hold_sha
+/var/lib/gitops-deploy/hold_plane`; the alert and the monitor both say so.
 
 ## A failed run's error string
 

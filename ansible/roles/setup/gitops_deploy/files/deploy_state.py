@@ -19,7 +19,14 @@ import pathlib
 from typing import ClassVar
 
 from deploy_config import log
-from deploy_git import behind_marker, broad_hold_cleared_by, hold_plane_marker
+from deploy_git import (
+    HOLD_PLANE_SEP,
+    behind_marker,
+    broad_hold_cleared_by,
+    hold_plane_entries,
+    hold_plane_marker,
+    hold_plane_with,
+)
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     MARKERS,
     NARROWED_TO_ROLE,
@@ -113,7 +120,7 @@ class DeployerState:
 
     @property
     def hold_plane(self) -> str | None:
-        """The playbook (and tags) whose broad apply failed, or None."""
+        """Each failed apply's playbook (and tags), `; `-joined (`hold_plane_with`), or None."""
         return self.read("hold_plane")
 
     @property
@@ -418,38 +425,48 @@ class DeployerState:
         """Record `sha` as the commit this host refuses to redeploy, or clear the hold."""
         self.write("hold", sha)
 
-    def clear_broad_hold(self, playbook: str, tags: list[str]) -> None:
-        """Clear the hold after a broad apply, but only if this apply covered the held plane.
+    def hold_failed_apply(self, sha: str, playbook: str, tags: list[str]) -> None:
+        """Hold `sha` for a failed apply of `playbook`/`tags`, beside any plane already held.
 
-        A hold says one plane is unapplied, and every consumer gates on `hold_sha` — so
-        clearing it after a success in a DIFFERENT plane turns GitOps Deploy — Status green
-        over a plane nothing has applied (issue #878). When the hold survives, the tick still
-        succeeded: the marker is the only thing kept.
+        Added to `hold_plane`, never written over it: see `deploy_git.hold_plane_with`.
         """
-        held = self.hold_plane or ""
-        if not broad_hold_cleared_by(held, playbook, tags):
+        self.write_hold(sha)
+        self.write("hold_plane", hold_plane_with(self.hold_plane, playbook, tags))
+
+    def clear_broad_hold(self, playbook: str, tags: list[str]) -> None:
+        """Clear the hold after a broad apply, but only once no held plane is left unapplied.
+
+        A hold says a plane is unapplied, and every consumer gates on `hold_sha` — so
+        clearing it after a success in a DIFFERENT plane turns GitOps Deploy — Status green
+        over a plane nothing has applied (issue #878). This apply drops the entries it
+        covers; while one survives, the tick still succeeded and the marker is kept.
+        """
+        held = hold_plane_entries(self.hold_plane)
+        left = [e for e in held if not broad_hold_cleared_by(e, playbook, tags)]
+        if left:
+            if left != held:
+                self.write("hold_plane", HOLD_PLANE_SEP.join(left))
             log(
-                f"hold kept: {held} is still unapplied "
+                f"hold kept: {HOLD_PLANE_SEP.join(left)} is still unapplied "
                 f"(this tick applied {hold_plane_marker(playbook, tags)})"
             )
             return
         self.write("hold_plane", None)
         self.write_hold(None)
 
-    def clear_service_hold(self) -> None:
-        """Clear a hold after a successful service deploy, unless a broad plane is unapplied.
+    def clear_service_hold(self, services: set[str]) -> None:
+        """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
 
-        A k8s or Docker deploy applies no plane, so it is never evidence that the plane a
-        broad hold names has been applied. Without this, an unrelated service deploy clears
+        A k8s or Docker deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
+        entry naming that playbook at a subset of those tags — a failed bump on a broad tick
+        writes exactly that, and the fix-forward deploy of the same service is its way out.
+        Any other entry stays held: without this, an unrelated service deploy clears
         `hold_sha` and orphans `hold_plane`, which `gitops_status` never reads on its own.
         """
-        held = self.hold_plane
-        if held:
-            log(
-                f"hold kept: {held} is still unapplied; a service deploy does not clear it"
-            )
+        if self.hold_plane and not services:
+            log(f"hold kept: {self.hold_plane} is still unapplied")
             return
-        self.write_hold(None)
+        self.clear_broad_hold("ansible/deploy.yml", sorted(services))
 
     def record_behind(
         self, origin: str, behind: bool, now: float, *, fast_forwarded: bool

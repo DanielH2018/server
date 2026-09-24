@@ -23,6 +23,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import time
 
 import deploy_alerts
+import deploy_broad_k8s
 import deploy_defer
 import deploy_io
 import deploy_locks
@@ -32,7 +33,6 @@ from deploy_config import CHICAGO, Config, log
 from deploy_git import (
     dirty_alert_slot,
     dirty_summary,
-    hold_plane_marker,
     should_alert_dirty,
 )
 from deploy_health import gate_services
@@ -155,6 +155,11 @@ def handle_broad(
         if applies
         else []
     )
+    # BEFORE the ff-merge, for the reason `handle_k8s`'s DECIDED gives: a process death inside
+    # the gate's window must leave `local` behind origin so the next tick re-evaluates. After
+    # `plans`, because a bump the deploy plane applies is not gated. It returns the ChangeSet
+    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set.
+    cs = deploy_broad_k8s.gate_broad_k8s(tools, state, config, target, cs, plans)
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
@@ -202,8 +207,13 @@ def handle_broad(
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
-            state.write_hold(origin)
-            state.write("hold_plane", hold_plane_marker(playbook, tags))
+            state.hold_failed_apply(origin, playbook, tags)
+            # The range is merged and this arm never resets, so nothing re-derives what it
+            # carried: the deferred pages go out now, and the failure post below names the
+            # promoted bumps, which no later tick's range will contain.
+            deploy_alerts.alert_deferred(
+                tools, state, config, origin, set(), cs, plan.k8s_services
+            )
             posted = deploy_alerts.discord(
                 tools,
                 config,
@@ -215,6 +225,7 @@ def handle_broad(
                     exc,
                     state.path("hold"),
                     state.path("hold_plane"),
+                    cs.k8s_deploy,
                 ),
             )
             # Exit 0 on a delivered detailed post so systemd's OnFailure generic curl doesn't
@@ -230,11 +241,14 @@ def handle_broad(
         state.record_broad_applied(origin, playbook, tags)
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)
-    deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    deploy_alerts.alert_deferred(
-        tools, state, config, origin, set(), cs, plan.k8s_services
+    # After the loop, so a broad apply that failed or hit a busy lock has already returned:
+    # the k8s half rides on the plane below it, and applying a workload onto a host whose
+    # setup plane did not apply is the ordering `main()`'s broad-before-k8s branch exists to
+    # prevent. It shares the same `deadline`, for the reason the plans share it, and it sends
+    # the deferred-change pages on every path but contention.
+    return deploy_broad_k8s.apply_broad_k8s(
+        tools, state, config, target, plan, cs, plans, recorded, deadline
     )
-    return 0
 
 
 def handle_k8s(
@@ -297,7 +311,7 @@ def handle_k8s(
     # solely in the Docker health-gate branch below, which such a host never reaches — so
     # without this the first rollback would leave GitOps Deploy — Status red forever and
     # need a manual rm (the trap this role's CLAUDE.md documents).
-    state.clear_service_hold()
+    state.clear_service_hold(cs.k8s_deploy)
     # Only after the gate inside deploy_k8s has passed and the hold is cleared — annotating
     # from inside the try would mark a deploy that the rollout gate went on to reject.
     tools.emit_deploy_annotation(cs.k8s_deploy, origin)
@@ -473,7 +487,7 @@ def handle_docker(
         time.time,
     )
     if not failed:
-        state.clear_service_hold()
+        state.clear_service_hold(cs.services)
         # Combined-push safety: a tasks/ or meta/deps.yml change bundled for a service OTHER than
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a

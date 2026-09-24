@@ -330,6 +330,13 @@ def _two_role_tree(tree: Tree, other_tag: str) -> str:
     return tree.commit("a second role in the playbook")
 
 
+# DECIDED: `role_tags`' `playbook` argument IS the capability under test, so no input
+# separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know
+# which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all.
+# Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect
+# against an empty set instead of `foreign_tags(...)` fails
+# `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves
+# its accepting half green, measured 2026-09-24.
 def _narrow_two(tree: Tree, old: str, new: str) -> frozenset[str]:
     return narrow_setup.role_tags(
         "demo", "demo", old, new, str(tree.root), TWO_ROLE_PLAYBOOK

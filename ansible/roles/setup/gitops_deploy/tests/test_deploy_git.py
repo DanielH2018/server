@@ -18,7 +18,9 @@ from deploy_git import (
     broad_hold_cleared_by,
     dirty_alert_slot,
     dirty_summary,
+    hold_plane_entries,
     hold_plane_marker,
+    hold_plane_with,
     is_diverged,
     next_action,
     should_alert_dirty,
@@ -339,6 +341,32 @@ def test_a_subset_of_tags_does_not():
     assert not broad_hold_cleared_by(
         "ansible/initial_setup.yml k3s,dns", "ansible/initial_setup.yml", ["k3s"]
     )
+
+
+# ── a hold_plane that more than one failed apply wrote ──────────────────────────────────────
+def test_a_second_failure_is_appended_beside_the_first():
+    held = hold_plane_with(
+        "ansible/deploy.yml radarr", "ansible/deploy.yml", ["sonarr"]
+    )
+    assert hold_plane_entries(held) == [
+        "ansible/deploy.yml radarr",
+        "ansible/deploy.yml sonarr",
+    ]
+
+
+def test_a_failure_already_held_is_not_added_twice():
+    held = "ansible/initial_setup.yml gitops_deploy"
+    assert hold_plane_with(held, "ansible/initial_setup.yml", ["gitops_deploy"]) == held
+
+
+def test_a_trailing_separator_parses_as_no_extra_entry():
+    assert hold_plane_entries("ansible/deploy.yml; ") == ["ansible/deploy.yml"]
+
+
+def test_an_empty_or_missing_marker_holds_no_entry():
+    assert hold_plane_entries("") == []
+    assert hold_plane_entries(None) == []
+    assert hold_plane_with(None, "ansible/deploy.yml", []) == "ansible/deploy.yml"
 
 
 def test_a_tagged_run_does_not_clear_an_untagged_hold():

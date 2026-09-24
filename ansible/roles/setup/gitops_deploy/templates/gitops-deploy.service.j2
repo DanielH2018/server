@@ -27,8 +27,17 @@ Type=oneshot
 #     60min rather than 45min. consult_staging runs INSIDE the same k8s handler,
 #     before deploy_k8s, so its two budgets are additive to the pair above rather than
 #     alternative to them: 180 + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120)
-#     + 900 + 1320 = 3120s. The BROAD arm does not stack with any of it — it returns before the
-#     k8s block, so the true ceiling is max(broad 1800 + 180, 3120), not a sum.
+#     + 900 + 1320 = 3120s. The BROAD arm returns before the k8s block, so the true ceiling is
+#     max(broad, k8s), not a sum of the two.
+#   - broad path, since #2348: that arm consults the staging gate for the promoted image bumps
+#     riding on its range and then deploys them, so its own worst case is 180 (max flock wait)
+#     + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) + BROAD_DEPLOY_TIMEOUT_S
+#     (1800) = 2700s, still under the k8s path's 3120s. Two things keep it there. The bumps
+#     share the plans' BROAD_DEPLOY_TIMEOUT_S rather than taking a K8S_DEPLOY_TIMEOUT_S of
+#     their own, so the whole apply phase is still one term. And the arm is FORWARD-ONLY — for
+#     a correctness reason rather than this one (a reset would undo the ff-merge under a setup
+#     plane it already applied), but K8S_ROLLBACK_TIMEOUT_S on top would reach 4020s and past
+#     this ceiling.
 #
 # Sized against a MEASURED staging deploy (defaults/main.yml carries the number), and the
 # 480s of remaining slack is deliberate: shrinking the staging budget to avoid raising this

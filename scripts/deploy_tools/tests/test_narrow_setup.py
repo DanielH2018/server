@@ -311,6 +311,11 @@ def test_a_binary_template_is_flagged_rather_than_raised(tree):
 # ── the deployer's real argv reaches this module's real CLI ────────────────────────────
 
 
+# DECIDED: these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv`
+# builds, and that function is the capability — there is no earlier signature to separate the
+# defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary,
+# and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with
+# argparse's `unrecognized arguments`, measured 2026-09-24.
 def test_the_deployers_argv_is_one_narrow_setup_main_accepts(tree, capsys):
     """The tick fakes replace the subprocess, so only this sees a flag the CLI does not take."""
 

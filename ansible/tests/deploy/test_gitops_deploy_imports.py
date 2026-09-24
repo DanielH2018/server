@@ -80,6 +80,20 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_state",
         "deploy_toolbox",
     },
+    # The k8s half of a broad range: the gate's verdict on it, and applying it (#2348).
+    "deploy_broad_k8s": {
+        "deploy_alerts",
+        "deploy_changes",
+        "deploy_config",
+        "deploy_defer",
+        "deploy_io",
+        "deploy_locks",
+        "deploy_staging",
+        "deploy_staging_io",
+        "deploy_state",
+        "deploy_tick_types",
+        "deploy_toolbox",
+    },
     # The marker files, plus the two pure hold-marker decisions `clear_broad_hold` makes.
     "deploy_state": {"deploy_config", "deploy_git", "gitops_markers"},
     "deploy_io": {
@@ -125,6 +139,7 @@ ALLOWED: dict[str, set[str] | None] = {
     },
     "deploy_handlers": {
         "deploy_alerts",
+        "deploy_broad_k8s",
         "deploy_defer",
         "deploy_narrow",
         "deploy_changes",

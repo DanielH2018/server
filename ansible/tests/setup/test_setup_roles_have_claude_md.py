@@ -45,6 +45,12 @@ MAX_LINES = 400
 # justification, not a waiver: name what in the doc is an operating rule that cannot move to a
 # docs/ page, or split the file instead.
 OVER_CEILING: dict[str, str] = {
+    "gitops_deploy": (
+        "404 lines on 2026-09-24. It sat at exactly 400 and #2348 added a fourth broad-plane "
+        "rule — that a broad range deploys the promoted image bumps riding on it — which is "
+        "an operating rule, not history: its record is already in docs/gitops-pipeline.md. "
+        "Trim two lines of an existing rule before adding to it."
+    ),
     "hypervisor": (
         "411 lines on 2026-09-21, predating the ceiling; the staging-guest lifecycle it "
         "documents has no docs/ page of its own yet. Trim or split it before adding to it."

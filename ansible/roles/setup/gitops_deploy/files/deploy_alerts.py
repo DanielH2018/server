@@ -122,13 +122,16 @@ def broad_failure_alert(
     exc: BaseException,
     hold_file: str,
     hold_plane_file: str,
+    bumps: set[str],
 ) -> str:
     """The post for a failed broad apply.
 
     A function rather than an inline f-string so the 1900-char budget it is sized against is
-    testable — see tests/test_gitops_deploy_failure_output.py.
+    testable — see tests/test_gitops_deploy_failure_output.py. `bumps`: no later range has them.
     """
     tag_note = f" --tags `{','.join(tags)}`" if tags else ""
+    bump_cmd = f'`./scripts/deploy.sh --tags "{",".join(sorted(bumps))}"`'
+    bump_note = f"**Image bumps not deployed**; after the plane, run {bump_cmd}.\n"
     return (
         f"🚨 gitops-deploy: **broad apply failed** on {hostname}.\n"
         f"`{playbook}`{tag_note} errored on `{origin[:8]}`:\n"
@@ -136,9 +139,10 @@ def broad_failure_alert(
         f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
         f"forward-only — **nothing was rolled back**, so live state is whatever the "
         f"failed run left.\n"
-        f"**Action:** fix forward and re-run that playbook by hand. A later tick clears the "
-        f"hold only by applying this same plane — after a hand run, "
-        f"`rm {hold_file} {hold_plane_file}`."
+        f"{bump_note if bumps else ''}"
+        f"**Action:** fix forward and re-run that playbook by hand. A later tick clears each "
+        f"`{hold_plane_file}` entry by applying it or deploying the services it tags; run "
+        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
     )
 
 
@@ -199,15 +203,15 @@ def meta_deferred_alert(origin: str, services: set[str]) -> str:
 def k8s_deferred_alert(
     origin: str, k8s: set[str], declared_k8s: set[str], consumers: set[str] | None
 ) -> str:
-    """The post for a k8s role change, which this deployer never auto-deploys.
+    """The post for a k8s role change this tick did not deploy.
 
     The remediation half is `deploy_remediation.k8s_remediation`, which decides whether the
     change can be named as a `--tags` redeploy at all.
     """
     return (
         f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(k8s))}` changed in "
-        f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
-        f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). "
+        f"`{origin[:8]}` — fast-forwarded but **not applied** (a k8s change is defer-and-"
+        f"alert unless this tick deployed it as a `k8s_autodeploy` image bump). "
     ) + k8s_remediation(k8s, declared_k8s, consumers)
 
 
@@ -307,6 +311,37 @@ def k8s_failure_alert(
         f"redeploys the same pin.\n"
         f"**Action:** revert the offending commit on the remote, or pin the bad version "
         f"out via Renovate `allowedVersions`."
+    )
+
+
+def broad_k8s_failure_alert(
+    hostname: str,
+    origin: str,
+    services: set[str],
+    exc: BaseException,
+    hold_file: str,
+    hold_plane_file: str,
+) -> str:
+    """The post for a promoted image bump that failed inside a BROAD tick.
+
+    Distinct from `k8s_failure_alert` because nothing was rolled back and nothing will be:
+    the reset `_rollback_k8s` performs would leave the tree claiming the old commit over an
+    applied setup plane, and a maintenance-mode hint would chase a revert that never ran.
+    """
+    return (
+        f"🚨 gitops-deploy: **k8s deploy failed on a broad tick** on {hostname}.\n"
+        f"The image bumps from `{origin[:8]}` failed:\n"
+        f"```\n{alert_excerpt(exc)}\n```\n"
+        f"**Nothing was rolled back.** The broad plane applied first on this tick, so the "
+        f"reset a k8s rollback performs would strand that apply against a tree claiming the "
+        f"old commit. The tree stays fast-forwarded and `{hold_file}` holds the SHA.\n"
+        f"The pre-apply Longhorn snapshot WAS taken for any service declaring "
+        f"`k8s_autodeploy_snapshot_pvcs` — `k8s/manifests` takes it on every apply — so a "
+        f"revert is available by hand.\n"
+        f"**Action:** fix forward on master, or redeploy by hand with "
+        f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
+        f"deploys these services clears their `{hold_plane_file}` entry; run "
+        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
     )
 
 
@@ -516,8 +551,8 @@ def alert_deferred(
             meta_deferred_alert(origin, pending_meta),
         )
     if cs.k8s:
-        # No `- deployed` subtraction (unlike tasks/meta): this deployer never auto-deploys a
-        # k8s-platform role at all, so there's no scoped redeploy for a k8s change to have ridden.
+        # No `- deployed` subtraction (unlike tasks/meta): a bump this tick deployed sits in
+        # `cs.k8s_deploy`, never in `cs.k8s`, so nothing in `cs.k8s` rode a redeploy here.
         #
         # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
         # origin SHA (alert_once) and the ff-merge below clears `behind_since` -- the deployer's
