@@ -27,10 +27,11 @@ kubeconfig, 12 already exclude check mode at a level a per-task read cannot see.
   - One, `Sync the live Grafana admin password with SOPS`, carries `not ansible_check_mode`
     inline alongside its own condition.
 
-`_excludes_check_mode`, `_importer_guards` and `walk_with_inherited_when` below teach the
-predicate to see all three, which is what makes a tree-wide census honest rather than a
-demand for twelve wrong changes. The remaining eight are fixed in the same commit as this
-widening.
+`excludes_check_mode`, `importer_guards` and `walk_with_inherited_when` teach the predicate
+to see all three, which is what makes a tree-wide census honest rather than a demand for
+twelve wrong changes. The remaining eight are fixed in the same commit as this widening.
+Those three live in `_check_mode` because `test_conditional_register_consumers.py` asks
+the same questions of the same tasks — see its docstring for the class it catches (#2315).
 
 TWO KINDS OF FIX, AND ONLY A HUMAN READING THE TASK SORTS THEM. `changed_when: false` does
 not: 19 of the 21 carry it, the waits included.
@@ -47,46 +48,16 @@ not: 19 of the 21 carry it, the waits included.
 Run: uv run pytest ansible/tests/deploy/test_retried_commands_survive_check_mode.py
 """
 
-import re
-
 import pytest
 from lib import yaml_fast
 
-from _helpers import ALL_VARS, ROLES, walk_tasks
-
-# The modules check mode cannot simulate, so it skips them outright. `uri`, `stat`, `slurp`
-# and the file modules are deliberately absent: they implement check mode and return a real
-# result, so a retry loop over one of them already works under `--check`.
-SKIPPED_IN_CHECK_MODE = frozenset(
-    {
-        "command",
-        "shell",
-        "raw",
-        "script",
-        "ansible.builtin.command",
-        "ansible.builtin.shell",
-        "ansible.builtin.raw",
-        "ansible.builtin.script",
-    }
+from _check_mode import (
+    SKIPPED_IN_CHECK_MODE,
+    excludes_check_mode,
+    importer_guards,
+    walk_with_inherited_when,
 )
-
-_INCLUDE_KEYS = frozenset(
-    {
-        "import_tasks",
-        "include_tasks",
-        "ansible.builtin.import_tasks",
-        "ansible.builtin.include_tasks",
-    }
-)
-
-# The three facts a `when:` can name to mean "not under a dry run". `k8s_dry_run` is listed
-# for completeness; `k8s_no_mutate` is the form roles actually use, and it is sound here only
-# because all.yml folds `ansible_check_mode` into it — asserted below, so redefining that var
-# cannot silently unguard nine tasks while this file stays green.
-_CHECK_MODE_FACTS = ("ansible_check_mode", "k8s_no_mutate", "k8s_dry_run")
-_NEGATED_FACT = re.compile(
-    r"\bnot\s+\(?\s*(?:" + "|".join(_CHECK_MODE_FACTS) + r")\b",
-)
+from _helpers import ALL_VARS, ROLES
 
 # Task files whose roles are retired. They deploy nothing, so a red here would be a demand to
 # edit history.
@@ -121,27 +92,6 @@ NON_RETRIED_READS_THAT_MUST_OPT_OUT = (
 )
 
 
-def _when_clauses(when) -> list[str]:
-    """`when:` as a flat list of strings, whatever shape it was written in."""
-    if when is None:
-        return []
-    if isinstance(when, (list, tuple)):
-        return [str(clause) for clause in when]
-    return [str(when)]
-
-
-def _excludes_check_mode(when) -> bool:
-    """True when `when:` cannot be true under `--check`.
-
-    A clause holding `or` is rejected: `not ansible_check_mode or foo` widens the condition
-    back out, and reading it as a guard would call an unguarded task clean.
-    """
-    return any(
-        _NEGATED_FACT.search(clause) and " or " not in clause
-        for clause in _when_clauses(when)
-    )
-
-
 def check_mode_retry_problem(task: dict, inherited_when=()) -> str | None:
     """Why `task` fails its own retry loop under `--check`, or None when it is fine.
 
@@ -156,9 +106,9 @@ def check_mode_retry_problem(task: dict, inherited_when=()) -> str | None:
     # `changed_when` branch below demands `false`, and a guarded task is free to compute a
     # real changed status — `Sync the live Grafana admin password with SOPS` does exactly
     # that and would be flagged for the wrong reason if this branch ran second.
-    if _excludes_check_mode(task.get("when")):
+    if excludes_check_mode(task.get("when")):
         return None
-    if any(_excludes_check_mode(when) for when in inherited_when):
+    if any(excludes_check_mode(when) for when in inherited_when):
         return None
     if task.get("check_mode") is not False:
         return (
@@ -182,43 +132,6 @@ def _task_files() -> list:
     ]
 
 
-def _importer_guards(tasks_dir) -> dict[str, list]:
-    """Per task-file basename, the `when:` of every task in the role that includes it.
-
-    Both `import_tasks` and `include_tasks` count. The first propagates its `when` onto each
-    imported task at parse time; the second evaluates it before including anything at all.
-    Either way a false condition means the file's tasks never run.
-    """
-    guards: dict[str, list] = {}
-    for path in sorted(tasks_dir.glob("*.yml")):
-        for task in walk_tasks(yaml_fast.safe_load(path.read_text()) or []):
-            for key in _INCLUDE_KEYS & set(task):
-                target = task[key]
-                name = target.get("file") if isinstance(target, dict) else target
-                if not isinstance(name, str):
-                    continue
-                guards.setdefault(name.rsplit("/", 1)[-1], []).append(task.get("when"))
-    return guards
-
-
-def walk_with_inherited_when(tasks, inherited=()):
-    """Every task, paired with the `when:` of each enclosing `block:`.
-
-    `_helpers.walk_tasks` yields the wrapper and its children side by side, which loses the
-    relationship between them — and a `when:` on a block is exactly a condition the children
-    are governed by without carrying it. Ansible applies it to `rescue:` and `always:` too,
-    so all three nest the same way here. `setup/k3s/tasks/storage_smoke.yml` is why: one
-    guard on its block covers the create, the wait, the assert and both cleanups.
-    """
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        yield task, list(inherited)
-        nested = [*inherited, task.get("when")]
-        for key in ("block", "rescue", "always"):
-            yield from walk_with_inherited_when(task.get(key), nested)
-
-
 def _retried_command_tasks() -> list[tuple]:
     """Every retried `command` in the deployed role tree, with its inherited `when:`s."""
     found = []
@@ -226,7 +139,7 @@ def _retried_command_tasks() -> list[tuple]:
         loaded = yaml_fast.safe_load(path.read_text())
         if not isinstance(loaded, list):
             continue
-        from_importer = _importer_guards(path.parent).get(path.name, [])
+        from_importer = importer_guards(path.parent).get(path.name, [])
         for task, from_blocks in walk_with_inherited_when(loaded):
             if SKIPPED_IN_CHECK_MODE & set(task) and (
                 "retries" in task or "until" in task
