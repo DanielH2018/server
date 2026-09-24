@@ -221,6 +221,10 @@ def in_role_wait_s(role: str) -> int:
     Counting sonarr's 660s gate as well as its 660s drain wait would size that role at 1320s of
     rollout for a rollout that takes 660s.
 
+    The exclusion is by substring, which is safe only while no single command carries both a
+    `rollout status` wait and an unrelated one. No k8s role's tasks carry two `--timeout=` values
+    on one command (checked 2026-09-24); a command that did would need this split by token.
+
     Args:
         role: the directory name under `ansible/roles/k8s/`.
 
