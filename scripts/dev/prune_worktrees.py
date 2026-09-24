@@ -37,7 +37,6 @@ A prune also repairs the shared object store the removed worktrees leave litter 
 """
 
 import argparse
-import json
 import sys
 from collections.abc import Callable
 from pathlib import Path
@@ -46,7 +45,6 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.gh import gh
 from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
@@ -62,6 +60,7 @@ import _claude_worktree  # noqa: F401
 from claude_worktree import (
     Worktree,
     cherry_says_landed,
+    forge_says_merged,
     merge_tree_says_contained,
     parse_worktree_list,
     session_is_alive,
@@ -166,42 +165,9 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     # Ask the forge, which knows what it merged. This runs LAST because it is the only check
     # needing a network round-trip and credentials; every branch the local checks settle never
     # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    if not branch:
-        return False
-    pr_list = gh(
-        "pr",
-        "list",
-        "--state",
-        "merged",
-        "--head",
-        branch,
-        "--json",
-        "headRefOid",
-        cwd=repo,
-        check=False,
-    )
-    if pr_list.returncode != 0:
-        return False
-    return pr_head_says_merged(pr_list.stdout, head)
-
-
-def pr_head_says_merged(stdout: str, head: str) -> bool:
-    """Read `gh pr list --state merged --head <branch> --json headRefOid`.
-
-    True when one of those merged PRs was merged from exactly this commit.
-
-    Matching on the head SHA, never on "a merged PR exists for this branch name". Branch names are
-    reused here — one session landed three PRs from `worktree-pi-detached-container-arm` on
-    2026-08-27, each with a different tip — so a name match would delete a branch carrying work that
-    never landed. SHA equality is the whole guarantee.
-    """
-    try:
-        prs = json.loads(stdout or "[]")
-    except json.JSONDecodeError:
-        return False
-    if not isinstance(prs, list):
-        return False
-    return any(isinstance(p, dict) and p.get("headRefOid") == head for p in prs)
+    # The lookup and its SHA-equality rule live in the deployed claude_worktree module, which
+    # the dotfiles pruner and Stop hook also use (dotfiles #629).
+    return forge_says_merged(repo, branch, head)
 
 
 def is_dirty(path: str) -> bool:
