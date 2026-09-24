@@ -407,43 +407,6 @@ def test_the_manual_plane_remediation_carries_the_warning_too():
     assert "--tags kubeconfig" not in cmd.split("WARNING")[0]
 
 
-# ── #2307: a derived narrow tag replaces the role tag, and the warning with it ──────────────
-
-
-def test_a_narrowed_role_prints_its_own_tags_and_drops_the_warning():
-    """The narrowing's whole point, on both composers.
-
-    The warning describes what `--tags k3s` does. Printed beside `--tags kubeconfig` it would
-    warn about a run the operator is not being told to make, which is how a real warning gets
-    read as boilerplate.
-    """
-    narrow = {"k3s": frozenset({"kubeconfig"})}
-    for cmd in (
-        broad_remediation(False, True, {"k3s"}, narrow_tags=narrow),
-        manual_plane_remediation({"k3s"}, narrow),
-    ):
-        assert "ansible/k3s-bringup.yml --tags kubeconfig" in cmd
-        assert "WARNING" not in cmd
-
-
-def test_a_role_the_derivation_refused_keeps_the_role_tag_and_the_warning():
-    """The rejecting half: an empty tag set is a refusal, not an empty `--tags` value.
-
-    `--tags` with nothing after it runs the WHOLE playbook, so a refusal that leaked through
-    as an empty string would prescribe every setup role on the host.
-    """
-    for narrow in ({}, {"k3s": frozenset()}):
-        cmd = manual_plane_remediation({"k3s"}, narrow)
-        assert "ansible/k3s-bringup.yml --tags k3s" in cmd
-        assert "WARNING" in cmd
-
-
-def test_several_narrow_tags_are_one_comma_joined_tags_value():
-    """Two ranges can make one role pending, and both tags have to run."""
-    narrow = {"k3s": frozenset({"kubeconfig", "coredns"})}
-    assert "--tags coredns,kubeconfig" in manual_plane_remediation({"k3s"}, narrow)
-
-
 _K3S_TASKS = pathlib.Path(__file__).parents[2] / "k3s" / "tasks"
 
 

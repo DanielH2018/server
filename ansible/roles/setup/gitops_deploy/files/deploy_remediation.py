@@ -146,9 +146,10 @@ def manual_plane_remediation(
 
 
 # Setup roles whose role tag applies far more than any one change to them needs, and what
-# running it actually does. A role in this map gets the warning ONLY where the printed command
-# is the whole-role tag — `_setup_commands` suppresses it beside a narrowed `--tags`, where the
-# warning would describe a run the operator is not being told to make.
+# running it actually does. A role in this map gets this warning where the printed command is
+# the whole-role tag. Beside a narrowed `--tags` it would describe a run the operator is not
+# being told to make, so `_setup_commands` swaps it for `_MAXIMAL_ROLE_GATED_WARNING` when
+# the narrowed tags still reach the gated tasks, and drops it otherwise.
 #
 # THE NARROWER TAG IS DERIVED, AND THIS IS THE FALLBACK (#2307). `deploy_defer.record` asks
 # `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
@@ -181,18 +182,35 @@ _K3S_NARROWER_TAGS = (
 # task it describes.
 _K3S_CONTROL_PLANE_GATES = ("k3s_server_args", "k3s_version", "reencrypt_finished")
 
+_K3S_GATED_TASKS = (
+    "three gated control-plane tasks: the "
+    f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
+    f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; a systemd restart when the log "
+    "drop-in changed; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every "
+    "Secret in etcd unless the cluster already reached "
+    f"`{_K3S_CONTROL_PLANE_GATES[2]}`"
+)
+
 _MAXIMAL_ROLE_TAGS: dict[str, str] = {
     "k3s": (
         "that tag is the WHOLE role. It reapplies MetalLB, Longhorn, the backup targets, the "
-        "crons, CoreDNS and the node config, and arms three gated control-plane tasks: the "
-        f"k3s installer, which restarts k3s when `{_K3S_CONTROL_PLANE_GATES[0]}` gained an "
-        f"argument or `{_K3S_CONTROL_PLANE_GATES[1]}` moved; a systemd restart when the log "
-        "drop-in changed; and `k3s secrets-encrypt rotate-keys`, which re-encrypts every "
-        "Secret in etcd unless the cluster already reached "
-        f"`{_K3S_CONTROL_PLANE_GATES[2]}`. Narrower tags, one per task file: "
+        f"crons, CoreDNS and the node config, and arms {_K3S_GATED_TASKS}. Narrower tags, "
+        "one per task file: "
         + ", ".join(f"`{t}`" for t in _K3S_NARROWER_TAGS)
         + "; `--list-tasks` shows what one selects"
     ),
+}
+
+# The narrower tags that still reach a role's gated tasks, and what they arm. A narrowed
+# `--tags` naming one keeps a warning: every task in `roles/setup/k3s/tasks/server.yml`
+# carries `k3s_server`, the restart and the re-encryption included, so a range touching that
+# file narrows to the tag that arms them. A constant because this module cannot import yaml;
+# `test_the_gated_tags_are_every_tag_the_gated_tasks_carry` derives it from the role.
+_MAXIMAL_ROLE_GATED_TAGS: dict[str, frozenset[str]] = {
+    "k3s": frozenset({"k3s_server"}),
+}
+_MAXIMAL_ROLE_GATED_WARNING: dict[str, str] = {
+    "k3s": f"that tag list reaches tasks/server.yml, which arms {_K3S_GATED_TASKS}",
 }
 
 
@@ -223,8 +241,8 @@ def _setup_commands(
     A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
     every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
     journal, the `manual_plane` Discord alert — carries the warning from one place. The
-    annotation goes only on the whole-role tag: beside a narrowed `--tags` it would warn about
-    a run nobody was told to make.
+    whole-role warning goes only on the whole-role tag. A narrowed `--tags` that still reaches
+    the role's gated tasks (`_MAXIMAL_ROLE_GATED_TAGS`) carries the shorter gated warning.
     """
     if not setup_roles:
         return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
@@ -247,7 +265,12 @@ def _setup_commands(
         narrowed = narrow_tags.get(role_tag) or narrow_tags.get(role) or frozenset()
         tags = ",".join(sorted(narrowed)) or role_tag
         cmd = f"`ansible-playbook {playbook} --tags {tags}`"
-        warning = "" if narrowed else maximal_tag_warning(role)
+        if not narrowed:
+            warning = maximal_tag_warning(role)
+        elif narrowed & _MAXIMAL_ROLE_GATED_TAGS.get(role, frozenset()):
+            warning = _MAXIMAL_ROLE_GATED_WARNING[role]
+        else:
+            warning = ""
         # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
         # <clear command>" after this list, and an unbracketed warning made that clause read
         # as a continuation of the warning's own last sentence.
