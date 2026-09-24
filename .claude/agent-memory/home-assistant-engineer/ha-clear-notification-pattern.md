@@ -33,5 +33,7 @@ away (you don't tap) stranded it. `automation.bedroom_arrive_home` already dismi
 note* (added earlier by the maintainer); the remaining strand was the *phone push*. Added the
 `clear_notification` above right after the dismiss in `bedroom_arrive_home` (before its fan/light resume,
 which is untouched). Deployed + all 33 automations loaded; can't live-fire without a real person.daniel→home
-GPS transition. See [[ha-review-2026-07-04-findings]] for the sibling (still-open) orphan class: the
-`bedroom_notify` away-hold recovery branch orphans bare-`tag` notes for watch-tier alerts (different bug).
+GPS transition. The sibling orphan class — `bedroom_notify`'s away-hold recovery branch leaving
+bare-`tag` visibility notes stranded for watch-tier alerts (a different bug from this one) — was
+fixed the same day: it now dismisses both `hold_{{ tag }}` and `{{ tag }}`
+(`ansible/roles/k8s/home-assistant/files/scripts/alerts.yaml`).
