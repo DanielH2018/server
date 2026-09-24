@@ -67,7 +67,7 @@ KNOWN_DENIED_DOCKERFILE_ROLES = frozenset({"code-server", "nut", "terraria", "va
 # must PRECEDE — the CrowdSec bouncer plugin pin shares traefik's defaults/main.yml, and its
 # own rule must keep the last word on that pin's group name.
 AUTOMERGE_GROUP = "k8s image {{depName}}"
-DIGEST_UPDATE_TYPES = ["digest"]
+DIGEST_UPDATE_TYPES = ["digest", "pinDigest"]
 FIRST_PER_PACKAGE_MANUAL_GROUP_PREFIX = "crowdsec bouncer plugin (manual"
 
 # The one manual path that is not a denied role's defaults. Fixed here rather than tolerated

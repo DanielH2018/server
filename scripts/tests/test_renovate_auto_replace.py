@@ -16,6 +16,7 @@ Run: uv run pytest scripts/tests/test_renovate_auto_replace.py
 import re
 
 from _renovate import (
+    _RENOVATE_CONFIG,
     _REPO,
     _file_pattern_to_regex,
     _k8s_image_manager,
@@ -146,3 +147,24 @@ def test_the_k8s_image_template_pins_a_digest_onto_a_bare_tag(
         newDigest=None,
     )
     assert unpinned == bare.group(0)
+
+
+def test_a_pin_digest_automerges_unless_the_role_is_denied_auto_deploy():
+    """Renovate types the update this template makes possible as `pinDigest`, not `digest`.
+
+    A rule matching only `digest` automerged none of the tag-only pins, so each opened a
+    hand-merge PR (#2481). The denylist rule must stay unscoped by update type, or a denied
+    role's pinDigest would fall through to the automerge rule above it.
+    """
+    rules = _RENOVATE_CONFIG["packageRules"]
+    assert any(
+        r.get("automerge") and "pinDigest" in r.get("matchUpdateTypes", [])
+        for r in rules
+    ), "no automerge rule matches updateType pinDigest"
+    denylist = [
+        r
+        for r in rules
+        if str(r.get("groupName", "")).startswith("k8s image {{depName}} (manual")
+    ]
+    assert len(denylist) == 1, denylist
+    assert "matchUpdateTypes" not in denylist[0], denylist[0]["matchUpdateTypes"]
