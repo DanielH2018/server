@@ -1,0 +1,15 @@
+---
+# The source of the cloudflare-realip local plugin (files/cloudflare-realip/). The Deployment
+# projects these keys to /plugins-local/src/{{ traefik_k8s_realip_plugin_module }}/, where
+# experimental.localPlugins in static-config.yaml.j2 reads them. A change here changes the
+# rendered manifests, so the central rollout restart picks it up.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: traefik-cloudflare-realip
+  namespace: {{ k8s_namespace }}
+data:
+  cloudflarerealip.go: |
+{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-realip/cloudflarerealip.go') | indent(4, true) }}
+  traefik-plugin.yml: |
+{{ lookup('file', playbook_dir + '/roles/k8s/traefik/files/cloudflare-realip/traefik-plugin.yml') | indent(4, true) }}

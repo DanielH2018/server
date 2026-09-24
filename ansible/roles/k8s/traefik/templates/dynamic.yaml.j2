@@ -204,4 +204,26 @@ spec:
       crowdsecAppsecEnabled: true
       crowdsecAppsecHost: "crowdsec:{{ crowdsec_k8s_appsec_port }}"
       crowdsecAppsecUnreachableBlock: false
+---
+# Attributes a request from a Cloudflare edge to the client Cloudflare reports in
+# CF-Connecting-IP: X-Forwarded-For and X-Real-Ip become that single address, and other
+# sources pass untouched. The https entrypoint chains it first (static-config.yaml.j2 says
+# why); the plugin source is files/cloudflare-realip/cloudflarerealip.go.
+#
+# After it, the rightmost-entry consumers are unchanged: the bouncer and the `-proxied`
+# limiters' `depth: 1` read the client either way, since Cloudflare's appended entry was
+# already the rightmost one. A backend sees `client, edge`, so N8N_PROXY_HOPS: 2 still
+# resolves the client.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: cloudflare-realip
+  namespace: {{ k8s_namespace }}
+spec:
+  plugin:
+    {{ traefik_k8s_realip_plugin_name }}:
+      trustedIPs:
+{% for ip in cloudflare_ips %}
+        - "{{ ip }}"
+{% endfor %}
 {% endif %}

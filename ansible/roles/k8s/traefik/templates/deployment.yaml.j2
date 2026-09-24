@@ -273,6 +273,11 @@ spec:
             - name: crowdsec-key
               mountPath: /secrets/crowdsec
               readOnly: true
+            # The cloudflare-realip local plugin's source. Traefik resolves
+            # ./plugins-local/src/<moduleName>/ against its working directory, which is /.
+            - name: cloudflare-realip-plugin
+              mountPath: /plugins-local
+              readOnly: true
 {% endif %}
 {% if traefik_k8s_manage_acme %}
             - name: traefik-acme
@@ -563,6 +568,16 @@ spec:
           emptyDir: {}
         - name: crowdsec-data
           emptyDir: {}
+        # Projects the plugin into the GOPATH layout Traefik reads. The manifest's ConfigMap key
+        # is `traefik-plugin.yml` and only the projected name carries the leading dot.
+        - name: cloudflare-realip-plugin
+          configMap:
+            name: traefik-cloudflare-realip
+            items:
+              - key: cloudflarerealip.go
+                path: src/{{ traefik_k8s_realip_plugin_module }}/cloudflarerealip.go
+              - key: traefik-plugin.yml
+                path: src/{{ traefik_k8s_realip_plugin_module }}/.traefik.yml
 {% endif %}
         - name: traefik-plugins-storage
           emptyDir: {}

@@ -1,0 +1,12 @@
+---
+# The plugin manifest. The Deployment projects this file as `.traefik.yml` next to the Go
+# source, which is the name Traefik reads. `import` must start with the moduleName that
+# static-config.yaml.j2 declares under experimental.localPlugins, or Traefik rejects the
+# plugin — and a rejected plugin disables EVERY plugin, the crowdsec bouncer included.
+displayName: Cloudflare real IP
+type: middleware
+import: homelab/cloudflarerealip
+summary: Replaces X-Forwarded-For with CF-Connecting-IP for requests from a Cloudflare edge.
+testData:
+  trustedIPs:
+    - 173.245.48.0/20

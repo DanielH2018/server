@@ -89,12 +89,12 @@ def _repo_files() -> set[str]:
 
 REPO_FILES = _repo_files()
 
-# Extensions this repo actually contains. A citation in some other extension is a file in
-# some other repository -- `docs/longhorn-backup-tiering.md` cites Longhorn's own
-# `deltablock.go:117` and `s3.go:88` to show where upstream does the thing. Deriving the set
-# from the tree means a language this repo adopts later is covered without an edit here,
-# rather than being silently exempt.
-_REPO_EXTENSIONS = {Path(p).suffix.lstrip(".") for p in REPO_FILES}
+# Extensions this repo contains, so a language adopted later is covered without an edit here.
+# A citation in another extension is another repository's file. DECIDED: minus `go` -- the only
+# Go here is the traefik role's local plugin (files/cloudflare-realip/), while the docs cite
+# UPSTREAM Go by basename (`docs/longhorn-backup-tiering.md`: Longhorn's `deltablock.go:117`,
+# `s3.go:88`), which counting the plugin would turn into missing-file failures.
+_REPO_EXTENSIONS = {Path(p).suffix.lstrip(".") for p in REPO_FILES} - {"go"}
 
 
 def resolves(cited: str, doc: Path) -> bool:

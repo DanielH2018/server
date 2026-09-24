@@ -26,15 +26,24 @@ data:
 {% for ip in cloudflare_ips %}
             - "{{ ip }}"
 {% endfor %}
-            # Carried over verbatim from the Docker traefik.yml.j2, and the reasoning is
-            # unchanged by the platform: this governs X-Forwarded-For TRUST, not admission.
-            # Deliberately NOT 10.0.0.0/8 (that would trust wg-easy's `wg_client_subnet`
-            # ({{ wg_client_subnet }}) clients as upstream proxies, letting a WG client
-            # spoof XFF) and deliberately not the pod
-            # CIDR — the Service runs externalTrafficPolicy: Local specifically so requests
-            # arrive with the real client address rather than cni0's, and trusting the pod
-            # network would let any pod forge XFF.
-            - "{{ lan_subnet }}"
+            # This list governs X-Forwarded-For TRUST, not admission: from a source listed
+            # here Traefik keeps the client-sent XFF, and from any other source it discards it
+            # and uses the connection address. Only a proxy in front of Traefik belongs here.
+            #
+            # DECIDED: Cloudflare only, and not `lan_subnet` ({{ lan_subnet }}). The LAN /24
+            # was trusted for the Docker-era edge (33bdbdb32, narrowed from 10.0.0.0/8 by
+            # f0429fb4b), where the Docker bridges and co-hosted proxies sat on it. On k3s
+            # nothing on the LAN proxies to Traefik: neither node runs Docker, and the Pi runs
+            # only docker-proxy, wg-easy, alloy and autoheal. Trusting the /24 let any LAN
+            # device forge XFF, and that included every WireGuard peer. wg-easy masquerades
+            # its `wg_client_subnet` ({{ wg_client_subnet }}) peers to the Pi's LAN address,
+            # which is inside the /24. With the /24 untrusted, Traefik strips a LAN client's
+            # XFF and forwards the connection address, so Authelia `networks:` rules and
+            # ClientIP() matchers still see the LAN address. Not the pod CIDR either: the
+            # Service runs externalTrafficPolicy: Local so requests arrive with the real client
+            # address rather than cni0's, and trusting the pod network would let any pod forge
+            # XFF. If a LAN reverse proxy is ever added in front of Traefik, list its single
+            # address here rather than the /24.
             - "127.0.0.1/32"
         http:
           redirections:
@@ -91,15 +100,26 @@ data:
 {% for ip in cloudflare_ips %}
             - "{{ ip }}"
 {% endfor %}
-            - "{{ lan_subnet }}"
+            # Same list as the http entrypoint above; its DECIDED comment covers why
+            # `lan_subnet` is absent.
             - "127.0.0.1/32"
         http:
           middlewares:
             # Entrypoint-wide, matching the Docker side. rate-limit stays per-router (the
             # ingressroute() macro attaches it) so a future chatty service can opt into a
             # higher ceiling, which an entrypoint-level limiter cannot express.
-            # crowdsec first: a banned IP is rejected before any headers work is done.
 {% if traefik_k8s_manage_crowdsec %}
+            # cloudflare-realip FIRST, ahead of crowdsec and of every router's forwardAuth.
+            # Cloudflare appends the client address to any XFF the client sent, so the
+            # trustedIPs above keep a client-chosen LEFTMOST entry, and Authelia logs the
+            # leftmost entry as remote_ip. This middleware replaces XFF with CF-Connecting-IP
+            # for a Cloudflare source, so everything after it sees `client` and every backend
+            # sees `client, edge`. It is the in-repo plugin under files/cloudflare-realip/,
+            # loaded from a ConfigMap (experimental.localPlugins below), and gated with the
+            # bouncer because the startupProbe that catches a failed plugin load is too.
+            # ENFORCED by ansible/tests/k8s/test_traefik_cloudflare_realip.py.
+            - {{ k8s_namespace }}-cloudflare-realip@kubernetescrd
+            # crowdsec next: a banned IP is rejected before any headers work is done.
             - {{ k8s_namespace }}-crowdsec@kubernetescrd
 {% endif %}
             - {{ k8s_namespace }}-default-headers@kubernetescrd
@@ -140,6 +160,15 @@ data:
         bouncer:
           moduleName: github.com/maxlerebourg/crowdsec-bouncer-traefik-plugin
           version: {{ traefik_k8s_bouncer_plugin_version }}
+      # A LOCAL plugin: Traefik reads the source from ./plugins-local/src/<moduleName>/ (the
+      # working directory is /) and downloads nothing, so it adds no startup network
+      # dependency beside the bouncer's. The Deployment projects it there from the
+      # traefik-cloudflare-realip ConfigMap. The key must match the one under `plugin:` in
+      # the Middleware, and moduleName must match the manifest's `import` prefix; a mismatch
+      # disables every plugin, the bouncer included.
+      localPlugins:
+        {{ traefik_k8s_realip_plugin_name }}:
+          moduleName: {{ traefik_k8s_realip_plugin_module }}
 {% endif %}
 
     serversTransport:

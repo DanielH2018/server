@@ -275,6 +275,7 @@
  "ansible/tests/k8s/test_service_role_claude_md_has_at_a_glance.py": 0.0,
  "ansible/tests/k8s/test_speedtest_scrape.py": 0.0,
  "ansible/tests/k8s/test_tls_cert_resolver_optional.py": 0.08,
+ "ansible/tests/k8s/test_traefik_cloudflare_realip.py": 0.09,
  "ansible/tests/k8s/test_traefik_inline_credentials.py": 0.0,
  "ansible/tests/k8s/test_traefik_netpol_https_origin_lock.py": 0.0,
  "ansible/tests/k8s/test_uncovered_roles_justifications_resolve.py": 0.01,
