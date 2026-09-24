@@ -17,6 +17,7 @@ from _release_fixtures import (
     _commit,
     _init_repo,
     _record,
+    _run_git,
     _set_origin_master,
 )
 
@@ -110,3 +111,112 @@ def test_the_manifest_renderers_own_tasks_are_never_narrowed(tmp_path):
         [_record("tdarr", commit=base)], repo_root=repo, shared_roles={"manifests"}
     )
     assert "manifests/tasks/main.yml" in stale["tdarr"]
+
+
+# authelia's half of 7fd4189cb, the shape no line match covers (#2436): one task's scalar
+# `when:` becomes the list form with the gate as a second conjunct, and another task's existing
+# list gains the gate as an item. Both render identical manifests on a real deploy.
+_AUTHELIA_TASKS = """\
+- name: Read back the operator digest
+  ansible.builtin.set_fact:
+    authelia_password_hash: "{{ authelia_k8s_hash.stdout }}"
+  when: authelia_password_hash is not defined
+  no_log: true
+
+- name: Read back the claude-ui digest
+  ansible.builtin.set_fact:
+    authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout }}"
+  when:
+    - authelia_k8s_manage_claude_user | bool
+    - authelia_claude_password_hash is not defined
+  no_log: true
+"""
+
+_AUTHELIA_TASKS_CHECK_MODE_GATED = """\
+- name: Read back the operator digest
+  ansible.builtin.set_fact:
+    authelia_password_hash: "{{ authelia_k8s_hash.stdout }}"
+  when:
+    # The generate task above is a `command`, so `--check` skips it whatever its `when:` says
+    # and leaves a skip result with no `stdout` (#2353).
+    - not ansible_check_mode
+    - authelia_password_hash is not defined
+  no_log: true
+
+- name: Read back the claude-ui digest
+  ansible.builtin.set_fact:
+    authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout }}"
+  when:
+    # Same reasoning as the operator digest above (#2353).
+    - not ansible_check_mode
+    - authelia_k8s_manage_claude_user | bool
+    - authelia_claude_password_hash is not defined
+  no_log: true
+"""
+
+
+def test_a_when_rewritten_from_scalar_to_list_is_clean(tmp_path):
+    """authelia's gate, which #2416's line match could not see (#2436).
+
+    The diff carries a removed `when: <expr>`, an added bare `when:` and added list items.
+    Neither spelling is a line shape, so the rule compares the CONDITIONS either side instead:
+    the same texts, plus `not ansible_check_mode`, which every real run satisfies.
+    """
+    stale = _tasks_range(
+        tmp_path,
+        _AUTHELIA_TASKS,
+        _AUTHELIA_TASKS_CHECK_MODE_GATED,
+        role="authelia",
+    )
+    assert stale == {}
+
+
+def test_a_when_rewrite_that_also_changes_the_condition_is_flagged(tmp_path):
+    """The discriminator between a shape test and a wrong interpreter.
+
+    Same scalar-to-list rewrite, but one conjunct is not the one that was there. A rule that
+    called this inert would be reading "a `when:` was reshaped" instead of "the conditions did
+    not move", which is the #947 false-GREEN this narrowing must not become.
+    """
+    after = _AUTHELIA_TASKS.replace(
+        "  when: authelia_password_hash is not defined\n",
+        "  when:\n    - not ansible_check_mode\n    - authelia_claude_user is defined\n",
+    )
+    stale = _tasks_range(tmp_path, _AUTHELIA_TASKS, after, role="authelia")
+    assert "authelia/tasks/main.yml" in stale["authelia"]
+
+
+def test_removing_a_check_mode_gate_is_flagged(tmp_path):
+    """Dropping the gate is a real change: the task runs under `--check` again.
+
+    Only ADDING the conjunct is inert, so the comparison has to be directional.
+    """
+    stale = _tasks_range(
+        tmp_path,
+        _AUTHELIA_TASKS_CHECK_MODE_GATED,
+        _AUTHELIA_TASKS,
+        role="authelia",
+    )
+    assert "authelia/tasks/main.yml" in stale["authelia"]
+
+
+def test_the_diff_context_is_pinned_against_a_hosts_git_config(tmp_path):
+    """`diff.context = 0` in a host's git config must not silently widen the reading.
+
+    A conjunct line classifies as one only with its `when:` key in view, and the key is a
+    context line. Left to inherit, `diff.context = 0` would leave every candidate unclassified,
+    the narrowing would no-op and every other test here would still pass -- the same
+    green-and-checking-nothing shape the `--src-prefix` pin exists for.
+    """
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    _run_git(repo, "config", "diff.context", "0")
+    path = "ansible/roles/k8s/authelia/tasks/main.yml"
+    base = _commit(repo, {path: _AUTHELIA_TASKS}, "baseline")
+    tip = _commit(repo, {path: _AUTHELIA_TASKS_CHECK_MODE_GATED}, "gate the reads")
+    _set_origin_master(repo, tip)
+
+    stale = pr.compute_stale(
+        [_record("authelia", commit=base)], repo_root=repo, shared_roles={"manifests"}
+    )
+    assert stale == {}

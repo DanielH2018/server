@@ -73,8 +73,10 @@ def _closure(role, callers):
 def _role_callers(repo):
     """Import `scripts/lib/k8s_roles` lazily.
 
-    For the reason `releases._deploy_tags` gives: it parses every k8s role's tasks YAML and
-    reads daniel-box's host_vars on import, which only the staleness reader needs.
+    For the reason `releases._deploy_tags` gives: the import pulls in PyYAML and
+    `lib.render_guard`, and the call walks every k8s role's `tasks/` and parses each file --
+    work only `--stale-only` asks for, not the other `probe.py` subcommands that load
+    `releases` through `probe.py`.
     """
     from lib.k8s_roles import role_callers
 
