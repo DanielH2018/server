@@ -105,7 +105,13 @@ def authenticated_clients(lines, routers):
             continue
         if entry.get("DownstreamStatus") not in OK_STATUSES:
             continue
-        host = entry.get("ClientHost", "")
+        # ClientHost is Traefik's whole X-Forwarded-For header, recorded before any entrypoint
+        # middleware runs. From a Cloudflare source it reads `<client-sent>, <client>`:
+        # Cloudflare appends the address it saw, so only the RIGHTMOST entry is not client-chosen.
+        # From any other source forwardedHeaders has already dropped the header, leaving the
+        # connection address. The crowdsecurity/traefik-logs parser takes the same entry, so
+        # this list holds the address CrowdSec bans (#2446).
+        host = (entry.get("ClientHost") or "").rsplit(",", 1)[-1].strip()
         if is_remote_client(host):
             seen.add(host)
     return frozenset(seen)
