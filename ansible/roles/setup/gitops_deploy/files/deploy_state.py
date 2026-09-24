@@ -138,6 +138,24 @@ class DeployerState:
             "broad_applied", f"{origin} {hold_plane_marker(playbook, tags)}".strip()
         )
 
+    def restore_broad_applied(self, marker: str | None) -> None:
+        """Put the marker back to a value a caller snapshotted, or remove it.
+
+        Args:
+            marker: the whole marker as it stood before this tick, or None when there was
+                none at all.
+
+        The reverse of `record_broad_applied` for a tick whose ff-merge was undone. One plan's
+        apply is recorded inside the loop, and a LATER plan's busy lock resets the tree to
+        `local` — the marker then claims a SHA this tree does not carry was applied, and
+        `land.sh` reads it to tell a plane the tick applied from one it merely fast-forwarded
+        past (#2382). It RESTORES rather than clearing, because an earlier tick's marker is
+        still true; the single marker records the last plane applied, not a row per plan, so
+        the earlier value is the only way back (the problem `Recorded.tags_before` solves for
+        the `manual_plane` sidecar).
+        """
+        self.write("broad_applied", marker)
+
     # ── the setup roles this deployer cannot apply itself ─────────────────────────────────
 
     @property

@@ -33,10 +33,17 @@ function inflight(b){const held=b.runs.filter(r=>r.locks.length);
   return s+'<table><tr><th>kind</th><th>PR / tag</th><th>pid</th><th>elapsed</th><th>locks</th><th>command</th><th></th></tr>'+b.runs.map(r=>`<tr><td>${esc(r.kind)}</td><td>${r.pr?'#'+esc(r.pr):esc(r.tag)}</td><td>${r.pid}</td><td>${r.elapsed_s}s</td><td>${esc(r.locks.join(' '))}${r.waiting_on.length?`<span class="mute">waiting on ${esc(r.waiting_on.join(' '))}</span>`:''}</td><td><code>${esc(r.args)}</code><br><span class="mute">${esc(r.log)}</span></td><td>${r.kind==='land'?`<button class="danger" onclick="post('/api/cancel',{pid:${r.pid}})">cancel</button>`:''}</td></tr>`).join('')+'</table>';}
 function stale(b){if(!b.stale.length)return '<p class="clear">every release is current</p>';
   return '<table><tr><th>service</th><th>why</th><th></th></tr>'+b.stale.map(r=>`<tr><td>${esc(r.service)}</td><td>${esc(r.reason)}</td><td><button onclick="post('/api/deploy',{tag:'${esc(r.service)}'})">deploy</button></td></tr>`).join('')+'</table>';}
+// A Clear drops every hold_plane entry at once, and each entry is a plane nobody has applied.
+// The prompt names them, because after the Clear nothing records them at all.
+let holdWarn='Type the held SHA to clear it';
+function clearHold(){const s=prompt(holdWarn);if(s)post('/api/hold/clear',{expected_sha:s});}
 function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${esc(v)}</code>`:'<span class="clear">clear</span>'}</td><td>${extra}</td></tr>`;
-  const hold=b.hold_sha?`<button class="warn" onclick="{const s=prompt('Type the held SHA to clear it');if(s)post('/api/hold/clear',{expected_sha:s})}">clear hold</button>`:'';
+  const planes=b.hold_plane_entries||[];
+  holdWarn=planes.length?`Clearing drops ${planes.length} plane(s) still recorded as UNAPPLIED:\n\n${planes.join('\n')}\n\nEach still needs applying by hand, and nothing records them after this.\n\nType the held SHA to clear it:`:'Type the held SHA to clear it';
+  const hold=b.hold_sha?'<button class="warn" onclick="clearHold()">clear hold</button>':'';
+  const planeCell=planes.length?planes.map(p=>`<code>${esc(p)}</code>`).join('<br>'):'<span class="clear">clear</span>';
   const ov=b.staging_gate_override?`<button onclick="post('/api/staging-override',{action:'clear'})">clear override</button>`:`<button class="warn" onclick="post('/api/staging-override',{action:'set'})">set override</button>`;
-  return '<table>'+row('hold_sha',b.hold_sha,hold)+row('hold_plane',b.hold_plane)+row('last_run',b.last_run)+row('behind_since',b.behind_since)+row('staging_gate_override',b.staging_gate_override,ov)+'</table>';}
+  return '<table>'+row('hold_sha',b.hold_sha,hold)+`<tr><td>hold_plane</td><td>${planeCell}</td><td></td></tr>`+row('last_run',b.last_run)+row('behind_since',b.behind_since)+row('staging_gate_override',b.staging_gate_override,ov)+'</table>';}
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${p.number}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
 async function tail(){if(!logPath)return;const r=await fetch('/api/log?path='+encodeURIComponent(logPath));document.getElementById('log').textContent=await r.text();}

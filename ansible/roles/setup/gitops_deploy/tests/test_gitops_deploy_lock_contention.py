@@ -202,6 +202,68 @@ def test_a_contended_mixed_range_records_no_pending_role(
     _deferred(tick, state_dir, posts=1)
 
 
+# A range carrying BOTH broad planes, so `deploy_narrow.plan` gives the loop two plans: the
+# setup plane's `initial_setup.yml`, then the deploy plane's `deploy.yml`. Plan 1 applies and
+# records `broad_applied`; plan 2 is where the busy lock lands.
+_TWO_PLANES = ChangeSet(
+    broad=True,
+    broad_setup=True,
+    broad_deploy=True,
+    setup_roles={"gitops_deploy"},
+)
+_TWO_PLANE_PATHS = [
+    "ansible/roles/setup/gitops_deploy/templates/config.env.j2",
+    "ansible/inventory/group_vars/all.yml",
+]
+
+
+def test_a_contended_second_plan_takes_back_the_first_plans_broad_applied(
+    gitops_deploy, tick, settings, state_dir
+):
+    """CLEAN half for #2382: the reset undoes the merge, so no marker may claim that SHA.
+
+    Nothing here is pending — `gitops_deploy` is a role this deployer applies — which is why
+    the snapshot cannot hang off the `Recorded` a tick with no pending role used to take from
+    a shared constant. `land.sh` reads `broad_applied` to tell a plane the tick APPLIED from
+    one it merely fast-forwarded past (#1537), and after the reset this tree carries neither.
+    """
+    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
+    code = deploy_handlers.handle_broad(
+        tick.tools,
+        gitops_deploy.STATE,
+        settings,
+        _target(),
+        _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
+    )
+    assert code == 0
+    assert len(tick.playbooks) == 2, "both plans must have been attempted"
+    assert not (state_dir / "broad_applied").exists(), (
+        "the first plan's apply is still recorded against a SHA the reset took away"
+    )
+    _deferred(tick, state_dir)
+
+
+def test_a_contended_tick_leaves_an_earlier_ticks_broad_applied_alone(
+    gitops_deploy, tick, settings, state_dir
+):
+    """FLAGGED half: the reverse RESTORES, it does not clear.
+
+    An earlier tick's record is true — that plane was applied and the tree still carries it —
+    and `land.sh` reading it as unapplied would send an operator at a run they already made.
+    """
+    earlier = f"{'9' * 40} ansible/initial_setup.yml gitops_deploy"
+    (state_dir / "broad_applied").write_text(earlier)
+    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
+    deploy_handlers.handle_broad(
+        tick.tools,
+        gitops_deploy.STATE,
+        settings,
+        _target(),
+        _plan(_TWO_PLANES, _TWO_PLANE_PATHS),
+    )
+    assert (state_dir / "broad_applied").read_text() == earlier
+
+
 def test_a_failed_mixed_apply_still_records_its_pending_role(
     gitops_deploy, tick, settings, state_dir
 ):

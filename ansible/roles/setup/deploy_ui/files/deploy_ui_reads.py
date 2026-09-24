@@ -22,6 +22,12 @@ MARKERS = tuple(
     for m in ("hold", "hold_plane", "last_run", "behind", "staging_override")
 )
 _OVERRIDE = gitops_markers.MARKERS["staging_override"]
+_HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
+
+# Between the entries of a `hold_plane` that more than one failed apply wrote (#2381). A
+# literal, because the daemon runs under `uv run --no-project` outside the repo venv and
+# cannot import `deploy_git.HOLD_PLANE_SEP`, which pytest asserts this matches.
+HOLD_PLANE_SEP = "; "
 
 _RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
@@ -221,17 +227,28 @@ def log_path_of(pid: int) -> str:
         return ""
 
 
-def read_state(state_dir: Path) -> dict[str, str]:
-    """Read the five markers as strings.
+def hold_plane_entries(held: str) -> list[str]:
+    """Each failed apply a `hold_plane` marker records, oldest first.
 
-    A missing marker is ''. The override is presence-only, so it reads 'set' or ''.
+    One entry per apply that failed since the hold was taken, not one hold. The page shows
+    them separately because a Clear drops all of them at once (#2453).
+    """
+    return [e.strip() for e in held.split(";") if e.strip()]
+
+
+def read_state(state_dir: Path) -> dict[str, str | list[str]]:
+    """Read the five markers, plus `hold_plane` split into its entries.
+
+    A missing marker is ''. The override is presence-only, so it reads 'set' or ''. The
+    `hold_plane_entries` key is the parsed form of `hold_plane`, and it is what the page
+    lists; the raw string stays beside it.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
             missing marker is a clear state; anything else that stops the read must not
             be mistaken for one.
     """
-    st = {}
+    st: dict[str, str | list[str]] = {}
     for name in MARKERS:
         p = state_dir / name
         try:
@@ -240,6 +257,7 @@ def read_state(state_dir: Path) -> dict[str, str]:
             st[name] = ""
             continue
         st[name] = "set" if name == _OVERRIDE else text.strip()
+    st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
     return st
 
 

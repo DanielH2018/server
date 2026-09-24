@@ -152,6 +152,28 @@ def apply_broad_k8s(
     """
     origin = target.origin
     bumps = cs.k8s_deploy - covered_by_plane(plans, cs.k8s_deploy)
+    # A k8s role the deploy plane APPLIED is not a deferred change, whatever the post would
+    # otherwise say (#2453). `narrow_broad` maps a role's own changed path to its tag, so the
+    # narrowed list names it whenever the range also carries a deploy-plane path, and a refused
+    # narrowing runs the whole play — either way the probe that measured this ran `deploy.yml
+    # --tags radarr,sonarr` and then posted "fast-forwarded but not applied" for the same
+    # roles, printing that same command as the remedy. Every plan here succeeded: this runs
+    # after the loop, whose failure and contention arms both return.
+    #
+    # INTERSECTED WITH THE DECLARED ENTRIES, which `covered_by_plane` alone does not do. It
+    # returns the WHOLE set on a refused narrowing, and that is sound for `k8s_deploy` (a
+    # promoted bump is declared by construction) but not for `cs.k8s`, which `_ACTIVE_K8S`
+    # fills from role directories in the tree. `deploy.yml` applies no role this host does not
+    # declare — the same fact `k8s_remediation` prescribes a full deploy for — so subtracting
+    # one would page nowhere at all. A shared role a declared role calls IS applied by a full
+    # run and still stays in the post: that is the pre-existing false "not applied", and it is
+    # the safe side of the two.
+    plane_applied = covered_by_plane(plans, cs.k8s) & plan.k8s_services
+    if plane_applied:
+        log(
+            f"{sorted(plane_applied)}: the deploy plane applied these, so they are not deferred"
+        )
+        cs = replace(cs, k8s=cs.k8s - plane_applied)
     if bumps and deadline - time.monotonic() < config.k8s_deploy_timeout_s:
         log(
             f"{sorted(bumps)}: {deadline - time.monotonic():.0f}s of the broad budget left, "
@@ -159,11 +181,12 @@ def apply_broad_k8s(
         )
         cs = replace(cs, k8s=cs.k8s | bumps, k8s_deploy=cs.k8s_deploy - bumps)
         bumps = set()
-    # The deploy plane has already applied these, so they are annotated whatever happens to
-    # the rest below — a failed bump beside them must not hide that they went out.
+    # The deploy plane has already applied these, so they are annotated on every path out of
+    # here BUT the reset one — a failed bump beside them must not hide that they went out.
+    # Not before the deploy below, which is where they were annotated until #2453: a busy lock
+    # there resets the tree, the next tick re-applies the same plane, and Grafana drew a second
+    # annotation for services that deployed once.
     applied = cs.k8s_deploy - bumps
-    if applied:
-        tools.emit_deploy_annotation(applied, origin)
     if bumps:
         try:
             deploy_io.deploy_k8s(config.repo, bumps, deadline - time.monotonic())
@@ -182,6 +205,8 @@ def apply_broad_k8s(
             # (`clear_service_hold`); written over an earlier entry, the bump's fix-forward
             # cleared a plane still unapplied. Either way Status went green too early.
             state.hold_failed_apply(origin, DEPLOY_PLAYBOOK, sorted(bumps))
+            if applied:
+                tools.emit_deploy_annotation(applied, origin)
             # The range is merged either way, so a hand-edited or denylisted k8s role in it has
             # no page but this one. Before the failure post, which stays the tick's last word.
             deploy_alerts.alert_deferred(
@@ -201,8 +226,10 @@ def apply_broad_k8s(
             )
             return 0 if posted else 1
         state.clear_service_hold(bumps)
+    if applied:
+        tools.emit_deploy_annotation(applied, origin)
+    if bumps:
         tools.emit_deploy_annotation(bumps, origin)
-    deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )

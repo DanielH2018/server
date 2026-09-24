@@ -15,7 +15,7 @@ import time
 from collections.abc import Mapping
 from pathlib import Path
 
-from deploy_ui_reads import Run
+from deploy_ui_reads import HOLD_PLANE_SEP, Run
 from gitops_markers import MARKERS
 
 REQUIRED_HEADER = "X-Deploy-UI"
@@ -93,6 +93,26 @@ def clear_hold(state_dir: Path, expected_sha: str) -> str | None:
     for name in (MARKERS["hold"], MARKERS["hold_plane"]):
         (state_dir / name).unlink(missing_ok=True)
     return None
+
+
+def hold_cleared_message(dropped: list[str]) -> str:
+    """What the page says after a Clear, naming every plane it just stopped recording.
+
+    Args:
+        dropped: the `hold_plane` entries the Clear removed, from `hold_plane_entries`.
+
+    A Clear removes `hold_plane` whole, whatever it holds. Since #2381 that is one entry per
+    failed apply, and the deployer clears them one at a time as each plane is applied — so a
+    Clear can drop entries for planes nobody has applied, and after it nothing records them
+    (#2453). The message names them and says what is owed.
+    """
+    if not dropped:
+        return "hold cleared (hold_sha and hold_plane)"
+    return (
+        f"hold cleared (hold_sha and hold_plane). {len(dropped)} plane(s) were recorded as "
+        f"unapplied and are now recorded nowhere — apply each by hand: "
+        + HOLD_PLANE_SEP.join(dropped)
+    )
 
 
 def set_override(state_dir: Path, action: str) -> str | None:

@@ -552,7 +552,8 @@ def alert_deferred(
         )
     if cs.k8s:
         # No `- deployed` subtraction (unlike tasks/meta): a bump this tick deployed sits in
-        # `cs.k8s_deploy`, never in `cs.k8s`, so nothing in `cs.k8s` rode a redeploy here.
+        # `cs.k8s_deploy`. The one exception is a broad tick's narrowed deploy plane, and
+        # `deploy_broad_k8s` subtracts what that applied from `cs` before calling this (#2453).
         #
         # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
         # origin SHA (alert_once) and the ff-merge below clears `behind_since` -- the deployer's
