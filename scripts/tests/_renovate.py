@@ -125,6 +125,43 @@ def _k8s_image_manager() -> dict:
     return _manager_covering("roles/k8s")
 
 
+_IF_BLOCK = re.compile(r"\{\{#if (\w+)\}\}(.*?)\{\{/if\}\}", re.S)
+_TRIPLE_STACHE = re.compile(r"\{\{\{(\w+)\}\}\}")
+
+
+def render_auto_replace(template: str, **values: str | None) -> str:
+    """Render a Renovate `autoReplaceStringTemplate` the way Renovate's Handlebars would.
+
+    Renovate compiles the template against the upgrade object and writes the result over the
+    WHOLE span its matchString matched, so a template that drops a literal prefix corrupts the
+    line rather than failing. This covers the two constructs the k8s-images template uses —
+    `{{{name}}}` unescaped interpolation and an `{{#if name}}…{{/if}}` block gated on a truthy
+    value — and raises on anything else, so a template that grows a third construct fails here
+    instead of round-tripping by accident.
+
+    An unset value renders empty, matching Handlebars. Renovate itself never leaves `newValue`
+    unset on the updates this manager produces: both the `digest` and `pinDigest` updates carry
+    `newValue: config.currentValue` (lib/workers/repository/process/lookup/index.ts).
+    """
+
+    def _block(m: re.Match[str]) -> str:
+        assert m.group(1) in values, f"template gates on unknown var {m.group(1)!r}"
+        return m.group(2) if values[m.group(1)] else ""
+
+    def _var(m: re.Match[str]) -> str:
+        assert m.group(1) in values, f"template reads unknown var {m.group(1)!r}"
+        return values[m.group(1)] or ""
+
+    out = _TRIPLE_STACHE.sub(_var, _IF_BLOCK.sub(_block, template))
+    assert "{{" not in out, (
+        "unrendered Handlebars left in "
+        + repr(out)
+        + " — render_auto_replace covers only "
+        "triple-stache interpolation and a plain #if block"
+    )
+    return out
+
+
 # ── the n8n base-pin ledger ──────────────────────────────────────────────────────────────
 #
 # Both n8n FROMs pin a channel tag with a digest beside it, so a bump changes only the digest
