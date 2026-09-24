@@ -148,7 +148,10 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
   whole set; `k3s_manage_backup_targets` does the same for the R2/B2 targets and the
   RecurringJobs; `k3s_etcd_restore_drill_armed` gates the weekly `etcd restore drill` cron,
   which on this host runs `--list-only` — the FULL restore drill runs in a throwaway guest on
-  `daniel-server` (`setup/hypervisor`), because it cannot pass beside a live k3s.
+  `daniel-server` (`setup/hypervisor`), because it cannot pass beside a live k3s. The
+  `--list-only` leg also runs restore gate 3 (`k3s_etcd_restore_gates.py --gate 3`) against the
+  snapshot it listed, so the `ETCDSnapshotFile` read the runbook depends on is exercised weekly
+  rather than on the day of an outage (#2420); any non-zero exit fails the drill.
 - **Authoritative sources:** Longhorn's own Volume, Backup and Snapshot CRs read through
   the cluster; B2/R2 listings read from the buckets (`probe.py b2-deletions`, the budget
   listing). Never a cached count.

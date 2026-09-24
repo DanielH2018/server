@@ -234,6 +234,73 @@ def test_the_exit_codes_are_the_gate_positions():
     assert gates.GATES[2].check is gates._gate_snapshot
 
 
+# ── `--gate N`, which is how the weekly drill exercises gate 3 (#2420) ──────────────────────
+
+
+def _run_only(only, drill_dir, homelab_dir, tools, snapshot=SNAPSHOT, now=NOW):
+    out = io.StringIO()
+    code = gates.run_gates(
+        snapshot,
+        str(drill_dir),
+        str(homelab_dir),
+        now=now,
+        tools=tools,
+        out=out,
+        only=only,
+    )
+    return code, out.getvalue()
+
+
+def test_only_gate_three_runs_gate_three_and_nothing_else(
+    drill_dir, homelab_dir, tools
+):
+    """The weekly drill's call. Gates 1 and 2 must not run: gate 1 reads the stamp that same
+    drill writes, which is circular, and gate 2's stamp is the operator's to take."""
+    # A stale gate-1 stamp and no gate-2 baseline at all — neither may affect the verdict.
+    (drill_dir / gates.DRILL_STAMP).write_text(_stamp(NOW - 90 * DAY))
+    (homelab_dir / gates.TOKEN_STAMP).unlink()
+    code, out = _run_only(3, drill_dir, homelab_dir, tools)
+    assert code == 0, out
+    assert "gate 3 ok" in out
+    assert "gate 1" not in out and "gate 2" not in out
+
+
+def test_only_gate_three_still_exits_three_on_a_refusal(drill_dir, homelab_dir):
+    """The exit code is the gate NUMBER, not a position in the sequence handed to the runner."""
+    code, out = _run_only(
+        3, drill_dir, homelab_dir, _tools(_snapshot_file(SNAPSHOT, ready=False))
+    )
+    assert code == 3
+    assert "readyToUse=False" in out
+
+
+def test_a_gate_number_this_runbook_does_not_have_is_usage(
+    drill_dir, homelab_dir, tools
+):
+    """Rather than a vacuous pass over an empty gate tuple, which is how a renumbering would
+    read green while drilling nothing."""
+    code, out = _run_only(4, drill_dir, homelab_dir, tools)
+    assert code == gates.runbook_gates.EX_USAGE
+    assert "no gate numbered 4" in out
+
+
+def test_the_gate_flag_reaches_run_gates_and_a_bad_one_is_usage():
+    """`--gate 4` is the seam, so the flag's VALUE is proven to arrive without patching the
+    module (the repo's monkeypatch ratchet) and without asking the cluster.
+
+    Exit 64 is only reachable through `run_gates`' empty-selection branch: a `main` that parsed
+    the flag and dropped its value would run all three gates and return 1, 2 or 69 instead. The
+    message that branch prints is asserted in
+    `test_a_gate_number_this_runbook_does_not_have_is_usage`, which can hand `run_gates` a
+    buffer — `out=sys.stdout` is bound as a default argument, so `capsys` cannot see it here.
+    """
+    assert gates.main(["--gate", "4", SNAPSHOT]) == gates.runbook_gates.EX_USAGE
+    # `--gate` with nothing usable after it, and the flag with no positional left, are usage.
+    assert gates.main(["--gate"]) == gates.runbook_gates.EX_USAGE
+    assert gates.main(["--gate", "three", SNAPSHOT]) == gates.runbook_gates.EX_USAGE
+    assert gates.main(["--gate", "3"]) == gates.runbook_gates.EX_USAGE
+
+
 def test_the_snapshot_name_is_required():
     # `cli(takes=1)`: no name, a flag, and a second positional are each usage — none of them
     # runs a gate, so neither the stamps nor the cluster are read.
