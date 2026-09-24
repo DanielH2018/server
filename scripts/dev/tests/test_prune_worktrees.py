@@ -429,7 +429,8 @@ def test_a_rebase_landed_branch_is_deleted_though_git_branch_d_refuses_it(
     _git(repo, "add", "c.txt")
     _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
     _git(repo, "checkout", "-q", "master")
-    _git(repo, "cherry-pick", "worktree-rebased")
+    # -x forces a new SHA: a same-second cherry-pick otherwise reproduces the original's.
+    _git(repo, "cherry-pick", "-x", "worktree-rebased")
     _git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
     assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
@@ -451,7 +452,8 @@ def test_the_shallow_sweep_stops_at_the_bulk_ancestry_layer(tmp_path, monkeypatc
     _git(repo, "add", "c.txt")
     _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
     _git(repo, "checkout", "-q", "master")
-    _git(repo, "cherry-pick", "worktree-rebased")
+    # -x forces a new SHA: a same-second cherry-pick otherwise reproduces the original's.
+    _git(repo, "cherry-pick", "-x", "worktree-rebased")
     _git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
     assert landed_orphan_branches(str(repo), deep=False) == ["worktree-ancestry"]
