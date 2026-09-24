@@ -307,3 +307,22 @@ def test_the_land_lib_modules_imported_by_dotted_path_are_not_reported_untested(
     for path, suite in expected.items():
         assert rows[path]["indirect_via"] == "import", path
         assert rows[path]["indirect_tests"] == suite, path
+
+
+def test_a_hyphenated_script_is_credited_to_the_test_that_loads_it(tmp_path):
+    """A hyphenated filename is not a module name, so its test quotes it instead.
+
+    No hyphenated script is left in the tree after #2386, so this is the only thing keeping
+    that branch of `indirect_test` honest. See the `DECIDED:` marker at the branch for why it
+    stays: without it a future `foo-bot.py` falls through to the path-mention rule, which
+    `_is_another_scripts_test` discards, and the page calls a tested script untested.
+    """
+    repo, scripts = _repo(tmp_path)
+    _write(scripts / "pkg" / "foo-bot.py", '"""Summary."""\n')
+    _write(
+        scripts / "pkg" / "tests" / "test_bots.py",
+        'spec_from_file_location("bot", SCRIPTS / "pkg" / "foo-bot.py")\n',
+    )
+    rows = {r["name"]: r for r in g.build_rows(scripts, repo)}
+    assert rows["foo-bot.py"]["indirect_tests"] == "test_bots.py"
+    assert rows["foo-bot.py"]["indirect_via"] == "import"

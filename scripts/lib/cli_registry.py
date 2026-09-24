@@ -13,10 +13,12 @@ container image), so a second top-level ``registry`` would shadow one of them de
 ``sys.path`` order. ``test_no_two_pythonpath_roots_share_a_module_basename`` in
 ``ansible/tests/repo/test_pythonpath_module_basenames.py`` enforces the separation.
 
-Argparse still owns argument parsing in every caller. This module owns three things argparse
-does not: `only`/`skip` selection (monitor-bridge's ``CHECKS_ONLY``/``CHECKS_SKIP``
-semantics — `only`, when non-empty, restricts to that set; `skip` always excludes), a
-`--list` renderer, and a completeness guard so a new entry point can't ship unregistered.
+Argparse still owns argument parsing in every caller. This module owns two things argparse
+does not: a `--list` renderer, and a completeness guard so a new entry point can't ship
+unregistered. It carried monitor-bridge's ``CHECKS_ONLY``/``CHECKS_SKIP`` selection too until
+2026-09-24, when ``scripts/validate/run_all.py`` — its only caller — was deleted (#2386);
+monitor-bridge's own copy of that selection is unaffected, and a caller that wants it again
+takes it from git history.
 
 Import it through the same bootstrap as any other ``lib`` module::
 
@@ -71,30 +73,6 @@ class Registry:
 
     def get(self, name):
         return self._entries[name]
-
-    def enabled(self, name, only=None, skip=None):
-        """Same only/skip semantics as monitor-bridge's `check_enabled`.
-
-        A non-empty `only` restricts to that set; `skip` always excludes, even from an
-        entry named in `only`.
-        """
-        only = frozenset(only or ())
-        skip = frozenset(skip or ())
-        if only and name not in only:
-            return False
-        return name not in skip
-
-    def selected(self, only=None, skip=None):
-        """Entries surviving `only`/`skip`, in registration order."""
-        return [e for e in self._entries.values() if self.enabled(e.name, only, skip)]
-
-    def unknown(self, names):
-        """Names that aren't registered.
-
-        For validating --only/--skip input, the way monitor-bridge's `validate_check_filter`
-        flags an unknown check name.
-        """
-        return sorted(set(names) - set(self._entries))
 
     def render_list(self):
         """One `name  description` line per entry, sorted by name, for a `--list` flag."""

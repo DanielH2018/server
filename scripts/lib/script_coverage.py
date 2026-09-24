@@ -99,6 +99,14 @@ def indirect_test(
         # quotes the filename, which is a load and not a mention, so it counts as an
         # import. Requiring a bare `import` here reported two genuinely tested scripts as
         # untested, which is the page telling a story about coverage that isn't true.
+        #
+        # DECIDED: kept although the tree holds no hyphenated script since #2386 deleted
+        # `glenstone-bot.py` and `osteria-francescana-bot.py`, the two this branch was
+        # written for. Dropping it leaves a future hyphenated script falling through to the
+        # path-mention rule, which `_is_another_scripts_test` then discards — the page would
+        # call it untested, the exact miscredit this branch closed. Three lines against a
+        # silent wrong answer; `test_a_hyphenated_script_is_credited_to_the_test_that_loads_it`
+        # keeps it honest.
         import_re = re.compile(rf"""['"]{re.escape(name)}['"]""")
 
     # A test living beside the module wins over one that merely imports it from elsewhere.
