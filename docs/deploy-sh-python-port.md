@@ -269,9 +269,9 @@ commit. A broken shim stops every deploy in the fleet, so the revert is also the
 response to any failed deploy after a slice lands.
 
 1. **`deploy_ui` learns the new process shape.** Widen `_RUN_RE` to match `deploy_run.py`
-   while still matching `deploy.sh`, then apply the `deploy_ui` role by hand. It is a setup
-   role, so the tick does not apply it. This slice lands first so the UI never loses sight of
-   a running deploy.
+   while still matching `deploy.sh`. `initial_setup.yml` includes the `deploy_ui` role, so
+   the GitOps tick applies it after the merge. This slice lands first so the UI never loses
+   sight of a running deploy.
 2. **Python front half.** `deploy_run.py` parses the arguments and runs every gate that
    comes before the tree lock: `--at` resolution, `--changed` derivation, the `--detach`
    conflict check, the fact-cache preflight, staleness, tag validation, and the `--check`,
@@ -288,8 +288,9 @@ response to any failed deploy after a slice lands.
 
 ## Concurrent changes to deploy.sh
 
-`deploy.sh` changes often: 14 commits touched it between 2026-09-10 and 2026-09-24. Each slice PR lists every commit in `git log <previous slice>..origin/master --
-scripts/deploy.sh` and ports its behaviour into the Python side in the same PR. From slice 2
+`deploy.sh` changes often: 14 commits touched it between 2026-09-10 and 2026-09-24. Each
+slice PR lists every commit in `git log <previous slice>..origin/master -- scripts/deploy.sh`
+and ports its behaviour into the Python side in the same PR. From slice 2
 on, a change to the wrapper's front half goes to `deploy_run.py` only. A change to the
 locked half goes to whichever file still holds it.
 
@@ -301,8 +302,8 @@ locked half goes to whichever file still holds it.
 - **Reuse `deploy_locks.service_locks` for the service locks.** It polls with `LOCK_NB`, so a
   queued deploy disappears from `/proc/locks`. It also reads every `OSError` from flock as
   contention, which merges 75 and 76, and it reports no wait time for the
-  `service lock … acquired after` line. Changing it would change the GitOps deployer, a setup
-  role that needs a manual apply, for no gain to the deployer.
+  `service lock … acquired after` line. Changing it would change the GitOps deployer's own
+  lock path for no gain to the deployer.
 - **Import `deploy_tags list` as well.** Rejected for the version-skew reason in the helper
   table.
 - **Keep `cd` in the shim, as `land.sh` does.** Rejected, because it changes which checkout

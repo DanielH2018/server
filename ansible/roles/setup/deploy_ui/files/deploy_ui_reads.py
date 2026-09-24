@@ -29,7 +29,9 @@ _HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
 # cannot import `deploy_git.HOLD_PLANE_SEP`, which pytest asserts this matches.
 HOLD_PLANE_SEP = "; "
 
-_RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|ansible-playbook)\b")
+# `deploy_run.py` is the Python the `deploy.sh` shim execs once #2412's port lands: from then
+# a deploy's `ps` args name it, and no process says `deploy.sh` at all.
+_RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|deploy_run\.py|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")
 # `deploy.sh --list-services` is a read this daemon itself runs on every deploy POST, and
