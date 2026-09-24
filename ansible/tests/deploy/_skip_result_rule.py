@@ -14,13 +14,14 @@ import yaml
 from lib import yaml_fast
 
 from _check_mode import (
+    POST_MODULE_KEYS,
     SKIP_FILTERS,
     SKIP_MISSING,
-    SKIPPED_IN_CHECK_MODE,
     excludes_check_mode,
     expressions,
     importer_guards,
     lazily_guarded,
+    skips_in_check_mode,
     unguarded_deref,
     walk_with_inherited_when,
 )
@@ -111,9 +112,7 @@ def _check_mode_producers(pairs) -> dict[str, str]:
         reg = task.get("register")
         if not reg:
             continue
-        if not SKIPPED_IN_CHECK_MODE & set(task):
-            continue
-        if task.get("check_mode") is False:
+        if not skips_in_check_mode(task):
             continue
         if excludes_check_mode(task.get("when")):
             continue
@@ -200,7 +199,16 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
             continue
         if any(excludes_check_mode(when) for when in inherited):
             continue
-        body = expressions(task)
+        # DECIDED: a consumer check mode skips is judged on its module args and its `when:`
+        # only (#2375). Ansible evaluates `failed_when`/`changed_when`/`until` on the result a
+        # module returned, and a skipped task returns none — so a read there cannot happen on
+        # the very run that makes the producer a skip result. The when-based rule in
+        # `_offenders` keeps them at full strength: its producer is skipped on a REAL run,
+        # where this consumer runs, its module returns, and its `failed_when` meets the skip
+        # dict.
+        body = expressions(
+            task, drop=POST_MODULE_KEYS if skips_in_check_mode(task) else ()
+        )
         loop = str(task.get("loop", ""))
         if any(skip_filter in loop for skip_filter in SKIP_FILTERS):
             continue

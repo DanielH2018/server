@@ -8,10 +8,11 @@ until-condition against the skip result, burns every retry and fails the play) a
 `deploy/test_conditional_register_consumers.py` (a later task dereferences the skip result
 and errors on the missing key).
 
-Two halves. `SKIPPED_IN_CHECK_MODE`, `excludes_check_mode`, `importer_guards` and
-`walk_with_inherited_when` answer "does a `--check` run reach this task at all". `SKIP_MISSING`,
-`unguarded_deref` and `lazily_guarded` answer "does this expression survive meeting a skip
-result". #2315.
+Two halves. `SKIPPED_IN_CHECK_MODE`, `skips_in_check_mode`, `excludes_check_mode`,
+`importer_guards` and `walk_with_inherited_when` answer "does a `--check` run reach this task at
+all". `SKIP_MISSING`, `unguarded_deref` and `lazily_guarded` answer "does this expression survive
+meeting a skip result". `POST_MODULE_KEYS` names the third question, "does Ansible evaluate this
+expression at all on the run that produced the skip result". #2315.
 
 Its own module rather than a section of `_helpers`: that file is at its length cap, and this
 is a subject a reader looks up by name rather than a path or a YAML walk.
@@ -42,6 +43,31 @@ SKIPPED_IN_CHECK_MODE = frozenset(
         "ansible.builtin.script",
     }
 )
+
+# The keys Ansible evaluates AFTER the module returns. A task check mode SKIPS never reaches
+# them — no module ran, so there is no result to judge — while its module args and its `when:`
+# are templated before the skip and are read on every run. `POST_MODULE_KEYS` is therefore text
+# to drop when the CONSUMER is itself skipped under `--check`, and text to keep in every other
+# case (#2375).
+POST_MODULE_KEYS = ("failed_when", "changed_when", "until")
+
+
+def skips_in_check_mode(task: dict) -> bool:
+    """True when a `--check` run skips this task for its module alone.
+
+    `check_mode: false` is the opt-out: the task runs for real under `--check`. A `when:` is
+    not consulted here — a task whose `when:` is false is skipped for a different reason, and
+    the two callers ask that question separately through `excludes_check_mode`.
+
+    LIMIT: `check_mode: false` on an enclosing `block:` propagates to its children, and
+    `walk_with_inherited_when` carries only `when:`, so a child under such a block reads as
+    skipped here when it actually runs. No `block:` in the roles tree carries `check_mode:`,
+    and `_check_mode_producers` has had the same blind spot since #2315.
+    """
+    if not SKIPPED_IN_CHECK_MODE & set(task):
+        return False
+    return task.get("check_mode") is not False
+
 
 _INCLUDE_KEYS = frozenset(
     {
@@ -138,8 +164,13 @@ SKIP_FILTERS = (
 )
 
 
-def expressions(task: dict) -> str:
+def expressions(task: dict, drop: tuple[str, ...] = ()) -> str:
     """Every templated string in the task itself, so a reference anywhere is seen.
+
+    `drop` names further keys to leave out. Its one caller passes `POST_MODULE_KEYS` for a
+    consumer check mode skips: those conditions are evaluated on a result, and a skipped task
+    produces none, so a read inside them cannot happen on the run whose skip result is at
+    issue (#2375).
 
     `block:`, `rescue:` and `always:` are dropped. `walk_with_inherited_when` yields each
     child on its own, so a wrapper that kept them would show a child's expressions twice —
@@ -149,7 +180,8 @@ def expressions(task: dict) -> str:
     a `failed_when:` on its own child, which Ansible never evaluates on a skipped task
     (#2352).
     """
-    body = {key: value for key, value in task.items() if key not in _NESTING_KEYS}
+    skip = set(_NESTING_KEYS) | set(drop)
+    body = {key: value for key, value in task.items() if key not in skip}
     return yaml.safe_dump(body, default_flow_style=False)
 
 
