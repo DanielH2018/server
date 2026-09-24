@@ -21,7 +21,7 @@ from pathlib import Path
 
 from _deploy_sh_fakes import (
     FAKE_RECAP,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
     stub_bin,
@@ -86,7 +86,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 # `_UV` exits 0 for the playbook, so deploy.sh reaches `emit_deploy_annotation`, which writes
 # an `event=deploy` line through `logger`. conftest's autouse `_no_syslog` already intercepts

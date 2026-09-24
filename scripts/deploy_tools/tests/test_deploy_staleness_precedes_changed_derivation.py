@@ -15,132 +15,92 @@ Both halves, per CLAUDE.md: a stale tree must refuse as STALE before the derivat
 half the bug got wrong), and a current tree must still reach the derivation and deploy what it
 finds (the half a naive reorder could delete by refusing everything).
 
+The gates run in process in `deploy_run.py` (#2412), so `run_front_half` injects their
+verdicts; the order they are asked in is the real code.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_changed_derivation.py
 """
 
-import subprocess
-from pathlib import Path
-
-from _deploy_sh_fakes import (
-    FAKE_RECAP,
-    FLOCK_STUB,
-    UV_DEPLOY_LOCKS_ARM,
-    deploy_sh_env,
-    make_snapshot_repo,
-)
-
-_REPO = Path(__file__).resolve().parents[3]
-_DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
+from _deploy_sh_fakes import make_snapshot_repo, run_front_half
 
 _STALE_EXIT = 4
 _BROAD_EXIT = 3
 
-# One `uv` for every helper deploy.sh shells out to. Each call is appended to $DEPLOY_SH_CALLS
-# first, so the ORDER the wrapper asks its questions in is readable even when an early refusal
-# means later helpers never run.
-_UV_STUB = """#!/bin/bash
-echo "$*" >> "$DEPLOY_SH_CALLS"
-case "$*" in
-  *deploy_staleness.py*) exit {stale_exit} ;;
-  *deploy_tags.py*changed*) echo "{derived}"; exit {changed_exit} ;;
-  *deploy_tags.py*validate*) exit 0 ;;
-  *ansible-playbook*) {recap}; exit 0 ;;
-{locks}
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
-
-def _run(tmp_path, *, stale_exit, changed_exit=0, derived="", args=("--changed",)):
-    """Run the real deploy.sh with `uv` and `flock` stubbed; return (result, helper calls).
-
-    Everything under test -- which question the wrapper asks first, and the code it returns --
-    is the real script. Only the helpers' verdicts are injected: a checkout that is behind
-    origin/master while carrying no unmerged commit of its own cannot be produced without
-    moving the checkout.
-    """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(
-        _UV_STUB.format(
-            stale_exit=stale_exit, changed_exit=changed_exit, derived=derived
-        )
-    )
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
-
-    calls = tmp_path / "calls.log"
-    calls.write_text("")
-    # A throwaway repo, not this checkout: deploy.sh snapshots HEAD into a worktree before it
-    # runs anything, and the tests must not register worktrees in the real `.git`.
+def _run(tmp_path, monkeypatch, *, stale, changed=(0, ""), args=("--changed",)):
     repo = make_snapshot_repo(tmp_path / "repo")
-    env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_SH_CALLS=str(calls))
-    result = subprocess.run(
-        [str(_DEPLOY_SH), *args],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
+    code, calls = run_front_half(
+        monkeypatch, repo, list(args), stale=stale, changed=changed
     )
-    return result, [ln for ln in calls.read_text().splitlines() if ln.strip()]
+    return code, [c[0] for c in calls], calls
 
 
 def test_a_stale_tree_deriving_no_tags_refuses_as_stale_rather_than_exiting_zero(
-    tmp_path,
+    tmp_path, monkeypatch
 ):
     """RED half: the shape issue #1593 reported -- silence wearing the success code."""
-    result, calls = _run(tmp_path, stale_exit=1, derived="")
-    assert result.returncode == _STALE_EXIT, (result.returncode, result.stderr)
-    assert not any("deploy_tags.py changed" in c for c in calls), calls
-    assert not any("ansible-playbook" in c for c in calls), calls
+    code, names, _ = _run(tmp_path, monkeypatch, stale=1)
+    assert code == _STALE_EXIT
+    assert "changed" not in names and "exec" not in names, names
 
 
-def test_a_stale_tree_with_a_broad_change_refuses_as_stale_not_as_broad(tmp_path):
+def test_a_stale_tree_with_a_broad_change_refuses_as_stale_not_as_broad(
+    tmp_path, monkeypatch
+):
     """The other pre-gate answer: exit 3 also reached the caller before the staleness read."""
-    result, calls = _run(tmp_path, stale_exit=1, changed_exit=_BROAD_EXIT)
-    assert result.returncode == _STALE_EXIT, (result.returncode, result.stderr)
-    assert not any("deploy_tags.py changed" in c for c in calls), calls
+    code, names, _ = _run(tmp_path, monkeypatch, stale=1, changed=(_BROAD_EXIT, ""))
+    assert code == _STALE_EXIT
+    assert "changed" not in names, names
 
 
-def test_a_current_tree_still_derives_its_tags_and_deploys_them(tmp_path):
+def test_a_current_tree_still_derives_its_tags_and_deploys_them(tmp_path, monkeypatch):
     """CLEAN half: hoisting the gate must not refuse a tree that is fine.
 
     Asserted on the call log as well as the exit code, so the ordering stays checked once
     neither gate refuses -- an exit-code-only test agrees with an implementation that answers
     0 for another reason.
     """
-    result, calls = _run(tmp_path, stale_exit=0, derived="uptime-kuma")
-    assert result.returncode == 0, (result.returncode, result.stderr)
-    staleness = next(i for i, c in enumerate(calls) if "deploy_staleness.py" in c)
-    changed = next(i for i, c in enumerate(calls) if "deploy_tags.py changed" in c)
-    assert staleness < changed, calls
-    assert any("ansible-playbook" in c for c in calls), calls
+    code, names, calls = _run(
+        tmp_path, monkeypatch, stale=0, changed=(0, "uptime-kuma")
+    )
+    assert code is None, names
+    assert names.index("staleness") < names.index("changed") < names.index("exec")
+    # The derived list became the run's --tags, which the locked half receives.
+    assert calls[-1][1][3] == "uptime-kuma", calls[-1]
 
 
-def test_a_current_tree_with_a_broad_change_still_refuses_as_broad(tmp_path):
+def test_a_current_tree_with_a_broad_change_still_refuses_as_broad(
+    tmp_path, monkeypatch
+):
     """The second CLEAN half: exit 3 must survive the reorder on a tree that is not stale."""
-    result, calls = _run(tmp_path, stale_exit=0, changed_exit=_BROAD_EXIT)
-    assert result.returncode == _BROAD_EXIT, (result.returncode, result.stderr)
-    assert any("deploy_tags.py changed" in c for c in calls), calls
-    assert not any("ansible-playbook" in c for c in calls), calls
+    code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(_BROAD_EXIT, ""))
+    assert code == _BROAD_EXIT
+    assert "changed" in names and "exec" not in names, names
 
 
-def test_the_staleness_gate_is_asked_once_not_twice(tmp_path):
+def test_a_current_tree_deriving_no_tags_exits_zero_having_run_nothing(
+    tmp_path, monkeypatch
+):
+    """Nothing changed and nothing is behind: the one case where 0 with no deploy is true."""
+    code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(0, ""))
+    assert code == 0
+    assert "exec" not in names, names
+
+
+def test_the_staleness_gate_is_asked_once_not_twice(tmp_path, monkeypatch):
     """The hoist adds a call site; it must not add a second fetch to every --changed run."""
-    _result, calls = _run(tmp_path, stale_exit=0, derived="uptime-kuma")
-    assert sum(1 for c in calls if "deploy_staleness.py" in c) == 1, calls
+    _code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(0, "uptime-kuma"))
+    assert names.count("staleness") == 1, names
 
 
-def test_skip_staleness_check_still_bypasses_the_hoisted_gate(tmp_path):
+def test_skip_staleness_check_still_bypasses_the_hoisted_gate(tmp_path, monkeypatch):
     """The escape hatch has to reach the new call site too, or --changed can never use it."""
-    result, calls = _run(
+    code, names, _ = _run(
         tmp_path,
-        stale_exit=1,
-        derived="uptime-kuma",
+        monkeypatch,
+        stale=1,
+        changed=(0, "uptime-kuma"),
         args=("--changed", "--skip-staleness-check"),
     )
-    assert result.returncode == 0, (result.returncode, result.stderr)
-    assert not any("deploy_staleness.py" in c for c in calls), calls
+    assert code is None, names
+    assert "staleness" not in names, names

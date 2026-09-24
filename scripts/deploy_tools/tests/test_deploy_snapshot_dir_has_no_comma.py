@@ -18,7 +18,7 @@ from pathlib import Path
 from _deploy_sh_fakes import (
     FAKE_RECAP,
     FLOCK_STUB,
-    UV_DEPLOY_LOCKS_ARM,
+    UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
 )
@@ -35,7 +35,7 @@ case "$*" in
 {locks}
   *) exit 0 ;;
 esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
 
 def test_multi_tag_snapshot_dir_has_no_comma(tmp_path: Path) -> None:

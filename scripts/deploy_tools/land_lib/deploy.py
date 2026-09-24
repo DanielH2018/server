@@ -334,7 +334,7 @@ def deploy_phase(ln: Landing) -> None:
     elif ln.deployed_at:
         # DECIDED: the tick is kicked HERE, after deploy.sh has returned, not in step 4.
         # `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked
-        # before the deploy is one deploy.sh then queues behind inside its own `flock -w 3000`
+        # before the deploy is one deploy.sh then queues behind inside its own `flock -w 3300`
         # -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges
         # the primary while this landing gates, and the gate's own snapshot needs no lock.
         # Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests

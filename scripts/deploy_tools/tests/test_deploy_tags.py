@@ -164,7 +164,7 @@ def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref: [
+        lambda ref, cwd=None: [
             "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
             "ansible/roles/k8s/jellyfin/templates/deployment.yaml.j2",
         ],
@@ -205,7 +205,7 @@ def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref: [
+        lambda ref, cwd=None: [
             "ansible/roles/k8s/manifests/tasks/main.yml",
             "ansible/roles/k8s/jellyfin/defaults/main.yml",
         ],
@@ -226,7 +226,7 @@ def test_changed_refuses_when_only_shared_roles_changed(capsys, monkeypatch):
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref: ["ansible/roles/k8s/manifests/tasks/main.yml"],
+        lambda ref, cwd=None: ["ansible/roles/k8s/manifests/tasks/main.yml"],
     )
     assert deploy_tags.main(["changed"]) == 3
     captured = capsys.readouterr()
@@ -238,7 +238,7 @@ def test_changed_refuses_a_broad_change(capsys, monkeypatch):
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref: ["ansible/inventory/host_vars/daniel-box.yml"],
+        lambda ref, cwd=None: ["ansible/inventory/host_vars/daniel-box.yml"],
     )
     assert deploy_tags.main(["changed"]) == 3
     captured = capsys.readouterr()
@@ -250,7 +250,7 @@ def test_changed_refuses_a_broad_change(capsys, monkeypatch):
 
 
 def test_changed_reports_no_files_differ(capsys, monkeypatch):
-    monkeypatch.setattr(deploy_tags, "_git_diff_paths", lambda ref: [])
+    monkeypatch.setattr(deploy_tags, "_git_diff_paths", lambda ref, cwd=None: [])
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
     assert captured.out == ""
@@ -262,7 +262,7 @@ def test_changed_warns_but_still_exits_zero_on_a_docs_only_change(capsys, monkey
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
-        lambda ref: ["ansible/roles/containers/dozzle/tasks/main.yml"],
+        lambda ref, cwd=None: ["ansible/roles/containers/dozzle/tasks/main.yml"],
     )
     assert deploy_tags.main(["changed"]) == 0
     captured = capsys.readouterr()
@@ -274,7 +274,7 @@ def test_changed_warns_but_still_exits_zero_on_a_docs_only_change(capsys, monkey
 def test_changed_default_ref_is_origin_master():
     parser_ref = []
 
-    def fake_git_diff(ref):
+    def fake_git_diff(ref, cwd=None):
         parser_ref.append(ref)
         return []
 

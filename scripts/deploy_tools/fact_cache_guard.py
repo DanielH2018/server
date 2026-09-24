@@ -33,7 +33,7 @@ any interpreter under a `.claude/worktrees/<other>` is stale here, whether or no
 currently resolves. An interpreter in the primary checkout, or in OUR worktree, is fine.
 
 WHY IT CLEARS RATHER THAN REFUSES. This is a cache; discarding it costs one re-gather. A
-refusal would only tell the operator to run the `rm` themselves. `deploy.sh` therefore calls
+refusal would only tell the operator to run the `rm` themselves. `deploy_run.py`, the front half of `deploy.sh`, therefore calls
 this with --clear in its preflight. Run without --clear it reports and exits 1, which is what
 the tests and an interactive check use.
 
@@ -178,7 +178,7 @@ def our_worktree_name(repo_root: Path) -> str | None:
     return worktree_name(str(repo_root.resolve()))
 
 
-def main() -> int:
+def main(argv: list[str] | None = None) -> int:
     """Scan the fact cache for entries pinning a gone or foreign worktree, and report them.
 
     Exits 0 when nothing is stale, 1 when stale entries were found and not cleared (or a
@@ -202,7 +202,7 @@ def main() -> int:
         default=REPO,
         help="the checkout this deploy renders from (default: this script's repo)",
     )
-    args = ap.parse_args()
+    args = ap.parse_args(argv)
 
     repo_root = args.repo_root.resolve()
     cache_dir = args.cache_dir or cache_dir_from_cfg(repo_root)

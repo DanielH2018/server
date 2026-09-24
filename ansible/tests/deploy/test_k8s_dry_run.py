@@ -38,7 +38,6 @@ _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DEPLOY = _REPO / "ansible/deploy.yml"
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
-_DEPLOY_SH = _REPO / "scripts/deploy.sh"
 
 _REAL_DIR = "/etc/rancher/k3s/manifests"
 _GUARD = "not k8s_dry_run | bool"
@@ -559,11 +558,12 @@ def test_no_mutate_covers_check_mode_and_dry_run() -> None:
 
 
 def test_wrapper_translates_dry_run_and_skips_the_lock() -> None:
-    body = _DEPLOY_SH.read_text()
-    assert "-e k8s_dry_run=true" in body, (
-        "scripts/deploy.sh --dry-run no longer sets the var. ansible-playbook has no --dry-run "
-        "of its own, so the flag would be passed through and rejected."
-    )
-    assert 'dry_run" == 1' in body, (
-        "the wrapper takes the git-tree lock for a run that writes nothing"
-    )
+    import deploy_run
+
+    dry, plain = (deploy_run.Plan(repo_root=_REPO) for _ in range(2))
+    deploy_run.parse_wrapper_flags(["--dry-run", "--tags", "n8n"], dry)
+    deploy_run.parse_wrapper_flags(["--tags", "n8n"], plain)
+    assert dry.args[:2] == ["-e", "k8s_dry_run=true"]
+    # ansible-playbook has no --dry-run, and a run that writes nothing takes no lock.
+    assert deploy_run.exec_target(dry)[:3] == ["uv", "run", "ansible-playbook"]
+    assert deploy_run.exec_target(plain)[0] == str(deploy_run.DEPLOY_LOCKED)

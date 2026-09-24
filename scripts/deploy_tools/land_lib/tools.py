@@ -254,7 +254,7 @@ def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
     on the first landing of every new service, which is the landing that most needs gating.
 
     UV_PROJECT_ENVIRONMENT is pointed at the primary's `.venv` for the life of the snapshot,
-    for the reason `deploy.sh`'s `run_playbook_in_snapshot` sets it: `uv run` resolves its
+    for the reason `deploy_locked.sh`'s `run_playbook_in_snapshot` sets it: `uv run` resolves its
     project from the working directory, and a snapshot carries no `.venv`, so the probe would
     otherwise build a fresh environment inside a directory removed seconds later.
 
@@ -266,11 +266,11 @@ def gate_snapshot(primary: Path, sha: str) -> Iterator[Path | None]:
     for its entire unit run, so the tick most landings race is exactly when the gate would
     have fallen back to the primary and read `skipped` on a role the primary has not pulled.
 
-    DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy.sh's
+    DECIDED: under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. deploy_locked.sh's
     reaper collects any directory there whose `.deploy-owner.lock` nobody holds -- and it
     creates that lock file itself to ask, so an unowned live gate snapshot would be reaped
     mid-gate by a concurrent deploy. Outside the root the reaper never looks, and the prune at
-    `deploy.sh:256` only deregisters worktrees whose directory is already gone.
+    `deploy_locked.sh:reap_dead_snapshots` only deregisters worktrees whose directory is already gone.
 
     Yields None, never raises, when the worktree could not be created. The caller decides what
     that means -- it must NOT assume the primary can answer instead (see

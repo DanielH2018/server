@@ -22,7 +22,8 @@ _REPO = REPO
 _ROLE = _REPO / "ansible/roles/k8s/claude-otel"
 _GRAFANA = _ROLE / "templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
-_DEPLOY_SH = _REPO / "scripts/deploy.sh"
+# The locked half behind the deploy.sh shim, which emits the annotation until #2412 ports it.
+_DEPLOY_SH = _REPO / "scripts/deploy_tools/deploy_locked.sh"
 # emit_deploy_annotation lives in the deployer's I/O module, not in its entry point.
 _GITOPS = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 

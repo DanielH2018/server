@@ -29,8 +29,9 @@ _HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
 # cannot import `deploy_git.HOLD_PLANE_SEP`, which pytest asserts this matches.
 HOLD_PLANE_SEP = "; "
 
-# `deploy_run.py` is the Python the `deploy.sh` shim execs once #2412's port lands: from then
-# a deploy's `ps` args name it, and no process says `deploy.sh` at all.
+# `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`, and that `uv` process
+# stays the family root while the locked half runs under it (#2412), so no process says
+# `deploy.sh` at all.
 _RUN_RE = re.compile(r"\b(land\.py|deploy\.sh|deploy_run\.py|ansible-playbook)\b")
 _PR_RE = re.compile(r"--pr\s+(\d+)")
 _TAGS_RE = re.compile(r"--tags[= ]+(\S+)")

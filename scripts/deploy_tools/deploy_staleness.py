@@ -40,7 +40,8 @@ NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook directly
 (roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls
 before deploying. This guard covers the interactive and agent path, where the failure was.
 
-Used by scripts/deploy.sh, which maps a non-zero exit here to its own refusal.
+Imported by scripts/deploy_tools/deploy_run.py, the front half of scripts/deploy.sh, which
+maps a non-zero return here to its own refusal.
 """
 
 import argparse

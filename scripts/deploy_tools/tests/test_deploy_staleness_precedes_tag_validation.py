@@ -15,119 +15,66 @@ Both halves, per CLAUDE.md: a stale tree carrying an unknown tag must refuse as 
 half the bug got wrong), and an unknown tag on a current tree must still refuse as a TAG MISS
 (the half a naive reorder could delete by never reaching the tag check at all).
 
+The gates run in process in `deploy_run.py` (#2412), so `run_front_half` injects their
+verdicts; the order they are asked in is the real code.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_staleness_precedes_tag_validation.py
 """
 
-import subprocess
-from pathlib import Path
-
-from _deploy_sh_fakes import (
-    FAKE_RECAP,
-    FLOCK_STUB,
-    UV_DEPLOY_LOCKS_ARM,
-    deploy_sh_env,
-    make_snapshot_repo,
-)
-
-_REPO = Path(__file__).resolve().parents[3]
-_DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
+from _deploy_sh_fakes import make_snapshot_repo, run_front_half
 
 _STALE_EXIT = 4
 _TAG_MISS_EXIT = 2
 
-# One `uv` for every helper deploy.sh shells out to. Each call is appended to $DEPLOY_SH_CALLS
-# first, so the ORDER the wrapper asks its questions in is readable even when an early refusal
-# means later helpers never run.
-_UV_STUB = """#!/bin/bash
-echo "$*" >> "$DEPLOY_SH_CALLS"
-case "$*" in
-  *deploy_staleness.py*) exit {stale_exit} ;;
-  *deploy_tags.py*validate*) exit {validate_exit} ;;
-  *ansible-playbook*) {recap}; exit 0 ;;
-{locks}
-  *) exit 0 ;;
-esac
-""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_DEPLOY_LOCKS_ARM)
 
-
-def _run(tmp_path, *, stale_exit, validate_exit, tag="definitely-not-a-real-service"):
-    """Run the real deploy.sh with `uv` and `flock` stubbed; return (result, helper calls).
-
-    Everything under test -- the order of the two gates and the code each returns -- is the real
-    script. Only the helpers' verdicts are injected, because the two states this pins (a tree
-    behind origin/master, a tag absent from containers_list) cannot both be produced in a
-    checkout without moving the checkout.
-    """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(
-        _UV_STUB.format(stale_exit=stale_exit, validate_exit=validate_exit)
-    )
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
-
-    calls = tmp_path / "calls.log"
-    calls.write_text("")
-    # A throwaway repo, not this checkout: deploy.sh snapshots HEAD into a worktree before it
-    # runs anything, and the tests must not register worktrees in the real `.git`.
+def _run(
+    tmp_path, monkeypatch, *, stale, validate, tag="definitely-not-a-real-service"
+):
     repo = make_snapshot_repo(tmp_path / "repo")
-    env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_SH_CALLS=str(calls))
-    argv = [str(_DEPLOY_SH)] + (["--tags", tag] if tag else [])
-    result = subprocess.run(
-        argv,
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        timeout=120,
-        check=False,
+    argv = ["--tags", tag] if tag else []
+    code, calls = run_front_half(
+        monkeypatch, repo, argv, stale=stale, validate=validate
     )
-    return result, [ln for ln in calls.read_text().splitlines() if ln.strip()]
+    return code, [c[0] for c in calls], calls
 
 
-def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path):
+def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path, monkeypatch):
     """RED half: the shape issue #1566 reported -- a new role's tag on a not-yet-pulled tree."""
-    result, calls = _run(tmp_path, stale_exit=1, validate_exit=1)
-    assert result.returncode == _STALE_EXIT, result.stderr
+    code, names, _ = _run(tmp_path, monkeypatch, stale=1, validate=1)
+    assert code == _STALE_EXIT
     # The tag was never judged against the wrong tree, and nothing was deployed.
-    assert not any("deploy_tags.py validate" in c for c in calls), calls
-    assert not any("ansible-playbook" in c for c in calls), calls
+    assert "validate" not in names and "exec" not in names, names
 
 
-def test_an_unknown_tag_on_a_current_tree_is_still_a_tag_miss(tmp_path):
+def test_an_unknown_tag_on_a_current_tree_is_still_a_tag_miss(tmp_path, monkeypatch):
     """CLEAN half: reordering must not swallow the tag check it moved past."""
-    result, calls = _run(tmp_path, stale_exit=0, validate_exit=1)
-    assert result.returncode == _TAG_MISS_EXIT, result.stderr
-    assert any("deploy_tags.py validate" in c for c in calls), calls
-    assert not any("ansible-playbook" in c for c in calls), calls
+    code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=1)
+    assert code == _TAG_MISS_EXIT
+    assert "validate" in names and "exec" not in names, names
 
 
-def test_the_staleness_gate_is_told_which_tags_are_being_deployed(tmp_path):
+def test_the_staleness_gate_is_told_which_tags_are_being_deployed(
+    tmp_path, monkeypatch
+):
     """The gate refuses only on a commit reaching what this run renders, so it needs the tags.
 
     Both halves: a tagged run hands them over, and an untagged run (the wrapper's own
     --changed path reaches the gate before deriving any) asks the unscoped question.
     """
     tagged_dir, untagged_dir = tmp_path / "tagged", tmp_path / "untagged"
-    tagged_dir.mkdir()
-    untagged_dir.mkdir()
-    _, tagged = _run(tagged_dir, stale_exit=0, validate_exit=0, tag="uptime-kuma")
-    gate = next(c for c in tagged if "deploy_staleness.py" in c)
-    assert "--tags uptime-kuma" in gate, tagged
-    _, untagged = _run(untagged_dir, stale_exit=0, validate_exit=0, tag=None)
-    assert "--tags" not in next(c for c in untagged if "deploy_staleness.py" in c)
+    _, _, tagged = _run(tagged_dir, monkeypatch, stale=0, validate=0, tag="uptime-kuma")
+    assert next(c for c in tagged if c[0] == "staleness")[1] == ("uptime-kuma",)
+    _, _, untagged = _run(untagged_dir, monkeypatch, stale=0, validate=0, tag=None)
+    assert next(c for c in untagged if c[0] == "staleness")[1] == ()
 
 
-def test_the_staleness_question_is_asked_before_the_tag_question(tmp_path):
+def test_the_staleness_question_is_asked_before_the_tag_question(tmp_path, monkeypatch):
     """Both gates pass: the order they were asked in is what this pins.
 
     Asserted on the call log rather than on an exit code, so the ordering stays checked even
     once neither gate refuses -- an exit-code-only test agrees with an implementation that
     happens to answer 4 for another reason.
     """
-    result, calls = _run(tmp_path, stale_exit=0, validate_exit=0, tag="uptime-kuma")
-    assert result.returncode == 0, result.stderr
-    staleness = next(i for i, c in enumerate(calls) if "deploy_staleness.py" in c)
-    validate = next(i for i, c in enumerate(calls) if "deploy_tags.py validate" in c)
-    assert staleness < validate, calls
+    code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=0, tag="uptime-kuma")
+    assert code is None, names
+    assert names.index("staleness") < names.index("validate") < names.index("exec")

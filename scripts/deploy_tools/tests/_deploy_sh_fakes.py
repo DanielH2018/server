@@ -47,13 +47,41 @@ shift
 exec "$@"
 """
 
-# The `case` arm every `uv` stub carries for the wrapper's `deploy_locks.py plan` call. It
-# runs the REAL module -- `shift 2` drops `run python`, and the interpreter is the one running
-# the tests -- rather than scripting a lock list: a stub that printed its own order would make
-# the concurrency tests flock whatever the stub said, and prove nothing about the deployer's
-# names. `deploy_sh_env` sets DEPLOY_TEST_PYTHON. A test that wants a BROKEN plan writes its
-# own arm ahead of this one.
-UV_DEPLOY_LOCKS_ARM = '  *deploy_locks.py*) shift 2; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
+# The `case` arms every `uv` stub carries for the wrapper's own two `uv run` calls, both run
+# for REAL under the interpreter running the tests (`deploy_sh_env` sets DEPLOY_TEST_PYTHON):
+#
+# - `deploy.sh` is a shim that execs `uv run --project <dir> python <deploy_run.py> ...`, so
+#   without this arm a stub's `*) exit 0` would swallow the whole run and report success.
+#   `shift 4` drops `run --project <dir> python`, the shim's exact prefix.
+# - `deploy_locks.py plan` is not scripted either: a stub that printed its own lock order
+#   would make the concurrency tests flock whatever the stub said, and prove nothing about
+#   the deployer's names. `shift 2` drops `run python`.
+#
+# A test that wants a BROKEN plan writes its own `deploy_locks.py` arm and carries
+# UV_DEPLOY_RUN_ARM alone.
+UV_DEPLOY_RUN_ARM = '  *deploy_run.py*) shift 4; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
+UV_WRAPPER_ARMS = (
+    UV_DEPLOY_RUN_ARM
+    + '\n  *deploy_locks.py*) shift 2; exec "$DEPLOY_TEST_PYTHON" "$@" ;;'
+)
+
+# The tags the throwaway repo's `containers_list` declares. `deploy_run.py` validates
+# `--tags` IN PROCESS against the caller's own host_vars, so a stubbed `uv` no longer answers
+# for it: a tag a test passes must be declared here, or the run refuses with exit 2.
+TEST_SERVICE_TAGS = (
+    "alpha",
+    "authelia",
+    "beta",
+    "jellyfin",
+    "n8n",
+    "pi-peer-backup",
+    "pihole",
+    "radarr",
+    "sonarr",
+    "traefik",
+    "uptime-kuma",
+    "x",
+)
 
 # What a stubbed `ansible-playbook` must print for `deploy.sh` to count the run as a deploy.
 # The wrapper reads the PLAY RECAP and refuses (exit 78) when it names no host -- ansible
@@ -108,7 +136,12 @@ def make_snapshot_repo(path: Path) -> Path:
     Carries `ansible/deploy.yml` because that is the argument the wrapper hands
     ansible-playbook. The content never matters: every test that uses this stubs `uv`. Carries
     the real `deploy_locks.py` too, because the wrapper reads its lock list from that module
-    at a checkout-relative path and the stubbed `uv` (UV_DEPLOY_LOCKS_ARM) runs it for real.
+    at a checkout-relative path and the stubbed `uv` (UV_WRAPPER_ARMS) runs it for real.
+
+    Two files exist for the helpers `deploy_run.py` calls in process against this checkout:
+    a host_vars declaring TEST_SERVICE_TAGS, for the tag validation, and an `ansible.cfg`
+    pointing the fact cache at a sibling directory, so the fact-cache preflight clears
+    nothing in the real `~/.cache/ansible/facts`.
     """
     path.mkdir(parents=True, exist_ok=True)
     env = git_free_env()
@@ -121,6 +154,15 @@ def make_snapshot_repo(path: Path) -> Path:
         subprocess.run(args, cwd=path, env=env, check=True, capture_output=True)
     (path / "ansible").mkdir(exist_ok=True)
     (path / "ansible" / "deploy.yml").write_text("---\n[]\n")
+    host_vars = path / "ansible" / "inventory" / "host_vars"
+    host_vars.mkdir(parents=True, exist_ok=True)
+    (host_vars / "daniel-box.yml").write_text(
+        "containers_list:\n"
+        + "".join(f"  - {{ name: {tag} }}\n" for tag in TEST_SERVICE_TAGS)
+    )
+    (path / "ansible.cfg").write_text(
+        f"[defaults]\nfact_caching_connection = {path.parent / 'fact-cache'}\n"
+    )
     (path / DEPLOY_LOCKS_REL).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(_REPO / DEPLOY_LOCKS_REL, path / DEPLOY_LOCKS_REL)
     subprocess.run(
@@ -166,3 +208,67 @@ def detached_pid(output: str) -> int:
     match = _DETACHED_PID.search(output)
     assert match, f"deploy.sh --detach printed no background pid:\n{output}"
     return int(match.group(1))
+
+
+class Execed(Exception):
+    """What `run_front_half`'s fake exec raises; `argv` is the command the run became."""
+
+    def __init__(self, argv: list[str]):
+        super().__init__(argv)
+        self.argv = argv
+
+
+def run_front_half(
+    monkeypatch,
+    repo: Path,
+    argv: list[str],
+    *,
+    stale: int = 0,
+    validate: int = 0,
+    changed: tuple[int, str] = (0, ""),
+) -> tuple[int | None, list[tuple]]:
+    """Run `deploy_run.run(argv)` in `repo` with each helper replaced by a recorder.
+
+    The front half calls its helpers in process, so a stubbed `uv` cannot answer for them:
+    `deploy_run.Tools` is the seam that injects their verdicts instead. The argument passes, the `--at`
+    resolution and the order of the gates are the real code, run against a real repo.
+
+    Returns the refusal code (None when the run reached its exec) and the calls in order:
+    `("staleness", tags, at_sha)`, `("validate", tags, at_sha)`, `("changed", ref)`,
+    `("fact_cache",)` and `("exec", argv)`.
+    """
+    import deploy_run
+
+    # Under a prek hook GIT_DIR points at the REAL repository and beats the working directory.
+    for key in [k for k in os.environ if k.startswith("GIT_")]:
+        monkeypatch.delenv(key)
+    monkeypatch.chdir(repo)
+    calls: list[tuple] = []
+
+    def staleness(plan):
+        calls.append(("staleness", tuple(plan.tags), plan.at_sha))
+        return stale
+
+    def validate_tags(plan):
+        calls.append(("validate", tuple(plan.tags), plan.at_sha))
+        return validate
+
+    def derive(plan):
+        calls.append(("changed", plan.changed_ref))
+        return changed
+
+    def fake_exec(target):
+        calls.append(("exec", target))
+        raise Execed(target)
+
+    tools = deploy_run.Tools(
+        staleness=staleness,
+        validate=validate_tags,
+        changed=derive,
+        clear_fact_cache=lambda plan: calls.append(("fact_cache",)),
+        exec_argv=fake_exec,
+    )
+    try:
+        return deploy_run.run(list(argv), tools), calls
+    except Execed:
+        return None, calls
