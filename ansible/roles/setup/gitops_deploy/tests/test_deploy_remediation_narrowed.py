@@ -202,3 +202,36 @@ def test_a_task_notifying_a_restart_outside_server_yml_would_be_found():
     dumped = yaml.safe_dump({k: v for k, v in task.items() if k != "notify"})
     assert not any(m in dumped for m in markers), "the marker arm would have caught it"
     assert set(task["notify"]) & _restart_handlers()
+
+
+# ── #2349: the clear command names the tags the apply beside it ran ─────────────────────
+
+
+def test_a_narrowed_apply_prints_a_clear_that_names_what_it_applied():
+    """A bare clear drops the whole line, and the row can grow between print and run.
+
+    A second PR touching the same role widens the row to `coredns,kubeconfig` before the
+    operator clears. The bare command would take `coredns` with it, leaving that change
+    merged, unapplied and recorded nowhere.
+    """
+    cmd = manual_plane_remediation({"k3s"}, {"k3s": frozenset({"kubeconfig"})})
+    assert "clear-manual-plane k3s --applied kubeconfig" in cmd
+
+
+def test_a_whole_role_apply_prints_the_bare_clear():
+    """The rejecting half: a whole-role apply covers whatever the row gained, so it takes it.
+
+    `--applied` there would be wrong in the other direction — it would leave a line pending
+    for a tag the operator just ran.
+    """
+    cmd = manual_plane_remediation({"k3s"}, {})
+    assert "clear-manual-plane k3s`" in cmd
+    assert "--applied" not in cmd
+
+
+def test_two_roles_keep_the_placeholder_and_still_say_applied_when_one_narrowed():
+    """The text names one command for a role SET, so the role stays a placeholder."""
+    cmd = manual_plane_remediation(
+        {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
+    )
+    assert "clear-manual-plane <role> --applied <the tags you ran>" in cmd

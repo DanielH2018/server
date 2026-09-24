@@ -51,12 +51,12 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (
     _BROAD_MANUAL_PREFIXES,
-    MANUAL_PLANE_CLEAR_CMD,
     broad_remediation,
     expand_build_couplings,
     k8s_remediation,
     services_from_changed_paths,
     setup_role_playbook,
+    manual_plane_clear_for,
     setup_role_tag,
 )
 
@@ -377,7 +377,9 @@ def plane_note(
         # a range carrying BOTH a bring-up playbook and an unapplyable role parks outright and
         # writes no marker, so printing the clear command there sends an operator after a file
         # that does not exist.
-        notes.append(f"Then clear the deployer's marker: `{MANUAL_PLANE_CLEAR_CMD}`.")
+        # `--applied` where the apply above was narrowed; see `manual_plane_clear_for` (#2349).
+        cmd = manual_plane_clear_for(unroutable, narrow_tags or {})
+        notes.append(f"Then clear the deployer's marker: `{cmd}`.")
     if cs.secrets:
         # DECIDED: fire on ANY change to secrets.yml, and never try to name which keys moved.
         # Naming them means decrypting both revisions, and no plaintext may reach a terminal, a

@@ -311,7 +311,10 @@ is about the half that did not.
 `/var/lib/gitops-deploy/manual_plane`, which pages **GitOps Deploy — Status** six hours later.
 So the printed remediation ends with `uv run python scripts/deploy_tools/gitops_state.py
 clear-manual-plane <role>`, and running the playbook without it leaves a page over work that
-is already live. A bring-up playbook gets no such line: the tick parks on those and writes no
+is already live. Where the apply it printed was narrowed, the clear carries `--applied
+<tags>`: the row can gain a tag between the note and your clear — a second PR touching the
+same role — and the bare form would drop that tag with yours. Run the printed pair as
+printed. A bring-up playbook gets no such line: the tick parks on those and writes no
 marker. Nothing is queued behind either — a landing behind a recorded role reads `settled`,
 because the tree converged.
 

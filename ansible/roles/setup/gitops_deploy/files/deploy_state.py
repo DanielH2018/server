@@ -257,6 +257,36 @@ class DeployerState:
             return
         self.write("manual_plane_tags", format_manual_plane_tags(pending))
 
+    def clear_manual_plane_tags_applied(
+        self, role: str, applied: frozenset[str]
+    ) -> frozenset[str] | None:
+        """Drop `applied` from `role`'s row, keeping the line when work is left on it.
+
+        Args:
+            role: the role, under the `--tags` value that selects it.
+            applied: the tags the operator actually ran.
+
+        Returns:
+            The tags still pending, or None when the whole line went — which is also what a
+            role that was not pending returns.
+
+        The operator's narrowed clear (#2349). `land.sh` prints `--tags kubeconfig` and the
+        clear beside it, and between the two a second range can widen the row to
+        `coredns,kubeconfig`. A whole-line clear there drops `coredns` with it, leaving that
+        change merged, unapplied and recorded nowhere. A row the apply covered entirely, and a
+        row that is empty — the refusal that means the whole role — still take the line.
+
+        `clear_manual_plane` is deliberately left alone: `deploy_defer.unrecord` and
+        `clear_manual_plane_applied` both depend on it dropping the line and the row together.
+        """
+        row = self.manual_plane_tags_pending().get(role)
+        remaining = (row - applied) if row else frozenset()
+        if not remaining:
+            self.clear_manual_plane(role)
+            return None
+        self.restore_manual_plane_tags(role, remaining)
+        return remaining
+
     def clear_manual_plane_applied(self, playbook: str, tags: list[str]) -> list[str]:
         """Drop the pending roles this apply covered, and return them.
 

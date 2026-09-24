@@ -188,7 +188,9 @@ Say which of these applies, then stop:
   `deploy_logic.py` has the evidence.)
 - The host's `manual_plane` marker names a setup role the deployer cannot apply. The range is
   merged, so nothing is queued behind it; the role needs its playbook by hand, then
-  `gitops_state.py clear-manual-plane <role>`. Another session's is theirs to clear.
+  `gitops_state.py clear-manual-plane <role>` — add `--applied <tags>` where the apply you ran
+  was narrowed, so a tag a later range added to the row stays pending rather than being
+  cleared with yours. Another session's is theirs to clear.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.

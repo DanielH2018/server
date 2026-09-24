@@ -137,8 +137,9 @@ def marker_key(role: str) -> str:
 # the Alloy shipper tails it into Loki with the rest of /var/log/syslog.
 JOURNAL_TAG = "gitops-state"
 
-# What `clear_manual_plane` calls with the role and the line it dropped (None for a no-op).
-Journal = Callable[[str, "ManualPlaneEntry | None"], None]
+# What `clear_manual_plane` calls with the role, the line it dropped (None when it kept the
+# line or found none) and the tags still pending after the clear.
+Journal = Callable[[str, "ManualPlaneEntry | None", frozenset], None]
 
 
 def operator() -> str:
@@ -149,6 +150,7 @@ def operator() -> str:
 def journal_clear(
     role: str,
     dropped: ManualPlaneEntry | None,
+    remaining: frozenset[str] = frozenset(),
     run: Callable[..., object] = subprocess.run,
 ) -> None:
     """Write the one line that says an operator cleared `role`, who, and from where.
@@ -170,6 +172,10 @@ def journal_clear(
         f"user={operator()}",
         f"cwd={os.getcwd()}",
     ]
+    if remaining:
+        # A narrowed clear that kept the line. Without this field the journal would read like
+        # a no-op clear, when what happened is that the role is STILL pending for other tags.
+        fields.append(f"still_pending={','.join(sorted(remaining))}")
     if dropped:
         fields.append(f"origin={dropped.origin}")
         fields.append(f"playbook={dropped.playbook}")
@@ -191,6 +197,7 @@ def clear_manual_plane(
     lock_path: str | None = None,
     lock_wait_s: float | None = None,
     journal: Journal | None = None,
+    applied: frozenset[str] = frozenset(),
 ) -> int:
     """Drop `role`'s pending line. Exit 0 whether or not there was one to drop.
 
@@ -198,8 +205,12 @@ def clear_manual_plane(
       lock_path: the tree lock to serialise the rewrite against. None reads
         `deploy_locks.TREE_LOCK`, the path every writer of this host's checkout takes.
       lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
-      journal: what records the clear, called once with the role and the line it dropped
-        (None for a no-op). None means `journal_clear`, the real `logger` line.
+      journal: what records the clear, called once with the role, the line it dropped (None
+        when it kept the line or found none) and the tags still pending. None means
+        `journal_clear`, the real `logger` line.
+      applied: the tags the operator actually ran, from `--applied`. Empty means a whole-role
+        apply, which clears the line however the row has grown; a narrowed apply drops only
+        its own tags and leaves the line standing for anything a later range added (#2349).
     """
     key = marker_key(role)
     try:
@@ -209,7 +220,12 @@ def clear_manual_plane(
             dropped = next(
                 (e for e in state.manual_plane_pending() if e.role == key), None
             )
-            cleared = state.clear_manual_plane(key)
+            if applied:
+                remaining = state.clear_manual_plane_tags_applied(key, applied)
+                cleared = dropped is not None and remaining is None
+            else:
+                remaining = None
+                cleared = state.clear_manual_plane(key)
     except LockBusy as busy:
         print(
             f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
@@ -234,7 +250,16 @@ def clear_manual_plane(
         return 1
     # After the lock is released and only once the rewrite happened: a refusal above writes
     # no line, because a line claiming a clear that never happened is worse than none.
-    (journal_clear if journal is None else journal)(key, dropped if cleared else None)
+    (journal_clear if journal is None else journal)(
+        key, dropped if cleared else None, remaining or frozenset()
+    )
+    if remaining:
+        print(
+            f"cleared {','.join(sorted(applied))} from {role}'s row in "
+            f"{state.path('manual_plane_tags')}; {role} is STILL pending for "
+            f"{','.join(sorted(remaining))} — a later range added it, so apply that too"
+        )
+        return 0
     if not cleared:
         print(
             f"{role} is not pending in {state.path('manual_plane')} — nothing to clear"
@@ -316,6 +341,15 @@ def main(
         help="drop one setup role's pending line, AFTER applying it by hand",
     )
     clear.add_argument("role", help="the setup role, e.g. k3s or common")
+    clear.add_argument(
+        "--applied",
+        default=None,
+        help=(
+            "the comma-separated --tags value you actually ran. Omit it after a whole-role "
+            "apply; pass it after a narrowed one, so a tag a later range added to the row "
+            "stays pending instead of being cleared with yours"
+        ),
+    )
     sub.add_parser(
         "clear-contention",
         help="drop the busy-service-lock streak marker, AFTER ending the lock's holder",
@@ -328,7 +362,10 @@ def main(
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.
         parser.error(f"no handler for {args.command}")
-    return clear_manual_plane(state, args.role, lock_path, lock_wait_s, journal)
+    applied = frozenset(t for t in (args.applied or "").split(",") if t)
+    return clear_manual_plane(
+        state, args.role, lock_path, lock_wait_s, journal, applied
+    )
 
 
 if __name__ == "__main__":

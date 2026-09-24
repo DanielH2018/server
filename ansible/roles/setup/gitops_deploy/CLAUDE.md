@@ -173,7 +173,9 @@ Each arm below is a rule and the function that holds it. The record page has the
     tag cannot be derived fast-forwards and is recorded in `manual_plane`** instead (`k3s`,
     `common`; the `DECIDED:` in `deploy_defer.py`'s docstring) — one line per role, first-seen
     stamp kept, logged on EVERY later tick, paged once per SHA, cleared by the tick applying the
-    role's real playbook or by `gitops_state.py clear-manual-plane <role>`. **Its remediation
+    role's real playbook or by `gitops_state.py clear-manual-plane <role>` — with `--applied
+    <tags>` after a NARROWED apply, which drops only those tags and leaves the line standing
+    for anything a later range added to the row (#2349). **Its remediation
     names the NARROWEST tag the change needs** (#2307), derived by `deploy_defer.record` into the
     `manual_plane_tags` sidecar every surface READS; on doubt, the role tag plus
     `deploy_remediation.maximal_tag_warning`. A line pending with no row stays at the role

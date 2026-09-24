@@ -174,6 +174,31 @@ CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
 
+# What the `--applied` value reads as in the generic command, where the surface knows a
+# narrowing was printed but is naming a role placeholder rather than one role.
+APPLIED_PLACEHOLDER = "<the tags you ran>"
+
+
+def manual_plane_clear_cmd(role: str = "<role>", tags=()) -> str:
+    """The clear command to print beside an apply of `role` with `tags`.
+
+    A bare clear drops the role's whole line, which is right after a WHOLE-ROLE apply and
+    wrong after a narrowed one: a second range can widen the row between the moment a surface
+    prints the command and the moment an operator runs it, and the bare form would then drop
+    a tag nobody applied (#2349). So a narrowed apply prints `--applied <those tags>`, and the
+    clear keeps whatever the row has gained since.
+
+    Args:
+        role: the role, under the `--tags` value that selects it. The default is the
+            placeholder the generic multi-role remediation prints.
+        tags: the tags the apply command names. Empty, or just the role tag, is a whole-role
+            apply and gets the bare form.
+    """
+    cmd = MANUAL_PLANE_CLEAR_CMD.replace("<role>", role)
+    applied = [t for t in sorted(frozenset(tags)) if t != role]
+    return f"{cmd} --applied {','.join(applied)}" if applied else cmd
+
+
 # The setup roles whose whole-role tag is a blunt instrument, and the narrowed tags that still
 # reach the tasks that make it one. `--tags k3s` reapplies MetalLB, Longhorn, the backup
 # targets, the crons, CoreDNS and the node config; every task in `roles/setup/k3s/tasks/

@@ -50,10 +50,10 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
-    MANUAL_PLANE_CLEAR_CMD,
     MARKERS,
     STATE_DIR,
     parse_contention,
+    manual_plane_clear_cmd,
     maximal_apply_warning,
     parse_manual_plane,
     parse_manual_plane_tags,
@@ -214,7 +214,7 @@ def manual_plane_lines(marker, now, tags_marker=None):
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
             f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
-            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', e.role)}`"
+            f"`{manual_plane_clear_cmd(e.role, selected)}`"
         )
     return lines
 

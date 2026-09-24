@@ -194,9 +194,28 @@ ansible-playbook ansible/k3s-bringup.yml --tags k3s
 uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s
 ```
 
+**After a NARROWED apply, pass `--applied` naming the tags you ran.** A bare clear drops the
+role's whole line, and the row can grow between the moment a surface printed the command and
+the moment you run it — a second PR touching the same role widens it to
+`coredns,kubeconfig`, and the bare form takes `coredns` with yours. That change is then
+merged, unapplied, and recorded nowhere:
+
+```bash
+ansible-playbook ansible/k3s-bringup.yml --tags kubeconfig
+uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s --applied kubeconfig
+```
+
+The clear then keeps the line and prints what is still pending. Every surface that prints a
+narrowed apply prints the matching `--applied` beside it, so following the printed pair is
+enough; the flag is for the case where you narrowed the apply yourself. A clear whose
+`--applied` covers the whole row takes the line, and so does one against a row the deployer
+could not narrow — an empty row means the whole role, which any apply that got you here
+covered.
+
 The clear writes one line to the journal, `journalctl -t gitops-state`, naming the role, the
-user who ran it, and the origin SHA of the line it dropped. A clear with no apply behind it
-leaves that trace and nothing else.
+user who ran it, the origin SHA of the line it dropped and — for a narrowed clear that kept
+the line — the tags still pending. A clear with no apply behind it leaves that trace and
+nothing else.
 
 The deployer clears a line itself when a tick applies that role's own playbook and tag
 (`DeployerState.clear_manual_plane_applied`). No role reaches that today, since the tick runs
@@ -603,8 +622,9 @@ stay).
     same range that DID apply still records its own. Three things clear a line: applying the
     role's real playbook and tag through the tick (`DeployerState.clear_manual_plane_applied`,
     which no role reaches today because the tick runs neither playbook), an operator running
-    `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>`, and nothing
-    else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
+    `uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane <role>` (with
+    `--applied <tags>` after a narrowed apply, which drops only those tags and keeps the line
+    for anything a later range added), and nothing else. The operator's clear writes one `logger -t gitops-state` line naming the role, the
     user, the cwd and the dropped line's origin SHA, so `journalctl -t gitops-state` says who
     cleared what and lets a later reader match it against an apply (#2022: `k3s` was cleared
     by hand with its apply still owed, and the marker's truncation was the only write).

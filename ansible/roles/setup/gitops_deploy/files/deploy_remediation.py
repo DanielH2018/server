@@ -11,9 +11,11 @@ from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
 from gitops_markers import (  # noqa: F401
+    APPLIED_PLACEHOLDER,
     CONTENTION_CLEAR_CMD,
     MANUAL_PLANE_CLEAR_CMD,
     MAXIMAL_ROLE_GATED_TAGS,
+    manual_plane_clear_cmd,
 )
 
 # The branch `broad_remediation` names when a caller does not say. gitops_deploy.py reads the
@@ -142,11 +144,44 @@ def manual_plane_remediation(
     The clear command is the reverse of the write, and it is part of the remediation rather
     than a note beside it: a role applied by hand with its line left behind pages GitOps
     Deploy — Status six hours later over work that is already live.
+
+    It names `--applied` whenever a narrowed apply was printed (#2349). A bare clear drops the
+    role's whole line, and a second range can widen the row between this text being printed
+    and the operator running it — so the bare form would clear a tag nobody applied. The
+    command stays generic across the role set, because `<role>` is already a placeholder the
+    operator substitutes.
     """
     return (
         " and ".join(_setup_commands(setup_roles, narrow_tags))
-        + f", then `{MANUAL_PLANE_CLEAR_CMD}`"
+        + f", then `{manual_plane_clear_for(setup_roles, narrow_tags)}`"
     )
+
+
+def _narrowed_tags(role: str, narrow_tags: dict[str, frozenset[str]]) -> frozenset[str]:
+    """The narrow tags recorded for `role`, by either key the marker can hold it under."""
+    role_tag = setup_role_tag(role)
+    return narrow_tags.get(role_tag) or narrow_tags.get(role) or frozenset()
+
+
+def manual_plane_clear_for(
+    setup_roles: set[str], narrow_tags: dict[str, frozenset[str]] | None = None
+) -> str:
+    """The clear command to print after applying `setup_roles` by hand.
+
+    One role prints its own name, and its own tags where the apply beside it was narrowed.
+    Several keep the `<role>` placeholder an operator substitutes, with `--applied` naming a
+    placeholder too where ANY of them printed a narrowed apply — the alternative is a list of
+    clear commands, which is not what the rest of this text does with a role set.
+    """
+    narrow_tags = narrow_tags or {}
+    roles = sorted(setup_roles or ())
+    if len(roles) == 1:
+        return manual_plane_clear_cmd(
+            setup_role_tag(roles[0]), _narrowed_tags(roles[0], narrow_tags)
+        )
+    if any(_narrowed_tags(role, narrow_tags) for role in roles):
+        return manual_plane_clear_cmd(tags=(APPLIED_PLACEHOLDER,))
+    return MANUAL_PLANE_CLEAR_CMD
 
 
 # Setup roles whose role tag applies far more than any one change to them needs, and what
@@ -261,7 +296,7 @@ def _setup_commands(
             )
             continue
         role_tag = setup_role_tag(role)
-        narrowed = narrow_tags.get(role_tag) or narrow_tags.get(role) or frozenset()
+        narrowed = _narrowed_tags(role, narrow_tags)
         tags = ",".join(sorted(narrowed)) or role_tag
         cmd = f"`ansible-playbook {playbook} --tags {tags}`"
         if not narrowed:

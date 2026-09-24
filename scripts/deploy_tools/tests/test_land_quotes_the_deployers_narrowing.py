@@ -81,6 +81,25 @@ def test_a_stale_row_from_an_earlier_range_is_flagged(pr):
     assert "ansible/k3s-bringup.yml --tags k3s`" in note
 
 
+def test_a_narrowed_note_clears_only_the_tags_it_told_you_to_apply(pr):
+    """The clear beside a narrowed apply names `--applied` (#2349).
+
+    A second PR touching the same role can widen the row between this note being printed and
+    the operator running the clear. The bare form would drop that PR's tag too, leaving its
+    change merged, unapplied and recorded nowhere.
+    """
+    narrow = confirmed(pr, "k3s kubeconfig")
+    note = land_tags.plane_note([RBAC], narrow_tags=narrow)
+    assert "clear-manual-plane k3s --applied kubeconfig" in note
+
+
+def test_a_role_tag_note_clears_the_whole_line(pr):
+    """The rejecting half: a whole-role apply covers whatever the row has gained."""
+    note = land_tags.plane_note([RBAC], narrow_tags={})
+    assert "clear-manual-plane k3s`" in note
+    assert "--applied" not in note
+
+
 @pytest.mark.parametrize(
     "sidecar", [None, "", "k3s -"], ids=["unreadable", "absent", "refused"]
 )
