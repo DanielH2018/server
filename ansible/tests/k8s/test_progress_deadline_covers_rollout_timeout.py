@@ -6,7 +6,9 @@ as soon as the Deployment is marked `ProgressDeadlineExceeded`, which Kubernetes
 `progressDeadlineSeconds` (default 600) without progress. A pod stuck `Pulling` makes no
 progress, so a budget above the deadline is unreachable. valheim measured that on 2026-08-13.
 prowlarr then raised its budget to 780s for a flaresolverr cold pull that took 8m54s (#2369),
-and that budget holds only because both of its templates raise the deadline to match.
+and that budget holds only because both of its templates raise the deadline to match. sonarr
+and radarr each carried a 660s budget against the default deadline until #2370; both now
+render the deadline from the same role variable the budget comes from.
 
 Run: uv run pytest ansible/tests/k8s/test_progress_deadline_covers_rollout_timeout.py
 """
@@ -17,13 +19,11 @@ from _k8s_render import rendered_docs
 _K8S_ROLES = REPO / "ansible/roles/k8s"
 _DEFAULT_DEADLINE_S = 600
 
-# Budgets above the default deadline with no matching deadline yet. #2370 tracks the fix; drop
-# a role from here when its template renders the deadline.
-_KNOWN_SHORT = frozenset({"sonarr", "radarr"})
-
 # Non-vacuity: the Deployments whose budget exceeds the default and that DO cover it. If the
-# census stops finding them, the check below passes over nothing.
-_MUST_COVER = frozenset({"prowlarr", "flaresolverr", "valheim"})
+# census stops finding them, the check below passes over nothing. sonarr and radarr are named
+# here because the check was written for them (#2370) — the guard has no exception set, so a
+# role that stopped rendering its deadline would otherwise leave the census quietly smaller.
+_MUST_COVER = frozenset({"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"})
 
 
 def deadline_offence(spec: dict, budget_s: int) -> str | None:
@@ -50,7 +50,7 @@ def test_deadline_offence_is_flagged_when_the_default_deadline_is_below_the_budg
 def test_every_deployment_deadline_covers_its_rollout_budget():
     offenders, covered = [], set()
     for role, tpl, doc in rendered_docs():
-        if doc.get("kind") != "Deployment" or role in _KNOWN_SHORT:
+        if doc.get("kind") != "Deployment":
             continue
         budget = manifests_rollout_timeout_s(_K8S_ROLES / role)
         name = doc["metadata"]["name"]

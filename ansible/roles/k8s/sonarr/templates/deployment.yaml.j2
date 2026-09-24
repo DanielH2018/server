@@ -14,6 +14,9 @@ spec:
   # not have this problem — this is about /config.)
 {{ spec_shell('Recreate') }}
   replicas: 1
+  # The same budget as the drain's rollout wait. See sonarr_k8s_rollout_timeout in
+  # defaults/main.yml.
+  progressDeadlineSeconds: {{ sonarr_k8s_rollout_timeout[:-1] | int }}
   selector:
     matchLabels:
       app: sonarr
