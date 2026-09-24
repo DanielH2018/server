@@ -11,10 +11,10 @@
 # 51821/TCP — the admin UI, on a ClusterIP Service. No rule here: the baseline already admits
 #   traefik and prometheus, and nothing else has any business in it.
 #
-# Note for slice 5: traffic a VPN client sends ONWARD to a cluster service is routed through this
-# pod, so it arrives at that service as `app: wg-easy` rather than as the client. In practice VPN
-# clients reach services by hostname through Traefik, so no policy in the repo depends on this —
-# but a service someone later dials by ClusterIP over the VPN would need `app: wg-easy` as a peer.
+# VPN clients cannot reach a cluster service by ClusterIP or pod IP at all: the wg-easy pod drops
+# peer traffic bound for k3s_pod_cidr and k3s_service_cidr in its own netns (the
+# `peer-cluster-drop` init container in roles/k8s/wg-easy). Peers reach services by hostname
+# through the Traefik VIP, a LAN address, so no policy should ever need `app: wg-easy` as a peer.
 #
 # Both ports come from this service's `containers_list` entry (udp_port / port) — verified live
 # 2026-08-20 as 51820 and 51821, and equal to the containerPorts.
