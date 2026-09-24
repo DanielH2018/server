@@ -49,6 +49,17 @@ MARKERS: dict[str, str] = {
     # One line per setup role this host fast-forwarded past and cannot apply itself,
     # `"<origin_sha> <playbook-or-none> <role> <unix_ts>"`. See `parse_manual_plane`.
     "manual_plane": "manual_plane",
+    # The narrowest `--tags` value each pending role's own change actually needs, one line per
+    # role as `"<role> <tag,tag>"` or `"<role> -"` for a range no derivation could narrow.
+    # See `parse_manual_plane_tags`.
+    #
+    # A SIDECAR RATHER THAN A FIFTH FIELD ON THE LINE ABOVE. `parse_manual_plane` accepts
+    # exactly four fields and SKIPS anything else, and these copies reach their hosts one role
+    # deploy at a time — so a five-field line written by a new deployer would read as no
+    # pending role at all in an un-redeployed monitor-bridge, and the page it raises on a
+    # role's age would stop firing. A reader that has never heard of this file degrades to the
+    # whole-role tag, which is the blunt but correct answer it printed before #2307.
+    "manual_plane_tags": "manual_plane_tags",
     # `"<origin_sha> <lock> <unix_ts_first_seen> <unix_ts_last_seen> <count>"` while
     # consecutive ticks defer on one busy service lock. See `parse_contention`.
     "contention": "contention_since",
@@ -147,6 +158,11 @@ MARKERS: dict[str, str] = {
 # (`common`).
 NO_PLAYBOOK = "none"
 
+# What the tag field of a `manual_plane_tags` line holds when no derivation could narrow the
+# role's change, so the reader prints the whole-role tag. A literal rather than an empty
+# field: a line ending in whitespace splits to one part, which every parser here skips.
+NARROWED_TO_ROLE = "-"
+
 # What an operator runs to clear one role's `manual_plane` line after applying it by hand,
 # and to end a contention streak once the lock's holder is gone. The deployer's alert,
 # `land.sh`, monitor-bridge's page and the SessionStart banner all print these; one string
@@ -244,6 +260,42 @@ def parse_manual_plane(marker: str | None) -> list[ManualPlaneEntry]:
             continue
         entries.append(ManualPlaneEntry(parts[0], parts[1], parts[2], at))
     return entries
+
+
+def parse_manual_plane_tags(marker: str | None) -> dict[str, frozenset[str]]:
+    """The narrowest tags each pending role needs, by role, from the `manual_plane_tags` marker.
+
+    An EMPTY frozenset means the deployer could not narrow that role's change, so its reader
+    prints the whole-role tag. A role with no line at all is the same answer, reached by a
+    reader that looked before the sidecar existed or by a tick that wrote none — which is why
+    the two are deliberately indistinguishable to a caller using `.get(role, frozenset())`.
+
+    A line this cannot parse is SKIPPED, for the reason every parser here skips: a remediation
+    built from a torn line names a tag that selects nothing, and Ansible exits 0 on one.
+    """
+    out: dict[str, frozenset[str]] = {}
+    for line in (marker or "").splitlines():
+        parts = line.split()
+        if len(parts) != 2:
+            continue
+        tags = [t for t in parts[1].split(",") if t and t != NARROWED_TO_ROLE]
+        out[parts[0]] = frozenset(tags)
+    return out
+
+
+def format_manual_plane_tags(tags: dict[str, frozenset[str]]) -> str | None:
+    """The `manual_plane_tags` marker for a role -> tags mapping, or None when it is empty.
+
+    The reverse of `parse_manual_plane_tags`, here beside it so the two cannot drift: a role
+    whose tags are empty is written as `NARROWED_TO_ROLE`, because a line with a trailing
+    empty field would split to one part and be skipped as garbled.
+    """
+    if not tags:
+        return None
+    return "\n".join(
+        f"{role} {','.join(sorted(tags[role])) or NARROWED_TO_ROLE}"
+        for role in sorted(tags)
+    )
 
 
 def parse_contention(marker: str | None) -> ContentionEntry | None:

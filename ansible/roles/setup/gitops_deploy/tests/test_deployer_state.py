@@ -34,7 +34,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 
 
 # ── the paths did not move ────────────────────────────────────────────────────────────────
-# The 22 markers by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
+# The 23 markers by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
 # than a count: a renamed basename or a swapped pair fails naming the marker, where a count
 # would pass either. Add a pair here when a marker is added, and nowhere else (issue #2051 —
 # these were 22 module-level constants in gitops_deploy.py with no production reader).
@@ -44,6 +44,7 @@ EXPECTED_MARKERS = frozenset(
         ("hold_plane", "hold_plane"),
         ("broad_applied", "broad_applied"),
         ("manual_plane", "manual_plane"),
+        ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
@@ -198,6 +199,56 @@ def test_clearing_the_last_role_removes_the_marker_entirely(state):
     state.clear_manual_plane("k3s")
     assert state.manual_plane is None
     assert not os.path.exists(state.path("manual_plane"))
+
+
+# ── the manual_plane_tags sidecar (#2307) ─────────────────────────────────────────────────
+
+
+def test_the_narrow_tags_of_a_pending_role_round_trip(state):
+    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
+
+
+def test_a_second_range_on_the_same_role_unions_its_tags(state):
+    """Both changes are merged and unapplied, so both tags have to run."""
+    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    state.record_manual_plane_tags("k3s", frozenset({"coredns"}))
+    assert state.manual_plane_tags_pending() == {
+        "k3s": frozenset({"coredns", "kubeconfig"})
+    }
+
+
+def test_a_refusal_widens_a_role_that_was_already_narrowed(state):
+    """The rejecting half, and the direction that must not be reversible.
+
+    A range nothing could narrow needs the whole role. A narrow tag left beside it would read
+    like the complete answer while describing half the work, so the refusal absorbs the pair —
+    in both arrival orders, since the tick order is not ours to choose.
+    """
+    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    state.record_manual_plane_tags("k3s", None)
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
+    state.record_manual_plane_tags("k3s", frozenset({"coredns"}))
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset()}, (
+        "a refusal already recorded is not narrowed away by a later range"
+    )
+
+
+def test_clearing_a_role_takes_its_narrow_tags_with_it(state):
+    """A row outliving its line is a row nothing can clear.
+
+    Every reader looks the tags up by the `manual_plane` line the role no longer has, so a
+    stale row would be handed to the next range recording the same role — naming a tag that
+    range never touched.
+    """
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
+    state.record_manual_plane_tags("common", frozenset({"resolv"}))
+    assert state.clear_manual_plane("k3s") is True
+    assert state.manual_plane_tags_pending() == {"common": frozenset({"resolv"})}
+    state.clear_manual_plane("common")
+    assert not os.path.exists(state.path("manual_plane_tags"))
 
 
 def test_an_apply_of_the_roles_own_playbook_and_tag_clears_its_line(state):

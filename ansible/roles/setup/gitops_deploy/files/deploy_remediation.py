@@ -89,6 +89,7 @@ def broad_remediation(
     broad_setup: bool,
     setup_roles: set[str] | None = None,
     branch: str = BRANCH_DEFAULT,
+    narrow_tags: dict[str, frozenset[str]] | None = None,
 ) -> str:
     """The manual command(s) a broad (defer-and-alert) change needs, in the order they work.
 
@@ -103,6 +104,10 @@ def broad_remediation(
     vague — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`. Omitting it keeps the old generic text,
     which is what every caller with no path list still gets.
 
+    `narrow_tags` narrows the `--tags` value one step further, from the whole-role tag to the
+    tags of the tasks that read what changed. It is the deployer's `manual_plane_tags` marker,
+    so a caller without that marker in reach omits it and gets the role tag.
+
     THE FF-MERGE COMES FIRST, and that is the half this returned string exists to carry.
     Ansible renders from the working tree, so a playbook run before the merge copies the
     PRE-merge files and reports `changed=0` — a clean, idempotent-looking recap over the old
@@ -116,11 +121,13 @@ def broad_remediation(
     if broad_deploy:
         cmds.append("`ansible-playbook ansible/deploy.yml`")
     if broad_setup:
-        cmds.extend(_setup_commands(setup_roles))
+        cmds.extend(_setup_commands(setup_roles, narrow_tags))
     return f"`git merge --ff-only origin/{branch}` FIRST, then " + " and ".join(cmds)
 
 
-def manual_plane_remediation(setup_roles: set[str]) -> str:
+def manual_plane_remediation(
+    setup_roles: set[str], narrow_tags: dict[str, frozenset[str]] | None = None
+) -> str:
     """The commands that clear a `manual_plane` marker: apply each role, then clear its line.
 
     No `git merge --ff-only` preamble, which is the one way this differs from
@@ -133,23 +140,24 @@ def manual_plane_remediation(setup_roles: set[str]) -> str:
     Deploy — Status six hours later over work that is already live.
     """
     return (
-        " and ".join(_setup_commands(setup_roles))
+        " and ".join(_setup_commands(setup_roles, narrow_tags))
         + f", then `{MANUAL_PLANE_CLEAR_CMD}`"
     )
 
 
 # Setup roles whose role tag applies far more than any one change to them needs, and what
-# running it actually does. The command printed beside a role in this map carries the warning.
+# running it actually does. A role in this map gets the warning ONLY where the printed command
+# is the whole-role tag — `_setup_commands` suppresses it beside a narrowed `--tags`, where the
+# warning would describe a run the operator is not being told to make.
 #
-# WHY A WARNING AND NOT A NARROWER TAG. The right answer is to map the changed file to the
-# tags of the tasks that read it and print the narrowest — `--tags kubeconfig` for a
-# readonly-rbac change, not `--tags k3s`. This composer cannot do that: `manual_plane`
-# records `<origin_sha> <playbook-or-none> <role> <ts>`, the ROLE and no paths, so
-# `manual_plane_remediation` has nothing to narrow from and the journal, the Discord alert
-# and the SessionStart banner all read that marker. Carrying paths to them means changing the
-# marker format in five copies of `gitops_markers.py` and the test that holds them together.
-# Filed as #2307; this closes the half that is dangerous today, which is an operator reading
-# a printed command and running it as written.
+# THE NARROWER TAG IS DERIVED, AND THIS IS THE FALLBACK (#2307). `deploy_defer.record` asks
+# `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
+# and stores the answer in the `manual_plane_tags` sidecar marker; every surface quoting this
+# composer reads that marker, so all four print the same narrow tag. The derivation refuses on
+# any doubt — an untagged task file, a variable nothing in the role reads, a `handlers/` change
+# — and a refusal lands here, on the whole-role tag plus this warning. That is the safe
+# direction: a `--tags` value matching nothing makes Ansible exit 0 having applied nothing,
+# which is worse than a command that applies too much and says so.
 #
 # Keyed by ROLE NAME, which is what every caller passes — `setup_role_tag` maps that to the
 # `--tags` value, and the two differ for `chezmoi_setup`.
@@ -200,15 +208,27 @@ def maximal_tag_warning(role: str) -> str:
     return _MAXIMAL_ROLE_TAGS.get(role, "")
 
 
-def _setup_commands(setup_roles: set[str] | None) -> list[str]:
+def _setup_commands(
+    setup_roles: set[str] | None,
+    narrow_tags: dict[str, frozenset[str]] | None = None,
+) -> list[str]:
     """One command per setup role, or the generic placeholder when no roles are known.
+
+    Args:
+        setup_roles: the roles to name a command for.
+        narrow_tags: role tag -> the narrower tags that role's own change needs, from the
+            `manual_plane_tags` marker. A role absent from it, or present with an empty set,
+            gets the whole-role tag.
 
     A role in `_MAXIMAL_ROLE_TAGS` gets its command annotated with what that command does, so
     every surface quoting this composer — land.sh's `needs-manual-apply` note, the deployer's
-    journal, the `manual_plane` Discord alert — carries the warning from one place.
+    journal, the `manual_plane` Discord alert — carries the warning from one place. The
+    annotation goes only on the whole-role tag: beside a narrowed `--tags` it would warn about
+    a run nobody was told to make.
     """
     if not setup_roles:
         return ["`ansible-playbook ansible/initial_setup.yml --tags <role>`"]
+    narrow_tags = narrow_tags or {}
     cmds = []
     for role in sorted(setup_roles):
         playbook = setup_role_playbook(role)
@@ -223,8 +243,11 @@ def _setup_commands(setup_roles: set[str] | None) -> list[str]:
                 "optimize_pi -e target=daniel-pi` on daniel-pi)"
             )
             continue
-        cmd = f"`ansible-playbook {playbook} --tags {setup_role_tag(role)}`"
-        warning = maximal_tag_warning(role)
+        role_tag = setup_role_tag(role)
+        narrowed = narrow_tags.get(role_tag) or narrow_tags.get(role) or frozenset()
+        tags = ",".join(sorted(narrowed)) or role_tag
+        cmd = f"`ansible-playbook {playbook} --tags {tags}`"
+        warning = "" if narrowed else maximal_tag_warning(role)
         # Parenthesised, not appended after a dash: `manual_plane_remediation` adds ", then
         # <clear command>" after this list, and an unbracketed warning made that clause read
         # as a continuation of the warning's own last sentence.

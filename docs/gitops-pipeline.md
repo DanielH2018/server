@@ -203,6 +203,52 @@ The deployer clears a line itself when a tick applies that role's own playbook a
 neither `k3s-bringup.yml` nor a playbook for `common`; it is what a role promoted into
 `initial_setup.yml` needs on the day it is.
 
+#### The tag the remediation prints is derived, not the role tag
+
+`--tags k3s` is the whole `setup/k3s` role: it reapplies MetalLB, Longhorn, the backup
+targets, the crons, CoreDNS and the node config, and arms three gated control-plane tasks. A
+three-line RBAC edit to `templates/readonly-rbac.yaml.j2` needed `--tags kubeconfig`, which is
+what was applied by hand on 2026-09-22 with ok=15 changed=2 (#2294). The printed command was
+the maximal one until #2307.
+
+**One derivation, four surfaces.** `deploy_defer.record` asks
+`scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
+and writes the answer to `/var/lib/gitops-deploy/manual_plane_tags`, one line per role as
+`"<role> <tag,tag>"` or `"<role> -"` for a range it could not narrow. The journal line, the
+Discord alert, the SessionStart banner and `land.sh`'s `needs-manual-apply` note all read that
+marker. Only the tick has the changed paths in reach — the banner runs from an isolated
+worktree and cannot ask git about the primary checkout — so quoting one stored answer is what
+keeps the four from disagreeing about the same deferral.
+
+**A sidecar file, not a fifth field on the `manual_plane` line.** `parse_manual_plane` accepts
+exactly four fields and skips anything else, and the copies of `gitops_markers.py` reach their
+hosts one role deploy at a time. A widened line would read as *no pending role* in an
+un-redeployed monitor-bridge, and its six-hour page would stop firing. A reader that has never
+heard of the sidecar prints the role tag instead, which is what every surface printed before.
+
+**Every task file in a setup role carries its own tags**, so the derivation maps a changed
+path to the tags of the tasks that read it:
+
+- `tasks/<f>.yml` → the tags on its own tasks;
+- `templates/<f>` or `files/<f>` → the tags of every task file naming `<f>`, following a
+  template another template includes or imports;
+- `defaults/main.yml` or `vars/<f>.yml` → the top-level keys whose value changed between the
+  two refs, then the tags of every task file and template naming one of those keys.
+
+**Any doubt refuses**, and a refusal prints the role tag with
+`deploy_remediation.maximal_tag_warning` beside it. The refusals that fire in practice: a task
+file with no `tags:` of its own (`main.yml`, `unit-logging.yml`,
+`longhorn-weekly-shard.yml` — their tasks inherit from the import site, so a hit there says
+nothing about which tag selects them); a `defaults/` key nothing in the role reads; a change
+under `handlers/` or `meta/`; a `defaults/` file either ref does not carry. Refusing is the
+safe direction because a `--tags` value matching nothing makes Ansible exit 0 having applied
+nothing — the silent-success failure `setup_tags_for` also guards against.
+
+Two ranges can make one role pending, since the first line keeps its first-seen stamp. The
+tags then union: both changes are merged and unapplied, so both tags have to run. A refusal on
+either side absorbs the pair, because a narrow tag beside work nothing could narrow
+would read like the complete answer.
+
 ### When a tick parks
 
 Two shapes park: a bring-up playbook, and a setup path naming no role at all. The symptom

@@ -22,12 +22,15 @@ from deploy_config import log
 from deploy_git import behind_marker, broad_hold_cleared_by, hold_plane_marker
 from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are re-exported
     MARKERS,
+    NARROWED_TO_ROLE,
     NO_PLAYBOOK,
     STATE_DIR,
     ContentionEntry,
     ManualPlaneEntry,
+    format_manual_plane_tags,
     parse_contention,
     parse_manual_plane,
+    parse_manual_plane_tags,
 )
 from host_lib import atomic_write
 
@@ -172,18 +175,57 @@ class DeployerState:
         return True
 
     def clear_manual_plane(self, role: str) -> bool:
-        """Drop `role`'s line, removing the marker when it was the last one.
+        """Drop `role`'s line and its narrow-tag row, removing each marker when it empties.
 
         Returns:
             True when a line went, False when that role was not pending — which is what an
             operator clearing twice, or naming a role nobody recorded, must get.
+
+        The sidecar row goes with the line whatever the answer. A row outliving its line is
+        a row nothing can clear: every reader looks the role up by the `manual_plane` line
+        it no longer has, so the stale narrowing would be handed to the NEXT range that
+        records the same role, naming a tag that range never touched.
         """
+        self._drop_manual_plane_tags(role)
         lines = (self.manual_plane or "").splitlines()
         kept = [line for line in lines if self._line_role(line) != role]
         if len(kept) == len(lines):
             return False
         self.write("manual_plane", "\n".join(kept) or None)
         return True
+
+    def manual_plane_tags_pending(self) -> dict[str, frozenset[str]]:
+        """The narrowest tags each pending role needs, by role; empty means "use the role tag"."""
+        return parse_manual_plane_tags(self.read("manual_plane_tags"))
+
+    def record_manual_plane_tags(self, role: str, tags: frozenset[str] | None) -> None:
+        """Record the narrowest tags `role`'s pending change needs, widening on doubt.
+
+        Args:
+            role: the role, under the `--tags` value that selects it — the same key
+                `record_manual_plane` writes, so a reader joins the two by one name.
+            tags: what the derivation returned, or None when it refused.
+
+        Two ranges can make one role pending, because `record_manual_plane` keeps the first
+        line and its first-seen stamp. The tags then UNION: both changes are merged and
+        unapplied, so both tags have to run. A refusal on either side absorbs the pair — a
+        range nothing could narrow needs the whole role, and a narrow tag beside it would
+        under-describe the work while reading like the complete answer.
+        """
+        pending = self.manual_plane_tags_pending()
+        known = role in pending
+        if tags is None or (known and not pending[role]):
+            pending[role] = frozenset()
+        else:
+            pending[role] = pending.get(role, frozenset()) | tags
+        self.write("manual_plane_tags", format_manual_plane_tags(pending))
+
+    def _drop_manual_plane_tags(self, role: str) -> None:
+        """Drop one role's narrow-tag row, removing the marker when it was the last one."""
+        pending = self.manual_plane_tags_pending()
+        if pending.pop(role, None) is None:
+            return
+        self.write("manual_plane_tags", format_manual_plane_tags(pending))
 
     def clear_manual_plane_applied(self, playbook: str, tags: list[str]) -> list[str]:
         """Drop the pending roles this apply covered, and return them.

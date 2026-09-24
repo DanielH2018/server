@@ -35,7 +35,7 @@ _K3S = "abc1230000000000000000000000000000000000 ansible/k3s-bringup.yml k3s 100
 _COMMON = "beef1230000000000000000000000000000000000 none common 2000"
 
 
-def _problems(manual=None, marker=None, now=1000.0):
+def _problems(manual=None, marker=None, now=1000.0, manual_tags=None):
     """The banner lines, with a clean primary checkout and no park unless one is passed."""
     return _mod.parked_deployer_problems(
         list_worktrees=lambda: _WORKTREES,
@@ -43,6 +43,7 @@ def _problems(manual=None, marker=None, now=1000.0):
         read_marker=lambda: marker,
         now=now,
         read_manual=lambda: manual,
+        read_manual_tags=lambda: manual_tags,
     )
 
 
@@ -115,3 +116,24 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
         read_manual=boom,
     )
     assert len(lines) == 1 and "primary checkout" in lines[0]
+
+
+# ── #2307: the narrow tag the deployer derived, not the whole-role tag ──────────────────────
+
+
+def test_a_narrowed_role_names_the_tag_its_own_change_needs():
+    """The banner quotes the sidecar rather than re-deriving it.
+
+    An isolated worktree cannot ask git about the primary checkout, so the deployer's answer —
+    written at the tick that recorded the role — is the only one this line can reach.
+    """
+    (line,) = _problems(manual=_K3S, manual_tags="k3s kubeconfig")
+    assert "--tags kubeconfig" in line
+    assert "--tags k3s`" not in line
+
+
+def test_a_role_with_no_narrowing_still_names_the_role_tag():
+    """The rejecting half, for both shapes of "no narrowing": no sidecar, and a refusal in it."""
+    for tags in (None, "k3s -"):
+        (line,) = _problems(manual=_K3S, manual_tags=tags)
+        assert "ansible/k3s-bringup.yml --tags k3s" in line

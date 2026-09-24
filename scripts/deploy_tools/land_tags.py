@@ -43,6 +43,8 @@ from lib.render_guard import (  # noqa: F401
     service_records_at_or_none,
     service_tags_at,
 )
+from lib.deployer_park import read_manual_plane_tags_marker
+from lib.gitops_markers import parse_manual_plane_tags
 from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
@@ -239,7 +241,26 @@ def covered_roles(shared: list[str], deployed: set[str]) -> set[str]:
     return {r for r in shared if (c := callers.get(r)) and c <= deployed}
 
 
-def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
+def manual_plane_narrow_tags() -> dict[str, frozenset[str]]:
+    """The deployer's `manual_plane_tags` sidecar, as role tag -> the narrower tags it needs.
+
+    Read rather than re-derived, and that is the point (#2307). The deployer derived it at the
+    tick that recorded the role, from the changed paths it had in reach; quoting its answer is
+    what makes this note, the deployer's journal line, the Discord alert and the SessionStart
+    banner print the SAME narrow tag instead of four derivations that can disagree.
+
+    Empty on any host where the marker cannot be read, which is every host but the deployer.
+    `_setup_commands` then prints the whole-role tag, exactly as it did before the sidecar.
+    """
+    return parse_manual_plane_tags(read_manual_plane_tags_marker())
+
+
+def plane_note(
+    files,
+    declared: set[str] | None = None,
+    quiet=(),
+    narrow_tags: dict[str, frozenset[str]] | None = None,
+) -> str:
     """What this PR still needs a HUMAN to apply, or "" if nothing.
 
     A deploy tag covers roles/k8s and roles/containers. It does not cover the setup plane,
@@ -309,7 +330,14 @@ def plane_note(files, declared: set[str] | None = None, quiet=()) -> str:
         if setup_role_playbook(r) != "ansible/initial_setup.yml"
     }
     if manual or unroutable:
-        notes.append(broad_remediation(False, True, unroutable))
+        notes.append(
+            broad_remediation(
+                False,
+                True,
+                unroutable,
+                narrow_tags=narrow_tags if narrow_tags is not None else {},
+            )
+        )
     if unroutable and not manual:
         # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
         # hand is only half the job: a role left in the marker pages GitOps Deploy — Status
@@ -512,7 +540,7 @@ def main(argv: list[str] | None = None) -> int:
     paths = [f["path"] for f in payload.get("files", [])]
     quiet = quiet_paths(paths, ns.range_)
     if ns.plane:
-        print(plane_note(paths, quiet=quiet))
+        print(plane_note(paths, quiet=quiet, narrow_tags=manual_plane_narrow_tags()))
         return 0
     if ns.self_applied:
         print("yes" if self_applied(paths, quiet=quiet) else "")

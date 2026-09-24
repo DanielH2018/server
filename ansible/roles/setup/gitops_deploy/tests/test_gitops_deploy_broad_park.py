@@ -17,10 +17,16 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 
 import deploy_defer
+from deploy_tick_types import TickTarget
 
-# The SHA the `tick` fixture fast-forwards to; see test_gitops_deploy_main_branches.py for why
-# `from conftest import` is avoided.
+# The two SHAs the `tick` fixture bounds a range with; see test_gitops_deploy_main_branches.py
+# for why `from conftest import` is avoided.
+LOCAL = "1" * 40
 ORIGIN = "2" * 40
+# The range `deploy_defer.record` hands the narrowing, which the scripted fake asserts against.
+TARGET = TickTarget(
+    local=LOCAL, origin=ORIGIN, hold=None, dirty=False, status="", action="deploy"
+)
 
 # A setup role applied by `k3s-bringup.yml`, so `setup_tags_for` derives nothing for it.
 K3S_SETUP = "ansible/roles/setup/k3s/tasks/longhorn-backup.yml"
@@ -109,6 +115,52 @@ def test_a_pending_role_is_named_on_every_later_tick(gitops_deploy, tick, capsys
     assert "ansible/k3s-bringup.yml --tags k3s" in out
 
 
+# ── #2307: the recorded role's own narrow tag, on every surface that quotes the deferral ───
+# The range that provoked this is `templates/readonly-rbac.yaml.j2`, which needed
+# `--tags kubeconfig` and was answered with `--tags k3s` — a command that restarts the control
+# plane.
+RBAC = "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2"
+
+
+def test_a_narrowed_role_is_recorded_with_its_tag_and_quoted_everywhere(
+    gitops_deploy, tick, capsys
+):
+    """The journal line, the Discord page and the next tick's pending line all narrow."""
+    tick.paths = [RBAC]
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    assert gitops_deploy.main(tick.tools) == 0
+    out = capsys.readouterr().out
+    assert gitops_deploy.STATE.manual_plane_tags_pending() == {
+        "k3s": frozenset({"kubeconfig"})
+    }
+    assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
+    assert "--tags k3s`" not in out
+    assert "--tags kubeconfig" in tick.posts[0]
+    capsys.readouterr()
+    assert gitops_deploy.main(tick.tools) == 0, "converged: an idle tick"
+    assert "--tags kubeconfig" in capsys.readouterr().out, (
+        "the per-tick pending line reads the same marker"
+    )
+
+
+def test_a_refused_narrowing_records_nothing_and_keeps_the_role_tag(
+    gitops_deploy, tick, capsys
+):
+    """The rejecting half: a derivation that cannot answer must widen, not narrow.
+
+    `narrow_setup` unscripted is a non-zero exit, which is what the real script returns for
+    every shape it refuses — an untagged task file, a variable nothing in the role reads.
+    """
+    tick.paths = [K3S_SETUP]
+    assert gitops_deploy.main(tick.tools) == 0
+    out = capsys.readouterr().out
+    assert gitops_deploy.STATE.manual_plane_tags_pending() == {"k3s": frozenset()}
+    assert "ansible/k3s-bringup.yml --tags k3s" in out
+    assert "WARNING" in out, (
+        "and the warning about what that tag does comes back with it"
+    )
+
+
 def test_a_role_already_recorded_is_not_announced_again(gitops_deploy, tick, capsys):
     """A second range naming the same role adds no line: `main()` already named the set.
 
@@ -116,9 +168,9 @@ def test_a_role_already_recorded_is_not_announced_again(gitops_deploy, tick, cap
     on the tick that re-recorded it — once as pending, once again right after.
     """
     config = gitops_deploy.tick_config()
-    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, ORIGIN, ["k3s"])
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, TARGET, ["k3s"])
     capsys.readouterr()
-    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, ORIGIN, ["k3s"])
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, TARGET, ["k3s"])
     assert "manual_plane recorded" not in capsys.readouterr().out
     assert len(gitops_deploy.STATE.manual_plane_pending()) == 1, "and no second line"
 

@@ -32,6 +32,12 @@ NARROW_TIMEOUT_S = 120.0
 
 NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
 
+# How long the setup-role narrowing gets, and the script that does it. Cheaper than the
+# deploy-plane derivation — one `git ls-tree` plus a `git show` per file of ONE role — so a run
+# still going at thirty seconds has wedged.
+NARROW_SETUP_TIMEOUT_S = 30.0
+NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
+
 
 class BroadPlan(NamedTuple):
     """What one broad tick applies.
@@ -76,6 +82,52 @@ def narrow_deploy_plane(
     """
     r = subprocess.run(
         ["uv", "run", "--frozen", "python", NARROW_SCRIPT, "narrow", old, new],
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=timeout,
+        check=False,
+    )
+    for line in r.stderr.splitlines():
+        if line.strip():
+            log(line.strip())
+    return r.returncode, r.stdout.strip()
+
+
+def narrow_setup_role(
+    repo: str, role: str, role_tag: str, old: str, new: str, timeout: float
+) -> tuple[int, str]:
+    """Ask `narrow_setup.py` which of `role`'s own tags the range `old..new` actually needs.
+
+    Args:
+        repo: the checkout to run in, which is also the tree the derivation reads.
+        role: the role directory under `ansible/roles/setup/`.
+        role_tag: the `--tags` value selecting the whole role, which the answer must not be.
+        old: the commit the checkout was on.
+        new: the commit carrying the change.
+        timeout: seconds before the child is killed.
+
+    Returns:
+        (exit code, stdout). Exit 0 with a comma-joined tag list narrows; anything else is a
+        refusal, and the caller records no narrowing so every surface prints the role tag.
+
+    A subprocess for the reason `narrow_deploy_plane` is one: the derivation parses YAML and
+    this unit runs under `uv run --no-project`. Every stderr line is logged, so the journal
+    carries the per-path derivation the marker was written from.
+    """
+    r = subprocess.run(
+        [
+            "uv",
+            "run",
+            "--frozen",
+            "python",
+            NARROW_SETUP_SCRIPT,
+            role,
+            old,
+            new,
+            "--role-tag",
+            role_tag,
+        ],
         cwd=repo,
         capture_output=True,
         text=True,
