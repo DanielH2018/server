@@ -2,7 +2,7 @@
 """Guard that the Pi's four Docker engine pins track the apt index they install from.
 
 `docker_install_package_specs` renders each pin into an apt spec
-(`containerd.io=2.3.5-1~ubuntu.24.04~noble`), so the version space that matters is Docker's
+(`containerd.io=2.3.5-*~ubuntu.24.04~noble`), so the version space that matters is Docker's
 own apt index, not the upstream GitHub tags. Until #2341 the managers read github-releases,
 and Docker packages a release days-to-weeks after upstream tags it: PR #2327 offered
 containerd 2.4.0 while the noble/arm64 index topped out at 2.3.5, so the

@@ -20,11 +20,18 @@ list -- a package pinned and installed under a name the hold never sees floats t
 And no apt task under docker_install says `state: latest`, because that is the calendar
 deciding the engine version; the pin decides now.
 
+A fifth, since #2357: the spec's Debian revision is a glob, never a literal `-1`. A pin names
+an upstream version and Docker publishes several revisions of one -- `containerd.io 2.3.4-1`
+and `2.3.4-2` both sit in the noble/arm64 index -- so a literal revision names a package apt
+may not be able to resolve, and neither the install nor the deliberate upgrade can then run.
+
 Run: uv run pytest ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
 """
 
+import fnmatch
 from pathlib import Path
 
+import jinja2
 from lib import yaml_fast
 from _helpers import ALL_VARS, SETUP_ROLES
 
@@ -39,9 +46,39 @@ PACKAGES_VAR = "docker_engine_packages"
 # it is rendered from -- both in the role defaults.
 SPECS_VAR = "docker_install_package_specs"
 VERSIONS_VAR = "docker_install_package_versions"
+# The `-<rev>~ubuntu.<release>~<codename>` tail every spec carries.
+SUFFIX_VAR = "docker_install_apt_suffix"
 # The census must keep finding these two. containerd.io is the one whose upgrade swaps the
 # shim; docker-ce is the one whose postinst restarts the daemon and the socket.
 MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
+
+# Rows of Docker's noble/arm64 index, read from daniel-pi's `apt-cache madison containerd.io`
+# on 2026-09-24. 2.3.4 is published at two revisions, which is the case a literal `-1` in the
+# suffix cannot express.
+INDEX_ROWS = (
+    "2.3.5-1~ubuntu.24.04~noble",
+    "2.3.4-2~ubuntu.24.04~noble",
+    "2.3.4-1~ubuntu.24.04~noble",
+)
+
+
+def apt_resolves(index_version: str, spec_version: str) -> bool:
+    """Would apt resolve `<pkg>=<spec_version>` to this row of its index?
+
+    fnmatch is the oracle rather than an equality: ansible.builtin.apt fnmatches the spec's
+    version against each available version (its own `package_best_match`) and hands apt-get the
+    newest match, and apt-get globs its own command line the same way.
+    Measured on daniel-pi 2026-09-24, `containerd.io=2.3.4-*~ubuntu.24.04~noble` in check mode
+    built `apt-get --simulate install 'containerd.io=2.3.4-2~ubuntu.24.04~noble'`.
+    """
+    return fnmatch.fnmatch(index_version, spec_version)
+
+
+def rendered_suffix(defaults: dict) -> str:
+    """The apt suffix as it renders on noble, the release daniel-pi runs."""
+    return jinja2.Template(defaults[SUFFIX_VAR]).render(
+        ansible_facts={"distribution_version": "24.04", "distribution_release": "noble"}
+    )
 
 
 def load_tasks(path: Path) -> list[dict]:
@@ -122,6 +159,58 @@ def test_install_and_hold_read_the_same_list():
     assert pinned == held, (
         f"{VERSIONS_VAR} pins {sorted(pinned - held)} the hold never sees and omits "
         f"{sorted(held - pinned)} the hold covers"
+    )
+
+
+def test_the_apt_spec_globs_the_debian_revision():
+    """A pin names an upstream version, and apt chooses the Debian revision (#2357).
+
+    Docker publishes several revisions of one upstream version, and Renovate strips the
+    revision from the version space it reads, so it can neither propose one nor prove that
+    `-1` exists for the version it proposes. A spec asserting `-1` names a package apt may not
+    be able to resolve, and that failure blocks the fresh install and the pending check of the
+    deliberate upgrade -- the two paths that install the pin at all.
+    """
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
+    assert SUFFIX_VAR in defaults[SPECS_VAR], (
+        f"{SPECS_VAR} no longer appends {SUFFIX_VAR}, so the suffix this guard reads is not "
+        "the one apt receives"
+    )
+    spec_version = "2.3.4" + rendered_suffix(defaults)
+    resolved = [row for row in INDEX_ROWS if apt_resolves(row, spec_version)]
+    assert resolved == ["2.3.4-2~ubuntu.24.04~noble", "2.3.4-1~ubuntu.24.04~noble"], (
+        f"{spec_version} resolves to {resolved}; it must reach every revision of the version "
+        "it pins and no other version"
+    )
+    assert not apt_resolves("2.3.4-1~ubuntu.22.04~jammy", spec_version), (
+        f"{spec_version} reaches another Ubuntu release's package; only the revision is a glob"
+    )
+
+
+def test_the_behind_pin_report_reads_the_upstream_version_not_the_glob():
+    """A `!=` against the globbed suffix is true on every host, pinned correctly or not.
+
+    The report would fire on every run, and an operator reading "Nothing moved" would take a
+    correctly-pinned host for one carrying a standing gap (#2357).
+    """
+    reports = [
+        t
+        for t in load_tasks(INSTALL)
+        if isinstance(t.get("ansible.builtin.debug"), dict)
+        and "docker_install_installed_engine" in str(t.get("when", ""))
+    ]
+    assert reports, (
+        "install.yml no longer reports an installed engine behind its pin, so the gap is "
+        "invisible behind a green run again"
+    )
+    when = " ".join(str(condition) for condition in reports[0]["when"])
+    assert SUFFIX_VAR not in when, (
+        f"the behind-pin report compares the installed version against {SUFFIX_VAR}, which "
+        "globs the revision -- no dpkg version equals it, so the report always fires"
+    )
+    assert VERSIONS_VAR in when, (
+        f"the behind-pin report no longer compares against {VERSIONS_VAR}, so it reports on "
+        "something other than the pin"
     )
 
 
@@ -305,6 +394,20 @@ def test_a_pin_outside_the_hold_list_is_detected():
     assert (
         pinned_names({"docker-ce": "5:1", "docker-ce-rootless-extras": "5:1"}) != held
     )
+
+
+def test_a_literal_revision_misses_a_repackage():
+    """The pre-#2357 shape, against an index that publishes the version only at `-2`.
+
+    A repackage superseding a withdrawn `-1` is the case that made the hardcoded revision a
+    spec apt cannot resolve; the glob resolves the same row.
+    """
+    published = ("2.3.6-2~ubuntu.24.04~noble",)
+    assert not [r for r in published if apt_resolves(r, "2.3.6-1~ubuntu.24.04~noble")]
+    defaults = yaml_fast.safe_load(DEFAULTS.read_text())
+    assert [
+        r for r in published if apt_resolves(r, "2.3.6" + rendered_suffix(defaults))
+    ]
 
 
 def test_a_hold_on_another_list_is_detected():
