@@ -78,6 +78,11 @@ def test_only_backups_of_vanished_volumes_are_considered() -> None:
         for task in tasks
         if "drop_orphans" in (task.get("ansible.builtin.set_fact") or {})
     )
+    assert "drop_current_pv" in str(guard["ansible.builtin.assert"]["that"]), (
+        "the guard must prove the list usable by finding the claim's OWN volume in it — a "
+        "weaker condition over drop_live_volumes, an rc check say, passes on a list that "
+        "parsed into nothing and makes every backup an orphan"
+    )
     assert tasks.index(guard) < tasks.index(classify), (
         "the volume list is classified into orphans before it is proven usable"
     )
