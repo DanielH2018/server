@@ -300,6 +300,13 @@ def test_a_deleted_broad_path_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
+def test_a_non_utf8_broad_path_is_flagged_rather_than_raised(tree: Tree):
+    """The scans read text; a traceback is a worse "cannot narrow" than the refusal (#2388)."""
+    (tree.root / "ansible/templates/blob.yml.j2").write_bytes(b"\xff\xfe\x00")
+    with pytest.raises(narrow_broad.CannotNarrow, match="is not text"):
+        tree.narrow(*_refs(tree))
+
+
 # ── the non-broad half is the mapper `changed` already uses ─────────────────────────────
 
 

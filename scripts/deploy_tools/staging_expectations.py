@@ -1,8 +1,10 @@
 #!/usr/bin/env python3
 """Check that staging's services ANSWER the way they are supposed to, not just that they start.
 
-SLICE 2 OF PHASE C (docs/staging-phase-c.md, Decision 2). Wired to nothing: slice 3 runs this
-after a staging deploy and reports the verdict, slice 4 gates on it.
+SLICE 2 OF PHASE C (docs/staging-phase-c.md, Decision 2). The GitOps deployer runs it:
+`deploy_io.run_staging_scripts` calls it with `--services <tags>` after a staging deploy exits
+0, and its exit code is the `expect_rc` that `deploy_staging.staging_verdict` folds into the
+verdict `staging_blocks` gates prod on. It pipes `staging_expect_remote.sh` to daniel-server.
 
 WHY A SECOND CHECK AT ALL. Slice 1's verdict is the playbook's exit code, and that is a real
 signal — the play carries its own rollout wait and a post-Available soak that hard-fails on a
