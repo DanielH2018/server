@@ -39,8 +39,9 @@ def tree_lock(tmp_path: Path) -> Path:
 
 
 @pytest.fixture
-def journal() -> list[tuple[str, gitops_state.ManualPlaneEntry | None]]:
-    """Every (role, dropped line) a clear recorded, in place of the real `logger` line.
+def journal() -> list[tuple[str, gitops_state.ManualPlaneEntry | None, frozenset]]:
+    """Every (role, dropped line, still-pending tags) a clear recorded, in place of
+    the real `logger` line.
 
     `run` injects it into every test: a real line from a test run would read as an
     operator's clear (`cleared=true role=k3s`) to the next investigator of this host.
@@ -57,7 +58,9 @@ def run(tree_lock: Path, journal):
             ["--state-dir", str(state_dir), *args],
             lock_path=str(tree_lock),
             lock_wait_s=0.05,
-            journal=lambda role, dropped: journal.append((role, dropped)),
+            journal=lambda role, dropped, remaining: journal.append(
+                (role, dropped, remaining)
+            ),
         )
 
     return _run
@@ -93,6 +96,112 @@ def test_clearing_the_last_role_removes_the_marker(tmp_path, run, capsys):
 def test_an_absent_marker_is_not_an_error(tmp_path, run, capsys):
     assert run(tmp_path, "clear-manual-plane", "k3s") == 0
     assert "not pending" in capsys.readouterr().out
+
+
+# ── #2349: a narrowed apply clears only the tags it ran ────────────────────────────────
+
+
+def test_a_narrowed_clear_keeps_a_tag_a_later_range_added(
+    tmp_path, run, capsys, journal
+):
+    """The sequence the narrowing introduced.
+
+    `land.sh` prints `--tags kubeconfig` and the clear beside it. Before the operator runs
+    the clear, a second PR changes `k3s/tasks/coredns.yml` and the next tick unions the row
+    to `coredns,kubeconfig`. A whole-line clear drops `coredns` with it, leaving that change
+    merged, unapplied and recorded nowhere. Under the old role-tag command the operator's
+    `--tags k3s` run would have applied it, so this gap is the narrowing's own.
+    """
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s coredns"
+    assert "STILL pending for coredns" in capsys.readouterr().out
+    ((_role, dropped, remaining),) = journal
+    assert dropped is None and remaining == frozenset({"coredns"})
+
+
+def test_a_narrowed_clear_covering_the_whole_row_takes_the_line(tmp_path, run, capsys):
+    """The accepting half: nothing left to apply means the role stops being pending."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s kubeconfig\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert not (tmp_path / "manual_plane").exists()
+    assert not (tmp_path / "manual_plane_tags").exists()
+    assert "cleared k3s" in capsys.readouterr().out
+
+
+def test_a_bare_clear_still_takes_the_whole_line_and_row(tmp_path, run):
+    """Omitting `--applied` means a whole-role apply, which covers whatever the row gained.
+
+    The bare command is what an operator types from memory and what every surface printed
+    before this flag existed, so it keeps its old meaning.
+    """
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s") == 0
+    assert not (tmp_path / "manual_plane").exists()
+    assert not (tmp_path / "manual_plane_tags").exists()
+
+
+def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
+    tmp_path, run, capsys, journal
+):
+    """Every printer names `--applied` only while it holds a non-empty row.
+
+    So `--applied kubeconfig` meeting an empty row means the row changed after the command
+    was printed: PR-B changed an untagged k3s file, the derivation refused, and the row
+    collapsed to "the whole role". Clearing there leaves PR-B merged, unapplied and recorded
+    nowhere.
+    """
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s -"
+    out = capsys.readouterr().out
+    assert "kept k3s" in out and "clear-manual-plane k3s`" in out
+    ((_role, dropped, remaining),) = journal
+    assert dropped is None and remaining == frozenset({"k3s"})
+
+
+def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
+    """A missing row is the same unknown: a line older than the sidecar, or a garbled row."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+
+
+def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
+    """The accepting half for an empty row: the whole-role tag covers it, however spelled."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "k3s") == 0
+    assert not (tmp_path / "manual_plane").exists()
+
+
+def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, run):
+    """What an operator pastes after applying both roles must clear both.
+
+    `common`'s row is always empty, because no playbook applies it and nothing narrows it.
+    A shared `clear-manual-plane <role> --applied <tags>` sent the operator to run it with
+    `--applied` for `common` too, which keeps that line by design.
+    """
+    # Importable only once `gitops_state` has put the deployer's `files/` on sys.path.
+    import deploy_remediation
+
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
+    (tmp_path / "manual_plane_tags").write_text("common -\nk3s kubeconfig\n")
+    text = deploy_remediation.manual_plane_remediation(
+        {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
+    )
+    clear = text.rsplit("`", 2)[-2]
+    commands = [c.split("gitops_state.py ", 1)[1].split() for c in clear.split(" && ")]
+    assert len(commands) == 2, clear
+    for argv in commands:
+        assert run(tmp_path, *argv) == 0
+    assert not (tmp_path / "manual_plane").exists(), clear
 
 
 def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, run, capsys):
@@ -174,7 +283,7 @@ def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
     write the command made. The journal call is the evidence that write does not leave.
     """
     assert run(marker.parent, "clear-manual-plane", "k3s") == 0
-    ((role, dropped),) = journal
+    ((role, dropped, _remaining),) = journal
     assert role == "k3s"
     assert (dropped.origin, dropped.playbook, dropped.at) == (
         "abc123def4567890",
@@ -182,7 +291,9 @@ def test_a_clear_journals_the_role_and_the_line_it_dropped_and_a_no_op_says_so(
         1000.0,
     )
     assert run(marker.parent, "clear-manual-plane", "k3s") == 0
-    assert journal[1] == ("k3s", None), "a second run drops nothing and still says so"
+    assert journal[1] == ("k3s", None, frozenset()), (
+        "a second run drops nothing and still says so"
+    )
 
 
 def test_a_refused_clear_journals_nothing(marker, tree_lock, run, journal):
@@ -231,8 +342,8 @@ def test_a_failing_logger_does_not_change_the_clears_exit_code(marker, tree_lock
         ["--state-dir", str(marker.parent), "clear-manual-plane", "k3s"],
         lock_path=str(tree_lock),
         lock_wait_s=0.05,
-        journal=lambda role, dropped: gitops_state.journal_clear(
-            role, dropped, run=no_logger
+        journal=lambda role, dropped, remaining: gitops_state.journal_clear(
+            role, dropped, remaining, run=no_logger
         ),
     )
     assert rc == 0

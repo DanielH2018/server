@@ -29,6 +29,7 @@ Reach `deploy_alerts` qualified, never by from-import.
 """
 
 import time
+from typing import NamedTuple
 
 import deploy_alerts
 import deploy_narrow
@@ -191,13 +192,32 @@ def narrow_tags_for(
     return frozenset(tag for tag in out.split(",") if tag) or None
 
 
+class Recorded(NamedTuple):
+    """What one tick's `record` wrote, and everything `unrecord` needs to take it back.
+
+    Attributes:
+        roles: the roles whose `manual_plane` LINE this tick appended. A role a previous tick
+            recorded keeps its first-seen stamp and is not in here.
+        tags_before: role tag -> its `manual_plane_tags` row as it stood BEFORE this tick, or
+            None where the role had no row. One entry per role the tick wrote a row for,
+            which is every role it was handed — including the ones already pending.
+    """
+
+    roles: list[str]
+    tags_before: dict[str, frozenset[str] | None]
+
+
+# What `deploy_handlers` passes to `unrecord` for a tick that never called `record`.
+NOTHING_RECORDED = Recorded([], {})
+
+
 def record(
     tools: DeployTools,
     state: DeployerState,
     config: Config,
     target: TickTarget,
     roles: list[str],
-) -> list[str]:
+) -> Recorded:
     """Record each role this tick merged past and cannot apply, then page once per SHA.
 
     A role already in the marker keeps its first-seen stamp, which is the age monitor-bridge
@@ -213,11 +233,18 @@ def record(
     twice whenever a role was already listed.
 
     Returns:
-        The roles this tick added, which is what `unrecord` takes back when the ff-merge that
-        made them pending is rolled back. A role a previous tick recorded is not in it.
+        A `Recorded` carrying both halves of what this tick did, because the two need
+        different reverses (#2320). The lines it appended are dropped outright. The rows it
+        WIDENED belong to a role an earlier range made pending, so they are put back to the
+        snapshot taken here — the union is not invertible, and dropping the line with them
+        would take back a range that is still merged.
     """
     now = time.time()
     origin = target.origin
+    before = state.manual_plane_tags_pending()
+    tags_before = {
+        setup_role_tag(role): before.get(setup_role_tag(role)) for role in roles
+    }
     recorded = [
         role
         for role in roles
@@ -250,25 +277,39 @@ def record(
             state.path("manual_plane"),
         ),
     )
-    return recorded
+    return Recorded(recorded, tags_before)
 
 
-def unrecord(state: DeployerState, origin: str, roles: list[str]) -> None:
-    """Take back the lines `record` wrote, for a tick whose ff-merge was undone.
+def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
+    """Take back everything `record` wrote, for a tick whose ff-merge was undone.
 
     A pending role means merged-and-unapplied. When the tick resets to `local` — which
     `for_contention` does, because nothing was applied — the merge half stops being true, so
     the marker would page for six hours about work no tree carries. The dedupe page is cleared
-    with them, but only when it names THIS origin: a page for an earlier SHA is somebody else's.
+    with it, but only when it names THIS origin: a page for an earlier SHA is somebody else's.
+
+    THE TWO HALVES NEED DIFFERENT REVERSES (#2320). A role whose line this tick appended is
+    cleared outright, and `clear_manual_plane` takes its row with it. A role that was ALREADY
+    pending keeps its line — an earlier range is still merged — and only the row this tick
+    widened is put back. `record` returned the earlier value because a subtraction cannot do
+    it: this tick's derivation may have collapsed the row to the empty set, and nothing
+    subtracted from an empty set recovers the earlier range's tags.
 
     Args:
         state: the marker files.
         origin: the SHA this tick recorded under.
-        roles: what `record` returned, so a role an earlier tick recorded is left alone.
+        recorded: what `record` returned for this tick.
     """
-    for role in roles:
-        state.clear_manual_plane(setup_role_tag(role))
-    if roles and state.read("broad_alerted") == origin:
+    cleared = {setup_role_tag(role) for role in recorded.roles}
+    for tag in cleared:
+        state.clear_manual_plane(tag)
+    for tag, before in recorded.tags_before.items():
+        if tag not in cleared:
+            state.restore_manual_plane_tags(tag, before)
+    # Only when this tick appended a line. A tick that only widened an already-pending role's
+    # row leaves the role pending either way, so clearing the dedupe there re-paged the same
+    # SHA on every contended tick.
+    if recorded.roles and state.read("broad_alerted") == origin:
         state.write("broad_alerted", None)
 
 

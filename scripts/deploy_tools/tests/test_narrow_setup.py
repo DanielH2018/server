@@ -19,99 +19,24 @@ import deploy_narrow
 import narrow_setup
 from lib.repo_paths import REPO
 
-from _narrow_fixtures import Tree, _refs
-
-ROLE = "ansible/roles/setup/demo"
-
-# One task file per tag, the shape every setup role has: `main.yml` imports them and carries
-# no tags of its own, so it is the untagged file the refusals key on.
-MAIN = """\
----
-- name: The first topic
-  ansible.builtin.import_tasks: alpha.yml
-- name: The second topic
-  ansible.builtin.import_tasks: beta.yml
-"""
-
-ALPHA = """\
----
-- name: Render the alpha config
-  ansible.builtin.template:
-    src: alpha.conf.j2
-    dest: /etc/alpha.conf
-  tags: [alpha]
-- name: Restart alpha
-  ansible.builtin.systemd:
-    name: alpha
-    state: restarted
-  tags: [alpha]
-"""
-
-BETA = """\
----
-- name: Render the beta config
-  ansible.builtin.template:
-    src: beta.conf.j2
-    dest: /etc/beta.conf
-  tags: [beta]
-- name: Release the beta cron scripts
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
-  vars:
-    release_bin_templates: "{{ demo_release_groups | map(attribute='templates') | flatten }}"
-  tags: [beta]
-"""
-
-DEFAULTS = """\
----
-demo_alpha_mode: fast
-demo_beta_mode: slow
-demo_orphan_key: nobody-reads-this
-# A host script's template named in a data structure rather than in a task's `src:` — the
-# shape `setup/k3s` uses for its cron scripts, through `k3s_render_stamp_groups`.
-demo_release_groups:
-  - name: demo-beta
-    templates:
-      - beta-cron.sh.j2
-"""
-
-
-# The playbook the remediation prints for `demo`. The derivation refuses a role no play in it
-# lists, since none of the role's own tags reach a host through it.
-PLAYBOOK = "ansible/demo.yml"
-PLAYBOOK_TEXT = """\
----
-- name: Apply the demo role
-  hosts: localhost
-  roles:
-    - { role: demo, tags: ["demo"] }
-"""
-
-
-def build(tmp_path) -> Tree:
-    """A checkout holding one setup role with two tagged task files and one untagged one."""
-    tree = Tree(tmp_path / "repo")
-    tree.write(PLAYBOOK, PLAYBOOK_TEXT)
-    tree.write(f"{ROLE}/tasks/main.yml", MAIN)
-    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA)
-    tree.write(f"{ROLE}/tasks/beta.yml", BETA)
-    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }}\n")
-    tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = {{ demo_beta_mode }}\n")
-    tree.write(f"{ROLE}/templates/beta-cron.sh.j2", "#!/bin/sh\necho beta\n")
-    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS)
-    tree.write(
-        f"{ROLE}/handlers/main.yml", "---\n- name: noop\n  ansible.builtin.debug: {}\n"
-    )
-    tree.commit("base")
-    return tree
+from _narrow_fixtures import _refs
+from _setup_role_fixtures import (
+    ALPHA,
+    BETA,
+    DEFAULTS,
+    MAIN,
+    PLAYBOOK,
+    PLAYBOOK_TEXT,
+    ROLE,
+    Tree,
+    build,
+    narrow,
+)
 
 
 @pytest.fixture
 def tree(tmp_path) -> Tree:
     return build(tmp_path)
-
-
-def narrow(tree: Tree, old: str, new: str) -> frozenset[str]:
-    return narrow_setup.role_tags("demo", "demo", old, new, str(tree.root), PLAYBOOK)
 
 
 # ── a template maps to the tags of the task file that renders it ────────────────────────
@@ -313,9 +238,9 @@ def test_the_real_playbooks_list_the_roles_they_apply():
         ("ansible/initial_setup.yml", "gitops_deploy"),
     ):
         text = (REPO / playbook).read_text()
-        assert narrow_setup._playbook_applies_role(text, role), f"{playbook}: {role}"
+        assert narrow_setup.playbook_applies_role(text, role), f"{playbook}: {role}"
     text = (REPO / "ansible/initial_setup.yml").read_text()
-    assert not narrow_setup._playbook_applies_role(text, "k3s")
+    assert not narrow_setup.playbook_applies_role(text, "k3s")
 
 
 def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():

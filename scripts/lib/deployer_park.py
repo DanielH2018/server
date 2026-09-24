@@ -50,10 +50,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib.gitops_markers import (
     CONTENTION_CLEAR_CMD,
     CONTENTION_PAGE_SECONDS,
-    MANUAL_PLANE_CLEAR_CMD,
     MARKERS,
     STATE_DIR,
     parse_contention,
+    manual_plane_clear_cmd,
+    maximal_apply_warning,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
@@ -191,20 +192,29 @@ def manual_plane_lines(marker, now, tags_marker=None):
     the change needs rather than the whole-role tag (#2307). It is READ, not re-derived: an
     isolated worktree cannot ask git about the primary checkout. An absent sidecar reads as
     the role tag.
+
+    The command carries `maximal_apply_warning` where it arms something gated (#2345). The
+    journal line, the Discord alert and `land.sh` all warn through `deploy_remediation`, which
+    this module cannot import — the SessionStart hook loads it with only `scripts/` on
+    `sys.path`. So the warning that both surfaces key on is data in `gitops_markers`, and the
+    banner was the one place printing `--tags k3s` with nothing beside it.
     """
     lines = []
     narrow = parse_manual_plane_tags(tags_marker) if tags_marker else {}
     for e in sorted(parse_manual_plane(marker), key=lambda e: e.at):
-        tags = ",".join(sorted(narrow.get(e.role) or {e.role}))
+        selected = narrow.get(e.role) or {e.role}
+        tags = ",".join(sorted(selected))
+        warning = maximal_apply_warning(e.role, selected)
         how = (
             f"apply `{e.playbook} --tags {tags}` by hand"
+            + (f" (WARNING: {warning})" if warning else "")
             if e.playbook != "none"
             else "apply the role by hand"
         )
         lines.append(
             f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
             f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
-            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', e.role)}`"
+            f"`{manual_plane_clear_cmd(e.role, selected)}`"
         )
     return lines
 

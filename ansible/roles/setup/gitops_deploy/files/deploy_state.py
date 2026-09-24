@@ -230,12 +230,83 @@ class DeployerState:
             pending[role] = pending.get(role, frozenset()) | tags
         self.write("manual_plane_tags", format_manual_plane_tags(pending))
 
+    def restore_manual_plane_tags(self, role: str, tags: frozenset[str] | None) -> None:
+        """Put `role`'s narrow-tag row back to a value a caller snapshotted, or remove it.
+
+        Args:
+            role: the role, under the `--tags` value that selects it.
+            tags: the row as it stood before, or None when the role had no row at all.
+
+        The inverse of `record_manual_plane_tags` for a tick whose ff-merge was undone, and it
+        restores rather than subtracting because the union is not invertible: a refusal
+        collapses the row to the empty set, which no subtraction can unwind back to the
+        earlier range's tags. `deploy_defer.record` takes the snapshot, `unrecord` hands it
+        back (#2320).
+        """
+        pending = self.manual_plane_tags_pending()
+        if tags is None:
+            pending.pop(role, None)
+        else:
+            pending[role] = tags
+        self.write("manual_plane_tags", format_manual_plane_tags(pending))
+
     def _drop_manual_plane_tags(self, role: str) -> None:
         """Drop one role's narrow-tag row, removing the marker when it was the last one."""
         pending = self.manual_plane_tags_pending()
         if pending.pop(role, None) is None:
             return
         self.write("manual_plane_tags", format_manual_plane_tags(pending))
+
+    def clear_manual_plane_tags_applied(
+        self, role: str, applied: frozenset[str]
+    ) -> frozenset[str] | None:
+        """Drop `applied` from `role`'s row, keeping the line when work is left on it.
+
+        Args:
+            role: the role, under the `--tags` value that selects it.
+            applied: the tags the operator actually ran. Naming `role` itself is a whole-role
+                apply, and clears the line however the row has grown.
+
+        Returns:
+            The tags still pending, or None when the whole line went — which is also what a
+            role that was not pending returns. `{role}` alone means the line was KEPT because
+            the row is empty or missing: the role needs its whole-role tag, which no narrowed
+            apply covers.
+
+        The operator's narrowed clear (#2349). `land.sh` prints `--tags kubeconfig` and the
+        clear beside it, and between the two a second range can widen the row to
+        `coredns,kubeconfig`. A whole-line clear there drops `coredns` with it, leaving that
+        change merged, unapplied and recorded nowhere. Only a row the apply covered entirely
+        takes the line.
+
+        An EMPTY or MISSING row keeps the line too, and writes nothing. Every printer names
+        `--applied` only while it holds a non-empty row, so meeting an empty one means the row
+        changed after the command was printed: a later range's derivation refused, collapsing
+        the row to "the whole role". Clearing there drops that range unapplied. A missing row
+        is the same unknown — a line written before the sidecar existed, or a row too garbled
+        to parse.
+
+        `clear_manual_plane` is deliberately left alone: `deploy_defer.unrecord` and
+        `clear_manual_plane_applied` both depend on it dropping the line and the row together.
+        """
+        if role in applied:
+            self.clear_manual_plane(role)
+            return None
+        row = self.manual_plane_tags_pending().get(role)
+        if not row:
+            return frozenset({role})
+        # DECIDED: subtract-and-keep, with no guard on the origin SHA the command was printed
+        # for. A second range that needs a tag ALREADY in the row (PR-B also needs
+        # `kubeconfig`) leaves the row unchanged, so an operator who applied `kubeconfig`
+        # before PR-B fast-forwarded clears PR-B's pending work with their own. Closing that
+        # needs the printed command to carry a token of what the row was, which widens the
+        # marker grammar the sidecar exists to leave alone. Accepted in #2349 (PR #2364).
+        remaining = row - applied
+        if not remaining:
+            self.clear_manual_plane(role)
+            return None
+        self.restore_manual_plane_tags(role, remaining)
+        return remaining
 
     def clear_manual_plane_applied(self, playbook: str, tags: list[str]) -> list[str]:
         """Drop the pending roles this apply covered, and return them.

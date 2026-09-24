@@ -235,6 +235,35 @@ def test_the_oldest_pending_role_decides(cfg):
     assert "common" in msg and "k3s" in msg
 
 
+def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
+    """The page prints the same clear the banner does, not a bare `<role>` (#2349).
+
+    A bare clear after a narrowed apply drops a tag a later range added to the row.
+    `common`'s empty row gets the bare form, since `--applied` there keeps the line.
+    """
+    marker = _K3S_PENDING + "\ndef456abc7890123 none common 25000.0"
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=1000.0 + 7 * 3600,
+        manual_plane=marker,
+        manual_plane_tags="common -\nk3s kubeconfig",
+    )
+    assert not ok
+    assert "clear-manual-plane common && " in msg
+    assert msg.endswith("clear-manual-plane k3s --applied kubeconfig`")
+    assert "<role>" not in msg
+
+
+def test_a_role_with_no_row_pages_the_bare_clear(cfg):
+    """The rejecting half: nothing narrowed, so the whole-role clear."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg, None, now=1000.0 + 7 * 3600, manual_plane=_K3S_PENDING
+    )
+    assert not ok
+    assert msg.endswith("clear-manual-plane k3s`")
+
+
 def test_an_unparseable_manual_plane_marker_is_ok(cfg):
     """Same rule as `behind_since`: garbage must not page forever with nothing to clear."""
     for marker in ("garbage", "a b c notanumber", "", "a b c"):
@@ -278,9 +307,10 @@ def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
     """The marker is read off the same :ro state mount as `behind_since`."""
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
+    _gw(tmp_path, "manual_plane_tags", "k3s kubeconfig")
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
-    assert "k3s" in msg
+    assert "k3s --applied kubeconfig" in msg, "the tags row is read off the mount too"
 
 
 # ── consecutive ticks deferred on a busy service lock (issue #1847) ───────────────────────────

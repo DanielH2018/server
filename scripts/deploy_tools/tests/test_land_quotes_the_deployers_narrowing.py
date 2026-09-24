@@ -81,6 +81,25 @@ def test_a_stale_row_from_an_earlier_range_is_flagged(pr):
     assert "ansible/k3s-bringup.yml --tags k3s`" in note
 
 
+def test_a_narrowed_note_clears_only_the_tags_it_told_you_to_apply(pr):
+    """The clear beside a narrowed apply names `--applied` (#2349).
+
+    A second PR touching the same role can widen the row between this note being printed and
+    the operator running the clear. The bare form would drop that PR's tag too, leaving its
+    change merged, unapplied and recorded nowhere.
+    """
+    narrow = confirmed(pr, "k3s kubeconfig")
+    note = land_tags.plane_note([RBAC], narrow_tags=narrow)
+    assert "clear-manual-plane k3s --applied kubeconfig" in note
+
+
+def test_a_role_tag_note_clears_the_whole_line(pr):
+    """The rejecting half: a whole-role apply covers whatever the row has gained."""
+    note = land_tags.plane_note([RBAC], narrow_tags={})
+    assert "clear-manual-plane k3s`" in note
+    assert "--applied" not in note
+
+
 @pytest.mark.parametrize(
     "sidecar", [None, "", "k3s -"], ids=["unreadable", "absent", "refused"]
 )
@@ -144,4 +163,34 @@ def test_a_confirmed_narrowing_reaches_the_verdict_after_the_tick(land_run):
 
 def test_an_unconfirmed_narrowing_leaves_the_role_tag_in_the_verdict(land_run):
     _rc, out, _err, _calls, _ = _landing(land_run, {})
+    assert "ansible/k3s-bringup.yml --tags k3s`" in out
+
+
+def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
+    """A raise in the re-render ends in the step 1 note, not in a traceback (#2350).
+
+    `plane_note` already ran on these inputs in step 1, so this is unlikely — which is exactly
+    why it was outside the `try`. `land.py` returning a traceback instead of a VERDICT costs
+    the operator the whole landing; the role tag costs them a wider apply.
+    """
+    calls_made = []
+
+    def plane_note(paths, declared=None, *, quiet=False, narrow_tags=None):
+        calls_made.append(narrow_tags)
+        if narrow_tags:
+            raise RuntimeError("the re-render blew up")
+        return land_tags.plane_note(paths, declared, quiet=quiet)
+
+    f = Fakes(
+        gh_views={"files,changedFiles": _RBAC_PR},
+        derived=([], "pr"),
+        state={"manual_plane_tags": "k3s kubeconfig"},
+        narrowing={"k3s": frozenset({"kubeconfig"})},
+    )
+    classifier = dataclasses.replace(build_classifier(f), plane_note=plane_note)
+    _rc, out, _err, _calls, _ = land_run([], f, classifier=classifier)
+    assert calls_made[-1] == {"k3s": frozenset({"kubeconfig"})}, (
+        "the re-render was tried"
+    )
+    assert "VERDICT" in out
     assert "ansible/k3s-bringup.yml --tags k3s`" in out

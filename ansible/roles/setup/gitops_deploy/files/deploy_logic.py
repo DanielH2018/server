@@ -105,11 +105,14 @@ from deploy_remediation import (  # noqa: F401
     BRANCH_DEFAULT,
     BROAD_BUDGET_MARGIN_S,
     MANUAL_PLANE_CLEAR_CMD,
+    _narrowed_tags,
     _setup_commands,
     broad_budget_ok,
     broad_remediation,
     deferred_service_alerts,
     k8s_remediation,
+    manual_plane_clear_cmd,
+    manual_plane_clear_for,
     manual_plane_remediation,
 )
 from deploy_staging import (  # noqa: F401

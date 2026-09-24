@@ -164,7 +164,9 @@ def handle_broad(
     # Kept: what this tick ADDED, so the contention arm can take exactly that back. A role a
     # previous tick already recorded keeps its first-seen stamp and is not in this list.
     recorded = (
-        deploy_defer.record(tools, state, config, target, pending) if pending else []
+        deploy_defer.record(tools, state, config, target, pending)
+        if pending
+        else deploy_defer.NOTHING_RECORDED
     )
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
