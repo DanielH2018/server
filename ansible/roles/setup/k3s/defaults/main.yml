@@ -1113,6 +1113,10 @@ k3s_host_coredns_bin: "{{ k3s_host_coredns_dir }}/coredns"
 k3s_host_coredns_conf: /etc/coredns/Corefile
 k3s_host_coredns_url: >-
   https://github.com/coredns/coredns/releases/download/v{{ k3s_host_coredns_version }}/coredns_{{ k3s_host_coredns_version }}_linux_amd64.tgz
+# Where get_url lands the tarball it checks against k3s_host_coredns_sha256. Inside the
+# versioned directory, not /tmp: a file that survives a reboot is what lets get_url's own
+# checksum comparison skip the download on every later run.
+k3s_host_coredns_tarball: "{{ k3s_host_coredns_versioned_bin | dirname }}/coredns_{{ k3s_host_coredns_version }}_linux_amd64.tgz"
 
 # DELIBERATELY A PUBLIC NAME, not `pi.hole`. This gate protects the resolv.conf switch, so
 # what it must establish is "the forwarder answers", not "Pi-hole is up". Probing pi.hole

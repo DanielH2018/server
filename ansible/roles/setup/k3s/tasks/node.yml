@@ -69,14 +69,33 @@
   become: true
   when: k3s_host_coredns_enabled
 
-- name: Install the pinned CoreDNS release
+- name: Download the pinned CoreDNS release
   tags: [node-dns]
   # checksum: is the whole security argument. The release's own .sha256 sidecar travels over
   # the same connection as the tarball and is signed by nothing, so fetching it would verify
   # transport integrity twice and authenticity never. The pin lives in defaults/main.yml and
   # a changed artifact fails here. Same shape as roles/setup/sops_setup.
+  #
+  # A separate get_url because `unarchive` with a URL src takes no checksum at all: until
+  # #2391 the tarball was fetched and extracted with nothing reading the pin. The tarball
+  # stays in the versioned directory, so a rerun finds a matching file and downloads nothing.
+  # test_host_coredns_install_is_checksummed.py pins this shape.
+  ansible.builtin.get_url:
+    url: "{{ k3s_host_coredns_url }}"
+    dest: "{{ k3s_host_coredns_tarball }}"
+    checksum: "sha256:{{ k3s_host_coredns_sha256 }}"
+    mode: "0644"
+    owner: root
+    group: root
+  become: true
+  when: k3s_host_coredns_enabled
+
+- name: Install the pinned CoreDNS release
+  tags: [node-dns]
+  # Extracts the tarball the task above verified. `remote_src` because that file is on the
+  # node, not the controller.
   ansible.builtin.unarchive:
-    src: "{{ k3s_host_coredns_url }}"
+    src: "{{ k3s_host_coredns_tarball }}"
     dest: "{{ k3s_host_coredns_versioned_bin | dirname }}"
     remote_src: true
     include: [coredns]
