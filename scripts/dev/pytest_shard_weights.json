@@ -756,6 +756,7 @@
  "scripts/tests/test_git_and_gh_go_through_lib.py": 0.1,
  "scripts/tests/test_invoker_paths_resolve.py": 0.3,
  "scripts/tests/test_mkdocs_config.py": 0.05,
+ "scripts/tests/test_renovate_auto_replace.py": 0.01,
  "scripts/tests/test_renovate_docker_engine_pins.py": 0.0,
  "scripts/tests/test_renovate_dockerfiles.py": 0.17,
  "scripts/tests/test_renovate_manager_overlap.py": 0.0,
