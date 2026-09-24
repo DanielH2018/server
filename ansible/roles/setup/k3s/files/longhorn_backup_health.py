@@ -110,6 +110,16 @@ DRILL_MAX_AGE_DAYS = _require_int_env("LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS")
 DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
+CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
+
+# Check 9's transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
+# file in milliseconds, and the shim sizes the reader's worst-case run against its 600s cron
+# period, where two more 30s calls would not fit.
+journal = host_lib.journal_reader(
+    _require_env("LONGHORN_JOURNALCTL"),
+    CRON_EVIDENCE_WINDOW_HOURS,
+    _require_int_env("LONGHORN_JOURNAL_TIMEOUT_S"),
+)
 
 MAX_AGE_S = MAX_AGE_HOURS * 3600
 WEEKLY_MAX_AGE_S = WEEKLY_MAX_AGE_HOURS * 3600
@@ -536,6 +546,15 @@ def main(now: float | None = None) -> int:
     )
     if coverage_problem:
         problems.append(coverage_problem)
+
+    # ── check 9: trim + B2-accounting cron evidence ───────────────────────────────────────
+    problems.extend(
+        logic.check_cron_evidence(
+            journal("longhorn-trim"),
+            journal("b2-deletions"),
+            CRON_EVIDENCE_WINDOW_HOURS,
+        )
+    )
 
     status, msg, push_msg = logic.build_verdict(
         problems,

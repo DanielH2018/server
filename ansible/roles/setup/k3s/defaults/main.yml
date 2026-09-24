@@ -436,11 +436,21 @@ k3s_longhorn_restore_drill_min_bytes: 1
 # it does prove: the restore completes, the probe pod mounts it and reports. n8n-files is here
 # because n8n writes to /files only when a workflow does and none has — its actualSize has stayed
 # within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume) for the 30 days to 2026-09-22, and
-# the 2026-08-30 drill restored it to files=0. A volume that starts holding data does NOT need
-# removing from this list for the drill to stay honest, but remove it anyway: the list is a claim
-# about the volume, and the waiver is dead weight once the content assertions can pass.
+# the 2026-08-30 drill restored it to files=0.
+# A volume that starts holding data DOES leave the waiver behind, but the drill no longer depends
+# on anyone noticing: the ceiling below withdraws it. Remove the name anyway once that happens —
+# the list is a claim about the volume, and the waiver is dead weight once the content assertions
+# can pass.
 k3s_longhorn_restore_drill_empty_ok_pvcs:
   - n8n-files
+# The waiver above applies only while the SOURCE volume's actualSize stays under this. Until
+# 2026-09-24 it applied by name alone, whatever the volume held (#2393), so an empty restore of a
+# volume that had filled up still stamped success and check 8 still read it as restore-proven.
+# 60 MiB: the recorded bare-ext4 band for the one declared volume is 51.05-51.77 MB across the 30
+# days to 2026-09-22, so this clears the observed noise by ~11 MB while withdrawing the waiver
+# from anything that could plausibly be real data. Raising it widens the band of real content a
+# `files=0` restore would still be waived for, which is the whole thing this bounds.
+k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
 k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
 # The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
 # volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
@@ -472,6 +482,14 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
 # state check 8 is already paging about on its own terms.
 k3s_longhorn_restore_drill_coverage_slack_days: 5
+
+# How far back check 9 of longhorn-backup-health.sh reads the `longhorn-trim` and `b2-deletions`
+# journal tags. Both crons run daily, so 26h holds the last run under either DST offset with a
+# couple of hours of jitter to spare. It is also how long a reported fault stays RED: the trim
+# arm reads only the NEWEST run, so a fixed trim goes green on its next run whatever this is,
+# while an UNPRICED deletion — a permanent event, not a state — ages out after this window.
+# Shrinking it below one cron period leaves the check with nothing to read on most ticks.
+k3s_longhorn_cron_evidence_window_hours: 26
 
 # How many volume engines Longhorn upgrades per node once the manager moves to a new version.
 # Upstream ships 0, which means engines NEVER follow the manager — after a version bump every

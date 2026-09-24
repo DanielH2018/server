@@ -111,10 +111,14 @@ ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
           vol: .metadata.name,
           size: (.spec.size | tostring),
           bs: ((.spec.backupBlockSize // 16777216) | tostring),
-          target: (.spec.backupTargetName // "default")}
+          target: (.spec.backupTargetName // "default"),
+          # Carried through for the empty-content waiver below, which needs to know what the
+          # SOURCE volume holds. It is already read two lines up for the size cap; emitting it
+          # is what lets a declared-empty volume stop being waived once it fills up.
+          asize: (((.status.actualSize // 0) | tonumber) | tostring)}
        | select(.pvc != "")]
       | sort_by(.pvc)[]
-      | [.pvc, .ns, .vol, .size, .bs, .target] | @tsv')
+      | [.pvc, .ns, .vol, .size, .bs, .target, .asize] | @tsv')
 [[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
 
 mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
@@ -186,7 +190,7 @@ if [[ -z "$PIN" ]]; then
 fi
 [[ -n "$RETRY" ]] && CHOICE="$RETRY"
 
-IFS=$'\t' read -r PVC PVC_NS VOL SIZE BLOCKSIZE TARGET <<<"$CHOICE"
+IFS=$'\t' read -r PVC PVC_NS VOL SIZE BLOCKSIZE TARGET ACTUAL_SIZE <<<"$CHOICE"
 [[ -n "$PVC" && -n "$VOL" && -n "$SIZE" ]] || fail "could not select a volume to drill"
 PVC_NS="${PVC_NS:-$FALLBACK_NS}"
 DRILL="restore-drill-${PVC}"
@@ -331,14 +335,38 @@ BYTES=$(sed -n 's/.*bytes=\([0-9]\{1,\}\).*/\1/p' <<<"$PROBE" | head -1)
 # volume is empty" from "the volume could not be read". The name is declared per volume so the
 # waiver cannot widen: a volume not on the list that restores empty still fails.
 EMPTY_OK="{{ k3s_longhorn_restore_drill_empty_ok_pvcs | join(' ') }}"
+EMPTY_OK_MAX_BYTES="{{ k3s_longhorn_restore_drill_empty_ok_max_actual_bytes }}"
 DECLARED_EMPTY=""
-[[ " ${EMPTY_OK} " == *" ${PVC} "* ]] && DECLARED_EMPTY=1
+WAIVER_NOTE=""
+# DECIDED: the waiver is gated on the SOURCE volume's actualSize as well as on the name (#2393).
+# The name alone waived both content assertions whatever the volume held, and nothing else in
+# this drill compares the restored content against the source — so the day n8n-files starts
+# holding data, an empty restore would still have stamped success and check 8 would still have
+# read it as restore-proven. The defaults comment claimed removing a volume from the list was
+# optional for the drill to stay honest; it was not, and both are corrected together.
+#
+# actualSize is the right quantity because it can only OVER-count: it includes snapshot blocks,
+# so a wrong reading strands a declared volume on the ordinary content assertions and shows up
+# as a visible RED, never as a volume wrongly waived. Backup.status.size is the alternative and
+# is too coarse — it counts whole 16 MiB blocks, which cannot separate a bare filesystem from
+# one holding a few MB. The threshold is derived beside the tunable in defaults/main.yml.
+#
+# Over the ceiling the waiver is WITHHELD rather than the run failed outright: a declared volume
+# that has filled up and restores its content correctly should pass on the ordinary assertions,
+# not fail because its name is still on a list.
+if [[ " ${EMPTY_OK} " == *" ${PVC} "* ]]; then
+  if (( ${ACTUAL_SIZE:-0} < EMPTY_OK_MAX_BYTES )); then
+    DECLARED_EMPTY=1
+  else
+    WAIVER_NOTE=" — declared may-be-empty, but the source volume's actualSize ${ACTUAL_SIZE:-0} is at or over the ${EMPTY_OK_MAX_BYTES}-byte bare-filesystem ceiling, so the waiver does not apply"
+  fi
+fi
 
 [[ -n "$FILES" && ( "$FILES" -gt 0 || -n "$DECLARED_EMPTY" ) ]] \
-  || fail "restored volume for ${PVC} has no files: ${PROBE}"
+  || fail "restored volume for ${PVC} has no files: ${PROBE}${WAIVER_NOTE}"
 MIN_BYTES="{{ k3s_longhorn_restore_drill_min_bytes }}"
 [[ -n "$BYTES" && ( "$BYTES" -ge "$MIN_BYTES" || -n "$DECLARED_EMPTY" ) ]] \
-  || fail "restored volume for ${PVC} holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}"
+  || fail "restored volume for ${PVC} holds ${BYTES:-0} bytes, under the ${MIN_BYTES} floor: ${PROBE}${WAIVER_NOTE}"
 
 # The stamp is written ONLY here, after both assertions pass. Check 7 reads its contents, so
 # stamping earlier — or on any failure path — would report a broken drill as a healthy one.

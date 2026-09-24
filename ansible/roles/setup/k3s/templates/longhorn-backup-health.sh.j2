@@ -38,11 +38,13 @@
 # actual (newer) setting. Nothing here catches that case; it is a property of which commit is on
 # the host, not something this script can detect from the outside.
 #
-# The reader issues up to 19 kubectl calls across its eight checks (2 armed targets x up to 2
-# calls, +1 freshness, +1 errored-backups, +1 coverage +9 per-tier, +1 recent-budget +1 r2-set,
-# +1 failed-jobs), each with a 30s timeout — an 570s worst case against this script's 600s cron
-# period. Left as-is: `k3s kubectl` calls against the local API server return in well under a
-# second in practice, and 30s is a timeout for a wedged cluster, not an expected duration.
+# The reader issues up to 19 kubectl calls across its first eight checks (2 armed targets x up to
+# 2 calls, +1 freshness, +1 errored-backups, +1 coverage +9 per-tier, +1 recent-budget +1 r2-set,
+# +1 failed-jobs), each with a 30s timeout, plus check 9's two journalctl reads at 10s each — a
+# 590s worst case against this script's 600s cron period. Left as-is: `k3s kubectl` calls against
+# the local API server return in well under a second in practice, and 30s is a timeout for a
+# wedged cluster, not an expected duration. The margin is now 10s, so a NEW kubectl call needs
+# either a shorter deadline or a longer cron period.
 set -uo pipefail
 
 # shellcheck source=/dev/null
@@ -129,6 +131,14 @@ export LONGHORN_WEEKLY_BACKUP_MINUTE_HOUR="{{ k3s_longhorn_weekly_backup_minute_
 export LONGHORN_RESTORE_DRILL_STAMP_DIR="{{ k3s_longhorn_restore_drill_stamp_dir }}"
 export LONGHORN_RESTORE_DRILL_MAX_AGE_DAYS="{{ k3s_longhorn_restore_drill_max_age_days }}"
 export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill_coverage_slack_days }}"
+# Check 9's transport. Absolute for the reason LONGHORN_BACKUP_KUBECTL is: cron's PATH is
+# /usr/bin:/bin here, and a reader that cannot spawn the binary reports "could not read" rather
+# than a verdict. Its own 10s timeout rather than the 30s kubectl one — journalctl answers from a
+# local file in milliseconds, so 10s is a wedged-journald deadline, and reusing 30s would push
+# the worst-case run past this script's 600s cron period (see the header's arithmetic).
+export LONGHORN_JOURNALCTL="/usr/bin/journalctl"
+export LONGHORN_JOURNAL_TIMEOUT_S="10"
+export LONGHORN_CRON_EVIDENCE_WINDOW_HOURS="{{ k3s_longhorn_cron_evidence_window_hours }}"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
 # having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty

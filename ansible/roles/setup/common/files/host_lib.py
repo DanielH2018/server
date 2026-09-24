@@ -184,3 +184,48 @@ def kubectl_runner(binary: str, namespace: str, timeout: int):
         return proc.returncode, proc.stdout if proc.returncode == 0 else proc.stderr
 
     return kubectl
+
+
+def journal_reader(binary, window_hours, timeout):
+    """Return a `journal(tag) -> list or None` bound to one binary, window and timeout.
+
+    Reads the messages a syslog tag wrote in the last `window_hours`. A host cron that reports
+    through `logger` is only evidence once something reads it back, and the caller that needs
+    that is the Longhorn backup-plane heartbeat (check 9, #2418). Bound the same way
+    kubectl_runner is, for the same reason: the binary path, the window and the deadline are the
+    caller's settings, and the subprocess handling should not be copied per caller.
+
+    `--output=cat` prints the message alone, so each returned line is exactly one journal entry
+    and `logger`'s one-entry-per-input-line behaviour is preserved. That drops the timestamps,
+    which is why the window is bounded by `--since` rather than by parsing dates back out.
+
+    Returns None when the read itself failed — a nonzero rc, a timeout, or a binary that would
+    not spawn. An empty list is a different answer and means the window held no message. A
+    caller that folded the two together would report a broken journalctl as a quiet cron.
+    """
+    argv = binary.split()
+
+    def journal(tag):
+        """Messages `tag` logged inside the window, newest last, or None if the read failed."""
+        try:
+            proc = subprocess.run(
+                [
+                    *argv,
+                    "-t",
+                    tag,
+                    "--since",
+                    "-%sh" % window_hours,
+                    "--output=cat",
+                    "--no-pager",
+                ],
+                capture_output=True,
+                text=True,
+                timeout=timeout,
+            )
+        except subprocess.SubprocessError, OSError:
+            return None
+        if proc.returncode != 0:
+            return None
+        return [line for line in proc.stdout.splitlines() if line.strip()]
+
+    return journal

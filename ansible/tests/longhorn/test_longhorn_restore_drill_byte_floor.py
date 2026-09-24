@@ -7,9 +7,11 @@ tdarr-configs — five JSON files, 1007 bytes in total, the whole of Tdarr's /ap
 2026-09-07, and the volume read as unproven for the rest of the 26-night rotation.
 
 Both assertions are waived for a PVC named in `k3s_longhorn_restore_drill_empty_ok_pvcs`, whose
-content is legitimately empty (n8n-files). The waiver is the reason the second pair below exists:
-a volume NOT on that list must still fail on an empty restore, or the exception has widened to
-everything and the drill proves nothing about content anywhere.
+content is legitimately empty (n8n-files), AND whose source volume is still under
+`k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`. The waiver is the reason the two pairs
+below exist: a volume NOT on that list must still fail on an empty restore, or the exception has
+widened to everything, and a volume on the list that has since filled up must fail too, or the
+list is a permanent exemption rather than a claim about what the volume holds.
 
 The guards are lifted out of the template by pattern rather than restated, so a reworded check is
 exercised as written; the Jinja placeholders are the only substitutions.
@@ -35,9 +37,18 @@ _FLOOR_GUARD = re.compile(
 
 
 def _run_floor_guard(
-    files: int, byte_count: int, pvc: str = "some-config"
+    files: int,
+    byte_count: int,
+    pvc: str = "some-config",
+    actual_size: int = 51712000,
 ) -> subprocess.CompletedProcess:
-    """Execute the drill's content assertions with the deployed floor and a stub `fail`."""
+    """Execute the drill's content assertions with the deployed floor and a stub `fail`.
+
+    `actual_size` defaults to n8n-files' own recorded reading on 2026-09-22 — the observation the
+    waiver's ceiling was derived from, so the accept half is measured rather than invented. It
+    must be substituted, not left to bash: an unset `ACTUAL_SIZE` is 0 inside `(( ))`, which
+    waives everything and would let a rejecting test pass while checking nothing.
+    """
     match = _FLOOR_GUARD.search(DRILL.read_text())
     assert match, "the drill's files/bytes guard moved — update _FLOOR_GUARD"
     defaults = load_yaml(K3S / "defaults" / "main.yml")
@@ -51,11 +62,16 @@ def _run_floor_guard(
             "{{ k3s_longhorn_restore_drill_empty_ok_pvcs | join(' ') }}",
             " ".join(defaults["k3s_longhorn_restore_drill_empty_ok_pvcs"]),
         )
+        .replace(
+            "{{ k3s_longhorn_restore_drill_empty_ok_max_actual_bytes }}",
+            str(defaults["k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"]),
+        )
     )
+    assert "{{" not in guard, f"an unsubstituted placeholder reached bash:\n{guard}"
     script = (
         'fail() { echo "FAIL: $*" >&2; exit 1; }\n'
         f'PVC={pvc}\nPROBE="files={files} bytes={byte_count}"\n'
-        f"FILES={files}\nBYTES={byte_count}\n" + guard
+        f"FILES={files}\nBYTES={byte_count}\nACTUAL_SIZE={actual_size}\n" + guard
     )
     return subprocess.run(["bash", "-c", script], capture_output=True, text=True)
 
@@ -82,6 +98,23 @@ def test_a_declared_empty_volume_passes_with_no_files() -> None:
     assert "n8n-files" in declared
     result = _run_floor_guard(files=0, byte_count=0, pvc="n8n-files")
     assert result.returncode == 0, result.stderr
+
+
+def test_a_declared_volume_over_the_size_gate_fails_with_no_files() -> None:
+    """FLAGGED half of the size gate: the waiver is withdrawn once the source holds real data."""
+    # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
+    defaults = load_yaml(K3S / "defaults" / "main.yml")
+    ceiling = defaults["k3s_longhorn_restore_drill_empty_ok_max_actual_bytes"]
+    result = _run_floor_guard(
+        files=0, byte_count=0, pvc="n8n-files", actual_size=ceiling + 1
+    )
+    assert result.returncode == 1
+    assert "has no files" in result.stderr
+    # The message has to name the SIZE gate, not just the empty restore: withholding the waiver
+    # and never having declared the volume produce the same `files=0` failure otherwise, and they
+    # need different fixes.
+    assert "the waiver does not apply" in result.stderr, result.stderr
+    assert str(ceiling) in result.stderr, result.stderr
 
 
 def test_an_undeclared_volume_still_fails_with_no_files() -> None:

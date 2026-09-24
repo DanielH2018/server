@@ -107,11 +107,21 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
     `ansible/tests/longhorn/test_longhorn_restore_drill_operator_pin.py::test_argv_pin_drills_that_volume_not_the_rotations_pick`.
     A volume whose content is legitimately EMPTY is declared in
     `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_pvcs`, and
-    the drill waives its two content assertions for that name alone — everything else it
+    the drill waives its two content assertions for that name — everything else it
     proves for that volume it still proves. n8n-files restored to `files=0` on 2026-08-30,
     could not be re-drilled for another rotation, and check 8 paged `not restore-proven in
     31d`. ENFORCED:
     `ansible/tests/longhorn/test_longhorn_restore_drill_byte_floor.py::test_an_undeclared_volume_still_fails_with_no_files`.
+    **The name is not enough on its own: the waiver holds only while the SOURCE volume's
+    `status.actualSize` stays under
+    `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_restore_drill_empty_ok_max_actual_bytes`**
+    (#2393). By name alone it applied whatever the volume held, and nothing else in the drill
+    compares restored content with the source — so once n8n-files starts holding data, an empty
+    restore would still have stamped success and check 8 would still have read it as
+    restore-proven. Over the ceiling the waiver is withheld rather than the run failed, so a
+    declared volume that has filled up and restores correctly passes on the ordinary
+    assertions. ENFORCED:
+    `ansible/tests/longhorn/test_longhorn_restore_drill_empty_waiver.py::test_a_filled_declared_volume_fails_and_stamps_nothing`.
     A FAILED attempt is re-drilled the next night, ahead of the rotation, once per failure
     (#2270). Selection is least-recently-attempted and the attempt stamp is refreshed whatever
     the outcome, so before this a failed volume waited a full 26-night cycle against check 8's
@@ -148,7 +158,19 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
   no single day's backup deletions reach the B2 transaction cap
   (`docs/longhorn-backup-tiering.md`).
 - **Required evidence:** the trim and the drill log every run through `logger` (tags
-  `longhorn-trim`, `longhorn-restore-drill`, readable in Loki). The drill also stamps
+  `longhorn-trim`, `longhorn-restore-drill`, readable in Loki), and so do the two B2 accounting
+  crons (`b2-deletions`, `b2-budget`). **A `logger` line is evidence only because check 9 of
+  `longhorn-backup-health.sh` reads it** (#2418). It pushes DOWN on the trim's `ABORT:` line, on
+  a non-zero `N failed` in its newest summary line, or on an `UNPRICED` line from `b2-deletions`
+  anywhere in `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`.
+  Before that the trim's own comment claimed "a cron mail or a Kuma push notices" a failure: no
+  such push existed, and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread
+  messages on 2026-09-24. Check 9 deliberately does NOT alarm on the crons having stopped
+  running — that is #2443, not this. Both matched lines are matched AS WRITTEN, so rewording one
+  in its script means changing `_TRIM_SUMMARY_RE` / `_TRIM_ABORT_RE` in
+  `ansible/roles/setup/k3s/files/longhorn_backup_health_logic.py` in the same edit. ENFORCED:
+  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`.
+  The drill also stamps
   `ATTEMPT_DIR` on every run and `SUCCESS_DIR` only after the assertions pass; check 7 of
   `longhorn-backup-health.sh` reads those and pushes DOWN when the drill stops running — a
   drill that silently stops looks identical to one never scheduled, which is how the

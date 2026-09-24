@@ -235,3 +235,22 @@ def test_rfc3339_to_epoch_rejects_garbage():
 
 def test_rfc3339_to_epoch_rejects_empty_string():
     assert host_lib.rfc3339_to_epoch("") is None
+
+
+# ── journal_reader: a cron's `logger` line is only evidence once something reads it back ──────
+
+
+def test_journal_reader_returns_the_windows_messages_one_per_line():
+    reader = host_lib.journal_reader("/bin/echo", 26, 10)
+    lines = reader("longhorn-trim")
+    assert lines is not None
+    # /bin/echo prints the argv back, which is enough to assert the tag and the window reach it.
+    assert "-t longhorn-trim" in lines[0]
+    assert "--since -26h" in lines[0]
+    assert "--output=cat" in lines[0]
+
+
+def test_journal_reader_returns_none_when_the_read_itself_failed():
+    """None and [] are different answers: a broken journalctl must not read as a quiet cron."""
+    assert host_lib.journal_reader("/bin/false", 26, 10)("longhorn-trim") is None
+    assert host_lib.journal_reader("/nonexistent/journalctl", 26, 10)("x") is None
