@@ -41,7 +41,7 @@ def test_a_stale_tree_deriving_no_tags_refuses_as_stale_rather_than_exiting_zero
     """RED half: the shape issue #1593 reported -- silence wearing the success code."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=1)
     assert code == _STALE_EXIT
-    assert "changed" not in names and "exec" not in names, names
+    assert "changed" not in names and "deploy" not in names, names
 
 
 def test_a_stale_tree_with_a_broad_change_refuses_as_stale_not_as_broad(
@@ -64,9 +64,9 @@ def test_a_current_tree_still_derives_its_tags_and_deploys_them(tmp_path, monkey
         tmp_path, monkeypatch, stale=0, changed=(0, "uptime-kuma")
     )
     assert code is None, names
-    assert names.index("staleness") < names.index("changed") < names.index("exec")
+    assert names.index("staleness") < names.index("changed") < names.index("deploy")
     # The derived list became the run's --tags, which the locked half receives.
-    assert calls[-1][1][3] == "uptime-kuma", calls[-1]
+    assert calls[-1][1] == ["in-process", "uptime-kuma"], calls[-1]
 
 
 def test_a_current_tree_with_a_broad_change_still_refuses_as_broad(
@@ -75,7 +75,7 @@ def test_a_current_tree_with_a_broad_change_still_refuses_as_broad(
     """The second CLEAN half: exit 3 must survive the reorder on a tree that is not stale."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(_BROAD_EXIT, ""))
     assert code == _BROAD_EXIT
-    assert "changed" in names and "exec" not in names, names
+    assert "changed" in names and "deploy" not in names, names
 
 
 def test_a_current_tree_deriving_no_tags_exits_zero_having_run_nothing(
@@ -84,7 +84,7 @@ def test_a_current_tree_deriving_no_tags_exits_zero_having_run_nothing(
     """Nothing changed and nothing is behind: the one case where 0 with no deploy is true."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, changed=(0, ""))
     assert code == 0
-    assert "exec" not in names, names
+    assert "deploy" not in names, names
 
 
 def test_the_staleness_gate_is_asked_once_not_twice(tmp_path, monkeypatch):

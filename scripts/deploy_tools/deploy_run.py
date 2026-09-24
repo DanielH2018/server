@@ -177,6 +177,13 @@ def clear_fact_cache(plan: Plan) -> None:
         traceback.print_exc()
 
 
+def run_locked(plan: Plan) -> int:
+    """The foreground locked half, in process; the wrapper's exit status."""
+    from deploy_tools import deploy_under_locks
+
+    return deploy_under_locks.run(plan.repo_root, plan.tags, plan.at_sha, plan.args)
+
+
 def exec_argv(argv: list[str]) -> None:
     """Replace this process with `argv`. Flushes first: exec discards Python's buffers."""
     sys.stdout.flush()
@@ -186,7 +193,7 @@ def exec_argv(argv: list[str]) -> None:
 
 @dataclass(frozen=True)
 class Tools:
-    """The boundaries a run crosses: the four helpers and the final exec.
+    """The boundaries a run crosses: the four helpers, the final exec and the locked half.
 
     A test passes its own to inject the helpers' verdicts and observe the order the gates
     ask in, as `land_lib/tools.py` does for a landing.
@@ -197,6 +204,7 @@ class Tools:
     changed: Callable[[Plan], tuple[int, str]] = run_changed
     clear_fact_cache: Callable[[Plan], None] = clear_fact_cache
     exec_argv: Callable[[list[str]], None] = exec_argv
+    locked_run: Callable[[Plan], int] = run_locked
 
 
 REAL_TOOLS = Tools()
@@ -406,20 +414,23 @@ def validate_tags(plan: Plan, tools: Tools) -> None:
         raise Refused(DEPLOY_TAG_MISS)
 
 
-def exec_target(plan: Plan) -> list[str]:
-    """The command a run that passed every gate becomes.
+def exec_target(plan: Plan) -> list[str] | None:
+    """The command a run that passed every gate becomes, or None to run it in process.
 
     `--check` and `--dry-run` run ansible-playbook unlocked, from the WORKING TREE: a dry run
     renders to a temp dir and applies with --dry-run=server, so it writes neither the cluster
-    nor the staging tree, and there is nothing for a lock to serialize. Every other run is
-    handed to the locked half.
+    nor the staging tree, and there is nothing for a lock to serialize. `--detach` is
+    handed to `deploy_locked.sh` until slice 4 of #2412 ports it; every other run takes
+    its locks in process, in `deploy_under_locks.py`.
     """
     if plan.check or plan.dry_run:
         return ["uv", "run", "ansible-playbook", "ansible/deploy.yml", *plan.args]
+    if not plan.detach:
+        return None
     return [
         str(DEPLOY_LOCKED),
         plan.at_sha,
-        "1" if plan.detach else "0",
+        "1",
         plan.tags_csv,
         "--",
         *plan.args,
@@ -471,7 +482,10 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
         validate_tags(plan, tools)
     except Refused as refused:
         return refused.code
-    tools.exec_argv(exec_target(plan))
+    target = exec_target(plan)
+    if target is None:
+        return tools.locked_run(plan)
+    tools.exec_argv(target)
     return 1  # the exec does not return; reached only when a test replaces it
 
 

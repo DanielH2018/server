@@ -431,8 +431,8 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
   broad apply takes `all` EXCLUSIVELY. **Waiting for a service lock spends the phase's own
   budget** (`deploy_locks.locked_budget`), so a queued phase can be SIGTERMed early and read
   as a failed deploy. The lock order is `all` first, then each service sorted — the
-  `# DECIDED:` in `files/deploy_locks.py`; `deploy.sh` takes the order `deploy_locks.py plan`
-  prints and refuses (exit 79) without it.
+  `# DECIDED:` in `files/deploy_locks.py`; `deploy.sh` takes the order `deploy_locks.plan`
+  returns and refuses (exit 79) without it.
 - An overrun never produces a second concurrent run — the timer coalesces the new start into
   the activation in flight — and it does not alert: `-E 75` plus `SuccessExitStatus=75` is
   `Result=success`.

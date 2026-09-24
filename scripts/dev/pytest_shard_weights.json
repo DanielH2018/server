@@ -561,6 +561,7 @@
  "scripts/deploy_tools/tests/test_deploy_detach_notify_no_hosts.py": 0.0,
  "scripts/deploy_tools/tests/test_deploy_exit_codes.py": 0.94,
  "scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py": 0.0,
+ "scripts/deploy_tools/tests/test_deploy_locked_halves_agree.py": 0.0,
  "scripts/deploy_tools/tests/test_deploy_service_lock_concurrency.py": 15.92,
  "scripts/deploy_tools/tests/test_deploy_snapshot_dir_has_no_comma.py": 0.18,
  "scripts/deploy_tools/tests/test_deploy_snapshot_failure_names_its_cause.py": 0.12,

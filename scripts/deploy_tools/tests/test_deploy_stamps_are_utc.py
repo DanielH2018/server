@@ -50,3 +50,18 @@ def test_the_pattern_flags_a_local_time_stamp():
     assert _DATE_CALL.search(local)
     assert _DATE_CALL.search("""since="$(date '+%Y-%m-%d %H:%M:%S')\"""")
     assert not _DATE_UTC.search(local)
+
+
+# The foreground's locked half stamps its snapshot in Python since slice 3 of #2412.
+_DEPLOY_UNDER_LOCKS = _REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
+_NOW_CALL = re.compile(r"\bdatetime\.now\(([^)]*)\)")
+
+
+def test_every_python_stamp_is_utc():
+    calls = _NOW_CALL.findall(_DEPLOY_UNDER_LOCKS.read_text())
+    assert calls, "deploy_under_locks.py: found no datetime.now() call to check"
+    assert all(arg == "UTC" for arg in calls), f"datetime.now() without UTC: {calls}"
+
+
+def test_the_python_pattern_flags_a_local_time_stamp():
+    assert _NOW_CALL.findall("datetime.now().strftime('%Y')") == [""]

@@ -5,10 +5,12 @@ the working tree instead of the snapshot, or one that skips its service lock, wo
 until something else deploys at the same moment. Neither failure has a symptom on the run that
 caused it, which is why they are pinned at the source.
 
-`scripts/deploy.sh`: every locked invocation goes through `run_playbook_in_snapshot` in
-`deploy_locked.sh`, which cds into the snapshot. `--check` and `--dry-run` are the exceptions:
-`deploy_run.py` execs them above the lock, from the working tree on purpose, and names
-ansible-playbook nowhere else.
+`scripts/deploy.sh`: a foreground run's playbook is `run_playbook` in `deploy_playbook.py`,
+which runs it with the snapshot as its cwd, called by `deploy_under_locks.run` after
+`take_service_locks`. `--detach` still goes through `run_playbook_in_snapshot` in
+`deploy_locked.sh`, which cds into the snapshot. `--check` and `--dry-run` are the
+exceptions: `deploy_run.py` execs them above the lock, from the working tree on purpose,
+and names ansible-playbook nowhere else.
 
 `deploy_io.py`: every function that runs a playbook wraps it in `service_locks`. The set of
 such functions is asserted by name, so one added later without a lock fails here rather than
@@ -25,6 +27,8 @@ from _helpers import REPO
 # The locked half behind the deploy.sh shim, and the Python front half that execs it.
 _DEPLOY_SH = REPO / "scripts/deploy_tools/deploy_locked.sh"
 _DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_run.py"
+_DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_under_locks.py"
+_DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_playbook.py"
 _DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 
@@ -121,7 +125,7 @@ def test_an_unguarded_playbook_call_is_flagged():
 
 
 def test_the_snapshot_runner_is_the_only_locked_path_and_it_cds_into_the_snapshot():
-    """The runner has to actually enter the snapshot, and both locked arms have to use it."""
+    """The runner has to actually enter the snapshot, and the --detach arm has to use it."""
     text = _DEPLOY_SH.read_text()
     body = text.split(f"{_SNAPSHOT_RUNNER}() {{", 1)
     assert len(body) == 2, f"{_SNAPSHOT_RUNNER} is gone from {_DEPLOY_SH.name}"
@@ -135,9 +139,79 @@ def test_the_snapshot_runner_is_the_only_locked_path_and_it_cds_into_the_snapsho
         "build one in a directory this run deletes"
     )
     calls = [n for n, line in _code_lines(text) if f"{_SNAPSHOT_RUNNER} " in line]
-    assert len(calls) == 2, (
-        f"expected the queued arm and the --detach arm to call {_SNAPSHOT_RUNNER}, "
-        f"found {len(calls)} call sites"
+    assert len(calls) == 1, (
+        f"expected the --detach arm alone to call {_SNAPSHOT_RUNNER} (the foreground runs in "
+        f"deploy_under_locks.py since #2412 slice 3), found {len(calls)} call sites"
+    )
+
+
+def _playbook_literal_owners(source: str) -> list[str]:
+    """The enclosing function of each "ansible-playbook" constant in `source`, in order."""
+    tree = ast.parse(source)
+    return [
+        function.name
+        for function in ast.walk(tree)
+        if isinstance(function, ast.FunctionDef)
+        for node in ast.walk(function)
+        if isinstance(node, ast.Constant) and node.value == "ansible-playbook"
+    ]
+
+
+def test_the_python_locked_half_runs_ansible_playbook_only_in_run_playbook():
+    """One call site, and it runs from the snapshot on the calling checkout's venv."""
+    source = _DEPLOY_PLAYBOOK.read_text()
+    assert _playbook_literal_owners(source) == ["run_playbook"]
+    assert _playbook_literal_owners(_DEPLOY_UNDER_LOCKS.read_text()) == []
+    runner = ast.unparse(_functions(source)["run_playbook"])
+    assert "cwd=run.snapshot" in runner, (
+        "run_playbook no longer runs from the snapshot, so a locked deploy renders from "
+        "whatever tree the wrapper happens to be sitting in"
+    )
+    assert "UV_PROJECT_ENVIRONMENT" in runner, (
+        "run_playbook must pin the caller's venv; a snapshot has none and uv would build "
+        "one in a directory this run deletes"
+    )
+
+
+def test_a_second_playbook_call_site_is_flagged():
+    assert _playbook_literal_owners(
+        "def run_playbook():\n    x = 'ansible-playbook'\n"
+        "def run():\n    y = 'ansible-playbook'\n"
+    ) == ["run_playbook", "run"]
+
+
+def _call_order(function: ast.FunctionDef) -> list[str]:
+    """The names of the plain calls in `function`, in source order."""
+    calls = [
+        node
+        for node in ast.walk(function)
+        if isinstance(node, ast.Call) and isinstance(node.func, ast.Name)
+    ]
+    return [
+        call.func.id
+        for call in sorted(calls, key=lambda c: (c.lineno, c.col_offset))
+        if isinstance(call.func, ast.Name)
+    ]
+
+
+def _locks_before_playbook(function: ast.FunctionDef) -> bool:
+    order = _call_order(function)
+    if "take_service_locks" not in order or "run_playbook" not in order:
+        return False
+    return order.index("take_service_locks") < order.index("run_playbook")
+
+
+def test_the_python_locked_half_takes_its_service_locks_before_the_playbook():
+    """The ordering ADR-0017 fixes, read off `run` in deploy_under_locks.py."""
+    run = _functions(_DEPLOY_UNDER_LOCKS.read_text())["run"]
+    assert _locks_before_playbook(run), (
+        "deploy_under_locks.run reaches the playbook before it takes a service lock"
+    )
+
+
+def test_a_playbook_before_its_locks_is_flagged():
+    assert not _locks_before_playbook(
+        _one_function("def run(s):\n    run_playbook(s)\n    take_service_locks(s)\n")
     )
 
 

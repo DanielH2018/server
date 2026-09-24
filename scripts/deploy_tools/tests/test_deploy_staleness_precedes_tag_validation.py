@@ -43,14 +43,14 @@ def test_a_stale_tree_with_an_unknown_tag_refuses_as_stale(tmp_path, monkeypatch
     code, names, _ = _run(tmp_path, monkeypatch, stale=1, validate=1)
     assert code == _STALE_EXIT
     # The tag was never judged against the wrong tree, and nothing was deployed.
-    assert "validate" not in names and "exec" not in names, names
+    assert "validate" not in names and "deploy" not in names, names
 
 
 def test_an_unknown_tag_on_a_current_tree_is_still_a_tag_miss(tmp_path, monkeypatch):
     """CLEAN half: reordering must not swallow the tag check it moved past."""
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=1)
     assert code == _TAG_MISS_EXIT
-    assert "validate" in names and "exec" not in names, names
+    assert "validate" in names and "deploy" not in names, names
 
 
 def test_the_staleness_gate_is_told_which_tags_are_being_deployed(
@@ -77,7 +77,7 @@ def test_the_staleness_question_is_asked_before_the_tag_question(tmp_path, monke
     """
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=0, tag="uptime-kuma")
     assert code is None, names
-    assert names.index("staleness") < names.index("validate") < names.index("exec")
+    assert names.index("staleness") < names.index("validate") < names.index("deploy")
 
 
 def test_a_helper_that_exits_or_crashes_returns_a_status_instead_of_ending_the_run():
