@@ -14,6 +14,9 @@ spec:
   # the new pod waits for a volume the old pod has not released.
 {{ spec_shell('Recreate') }}
   replicas: 1
+  # The same budget as the drain's rollout wait. See prowlarr_k8s_rollout_timeout in
+  # defaults/main.yml.
+  progressDeadlineSeconds: {{ prowlarr_k8s_rollout_timeout[:-1] | int }}
   selector:
     matchLabels:
       app: prowlarr

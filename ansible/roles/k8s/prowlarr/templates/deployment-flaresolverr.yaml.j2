@@ -34,6 +34,9 @@ spec:
   # docs — recorded honestly as a waiver, not papered over.
 {{ spec_shell('RollingUpdate', max_surge=1, max_unavailable=0) }}
   replicas: 1
+  # A cold pull of this image took 8m54s (#2369), inside the 600s default only by chance. See
+  # prowlarr_k8s_rollout_timeout in defaults/main.yml.
+  progressDeadlineSeconds: {{ prowlarr_k8s_rollout_timeout[:-1] | int }}
   selector:
     matchLabels:
       app: flaresolverr

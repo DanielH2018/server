@@ -31,6 +31,10 @@ rendering attacker-supplied pages in a headless browser.
 - **flaresolverr is fenced to ingress from prowlarr alone**, via
   `templates/networkpolicy-flaresolverr.yaml.j2` — a deliberate narrowing from the Compose-era
   isolated network, since egress policies on this cluster don't hold but ingress does.
+- **Both Deployments wait 780s, not 300s.** A cold pull on daniel-server took 8m54s for the
+  292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). `prowlarr_k8s_rollout_timeout`
+  sets the drain's wait and each template's `progressDeadlineSeconds`. The deadline has to move
+  with the wait, or `rollout status` fails at the 600s default anyway.
 - **Log churn, not log size, drives PVC growth.** `prowlarr_k8s_log_level`/`_log_rotate`
   override upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the full
   rationale, shared across the *arr roles.

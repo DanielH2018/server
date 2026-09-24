@@ -260,6 +260,7 @@
  "ansible/tests/k8s/test_pod_template_hygiene.py": 0.0,
  "ansible/tests/k8s/test_priorityclass_omits_defaulted_fields.py": 0.0,
  "ansible/tests/k8s/test_probes_do_not_flood_metrics.py": 0.0,
+ "ansible/tests/k8s/test_progress_deadline_covers_rollout_timeout.py": 0.99,
  "ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py": 0.01,
  "ansible/tests/k8s/test_rate_limit_keys_on_the_client.py": 0.0,
  "ansible/tests/k8s/test_readiness_coverage.py": 0.0,
