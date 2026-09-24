@@ -96,6 +96,8 @@ class Fakes:
     # answers BEHIND unless a test says the tick crossed the merge commit.
     merge_applied_rc: int = 1
     state: dict[str, str] = field(default_factory=dict)
+    # What `tools.confirm_narrowing` answers: role tag -> the deployer's row it confirmed.
+    narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
 
@@ -130,7 +132,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         return f.remaining_setup
 
     return Classifier(
-        plane_note=lambda paths, declared=None, quiet=(): f.plane,
+        plane_note=lambda paths, declared=None, quiet=(), narrow_tags=None: f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
         self_applied_command=lambda paths, quiet=(): f.self_applied_command,
         remaining_setup_hosts=remaining_setup_hosts,
@@ -232,6 +234,11 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
     def await_ci(sha, timeout):
         return CiVerdict(*await_ci_seq(sha, timeout))
 
+    def confirm_narrowing(paths, pr_range, primary, sidecar):
+        # The sidecar is recorded: a phase must pass what the deployer's marker holds.
+        calls.append(("confirm_narrowing", (pr_range, sidecar), {}))
+        return f.narrowing
+
     t = [0.0]
 
     def clock() -> float:
@@ -251,6 +258,7 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         declared_at=lambda ref, primary: f.declared_at,
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
+        confirm_narrowing=confirm_narrowing,
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),

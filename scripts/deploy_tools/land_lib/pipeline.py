@@ -97,6 +97,9 @@ def _step_tick(ln: Landing) -> None:
         return
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()
+    # Only here, after an awaited tick: before it, the deployer's narrowing holds no row for
+    # this PR's range. The fast path above keeps the whole-role tag.
+    classify.narrow_plane(ln)
 
 
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the

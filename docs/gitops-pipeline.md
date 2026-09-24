@@ -225,6 +225,14 @@ marker. Only the tick has the changed paths in reach — the banner runs from an
 worktree and cannot ask git about the primary checkout — so quoting one stored answer is what
 keeps the four from disagreeing about the same deferral.
 
+`land.sh` reads the row only after the tick it awaited, in `classify.narrow_plane`, and quotes
+it only where the row contains the tags derived for that PR alone
+(`land_tags.confirmed_narrow_tags`).
+Nothing else ties the row to that PR. Read before the tick, the row is absent or belongs to an
+earlier range, and a stale `coredns` row printed for an RBAC PR would apply `coredns`, clear the
+marker, and leave the RBAC change unapplied with no marker recording it. A landing that skips
+the tick, or whose row does not cover its own tags, prints the role tag.
+
 **A sidecar file, not a fifth field on the `manual_plane` line.** `parse_manual_plane` accepts
 exactly four fields and skips anything else, and the copies of `gitops_markers.py` reach their
 hosts one role deploy at a time. A widened line would read as *no pending role* in an
@@ -243,8 +251,9 @@ path to the tags of the tasks that read it:
 - `defaults/main.yml` or `vars/<f>.yml` → the top-level keys whose value changed between the
   two refs, then the tags of every task file and template naming one of those keys.
 
-A path that reaches no host is SKIPPED, not refused: a `.md` Ansible never renders, and a
-role-local `tests/` directory. Refusing on one would leave the narrowing almost never firing —
+A path that reaches no host is SKIPPED, not refused: a `.md` outside `files/` and `templates/`
+(one inside them can be copied or rendered onto a host, so it narrows), and a role-local
+`tests/` directory. Refusing on one would leave the narrowing almost never firing —
 4 of the 5 most recent ranges touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of
 nothing but such paths refuses instead, since an empty `--tags` value runs the whole playbook.
 
@@ -258,10 +267,26 @@ does not carry. Refusing is the safe direction because a `--tags` value matching
 Ansible exit 0 having applied nothing — the silent-success failure `setup_tags_for` also guards
 against.
 
+A derived tag must also be reachable in the playbook the remediation prints, or it refuses. The
+role must sit in that playbook's `roles:`, and the task file must be statically imported
+(`import_tasks`, not `include_tasks`) from `tasks/main.yml`. `tasks/storage_smoke.yml` belongs
+to `k3s-storage-smoke.yml`, and `agent.yml` to the join plays whose hosts are empty without
+`-e join_agent=...`, so `k3s-bringup.yml --tags storage_smoke` selects only `always` tasks.
+A template cycle that reaches no task file refuses, and so does a template that is not UTF-8
+text.
+
+A narrowed tag that still reaches the role's gated control-plane tasks keeps a warning.
+Every task in `setup/k3s/tasks/server.yml` carries `k3s_server`, including the installer
+restart and `secrets-encrypt rotate-keys`, so `--tags k3s_server` prints beside
+`deploy_remediation._MAXIMAL_ROLE_GATED_WARNING`.
+
 Two ranges can make one role pending, since the first line keeps its first-seen stamp. The
 tags then union: both changes are merged and unapplied, so both tags have to run. A refusal on
 either side absorbs the pair, because a narrow tag beside work nothing could narrow
-would read like the complete answer.
+would read like the complete answer. A line that was already pending with NO row is the same
+refusal. The deployer from before the sidecar wrote such lines, including the tick that merged
+#2307 itself, and so does a row too garbled to parse. What that earlier range needed is
+unknown, so the role stays at the role tag until its line is cleared.
 
 ### When a tick parks
 

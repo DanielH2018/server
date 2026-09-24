@@ -45,7 +45,7 @@ from lib.render_guard import (  # noqa: F401
 )
 from lib.deployer_park import read_manual_plane_tags_marker
 from lib.gitops_markers import parse_manual_plane_tags
-from lib.repo_paths import GITOPS_DEPLOY_FILES
+from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
@@ -57,12 +57,14 @@ from deploy_logic import (
     k8s_remediation,
     services_from_changed_paths,
     setup_role_playbook,
+    setup_role_tag,
 )
 
 # Same directory, so a direct invocation already has it on sys.path. `service_tags` is the
 # one reader of containers_list, and sharing it is what keeps "is this name a deploy tag?"
 # answered identically here and in deploy.sh's own validation.
 import deploy_tags
+import narrow_setup
 from land_reach import remaining_setup_hosts_note
 from lib.k8s_roles import role_callers
 
@@ -241,18 +243,46 @@ def covered_roles(shared: list[str], deployed: set[str]) -> set[str]:
     return {r for r in shared if (c := callers.get(r)) and c <= deployed}
 
 
-def manual_plane_narrow_tags() -> dict[str, frozenset[str]]:
-    """The deployer's `manual_plane_tags` sidecar, as role tag -> the narrower tags it needs.
+def confirmed_narrow_tags(
+    files, pr_range: str, repo, sidecar: str | None
+) -> dict[str, frozenset[str]]:
+    """The deployer's narrowing for each setup role this PR touches, where it covers this PR.
 
-    Read rather than re-derived, and that is the point (#2307). The deployer derived it at the
-    tick that recorded the role, from the changed paths it had in reach; quoting its answer is
-    what makes this note, the deployer's journal line, the Discord alert and the SessionStart
-    banner print the SAME narrow tag instead of four derivations that can disagree.
+    What prints is the deployer's `manual_plane_tags` row (#2307): it spans every range that
+    made the role pending, and the note ends in the command clearing all of them. A row is
+    quoted only when it CONTAINS this PR's own `narrow_setup.role_tags` over `pr_range`,
+    because nothing else ties it to this PR. Read before the tick records this range, it is
+    absent or an earlier range's, and a stale `coredns` row printed for an RBAC PR leaves the
+    RBAC change unapplied behind a cleared marker. Every other case drops the role, so
+    `_setup_commands` prints the whole-role tag. `docs/gitops-pipeline.md` has the long form.
 
-    Empty on any host where the marker cannot be read, which is every host but the deployer.
-    `_setup_commands` then prints the whole-role tag, exactly as it did before the sidecar.
+    Args:
+        files: the PR's changed paths.
+        pr_range: `<old>..<new>` bounding this PR's own change, or '' when unknown.
+        repo: the checkout holding both ends of the range.
+        sidecar: the `manual_plane_tags` marker text, or None when it cannot be read.
     """
-    return parse_manual_plane_tags(read_manual_plane_tags_marker())
+    if ".." not in pr_range:
+        return {}
+    old, new = pr_range.split("..", 1)
+    rows = parse_manual_plane_tags(sidecar)
+    out: dict[str, frozenset[str]] = {}
+    for role in services_from_changed_paths(list(files)).setup_roles:
+        tag, playbook = setup_role_tag(role), setup_role_playbook(role)
+        row = rows.get(tag)
+        if not row or playbook is None:
+            continue
+        # DECIDED: `except Exception`, because any failure here must print the role tag. The
+        # derivation shells out to git and decodes the output. An escape would kill a landing
+        # that has already merged, over a note the whole-role tag answers correctly.
+        try:
+            own = narrow_setup.role_tags(role, tag, old, new, str(repo), playbook)
+        except Exception as exc:
+            print(f"narrow-setup: {role} keeps its role tag ({exc})", file=sys.stderr)
+            continue
+        if own <= row:
+            out[tag] = row
+    return out
 
 
 def plane_note(
@@ -500,11 +530,16 @@ def quiet_paths(paths: list[str], range_: str) -> set[str]:
         return docs
 
 
-def main(argv: list[str] | None = None) -> int:
+def main(
+    argv: list[str] | None = None,
+    sidecar=read_manual_plane_tags_marker,
+    repo: Path = REPO,
+) -> int:
     """Print one fact about a PR's file list -- tags, plane note, self-applied flag, or remaining-setup-hosts note.
 
     Which one prints depends on `--plane`/`--self-applied`/`--remaining-setup-hosts`; with
-    none of them, prints the derived `--tags` value. Always exits 0.
+    none of them, prints the derived `--tags` value. Always exits 0. `sidecar` and `repo` are
+    where `--plane` reads the deployer's narrowing and the range, a seam for the tests.
     """
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument(
@@ -540,7 +575,8 @@ def main(argv: list[str] | None = None) -> int:
     paths = [f["path"] for f in payload.get("files", [])]
     quiet = quiet_paths(paths, ns.range_)
     if ns.plane:
-        print(plane_note(paths, quiet=quiet, narrow_tags=manual_plane_narrow_tags()))
+        narrow = confirmed_narrow_tags(paths, ns.range_, repo, sidecar())
+        print(plane_note(paths, quiet=quiet, narrow_tags=narrow))
         return 0
     if ns.self_applied:
         print("yes" if self_applied(paths, quiet=quiet) else "")

@@ -85,7 +85,9 @@ def classify(ln: Landing) -> None:
     t, c = ln.tools, ln.classifier
     view = ln.view("files,changedFiles")
     paths = [f["path"] for f in view.get("files", [])]
-    quiet = c.quiet_paths(paths, pr_range(ln))
+    ln.pr_paths, ln.pr_range = paths, pr_range(ln)
+    quiet = c.quiet_paths(paths, ln.pr_range)
+    ln.quiet = set(quiet)
     ln.self_applied = _classified(
         ln, "self-applied classification", c.self_applied, paths, quiet=quiet
     )
@@ -128,6 +130,7 @@ def classify(ln: Landing) -> None:
     declared = _classified(
         ln, "declared-tag read", t.declared_at, ln.merge_sha, ln.opts.primary
     )
+    ln.declared = declared
     if declared is None:
         say(
             f"could not read containers_list at {ln.merge_sha[:8]} — "
@@ -152,6 +155,37 @@ def classify(ln: Landing) -> None:
         ln.needs_diff = True
         say(
             f"file list truncated; deriving from the diff since {ln.opts.since} after the tick"
+        )
+
+
+def narrow_plane(ln: Landing) -> None:
+    """Re-render `plane` with the deployer's narrow tags, once the tick has run (#2307).
+
+    `plane` is classified in step 1, before the tick has recorded this PR's range, so it
+    names the whole-role tag. The deployer then records the narrowest tags in its
+    `manual_plane_tags` sidecar. This reads that sidecar AFTER the awaited tick.
+    `land_tags.confirmed_narrow_tags` quotes a row only where it contains this PR's own
+    derivation, so a stale row from an earlier range cannot be printed (#2324 review,
+    finding 1).
+
+    Every failure keeps the note as step 1 wrote it, with the whole-role tag: an unreadable
+    or absent sidecar, no PR range, a derivation that refuses or raises.
+    """
+    if not ln.plane or not ln.pr_range:
+        return
+    sidecar = ln.state("manual_plane_tags")
+    if not sidecar:
+        return
+    try:
+        narrow = ln.tools.confirm_narrowing(
+            ln.pr_paths, ln.pr_range, ln.opts.primary, sidecar
+        )
+    except Exception as exc:
+        say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")
+        return
+    if narrow:
+        ln.plane = ln.classifier.plane_note(
+            ln.pr_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
         )
 
 

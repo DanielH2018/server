@@ -176,7 +176,9 @@ Each arm below is a rule and the function that holds it. The record page has the
     role's real playbook or by `gitops_state.py clear-manual-plane <role>`. **Its remediation
     names the NARROWEST tag the change needs** (#2307), derived by `deploy_defer.record` into the
     `manual_plane_tags` sidecar every surface READS; on doubt, the role tag plus
-    `deploy_remediation.maximal_tag_warning`.
+    `deploy_remediation.maximal_tag_warning`. A line pending with no row stays at the role
+    tag, and `land.sh` quotes a row only after its awaited tick and only where the row
+    contains its own PR's tags (`docs/gitops-pipeline.md` has the rules).
   - **This role applies itself.** The `Run gitops-deploy once` handler is `state: started`,
     which Ansible skips for an `activating` unit. The `DECIDED:` above
     `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py`.
