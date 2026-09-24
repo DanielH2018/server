@@ -20,7 +20,7 @@ docker_install_stale_crons:
 # #1961). Pinned 2026-09-21 to what daniel-pi already ran, so the first run with these is a
 # no-op.
 docker_install_engine_version: "29.8.1"
-docker_install_containerd_version: "2.3.5"
+docker_install_containerd_version: "2.4.0"
 docker_install_compose_plugin_version: "5.5.1"
 docker_install_buildx_plugin_version: "0.37.1"
 
