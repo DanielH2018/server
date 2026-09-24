@@ -27,10 +27,13 @@ See repo-root `CLAUDE.md` for conventions.
   [[sops_setup]]'s `.bashrc` path.
 
 ## Notable
-- **Run-order coupling with SOPS:** [[sops_setup]] later *appends*
-  `export SOPS_AGE_KEY_FILE=…` to `.bashrc` via `lineinfile`. The tracked `files/.bashrc`
-  does **not** contain that line, and this role uses `copy` (full overwrite). In a normal
-  full `initial_setup.yml` run that's fine — config_files runs first, sops_setup re-adds the
-  export after. But running **`--tags config_files` alone strips the SOPS export** until the
-  next `sops_setup` run. Re-add it by re-running `--tags sops_setup` (or a full setup).
+- **The SOPS export lives in `files/.bashrc`.** `export SOPS_AGE_KEY_FILE=…` is part of the
+  tracked file, so a `--tags config_files` run keeps it. Until #2319, [[sops_setup]] appended
+  it with `lineinfile` instead, and a `config_files`-only run stripped it until the next
+  `sops_setup`. The chezmoi-managed hosts carry the same line in the dotfiles repo's
+  `home/dot_bashrc`, above `ble-attach`.
+- **This role overwrites whatever `.bashrc` a host has, chezmoi's included.** It has no host
+  guard, and `files/.bashrc` is not chezmoi's version: it lacks the `ble-attach` tail. A
+  `--tags config_files` run against daniel-box or daniel-server replaces the chezmoi file
+  (keeping a `.bak`).
 - Dotfiles are static — edit `files/.bashrc` / `files/.gitconfig` directly (no Jinja).

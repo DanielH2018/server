@@ -17,8 +17,7 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "sops_setup"`.
 - **Granular tags:** `sops-install` (age + sops binary), `collections` (pinned galaxy
   install), `age-key` (key-dir/keygen/pubkey display + the first-host `.sops.yaml` seed —
-  the seed shares the tag because it consumes the registered pubkey), `sops-config`
-  (the `.bashrc` export).
+  the seed shares the tag because it consumes the registered pubkey).
 
 ## What it does (`tasks/main.yml`)
 1. **Install** `age` (apt) and the `sops` binary to `/usr/local/bin`, at
@@ -39,7 +38,11 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
    won't regenerate) and print its public key.
 4. **Seed `ansible/.sops.yaml`** with that pubkey — **first-host bootstrap only**
    (skipped when the tracked `.sops.yaml` already exists; see Notable).
-5. **Export `SOPS_AGE_KEY_FILE`** in `~/.bashrc` so `sops`/the lookup find the key.
+This role does **not** write `SOPS_AGE_KEY_FILE` into `~/.bashrc`. Until #2319 it appended
+the export with `lineinfile`, which landed after the dotfiles' `ble-attach` line and was undone
+by every `chezmoi apply`. The export now belongs to whatever owns the host's `.bashrc`: the
+dotfiles repo's `home/dot_bashrc` on the chezmoi hosts, and [[config_files]]' tracked
+`files/.bashrc` on daniel-pi.
 
 ## Notable
 - **DR:** host keys at `~/.config/sops/age/keys.txt` are in **no automated backup** (nothing
