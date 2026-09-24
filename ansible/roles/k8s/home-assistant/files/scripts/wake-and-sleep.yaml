@@ -25,6 +25,16 @@ bedroom_apply_wake:
         brightness_pct: "{{ target }}"
         color_temp_kelvin: 2200
         transition: 60
+    # Arm the color tracker at the 2200K we just set, exactly as the wake_fallback branch of
+    # bedroom_lights_set does (scripts/lighting.yaml) — same reasoning: bedroom_color_track is
+    # suppressed for the whole ramp window by in_wake_window, so a missing arm is invisible during
+    # the ramp and bites after it, when tracking resumes against a stale expected value and reads
+    # the fixed warm ramp color as "manual".
+    - service: input_number.set_value
+      target:
+        entity_id: input_number.bedroom_light_expected_color_temp
+      data:
+        value: 2200
 
 # Test-only: preview the morning wake ramp on demand, COMPRESSED. Sweeps the 45-min window's frames
 # (elapsed 0 -> 15 -> 30 -> 45 = window start -> alarm -> alarm+15 -> alarm+30) using the SAME tested

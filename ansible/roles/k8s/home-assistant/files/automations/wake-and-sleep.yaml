@@ -100,6 +100,18 @@
         # in_wake_release_window): the old single-tick [45,46) release was lost for the day if an HA
         # restart/deploy or a gated-off minute spanned it; this self-heals on a later tick, and the
         # al_still_manual guard makes a repeat run a no-op so it can't stomp a later daytime manual pick.
+        # DECIDED: the release does NOT arm input_number.bedroom_light_expected_color_temp.
+        # Handing the room back leaves the tracker holding the ramp's warm 2200K while AL applies its
+        # sun-curve color, so bedroom_color_track's ~150K "still auto" check fails and tracking parks.
+        # That is correct here. bedroom_color_track exists only to drift the color while AL is TAKEN
+        # OVER; once released, AL drives the color itself. Arming the tracker would put color_track
+        # back to writing color on top of AL, and an explicit light.turn_on is exactly what marks the
+        # group manually controlled again (AL take_over) — re-pausing the AL this branch just
+        # released. Arming once would not even hold: AL keeps moving its color along the sun curve
+        # and nothing re-arms the tracker as it drifts. Every writer that takes AL over again arms on
+        # the way in (bedroom_set_natural_brightness, bedroom_apply_wake, and bedroom_lights_set's
+        # wake_fallback branch), so the tracker is never both stale and needed. The Tap Dial writes
+        # the lights directly and is meant to read as manual. Filed and decided as #2496.
         - conditions: "{{ release_due }}"
           sequence:
             - service: adaptive_lighting.set_manual_control
@@ -212,6 +224,9 @@
         # exactly like bedroom_wake_ramp's release_due branch. The ramp reached 100% by window end, so
         # AL takes over at full brightness with no upward pop. person-home is a top-level condition, so
         # leaving mid-ramp stops the automation (no re-light of an empty room, no stale good-morning).
+        # DECIDED: no tracker arm on release — same reasoning as bedroom_wake_ramp's
+        # `DECIDED: the release does NOT arm input_number.bedroom_light_expected_color_temp`
+        # in this file. Filed and decided as #2496.
         - conditions:
             - "{{ no_real_wake }}"
             - "{{ release_due }}"
