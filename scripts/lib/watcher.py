@@ -7,8 +7,8 @@ healthchecks.io-style monitor so a broken watcher alerts instead of silently goi
 
 This module carries two layers:
 
-  - The low-level helpers (``configure_logging``, ``require_env``, ``new_session``,
-    ``send_discord_notification``, ``ping_healthcheck``). Any watcher can use them directly.
+  - The low-level helpers (``configure_logging``, ``send_discord_notification``,
+    ``ping_healthcheck``). Any watcher can use them directly.
   - ``Watcher`` + ``run_watcher``: a generic fetch -> check(previous, current) ->
     notify-on-transition -> healthcheck-ping loop, with state persisted as JSON between runs.
     A watcher that should notify only when its state CHANGES (a cert crossing an expiry
@@ -48,26 +48,6 @@ def configure_logging(name: str) -> logging.Logger:
         format="%(asctime)s - %(name)s - %(levelname)s - %(message)s",
     )
     return logging.getLogger(name)
-
-
-def require_env(name: str) -> str:
-    """Return a required environment variable's value, or exit with a clear message.
-
-    Fail-fast beats a confusing ``None`` flowing into a request URL later -- a
-    misconfigured watcher should die loudly (and not ping its healthcheck) so you notice.
-    """
-    value = os.environ.get(name)
-    if not value:
-        raise SystemExit(f"Missing required environment variable {name!r}.")
-    return value
-
-
-def new_session(headers: dict[str, str] | None = None) -> requests.Session:
-    """Return a ``requests.Session`` (connection reuse) with optional default headers."""
-    session = requests.Session()
-    if headers:
-        session.headers.update(headers)
-    return session
 
 
 def send_discord_notification(

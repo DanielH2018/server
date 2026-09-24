@@ -69,15 +69,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.ansible_jinja_env import template_env
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
     REPO,
-    SHARED_TPL,
     dump_numbered,
     load_yaml,
-    make_env,
     render_or_error,
 )
 
@@ -155,18 +154,6 @@ def render_context(template: Path) -> dict:
     }
 
 
-def build_env(template_dir: Path):
-    return make_env([template_dir, SHARED_TPL])
-
-
-def render_template(path: Path, ctx: dict) -> str:
-    env = build_env(path.parent)
-    rendered, err = render_or_error(env, path.name, ctx)
-    if rendered is None:
-        raise RuntimeError(err)
-    return rendered
-
-
 def systemd_verify(unit_path: Path, systemd_analyze_bin: str) -> str | None:
     """Run `systemd-analyze verify` on the rendered unit; return an error string, or None.
 
@@ -204,7 +191,7 @@ def check_template(
     Returns an error string, or None on success.
     """
     rel = path.relative_to(ANSIBLE)
-    env = build_env(path.parent)
+    env = template_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
     if rendered is None:
         return err
@@ -228,7 +215,7 @@ def check_polkit_rules(out_dir: Path, node_bin: str) -> str | None:
     templates it sits beside.
     """
     ctx = render_context(RULES_TEMPLATE)
-    env = build_env(RULES_TEMPLATE.parent)
+    env = template_env(RULES_TEMPLATE.parent)
     rendered, err = render_or_error(env, RULES_TEMPLATE.name, ctx)
     if rendered is None:
         return err

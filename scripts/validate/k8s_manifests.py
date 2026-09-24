@@ -32,12 +32,11 @@ The rendering, parsing and rule pieces live under ``scripts/lib/`` since 2026-09
 ``k8s_roles`` (which roles are rendered and which are exempt), ``k8s_context`` (Ansible's
 variable semantics), ``k8s_yaml`` (the strict loaders and the ``lookup()`` stub), ``k8s_pvc``
 (claim names), ``k8s_schema`` (the OpenAPI and vendored-CRD checks) and ``k8s_net_rules`` (the
-two semantic rules no schema can make). This module keeps the Ansible filter registration, the
-per-template render and ``main()``, and re-exports every moved name so an existing importer
-keeps working.
+two semantic rules no schema can make). The filter registration every render guard shares is
+``lib.ansible_jinja_env``. This module keeps the per-template render and ``main()``, and
+re-exports every moved name so an existing importer keeps working.
 """
 
-import hashlib
 import sys
 from pathlib import Path
 
@@ -85,7 +84,12 @@ from lib.k8s_schema import (
     normalise_octal,
     schema_error,
 )
-from lib.k8s_yaml import _to_json, make_lookup, yaml_error
+from lib.ansible_jinja_env import (
+    make_ansible_env,
+    register_ansible_filters,
+    template_env,
+)
+from lib.k8s_yaml import make_lookup, yaml_error
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -96,12 +100,6 @@ from lib.render_guard import (
     make_env,
     render_or_error,
 )
-
-sys.path.insert(0, str(ANSIBLE / "filter_plugins"))
-from authelia_access import authelia_service_rules
-from toposort import filter_by_platform
-
-from ansible.plugins.filter.core import to_bool
 
 # Re-exported for the ~20 modules that import these from here: the render helpers and inventory
 # anchors from `lib.render_guard`, and everything the six `lib.k8s_*` modules were split into.
@@ -149,42 +147,6 @@ __all__ = [
 ]
 
 
-def _ansible_hash(value, algo="sha1"):
-    """Mirror Ansible's `hash` filter so templates using it render identically here.
-
-    Same shim as `validate/compose_templates.py`'s `_ansible_hash`, kept as its own copy per
-    that module's convention: each render guard owns the Ansible pieces its own templates
-    reach for, rather than share a cross-guard import for a five-line function.
-    """
-    return hashlib.new(algo, str(value).encode("utf-8")).hexdigest()
-
-
-def register_ansible_filters(env):
-    """Register the Ansible filters the manifest templates use on a bare Jinja env.
-
-    `bool` is ansible-core's own `to_bool`, not Python's `bool()`: `bool("false")` is True, so a
-    hand-rolled shim would render `{% if x | bool %}` the opposite way from a real deploy and
-    report clean on exactly the string/boolean divergence `| bool` is written to prevent.
-
-    pihole's ConfigMap includes the shared dnsmasq template, which derives its override records
-    from the inventory via the repo's filter plugin — register the real thing for that too.
-
-    `hash` backs `ansible/templates/checksum-annotation.yml.j2`'s path-mode call
-    (`lookup('file', path, rstrip=False) | hash('sha1')`).
-    """
-    env.filters["bool"] = to_bool
-    env.filters["filter_by_platform"] = filter_by_platform
-    # authelia's config Secret derives its per-service access_control rules from
-    # containers_list through the repo's filter plugin, which raises on a `use_authelia: true`
-    # entry without an `auth_tier` — the real thing, so that failure reaches this guard too.
-    env.filters["authelia_service_rules"] = authelia_service_rules
-    env.filters["hash"] = _ansible_hash
-    # uptime-kuma embeds files/discord-message.liquid into a JSON Secret value with `to_json`;
-    # the looked-up-template env in make_lookup registers the same shim.
-    env.filters["to_json"] = _to_json
-    return env
-
-
 def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     """Render one manifest template.
 
@@ -192,9 +154,8 @@ def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     documents (for the PVC claimName cross-reference check in main(), which needs the actual objects
     rather than just a pass/fail).
     """
-    env = make_env([K8S_ROLES / role / "templates", SHARED_TPL])
+    env = template_env(K8S_ROLES / role / "templates")
     env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
     rendered, err = render_or_error(env, tpl.name, ctx)
     if rendered is None:
         return err, []
@@ -253,7 +214,7 @@ def main() -> int:
     parsed_templates: list[tuple[str, list]] = []
     # The env volume_claim_pvc_names renders a claim name with. Built once here rather than
     # inside that function so the function needs nothing from this module.
-    claim_env = make_env([SHARED_TPL])
+    claim_env = make_ansible_env([SHARED_TPL])
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
         # helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile for

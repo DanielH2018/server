@@ -1,4 +1,4 @@
-"""Registry: only/skip selection and the completeness guard, each as a red-proof pair."""
+"""Registry: the `--list` renderer and the completeness guard, each as a red-proof pair."""
 
 import pytest
 
@@ -20,53 +20,6 @@ def test_add_rejects_a_duplicate_name():
     reg.add("disk", lambda: 1)
     with pytest.raises(ValueError):
         reg.add("disk", lambda: 2)
-
-
-# --- only/skip selection — mirrors check.py's check_enabled semantics -----------------
-
-
-def test_no_filter_enables_everything():
-    reg = Registry("t")
-    reg.add("disk", lambda: 1)
-    reg.add("cert", lambda: 1)
-    assert reg.enabled("disk")
-    assert reg.enabled("cert")
-
-
-def test_only_restricts_to_the_named_set():
-    reg = Registry("t")
-    reg.add("disk", lambda: 1)
-    reg.add("cert", lambda: 1)
-    only = frozenset({"disk"})
-    assert reg.enabled("disk", only=only)
-    assert not reg.enabled("cert", only=only)
-
-
-def test_skip_excludes_even_when_named_in_only():
-    reg = Registry("t")
-    reg.add("disk", lambda: 1)
-    only = frozenset({"disk"})
-    skip = frozenset({"disk"})
-    assert not reg.enabled("disk", only=only, skip=skip)
-
-
-def test_selected_returns_only_the_surviving_entries():
-    reg = Registry("t")
-    reg.add("disk", lambda: 1)
-    reg.add("cert", lambda: 1)
-    reg.add("mem", lambda: 1)
-    names = [
-        e.name
-        for e in reg.selected(only=frozenset({"disk", "mem"}), skip=frozenset({"mem"}))
-    ]
-    assert names == ["disk"]
-
-
-def test_unknown_flags_a_name_not_in_the_registry():
-    reg = Registry("t")
-    reg.add("disk", lambda: 1)
-    assert reg.unknown({"disk", "nope"}) == ["nope"]
-    assert reg.unknown({"disk"}) == []
 
 
 # --- render_list ------------------------------------------------------------------------

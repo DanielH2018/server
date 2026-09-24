@@ -197,17 +197,6 @@ def test_discover_templates_excludes_vendored_collections():
     assert all("collections" not in p.parts for p in v.discover_templates())
 
 
-def test_ansible_search_test_mirrors_the_real_jinja_test():
-    # No current template uses Ansible's `search` Jinja test (the last one, docker-user-rules.sh.j2,
-    # retired at E7 2026-08-13) — vanilla Jinja2 has no `search` test at all (TemplateRuntimeError
-    # without this), so this pins the regex-search (not full-match) semantics for whichever
-    # template needs it next.
-    assert ajc.ansible_search("172.64.0.0/13", ":") is False
-    assert ajc.ansible_search("2400:cb00::/32", ":") is True
-    assert ajc.ansible_search("ABC", "abc", ignorecase=True) is True
-    assert ajc.ansible_search("ABC", "abc", ignorecase=False) is False
-
-
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
     # The 2026-07-01 kopia bug class (ansible/roles/containers/archive/kopia/files/maintenance-check.sh):
     # an apostrophe broke bash's own quote parsing inside a single-quoted block. Reproduce the

@@ -5,8 +5,8 @@ Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re
 name here, so an existing importer keeps working. These are the pieces that decide what a
 manifest renders WITH — the recursive expansion Ansible does on a variable's value, a role's
 resolved defaults, and the precedence collision the validator asserts is empty. The `bool`
-filter that expansion registers is `lib.ansible_jinja_compat.ansible_bool`, the one shim every
-render guard in `scripts/lib` shares.
+filter that expansion registers is `lib.ansible_jinja_compat.ansible_bool`, the light-tier shim,
+rather than the real filters `lib.ansible_jinja_env` gives every render guard.
 """
 
 import sys as _sys
@@ -48,12 +48,12 @@ def resolve_vars(values: dict, context: dict, passes: int = 5) -> dict:
     env = make_env([SHARED_TPL])
     # `bool` is an Ansible filter, not a Jinja builtin, so a group_var that uses it renders
     # here as "No filter named 'bool'" — a render failure pointing at a variable that is
-    # perfectly valid under Ansible. Shimmed for the same reason the compose guard shims
-    # `hash` and the shell guard shims `search`; see make_env's docstring.
+    # perfectly valid under Ansible. Every render guard registers the real filter through
+    # `lib.ansible_jinja_env`; this module is the one caller that cannot, for the reason below.
     #
     # DECIDED: the shim is `ansible_jinja_compat.ansible_bool`, not ansible-core's `to_bool`
-    # that `validate/k8s_manifests.register_ansible_filters` binds for the manifests
-    # themselves. `to_bool` would make the two paths agree by identity, but importing
+    # that `lib.ansible_jinja_env.register_ansible_filters` binds for every render guard.
+    # `to_bool` would make the two paths agree by identity, but importing
     # `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py` imports this
     # module — `probe.py monitors` reaches no ansible-core module today (measured 2026-09-18,
     # `python -X importtime`). The shim copies `to_bool`'s tables and fallback, and
