@@ -145,15 +145,63 @@ def test_a_bare_clear_still_takes_the_whole_line_and_row(tmp_path, run):
     assert not (tmp_path / "manual_plane_tags").exists()
 
 
-def test_a_narrowed_clear_on_a_role_with_no_row_takes_the_line(tmp_path, run):
-    """An empty row is the refusal that means the whole role, so any apply covers it.
+def test_a_narrowed_clear_on_a_row_a_later_refusal_collapsed_keeps_the_line(
+    tmp_path, run, capsys, journal
+):
+    """Every printer names `--applied` only while it holds a non-empty row.
 
-    A row this deployer could not narrow, or a line older than the sidecar, must not survive
-    a clear — the operator applied the whole role to get here.
+    So `--applied kubeconfig` meeting an empty row means the row changed after the command
+    was printed: PR-B changed an untagged k3s file, the derivation refused, and the row
+    collapsed to "the whole role". Clearing there leaves PR-B merged, unapplied and recorded
+    nowhere.
     """
     (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
     assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s -"
+    out = capsys.readouterr().out
+    assert "kept k3s" in out and "clear-manual-plane k3s`" in out
+    ((_role, dropped, remaining),) = journal
+    assert dropped is None and remaining == frozenset({"k3s"})
+
+
+def test_a_narrowed_clear_on_a_line_with_no_row_keeps_it(tmp_path, run):
+    """A missing row is the same unknown: a line older than the sidecar, or a garbled row."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+
+
+def test_applied_naming_the_role_tag_is_a_whole_role_clear(tmp_path, run):
+    """The accepting half for an empty row: the whole-role tag covers it, however spelled."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "k3s") == 0
     assert not (tmp_path / "manual_plane").exists()
+
+
+def test_the_printed_clear_for_k3s_and_common_leaves_no_line_behind(tmp_path, run):
+    """What an operator pastes after applying both roles must clear both.
+
+    `common`'s row is always empty, because no playbook applies it and nothing narrows it.
+    A shared `clear-manual-plane <role> --applied <tags>` sent the operator to run it with
+    `--applied` for `common` too, which keeps that line by design.
+    """
+    # Importable only once `gitops_state` has put the deployer's `files/` on sys.path.
+    import deploy_remediation
+
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n{COMMON}\n")
+    (tmp_path / "manual_plane_tags").write_text("common -\nk3s kubeconfig\n")
+    text = deploy_remediation.manual_plane_remediation(
+        {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
+    )
+    clear = text.rsplit("`", 2)[-2]
+    commands = [c.split("gitops_state.py ", 1)[1].split() for c in clear.split(" && ")]
+    assert len(commands) == 2, clear
+    for argv in commands:
+        assert run(tmp_path, *argv) == 0
+    assert not (tmp_path / "manual_plane").exists(), clear
 
 
 def test_a_state_directory_this_user_cannot_write_says_who_owns_it(marker, run, capsys):

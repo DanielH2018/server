@@ -177,10 +177,6 @@ CONTENTION_CLEAR_CMD = (
     "uv run python scripts/deploy_tools/gitops_state.py clear-contention"
 )
 
-# What the `--applied` value reads as in the generic command, where the surface knows a
-# narrowing was printed but is naming a role placeholder rather than one role.
-APPLIED_PLACEHOLDER = "<the tags you ran>"
-
 
 def manual_plane_clear_cmd(role: str = "<role>", tags=()) -> str:
     """The clear command to print beside an apply of `role` with `tags`.

@@ -208,9 +208,12 @@ uv run python scripts/deploy_tools/gitops_state.py clear-manual-plane k3s --appl
 The clear then keeps the line and prints what is still pending. Every surface that prints a
 narrowed apply prints the matching `--applied` beside it, so following the printed pair is
 enough; the flag is for the case where you narrowed the apply yourself. A clear whose
-`--applied` covers the whole row takes the line, and so does one against a row the deployer
-could not narrow — an empty row means the whole role, which any apply that got you here
-covered.
+`--applied` covers the whole row takes the line. A clear with `--applied` against an EMPTY or
+missing row keeps the line and says so. An empty row means the whole role is pending: a later
+range's derivation refused after your command was printed, and no narrowed apply covers that.
+Apply the whole role, then clear without `--applied`. `common`'s row is always empty, so a
+remediation naming several roles prints one clear per role, and only the narrowed ones carry
+`--applied`.
 
 The clear writes one line to the journal, `journalctl -t gitops-state`, naming the role, the
 user who ran it, the origin SHA of the line it dropped and — for a narrowed clear that kept

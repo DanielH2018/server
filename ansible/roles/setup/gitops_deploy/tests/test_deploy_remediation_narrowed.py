@@ -229,9 +229,15 @@ def test_a_whole_role_apply_prints_the_bare_clear():
     assert "--applied" not in cmd
 
 
-def test_two_roles_keep_the_placeholder_and_still_say_applied_when_one_narrowed():
-    """The text names one command for a role SET, so the role stays a placeholder."""
+def test_two_roles_print_one_clear_each_and_only_the_narrowed_one_says_applied():
+    """`common`'s row is always empty, so `--applied` there would keep its line for good.
+
+    A shared `<role> --applied <tags>` placeholder sent the operator to do exactly that, and
+    its `<` read as a shell redirect when pasted.
+    """
     cmd = manual_plane_remediation(
         {"k3s", "common"}, {"k3s": frozenset({"kubeconfig"})}
     )
-    assert "clear-manual-plane <role> --applied <the tags you ran>" in cmd
+    assert "clear-manual-plane common && " in cmd
+    assert "clear-manual-plane k3s --applied kubeconfig`" in cmd
+    assert "<" not in cmd.rsplit(", then ", 1)[-1], "the clear names no placeholder"

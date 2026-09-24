@@ -63,6 +63,7 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 from deploy_changes import setup_role_tag
 from deploy_locks import TREE_LOCK
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
+from gitops_markers import manual_plane_clear_cmd
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -211,6 +212,8 @@ def clear_manual_plane(
       applied: the tags the operator actually ran, from `--applied`. Empty means a whole-role
         apply, which clears the line however the row has grown; a narrowed apply drops only
         its own tags and leaves the line standing for anything a later range added (#2349).
+        A narrowed apply against an empty or missing row keeps the line: that row means the
+        whole role, which a narrowed apply does not cover.
     """
     key = marker_key(role)
     try:
@@ -220,9 +223,11 @@ def clear_manual_plane(
             dropped = next(
                 (e for e in state.manual_plane_pending() if e.role == key), None
             )
-            if applied:
+            if applied and dropped is None:
+                remaining, cleared = None, False
+            elif applied:
                 remaining = state.clear_manual_plane_tags_applied(key, applied)
-                cleared = dropped is not None and remaining is None
+                cleared = remaining is None
             else:
                 remaining = None
                 cleared = state.clear_manual_plane(key)
@@ -253,6 +258,16 @@ def clear_manual_plane(
     (journal_clear if journal is None else journal)(
         key, dropped if cleared else None, remaining or frozenset()
     )
+    if remaining == frozenset({key}):
+        # The row is empty or missing, so the WHOLE role is pending: a later range's
+        # derivation refused after this command was printed. No narrowed apply covers that.
+        print(
+            f"kept {role} in {state.path('manual_plane')}: its row in "
+            f"{state.path('manual_plane_tags')} is empty or missing, so the whole role is "
+            f"pending, not just {','.join(sorted(applied))}. Apply the whole role, then "
+            f"clear it without --applied: `{manual_plane_clear_cmd(key)}`"
+        )
+        return 0
     if remaining:
         print(
             f"cleared {','.join(sorted(applied))} from {role}'s row in "

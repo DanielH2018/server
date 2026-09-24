@@ -11,7 +11,6 @@ from __future__ import annotations
 
 from deploy_changes import ChangeSet, setup_role_playbook, setup_role_tag
 from gitops_markers import (  # noqa: F401
-    APPLIED_PLACEHOLDER,
     CONTENTION_CLEAR_CMD,
     MANUAL_PLANE_CLEAR_CMD,
     MAXIMAL_ROLE_GATED_TAGS,
@@ -147,9 +146,8 @@ def manual_plane_remediation(
 
     It names `--applied` whenever a narrowed apply was printed (#2349). A bare clear drops the
     role's whole line, and a second range can widen the row between this text being printed
-    and the operator running it — so the bare form would clear a tag nobody applied. The
-    command stays generic across the role set, because `<role>` is already a placeholder the
-    operator substitutes.
+    and the operator running it — so the bare form would clear a tag nobody applied. A role
+    set prints one clear per role; `manual_plane_clear_for` says why.
     """
     return (
         " and ".join(_setup_commands(setup_roles, narrow_tags))
@@ -168,20 +166,21 @@ def manual_plane_clear_for(
 ) -> str:
     """The clear command to print after applying `setup_roles` by hand.
 
-    One role prints its own name, and its own tags where the apply beside it was narrowed.
-    Several keep the `<role>` placeholder an operator substitutes, with `--applied` naming a
-    placeholder too where ANY of them printed a narrowed apply — the alternative is a list of
-    clear commands, which is not what the rest of this text does with a role set.
+    One clear per role, each naming its own tags where the apply beside it was narrowed,
+    chained with `&&` so the text stays one pasteable command. A shared `<role> --applied
+    <tags>` placeholder is what this printed before, and it stranded a line: substituted with
+    `common`, whose row is always empty, `--applied` keeps the line by design, because an
+    empty row means the whole role is pending. Naming each role also leaves no `<` for a
+    shell to read as a redirect.
     """
     narrow_tags = narrow_tags or {}
     roles = sorted(setup_roles or ())
-    if len(roles) == 1:
-        return manual_plane_clear_cmd(
-            setup_role_tag(roles[0]), _narrowed_tags(roles[0], narrow_tags)
-        )
-    if any(_narrowed_tags(role, narrow_tags) for role in roles):
-        return manual_plane_clear_cmd(tags=(APPLIED_PLACEHOLDER,))
-    return MANUAL_PLANE_CLEAR_CMD
+    if not roles:
+        return MANUAL_PLANE_CLEAR_CMD
+    return " && ".join(
+        manual_plane_clear_cmd(setup_role_tag(role), _narrowed_tags(role, narrow_tags))
+        for role in roles
+    )
 
 
 # Setup roles whose role tag applies far more than any one change to them needs, and what
