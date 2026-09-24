@@ -1,5 +1,18 @@
 [Unit]
-Description=Hourly staging-gate backfill, until the entry condition is met
+# DECIDED: the ratchet keeps running after the entry condition is met (part 1 MET, #2414). It was
+# built to collect the clean runs that armed the gate, and it stays for the second job it turned
+# out to do: it is the only thing that regularly drives the gate path. A real gated tick reaches
+# `consult_staging` about once a month, and `staging_blocks` passes NO_VERDICT through, so a gate
+# that rots answers "could not be asked" and prod ships unblocked. The hourly run drives the ssh
+# key, the dispatcher, the ff-merge and the expectations at the gateable-commit arrival rate
+# instead.
+#
+# It exercises the gate; it does not alarm on it. A NO_VERDICT breaks the ledger's clean streak,
+# but the harness reports that as CONDITION_NOT_MET, which staging-backfill.service tolerates, and
+# check_staging_backfill_alive reads the run-recency heartbeat rather than the ledger. #2455 tracks
+# closing that gap, and records why dropping `SuccessExitStatus=` is the wrong way to. Full
+# analysis in docs/staging-phase-c.md.
+Description=Hourly staging-gate ratchet — measures the gate, and keeps the gate path exercised
 
 [Timer]
 OnBootSec=20min

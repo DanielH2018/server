@@ -493,6 +493,33 @@ outnumber true ones, and staging causes them rather than the change under test.
 
 ---
 
+## After the flip: the ratchet stays
+
+**Decided 2026-09-24 (#2414): `staging-backfill.timer` keeps running now part 1 is MET.** The
+ratchet was built to collect the clean runs that armed the gate. What keeps it installed is the
+second job it turned out to do — it is the only thing that regularly drives the gate path. A real
+gated tick reaches `consult_staging` about once a month, and `staging_blocks` passes NO_VERDICT
+through, so a gate that rots answers "could not be asked" and prod ships unblocked. The hourly run
+drives the ssh key, the dispatcher, the ff-merge and the expectations at the gateable-commit
+arrival rate, about 2.5 a week, instead. Retiring the timer would leave a blocking gate with no
+regular exercise, which is strictly worse than the state above.
+
+**It exercises the gate; it does not alarm on it.** A NO_VERDICT scores as a false failure and
+breaks the clean streak, but `backfill_staging_gate.py` reports that as `CONDITION_NOT_MET`,
+`staging-backfill.service` tolerates that exit through `SuccessExitStatus=`, and
+`check_staging_backfill_alive` reads the run-recency heartbeat rather than the ledger's outcomes.
+So the streak decays silently and only the roughly monthly real tick pages. #2455 tracks closing
+that gap.
+
+**Dropping `SuccessExitStatus=` is not the way to close it.** `classify` never returns a true
+failure, so a REJECTED lands as `needs-triage` and holds the verdict at NOT MET until somebody
+hand-edits the ledger on daniel-box. The unit would then page hourly and permanently over one
+commit the gate caught correctly — the "teaches an operator to ignore it" failure the unit's own
+comment warns against. The alarm has to key on a false failure since the last clean run, not on
+the verdict.
+
+The short form of this decision is the `DECIDED:` marker in `staging-backfill.timer.j2`.
+
 ## After the flip: the tick ledger
 
 The entry condition measured the gate before it was armed. This measures it after, and the two
