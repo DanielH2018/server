@@ -116,6 +116,9 @@
   register: hypervisor_staging_vm_info
   changed_when: false
   failed_when: false
+  # A read of libvirt's own state, so it runs under --check too: skipped, it leaves no rc or
+  # stdout and every decision below errors on the attribute instead of skipping (#2323).
+  check_mode: false
   become: true
 
 - name: Define the guest
@@ -137,6 +140,8 @@
     cmd: virsh --connect qemu:///system dumpxml {{ staging_vm_hostname }}
   register: hypervisor_staging_vm_live_xml
   changed_when: false
+  # A read, and the stop below compares its stdout in its own `when:` (#2323).
+  check_mode: false
   become: true
 
 - name: Stop a running guest whose live interface carries no egress fence
@@ -167,6 +172,11 @@
     cmd: virsh --connect qemu:///system dominfo {{ staging_vm_hostname }}
   register: hypervisor_staging_vm_state
   changed_when: false
+  # A read, so it runs under --check too (#2323). On a host the guest was never defined on,
+  # --check only simulated the define above, so the read has nothing to find; that is not a
+  # failure of the check run, and the start and autostart below then see an empty stdout.
+  check_mode: false
+  failed_when: hypervisor_staging_vm_state.rc != 0 and not ansible_check_mode
   become: true
 
 - name: Start the guest

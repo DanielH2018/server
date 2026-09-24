@@ -41,8 +41,8 @@ are `_check_mode.excludes_check_mode` over `_check_mode.walk_with_inherited_when
 `deploy/test_retried_commands_survive_check_mode.py`, which asks the same questions of
 the same tasks for the retry-loop version of this bug.
 
-`check_mode_skip_consumers.txt` beside this file holds the 32 instances that predate the
-widening, and its header carries the rules for editing it. Draining that list is #2323.
+The widening found 33 consumers that predated it. They sat in an allowlist until #2323 fixed
+the last of them, so the rule has no exemptions.
 """
 
 import re
@@ -260,64 +260,37 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
     return problems
 
 
-_ALLOWLIST = Path(__file__).parent / "check_mode_skip_consumers.txt"
-
-
-def _allowlisted() -> frozenset[tuple[str, str]]:
-    """`(path under ansible/roles/, task name)` for every entry in the allowlist file.
-
-    Kept as data rather than a literal: the list is long, it only ever shrinks, and a drain
-    PR then reads as deleted lines rather than as a diff inside a test module. The file's own
-    header carries the rules for editing it.
-    """
-    entries = set()
-    for line in _ALLOWLIST.read_text().splitlines():
-        if not line.strip() or line.startswith("#"):
-            continue
-        path, _, task = line.partition("\t")
-        entries.add((path, task))
-    return frozenset(entries)
-
-
 _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
 
-
-def _live_offenders(path: Path) -> list[Problem]:
-    """`_offenders`, minus the entries _allowlisted() already owns."""
-    rel = path.relative_to(_ROLES).as_posix()
-    allowlisted = _allowlisted()
-    return [
-        problem
-        for problem in _offenders(path)
-        if (rel, problem.task) not in allowlisted
-    ]
+# Files the census must walk. Each held a consumer the #2315 widening flagged, so a glob that
+# stopped reaching them would turn the per-file test green over files it never read.
+_KNOWN_TASK_FILES = frozenset(
+    {
+        "setup/k3s/tasks/coredns.yml",
+        "setup/hypervisor/tasks/guest.yml",
+        "k8s/jellyfin/tasks/verify.yml",
+        "k8s/media-volume/tasks/sync.yml",
+    }
+)
 
 
 @pytest.mark.parametrize(
     "path", _task_files(), ids=lambda p: str(p.relative_to(_ROLES))
 )
 def test_no_unguarded_consumer_of_a_conditional_register(path: Path) -> None:
-    problems = _live_offenders(path)
+    problems = _offenders(path)
     assert not problems, "\n".join(problem.message for problem in problems)
 
 
-def test_the_allowlist_names_only_live_offenders() -> None:
-    """Every allowlisted pair is still an offender, so the list can only shrink.
+def test_the_census_walks_the_files_it_was_written_for() -> None:
+    """The non-vacuity half of the per-file test above.
 
-    This is also the census's non-vacuity assertion: a rule that stopped matching, or a walk
-    that started returning nothing, empties `found` and fails here by name. Without it the
-    per-file test above would pass over zero offenders and say nothing.
+    The rule's own behaviour is pinned by the anchors below. This asserts the glob still
+    reaches files that once held an offender, so a moved roles tree fails here by name.
     """
-    found = {
-        (path.relative_to(_ROLES).as_posix(), problem.task)
-        for path in _task_files()
-        for problem in _offenders(path)
-    }
-    stale = sorted(_allowlisted() - found)
-    assert not stale, (
-        f"check_mode_skip_consumers.txt still lists {stale}, which the rule no longer "
-        "flags — the task was fixed, renamed or removed. Drop the entry in the same commit."
-    )
+    walked = {path.relative_to(_ROLES).as_posix() for path in _task_files()}
+    missing = sorted(_KNOWN_TASK_FILES - walked)
+    assert not missing, f"_task_files() no longer reaches {missing}"
 
 
 def test_the_widened_rule_would_have_caught_the_coredns_read(tmp_path: Path) -> None:

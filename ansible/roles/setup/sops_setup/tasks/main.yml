@@ -83,6 +83,11 @@
     executable: /bin/bash
   register: sops_setup_public_key
   changed_when: false
+  # A read, so it runs under --check too: skipped, it leaves no stdout and the two tasks below
+  # error on the attribute (#2323). On a host with no key yet, --check only simulated the
+  # keygen above, so there is nothing to read; that is not a failure of the check run.
+  check_mode: false
+  failed_when: sops_setup_public_key.rc != 0 and not ansible_check_mode
 
 - name: Show the Public Key to user
   tags: [age-key]

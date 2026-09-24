@@ -112,5 +112,7 @@
 
 - name: Show the hardlink probe result
   tags: [deploy]
+  # --check runs no probe, so there is no log to show (#2323).
+  when: not ansible_check_mode
   ansible.builtin.debug:
     msg: "{{ media_volume_probe_log.stdout }}"

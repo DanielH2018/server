@@ -49,6 +49,12 @@
   register: claude_code_version
   become: false
   changed_when: false
+  # A read, so it runs under --check too: skipped, it leaves no stdout and the login report
+  # below errors on the attribute (#2323). On a host without claude yet, --check only
+  # simulated the install above, so there is nothing to run; that is not a failure of the
+  # check run.
+  check_mode: false
+  failed_when: claude_code_version.rc != 0 and not ansible_check_mode
 
 - name: Keep the user manager alive after logout (loginctl enable-linger)
   # user-1000.slice is StopWhenUnneeded=yes, so a fan-out agent launched from an ssh login

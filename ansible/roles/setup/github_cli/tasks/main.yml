@@ -83,6 +83,9 @@
   become: false
   changed_when: false
   failed_when: false
+  # A read of gh's stored credential, so it runs under --check too: skipped, it leaves no rc
+  # and the report below errors on the attribute (#2323).
+  check_mode: false
 
 - name: Report that an interactive GitHub login is still required
   tags: [github_cli]
