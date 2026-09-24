@@ -100,8 +100,10 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   `-security`) **and** `apt-config dump Unattended-Upgrade::Origins-Pattern` (must list the
   extras). Note `unattended-upgrade --dry-run` needs root, so the only unprivileged proof that
   a pattern matches is reading `archive`/`codename` off the package file via python-apt.
-- **SSH:** `.ssh` perms, an `ssh-users` group, sshd hardening, and a `Match` block re-enabling
-  forwarding for `sys_user` (the global config disables agent/X11/TCP forwarding). Since #397
+- **SSH:** `.ssh` perms (**absolute paths only** — this play becomes root, so `~` means `/root`;
+  #2413, ratcheted by `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py`), an `ssh-users`
+  group, sshd hardening, and a `Match` block re-enabling forwarding for `sys_user` (the global
+  config disables agent/X11/TCP forwarding). Since #397
   that block sets `AllowTcpForwarding all`, not `local` — **both** directions, plus
   `AllowStreamLocalForwarding remote` and `StreamLocalBindUnlink yes`, for the clipboard
   bridge's reverse unix-socket forward. `local` alone does not work and the reason is not

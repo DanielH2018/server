@@ -101,14 +101,53 @@
   become: true
   notify: Restart fail2ban
 
-- name: Set SSH directory permissions
+- name: Harden the sys user's SSH directory
   tags: [ssh]
+  # THE PATH IS ABSOLUTE, and has to be. This task read `path: ~/.ssh` until 2026-09-24 (#2413),
+  # and hardened root's directory instead of the sys user's on every run. The file module expands
+  # `~` as the BECOME user; this play is `become: true` (ansible/initial_setup.yml) and the sudo
+  # plugin defaults to `-H`, so `~` resolved to /root. The task therefore chowned /root/.ssh to
+  # ubuntu recursively — which StrictModes reads as a wrong-owner key file, refusing root's keys —
+  # while /home/ubuntu/.ssh kept its 640 and 660 modes and its August ctimes. Both hosts recorded
+  # the task as `ok` throughout, because chowning the wrong directory succeeds.
+  #
+  # `become: true` STAYS. With the path pinned, escalation no longer decides which directory is
+  # written, and it is what lets this correct an owner that has already drifted to root.
+  #
+  # `u=rwX,go=` rather than 0700: a recursive numeric 0700 marks the public keys, known_hosts and
+  # the ControlMaster sockets under cm/ executable. The capital X sets the search bit on
+  # directories only, which is the distinction a numeric recursive mode cannot make.
   ansible.builtin.file:
-    path: ~/.ssh
-    mode: "0700"
-    owner: ubuntu
-    group: ubuntu
+    path: "/home/{{ sys_user }}/.ssh"
+    state: directory
+    mode: u=rwX,go=
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
     recurse: true
+  become: true
+
+- name: Check whether root has an SSH directory
+  tags: [ssh]
+  ansible.builtin.stat:
+    path: /root/.ssh
+  register: initial_setup_root_ssh_dir
+  become: true
+
+- name: Give root back its own SSH directory
+  tags: [ssh]
+  # The cleanup half of #2413. Pinning the path above stops the wrong directory being chowned; it
+  # does nothing about the ownership already on disk, which stays ubuntu-owned until something
+  # puts it back. Ownership ONLY — root's modes were never touched by the bug, so they are not
+  # this task's business. Guarded on the stat above so it can never CREATE /root/.ssh: a host
+  # where root has no keys should keep it that way.
+  ansible.builtin.file:
+    path: /root/.ssh
+    state: directory
+    owner: root
+    group: root
+    recurse: true
+  become: true
+  when: initial_setup_root_ssh_dir.stat.isdir | default(false)
 
 - name: Create ssh-users group
   tags: [ssh]
