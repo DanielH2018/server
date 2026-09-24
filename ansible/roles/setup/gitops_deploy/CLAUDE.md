@@ -164,12 +164,12 @@ Each arm below is a rule and the function that holds it. The record page has the
   - **The ff-merge happens BEFORE the apply** — applying first renders from the pre-merge tree
     and deploys nothing. `test_broad_remediation_puts_the_ff_merge_before_the_playbook`.
   - **A broad range also deploys the promoted image bumps that rode in on it (#2348), and
-    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` — and `hold_plane` for a
-    plane, never for a service — alerts saying nothing was rolled back, and leaves the tree
-    fast-forwarded: no `git reset`, which would leave the tree claiming the old commit over
-    half-new live state. The bumps go through the staging gate first and a block DEMOTES them
-    into the defer-and-alert channel rather than holding the range
-    (`deploy_broad_k8s.gate_broad_k8s`); they share the plans' budget, so the ceiling holds.
+    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` and `hold_plane` (a bump's
+    is `ansible/deploy.yml <tags>`), says nothing was rolled back, and leaves the tree
+    fast-forwarded: a `git reset` would claim the old commit over half-new live state. A bump
+    the deploy plane covers deploys once, ungated; the rest pass the staging gate, and a block
+    or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
+    (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names

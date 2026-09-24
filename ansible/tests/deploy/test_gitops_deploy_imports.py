@@ -86,6 +86,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_changes",
         "deploy_config",
         "deploy_defer",
+        "deploy_git",
         "deploy_io",
         "deploy_locks",
         "deploy_staging",

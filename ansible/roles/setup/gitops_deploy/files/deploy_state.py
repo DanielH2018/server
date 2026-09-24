@@ -436,19 +436,26 @@ class DeployerState:
         self.write("hold_plane", None)
         self.write_hold(None)
 
-    def clear_service_hold(self) -> None:
-        """Clear a hold after a successful service deploy, unless a broad plane is unapplied.
+    def clear_service_hold(self, services: set[str]) -> None:
+        """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
 
-        A k8s or Docker deploy applies no plane, so it is never evidence that the plane a
-        broad hold names has been applied. Without this, an unrelated service deploy clears
+        A k8s or Docker deploy is `ansible/deploy.yml --tags <services>`, so it clears a hold
+        whose plane is that playbook at a subset of those tags — a failed bump on a broad tick
+        writes exactly that, and the fix-forward deploy of the same service is its way out.
+        Any other plane stays held: without this, an unrelated service deploy clears
         `hold_sha` and orphans `hold_plane`, which `gitops_status` never reads on its own.
         """
         held = self.hold_plane
-        if held:
+        if held and not (
+            services
+            and broad_hold_cleared_by(held, "ansible/deploy.yml", sorted(services))
+        ):
             log(
-                f"hold kept: {held} is still unapplied; a service deploy does not clear it"
+                f"hold kept: {held} is still unapplied; a deploy of "
+                f"{','.join(sorted(services))} does not clear it"
             )
             return
+        self.write("hold_plane", None)
         self.write_hold(None)
 
     def record_behind(

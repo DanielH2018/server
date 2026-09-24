@@ -204,11 +204,26 @@ def test_the_alert_excerpt_keeps_the_argv_line_and_the_tail(gitops_deploy) -> No
     assert FATAL in excerpt
 
 
+# The nine bumps the 2026-09-24 01:45 tick carried (#2348): the longest list a post has named.
+NINE_BUMPS = {
+    "bentopdf",
+    "flaresolverr",
+    "homepage",
+    "freshrss",
+    "home-assistant",
+    "speedtest",
+    "radarr",
+    "prowlarr",
+    "bazarr",
+}
+
+
 def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
     gitops_deploy,
 ) -> None:
     """discord_post cuts at message[:1900], keeping the head — so an unbounded error string
-    would evict the remediation prose rather than truncate itself."""
+    would evict the remediation prose rather than truncate itself. Measured with the widest
+    dropped-bump list the post has had to name, since that line grows it."""
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 50000
     )
@@ -220,10 +235,12 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
         exc,
         gitops_deploy.STATE.path("hold"),
         gitops_deploy.STATE.path("hold_plane"),
+        NINE_BUMPS,
     )
     assert len(message) <= 1900
     assert "fix forward and re-run that playbook by hand" in message
     assert "nothing was rolled back" in message
+    assert f'--tags "{",".join(sorted(NINE_BUMPS))}"' in message
 
 
 def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
@@ -236,9 +253,36 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
         exc,
         gitops_deploy.STATE.path("hold"),
         gitops_deploy.STATE.path("hold_plane"),
+        set(),
     )
     assert FATAL in message
     assert "--tags `k3s`" in message
+    assert "not deployed" not in message, "a range with no bump names none"
+
+
+def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
+    gitops_deploy,
+) -> None:
+    """The same 1900-char budget as its siblings, at the widest service list seen.
+
+    The list is named once, in the command the operator runs: a second copy in the header
+    spent the budget the error excerpt and the action line share.
+    """
+    exc = RuntimeError(
+        "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 50000
+    )
+    message = deploy_alerts.broad_k8s_failure_alert(
+        "daniel-box",
+        "2d25ced3" * 5,
+        NINE_BUMPS,
+        exc,
+        gitops_deploy.STATE.path("hold"),
+        gitops_deploy.STATE.path("hold_plane"),
+    )
+    assert len(message) <= 1900
+    assert "Nothing was rolled back" in message
+    assert message.count(",".join(sorted(NINE_BUMPS))) == 1
+    assert message.count("bentopdf") == 1
 
 
 def test_head_passes_short_text_through_and_cuts_long_text_at_a_line(

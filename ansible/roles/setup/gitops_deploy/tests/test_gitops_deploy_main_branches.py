@@ -315,7 +315,7 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir)
 
 
 def test_a_service_deploy_does_not_clear_a_broad_hold(gitops_deploy, tick, state_dir):
-    """A service deploy applies no plane, so it is no evidence the held one was applied."""
+    """A tagged service deploy applies part of the held whole-playbook plane, not all of it."""
     _hold_the_deploy_plane(state_dir)
     _docker_push(tick)
     assert gitops_deploy.main(tick.tools) == 0

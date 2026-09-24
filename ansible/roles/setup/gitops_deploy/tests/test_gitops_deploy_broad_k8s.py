@@ -15,6 +15,8 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 import dataclasses
 
+import pytest
+
 import deploy_locks
 from _deploy_fakes import fits_budget
 
@@ -28,6 +30,9 @@ DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
 # `manual_plane`. The 2026-09-24 incident's range was this shape, nine bumps behind one such
 # commit.
 UNAPPLYABLE_ROLE = "ansible/roles/setup/k3s/tasks/main.yml"
+# A deploy-plane path: `deploy_narrow.plan` gives the range an `ansible/deploy.yml` plan whose
+# tag list `tick.narrow` scripts.
+DEPLOY_PLANE = "ansible/inventory/group_vars/all.yml"
 # A setup role the deployer DOES apply, so the broad plane runs a playbook of its own and the
 # ordering between the two applies is observable.
 APPLYABLE_ROLE = "ansible/roles/setup/gitops_deploy/tasks/main.yml"
@@ -41,6 +46,7 @@ DEPLOY_SONARR = [
     "--tags",
     "sonarr",
 ]
+DEPLOY_PLANE_FULL = ["uv", "run", "--frozen", "ansible-playbook", "ansible/deploy.yml"]
 APPLY_GITOPS_DEPLOY = [
     "uv",
     "run",
@@ -198,39 +204,162 @@ def test_the_gate_is_consulted_before_the_ff_merge(gitops_deploy, tick, settings
     """A death inside the gate's window must leave `local` behind origin, or the range strands."""
     config = _mixed(settings, tick, APPLYABLE_ROLE)
     assert gitops_deploy.main(tick.tools, config) == 0
+    assert ("staging", {"sonarr"}) in tick.log, "the gate was never consulted"
     assert tick.log.index(("staging", {"sonarr"})) < tick.index("git", "merge")
+
+
+def test_a_bump_the_deploy_plane_applies_never_reaches_the_gate(
+    gitops_deploy, tick, settings, state_dir
+):
+    """A bump the narrowed deploy plane reaches is applied by that plane, ungated.
+
+    Gating it would change nothing: a rejection cannot keep `deploy.yml --tags sonarr` from
+    applying the pin, so the verdict post's "prod was not deployed" and the defer-and-alert
+    post's "not applied" would both be false.
+    """
+    config = _blocking(settings, tick, DEPLOY_PLANE)
+    tick.narrow = (0, "sonarr")
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [DEPLOY_SONARR]
+    assert not [entry for entry in tick.log if entry[0] == "staging"]
+    assert _marker(state_dir, "k8s_alerted_sha") is None, (
+        "no post says it was not applied"
+    )
 
 
 # ── a failed bump holds the SHA and rolls nothing back ────────────────────────────────────
 
 
-def test_a_failed_bump_holds_the_sha_names_no_plane_and_does_not_reset(
+def test_a_failed_bump_holds_the_sha_and_its_plane_and_does_not_reset(
     gitops_deploy, tick, settings, state_dir
 ):
     """Forward-only. A reset here would undo the ff-merge under an applied setup plane.
 
-    No `hold_plane` either: that marker names a playbook for `clear_broad_hold` to match an
-    apply against, and a service is not a plane — a hold written there is one no broad apply
-    can clear.
+    The hold names the run that failed, `deploy.yml --tags sonarr`. With no `hold_plane` the
+    next unrelated service deploy cleared it through `clear_service_hold`, and GitOps Deploy —
+    Status went green over the failed pin.
     """
     config = _mixed(settings, tick, UNAPPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("image manifest unknown")]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the tree stays fast-forwarded"
     assert _marker(state_dir, "hold_sha") == ORIGIN
-    assert _marker(state_dir, "hold_plane") is None
+    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml sonarr"
     assert "Nothing was rolled back" in tick.posts[-1]
+
+
+@pytest.mark.parametrize(
+    ("held", "cleared"),
+    [("sonarr", True), ("radarr", False)],
+    ids=["a-deploy-of-the-held-service", "an-unrelated-deploy"],
+)
+def test_a_bump_hold_clears_only_on_a_deploy_that_covers_it(
+    gitops_deploy, tick, settings, state_dir, held, cleared
+):
+    """The way out of the hold above: a later `deploy.yml --tags sonarr` is the same apply.
+
+    A k8s-only tick deploying sonarr applies exactly what the held run failed to, so it
+    clears the hold; one deploying anything else is no evidence and must keep it.
+    """
+    (state_dir / "hold_sha").write_text("f" * 40)
+    (state_dir / "hold_plane").write_text(f"ansible/deploy.yml {held}")
+    config = _mixed(settings, tick)
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [DEPLOY_SONARR]
+    assert (_marker(state_dir, "hold_sha") is None) is cleared
+    assert (_marker(state_dir, "hold_plane") is None) is cleared
+
+
+def test_a_failed_bump_still_pages_the_k8s_change_beside_it(
+    gitops_deploy, tick, settings, state_dir
+):
+    """A hand-edited k8s role in the same range is unapplied either way, and must say so.
+
+    The failure arm used to return before `alert_deferred`, so radarr's only page was lost.
+    """
+    config = _mixed(settings, tick, UNAPPLYABLE_ROLE)
+    tick.paths = [*tick.paths, "ansible/roles/k8s/radarr/tasks/main.yml"]
+    tick.playbook_outcomes = [RuntimeError("image manifest unknown")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert any("radarr" in post for post in tick.posts)
 
 
 def test_a_failed_broad_apply_never_reaches_the_bump(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The plane below has to succeed first, so its failure arm returns before the k8s deploy."""
+    """The plane below has to succeed first, so its failure arm returns before the k8s deploy.
+
+    The ff-merge already moved past the bump and the arm must not reset, so no later range
+    carries it: the failure post is the only place left to name it.
+    """
     config = _mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.playbooks == [APPLY_GITOPS_DEPLOY]
     assert _marker(state_dir, "hold_plane") == "ansible/initial_setup.yml gitops_deploy"
+    assert "broad apply failed" in tick.posts[-1]
+    assert "sonarr" in tick.posts[-1], "the dropped bump is named"
+
+
+def test_a_failed_broad_apply_still_pages_a_demoted_bump(
+    gitops_deploy, tick, settings, state_dir
+):
+    """A bump staging rejected sits in the defer-and-alert channel, which a failure skipped."""
+    config = _blocking(settings, tick, APPLYABLE_ROLE)
+    tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert "broad apply failed" in tick.posts[-1]
+
+
+# ── a bump is deployed once, and only with a budget that fits it ──────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("narrow", "expected"),
+    [((0, "sonarr"), [DEPLOY_SONARR]), ((3, ""), [DEPLOY_PLANE_FULL])],
+    ids=["narrowed-to-the-bump", "refused-full-run"],
+)
+def test_a_bump_the_deploy_plane_applies_is_not_deployed_again(
+    gitops_deploy, tick, settings, narrow, expected
+):
+    """A second `--tags sonarr` re-takes the Longhorn snapshot and spends the shared budget."""
+    config = _mixed(settings, tick, DEPLOY_PLANE)
+    tick.narrow = narrow
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == expected
+    assert ("annotation", {"sonarr"}) in tick.log
+
+
+def test_a_deploy_plane_narrowed_elsewhere_still_deploys_the_bump(
+    gitops_deploy, tick, settings
+):
+    """The rejecting half: a plane that does not name the bump's tag does not cover it."""
+    config = _mixed(settings, tick, DEPLOY_PLANE)
+    tick.narrow = (0, "radarr")
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [[*DEPLOY_SONARR[:-1], "radarr"], DEPLOY_SONARR]
+
+
+def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
+    gitops_deploy, tick, settings, state_dir
+):
+    """Less left than a k8s-only tick grants a bump: defer it, never start a run to be killed.
+
+    No hold and no reset, because the plane under it applied. The bump takes the
+    defer-and-alert channel, whose durable half is `Release Staleness Drift` reading the pin.
+    """
+    config = dataclasses.replace(
+        _mixed(settings, tick, APPLYABLE_ROLE),
+        broad_deploy_timeout_s=60,
+        k8s_deploy_timeout_s=900,
+    )
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks == [APPLY_GITOPS_DEPLOY]
+    assert tick.head == ORIGIN
+    assert _marker(state_dir, "hold_sha") is None
+    assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
 
 
 def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(

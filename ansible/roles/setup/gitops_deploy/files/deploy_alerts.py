@@ -122,13 +122,16 @@ def broad_failure_alert(
     exc: BaseException,
     hold_file: str,
     hold_plane_file: str,
+    bumps: set[str],
 ) -> str:
     """The post for a failed broad apply.
 
     A function rather than an inline f-string so the 1900-char budget it is sized against is
-    testable — see tests/test_gitops_deploy_failure_output.py.
+    testable — see tests/test_gitops_deploy_failure_output.py. `bumps`: no later range has them.
     """
     tag_note = f" --tags `{','.join(tags)}`" if tags else ""
+    bump_cmd = f'`./scripts/deploy.sh --tags "{",".join(sorted(bumps))}"`'
+    bump_note = f"**Image bumps not deployed**; after the plane, run {bump_cmd}.\n"
     return (
         f"🚨 gitops-deploy: **broad apply failed** on {hostname}.\n"
         f"`{playbook}`{tag_note} errored on `{origin[:8]}`:\n"
@@ -136,6 +139,7 @@ def broad_failure_alert(
         f"The tree is fast-forwarded and the plane is **unapplied**. This arm is "
         f"forward-only — **nothing was rolled back**, so live state is whatever the "
         f"failed run left.\n"
+        f"{bump_note if bumps else ''}"
         f"**Action:** fix forward and re-run that playbook by hand. A later tick clears the "
         f"hold only by applying this same plane — after a hand run, "
         f"`rm {hold_file} {hold_plane_file}`."
@@ -316,18 +320,17 @@ def broad_k8s_failure_alert(
     services: set[str],
     exc: BaseException,
     hold_file: str,
+    hold_plane_file: str,
 ) -> str:
     """The post for a promoted image bump that failed inside a BROAD tick.
 
-    Distinct from `k8s_failure_alert` because nothing was rolled back and nothing will be.
-    The broad arm applied the host plane before this deploy, so the `git reset --hard` that
-    `_rollback_k8s` performs would leave the tree claiming the old commit over an applied
-    setup plane. A post that said "rolled back" here would be false, and "check whether the
-    volume is in maintenance mode" would send the operator after a revert that never ran.
+    Distinct from `k8s_failure_alert` because nothing was rolled back and nothing will be:
+    the reset `_rollback_k8s` performs would leave the tree claiming the old commit over an
+    applied setup plane, and a maintenance-mode hint would chase a revert that never ran.
     """
     return (
         f"🚨 gitops-deploy: **k8s deploy failed on a broad tick** on {hostname}.\n"
-        f"`{', '.join(sorted(services))}` from `{origin[:8]}` failed:\n"
+        f"The image bumps from `{origin[:8]}` failed:\n"
         f"```\n{alert_excerpt(exc)}\n```\n"
         f"**Nothing was rolled back.** The broad plane applied first on this tick, so the "
         f"reset a k8s rollback performs would strand that apply against a tree claiming the "
@@ -336,8 +339,9 @@ def broad_k8s_failure_alert(
         f"`k8s_autodeploy_snapshot_pvcs` — `k8s/manifests` takes it on every apply — so a "
         f"revert is available by hand.\n"
         f"**Action:** fix forward on master, or redeploy by hand with "
-        f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. Clear the hold with '
-        f"`rm {hold_file}` once the service is healthy."
+        f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
+        f"deploys these services clears the hold; after a hand run, "
+        f"`rm {hold_file} {hold_plane_file}`."
     )
 
 

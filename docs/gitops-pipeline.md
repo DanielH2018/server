@@ -402,9 +402,10 @@ before reaching it. If everything after the held SHA maps to no service here, di
 hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
 
 **A BROAD hold clears only when its own plane is applied** — see *Which apply clears a hold*
-below. `clear_service_hold()` is the service half of that rule: a k8s or Docker deploy applies
-no plane, so it leaves a broad hold standing rather than clearing `hold_sha` out from under an
-unapplied plane.
+below. `clear_service_hold()` is the service half of that rule: a k8s or Docker deploy is
+`ansible/deploy.yml --tags <services>`, so it clears a hold naming that playbook at a subset of
+those tags (a failed bump on a broad tick writes one) and leaves any other broad hold standing
+rather than clearing `hold_sha` out from under an unapplied plane.
 
 **A service migrated off this host must take its rendered compose with it.** `containers_for()`
 treats a present `containers/<svc>/docker-compose.yml` as proof the service is deployed here,
@@ -554,14 +555,27 @@ stay).
     `prowlarr`, `bazarr`) behind one `roles/setup/k3s` commit; the 01:48 tick's range began
     after them, and every one of the nine pods was still serving its old image when `kubectl`
     was read. `deploy_broad_k8s.apply_broad_k8s` runs after the plan loop, so a broad apply
-    that failed or hit a busy lock has already returned and the bumps are re-derived by the
-    next tick's range.
+    that failed or hit a busy lock has already returned without deploying them.
+    - **Only a busy lock re-derives the bumps.** Its arm undoes the ff-merge, so the next
+      tick's range carries them again. A FAILED apply leaves the tree fast-forwarded past them
+      and never resets, so no later range carries them: `broad_failure_alert` names every
+      promoted bump with the `deploy.sh --tags` line that deploys it, and the deferred-change
+      pages (`alert_deferred`) go out on that path as well as on a successful one.
+    - **A bump the deploy plane covers is deployed once, by the plane, ungated.**
+      `narrow_broad._changed_half` builds its ChangeSet from the raw paths, so a range that
+      also moves a deploy-plane path puts the bump's tag in the narrowed list, and a refused
+      narrowing runs the whole play. `deploy_broad_k8s.covered_by_plane` takes those bumps out
+      of both the gate and the separate deploy. A second `--tags sonarr` re-took the Longhorn
+      snapshot of every claim sonarr declares and spent the shared budget twice. Gating a
+      covered bump could withhold nothing: the plane applies it whatever the verdict, exactly
+      as it applied every such bump before #2348.
     - **The staging gate decides first, and a rejection DEMOTES rather than holds.**
       `deploy_broad_k8s.gate_broad_k8s` consults it before the ff-merge, which is where
       `handle_k8s`'s own `DECIDED:` says it has to run. The gate is armed and blocking on
       daniel-box, the only host running this deployer, so deploying past it in this arm would
       be a way around an abort valve a k8s-only tick honours and would leave a mixed range out
-      of the tick ledger the Phase-C evidence is made of. On a block the promoted set is folded
+      of the tick ledger the Phase-C evidence is made of. That holds for the bumps this arm
+      deploys itself; a bump the deploy plane covers bypasses the gate, as above. On a block the gated set is folded
       back into `ChangeSet.k8s` — the defer-and-alert channel any change the promotion
       refuses takes — and the broad half still applies. Holding instead would park the setup plane and
       whatever else shared the push behind one service's verdict, which is the cost
@@ -576,11 +590,22 @@ stay).
       the reason the plans share it: the broad path's worst case is then 180 flock + 720
       staging + 1800 apply = 2700s, still under the k8s path's 3120s, so the unit's ceiling
       does not move. A budget per phase would have put a mixed range past it.
-    - **A failure writes `hold_sha` and no `hold_plane`.** `clear_broad_hold` matches a hold's
-      plane against the playbook and tags an apply ran, and a service tag is not a plane — a
-      `hold_plane` written here would be one no broad apply could ever clear.
-      `deploy_alerts.broad_k8s_failure_alert` is a separate body from `k8s_failure_alert` for
-      the same reason: it must not say "rolled back locally" or send the operator after a
+    - **The bump deploy starts only when `K8S_DEPLOY_TIMEOUT_S` still fits.** That is the
+      budget a k8s-only tick grants the same bump. With less left, the run would die at the
+      timeout (a hold and a page, often for a healthy service) or its lock wait would raise
+      `ServiceLockBusy` and reset the tree under planes that applied. So it defers instead,
+      with no hold and no reset: the bump joins `ChangeSet.k8s`, the defer-and-alert post
+      names it, and `Release Staleness Drift` reads the unapplied pin from the release
+      records until something deploys it.
+    - **A failure writes `hold_sha` and `hold_plane` = `ansible/deploy.yml <bumps>`**, the run
+      that failed. With no plane recorded, the next unrelated service deploy cleared the hold
+      through `clear_service_hold`, and GitOps Deploy — Status went green over the failed pin.
+      `clear_service_hold` clears a hold only when the services it deployed cover the held
+      tags, so the fix-forward deploy of the same service is the way out, and
+      `clear_broad_hold` clears it on a `deploy.yml` run covering them. The deferred-change
+      pages go out before the failure post.
+      `deploy_alerts.broad_k8s_failure_alert` is a separate body from `k8s_failure_alert`: it
+      must not say "rolled back locally" or send the operator after a
       volume revert that never ran. The pre-apply Longhorn snapshot IS taken — `k8s/manifests`
       takes it on every apply of a claim-declaring service — so a hand revert stays available.
   It was an if/else until 2026-09-18 (#2046) and the setup arm won: two Pi retirements that
@@ -892,7 +917,8 @@ stay).
   - **A clean k8s tick is the second place `hold_sha` clears.** `clear_service_hold()` also sits
     in the Docker health-gate branch, which an all-k8s host never reaches — without this the
     first rollback would leave **GitOps Deploy — Status** red permanently and need a manual `rm`.
-    It clears a rollback hold only; a BROAD hold survives it, per *Which apply clears a hold*.
+    It clears a rollback hold, and a broad-tick bump hold its services cover; any other BROAD
+    hold survives it, per *Which apply clears a hold*.
   - **One tick promotes at most `gitops_deploy_k8s_autodeploy_max_per_tick` services (default 3).**
     Every promoted service shares a single `ansible-playbook` run under one
     `K8S_DEPLOY_TIMEOUT_S`, and the failure path resets the whole merged range — so an
