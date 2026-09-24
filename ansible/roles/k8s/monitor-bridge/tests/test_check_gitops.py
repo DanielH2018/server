@@ -250,7 +250,9 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
         manual_plane_tags="common -\nk3s kubeconfig",
     )
     assert not ok
-    assert "clear-manual-plane common && " in msg
+    assert "apply the role by hand, then `" in msg  # `common` has no playbook
+    assert "clear-manual-plane common`" in msg
+    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
     assert msg.endswith("clear-manual-plane k3s --applied kubeconfig`")
     assert "<role>" not in msg
 
@@ -378,3 +380,74 @@ def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert "service lock all" in msg
+
+
+def test_the_page_names_the_apply_the_clear_belongs_to(cfg):
+    """The clear carries `--applied <the row>`; the apply beside it must name the same tags.
+
+    Without it the page said "apply by hand, then `... --applied kubeconfig`", so an operator
+    who applied an earlier, narrower set and pasted the clear dropped the tags a later range
+    had added (#2371). The whole-role apply carries `maximal_apply_warning`, as every other
+    surface printing that command does.
+    """
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+        manual_plane_tags="k3s -",
+    )
+    assert not ok
+    assert "apply `ansible/k3s-bringup.yml --tags k3s` by hand" in msg
+    assert "rotate-keys" in msg, "the whole-role tag arms the gated tasks"
+
+
+def test_a_narrowed_apply_off_the_gated_tags_carries_no_warning(cfg):
+    """The rejecting half: a warning printed beside every command is one nobody reads."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+        manual_plane_tags="k3s kubeconfig",
+    )
+    assert not ok
+    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
+    assert "rotate-keys" not in msg
+
+
+def test_a_role_no_playbook_applies_is_not_told_to_run_none(cfg):
+    """`common`'s playbook field is the literal `none`, which is not a command to print."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=25000.0 + 7 * 3600,
+        manual_plane="def456abc7890123 none common 25000.0",
+    )
+    assert not ok
+    assert "apply the role by hand" in msg
+    assert "--tags common" not in msg and "none --tags" not in msg
+
+
+def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
+    """A marker that does not decode reads as absent, not as a check error (#2371).
+
+    Raising here turned `gitops_status` into DOWN "check error" every cycle, which masks the
+    hold, diverged, behind and contention arms — the four this monitor exists to raise.
+    """
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "hold_sha", "held123abc456789")
+    (tmp_path / "manual_plane_tags").write_bytes(b"k3s \xff\xfe kubeconfig\n")
+    ok, msg = checks.gitops.check_gitops_status(cfg)
+    assert not ok
+    assert "deploy held at held123a" in msg
+
+
+def test_a_decodable_sidecar_is_still_read(tmp_path, cfg):
+    """The accepting half: degrading to absent must not become "never read"."""
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
+    _gw(tmp_path, "manual_plane_tags", "k3s kubeconfig")
+    ok, msg = checks.gitops.check_gitops_status(cfg)
+    assert not ok
+    assert "--tags kubeconfig" in msg

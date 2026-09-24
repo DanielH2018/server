@@ -367,3 +367,119 @@ def test_the_real_setup_tree_has_a_tag_two_roles_declare():
     text = (REPO / "ansible/initial_setup.yml").read_text()
     shared = narrow_setup.foreign_tags("initial_setup", text, "HEAD", str(REPO))
     assert "firewall" in shared, sorted(shared)
+
+
+# ── two YAML shapes the line scan lost the key of (#2371) ───────────────────────────────
+
+DEFAULTS_WITH_A_BLOCK_SCALAR = DEFAULTS + (
+    "demo_script: |\n  #!/bin/sh\n\n  echo {{ demo_alpha_mode }}\n"
+)
+
+DEFAULTS_WITH_AN_ALIAS = DEFAULTS + ('demo_a: &a "{{ demo_alpha_mode }}"\ndemo_b: *a\n')
+
+
+def test_a_key_interpolated_after_a_blank_line_in_a_block_scalar_names_its_readers(
+    tree,
+):
+    """A blank line inside a block scalar ended the key's block for the line scan.
+
+    Everything after it was attributed to no key at all, so `demo_script` did not read
+    `demo_alpha_mode` and the change narrowed to `alpha` alone while `beta.conf.j2` rendered
+    the script.
+    """
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS_WITH_A_BLOCK_SCALAR)
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "script = {{ demo_script }}\n")
+    old = tree.commit("a block scalar holding a blank line")
+    tree.write(
+        f"{ROLE}/defaults/main.yml",
+        DEFAULTS_WITH_A_BLOCK_SCALAR.replace("mode: fast", "mode: faster"),
+    )
+    assert narrow(tree, old, tree.commit("change the mode")) == frozenset(
+        {"alpha", "beta"}
+    )
+
+
+def test_a_key_reached_through_a_yaml_alias_names_its_readers(tree):
+    """An alias copies a value without repeating the text that named anything.
+
+    `demo_b: *a` holds the same `{{ demo_alpha_mode }}` string as `demo_a`, which the line
+    scan could not see, so `beta.conf.j2` dropped out of the answer.
+    """
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS_WITH_AN_ALIAS)
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_a }}\n")
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = {{ demo_b }}\n")
+    old = tree.commit("an alias of the alpha mode")
+    tree.write(
+        f"{ROLE}/defaults/main.yml",
+        DEFAULTS_WITH_AN_ALIAS.replace("mode: fast", "mode: faster"),
+    )
+    assert narrow(tree, old, tree.commit("change the mode")) == frozenset(
+        {"alpha", "beta"}
+    )
+
+
+def test_a_defaults_file_that_does_not_parse_is_flagged(tree):
+    """The parse's rejecting half: an unreadable vars file is a reader it cannot see."""
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS + "  bad: [unclosed\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="does not parse"):
+        narrow(tree, *_refs(tree))
+
+
+def test_a_defaults_file_that_is_not_a_mapping_is_flagged(tree):
+    tree.write(f"{ROLE}/defaults/main.yml", "---\n- not\n- a mapping\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="is not a mapping of keys"):
+        narrow(tree, *_refs(tree))
+
+
+def test_a_non_yaml_file_beside_the_defaults_does_not_block_the_narrowing(tree):
+    """Only `.yml`/`.yaml` is a vars file, as in `tasks/` — Ansible loads no other."""
+    tree.write(f"{ROLE}/defaults/README.md", "# not a vars file\n")
+    old = tree.commit("prose beside the defaults")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    assert narrow(tree, old, tree.commit("edit alpha")) == frozenset({"alpha"})
+
+
+# ── a cycle one step in refuses rather than merging an empty answer (#2371) ──────────────
+
+
+def test_a_reader_key_whose_own_readers_form_a_cycle_is_flagged(tree):
+    """`demo_y` reads the changed key and reaches only `demo_z`, which names it back.
+
+    `key_readers` unioned that empty answer silently, so the range narrowed to `alpha` and
+    read as complete. The accepting half is
+    `test_a_key_another_defaults_key_interpolates_names_both_readers` above, where the same
+    derived key does reach a task file.
+    """
+    cyclic = DEFAULTS + (
+        'demo_y: "{{ demo_alpha_mode }}{{ demo_z }}"\ndemo_z: "{{ demo_y }}"\n'
+    )
+    tree.write(f"{ROLE}/defaults/main.yml", cyclic)
+    old = tree.commit("a derived key reaching only a cycle")
+    tree.write(
+        f"{ROLE}/defaults/main.yml", cyclic.replace("mode: fast", "mode: faster")
+    )
+    with pytest.raises(
+        narrow_setup.CannotNarrow, match="demo_y reaches no task file through demo_z"
+    ):
+        narrow(tree, old, tree.commit("change the mode"))
+
+
+def test_a_template_reader_in_a_cycle_is_flagged_beside_the_src_reader(tree):
+    """The same silent merge through `readers_of`'s template edge.
+
+    `outer.j2` names `alpha.conf.j2` and is itself rendered by nothing — it only trades
+    includes with `inner.j2`. Returning `alpha` alone dropped whatever `outer.j2` reaches.
+    """
+    tree.write(
+        f"{ROLE}/templates/outer.j2",
+        "{% include 'inner.j2' %}\n{% include 'alpha.conf.j2' %}\n",
+    )
+    tree.write(f"{ROLE}/templates/inner.j2", "{% include 'outer.j2' %}\n")
+    old = tree.commit("a template pair rendering nothing")
+    tree.write(
+        f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }} # more\n"
+    )
+    with pytest.raises(
+        narrow_setup.CannotNarrow, match="only templates naming each other"
+    ):
+        narrow(tree, old, tree.commit("edit the template"))

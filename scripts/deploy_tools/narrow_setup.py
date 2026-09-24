@@ -18,6 +18,12 @@ to the tags of the tasks that read it:
     tags of every task file and template naming one of those keys, following another vars
     key that interpolates one.
 
+WHAT IT DOES NOT FOLLOW. A `set_fact` that derives a variable in one task file and is
+consumed in another with different tags reads as unread here: the scans see the name in both
+files, but nothing ties the two, so a change reaching only the setter narrows to the setter's
+tags. Both of `setup/k3s`'s `set_fact`s are consumed in the file that sets them, so this is
+inert in today's tree (#2371, item 7).
+
 ANY DOUBT IS A REFUSAL, and the caller falls back to the role tag. A tag that matches nothing
 makes Ansible exit 0 having applied nothing — the silent-success failure
 `deploy_changes.setup_tags_for` and `deploy_remediation.k8s_remediation` both already guard
@@ -38,6 +44,9 @@ SessionStart banner and `land.sh` all quote ONE derivation rather than each repe
 `land_tags.confirmed_narrow_tags` also calls `role_tags` in-process, over one PR's own range,
 but only as a guard: `land.sh` prints the stored row, and only when it contains that answer.
 
+The READING those rules do — the git reads, the YAML parses and `RoleIndex` — is
+`narrow_setup_index.py` beside this. One derivation, split at the 600-line module cap.
+
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py
 """
 
@@ -47,21 +56,20 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
-import posixpath
-import re
 import sys
 
 import yaml
 
 from lib import yaml_fast
 from lib.git import git
-from narrow_setup_playbook import (
-    declared_tags,
-    playbook_applies_role,
-    playbook_roles,
+from narrow_setup_index import (
+    SETUP_TREE,
+    CannotNarrow,
+    RoleIndex,
+    foreign_tags,
+    show_at,
 )
-
-SETUP_TREE = "ansible/roles/setup"
+from narrow_setup_playbook import playbook_applies_role
 
 # The directories under a role a changed path can be narrowed from. Everything else in the
 # role — `handlers/` (whose tasks run under the notifying task's tags), `meta/`, `tests/`,
@@ -84,369 +92,6 @@ def _reaches_no_host(rel: str) -> bool:
     return rel.endswith(".md") or rel.startswith("tests/")
 
 
-# What a template uses to pull in another template. A change to the inner one reaches every
-# task that renders an outer one, so the scan follows that edge instead of stopping at the
-# first file.
-_TEMPLATE_EDGE = re.compile(r"{%-?\s*(?:import|include|from)\s")
-
-
-# Ansible's two tags that do not select a subset. `--tags never` selects exactly the tasks
-# opted out of every ordinary run, and `--tags always` selects the tasks that run whatever is
-# asked for — so neither describes "the work this change needs". `docker_install`'s
-# `tasks/install.yml` carries both `never` and `docker-engine-upgrade`, and printing that pair
-# would tell an operator to run the engine upgrade a config edit never asked for (#2350).
-_SPECIAL_TAGS = frozenset({"never", "always"})
-
-
-class CannotNarrow(Exception):
-    """This change reaches something no narrow tag list covers. The caller uses the role tag."""
-
-
-def _show(ref: str, path: str, repo: str) -> str | None:
-    """The file's text at `ref`, or None when the ref does not carry it.
-
-    A file that is not UTF-8 text refuses rather than raising: the scans below read text, and
-    a traceback in the deployer's journal is a worse way to say "cannot narrow" than this.
-    """
-    try:
-        r = git("show", f"{ref}:{path}", cwd=repo, check=False)
-    except UnicodeDecodeError as exc:
-        raise CannotNarrow(f"{path} is not text at {ref}") from exc
-    return r.stdout if r.returncode == 0 else None
-
-
-# The spellings of a STATIC task import. `include_tasks` is deliberately absent: a dynamic
-# include's tasks run only when the include task itself is selected, and the tags on the
-# included file's own tasks do not select the include — so a hit in such a file names a tag
-# that may run nothing.
-_STATIC_IMPORTS = (
-    "import_tasks",
-    "ansible.builtin.import_tasks",
-    "ansible.legacy.import_tasks",
-)
-
-
-def _static_imports(tasks) -> list[str]:
-    """The literal file names a task list imports statically, blocks walked through.
-
-    A templated name (`{{ role_path }}/...`) is left out: which file it names is only known at
-    run time, so a file reached only that way is not provably reachable.
-    """
-    out: list[str] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            continue
-        for key in ("block", "rescue", "always"):
-            if isinstance(task.get(key), list):
-                out += _static_imports(task[key])
-        for key in _STATIC_IMPORTS:
-            value = task.get(key)
-            if isinstance(value, dict):
-                value = value.get("file")
-            if isinstance(value, str) and "{{" not in value:
-                out.append(value)
-    return out
-
-
-def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> set[str]:
-    """Every tag the OTHER setup roles in this playbook declare.
-
-    A tag two roles declare does not select one of them. `firewall` is carried by tasks in
-    both `deploy_ui` and `initial_setup`, so `initial_setup.yml --tags firewall` runs both
-    roles' firewall tasks — the printed command would apply a role the change never touched
-    (#2350). The derivation refuses such a tag and the caller prints the whole-role tag, which
-    is the direction this module always fails in.
-
-    Raises:
-        CannotNarrow: another role's task file does not parse, so which tags it declares is
-            unknown. Unknown is not "no collision".
-    """
-    out: set[str] = set()
-    for other in sorted(playbook_roles(playbook_text) - {role}):
-        prefix = f"{SETUP_TREE}/{other}/tasks/"
-        for path in _tracked(ref, prefix, repo):
-            if not path.endswith((".yml", ".yaml")):
-                continue
-            text = _show(ref, path, repo)
-            if text is None:
-                continue
-            try:
-                doc = yaml_fast.safe_load(text)
-            except yaml.YAMLError as exc:
-                raise CannotNarrow(f"{path} does not parse: {exc}") from exc
-            if isinstance(doc, list):
-                out |= declared_tags(doc)
-    return out
-
-
-def _task_tags(tasks, inherited: frozenset[str]) -> list[frozenset[str]]:
-    """The effective tag set of every task in a task list, blocks walked through.
-
-    A `block`/`rescue`/`always` mapping is not a task: its own `tags:` apply to the tasks
-    inside it, which is why the walk carries `inherited` down rather than counting the block
-    itself. An empty frozenset in the result means a task no tag of this file selects.
-    """
-    out: list[frozenset[str]] = []
-    for task in tasks or []:
-        if not isinstance(task, dict):
-            raise CannotNarrow("a task list holds something that is not a mapping")
-        own = task.get("tags") or []
-        own = [own] if isinstance(own, str) else own
-        effective = inherited | frozenset(str(t) for t in own)
-        nested = [
-            task.get(key) for key in ("block", "rescue", "always") if task.get(key)
-        ]
-        if nested:
-            for inner in nested:
-                out += _task_tags(inner, effective)
-        else:
-            out.append(effective)
-    return out
-
-
-def file_tags(text: str) -> frozenset[str] | None:
-    """The tags that select every task in one task file, or None when one is untagged.
-
-    None is a refusal, and it is the common case for a file nobody tagged: `main.yml`'s
-    imports, `unit-logging.yml`, `longhorn-weekly-shard.yml`. Those inherit their tags from
-    the import site, so a hit in one says nothing about which tag applies it.
-    """
-    try:
-        doc = yaml_fast.safe_load(text)
-    except yaml.YAMLError as exc:
-        raise CannotNarrow(f"a task file does not parse: {exc}") from exc
-    if not isinstance(doc, list):
-        raise CannotNarrow("a task file is not a list of tasks")
-    per_task = _task_tags(doc, frozenset())
-    if not per_task or any(not tags for tags in per_task):
-        return None
-    return frozenset().union(*per_task)
-
-
-def _top_level_keys_naming(text: str, name: str | re.Pattern) -> set[str]:
-    """The top-level keys of a vars file whose block of lines mentions `name`.
-
-    A line scan rather than a parse, because the value may be a nested structure and what is
-    wanted is only "which key's block holds this string". A top-level key is a line starting in
-    column zero with a `key:`; everything indented under it belongs to that key. A compiled
-    pattern matches by `search`, for a variable name that must not match inside a longer one.
-    """
-    mentions = (
-        name if isinstance(name, re.Pattern) else re.compile(re.escape(name))
-    ).search
-    keys: set[str] = set()
-    current = None
-    for line in text.splitlines():
-        m = re.match(r"^([A-Za-z_][\w]*)\s*:", line)
-        if m:
-            current = m.group(1)
-        elif not line.strip() or line.lstrip().startswith("#"):
-            if not line.strip():
-                current = None
-            continue
-        if current and mentions(line):
-            keys.add(current)
-    return keys
-
-
-def _tracked(ref: str, prefix: str, repo: str) -> list[str]:
-    """Every tracked path under `prefix` at `ref`."""
-    r = git("ls-tree", "-r", "--name-only", ref, "--", prefix, cwd=repo, check=False)
-    if r.returncode != 0:
-        raise CannotNarrow(f"`git ls-tree {prefix}` failed: {r.stderr.strip()}")
-    return [line for line in r.stdout.splitlines() if line]
-
-
-class RoleIndex:
-    """One setup role's task files and templates, as read at a single ref.
-
-    Attributes:
-        tags: task-file basename -> the tags selecting it, or None when it is untagged.
-        task_text: task-file basename -> its text, for the name scans.
-        template_text: template path below the role -> its text, for the include edges.
-        reachable: the task files `tasks/main.yml` reaches through static imports — the only
-            ones the role's entry in its playbook runs. A tag read off any other file (one a
-            separate playbook imports, one only a play-level `include_role` with
-            `tasks_from:` reaches) can select nothing under the printed command.
-    """
-
-    def __init__(self, role: str, ref: str, repo: str) -> None:
-        self.prefix = f"{SETUP_TREE}/{role}/"
-        self.tags: dict[str, frozenset[str] | None] = {}
-        self.task_text: dict[str, str] = {}
-        self.template_text: dict[str, str] = {}
-        self.vars_text: dict[str, str] = {}
-        for path in _tracked(ref, self.prefix, repo):
-            rel = path[len(self.prefix) :]
-            if not rel.startswith(("tasks/", "templates/", "defaults/", "vars/")):
-                # `files/` and the rest are matched by NAME only and never read, so a binary
-                # file there cannot stop the scans that do read text.
-                continue
-            text = _show(ref, path, repo)
-            if text is None:
-                raise CannotNarrow(f"{path} is listed at {ref} but does not read back")
-            if rel.startswith("tasks/") and rel.endswith((".yml", ".yaml")):
-                self.task_text[rel] = text
-                self.tags[rel] = file_tags(text)
-            elif rel.startswith("templates/"):
-                self.template_text[rel] = text
-            elif rel.startswith(("defaults/", "vars/")):
-                self.vars_text[rel] = text
-        if not self.tags:
-            raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
-        self.reachable = self._reachable_from("tasks/main.yml")
-
-    def _reachable_from(self, start: str) -> frozenset[str]:
-        """Every task file `start` imports statically, itself included, transitively."""
-        seen: set[str] = set()
-        todo = [start]
-        while todo:
-            rel = todo.pop()
-            if rel in seen or rel not in self.task_text:
-                continue
-            seen.add(rel)
-            try:
-                doc = yaml_fast.safe_load(self.task_text[rel])
-            except yaml.YAMLError as exc:
-                raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
-            for name in _static_imports(doc if isinstance(doc, list) else []):
-                todo.append(posixpath.normpath(f"tasks/{name}"))
-        return frozenset(seen)
-
-    def tags_of(self, rel: str) -> frozenset[str]:
-        """The tags selecting one task file; refuses one untagged, unknown or unreached."""
-        if rel not in self.tags:
-            raise CannotNarrow(f"{rel} is not a task file of this role")
-        if rel not in self.reachable:
-            raise CannotNarrow(
-                f"{rel} is not statically imported from tasks/main.yml, so the role's entry "
-                "in its playbook never runs it under its own tags"
-            )
-        tags = self.tags[rel]
-        if tags is None:
-            raise CannotNarrow(
-                f"{rel} carries no tags of its own, so its tasks inherit them from wherever "
-                "it is imported"
-            )
-        special = tags & _SPECIAL_TAGS
-        if special:
-            raise CannotNarrow(
-                f"{rel} carries the special tag {', '.join(sorted(special))}, which selects "
-                "opt-in or unconditional tasks rather than this change's work"
-            )
-        return tags
-
-    def readers_of(
-        self, name: str, seen: frozenset[str] = frozenset()
-    ) -> frozenset[str]:
-        """The tags of every task file naming `name`, templates followed one edge at a time.
-
-        `name` is a bare file name, which is how a task's `src:` and a template's `include`
-        both name the thing they read. A template that names it is not an answer yet — it is
-        the same question asked of that template's own readers.
-
-        THE THREE KINDS OF HIT UNION, they do not shadow each other (#2344). A template can be
-        named in a task's `src:` AND in a `defaults/` structure a different task file renders
-        from — `k3s_render_stamp_groups` handed to `common/tasks/release_bin.yml` is that
-        shape. Stopping at the first kind returned one reader's tags and dropped the other's,
-        so the operator cleared the marker over a partly applied change. A `defaults/` key that
-        names it but that NOTHING reads still refuses, through `key_readers`: that is the
-        fail-closed half, and it is unchanged.
-        """
-        if name in seen:
-            return frozenset()
-        seen = seen | {name}
-        tags: set[str] = set()
-        hit = False
-        for rel, text in self.task_text.items():
-            if name in text:
-                hit = True
-                tags |= self.tags_of(rel)
-        for rel, text in self.template_text.items():
-            if rel.rsplit("/", 1)[-1] == name or name not in text:
-                continue
-            if not _TEMPLATE_EDGE.search(text):
-                continue
-            hit = True
-            tags |= self.readers_of(rel.rsplit("/", 1)[-1], seen)
-        keys = self._vars_keys_naming(name)
-        if keys:
-            hit = True
-            for key in sorted(keys):
-                got = self.key_readers(key, seen)
-                if not got:
-                    # A key reaching only a cycle: dropping it narrows to the rest alone.
-                    raise CannotNarrow(
-                        f"{key} reaches no task file, only names in a cycle"
-                    )
-                tags |= got
-        if not hit:
-            raise CannotNarrow(f"nothing in this role names {name}")
-        return frozenset(tags)
-
-    def _vars_keys_naming(self, name: str) -> set[str]:
-        """The `defaults/` and `vars/` keys whose value names `name`, or an empty set.
-
-        A host script's template is often named in a data structure rather than in a `src:`:
-        `setup/k3s` collects them in `k3s_render_stamp_groups` and hands the group to
-        `common/tasks/release_bin.yml` through a `vars:` block on the import. The task file
-        naming the KEY is the one that renders the template, so its tags are part of the
-        answer — wider than the one import site, and still far narrower than the whole role.
-
-        It answers rather than refusing, because `readers_of` unions it with the direct hits
-        and an empty answer there is only a refusal when nothing else matched either.
-        """
-        return {
-            key
-            for rel, text in self.vars_text.items()
-            for key in _top_level_keys_naming(text, name)
-        }
-
-    def key_readers(
-        self, key: str, seen: frozenset[str] = frozenset()
-    ) -> frozenset[str]:
-        """The tags of every task file or template reading the variable `key`.
-
-        A hit in a template maps to that template's readers, the same edge `readers_of`
-        follows. A key nothing in the role reads refuses: it may be consumed by a `when:` on
-        an import — where the tags belong to the import site, not to the file — or by another
-        role entirely.
-
-        `seen` is the template names already on the walk, carried down from `readers_of` so
-        the two can recurse into each other and still terminate: a template that names a key
-        whose only reader is that same template would otherwise loop forever once the vars
-        answer stopped being a fallback (#2344).
-
-        ANOTHER `defaults/` OR `vars/` KEY interpolating this one is a reader too, and the
-        same question is asked of it: `k3s_node_dns_options` interpolates
-        `k3s_node_dns_timeout`, so every reader of the first also reads the second. Keys go on
-        `seen` under a `key:` prefix, so two keys naming each other terminate — with an empty
-        answer, which `path_tags` refuses.
-        """
-        marker = f"key:{key}"
-        if marker in seen:
-            return frozenset()
-        seen = seen | {marker}
-        mention = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
-        tags: set[str] = set()
-        hit = False
-        naming = [_top_level_keys_naming(t, mention) for t in self.vars_text.values()]
-        for other in sorted(set().union(*naming) - {key}):
-            hit = True
-            tags |= self.key_readers(other, seen)
-        for rel, text in self.task_text.items():
-            if mention.search(text):
-                hit = True
-                tags |= self.tags_of(rel)
-        for rel, text in self.template_text.items():
-            if mention.search(text):
-                hit = True
-                tags |= self.readers_of(rel.rsplit("/", 1)[-1], seen)
-        if not hit:
-            raise CannotNarrow(f"nothing in this role reads {key}")
-        return frozenset(tags)
-
-
 def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
     """The top-level keys of a vars file whose value changed between two refs.
 
@@ -454,7 +99,7 @@ def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
     before-state to diff, and one deleted by it leaves nothing to narrow to. A key removed
     counts as changed, because the tasks reading it change behaviour.
     """
-    before, after = _show(old, path, repo), _show(new, path, repo)
+    before, after = show_at(old, path, repo), show_at(new, path, repo)
     if before is None or after is None:
         raise CannotNarrow(f"{path} is absent at {old if before is None else new}")
     try:
@@ -531,7 +176,7 @@ def role_tags(
     changed = [line for line in r.stdout.splitlines() if line]
     if not changed:
         raise CannotNarrow(f"{old}..{new} changes nothing under {prefix}")
-    playbook_text = _show(new, playbook, repo)
+    playbook_text = show_at(new, playbook, repo)
     if not playbook_applies_role(playbook_text, role):
         raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
     index = RoleIndex(role, new, repo)

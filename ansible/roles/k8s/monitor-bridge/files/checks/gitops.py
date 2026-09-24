@@ -21,13 +21,51 @@ from gitops_markers import (
     CONTENTION_CLEAR_CMD,
     MARKERS,
     STATE_DIR,
+    NO_PLAYBOOK,
+    manual_plane_clear_cmd,
+    maximal_apply_warning,
     parse_behind,
     parse_contention,
-    manual_plane_clear_cmd,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
 from verdicts.service import gitops_alive
+
+
+def _apply_and_clear(pending, narrow) -> str:
+    """What to run for every pending role, apply command before its clear.
+
+    The page printed the clear alone, and the clear carries `--applied <the row>` while the
+    apply it follows named no tags at all (#2371). An operator who applied an earlier, narrower
+    set and then pasted this dropped the tags a later range had added. So the apply command is
+    printed beside it, from the same row, and carries `maximal_apply_warning` where the tags it
+    names arm something gated — the shape `deployer_park.manual_plane_lines` prints.
+
+    Args:
+      pending: the `parse_manual_plane` entries, which may hold several lines for one role.
+        The OLDEST line per role decides its playbook, matching the age this page fired on.
+      narrow: the `parse_manual_plane_tags` rows, by role.
+    """
+    oldest: dict[str, object] = {}
+    for entry in sorted(pending, key=lambda e: e.at):
+        oldest.setdefault(entry.role, entry)
+    parts = []
+    for role in sorted(oldest):
+        entry = oldest[role]
+        selected = narrow.get(role) or {role}
+        warning = maximal_apply_warning(role, selected)
+        how = (
+            "apply the role by hand"
+            if entry.playbook == NO_PLAYBOOK
+            else "apply `%s --tags %s` by hand%s"
+            % (
+                entry.playbook,
+                ",".join(sorted(selected)),
+                " (WARNING: %s)" % warning if warning else "",
+            )
+        )
+        parts.append("%s, then `%s`" % (how, manual_plane_clear_cmd(role, selected)))
+    return "; ".join(parts)
 
 
 def gitops_status(
@@ -156,19 +194,14 @@ def gitops_status(
         if age_s > max_behind_s:
             roles = ", ".join(sorted({e.role for e in pending}))
             narrow = parse_manual_plane_tags(manual_plane_tags)
-            clears = " && ".join(
-                manual_plane_clear_cmd(r, narrow.get(r) or {r})
-                for r in sorted({e.role for e in pending})
-            )
             return False, (
-                "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; apply by hand, "
-                "then `%s`"
+                "%s unapplied for %.0fh (> %.0fh) — the tick cannot apply %s; %s"
                 % (
                     roles,
                     age_s / 3600,
                     max_behind_s / 3600,
                     "it" if len(pending) == 1 else "them",
-                    clears,
+                    _apply_and_clear(pending, narrow),
                 )
             )
     return True, "no held deploy"
@@ -193,10 +226,18 @@ def check_gitops_alive(cfg: Config, now: float | None = None) -> tuple[bool, str
 
 
 def _read_gitops_marker(cfg: Config, name: str) -> str | None:
+    """One marker's text, or None when it is absent or unreadable.
+
+    A marker that does not decode reads as ABSENT, the same doctrine every parser in
+    `gitops_markers` states: garbage is nothing rather than a guess. It used to raise, which
+    `gate_lib._evaluate` turned into `gitops_status` DOWN "check error" every cycle — and that
+    masks the hold, diverged, behind and contention arms, which are the four this monitor
+    exists to raise (#2371). Losing one arm to a torn file beats losing all five.
+    """
     try:
         with open(os.path.join(cfg.GITOPS_STATE_DIR, name)) as fh:
             return fh.read().strip() or None
-    except FileNotFoundError:
+    except OSError, UnicodeDecodeError:
         return None
 
 

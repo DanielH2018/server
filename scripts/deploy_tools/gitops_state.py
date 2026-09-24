@@ -63,7 +63,7 @@ _sys.path.insert(0, str(HOST_LIB_FILES))
 from deploy_changes import setup_role_tag
 from deploy_locks import TREE_LOCK
 from deploy_state import STATE_DIR, DeployerState, ManualPlaneEntry
-from gitops_markers import manual_plane_clear_cmd
+from gitops_markers import manual_plane_clear_cmd, maximal_apply_warning
 
 # Seconds to wait for it. Every other waiter on this lock waits 3000 (the census in the
 # deployer's test_gitops_deploy_timeout_budgets.py), because those are unattended jobs that
@@ -261,11 +261,16 @@ def clear_manual_plane(
     if remaining == frozenset({key}):
         # The row is empty or missing, so the WHOLE role is pending: a later range's
         # derivation refused after this command was printed. No narrowed apply covers that.
+        # The whole-role apply this sends the operator to is the one `maximal_apply_warning`
+        # exists for (#2345): every other surface printing that command carries the warning,
+        # and this one printed it bare.
+        warning = maximal_apply_warning(key, frozenset({key}))
         print(
             f"kept {role} in {state.path('manual_plane')}: its row in "
             f"{state.path('manual_plane_tags')} is empty or missing, so the whole role is "
-            f"pending, not just {','.join(sorted(applied))}. Apply the whole role, then "
-            f"clear it without --applied: `{manual_plane_clear_cmd(key)}`"
+            f"pending, not just {','.join(sorted(applied))}. Apply the whole role"
+            + (f" (WARNING: {warning})" if warning else "")
+            + f", then clear it without --applied: `{manual_plane_clear_cmd(key)}`"
         )
         return 0
     if remaining:
@@ -377,7 +382,14 @@ def main(
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.
         parser.error(f"no handler for {args.command}")
-    applied = frozenset(t for t in (args.applied or "").split(",") if t)
+    applied = frozenset(t.strip() for t in (args.applied or "").split(",") if t.strip())
+    if args.applied is not None and not applied:
+        # `--applied ""` is what `--applied "$TAGS"` sends with TAGS unset, and an empty set
+        # means a WHOLE-role apply here — so it would clear a line that is still pending.
+        parser.error(
+            "--applied names no tag. Omit it after a whole-role apply; pass the tags you "
+            "actually ran after a narrowed one."
+        )
     return clear_manual_plane(
         state, args.role, lock_path, lock_wait_s, journal, applied
     )
