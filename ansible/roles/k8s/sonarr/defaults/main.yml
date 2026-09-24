@@ -23,10 +23,14 @@ k8s_autodeploy_snapshot_pvcs: [sonarr-config]  # noqa var-naming[no-role-prefix]
 # what this role creates can see the coupling (2026-08-22 review M2).
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
-# The rollout budget, declared once. Read by BOTH the `manifests_rollout_timeout` passed to
-# k8s/manifests in tasks/main.yml and the inline `rollout status` gate in tasks/verify.yml, so
-# the two cannot drift. A first boot installing DOCKER_MODS takes up to 10 minutes; the 300s
-# k8s/manifests default times out against the startupProbe that allows it.
+# The rollout budget, declared once. Read by THREE places, so none of them can drift: the
+# `manifests_rollout_timeout` passed to k8s/manifests in tasks/main.yml, the inline `rollout
+# status` gate in tasks/verify.yml, and `progressDeadlineSeconds` in templates/deployment.yaml.j2.
+# A first boot installing DOCKER_MODS takes up to 10 minutes; the 300s k8s/manifests default
+# times out against the startupProbe that allows it.
+# The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
+# fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
+# was unreachable until #2370 rendered the deadline here too.
 sonarr_k8s_rollout_timeout: 660s
 
 # ── the config database ─────────────────────────────────────────────────────────────────────

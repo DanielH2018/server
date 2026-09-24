@@ -133,8 +133,14 @@ class Context(NamedTuple):
 
 
 def _show(ref: str, path: str, cwd: Path) -> str | None:
-    """The file's text at `ref`, or None when the ref does not carry it."""
-    r = git("show", f"{ref}:{path}", cwd=cwd, check=False)
+    """The file's text at `ref`, or None when the ref does not carry it.
+
+    A non-UTF-8 file refuses rather than raising, as `narrow_setup._show` does.
+    """
+    try:
+        r = git("show", f"{ref}:{path}", cwd=cwd, check=False)
+    except UnicodeDecodeError as exc:
+        raise CannotNarrow(f"{path} is not text at {ref}") from exc
     return r.stdout if r.returncode == 0 else None
 
 

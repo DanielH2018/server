@@ -10,6 +10,37 @@ on:
   # trigger is harmless and would do the right thing if the repo ever moved to an org: every
   # job treats a merge_group event like a push, no PR scoping.
   merge_group:
+  # An on-demand full sweep, for a PR whose own diff scopes out every hook that matters. The
+  # runner-image bump is the case it exists for: #2259 moves every `runs-on` to `ubuntu-26.04`,
+  # and a workflow-only diff matches no hook's `files` regex, so that PR's green run says nothing
+  # about `validate-unit-templates` against the image's systemd-analyze and Node, nor about
+  # gitleaks built with its Go (#2366). Without this trigger the first full sweep on a new image
+  # is the merge commit's push run, and a red one there parks every landing behind it.
+  #
+  # Dispatch the BRANCH, never master. `ci_verdict` in the deployer's `deploy_git.py` reduces
+  # every check-run sharing a required name for one commit, worst outcome wins. A red dispatch
+  # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that the
+  # deployer's gate and `await_ci.py` both read, and that SHA's own green push run does not
+  # outvote it. The concurrency arm below keeps a dispatch out of a push's group; it does nothing
+  # about this.
+  #
+  # The REF you dispatch must carry this trigger, because GitHub runs the workflow file from that
+  # ref. A branch cut before this landed therefore rebases onto master before it can be swept,
+  # which for a Renovate PR is its own rebase-check box. Measured 2026-09-24 against a branch
+  # without the trigger: `gh workflow run ci.yml --ref <branch>` returned HTTP 422 `Workflow does
+  # not have 'workflow_dispatch' trigger`. The DEFAULT branch does not need it for the API to
+  # accept a dispatch — measured the same day, with master still carrying no trigger, dispatching
+  # a probe branch that carried one started run 35999885346 and every job took the full-sweep
+  # path. GitHub documents the Run-workflow BUTTON as requiring the default branch; that half is
+  # untested here, so reach for `gh workflow run` rather than the UI.
+  #
+  # Every job treats a dispatch like a push, with nothing to configure. Both scoping steps are
+  # `if: github.event_name == 'pull_request'`, so `steps.changed.outputs.mode` stays unset and
+  # each full-sweep step fires; `pytest` carries no condition; `renovate-config` runs on
+  # `!= 'push'`. ENFORCED by ansible/tests/repo/test_ci_dispatch_sweeps_everything.py, because a
+  # scoping condition rewritten to key on `push` would leave a dispatch fast, green and checking
+  # nothing.
+  workflow_dispatch:
   push:
     branches: [master]
 
@@ -33,7 +64,13 @@ concurrency:
   # evicted. The cost is concurrent master sweeps rather than serialised ones, which is why
   # this is safe here specifically: runner minutes are free on a public repo, and the queue
   # measurement that prompted this found job start lag at 1-4s with nothing waiting on a slot.
-  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.sha }}
+  #
+  # A `workflow_dispatch` run keys on `github.run_id`, which is unique per run, so it lands in a
+  # group nothing else can enter. Without that arm it falls through to `github.sha` and joins the
+  # push group of the SHA it was dispatched on — one pending run per group, so dispatching a
+  # master SHA could evict that SHA's queued push run and leave it with no verdict. That is the
+  # 2026-09-05 failure above reached by a second route.
+  group: ${{ github.workflow }}-${{ github.event_name == 'pull_request' && github.ref || github.event_name == 'workflow_dispatch' && github.run_id || github.sha }}
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 permissions:
@@ -99,7 +136,7 @@ jobs:
     # the toolcache holds that day, while a three-part one moves only through Renovate.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
     # ansible/tests/repo/test_workflow_runners_are_pinned.py.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -306,7 +343,7 @@ jobs:
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     name: ansible-lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -454,7 +491,7 @@ jobs:
   # hide another's.
   pytest:
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -556,7 +593,7 @@ jobs:
   # too, which is the "no verdict" every reader already handles.
   prek:
     name: prek (lint + validate + tests + secrets)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [hooks, pytest, ansible_lint]
     if: always()
     steps:
@@ -579,7 +616,7 @@ jobs:
     # so it stays on every PR and self-scopes below; merge_group is treated like a PR whose
     # scope step found nothing to diff, the same as every other job here.
     if: github.event_name != 'push'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7

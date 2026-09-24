@@ -155,6 +155,21 @@ def test_rewrite_applies_to_a_pipeline_consumer():
     assert rewrite("cat data.json | python3 -") == "cat data.json | uv run python3 -"
 
 
+# A `VAR=x.py` word is a shell assignment, not a script invocation. The hook once rewrote it
+# to `uv run P=…`, which failed with `Failed to spawn: P=…` (#2388). The pair proves the fix
+# skips only the assignment rather than abandoning the whole command.
+
+
+@_runnable
+def test_a_program_after_a_py_valued_assignment_is_rewritten():
+    assert rewrite('P=x.py; python3 "$P"') == 'P=x.py; uv run python3 "$P"'
+
+
+@_runnable
+def test_a_py_valued_assignment_is_left_alone():
+    assert rewrite('P=path/to/x.py; sed -n 1p "$P"') is None
+
+
 # --- what must be left alone --------------------------------------------------------------
 
 

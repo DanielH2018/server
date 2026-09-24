@@ -8,16 +8,11 @@ healthchecks.io-style monitor so a broken watcher alerts instead of silently goi
 This module carries two layers:
 
   - The low-level helpers (``configure_logging``, ``require_env``, ``new_session``,
-    ``send_discord_notification``, ``ping_healthcheck``) were moved here unchanged from
-    ``scripts/availability_bots/common.py``, which now re-exports them so the availability
-    bots keep working without a code change. Any watcher can use them directly.
-  - ``Watcher`` + ``run_watcher`` are new: a generic fetch -> check(previous, current) ->
+    ``send_discord_notification``, ``ping_healthcheck``). Any watcher can use them directly.
+  - ``Watcher`` + ``run_watcher``: a generic fetch -> check(previous, current) ->
     notify-on-transition -> healthcheck-ping loop, with state persisted as JSON between runs.
-    The availability bots do NOT use this loop -- they notify on every run they find
-    availability, which is a deliberate difference (an open slot is worth repeating, a
-    transition is not the model there). A watcher that should notify only when its state
-    CHANGES (a cert crossing an expiry threshold, a service coming back up, ...) is the
-    intended caller of ``run_watcher``.
+    A watcher that should notify only when its state CHANGES (a cert crossing an expiry
+    threshold, a service coming back up, ...) is the intended caller of ``run_watcher``.
 
 Secrets (a Discord webhook, a healthcheck ping URL) are read from the environment by the
 caller, exactly as the availability bots already do -- never hardcoded here.
@@ -63,10 +58,7 @@ def require_env(name: str) -> str:
     """
     value = os.environ.get(name)
     if not value:
-        raise SystemExit(
-            f"Missing required environment variable {name!r}. "
-            "See scripts/availability_bots/.env.example for the full list."
-        )
+        raise SystemExit(f"Missing required environment variable {name!r}.")
     return value
 
 

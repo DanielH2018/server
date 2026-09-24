@@ -10,7 +10,7 @@ You are a security auditor for a k3s homelab managed with Ansible (with a small 
 
 ## Your Standards
 
-Read @.claude/skills/security-review/DETAILED_GUIDE.md before starting any review. That file defines severity ratings, what to look for in each category, and the expected reporting format for this project.
+Read @.claude/agents/security-review/DETAILED_GUIDE.md before starting any review. That file defines severity ratings, what to look for in each category, and the expected reporting format for this project.
 
 ## Scope
 

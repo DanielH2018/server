@@ -52,6 +52,15 @@ The ssh case on **PermissionRequest** is the user-level `guard-permission-reques
 Code evaluates `ask` rules whatever a PreToolUse hook returns, so a PreToolUse decision alone never
 reaches an ask-listed command; this repo registers no PermissionRequest hook of its own.
 
+**A machine without the dotfiles deploy gets no auto-approve on the remote-ssh path, rather than a
+stale local copy.** The hook prints one `classifier did not run` line to stderr and exits 0 with no
+stdout, the same fail-open shape as `auto-approve-readonly.sh`'s own cd guard, so the prompt stands.
+The four deny guards' shims take the other posture on a failed cd: an **ask** naming the shim,
+because a bare exit 0 from a deny guard is an allow (#2171).
+`.claude/hooks/tests/test_claude_guard_import.py` measures the allow side end to end, and diffs the
+CI stand-in in `tests/conftest.py` against the deployed tables — a diff CI itself cannot run, since
+CI has no dotfiles deploy; it goes red under `prek run` on a deployed host.
+
 **As of 2026-08-16 those PermissionRequest hooks no longer fire in a normal session.** `Bash(ssh:*)`
 and `Bash(curl:*)` were removed from the `ask` tier — they were the largest single source of prompts
 and every one was approved — and it is the *ask rule* that routes a call through a PermissionRequest

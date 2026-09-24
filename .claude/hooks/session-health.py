@@ -442,7 +442,9 @@ def other_live_sessions(cwd):
     return lines
 
 
-WORKTREE_TIMEOUT_S = 30
+# Well inside the 15s budget settings.json kills this hook at (session-health.sh's gen-hooks
+# header). prune_worktrees.py --brief took 1.3s warm on 2026-09-24.
+WORKTREE_TIMEOUT_S = 5
 
 
 def stale_worktree_lines():
@@ -519,6 +521,9 @@ def main(
         for line in sessions:
             print(line)
 
+    # A kill at the hook's timeout discards what Python still buffers, so everything above
+    # reaches the pipe before the slow, GitHub-bound worktree read starts (#2388).
+    sys.stdout.flush()
     for line in stale_worktree_lines():
         print(line)
     for line in remote_fanout_lines():

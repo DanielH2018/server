@@ -14,6 +14,9 @@ bump.
 The rest is ordinary: triage by class, finish what needs finishing, then land each one through
 `land-after-merge`.
 
+A daily timer runs this same skill unattended where it is armed —
+`ansible/roles/setup/renovate_agent/CLAUDE.md`.
+
 ## 0. An update with no PR is still an update
 
 `gh pr list` cannot see an update Renovate detected but never raised. Those sit in the
@@ -96,6 +99,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 | `ansible/roles/setup/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
 | `prek.toml`, `.github/workflows/*` | tooling | merge; CI is the only consumer |
+| `.github/workflows/*`, title `CI runner image` | CI runner image | the PR run proves almost nothing about it — sweep the branch first, §3 *A runner-image bump* |
 | anything else | read the rule | see below |
 
 **The title's parenthetical is the fastest tell.** A title reading `Update n8n (manual — append
@@ -155,6 +159,24 @@ and `--skip hypervisor_staging_vm_image` leaves out the 600 MB cloud image.
 
 Take the URL and checksum from the **publisher's own manifest** where one exists, not by
 editing the string Renovate produced.
+
+**A runner-image bump verifies by a full sweep on the branch, not by reading a release note.**
+CI scopes its hooks to the PR's changed files, and a workflow-only diff matches no hook's `files`
+regex — so the green run says nothing about the hooks that read what the image preinstalls
+(`validate-unit-templates` against its systemd-analyze and Node, gitleaks built with its Go). To
+sweep the new image before merging, rebase the branch so it carries master's `workflow_dispatch`
+trigger, then dispatch CI on it:
+
+```bash
+uv run python scripts/dev/renovate_rebase.py <n>            # wait for Renovate to refresh the branch
+gh workflow run ci.yml --ref "$(gh pr view <n> --json headRefName -q .headRefName)"
+gh run list --workflow ci.yml --event workflow_dispatch --limit 1
+```
+
+The dispatched run takes the full-sweep path in every job, because each one reads a dispatch as a
+push. Dispatch the branch and never master: a red dispatch run pins the required context red on
+that master SHA, and the deployer's gate reads the worst outcome of every run sharing the name
+(#2366).
 
 ## 4. Finish the incomplete ones in a worktree
 

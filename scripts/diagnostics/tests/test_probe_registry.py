@@ -25,7 +25,7 @@ from diagnostics.probe_lib import subcommands
 from lib.cli_registry import Registry, package_entry_points
 
 # The twelve probe_lib modules that define a run_*/main entry point (core.py doesn't — it's
-# helpers, not a subcommand backend). Every one of probe.py's 23 subcommands maps to one of
+# helpers, not a subcommand backend). Every one of probe.py's 22 subcommands maps to one of
 # these (several subcommands share a module, e.g. "monitors"/"kuma-drift" both back onto
 # monitors.py, and "targets"/"pi" both back onto pi_plane.py) or to none (the streaming,
 # plan()-driven subcommands like `loki-labels`/`cert`).
@@ -66,7 +66,7 @@ def test_list_flag_prints_every_subcommand_with_a_description(capsys):
     assert probe.main(["--list"]) == 0
     out = capsys.readouterr().out
     lines = out.strip().splitlines()
-    assert len(lines) == len(subcommands.SUBCOMMANDS) == 23
+    assert len(lines) == len(subcommands.SUBCOMMANDS) == 22
     for name, description, _module, _func in subcommands.SUBCOMMANDS:
         assert any(line.startswith(name) and description in line for line in lines), (
             name,

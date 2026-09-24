@@ -92,7 +92,6 @@ from diagnostics.probe_lib.alerts import run_alerts
 from diagnostics.probe_lib.arr import run_arr
 from diagnostics.probe_lib.b2_ledger import (
     run_b2_deletions,
-    run_b2_record,
     run_b2_spend,
 )
 from diagnostics.probe_lib.cli_parser import _build_parser
@@ -182,7 +181,6 @@ def main(argv=None):
         "longhorn-blocks": run_longhorn_blocks,
         "readonly-rbac": run_readonly_rbac,
         "vip-placement": run_vip_placement,
-        "b2-record": run_b2_record,
         "b2-deletions": run_b2_deletions,
         "ha-state": run_ha_state,
         "monitors": run_monitors,

@@ -10,7 +10,8 @@ paths:
 # Python layout — where a module and its tests go
 
 The long form, with the measurements and the options not taken, is
-`docs/python-code-organization.md`. This file is the part you need while placing a file.
+`docs/python-code-organization.md`. This file is the part you need while placing a file, plus
+the three rules every new check meets (the last three sections).
 
 ## Cross-directory imports need a `sys.path` bootstrap
 
@@ -67,3 +68,37 @@ Ansible's plugin loader imports every `.py` there at deploy time and would choke
 `ansible/tests/repo/test_testpaths_covers_every_test_file.py`) refuses a test file beside the
 plugin. A `filter_plugins/tests/` subdirectory would pass it and still load, because
 `PluginLoader._get_paths_with_context` globs two levels of subdirectories.
+
+## A new check ships with a proof it can go red
+
+Any validator, guard, health check or probe lands with a paired test: one input it must accept,
+and one input it must reject. A check is only ever observed passing, so without the rejecting
+half there is no evidence it can fail. `volume-claim`'s short-circuit shipped behind 16 passing
+tests and a mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s
+bare-boot rule never caught a real image problem across 11 failures. Both read green throughout.
+`scripts/validate/tests/test_validate_compose_templates.py` is the worked example: every rule
+there is a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails
+its own test. Name the pair that way.
+
+## A check that finds its subject by pattern names a member it must find
+
+A guard that globs for the files it checks (`validate_*.py`, a `gen_reference_` prefix, a
+one-level `DIR.glob("*.py")`) returns an EMPTY set the moment those files are renamed or move one
+directory down, and an `all(...)` over nothing passes. The red-proof pair cannot see this: both
+halves still fire on the inputs the test hands them. Assert non-vacuity against something
+concrete — `assert len(found) >= <n>`, or better a frozenset of names the census must contain,
+so the failure names the member that went missing. `KNOWN_CONSUMERS` in
+`scripts/diagnostics/tests/test_probe_boundaries.py` is the worked example. Nine guards broke this
+way in six consecutive PRs (#838, #846, #852, two in #858, four in the monitor-bridge package
+move), and the non-vacuity assertion alone caught every one.
+
+## A check that reaches over a network measures its transport first
+
+The paired test proves the *verdict* can go red. It says nothing about whether the fetch that
+feeds the verdict returns in time, and a check whose source is slow fails open on every slow
+cycle behind a green monitor. Time each endpoint against the live source, more than once. The
+Pi-detached arm (PR #482) polled glances' `/api/4/containers`, which took 4.43s on an idle Pi and
+then timed out at the 10s `HTTP_TIMEOUT` on the next call, where the sibling endpoints answer in
+0.03-0.06s. PR #484 reshaped it so the cheap signal decides and the expensive one only explains.
+**A slow source is a design input:** make it conditional on the cheap signal having already
+fired, and make its failure downgrade the diagnosis rather than the verdict.
