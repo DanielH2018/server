@@ -494,9 +494,14 @@ stay).
   k8s service, on the k8s path only. `STAGING_GATE_BLOCKING`
   (`gitops_deploy_staging_gate_blocking`) decides whether a REJECTION stops the prod deploy.
   With the second false the gate is advisory: the verdict is logged and alerted, prod deploys
-  either way, and this deployer behaves as it did before slice 4. Both are false by default;
-  daniel-box sets only the first. `docs/staging-phase-c.md` carries the entry condition the flip
-  is gated on — do not restate the status here.
+  either way, and this deployer behaves as it did before slice 4. Both are false by default.
+  `docs/staging-phase-c.md` carries the entry condition the flip is gated on — do not restate
+  the status here.
+  - **Nothing exercises the gate between real ticks.** The staging-backfill ratchet did, hourly,
+    until the operator retired it on 2026-09-24 (#2414). A real gated tick arrives about once a
+    month, so a gate that rots between two of them is noticed only by `consult_staging`'s alert
+    on that tick's NO VERDICT. The trade-off and what was removed are in `docs/staging-phase-c.md`,
+    *After the flip: the ratchet is retired*.
   - **NO VERDICT never blocks, in either mode.** A wedged guest, an ssh outage, a timeout or a
     bug in the gate reports NO VERDICT and prod deploys. Blocking there would park prod behind
     one guest on a NAT network covering six services of fifty-four, where passing through leaves prod
@@ -1156,8 +1161,7 @@ rather than carrying a path, which is what lets `state_dir` repoint the whole st
 by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
 table of basenames — the 22 module-level path literals `gitops_deploy.py` used to declare
 beside it had no production reader and went with issue #2051 (`tests/conftest.py`'s
-`state_dir` now repoints the one object, and `scripts/deploy_tools/tests/test_tick_ledger_report.py`
-pins the Ansible default against `MARKERS`). `read()` returns None for a missing AND an empty marker —
+`state_dir` now repoints the one object). `read()` returns None for a missing AND an empty marker —
 a torn write is a disarmed hold, not a hold on `""` — and PROPAGATES any other `OSError`:
 an unreadable state directory must not read as "no hold," or a held host reports converged.
 `tests/test_deployer_state.py` pins all three outcomes.

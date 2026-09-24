@@ -2,9 +2,9 @@
 
 `StagingVerdict` and `TickOutcome` replaced eight bare module constants. The type is the gain:
 `ty` now catches a typo that a runtime `frozenset` only caught when the branch ran. The VALUES
-are what must not move — they are the journal line an operator reads, the `verdict`/`outcome`
-fields `record_staging_tick` writes into `staging-ticks.jsonl`, and what
-`backfill_staging_gate.py` reads back out of that file in the other tree.
+are what must not move — they are the journal line an operator reads, and the
+`verdict`/`outcome` fields `record_staging_tick` writes into `staging-ticks.jsonl`, whose
+earlier rows use the same words.
 
 So this module pins the values against the literals they replaced, written out here rather than
 read from the enum: a test that compares the enum to itself would accept a renamed value.
@@ -64,7 +64,7 @@ def test_each_constant_still_equals_the_literal_it_replaced(name, literal):
 
 
 def test_the_enums_carry_no_member_the_old_vocabulary_lacked():
-    """A new member is a word the backfill tree does not know. Named sets, not counts."""
+    """A new member is a word no earlier ledger row uses. Named sets, not counts."""
     assert {v.value for v in StagingVerdict} == set(OLD_STAGING_LITERALS.values())
     assert {v.value for v in TickOutcome} == set(OLD_TICK_LITERALS.values())
 

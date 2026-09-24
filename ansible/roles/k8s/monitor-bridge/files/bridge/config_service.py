@@ -46,7 +46,6 @@ class ServiceConfig:
     GITOPS_MAX_AGE_S: float
     ETCD_DRILL_STATE_DIR: str
     ETCD_DRILL_MAX_AGE_S: float
-    STAGING_BACKFILL_MAX_AGE_S: float
     GITOPS_BEHIND_MAX_S: float
     GITOPS_CONTENTION_MAX_S: float
     HA_URL: str
@@ -208,18 +207,6 @@ def service_config(
         # with the cron; the two are pinned to each other by
         # test_etcd_drill_grace_is_derived_from_the_cron.
         ETCD_DRILL_MAX_AGE_S=_num("ETCD_DRILL_MAX_AGE_DAYS", "8") * 86400,
-        # The staging-gate backfill ratchet's run-recency window. It shares GITOPS_STATE_DIR:
-        # the unit writes its heartbeat and Ansible writes its armed marker into
-        # /var/lib/gitops-deploy, which this pod already hostPath-mounts for the gitops pair.
-        #
-        # DECIDED: 150 minutes, DERIVED from the timer rather than picked round.
-        # staging-backfill.timer is OnUnitActiveSec=1h with RandomizedDelaySec=10min, and
-        # TimeoutStartSec=25min bounds the run itself, so the worst-case gap between two
-        # heartbeats is about 95 minutes. 150 clears that with slack and still falls short of
-        # two cadences (190 min) — a window that spans two would tolerate a fully missed run,
-        # which is the miss this check exists to catch. Move it only with the timer;
-        # test_staging_backfill_window_is_derived_from_the_timer pins the pair.
-        STAGING_BACKFILL_MAX_AGE_S=_num("STAGING_BACKFILL_MAX_AGE_MIN", "150") * 60,
         # How long the host may sit behind origin before GitOps Status pages. Generous on
         # purpose: the deployer ticks every 30 min, and the dirty-tree path (operator mid-edit)
         # is behind by design for as long as the edit lasts. 6 h pages a genuinely-stuck host

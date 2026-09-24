@@ -41,8 +41,11 @@ def test_the_units_census_is_not_vacuous():
     a vacuous census would make the coverage assertion below pass by comparing against
     itself."""
     units = _systemd_units_install_writes()
-    assert len(units) >= 6, units
-    assert {"gitops-deploy.timer", "staging-backfill.timer"} <= units
+    assert {
+        "gitops-deploy.service",
+        "gitops-deploy.timer",
+        "gitops-deploy-alert.service",
+    } <= units, units
 
 
 def test_the_teardown_removes_every_unit_install_writes():

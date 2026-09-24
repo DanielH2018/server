@@ -264,7 +264,6 @@ kuma_status_page_groups:
       - "^manifest-prune-check$"
       - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
-      - "^staging-backfill-ratchet$"
       - "^status-page-sync$"
   - name: Other
     match:

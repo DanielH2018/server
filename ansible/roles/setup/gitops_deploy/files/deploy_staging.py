@@ -86,8 +86,8 @@ class StagingVerdict(StrEnum):
 
     A `StrEnum` so `ty` catches a typo where a bare string only failed when the branch ran.
     The VALUES are unchanged and load-bearing: they are what a journal line reads as, what
-    `json.dumps` writes into the tick ledger, and what `backfill_staging_gate.py` reads back
-    out of it — a verdict an operator cannot name is one they cannot act on. Pinned by
+    `json.dumps` writes into the tick ledger, and what an operator reads back out of it — a
+    verdict an operator cannot name is one they cannot act on. Pinned by
     test_staging_vocabulary_is_a_strenum.py.
     """
 
@@ -144,17 +144,13 @@ def staging_blocks(verdict: str | None, *, blocking: bool) -> bool:
     return blocking and verdict == STAGING_REJECTED
 
 
-# The outcome vocabulary `backfill_staging_gate.py` records in its ledger, restated here because
-# the two trees cannot import each other — `deploy_staging.py` ships to the host in the role's
-# files/, and the backfill runs from the repo. The three words are asserted equal to that
-# module's constants by test_tick_and_backfill_agree_on_the_outcome_vocabulary, so a rename on
-# either side fails rather than silently splitting the ledger's meaning in two.
+# The outcome vocabulary of the tick ledger. It began as a copy of the retired staging-backfill
+# harness's ledger words (#2414), so the rows already in staging-ticks.jsonl use these three.
 class TickOutcome(StrEnum):
     """The outcome vocabulary a real gated tick records in the ledger.
 
     Same reasoning as `StagingVerdict`: the values are the on-disk JSONL form and must not
-    move. `backfill_staging_gate.OK`/`FALSE_FAILURE`/`NEEDS_TRIAGE` are the same three words
-    in the other tree, tied by test_tick_and_backfill_agree_on_the_outcome_vocabulary.
+    move, or the rows already written stop reading the same as the rows written after.
     """
 
     OK = "pass"
@@ -169,7 +165,7 @@ TICK_NEEDS_TRIAGE = TickOutcome.NEEDS_TRIAGE
 _TICK_OUTCOMES = {
     STAGING_PASS: TICK_OK,
     # NO_VERDICT is a false failure by definition: the gate could not be asked, which is never a
-    # property of the commit. Same call `classify` makes on the backfill side.
+    # property of the commit.
     STAGING_NO_VERDICT: TICK_FALSE_FAILURE,
     # A rejection is either the gate misfiring or a real defect, and only an operator can say
     # which. Recorded as needing triage rather than guessed at — guessing is how a broken gate
@@ -190,7 +186,6 @@ def staging_tick_outcome(verdict: str) -> TickOutcome | None:
     A SKIPPED verdict returns None and MUST NOT be written. `consult_staging` returns it on two
     paths that measured nothing — the gate is off, and the tick touched no staging service — and
     a tick runs every ten minutes. Recording those would bury the real samples under thousands of
-    rows that say only that the gate did not run, which is the same reason the backfill drops its
-    own SKIPPED rather than shipping it to the ledger.
+    rows that say only that the gate did not run.
     """
     return _TICK_OUTCOMES.get(verdict)

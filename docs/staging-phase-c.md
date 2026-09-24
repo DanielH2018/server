@@ -13,8 +13,9 @@ SHA and skips prod on a REJECTION. NO VERDICT still deploys prod.
 exists: 20 consecutive clean gate runs (the ledger read 23/20 with zero needing triage), two
 real gated ticks both PASS, and the written NO_VERDICT answer. It was **rescoped 2026-08-30**
 because the original version could not be satisfied — the gate is reachable by roughly one real
-tick a month, so part 1's evidence is gathered by a deliberate backfill rather than by waiting
-on merges.
+tick a month, so part 1's evidence was gathered by a deliberate backfill rather than by waiting
+on merges. That backfill ratchet was retired on 2026-09-24; see
+[After the flip: the ratchet is retired](#after-the-flip-the-ratchet-is-retired).
 
 To return to advisory, set `gitops_deploy_staging_gate_blocking: false` and re-run
 `initial_setup.yml --tags gitops_deploy`. Editing the inventory alone does not reach the host: that
@@ -274,13 +275,12 @@ measured deliberately. Three parts, all required.
 
 **1. A backfill of 20 consecutive gate runs against real master SHAs, with zero false failures.**
 
-Run it with `uv run python scripts/deploy_tools/backfill_staging_gate.py`, `--dry-run` first —
-that lists the commits and the tags it would gate and touches staging not at all. A real run
-exits 0 only when the condition below is met, so it is a check rather than a report to
-interpret. A `--dry-run` exits 0 for any runnable plan: it gates nothing and never reads the
-streak, so its 0 says the plan is runnable and nothing more.
+The harness was `scripts/deploy_tools/backfill_staging_gate.py`, retired with its timer on
+2026-09-24 (#2414) and recoverable from git history. A real run exited 0 only when the
+condition below was met, so it was a check rather than a report to interpret. A `--dry-run`
+listed the commits and tags it would gate and touched staging not at all.
 
-Two properties of that script are load-bearing rather than tidy. It gates **oldest-first**,
+Two properties of that script were load-bearing rather than tidy. It gates **oldest-first**,
 because the staging checkout only moves forward and asking about a commit older than its HEAD
 used to return a verdict about the wrong tree. And it reports a REJECTED as `needs-triage`
 rather than guessing: nothing in an exit code distinguishes the gate misfiring from a genuine
@@ -304,23 +304,17 @@ So the 20 accumulate in a **ledger**: `--jsonl <path>` is read back as well as w
 streak spans every recorded run rather than one invocation. Five historical samples plus each
 future gated commit reach 20 without a third rescope.
 
-**The ledger ratchets on a timer, not by hand.** `staging-backfill.timer` on daniel-box runs the
-harness hourly with `--since-ledger`, which derives its window from the newest recorded run.
-Those commits are descendants of the gate's checkout, so the scheduled form needs no reset —
-that is the whole reason the ratchet is a different shape from the backfill. It rides
-`gitops_deploy_staging_gate`: the role stops and disables the timer when the gate is off, because
-a ratchet running then would deploy to staging hourly for a measurement nobody is collecting.
+**The ledger ratcheted on a timer, not by hand.** `staging-backfill.timer` on daniel-box ran
+the harness hourly with `--since-ledger`, which derived its window from the newest recorded run.
+Those commits were descendants of the gate's checkout, so the scheduled form needed no reset.
+That is why the ratchet was a different shape from the one-shot backfill.
 
-**Two things watch the ratchet, and they answer different questions.**
-`OnFailure=staging-backfill-alert.service` pages when a run fails. The Kuma monitor "Staging
-Backfill Ratchet" pages when runs stop happening at all, which the first cannot see: a stopped
-timer produces no failures. The unit's `ExecStopPost=` writes an epoch to
-`/var/lib/gitops-deploy/staging-backfill-last-run` on every invocation, including the tolerated
-not-met exit, and monitor-bridge's `check_staging_backfill_alive` reads it against a 150-minute
-window derived from the timer's own cadence. Ansible writes an armed marker beside it in both
-directions, so disarming the gate reports up with the reason rather than red forever. The
-ledger's `mtime` is deliberately NOT the liveness signal: a run with no gateable commit appends
-nothing, so at the arrival rate below it would read red on an ordinary quiet week.
+**Two things watched the ratchet.** `OnFailure=staging-backfill-alert.service` paged when a run
+failed. The Kuma monitor "Staging Backfill Ratchet" paged when runs stopped happening at all.
+It read a heartbeat that the unit's `ExecStopPost=` wrote to
+`/var/lib/gitops-deploy/staging-backfill-last-run`, through monitor-bridge's
+`check_staging_backfill_alive`. Neither watched the ledger's outcomes, so a NO VERDICT that broke
+the streak paged nothing (#2455). All of it was removed with the ratchet.
 
 **Measured 2026-08-30, the arrival rate is about 2.5 gateable commits a week, and it is lumpy.**
 Over 592 master commits in the preceding fortnight, five were gateable — and none at all in the
@@ -329,21 +323,19 @@ days, which is still a different order from the one-a-month tick rate the rescop
 to. Do not read the timer's hourly cadence as the sample rate; it is only how often the harness
 checks whether master has produced anything to ask about.
 
-**Contention with the 10-minute tick is a skip, not a sample.** Both reach the same staging lock.
-The loser used to answer PREP_FAILED, which the harness scored as a false failure — so the tick
-would have reset the measured streak to zero on every collision, the metric destroying itself.
-`staging_gate_remote.sh` now exits `GATE_BUSY` for lock contention specifically,
-`staging_gate.py --report-busy` surfaces it as `NOT_RUN`, and the harness records nothing and
-reaches that commit on the next run. The default stays NO_VERDICT, so the deployer's contract is
-unchanged — `staging_verdict_summary` reads any non-zero that is not 2 as REJECTED, so a third
-code reaching the tick would report a busy lock as staging rejecting the change.
+**Contention with the 10-minute tick was a skip, not a sample.** Both reached the same staging
+lock. The loser answered PREP_FAILED, which the harness scored as a false failure, so each
+collision would have reset the measured streak to zero. For the ratchet's lifetime
+`staging_gate_remote.sh` exited a separate `GATE_BUSY` (76) for lock contention, and
+`staging_gate.py --report-busy` surfaced it as `NOT_RUN` so the harness recorded nothing. Both
+went with the ratchet. The remote reports a busy lock as PREP_FAILED again, and the deployer
+reads it as NO_VERDICT, as it always did. `staging_verdict_summary` reads any non-zero that is
+not 2 as REJECTED, which is why no third code ever reached the tick.
 
-**A backfill is a one-shot.** The gate's checkout only fast-forwards, so a run leaves it at the
-newest commit in the window and a second pass over the same window is all ancestors. The script
-reads that checkout's HEAD before running and refuses a plan it has already moved past, naming
-the `git reset --hard` that would make the window runnable — a refusal is cheaper than eleven
-false failures that say nothing about the gate. Resuming a run that died partway needs another
-reset for the same reason.
+**A backfill was a one-shot.** The gate's checkout only fast-forwards, so a run left it at the
+newest commit in the window and a second pass over the same window was all ancestors. The
+script refused a plan its checkout had already moved past, naming the `git reset --hard` that
+would make the window runnable.
 
 **That reset was not safe until the runner moved out of the checkout.** The first attempt on
 2026-08-30 reset the tree to `9bc53639`, a commit predating the gate itself, and the dispatcher
@@ -393,9 +385,10 @@ behaviour prod had before any of this existed.
 **The cost is real and is paid for with noise rather than with a block.** A permanently broken
 staging degrades the gate to nothing, silently, unless every NO_VERDICT is loud. So it is:
 `consult_staging` alerts on every non-PASS, and as of slice 4 that includes the internal-error
-path, which returned before reaching the alert while nothing branched on the answer. The
-"Staging Backfill Ratchet" monitor is the second signal — it pages when the harness stops
-running at all, which the per-run `OnFailure=` structurally cannot see.
+path, which returned before reaching the alert while nothing branched on the answer. That alert
+is the only signal left. It fires only on a real gated tick, which arrives about once a month,
+so a broken staging can go unreported for weeks. The "Staging Backfill Ratchet" monitor was a
+second signal until the ratchet was retired on 2026-09-24.
 
 **The operator's route past a block** is `touch /var/lib/gitops-deploy/staging_gate_override` on
 daniel-box. It lets exactly one blocking tick through, posts to Discord naming itself when it is
@@ -426,11 +419,10 @@ against today. Only the second decides whether blocking is safe.
 
 ### Where the evidence stands
 
-**Part 1: MET, 2026-09-02.** `backfill_staging_gate.py` reports `clean streak=20/20` over 26
+**Part 1: MET, 2026-09-02.** `backfill_staging_gate.py` reported `clean streak=20/20` over 26
 recorded runs — 20 pass, 6 false-failure (all six predating the fixes described above), 0
-true-failure, 0 needs-triage. Read it from the script rather than by eye, and read it again
-immediately before flipping the switch: the hourly ratchet keeps appending, and one untriaged
-REJECTED drops the verdict back to NOT MET.
+true-failure, 0 needs-triage. The raw ledger is kept on daniel-box at
+`/var/lib/gitops-deploy/staging-backfill.jsonl`, and nothing writes to it after the retirement.
 
 **Part 2: MET 2026-09-02, 2 of 2.** `staging: PASS on ['freshrss']` at 19:47:52 (gate PASS for
 `5e06d859`, 1/1 expectations) and `staging: PASS on ['ical-proxy']` at 20:16:25 (gate PASS for
@@ -471,7 +463,7 @@ so a one-commit range is clean about three times in four and a three-commit rang
 half the time. Forcing a sample therefore means merging the bump and triggering the tick as
 soon as CI is green, so the range is that one commit — `land.sh`'s CI wait is precisely what
 let #858 into #857's range. At those odds the hand-forced route is a coin-flip repeated, which
-is the argument for making a real gated tick ratchet on its own the way part 1 does.
+is the argument for making a real gated tick ratchet on its own the way part 1 did.
 
 **The second sample needs a second such tick.** `freshrss_k8s_cache_image` — `nginx:alpine`,
 pinned at `4a73073b`, and `db35bfc6` upstream as of 2026-09-02 — is the remaining candidate in
@@ -500,18 +492,16 @@ questions are different: part 1 asked whether the gate is trustworthy enough to 
 this asks how often the armed gate actually stops a prod deploy.
 
 `consult_staging` appends one row per real gated tick to
-`gitops_deploy_staging_tick_ledger` (`/var/lib/gitops-deploy/staging-ticks.jsonl`), carrying the
-SHA, the promoted services, the verdict and the ledger outcome. `staging-backfill.service`
-passes that file to `backfill_staging_gate.py --tick-jsonl`, so the hourly ratchet's report ends
-with a second section counting it. Reading it is the only thing the backfill does with it — the
-file is written by the deployer and never by the harness.
+`/var/lib/gitops-deploy/staging-ticks.jsonl` (`gitops_markers.MARKERS["staging_ticks"]`), carrying the
+SHA, the promoted services, the verdict and the ledger outcome. Until 2026-09-24 the hourly
+ratchet's report ended with a section counting it. No automated reader remains. An
+operator reads it with `jq`; for example,
+`jq -c 'select(.outcome != "pass")' /var/lib/gitops-deploy/staging-ticks.jsonl` lists every tick
+that was not a clean pass.
 
-**It is a separate file from the backfill ledger, and must stay one.** Two reasons, either
-sufficient. `--since-ledger` plans its next window as `<newest recorded sha>..master`, so a tick
-row in that file would send the hourly ratchet to a window it cannot run. And the two measure
-runs of different scope — a backfill gates the services a commit *changed*, a tick gates the
-narrower set the deployer *promoted* — so pooling them would put the wrong kind of sample into
-the streak that decides part 1. `test_the_two_ledgers_are_different_files` holds the split.
+It was always a separate file from the backfill ledger, because the two measure runs of
+different scope. A backfill gated the services a commit *changed*, and a tick gates the narrower
+set the deployer *promoted*.
 
 **A tick that measured nothing writes nothing.** `consult_staging` returns SKIPPED when the gate
 is off and when the tick touched no staging service, and it runs every ten minutes; recording
@@ -526,6 +516,42 @@ and only an operator can tell which. The report flags the count; nothing else ac
 The recorder cannot break a prod deploy. It runs inside `consult_staging`, whose contract is
 that no failure path may stop the deploy, so a ledger it cannot write costs the measurement and
 nothing else.
+
+---
+
+## After the flip: the ratchet is retired
+
+The operator retired the staging-backfill ratchet on 2026-09-24 (#2414). The case for keeping
+it is in closed PR #2457, and the operator read it before deciding. The trade-off is recorded as
+a `DECIDED:` marker above the retirement tasks in `roles/setup/gitops_deploy/tasks/install.yml`.
+
+**What was given up.** The hourly ratchet was the only thing that drove the gate regularly: the
+restricted ssh key, the dispatcher, the ff-merge and the expectations. A real gated tick reaches
+`consult_staging` about once a month. A gate that rots answers NO VERDICT, and `staging_blocks`
+blocks only on REJECTED, so a rotted gate lets prod through without blocking anything. The one
+alarm left is `consult_staging`'s Discord post on every non-PASS of a real tick.
+
+**Why that was accepted.** Part 1 was met, so the ratchet had finished the measurement it was
+built for. Keeping it meant an hourly staging deploy, three systemd units, a Kuma monitor, a
+monitor-bridge check and a push token, all for an exercise that raised no alarm. A NO VERDICT
+only broke the ledger's clean streak, and the unit tolerated that as a not-met exit (#2455).
+
+**What was removed.** The harness and its tests; the timer, service and `OnFailure=` alert
+unit; the armed marker and the heartbeat; `staging_gate.py --report-busy`, the remote's
+`GATE_BUSY` and `exit_codes.GATE_NOT_RUN`; monitor-bridge's `check_staging_backfill_alive`; the
+"Staging Backfill Ratchet" Kuma monitor and its push token. The gate itself is unchanged:
+`staging_gate.py`, `consult_staging`, `staging_blocks`, the override and the tick ledger.
+
+**How the host converges.** `initial_setup.yml --tags gitops_deploy` on daniel-box stops and
+disables the timer, stops the service and removes the three unit files. It also clears any
+`failed` state those units left, and removes `staging-backfill-armed` and
+`staging-backfill-last-run`. `staging-backfill.jsonl` is **kept**. It is the raw evidence
+behind *Part 1: MET*, it is small, and nothing reads or writes it any more, so deleting it would
+gain nothing and could not be undone. Remove it by hand when that evidence is no longer wanted.
+
+**To exercise the gate by hand**, run `uv run python scripts/deploy_tools/staging_gate.py <sha>
+--tags <services>` on daniel-box against master's tip. The gate's checkout only fast-forwards,
+so an older commit is refused. That is the call the ratchet made, one commit at a time.
 
 ---
 

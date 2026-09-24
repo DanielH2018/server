@@ -22,7 +22,6 @@ _ROUTED = frozenset({"git", "gh", "kubectl"})
 # empty or partial scan means the walk stopped matching, not that the tree is clean.
 KNOWN_MEMBERS = frozenset(
     {
-        "deploy_tools/backfill_staging_gate.py",
         "dev/prune_worktrees.py",
         "dev/fanout_place.py",
         "dev/pytest_shard.py",

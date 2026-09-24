@@ -494,14 +494,6 @@ stringData:
     {"type": "push", "name": "GitOps Deploy — Alive", "description": "The pull-based deployer on daniel-box has not ticked in GITOPS_MAX_AGE_MIN. Check `systemctl status gitops-deploy.timer` and the SessionStart banner's parked state.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_alive_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   gitops-deploy-status.json: |
     {"type": "push", "name": "GitOps Deploy — Status", "description": "The deployer is parked: a held SHA after a failed health gate, a diverged tree, a busy service lock, or a tree behind origin for 6h. The message names which. `gitops_state.py` clears a marker once the cause is fixed.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_gitops_status_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Pushed every bridge cycle like its neighbours, so the standard interval applies — the
-  # RATCHET is hourly, but the CHECK reading its heartbeat runs every cycle, and it is the check
-  # that beats. The staleness window lives in bridge_config.py (STAGING_BACKFILL_MAX_AGE_S, 150
-  # minutes derived from the timer); this interval is only the heartbeat that says the bridge is
-  # still evaluating it. Green while the gate is disarmed, with the reason in the message — the
-  # ratchet's timer is stopped then, so no heartbeat is expected.
-  staging-backfill-ratchet.json: |
-    {"type": "push", "name": "Staging Backfill Ratchet", "description": "monitor-bridge reads the staging-backfill.timer heartbeat in /var/lib/gitops-deploy every 5 min; the hourly unit writes it on every run. DOWN means the ratchet is armed but has not run in 150 min, or the heartbeat is unreadable; a disarmed ratchet stays UP. Run systemctl status staging-backfill.timer on daniel-box.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_staging_backfill_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # Pushed every bridge cycle like its neighbours, so the standard 600s interval applies — the
   # DRILL is weekly, but the CHECK reading its stamp runs every cycle, and it is the check that
   # beats. The staleness window lives in check.py (ETCD_DRILL_MAX_AGE_S, 8 days derived from the
