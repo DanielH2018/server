@@ -358,3 +358,41 @@ def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
     assert tick.head == LOCAL, "the ff-merge was undone, so the range is not merged"
     assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
     assert [e.role for e in state.manual_plane_pending()] == ["k3s"]
+
+
+def test_a_rolled_back_tick_restores_a_row_its_own_refusal_collapsed(
+    gitops_deploy, tick
+):
+    """The case that makes restore, not subtract, the reverse (#2320).
+
+    The second range's derivation refuses, so the union collapses the row to the empty set
+    — "the whole role". Nothing subtracted from an empty set recovers `kubeconfig`.
+    """
+    config = gitops_deploy.tick_config()
+    state = gitops_deploy.STATE
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+    del tick.narrow_setup["k3s"]
+    recorded = deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
+    deploy_defer.unrecord(state, ORIGIN, recorded)
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
+
+
+def test_a_rolled_back_tick_on_an_already_pending_role_pages_once(gitops_deploy, tick):
+    """No line appended means nothing to take back from the dedupe page either.
+
+    The role stays pending through the rollback, so clearing `broad_alerted` there re-paged
+    the same SHA on every contended tick. The rejecting half is
+    `test_a_rolled_back_tick_takes_its_own_line_and_row_with_it`, where the page does go.
+    """
+    config = gitops_deploy.tick_config()
+    state = gitops_deploy.STATE
+    state.record_manual_plane(LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0)
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    for _ in range(2):
+        recorded = deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+        assert recorded.roles == [], "the role was already pending"
+        deploy_defer.unrecord(state, ORIGIN, recorded)
+    assert len(tick.posts) == 1
+    assert state.read("broad_alerted") == ORIGIN

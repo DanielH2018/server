@@ -306,7 +306,10 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
     for tag, before in recorded.tags_before.items():
         if tag not in cleared:
             state.restore_manual_plane_tags(tag, before)
-    if state.read("broad_alerted") == origin:
+    # Only when this tick appended a line. A tick that only widened an already-pending role's
+    # row leaves the role pending either way, so clearing the dedupe there re-paged the same
+    # SHA on every contended tick.
+    if recorded.roles and state.read("broad_alerted") == origin:
         state.write("broad_alerted", None)
 
 
