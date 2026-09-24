@@ -33,7 +33,6 @@ from deploy_config import CHICAGO, Config, log
 from deploy_git import (
     dirty_alert_slot,
     dirty_summary,
-    hold_plane_marker,
     should_alert_dirty,
 )
 from deploy_health import gate_services
@@ -208,8 +207,7 @@ def handle_broad(
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
             log(f"broad apply failed ({playbook} {tags}): {exc}")
-            state.write_hold(origin)
-            state.write("hold_plane", hold_plane_marker(playbook, tags))
+            state.hold_failed_apply(origin, playbook, tags)
             # The range is merged and this arm never resets, so nothing re-derives what it
             # carried: the deferred pages go out now, and the failure post below names the
             # promoted bumps, which no later tick's range will contain.

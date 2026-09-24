@@ -140,9 +140,9 @@ def broad_failure_alert(
         f"forward-only — **nothing was rolled back**, so live state is whatever the "
         f"failed run left.\n"
         f"{bump_note if bumps else ''}"
-        f"**Action:** fix forward and re-run that playbook by hand. A later tick clears the "
-        f"hold only by applying this same plane — after a hand run, "
-        f"`rm {hold_file} {hold_plane_file}`."
+        f"**Action:** fix forward and re-run that playbook by hand. A later tick clears each "
+        f"`{hold_plane_file}` entry by applying it or deploying the services it tags; run "
+        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
     )
 
 
@@ -203,15 +203,15 @@ def meta_deferred_alert(origin: str, services: set[str]) -> str:
 def k8s_deferred_alert(
     origin: str, k8s: set[str], declared_k8s: set[str], consumers: set[str] | None
 ) -> str:
-    """The post for a k8s role change, which this deployer never auto-deploys.
+    """The post for a k8s role change this tick did not deploy.
 
     The remediation half is `deploy_remediation.k8s_remediation`, which decides whether the
     change can be named as a `--tags` redeploy at all.
     """
     return (
         f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(k8s))}` changed in "
-        f"`{origin[:8]}` — fast-forwarded but **not applied** (this deployer only "
-        f"auto-deploys Docker-platform services; k8s roles are defer-and-alert). "
+        f"`{origin[:8]}` — fast-forwarded but **not applied** (a k8s change is "
+        f"defer-and-alert unless this tick deployed it as an image bump). "
     ) + k8s_remediation(k8s, declared_k8s, consumers)
 
 
@@ -340,8 +340,8 @@ def broad_k8s_failure_alert(
         f"revert is available by hand.\n"
         f"**Action:** fix forward on master, or redeploy by hand with "
         f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
-        f"deploys these services clears the hold; after a hand run, "
-        f"`rm {hold_file} {hold_plane_file}`."
+        f"deploys these services clears their `{hold_plane_file}` entry; run "
+        f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
     )
 
 

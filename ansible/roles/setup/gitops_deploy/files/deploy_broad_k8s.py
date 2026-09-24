@@ -25,7 +25,6 @@ import deploy_io
 import deploy_locks
 from deploy_changes import ChangeSet
 from deploy_config import Config, log
-from deploy_git import hold_plane_marker
 from deploy_staging import staging_blocks
 from deploy_staging_io import consult_staging, consume_staging_override
 from deploy_state import DeployerState
@@ -160,6 +159,11 @@ def apply_broad_k8s(
         )
         cs = replace(cs, k8s=cs.k8s | bumps, k8s_deploy=cs.k8s_deploy - bumps)
         bumps = set()
+    # The deploy plane has already applied these, so they are annotated whatever happens to
+    # the rest below — a failed bump beside them must not hide that they went out.
+    applied = cs.k8s_deploy - bumps
+    if applied:
+        tools.emit_deploy_annotation(applied, origin)
     if bumps:
         try:
             deploy_io.deploy_k8s(config.repo, bumps, deadline - time.monotonic())
@@ -173,15 +177,15 @@ def apply_broad_k8s(
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:
             log(f"k8s deploy failed for {sorted(bumps)} on a broad tick: {exc}")
-            state.write_hold(origin)
-            # The plane is the run that failed, `deploy.yml --tags <bumps>`. Without it any
-            # later service deploy cleared the hold (`clear_service_hold`), and GitOps Deploy —
-            # Status went green over the failed pin; with it, only a run covering these tags does.
-            state.write("hold_plane", hold_plane_marker(DEPLOY_PLAYBOOK, sorted(bumps)))
+            # The plane is the run that failed, `deploy.yml --tags <bumps>`, ADDED to any plane
+            # already held. Without it any later service deploy cleared the hold
+            # (`clear_service_hold`); written over an earlier entry, the bump's fix-forward
+            # cleared a plane still unapplied. Either way Status went green too early.
+            state.hold_failed_apply(origin, DEPLOY_PLAYBOOK, sorted(bumps))
             # The range is merged either way, so a hand-edited or denylisted k8s role in it has
             # no page but this one. Before the failure post, which stays the tick's last word.
             deploy_alerts.alert_deferred(
-                tools, state, config, origin, set(), cs, plan.k8s_services
+                tools, state, config, origin, applied, cs, plan.k8s_services
             )
             posted = deploy_alerts.discord(
                 tools,
@@ -197,8 +201,7 @@ def apply_broad_k8s(
             )
             return 0 if posted else 1
         state.clear_service_hold(bumps)
-    if cs.k8s_deploy:
-        tools.emit_deploy_annotation(cs.k8s_deploy, origin)
+        tools.emit_deploy_annotation(bumps, origin)
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services

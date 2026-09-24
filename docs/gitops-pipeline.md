@@ -597,8 +597,8 @@ stay).
       with no hold and no reset: the bump joins `ChangeSet.k8s`, the defer-and-alert post
       names it, and `Release Staleness Drift` reads the unapplied pin from the release
       records until something deploys it.
-    - **A failure writes `hold_sha` and `hold_plane` = `ansible/deploy.yml <bumps>`**, the run
-      that failed. With no plane recorded, the next unrelated service deploy cleared the hold
+    - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,
+      the run that failed, beside any plane already held. With no plane recorded, the next unrelated service deploy cleared the hold
       through `clear_service_hold`, and GitOps Deploy — Status went green over the failed pin.
       `clear_service_hold` clears a hold only when the services it deployed cover the held
       tags, so the fix-forward deploy of the same service is the way out, and
@@ -1161,6 +1161,13 @@ an unreadable state directory must not read as "no hold," or a held host reports
 deciding through `deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run applies the
 whole playbook and covers any tag set held against it, a tagged run covers a held tag set it is
 a superset of, and a tagged run covers an untagged hold not at all.
+
+**`hold_plane` holds one entry per failed apply, joined by `; `**
+(`DeployerState.hold_failed_apply`, `deploy_git.hold_plane_with`). A second failure adds its
+entry beside the first rather than writing over it. An apply drops only the entries it covers,
+and `hold_sha` clears once none is left. Before this, a failed bump on a broad tick overwrote
+an earlier plane's entry, and the bump's own fix-forward deploy then cleared both markers
+while that earlier plane was still unapplied: #878 again, through the service door.
 
 It was unconditional until 2026-09-02, and that erased the fault. A broad apply of
 `ansible/deploy.yml` failed on `2d25ced3` and wrote both markers; the next tick routed to the

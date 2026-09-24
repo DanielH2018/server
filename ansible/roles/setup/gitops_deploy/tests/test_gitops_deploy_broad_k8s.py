@@ -360,6 +360,79 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
     assert tick.head == ORIGIN
     assert _marker(state_dir, "hold_sha") is None
     assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert not any("Docker-platform" in post for post in tick.posts), (
+        "the deferral post must not claim this deployer never auto-deploys a k8s bump"
+    )
+
+
+# ── a new failure never overwrites a hold another plane still owes ────────────────────────
+
+
+@pytest.mark.parametrize(
+    ("earlier", "broad_path", "outcomes"),
+    [
+        ("ansible/deploy.yml", UNAPPLYABLE_ROLE, [RuntimeError("bump failed")]),
+        (
+            "ansible/initial_setup.yml gitops_deploy",
+            UNAPPLYABLE_ROLE,
+            [RuntimeError("bump failed")],
+        ),
+        (
+            "ansible/deploy.yml radarr",
+            APPLYABLE_ROLE,
+            [None, RuntimeError("bump failed")],
+        ),
+    ],
+    ids=["untagged-deploy-plane", "setup-plane", "narrowed-deploy-plane"],
+)
+def test_a_failed_bump_keeps_an_earlier_plane_held_past_the_bumps_fix(
+    gitops_deploy, tick, settings, state_dir, earlier, broad_path, outcomes
+):
+    """#878's class: the bump's fix-forward deploy must clear the bump's entry and no other.
+
+    Overwriting `hold_plane` with the bump's entry let a later sonarr deploy clear both
+    markers while the earlier plane was still unapplied, and GitOps Deploy — Status read green.
+    """
+    (state_dir / "hold_sha").write_text("e" * 40)
+    (state_dir / "hold_plane").write_text(earlier)
+    config = _mixed(settings, tick, broad_path)
+    tick.playbook_outcomes = outcomes
+    assert gitops_deploy.main(tick.tools, config) == 0
+    gitops_deploy.STATE.clear_service_hold({"sonarr"})
+    assert _marker(state_dir, "hold_sha") is not None, "the earlier plane is still owed"
+    assert _marker(state_dir, "hold_plane") == earlier
+
+
+def test_a_failed_plane_keeps_an_earlier_plane_held_beside_its_own(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The broad loop's own failure arm overwrote the marker the same way."""
+    (state_dir / "hold_sha").write_text("e" * 40)
+    (state_dir / "hold_plane").write_text("ansible/deploy.yml radarr")
+    config = _mixed(settings, tick, APPLYABLE_ROLE)
+    tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    gitops_deploy.STATE.clear_broad_hold("ansible/initial_setup.yml", ["gitops_deploy"])
+    assert _marker(state_dir, "hold_sha") == ORIGIN
+    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml radarr"
+
+
+def test_a_failed_bump_still_annotates_the_bump_the_plane_applied(
+    gitops_deploy, tick, settings
+):
+    """radarr went out with the narrowed deploy plane; sonarr's failure must not hide that."""
+    config = _mixed(settings, tick, DEPLOY_PLANE)
+    radarr = "ansible/roles/k8s/radarr/defaults/main.yml"
+    tick.declare(DECLARES_SONARR + "  - name: radarr\n    platform: k8s\n")
+    tick.paths = [*tick.paths, radarr]
+    tick.tree_listing += radarr + "\n"
+    tick.files[f"{ORIGIN}:{radarr}"] = "radarr_image: x:2\nk8s_autodeploy: true\n"
+    tick.diffs["radarr"] = "--- a\n+++ b\n-radarr_image: x:1\n+radarr_image: x:2\n"
+    tick.narrow = (0, "radarr")
+    tick.playbook_outcomes = [None, RuntimeError("image manifest unknown")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "sonarr was the bump that failed"
+    assert ("annotation", {"radarr"}) in tick.log
 
 
 def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(

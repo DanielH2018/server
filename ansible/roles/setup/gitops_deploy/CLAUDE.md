@@ -327,13 +327,13 @@ import and `state_dir` repoints every marker at `tmp_path`. Run:
 
 ## Which apply clears a hold
 
-**`hold_sha` clears only when the plane the hold names is applied**
-(`DeployerState.clear_broad_hold` / `clear_service_hold`, through
-`deploy_logic.broad_hold_cleared_by`). Coverage, not equality: an untagged run covers any tag
-set, a tagged run covers a held tag set it is a superset of, never an untagged hold. Every
+**`hold_sha` clears only once every plane `hold_plane` lists is applied** — one `; `-joined
+entry per failed apply, each dropped by an apply covering it (`clear_broad_hold` /
+`clear_service_hold`, through `deploy_logic.broad_hold_cleared_by`): an untagged run covers any
+tag set, a tagged run a held tag set it is a superset of, never an untagged hold. Every
 consumer gates on `hold_sha` alone — `gitops_status`, `land.sh`, `renovate_agent.decide` — so
 an early clear turns the tile green over an unapplied plane (#878). A hand `ansible-playbook`
-run clears nothing: after fixing forward, `rm /var/lib/gitops-deploy/hold_sha
+run clears nothing: once every entry is applied, `rm /var/lib/gitops-deploy/hold_sha
 /var/lib/gitops-deploy/hold_plane`, as the alert and the monitor both print.
 
 ## A failed run's error string

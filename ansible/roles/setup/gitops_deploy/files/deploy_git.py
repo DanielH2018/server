@@ -244,6 +244,28 @@ def hold_plane_marker(playbook: str, tags: list[str] | None) -> str:
     return f"{playbook} {','.join(tags or [])}".strip()
 
 
+# Between the entries of a `hold_plane` that more than one failed apply wrote. Not a newline:
+# every reader outside this role prints the marker on one line.
+HOLD_PLANE_SEP = "; "
+
+
+def hold_plane_entries(held: str | None) -> list[str]:
+    """Each failed apply a `hold_plane` marker records, oldest first."""
+    return [e.strip() for e in (held or "").split(";") if e.strip()]
+
+
+def hold_plane_with(held: str | None, playbook: str, tags: list[str] | None) -> str:
+    """`held` with a failed apply of `playbook`/`tags` added beside what it already records.
+
+    A second failure used to OVERWRITE the marker, so the first plane's entry was gone while
+    that plane was still unapplied: the second failure's fix then cleared `hold_sha` over it,
+    and GitOps Deploy — Status read green (#878's class). Each entry clears on its own.
+    """
+    entries = hold_plane_entries(held)
+    entry = hold_plane_marker(playbook, tags)
+    return HOLD_PLANE_SEP.join(entries if entry in entries else [*entries, entry])
+
+
 def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> bool:
     """Does a successful apply of `playbook`/`tags` cover the plane recorded in `held`?
 
