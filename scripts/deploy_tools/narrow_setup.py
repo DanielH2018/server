@@ -55,6 +55,17 @@ SETUP_TREE = "ansible/roles/setup"
 # a `CLAUDE.md` — refuses, so the caller prints the role tag.
 NARROWABLE = ("tasks/", "templates/", "files/", "defaults/", "vars/")
 
+
+# Paths inside a role that reach no host, so they add no tag requirement: prose Ansible never
+# renders, and a role-local `tests/` directory (the no-role-ships-a-test-file invariant is
+# `ansible/tests/repo/test_no_role_ships_a_test_file.py`). They are SKIPPED rather than
+# refused, because a role `CLAUDE.md` rides along in most real ranges and refusing on one
+# would leave the narrowing almost never firing — measured against the k3s role's history,
+# where 4 of the 5 most recent ranges carry the role's own CLAUDE.md.
+def _reaches_no_host(rel: str) -> bool:
+    return rel.endswith(".md") or rel.startswith("tests/")
+
+
 # What a template uses to pull in another template. A change to the inner one reaches every
 # task that renders an outer one, so the scan follows that edge instead of stopping at the
 # first file.
@@ -115,6 +126,28 @@ def file_tags(text: str) -> frozenset[str] | None:
     return frozenset().union(*per_task)
 
 
+def _top_level_keys_naming(text: str, name: str) -> set[str]:
+    """The top-level keys of a vars file whose block of lines mentions `name`.
+
+    A line scan rather than a parse, because the value may be a nested structure and what is
+    wanted is only "which key's block holds this string". A top-level key is a line starting in
+    column zero with a `key:`; everything indented under it belongs to that key.
+    """
+    keys: set[str] = set()
+    current = None
+    for line in text.splitlines():
+        m = re.match(r"^([A-Za-z_][\w]*)\s*:", line)
+        if m:
+            current = m.group(1)
+        elif not line.strip() or line.lstrip().startswith("#"):
+            if not line.strip():
+                current = None
+            continue
+        if current and name in line:
+            keys.add(current)
+    return keys
+
+
 def _tracked(ref: str, prefix: str, repo: str) -> list[str]:
     """Every tracked path under `prefix` at `ref`."""
     r = git("ls-tree", "-r", "--name-only", ref, "--", prefix, cwd=repo, check=False)
@@ -137,6 +170,7 @@ class RoleIndex:
         self.tags: dict[str, frozenset[str] | None] = {}
         self.task_text: dict[str, str] = {}
         self.template_text: dict[str, str] = {}
+        self.vars_text: dict[str, str] = {}
         for path in _tracked(ref, self.prefix, repo):
             rel = path[len(self.prefix) :]
             text = _show(ref, path, repo)
@@ -147,6 +181,8 @@ class RoleIndex:
                 self.tags[rel] = file_tags(text)
             elif rel.startswith("templates/"):
                 self.template_text[rel] = text
+            elif rel.startswith(("defaults/", "vars/")):
+                self.vars_text[rel] = text
         if not self.tags:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
 
@@ -187,8 +223,29 @@ class RoleIndex:
                 continue
             hit = True
             tags |= self.readers_of(rel.rsplit("/", 1)[-1], seen)
-        if not hit:
-            raise CannotNarrow(f"no task file or template of this role names {name}")
+        if hit:
+            return frozenset(tags)
+        return self._named_in_vars(name)
+
+    def _named_in_vars(self, name: str) -> frozenset[str]:
+        """The tags of whatever reads the `defaults/` key whose value names `name`.
+
+        A host script's template is often named in a data structure rather than in a `src:`:
+        `setup/k3s` collects them in `k3s_render_stamp_groups` and hands the group to
+        `common/tasks/release_bin.yml` through a `vars:` block on the import. The task file
+        naming the KEY is the one that renders the template, so its tags are the answer — wider
+        than the one import site, and still far narrower than the whole role.
+        """
+        keys = {
+            key
+            for rel, text in self.vars_text.items()
+            for key in _top_level_keys_naming(text, name)
+        }
+        if not keys:
+            raise CannotNarrow(f"nothing in this role names {name}")
+        tags: set[str] = set()
+        for key in sorted(keys):
+            tags |= self.key_readers(key)
         return frozenset(tags)
 
     def key_readers(self, key: str) -> frozenset[str]:
@@ -285,13 +342,18 @@ def role_tags(
     tags: set[str] = set()
     for path in changed:
         rel = path[len(prefix) :]
+        if _reaches_no_host(rel):
+            continue
         got = path_tags(rel, index, old, new, repo)
         print(f"narrow-setup: {rel} -> {','.join(sorted(got))}", file=sys.stderr)
         tags |= got
     if role_tag in tags:
         raise CannotNarrow(f"the derivation lands on {role_tag}, the whole-role tag")
     if not tags:
-        raise CannotNarrow("the derivation names no tag")
+        # Every changed path reaches no host. The deployer should not have deferred this range
+        # at all, so there is no narrowing to offer — and an empty `--tags` value runs the
+        # whole playbook, which is the opposite of what an empty answer means here.
+        raise CannotNarrow("every changed path reaches no host, so no tag applies")
     return frozenset(tags)
 
 

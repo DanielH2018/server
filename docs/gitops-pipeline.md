@@ -211,6 +211,11 @@ three-line RBAC edit to `templates/readonly-rbac.yaml.j2` needed `--tags kubecon
 what was applied by hand on 2026-09-22 with ok=15 changed=2 (#2294). The printed command was
 the maximal one until #2307.
 
+Measured against the k3s role's own history: `1d53e8af`, which added `k3s.cattle.io` to
+`k3s_readonly_crd_api_groups`, narrows to `kubeconfig` — the #2294 shape. `2aebe35a`, a
+release-staleness grace window, narrows to the seven `health-crons.yml` tags, so it leaves the
+control plane, MetalLB, Longhorn, CoreDNS and the node config untouched.
+
 **One derivation, four surfaces.** `deploy_defer.record` asks
 `scripts/deploy_tools/narrow_setup.py` which of the role's own tags the changed paths reach,
 and writes the answer to `/var/lib/gitops-deploy/manual_plane_tags`, one line per role as
@@ -231,18 +236,27 @@ path to the tags of the tasks that read it:
 
 - `tasks/<f>.yml` → the tags on its own tasks;
 - `templates/<f>` or `files/<f>` → the tags of every task file naming `<f>`, following a
-  template another template includes or imports;
+  template another template includes or imports. A host script's template is usually named in
+  a `defaults/` data structure rather than in a task's `src:` — `setup/k3s` collects them in
+  `k3s_render_stamp_groups` and hands the group to `common/tasks/release_bin.yml` through a
+  `vars:` block — so a name found only there maps to the tags of whatever reads that KEY;
 - `defaults/main.yml` or `vars/<f>.yml` → the top-level keys whose value changed between the
   two refs, then the tags of every task file and template naming one of those keys.
 
-**Any doubt refuses**, and a refusal prints the role tag with
+A path that reaches no host is SKIPPED, not refused: a `.md` Ansible never renders, and a
+role-local `tests/` directory. Refusing on one would leave the narrowing almost never firing —
+4 of the 5 most recent ranges touching `setup/k3s` carry the role's own `CLAUDE.md`. A range of
+nothing but such paths refuses instead, since an empty `--tags` value runs the whole playbook.
+
+**Any other doubt refuses**, and a refusal prints the role tag with
 `deploy_remediation.maximal_tag_warning` beside it. The refusals that fire in practice: a task
-file with no `tags:` of its own (`main.yml`, `unit-logging.yml`,
-`longhorn-weekly-shard.yml` — their tasks inherit from the import site, so a hit there says
-nothing about which tag selects them); a `defaults/` key nothing in the role reads; a change
-under `handlers/` or `meta/`; a `defaults/` file either ref does not carry. Refusing is the
-safe direction because a `--tags` value matching nothing makes Ansible exit 0 having applied
-nothing — the silent-success failure `setup_tags_for` also guards against.
+file with no `tags:` of its own (`main.yml`, `unit-logging.yml`, `longhorn-weekly-shard.yml` —
+their tasks inherit from the import site, so a hit there says nothing about which tag selects
+them); a `defaults/` change that moved no key's value, which is every comment-only edit; a key
+nothing in the role reads; a change under `handlers/` or `meta/`; a `defaults/` file either ref
+does not carry. Refusing is the safe direction because a `--tags` value matching nothing makes
+Ansible exit 0 having applied nothing — the silent-success failure `setup_tags_for` also guards
+against.
 
 Two ranges can make one role pending, since the first line keeps its first-seen stamp. The
 tags then union: both changes are merged and unapplied, so both tags have to run. A refusal on

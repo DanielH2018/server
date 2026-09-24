@@ -53,6 +53,11 @@ BETA = """\
     src: beta.conf.j2
     dest: /etc/beta.conf
   tags: [beta]
+- name: Release the beta cron scripts
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/release_bin.yml"
+  vars:
+    release_bin_templates: "{{ demo_release_groups | map(attribute='templates') | flatten }}"
+  tags: [beta]
 """
 
 DEFAULTS = """\
@@ -60,6 +65,12 @@ DEFAULTS = """\
 demo_alpha_mode: fast
 demo_beta_mode: slow
 demo_orphan_key: nobody-reads-this
+# A host script's template named in a data structure rather than in a task's `src:` — the
+# shape `setup/k3s` uses for its cron scripts, through `k3s_render_stamp_groups`.
+demo_release_groups:
+  - name: demo-beta
+    templates:
+      - beta-cron.sh.j2
 """
 
 
@@ -71,6 +82,7 @@ def build(tmp_path) -> Tree:
     tree.write(f"{ROLE}/tasks/beta.yml", BETA)
     tree.write(f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }}\n")
     tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = {{ demo_beta_mode }}\n")
+    tree.write(f"{ROLE}/templates/beta-cron.sh.j2", "#!/bin/sh\necho beta\n")
     tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS)
     tree.write(
         f"{ROLE}/handlers/main.yml", "---\n- name: noop\n  ansible.builtin.debug: {}\n"
@@ -185,3 +197,35 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
         "tasks/unit-logging.yml",
         "tasks/longhorn-weekly-shard.yml",
     }
+
+
+def test_a_template_named_only_in_a_defaults_structure_maps_to_that_keys_readers(tree):
+    """The shape a host script takes: the name is in `defaults/`, not in any task's `src:`.
+
+    The task file naming the KEY is the one that renders the template, so its tags are the
+    answer — wider than the one import site, still far narrower than the whole role.
+    """
+    tree.write(f"{ROLE}/templates/beta-cron.sh.j2", "#!/bin/sh\necho beta beta\n")
+    assert narrow(tree, *_refs(tree)) == frozenset({"beta"})
+
+
+def test_a_role_claude_md_does_not_block_the_narrowing(tree):
+    """Prose reaches no host, so it adds no tag requirement.
+
+    Measured against the k3s role's history: 4 of the 5 most recent ranges touching it carry
+    the role's own `CLAUDE.md`, so refusing on one would leave this almost never firing.
+    """
+    tree.write(f"{ROLE}/CLAUDE.md", "# Demo\n")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    assert narrow(tree, *_refs(tree)) == frozenset({"alpha"})
+
+
+def test_a_range_of_nothing_but_prose_is_flagged(tree):
+    """The rejecting half: skipping is not the same as narrowing to an empty `--tags`.
+
+    An empty `--tags` value runs the whole playbook, so a range the deployer should not have
+    deferred at all must refuse rather than answer nothing.
+    """
+    tree.write(f"{ROLE}/CLAUDE.md", "# Demo\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+        narrow(tree, *_refs(tree))
