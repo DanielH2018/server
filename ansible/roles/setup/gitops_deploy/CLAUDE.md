@@ -205,9 +205,12 @@ Each arm below is a rule and the function that holds it. The record page has the
   once the oldest pending line is older than the same 6 h, last of its four arms.
 - **Secrets-only pushes** (`secrets.yml` with no template) fast-forward but do not redeploy;
   the deployer alerts once per SHA (`secrets_alerted_sha`) to redeploy the consumers. On a
-  broad tick the page fires BEFORE the apply loop (`deploy_handlers.handle_broad`): every
-  failure arm returns, the range has already fast-forwarded, and a page skipped there is never
-  sent by any later tick (#2383).
+  broad tick the page fires from EVERY exit that leaves the range merged — the failure arm in
+  `deploy_handlers.handle_broad`, and the failure arm and tail of
+  `deploy_broad_k8s.apply_broad_k8s`. Each of those returns with the range fast-forwarded, so
+  a page skipped there is never sent by any later tick (#2383). The contention arm sends
+  nothing: it resets the tree, so the post's "fast-forwarded, redeploy the consumers" would
+  send the operator holding the lock at a tree back on `local` (#2459).
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every
   other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` is diff-shape
   first, identity second: the only path touched under the role is `defaults/main.yml`, every

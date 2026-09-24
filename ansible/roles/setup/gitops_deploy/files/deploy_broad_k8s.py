@@ -209,9 +209,12 @@ def apply_broad_k8s(
                 tools.emit_deploy_annotation(applied, origin)
             # The range is merged either way, so a hand-edited or denylisted k8s role in it has
             # no page but this one. Before the failure post, which stays the tick's last word.
+            # The secrets page rides this exit for the reason the `DECIDED:` in
+            # `deploy_handlers.handle_broad`'s own failure arm gives (#2459).
             deploy_alerts.alert_deferred(
                 tools, state, config, origin, applied, cs, plan.k8s_services
             )
+            deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
                 tools,
                 config,
@@ -233,4 +236,7 @@ def apply_broad_k8s(
     deploy_alerts.alert_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
+    # The tick's last exit, and the only one a range with nothing deferred reaches, so the
+    # secrets page has to be here as well as on the two failure arms (#2459).
+    deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     return 0

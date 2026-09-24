@@ -385,6 +385,46 @@ def test_a_contended_bump_annotates_nothing_the_next_tick_will_annotate_again(
     assert not [entry for entry in tick.log if entry[0] == "annotation"]
 
 
+# What the plan loop records for `plane_applies_radarr`'s narrowed deploy plane, and what the
+# bump's contention arm below has to take back.
+PLANE_APPLIED = f"{ORIGIN} ansible/deploy.yml radarr"
+
+
+def test_a_contended_bump_takes_back_the_planes_broad_applied(
+    gitops_deploy, tick, settings, state_dir
+):
+    """#2382's widened path (#2459): the bump's own contention arm restores the marker too.
+
+    The loop's arm was pinned when #2382 landed; this one never was. The plane applied and
+    recorded `broad_applied`, then the bump's lock wait reset the tree to `local` — and
+    `land.sh` reads that marker to tell a plane the tick APPLIED from one it merely
+    fast-forwarded past (#1537), which after the reset this tree carries neither of.
+    """
+    config = plane_applies_radarr(settings, tick)
+    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.head == LOCAL, "the ff-merge was undone"
+    assert marker(state_dir, "broad_applied") != PLANE_APPLIED
+    assert marker(state_dir, "broad_applied") is None
+
+
+def test_a_contended_bump_leaves_an_earlier_ticks_broad_applied_alone(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The rejecting half: the reverse RESTORES the earlier value, it does not clear.
+
+    An earlier tick's record is true — that plane was applied and the tree still carries it —
+    so a reverse that blanked the marker would send an operator at a run they already made.
+    """
+    earlier = f"{'9' * 40} ansible/initial_setup.yml gitops_deploy"
+    (state_dir / "broad_applied").write_text(earlier)
+    config = plane_applies_radarr(settings, tick)
+    tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy("lock sonarr busy")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert marker(state_dir, "broad_applied") != PLANE_APPLIED
+    assert marker(state_dir, "broad_applied") == earlier
+
+
 def test_a_busy_service_lock_undoes_the_range_and_the_manual_plane_line(
     gitops_deploy, tick, settings, state_dir
 ):

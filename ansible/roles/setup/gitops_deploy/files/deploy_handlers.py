@@ -173,14 +173,6 @@ def handle_broad(
         if pending
         else deploy_defer.nothing_recorded(state)
     )
-    # BEFORE the apply loop, not after it (#2383). Every failure arm below returns, and the
-    # range has already fast-forwarded — `local == origin` makes `next_action` noop from the
-    # next tick on, so a page skipped here is never sent and the rotated value sits merged and
-    # stale in every consumer. The contention arm resets and re-crosses the range, and it
-    # deliberately leaves `secrets_alerted` standing: the post went out, its advice still holds
-    # once the next tick re-merges, and clearing the dedupe would page the same SHA twice.
-    deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
     # a rollback re-run now fits, so the budget is no longer the reason — but a rollback
@@ -219,9 +211,21 @@ def handle_broad(
             # The range is merged and this arm never resets, so nothing re-derives what it
             # carried: the deferred pages go out now, and the failure post below names the
             # promoted bumps, which no later tick's range will contain.
+            #
+            # DECIDED: the secrets page rides the NON-CONTENTION exits — this arm, and the
+            # two in `apply_broad_k8s` — rather than firing once before the loop (#2459).
+            # #2383 put it before the loop so no failure arm could drop it, and that also
+            # sent it on the contention arm, which resets the tree seconds later. Its text
+            # says the range was fast-forwarded and names `ansible-playbook` as the remedy,
+            # and both are false after a reset: the operator whose `deploy.sh` holds the lock
+            # would have redeployed the OLD secret from a tree back on `local`, and the
+            # dedupe marker then suppressed the page the re-merging tick owes. Sending it
+            # from each exit that leaves the range merged keeps #2383's property — every one
+            # of them is reached with `local == origin`, where no later tick re-evaluates.
             deploy_alerts.alert_deferred(
                 tools, state, config, origin, set(), cs, plan.k8s_services
             )
+            deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
             posted = deploy_alerts.discord(
                 tools,
                 config,

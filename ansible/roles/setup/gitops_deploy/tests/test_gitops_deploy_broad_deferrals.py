@@ -34,7 +34,7 @@ from _broad_k8s_range import (
 def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2383: the page fires before the apply loop, so no failure arm can skip it.
+    """#2383: every arm that leaves the range merged sends the page itself.
 
     `alert_once` advances its marker on DETECTION and the range has already fast-forwarded, so
     `local == origin` and every later tick noops. A page skipped here is never sent, and the
@@ -50,7 +50,7 @@ def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
 def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The rejecting half: firing before the loop must not mean firing unconditionally."""
+    """The rejecting half: firing on the failure arm must not mean firing unconditionally."""
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0
@@ -58,24 +58,28 @@ def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
 
 
-def test_a_contended_tick_pages_a_secret_once_across_the_retry(
+def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The contention arm resets the ff-merge, and the secrets page must not be sent twice.
+    """#2459: the contention arm resets the ff-merge, so its page would be false.
 
-    The reset is the one path that re-crosses the range, so the next tick detects the same
-    rotation again. `secrets_alerted_sha` is deliberately NOT taken back with the merge: the
-    post already went out, and its advice — redeploy the consumers — still holds once the
-    range re-merges.
+    The post says the range was fast-forwarded and sends the operator at `ansible-playbook
+    ansible/deploy.yml --tags <svc>`. After a reset the tree is back on `local`, so that
+    command redeploys the OLD secret — and it is an operator's own `deploy.sh` holding the
+    lock, so they are at a prompt to run it. The page belongs to the tick that leaves the
+    range merged, which is the retry.
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, SECRETS)
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("service lock busy")]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
+    assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
+    assert marker(state_dir, "secrets_alerted_sha") is None
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the retry merged and applied"
     secrets_posts = [post for post in tick.posts if "`secrets.yml` changed" in post]
-    assert len(secrets_posts) == 1, "the same SHA was paged twice"
+    assert len(secrets_posts) == 1, "the retry owes exactly one page"
+    assert marker(state_dir, "secrets_alerted_sha") == ORIGIN
 
 
 # ── a k8s role the deploy plane applied is not reported as deferred ───────────────────────
