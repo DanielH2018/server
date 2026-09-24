@@ -343,8 +343,7 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
    `Classifier` out of `Tools` and give the remaining callables real signatures.
 
 10. **The top-level `deploy_tools` scripts have no injectable seam.** `test_deploy_detach_notify.py`
-    uses `monkeypatch` 31 times, `test_backfill_staging_gate.py` 30, `test_staging_gate.py`
-    25, where `land_lib` tests inject a dataclass. `publish_pr.py:101` already has its own
+    uses `monkeypatch` 31 times and `test_staging_gate.py` 25, where `land_lib` tests inject a dataclass. `publish_pr.py:101` already has its own
     `Tools`; give `staging_gate.py` and `deploy_detach_notify.py` the same.
 
 11. **`Ledger.cause` is written from seven sites as free-form strings.** Including an f-string

@@ -99,11 +99,10 @@ LAND_GAVE_UP = 75
 # -- scripts/deploy_tools/staging_gate.py -----------------------------------------------
 # The gate's verdicts, which are also its exit codes. Three outcomes rather than two,
 # because an operator who cannot tell "staging rejected this" from "staging could not be
-# asked" learns to override on reflex. NOT_RUN is only ever returned under --report-busy.
+# asked" learns to override on reflex.
 GATE_PASS = 0
 GATE_REJECTED = 1
 GATE_NO_VERDICT = 2
-GATE_NOT_RUN = 3
 
 # -- scripts/deploy_tools/publish_pr.py, `publish` --------------------------------------
 # What state the tree is in afterwards. 1 promises the commit is still local and there is

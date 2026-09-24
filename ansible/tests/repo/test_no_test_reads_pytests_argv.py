@@ -17,7 +17,7 @@ break. So a call is flagged only when the resolved callee's `main` routes argv i
 `parse_args` — `parse_args()` bare, `parse_args(argv)` for a parameter of `main`, or
 `parse_args(sys.argv[...])` — and the test module neither passes argv nor patches `sys.argv`.
 Both remedies the tree already uses are accepted: `main([])` (postflight) and
-`monkeypatch.setattr(sys, "argv", [...])` (`fact_cache_guard`, `backfill_staging_gate`).
+`monkeypatch.setattr(sys, "argv", [...])` (`fact_cache_guard`).
 
 Run: uv run pytest ansible/tests/repo/test_no_test_reads_pytests_argv.py
 """
@@ -31,13 +31,10 @@ from _helpers import REPO, is_test_file
 # Non-vacuity floors. Both censuses find their subjects by pattern, so each must be shown to
 # contain something concrete — a renamed module or a moved directory would otherwise empty a
 # census and let the guard pass over nothing.
-KNOWN_ARGV_READERS = frozenset(
-    {"postflight", "fact_cache_guard", "backfill_staging_gate"}
-)
+KNOWN_ARGV_READERS = frozenset({"postflight", "fact_cache_guard"})
 KNOWN_PATCHED_CALLERS = frozenset(
     {
         "scripts/deploy_tools/tests/test_fact_cache_guard.py",
-        "scripts/deploy_tools/tests/test_backfill_staging_gate.py",
     }
 )
 

@@ -14,10 +14,9 @@ budget was sized from, and the accepted trade-offs are in `docs/gitops-pipeline.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
-- **Timers (4):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
-  gitops_deploy_tick_interval }}`), `staging-backfill.timer` (`OnBootSec=20min`,
-  `OnUnitActiveSec=1h`), `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-* {{ '%02d' |
-  format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' |
+- **Timers (3):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
+  gitops_deploy_tick_interval }}`), `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-*
+  {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' |
   format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00`),
   `kuma-check-github-interaction-limit.timer` (`OnCalendar=*-*-* {{ '%02d' |
   format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' |
@@ -128,11 +127,19 @@ Each arm below is a rule and the function that holds it. The record page has the
     `name:` exactly; an empty list disarms the gate with a log line.
 - **Staging gate — two switches.** `STAGING_GATE` asks daniel-stage about every commit that
   would auto-deploy a k8s service; `STAGING_GATE_BLOCKING` decides whether a REJECTION stops
-  the prod deploy. Both default false; daniel-box sets only the first (`docs/staging-phase-c.md`
-  owns the flip). NO VERDICT never blocks (`staging_blocks`, `tests/test_staging_blocking.py`).
+  the prod deploy. Both default false; daniel-box sets both (`docs/staging-phase-c.md` owns the
+  flip). NO VERDICT never blocks (`staging_blocks`, `tests/test_staging_blocking.py`).
   `consult_staging` runs BEFORE the ff-merge, so a rejection holds the SHA with nothing to
   roll back; moving it after the merge silently breaks that. The escape hatch is one tick:
   `touch /var/lib/gitops-deploy/staging_gate_override`, read only where the gate would block.
+- **The staging-backfill ratchet is retired** (#2414, 2026-09-24), and the trade-off is a
+  `DECIDED:` marker above the retirement tasks in `tasks/install.yml`. The ratchet was the only
+  regular exerciser of the gate. Without it, a real gated tick reaches `consult_staging` about
+  once a month, and a gate that rots answers NO VERDICT, which does not block. The one alarm left
+  is `consult_staging`'s Discord post on every non-PASS. `install.yml` stops the ratchet's timer
+  and service on daniel-box and removes its three units and its two liveness files.
+  `teardown.yml` reaps the same units on any other host. `staging-backfill.jsonl` is kept as the
+  Part 1 evidence; nothing writes or reads it any more.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True) ->
   "dirty"`): `last_run` is still written, so GitOps-Alive stays green, and the page is
@@ -298,9 +305,8 @@ Three layers, and which one a function belongs in is decided by what it touches.
   ENFORCED in `ansible/tests/deploy/test_gitops_deploy_imports.py`, which also holds every
   module's sibling imports to an explicit `ALLOWED` map, keeps `deploy_logic.py` defining
   nothing (it re-exports every decision name, so a `deploy_logic.<name>` citation stays true),
-  and keeps `deploy_staging` import-pure — `await_ci.py`, `land_tags.py` and
-  `backfill_staging_gate.py` import the index with only this `files/` on `sys.path`, so its
-  I/O shell lives in `deploy_staging_io.py`.
+  and keeps `deploy_staging` import-pure — `await_ci.py` and `land_tags.py` import the index
+  with only this `files/` on `sys.path`, so its I/O shell lives in `deploy_staging_io.py`.
 - **Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config`
   collects a malformed value into `Config.errors`; `CONFIG.validate()` at the top of `main()`
   turns it into one line naming the key plus a Discord post. `tick_config()` snapshots the

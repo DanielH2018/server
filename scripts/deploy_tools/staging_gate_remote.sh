@@ -29,13 +29,6 @@ set -uo pipefail
 
 PREP_FAILED=70 # outside deploy.sh's vocabulary (2, 3, 4, 75) and outside 0/1
 
-# Lock contention specifically, split out of PREP_FAILED because it is the one prep failure that
-# says nothing at all — not about the gate and not about the commit. Another run simply held the
-# lock. Callers that MEASURE the gate (backfill_staging_gate.py) must not record such a run as a
-# sample; the 30-minute tick and this script's own callers still treat it as NO_VERDICT, which is
-# what it was before this code existed.
-GATE_BUSY=76
-
 # The gate's OWN checkout, not this host's. Until 2026-08-29 (review M-2) this was
 # /home/ubuntu/server, which the gate fast-forwarded to the SHA under test, unlocked, and
 # never restored — so asking staging a question moved an operator's tree to an arbitrary
@@ -61,18 +54,17 @@ main() {
 
   # One gate run at a time against that one tree. The timer's run and an operator driving
   # staging_gate.py by hand would otherwise interleave a fetch, a merge and a deploy on a tree
-  # each believes it pinned. Contention is GATE_BUSY, not a verdict: this run learned nothing
-  # about the SHA — see that constant.
+  # each believes it pinned. Contention is PREP_FAILED, not a verdict: this run learned nothing
+  # about the SHA. It had its own code, GATE_BUSY, while the staging-backfill ratchet measured the
+  # gate and needed to tell a run that never started from a false failure; that ratchet was
+  # retired on 2026-09-24 (#2414) and nothing else read the distinction.
   #
   # A DIFFERENT lock from /var/lock/server-git-tree.lock, which deploy.sh takes below. flock
   # attaches to the open file description rather than to the process, so a second `exec 9>` on
   # the same path conflicts with the first even inside one process tree — which is also why the
   # dispatcher does not take this lock before exec'ing here.
   exec 9>"$LOCK" || fail_prep "cannot open $LOCK"
-  flock -n 9 || {
-    echo "staging-gate: busy: another staging-gate run holds $LOCK" >&2
-    exit "$GATE_BUSY"
-  }
+  flock -n 9 || fail_prep "busy: another staging-gate run holds $LOCK"
 
   # A dirty tree is prep failure, not a verdict: deploy.sh renders from the working directory, so
   # an uncommitted edit here would make the gate measure something other than the SHA under test.
@@ -100,9 +92,9 @@ main() {
 # 2026-08-30 on a scratch repo: `merge --ff-only HEAD~1` exits 0, HEAD unmoved.
 #
 # The 30-minute tick cannot reach this, because it only ever asks about master's tip and this
-# tree only moves forward. A hand-run can, and so can backfill_staging_gate.py, which is why
-# that script walks oldest-to-newest and why this assert exists rather than a comment telling
-# people to. Both sides go through rev-parse so a caller passing an abbreviation compares
+# tree only moves forward. A hand-run can, and so could the retired staging-backfill harness,
+# which is why that harness walked oldest-to-newest and why this assert exists rather than a
+# comment telling people to. Both sides go through rev-parse so a caller passing an abbreviation compares
 # equal instead of failing spuriously.
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$SHA")" ] ||
   fail_prep "HEAD is $(git rev-parse --short HEAD) after merging $SHA — refusing to report a verdict about a tree that is not the SHA under test"

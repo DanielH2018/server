@@ -120,6 +120,9 @@ RETIRED: frozenset[str] = frozenset(
         # 429d4ffb 2026-09-10 — a duplicate of a value held elsewhere; the Django signing
         # key added in the same commit is a different credential, not this one renamed.
         "healthchecks_smtp_user",
+        # 2026-09-24 — the staging-backfill ratchet's Kuma push token, retired with the
+        # ratchet (#2414).
+        "monitor_bridge_staging_backfill_push_token",
     }
 )
 

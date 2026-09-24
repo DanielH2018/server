@@ -88,37 +88,17 @@ def test_the_three_verdicts_are_distinct() -> None:
     }
 
 
-def test_a_busy_lock_is_a_no_verdict_by_default() -> None:
-    """The deployer's contract does not change.
+def test_the_retired_busy_code_still_reads_as_no_verdict() -> None:
+    """A runner deployed before #2414 still exits 76 on a busy staging lock.
 
-    `deploy_logic.staging_verdict_summary` reads any non-zero that is not 2 as REJECTED, so a
-    busy lock leaking a third code to the tick would report staging as having rejected the
-    change. Default off is what keeps that impossible.
+    The remote folded its GATE_BUSY into PREP_FAILED when the staging-backfill ratchet was
+    retired, but the copy on daniel-server changes only when the hypervisor role is applied
+    there. Until then a busy lock arrives as 76, and it stays NO_VERDICT only because 76 is
+    also deploy.sh's DEPLOY_LOCK_UNAVAILABLE. `staging_verdict_summary` reads any non-zero that
+    is not 2 as REJECTED, so a busy lock must never become a rejection.
     """
-    assert sg.classify(sg.GATE_BUSY) == NO_VERDICT
-
-
-def test_report_busy_makes_a_run_that_never_started_visible() -> None:
-    """The rejecting half, and why the flag exists.
-
-    backfill_staging_gate.py MEASURES the gate, and a run that lost the lock measured nothing.
-    Scoring it as a false failure would let the 30-minute tick reset the streak to zero every
-    time the two collided — the metric destroying itself rather than reporting on the gate.
-    """
-    assert sg.classify(sg.GATE_BUSY, report_busy=True) == sg.NOT_RUN
-    # deploy.sh's own 75 is the same situation one lock down.
-    assert sg.classify(75, report_busy=True) == sg.NOT_RUN
-    # Everything else is unmoved by the flag.
-    assert sg.classify(sg.PREP_FAILED, report_busy=True) == NO_VERDICT
-    assert sg.classify(1, report_busy=True) == sg.REJECTED
-
-
-def test_the_busy_code_matches_the_remote_script() -> None:
-    # Same pin as PREP_FAILED below, for the same reason: a Python module and a shell script
-    # that cannot import from each other.
-    match = re.search(r"^GATE_BUSY=(\d+)", REMOTE_SCRIPT.read_text(), re.M)
-    assert match, "staging_gate_remote.sh no longer defines GATE_BUSY"
-    assert int(match.group(1)) == sg.GATE_BUSY
+    assert 76 in DEPLOY_SH_NO_VERDICT
+    assert sg.classify(76) == NO_VERDICT
 
 
 def test_the_prep_code_matches_the_remote_script() -> None:

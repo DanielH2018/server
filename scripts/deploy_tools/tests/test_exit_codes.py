@@ -94,7 +94,7 @@ def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
             "UNLANDED_PR_OPEN",
             "UNLANDED_NO_PR",
         ),
-        ("GATE_PASS", "GATE_REJECTED", "GATE_NO_VERDICT", "GATE_NOT_RUN"),
+        ("GATE_PASS", "GATE_REJECTED", "GATE_NO_VERDICT"),
         ("CI_GREEN", "CI_RED", "CI_DISARMED", "CI_PENDING"),
         ("LAND_SETTLED", "LAND_FAILED", "LAND_BAD_ARGS", "LAND_GAVE_UP"),
         (
@@ -121,4 +121,3 @@ def test_the_importers_take_their_values_from_here():
 
     assert staging_gate.DEPLOY_SH_NO_VERDICT is ec.DEPLOY_SH_NO_VERDICT
     assert staging_gate.PASS == ec.GATE_PASS
-    assert staging_gate.NOT_RUN == ec.GATE_NOT_RUN

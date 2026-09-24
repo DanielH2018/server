@@ -137,11 +137,9 @@ MARKERS: dict[str, str] = {
     # per-SHA markers above still gate DETECTION (so a delivered alert isn't re-queued on the
     # broad path's every-tick re-eval); this queue owns delivery.
     "pending_alerts": "pending_alerts.json",
-    # Where a real gated tick's verdict is recorded. Deliberately NOT the backfill ledger:
-    # that file is planned from — `backfill_staging_gate.py --since-ledger` reads its newest
-    # row to build the next window — so a tick row in it would send the hourly ratchet to a
-    # window it cannot run. `gitops_deploy_staging_tick_ledger` in the role's defaults is the
-    # same path, tied by `test_the_tick_ledger_constant_matches_the_ansible_default`.
+    # Where a real gated tick's verdict is recorded (docs/staging-phase-c.md, *After the flip:
+    # the tick ledger*). Nothing reads it back since the staging-backfill ratchet was retired
+    # (#2414); an operator reads it with `jq`.
     "staging_ticks": "staging-ticks.jsonl",
     # The operator's one-tick escape hatch, armed by creating the file and disarmed by
     # removing it. Decision 4: "Build the override before the gate. A gate with no escape

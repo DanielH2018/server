@@ -319,7 +319,7 @@ def test_a_from_import_of_the_io_surface_is_flagged():
 def test_deploy_logic_imports_without_the_common_files_path():
     """The index must import with ONLY the role's files/ on sys.path — no `host_lib`.
 
-    `scripts/deploy_tools/await_ci.py`, `land_tags.py` and `backfill_staging_gate.py` all reach
+    `scripts/deploy_tools/await_ci.py` and `land_tags.py` both reach
     the deployer's decisions through `deploy_logic`, and each puts only this directory on
     `sys.path`. `host_lib` lives in `roles/setup/common/files`, which those tools never add, so
     any module-level import chain from `deploy_logic` down to `deploy_config` breaks `land.sh`

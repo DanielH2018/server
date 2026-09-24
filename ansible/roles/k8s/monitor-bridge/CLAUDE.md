@@ -137,9 +137,6 @@ unreachable source pages through `_evaluate` unless a streak is named.
   blocks every landing. Age-gated, not presence-gated: a routine push is behind for one tick.
   Parsers come from `gitops_markers.py`, a generated copy of the deployer's module
   (`scripts/dev/gen_gitops_markers.py`). An unparseable marker reads as not-behind.
-- **Staging Backfill — Alive** (`staging_backfill`): the backfill ratchet's `ExecStopPost`
-  heartbeat off the same hostPath; `OnFailure=` covers a run that failed, this covers runs
-  that stopped happening.
 - **etcd Restore Drill** (`etcd_restore_drill`): the weekly drill's stamp, read fail-closed —
   a stale or failing stamp is `down`, since etcd holds the Longhorn CRs needed to find every
   volume backup.

@@ -83,7 +83,6 @@ ansible/roles/setup/k3s/tests/test_longhorn_reap_delete_transport.py 5
 ansible/roles/setup/renovate_notify/tests/test_pending_soak_wiring.py 6
 scripts/deploy_tools/tests/conftest.py 1
 scripts/deploy_tools/tests/test_await_ci.py 4
-scripts/deploy_tools/tests/test_backfill_staging_gate.py 15
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 17
 scripts/deploy_tools/tests/test_deploy_tags.py 7
 scripts/deploy_tools/tests/test_deploy_tags_blockers.py 2
@@ -91,7 +90,6 @@ scripts/deploy_tools/tests/test_land_pipeline.py 3
 scripts/deploy_tools/tests/test_land_tags.py 5
 scripts/deploy_tools/tests/test_land_tools.py 2
 scripts/deploy_tools/tests/test_staging_gate.py 3
-scripts/deploy_tools/tests/test_tick_ledger_report.py 2
 scripts/dev/tests/test_memory_survey.py 3
 scripts/dev/tests/test_prune_worktrees.py 14
 scripts/diagnostics/tests/_alert_fixtures.py 3
