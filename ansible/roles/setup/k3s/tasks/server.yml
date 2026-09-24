@@ -315,6 +315,9 @@
   register: k3s_node_ip
   become: true
   changed_when: false
+  # A read of the node object k3s already holds, so it runs under --check too: skipped, it
+  # leaves no stdout and the assert below fails on an address it never read (#2316).
+  check_mode: false
 
 - name: Fail if the node registered an address the host does not own
   tags: [k3s_server]

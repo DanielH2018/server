@@ -2,7 +2,7 @@
 # Same image the Docker role runs — both copies stay on the same tag through coexistence so a
 # difference in behaviour between them is never the image. DOCKER_MODS rides along (HACS);
 # whether the mod layer applies under containerd is a B3 gate, checked at first boot.
-home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.6.3-ls221
+home_assistant_k8s_image: lscr.io/linuxserver/homeassistant:2026.9.3-ls249
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — the sharpest case in the fleet: strategy is Recreate and the config volume
