@@ -5,8 +5,10 @@
 # sensor.bedroom_wake_start (watch alarm - 15 min, morning-only — see configuration.yaml); the
 # `fallback` at 09:00 guarantees the overnight overrides clear even on a no-alarm day. Both clear the
 # overrides (manual-off, fan-manual, sleep mode, AL sleep) and re-apply the fan if home; only the
-# `alarm` trigger runs the wake ramp (the fallback never forces lights, so it can't clobber a scene
-# you set after waking). The alarm encodes the day, so the old weekday/weekend split is gone.
+# `alarm` trigger runs the wake ramp. The `fallback` touches the lights in one case only — a night
+# that was still running at 09:00, where it re-applies natural lighting (#2509) — so it still cannot
+# clobber a scene you set after waking. The alarm encodes the day, so the old weekday/weekend split
+# is gone.
 - id: bedroom_morning_reset
   alias: Bedroom morning reset and wake
   description: At the alarm (wake ramp) + a 09:00 fallback (hygiene) — clear overnight overrides; gently wake if home.
@@ -19,6 +21,13 @@
       at: "09:00:00"
       id: fallback
   action:
+    # Read the night's state BEFORE clearing it — script.bedroom_clear_overrides turns
+    # bedroom_sleep_mode off, so the fallback branch below has no way to ask afterwards whether
+    # the night was still running. HA evaluates a `variables:` step when it reaches it, so this
+    # step's position is the whole mechanism.
+    - variables:
+        was_sleeping: "{{ is_state('input_boolean.bedroom_sleep_mode', 'on') }}"
+        light_on: "{{ is_state('light.bedroom_lights', 'on') }}"
     # Daily hygiene (BOTH triggers): clear every overnight override (3 booleans + AL sleep) via the
     # shared script so sleep state / manual-off can't persist into the day. Single source of truth
     # with the test-harness reset (script.bedroom_clear_overrides).
@@ -35,7 +44,8 @@
     # == home is the reliable "you're here to be woken" signal and still won't ramp an empty bedroom while
     # away (an FP300 dog/false-positive can't trigger the wake either). apply_natural's wake exception
     # delegates to script.bedroom_apply_wake (the gentle-then-steep 30-min ramp, alarm at midpoint),
-    # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback never forces lights.
+    # which automation.bedroom_wake_ramp then drives per-minute. The 09:00 fallback runs no ramp; its
+    # one lights branch is the next one down.
     - if: "{{ trigger.id == 'alarm' and is_state('person.daniel', 'home') }}"
       then:
         # Record the wake so bedroom_fallback_wake knows today is handled (never double-wake).
@@ -52,6 +62,34 @@
         # curve: its only source, sensor.pixel_9_pro_sleep_duration, no longer exists and has no
         # replacement on either device, so the `slept_h > 0` gate could never open. See the
         # wake_brightness comment in custom_templates/lighting.jinja.
+
+    # Fallback trigger only: hand the room back to automatic lighting when the night ran all the
+    # way to 09:00. bedroom_bedtime fades to scene.bedroom_nightlight (rgb_color [255, 140, 40] at
+    # 3%, files/scenes.yaml) and marks AL manually controlled, and NOTHING here used to undo that on
+    # a no-alarm morning: bedroom_color_track needs color_mode == 'color_temp' and the RGB scene
+    # left the bulb in xy mode, light_decision's `presence` branch returns noop while the light is
+    # already on, and only the wake-ramp release branches clear AL's manual_control. The room
+    # therefore sat at amber 3% for the rest of the day (#2509).
+    #
+    # `was_sleeping` is the discriminator, not the light's colour: the alarm trigger's own
+    # clear_overrides turns sleep mode off hours earlier, so sleep mode still on at 09:00 means no
+    # other path ended this night, and a scene set after a real wake can never be clobbered. The
+    # `light_on` term keeps this from lighting an empty room — sleep mode on with the lights off is
+    # a night you left, and the presence path owns relighting that.
+    #
+    # reason "natural" goes through the single sanctioned writer and is ungated (the caller
+    # pre-gates), so it reaches bedroom_apply_natural: sleep mode is already cleared and 09:00 is
+    # outside both exception windows, so that lands on bedroom_set_natural_brightness, which puts
+    # the bulb back in color-temp mode and ARMS the colour tracker. It does not release AL's
+    # manual_control — the tracker is the auto-drivable half this restores, the same hand-off every
+    # other natural write makes. natural_brightness reads the FP300 illuminance with the lights on,
+    # which its "read while OFF" precondition disallows; a 3% nightlight against morning daylight
+    # moves that reading far less than the ~100% wake-ramp case the precondition was written for.
+    - if: "{{ trigger.id == 'fallback' and was_sleeping and light_on }}"
+      then:
+        - service: script.bedroom_lights_set
+          data:
+            reason: "natural"
 
 # Per-minute sunrise ramp. While inside the 45-min wake window, set the current ramp frame
 # (script.bedroom_apply_wake) each minute — stateless ticks resume cleanly after an HA restart. On

@@ -11,9 +11,15 @@ set -euo pipefail
 # the peer list can be empty, and an unused variable is a shellcheck failure in the rendered
 # script (validate/shell_templates.py renders with the loop unrolled to nothing).
 
+# The lock and the per-peer failure counters. The override exists so the tests can run the
+# rendered script against a temporary directory; cron passes nothing and gets /tmp, where a
+# reboot clears every counter — which is the right reset, since a reboot ends any outage the
+# counters were tracking.
+state_dir="${SYNC_ARTIFACTS_STATE_DIR:-/tmp}"
+
 # One sync at a time. The cron interval is far longer than a run, but a slow or hung ssh must
 # not stack copies of rsync against the same destination.
-exec 9>"/tmp/sync-artifacts.lock"
+exec 9>"${state_dir}/sync-artifacts.lock"
 flock -n 9 || exit 0
 
 status=0
@@ -22,10 +28,36 @@ status=0
 # would otherwise keep offering links to documents that no longer exist anywhere.
 # ConnectTimeout keeps a rebooting peer from holding the lock for the whole interval, and
 # BatchMode makes a missing key fail rather than prompt.
-if ! rsync -a --delete --timeout=60 \
-    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10' \
+# ClearAllForwardings drops any LocalForward this host's ~/.ssh/config attaches to
+# {{ peer.ssh_target }}: rsync's transport needs no forwarding, and a forward whose local port is
+# already held fails the whole ssh with "bind [127.0.0.1]:<port>: Address already in use"
+# rather than just declining the tunnel (#2467).
+if rsync -a --delete --timeout=60 \
+    -e 'ssh -o BatchMode=yes -o ConnectTimeout=10 -o ClearAllForwardings=yes' \
     "{{ peer.ssh_target }}:{{ peer.path }}/" "{{ artifacts_peer_dir }}/{{ peer.name }}/"; then
-  echo "sync-artifacts: {{ peer.name }} failed" >&2
+  # A run that recovers says so in the journal and forgets the streak, so the next outage
+  # starts counting from zero rather than inheriting the last one's total.
+  if [ -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails" ]; then
+    logger -t sync-artifacts "{{ peer.name }} recovered after \
+$(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails") failed run(s)"
+    rm -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
+  fi
+else
+  # DECIDED: a failure goes to the journal, and only the run that REACHES the threshold writes
+  # to stderr, which is what cron mails. The old script mailed every failure: 145 messages
+  # reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, nobody reads that spool, and a
+  # peer that is simply powered off is the common case. Alerting once per outage keeps the mail
+  # as an alert without making it a log. A push monitor would be better and is filed separately;
+  # it needs a Kuma token in SOPS, which this script cannot add for itself.
+  fails=$(( $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails" 2>/dev/null || echo 0) + 1 ))
+  echo "$fails" > "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
+  logger -t sync-artifacts "{{ peer.name }} failed (consecutive run $fails)"
+  # The threshold is artifacts_sync_alert_after_failures in the role's defaults, which carries
+  # the reasoning for the number. Interpolated at its use site rather than held in a variable:
+  # the peer list can be empty, and an unused variable fails shellcheck in the rendered script.
+  if [ "$fails" -eq {{ artifacts_sync_alert_after_failures }} ]; then
+    echo "sync-artifacts: {{ peer.name }} has failed $fails consecutive runs" >&2
+  fi
   status=1
 fi
 {% endfor %}

@@ -106,8 +106,10 @@ _KUMA = "prints nothing on a healthy run; its verdict is a Kuma push"
 # success line does not belong here: route it instead.
 MAILS_ONLY_ON_FAILURE = {
     "Sync peer Claude artifacts": (
-        "rsync -a without -v and ssh in BatchMode print nothing on success; the mail is the "
-        "only alert, since nothing else watches the sync (artifacts/CLAUDE.md)"
+        "rsync -a without -v and ssh in BatchMode print nothing on success, and a failure goes "
+        "to logger -t sync-artifacts; only the run that reaches "
+        "artifacts_sync_alert_after_failures consecutive failures writes to stderr, so a peer "
+        "that stays down mails once per outage rather than every 5 minutes (#2467)"
     ),
     "Claude Code telemetry health": _KUMA,
     "configarr sync health": _KUMA,

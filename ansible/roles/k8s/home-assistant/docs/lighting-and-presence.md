@@ -317,8 +317,13 @@ and the bedtime/wake routines that drive them.
   `at: sensor.bedroom_wake_start` (id `alarm`), and both `bedroom_apply_natural`'s morning exception
   and `bedroom_presence_on`'s window read it (the old triplicated 06:00/07:00 formula + weekday/weekend
   split are GONE). `bedroom_morning_reset` also has a `09:00` `fallback` trigger that clears the
-  overnight overrides (sleep mode, AL sleep, manual-off, fan-manual) on no-alarm days WITHOUT forcing
-  lights; only the `alarm` trigger runs the ramp. **The wake ramp is gated on the GEOFENCE
+  overnight overrides (sleep mode, AL sleep, manual-off, fan-manual) on no-alarm days; only the
+  `alarm` trigger runs the ramp. The fallback re-applies natural lighting in ONE case — sleep mode
+  was still on and the lights were still on when it fired, meaning the night ran to 09:00 and the
+  bedtime nightlight would otherwise hold the room at amber 3% all day (#2509). It reads both states
+  in a `variables:` step BEFORE `script.bedroom_clear_overrides`, because that script is what turns
+  sleep mode off. Any other morning leaves the lights alone, so a scene set after a real wake is
+  never clobbered. **The wake ramp is gated on the GEOFENCE
   (`person.daniel == home`), NOT the FP300 room sensor** (changed 2026-06-19). The room presence
   sensor was the gate originally, but with `motion_sensitivity` reverted to `high` (no setting
   separates the running fan from a person — see the FP300 fan false-HOLD note) the radar drops a

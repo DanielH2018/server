@@ -51,6 +51,12 @@ artifacts_peer_sources:
 # pull direction, on a timer. A session on daniel-box mounts its own tree and never waits.
 artifacts_sync_minute: "*/5"
 
+# Consecutive failed runs before sync-artifacts.sh writes to stderr, which is what cron mails.
+# 12 runs at the interval above is an hour of a peer being unreachable. Below it the failure goes
+# to the journal alone (`journalctl -t sync-artifacts`), because daniel-server being off is the
+# ordinary case and mailing each run buried the spool under 145 messages in five weeks (#2467).
+artifacts_sync_alert_after_failures: 12
+
 # Services no inventory lists any more, but that the older artifacts are about — a document
 # reviewing the kopia retirement is only findable by service if the name is still recognised.
 # Retiring a service should add its name here rather than dropping it from the index.

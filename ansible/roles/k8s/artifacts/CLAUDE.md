@@ -40,9 +40,20 @@ Consequences worth knowing before debugging a missing artifact:
   not a fault. A session on daniel-box mounts its own tree directly and never waits.
 - **The cron runs as `sys_user`, not root**, and is gated `when: not k8s_dry_run` — so a
   `--dry-run` deploy renders the script but installs no cron.
-- **Nothing alerts if the sync stops.** There is no heartbeat and no staleness check; a peer whose
-  artifacts quietly stop arriving looks identical to a peer that wrote none. Treat a suspiciously
-  old peer artifact as "check the cron on daniel-box" rather than "the peer wrote nothing".
+- **A failed run goes to the journal; only a sustained outage mails.** Read it with
+  `journalctl -t sync-artifacts` on daniel-box — every failed run logs there, with the
+  consecutive-failure count, and a recovery logs the streak it ended. cron mail carries one
+  message per outage: the run that reaches `artifacts_sync_alert_after_failures` consecutive
+  failures is the only one that writes to stderr. Before #2467 every failure mailed, which put 145
+  messages in `/var/mail/ubuntu` over five weeks — daniel-server being powered off is the ordinary
+  case, so per-run mail was a log, not an alert.
+- **The ssh transport passes `ClearAllForwardings=yes`.** `ssh` reads `~/.ssh/config` for every
+  connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
+  collision on its local port fails the whole connection. rsync needs no forward, so the sync
+  declines all of them.
+- **There is still no heartbeat and no staleness check.** A peer whose artifacts quietly stop
+  arriving looks identical to a peer that wrote none. Treat a suspiciously old peer artifact as
+  "check the cron on daniel-box" rather than "the peer wrote nothing".
 
 ## A new Python module goes in `artifacts_modules`, and nowhere else
 The pod runs `python3 /app/artifact_server.py` against the whole ConfigMap mounted at `/app`,
