@@ -196,6 +196,11 @@ def test_a_role_pending_with_no_row_stays_at_the_role_tag(
     that merges #2307 itself. Whatever made that line pending is unknown here, so a second
     range answering `kubeconfig` would print `--tags kubeconfig` and leave the first range's
     change unapplied behind a clear command. Unknown absorbs anything: the role tag.
+
+    The `not narrowed` assertion is what separates this from the refusal path (#2363). The
+    role tag prints whether the derivation ANSWERED `kubeconfig` and was absorbed, or never
+    answered at all — `narrow_tags_for`'s `except Exception` arm yields the same tag — so
+    without it this test passed against a fake that raised and proved nothing about absorption.
     """
     gitops_deploy.STATE.record_manual_plane(
         LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0
@@ -206,6 +211,10 @@ def test_a_role_pending_with_no_row_stays_at_the_role_tag(
     tick.narrow_setup["k3s"] = (0, "kubeconfig")
     assert gitops_deploy.main(tick.tools) == 0
     out = capsys.readouterr().out
+    assert "narrow-setup: k3s not narrowed" not in out, (
+        "the derivation refused, so the role tag below is the refusal's answer rather than "
+        "an absorbed narrowing — this test would pass for either"
+    )
     assert gitops_deploy.STATE.manual_plane_tags_pending() == {"k3s": frozenset()}
     assert "ansible/k3s-bringup.yml --tags k3s" in out
     assert "--tags kubeconfig" not in out

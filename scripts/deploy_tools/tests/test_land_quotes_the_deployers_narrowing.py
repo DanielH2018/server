@@ -114,6 +114,13 @@ def test_no_pr_range_is_flagged(pr):
     )
 
 
+# DECIDED: `sidecar=` is the seam that makes the CLI testable, not scaffolding a better test
+# would avoid (#2363). Pre-#2324 `main(argv)` read the host's real `/var/lib/gitops-deploy`
+# marker through a module-level constant and consulted no narrowing at all, so no input
+# separates the CLI defect from the signature — the check and its seam landed together. What
+# the test has to hold is today's behaviour, and it does: replacing the
+# `confirmed_narrow_tags` call in `land_tags.main` with a bare `parse_manual_plane_tags` fails
+# `test_the_plane_cli_does_not_print_a_stale_row` on its own assertion, measured 2026-09-24.
 def _plane_cli(pr, capsys, sidecar: str) -> str:
     tree, rng = pr
     payload = json.dumps({"files": [{"path": RBAC}], "changedFiles": 1})
