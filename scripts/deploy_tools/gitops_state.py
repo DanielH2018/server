@@ -166,7 +166,7 @@ def journal_clear(
 ) -> None:
     """Write the one line that says an operator cleared `role`, who, and from where.
 
-    logfmt like `deploy_locked.sh`'s `emit_deploy_annotation`, and fire-and-forget the same way:
+    logfmt like `deploy_playbook.annotate`, and fire-and-forget the same way:
     `logger` missing, or the syslog socket refusing, changes nothing about the exit code. The
     clear already happened by the time this runs; a line saying so must not make it read as
     failed. `dropped` is the marker line the clear removed, or None for a no-op clear, which

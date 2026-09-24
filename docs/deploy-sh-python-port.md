@@ -1,11 +1,11 @@
 # Porting deploy.sh to Python behind a thin shim
 
-Issue #2412. **Status: slices 1, 2 and 3 landed 2026-09-24; slice 4 is not started.**
+Issue #2412. **Status: all four slices landed 2026-09-24; `deploy.sh` has no bash left behind the shim.**
 This page decides how `scripts/deploy.sh` becomes a thin exec shim, as
 `scripts/deploy_tools/land.sh` already is, over a Python module that imports the deploy
-helpers instead of spawning them. Since slice 2 the shim execs `deploy_run.py`, which runs
-every gate before the tree lock and then execs `deploy_locked.sh`, the bash that slices 3
-and 4 port.
+helpers instead of spawning them. The shim execs `deploy_run.py`, which runs every gate
+before the tree lock and then calls `deploy_under_locks.py`, or `deploy_detach.py` for
+`--detach`. The bash locked half, `deploy_locked.sh`, existed from slice 2 to slice 4.
 
 ## Why
 
@@ -28,7 +28,11 @@ package.
 
 The port changes the implementation and nothing a consumer can observe. The frozen contract
 below defines what "nothing" means. Deliberate behaviour changes are out of scope, with one
-exception: `LOCK_PLAN_TIMEOUT` goes away (see *Per-helper decisions*).
+exception: `LOCK_PLAN_TIMEOUT` goes away (see *Per-helper decisions*). Two changes were
+found while porting and kept: a lock file that cannot be opened names the OS error
+(`Is a directory`) where `flock(1)` gave a bare status, and the playbook's output goes
+through a `tee` child, so killing the wrapper with SIGKILL does not take the playbook with it
+(#2486).
 
 ## The frozen contract
 
@@ -135,21 +139,21 @@ passes a root explicitly. Each helper is decided separately:
 
 | Helper | Before the port | Port | Why |
 |---|---|---|---|
-| `deploy_locks.plan` | `uv run` subprocess, bounded by `LOCK_PLAN_TIMEOUT` | Import | Stdlib-only and pure. The timeout existed to bound a hung interpreter start, which an import cannot have. `LOCK_PLAN_TIMEOUT` and its test retire with `deploy_locked.sh` in slice 4, since the `--detach` arm still runs `plan` as a subprocess until then. Exit 79 stays, for a plan that raises or names no lock. |
+| `deploy_locks.plan` | `uv run` subprocess, bounded by `LOCK_PLAN_TIMEOUT` | Import | Stdlib-only and pure. The timeout existed to bound a hung interpreter start, which an import cannot have. `LOCK_PLAN_TIMEOUT` and its test retired with `deploy_locked.sh` in slice 4. Exit 79 stays, for a plan that raises or names no lock. |
 | `deploy_staleness` | A subprocess, cwd is the caller's checkout | Import `main(argv)` with `--repo <repo_root>` | `--repo` already exists and defaults to cwd, so passing it keeps the answer identical. |
 | `deploy_tags validate` | A subprocess, `--at <sha>` optional | Import | With `--at` it reads the commit through `git show`. Without it, it reads `HOST_VARS` from the module's checkout, which equals `repo_root` in every real invocation. |
 | `deploy_tags changed` | A subprocess | Import | As `validate`. It keeps exit 3 on a broad change. |
 | `deploy_tags list` | A subprocess **in the snapshot**, bounded by `TAG_LIST_TIMEOUT` | **Stays a subprocess** in the snapshot | It must read the snapshot's `containers_list` with the snapshot's own parser. An import would read the snapshot's data with the calling checkout's code, which is the version skew #851 fixed for `land_lib`. `--at` makes the skew real: the snapshot can be a newer commit than the caller. |
 | `fact_cache_guard --clear` | A subprocess, `\|\| true` | Import, inside `try/except Exception` | Fails open, as the `DECIDED: this preflight fails OPEN` note requires. |
-| `deploy_detach_notify` | A subprocess from the detached child, `--cwd <snapshot>` | Import `main(argv)` in the forked child | This preserves the `DECIDED: the two halves of this gate come from different trees` split exactly: notifier code from the caller, probe renders from the snapshot. |
+| `deploy_detach_notify` | A subprocess from the detached child, `--cwd <snapshot>` | **Stays a subprocess** of the forked child | Planned as an import; kept a subprocess in slice 4. The black-box `--detach` tests stub it by argv through the `uv` fake, and an imported `main` would have every one of them post to the host's real webhook and probe production. The `DECIDED: the two halves of this gate come from different trees` split holds either way. `deploy_run.py` names its path, so `script_classify` still reads it as a gate. |
 | `ansible-playbook` | `uv run` subprocess | Stays a subprocess | Unchanged, including `UV_PROJECT_ENVIRONMENT=<repo_root>/.venv` and the snapshot as cwd. |
 
 ## Locks
 
 `fcntl.flock` and `flock(1)` both call flock(2), so they contend on the same lock. The
 GitOps deployer already takes the service locks with `fcntl.flock` in
-`deploy_locks.service_locks` while `deploy_locked.sh` takes them with `flock(1)`. That is the
-existing proof that a Python wrapper and a bash wrapper exclude each other during rollout.
+`deploy_locks.service_locks` while the bash wrapper took them with `flock(1)`. That was the
+proof that a Python wrapper and a bash wrapper exclude each other during rollout.
 
 The Python module takes each lock as follows:
 
@@ -177,9 +181,10 @@ parent closes its copies. The port uses `os.fork()` after the locks are taken:
 
 - The child calls `os.setsid()`, redirects descriptors 1 and 2 to the log, and runs the playbook, the
   annotation, the notifier and the snapshot cleanup inside `try/finally`.
-- The parent closes its copies of the owner-lock and service-lock descriptors, prints
-  `running in background (pid <child>)` and the log path, and exits 0 through `os._exit` so
-  no `finally` in the parent removes the snapshot.
+- The parent closes its copies of the owner-lock and service-lock descriptors and clears
+  `snapshot` on its `Run`, so nothing in the parent removes the worktree. It prints
+  `running in background (pid <child>)` and the log path, and returns 0. The child ends in
+  `os._exit`, so it never unwinds into `deploy_run.py`'s frames.
 
 A flock is released only when every descriptor on its open file description is closed, so
 the lock follows the child, as it follows the bash child today.
@@ -288,9 +293,10 @@ response to any failed deploy after a slice lands.
    `deploy_playbook.py` beside it). `deploy_locked.sh` keeps only the
    `--detach` arm, and `test_deploy_locked_halves_agree.py` pins the values both halves
    share until slice 4 deletes the bash.
-4. **`--detach`.** Port the fork, the detached child and the notifier import, then delete
-   `deploy_locked.sh`. Re-point ADR-0017's anchors and the remaining text-reading tests, fix
-   the registries, and close #2412.
+4. **`--detach`.** Port the fork and the detached child into
+   `scripts/deploy_tools/deploy_detach.py`, then delete `deploy_locked.sh`. Re-point
+   ADR-0017's anchors and the remaining text-reading tests, fix the registries, and close
+   #2412.
 
 ## Concurrent changes to deploy.sh
 

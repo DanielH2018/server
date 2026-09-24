@@ -179,7 +179,7 @@ nav:
       - Deploying by hand: deploying.md
       # Specced, not started (#2412). Listed beside the page it will change, so a reader of
       # the deploy wrapper finds the planned port before editing the bash it replaces.
-      - deploy.sh port to Python (specced): deploy-sh-python-port.md
+      - deploy.sh port to Python: deploy-sh-python-port.md
       - The GitOps pipeline: gitops-pipeline.md
       # Specced, not started — same convention as Staging Phase C below. It changes what a
       # session does after every merge, so a reader arriving at the pipeline page should find

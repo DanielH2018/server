@@ -10,9 +10,8 @@ gitops run gave up having deployed nothing.
 The comment at LOCK_WAIT named this guard from 2026-09-02 and no such test existed
 (issue #1775). The four values are read from the role defaults the unit renders its
 `config.env` from, not copied here, so raising any one of them fails this rather than
-silently shortening the wait again. The value read is `deploy_under_locks.LOCK_WAIT`, the
-foreground's since slice 3 of #2412; `test_deploy_locked_halves_agree.py` pins the
-`--detach` arm's copy in `deploy_locked.sh` to it.
+silently shortening the wait again. The value read is `deploy_under_locks.LOCK_WAIT`,
+which both the foreground and `--detach` wait with.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py
 """

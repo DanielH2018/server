@@ -112,7 +112,7 @@ claude_otel_dashboard_folders:
   - Security
 
 # ── deploy annotations ────────────────────────────────────────────────────────────────────────
-# Deploys are recorded as syslog lines (scripts/deploy.sh + gitops_deploy.py both call `logger`),
+# Deploys are recorded as syslog lines (deploy_playbook.annotate + deploy_io.py both call `logger`),
 # promtail ships them to loki-homelab, and every dashboard gets an annotation query injected at
 # deploy time by scripts/grafana/inject_dashboard_annotations.py. No Grafana API call, so no pinned
 # ClusterIP and no standing write credential — see the emit_deploy_annotation comments.

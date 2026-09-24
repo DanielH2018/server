@@ -1,8 +1,7 @@
 """The locked half of a foreground deploy: tree lock, snapshot, service locks, playbook.
 
-`deploy_run.py` calls `run` once every gate has passed. `--detach` still runs through
-`deploy_locked.sh` until slice 4 of #2412 (`docs/deploy-sh-python-port.md`) ports it, so the
-values the two share are pinned together by `test_deploy_locked_halves_agree.py`.
+`deploy_run.py` calls `run` once every gate has passed. `--detach` is `deploy_detach.py`,
+which takes the same locks through the functions here and forks before the playbook.
 
 TWO LOCKS, GUARDING TWO DIFFERENT THINGS (ADR-0017). `/var/lock/server-git-tree.lock` guards
 the git tree and nothing else: gitops-deploy.service, the weekly secret-rotate cron and the

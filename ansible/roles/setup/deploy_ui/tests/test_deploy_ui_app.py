@@ -446,25 +446,15 @@ def test_content_length_non_numeric_is_flagged():
     assert deploy_ui.content_length({"Content-Length": "-1"}) is None
 
 
-# The locked half behind the deploy.sh shim holds the tree-lock path until #2412 ports it.
-DEPLOY_LOCKED = (
-    pathlib.Path(__file__).resolve().parents[5]
-    / "scripts/deploy_tools/deploy_locked.sh"
-)
-
-
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
     the literal-agreement guard: the tree lock path and the service-lock shape the page
     watches are the ones `deploy_locks.py` names -- the one module that names them, for
-    the deployer and, through `deploy_locks.py plan`, for deploy.sh (issue #2054)."""
+    the deployer and for deploy.sh, which imports it (issues #2054, #2412)."""
     import deploy_locks
 
     monkeypatch.delenv("HOMELAB_DEPLOY_LOCK_DIR", raising=False)
     assert deploy_locks.TREE_LOCK == f"/var/lock/{deploy_ui.TREE_LOCK}"
-    assert f'"${{HOMELAB_DEPLOY_TREE_LOCK:-{deploy_locks.TREE_LOCK}}}"' in (
-        DEPLOY_LOCKED.read_text()
-    )
     lock_dir = deploy_ui.Config.__dataclass_fields__["lock_dir"].default
     assert str(lock_dir) == deploy_locks.lock_dir() == "/var/lock"
     for name in (deploy_locks.SERVICE_LOCK_ALL, "sonarr", "pi-peer-backup"):

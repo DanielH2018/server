@@ -5,8 +5,8 @@ Invoke it as ``./scripts/deploy.sh``, which execs this file; every doc, skill, h
 consumer names the shim. The port from bash is issue #2412, planned in
 ``docs/deploy-sh-python-port.md``. This module holds the FRONT half: argument parsing and
 every gate that runs before the tree lock. The locked half -- tree lock, snapshot, service
-locks, playbook, ``--detach`` -- is still ``deploy_locked.sh`` beside it, which this module
-execs with the resolved arguments once every gate has passed.
+locks, playbook -- is ``deploy_under_locks.py``, and ``--detach``'s is ``deploy_detach.py``;
+this module calls one of them once every gate has passed.
 
 Usage::
 
@@ -52,9 +52,10 @@ from deploy_tools.exit_codes import (
 from lib.git import git
 from lib.repo_paths import HOST_VARS, REPO
 
-# The locked half, until slice 4 of #2412 ports it. This checkout's own copy, so the code that
-# runs is always this checkout's release of both halves together.
-DEPLOY_LOCKED = REPO / "scripts/deploy_tools/deploy_locked.sh"
+# What a detached run starts once its playbook exits. Named here, in the script every deploy
+# runs, rather than in `deploy_detach.py`: `script_classify` credits a spawn to the script
+# that names it, and a module that only `deploy_run.py` imports is not one.
+DETACH_NOTIFIER = "scripts/deploy_tools/deploy_detach_notify.py"
 
 # host_vars relative to a checkout root, for asking the CALLER's checkout rather than REPO.
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
@@ -178,9 +179,13 @@ def clear_fact_cache(plan: Plan) -> None:
 
 
 def run_locked(plan: Plan) -> int:
-    """The foreground locked half, in process; the wrapper's exit status."""
-    from deploy_tools import deploy_under_locks
+    """The locked half, in process; the wrapper's exit status."""
+    from deploy_tools import deploy_detach, deploy_under_locks
 
+    if plan.detach:
+        return deploy_detach.run(
+            plan.repo_root, plan.tags, plan.at_sha, plan.args, DETACH_NOTIFIER
+        )
     return deploy_under_locks.run(plan.repo_root, plan.tags, plan.at_sha, plan.args)
 
 
@@ -419,22 +424,12 @@ def exec_target(plan: Plan) -> list[str] | None:
 
     `--check` and `--dry-run` run ansible-playbook unlocked, from the WORKING TREE: a dry run
     renders to a temp dir and applies with --dry-run=server, so it writes neither the cluster
-    nor the staging tree, and there is nothing for a lock to serialize. `--detach` is
-    handed to `deploy_locked.sh` until slice 4 of #2412 ports it; every other run takes
-    its locks in process, in `deploy_under_locks.py`.
+    nor the staging tree, and there is nothing for a lock to serialize. Every other run takes
+    its locks in process: `deploy_under_locks.py`, or `deploy_detach.py` for `--detach`.
     """
     if plan.check or plan.dry_run:
         return ["uv", "run", "ansible-playbook", "ansible/deploy.yml", *plan.args]
-    if not plan.detach:
-        return None
-    return [
-        str(DEPLOY_LOCKED),
-        plan.at_sha,
-        "1",
-        plan.tags_csv,
-        "--",
-        *plan.args,
-    ]
+    return None
 
 
 def prepare_stdio() -> None:

@@ -10,7 +10,7 @@ change on either side that the other does not follow is exactly the drift this f
 
 No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
-real `flock` holder; `--detach` is still bash and still reads a stubbed `flock`. `fuser`,
+real `flock` holder, in both the foreground and `--detach`. `fuser`,
 `ps`, `uv`, `logger`, `systemctl` and `journalctl` are stubbed on PATH. The only live reads are
 gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
 
@@ -243,30 +243,15 @@ def test_a_flock_failure_that_is_not_contention_exits_its_own_code(tmp_path):
     assert ec.DEPLOY_LOCK_UNAVAILABLE in ec.DEPLOY_SH_NO_VERDICT
 
 
-# `--detach` takes the same lock through a second, non-blocking call, so it needs both halves
-# of the same pair. Its `flock -n` carries `-E "$LOCK_BUSY"`, so a held lock answers 75 here.
-_FLOCK_DETACH_BUSY = """#!/bin/bash
-case "$1 $2" in
-  "-n -E") exit 75 ;;
-esac
-exit 0
-"""
-
-_FLOCK_DETACH_ERRORS = """#!/bin/bash
-case "$1 $2" in
-  "-n -E") echo "flock: bad file descriptor" >&2; exit 65 ;;
-esac
-exit 0
-"""
-
-
-def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
+# `--detach` takes the tree lock NON-blocking, so a held one refuses at once rather than
+# queueing, and the same pair applies: contention is 75, a lock file it cannot open is 76.
+def _run_detach(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess:
     bin_dir = stub_bin(
-        tmp_path,
-        {"flock": flock, "fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER},
+        tmp_path, {"fuser": _FUSER, "ps": _PS, "uv": _UV, "logger": _LOGGER}
     )
     repo, env = _deploy_repo_env(tmp_path, bin_dir)
     env["FUSER_STUB_SELF_FDS"] = str(tmp_path / "self-fds")
+    env.update(env_extra)
     return subprocess.run(
         [
             str(_DEPLOY_SH),
@@ -287,41 +272,34 @@ def _run_detach(tmp_path: Path, flock: str) -> subprocess.CompletedProcess:
 
 def test_detach_still_reports_a_held_lock_as_contention(tmp_path):
     """CLEAN half: --detach fails fast on a real holder, and 75 says retry shortly."""
-    result = _run_detach(tmp_path, _FLOCK_DETACH_BUSY)
+    with _held(tmp_path / "locks" / "server-git-tree.lock", 10):
+        result = _run_detach(tmp_path)
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
     assert "A deploy is already running" in result.stderr
+    assert "running in background" not in result.stdout
 
 
 def test_detach_tells_a_broken_lock_file_from_a_held_one(tmp_path):
-    """FLAGGED half: `flock -n` without `-E` answers 1 for both, and this arm read both
+    """FLAGGED half: `flock -n` without `-E` answered 1 for both, and this arm read both
     as contention."""
-    result = _run_detach(tmp_path, _FLOCK_DETACH_ERRORS)
+    result = _run_detach(
+        tmp_path, HOMELAB_DEPLOY_TREE_LOCK=_unopenable_tree_lock(tmp_path)
+    )
     assert result.returncode == ec.DEPLOY_LOCK_UNAVAILABLE, result.stderr
-    assert "flock exit 65" in result.stderr
+    assert "Is a directory" in result.stderr
     assert "A deploy is already running" not in result.stderr
 
 
-# The SERVICE locks, not the tree lock. `--detach` fails fast on the tree lock (`flock -n -E`)
-# and then WAITS on each service lock (`flock -w -E`, `-s -w -E` for the shared `all` one), so
-# `-w` in the argv is exactly the service-lock acquire. A holder that never lets go answers
-# `-E`'s 75 there.
-_FLOCK_SERVICE_BUSY = """#!/bin/bash
-for arg in "$@"; do
-  [[ "$arg" == "-w" ]] && exit 75
-done
-exit 0
-"""
-
-
 def test_detach_reports_a_busy_service_lock_as_contention(tmp_path):
-    """FLAGGED half for the `$?`-inside-`if !` read: contention exited 76, not 75.
+    """FLAGGED half for the bash `$?`-inside-`if !` read: contention exited 76, not 75.
 
-    `service_lock_status=$?` inside `if ! take_service_locks; then` reads the status of the
-    NEGATION, which is always 0, so neither the LOCK_BUSY nor the LOCK_UNAVAILABLE test could
-    match and every service-lock refusal fell through to `say_lock_unavailable 0`. 76 tells the
-    session "retrying alone changes nothing" for the one case where retrying is the whole
-    remedy: another deploy of the same service is holding the lock and will release it.
+    The service locks WAIT under --detach, as in the foreground, and a wait that runs out is
+    75: another deploy of the same service holds the lock and will release it, so retrying is
+    the whole remedy. 76 would tell the session retrying changes nothing.
     """
-    result = _run_detach(tmp_path, _FLOCK_SERVICE_BUSY)
+    with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock", 10):
+        result = _run_detach(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
-    assert "flock exit 0" not in result.stderr
+    assert "deploy --detach: a deploy of one of these services held its lock" in (
+        result.stderr
+    )
