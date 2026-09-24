@@ -20,9 +20,6 @@ Design: docs/superpowers/specs/2026-06-15-terraria-player-stats-design.md
 """
 
 import re
-import sqlite3
-import sys
-import time
 
 import stats_lib
 
@@ -218,36 +215,16 @@ def apply_entries(state, entries):
 
 
 # SQLite source of truth — per-game: no death/SteamID columns (Terraria has neither).
-class Store:
-    """SQLite-backed source of truth for player stats, the ingest cursor, and the raw event log."""
+class Store(stats_lib.SqliteStore):
+    """Terraria's player schema over stats_lib's shared connection + cursor/events tables."""
 
-    def __init__(self, path):
-        self.conn = sqlite3.connect(path)
-        self.conn.execute("PRAGMA journal_mode=WAL")
-        self._init_schema()
-
-    def close(self):
-        self.conn.close()
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *exc):
-        self.close()
-
-    def _init_schema(self):
-        c = self.conn
-        c.execute("""CREATE TABLE IF NOT EXISTS players(
+    def _init_game_schema(self, conn):
+        conn.execute("""CREATE TABLE IF NOT EXISTS players(
             name TEXT PRIMARY KEY,
             total_playtime_seconds REAL NOT NULL DEFAULT 0,
             session_count INTEGER NOT NULL DEFAULT 0,
             first_seen REAL, last_seen REAL,
             current_session_start REAL)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS cursor(
-            id INTEGER PRIMARY KEY CHECK(id=1), last_ts_ns INTEGER NOT NULL)""")
-        c.execute("""CREATE TABLE IF NOT EXISTS events(
-            ts_ns INTEGER, player TEXT, kind TEXT, raw TEXT)""")
-        c.commit()
 
     def load_state(self):
         """Loads all players from SQLite into a fresh StatsState.
@@ -277,17 +254,10 @@ class Store:
                 st.last_event_ts = max(st.last_event_ts, ls)
         return st
 
-    def get_cursor(self):
-        row = self.conn.execute("SELECT last_ts_ns FROM cursor WHERE id=1").fetchone()
-        return int(row[0]) if row else 0
-
     def save(self, state, cursor_ns, events=()):
         """Persist events + player snapshot + cursor atomically (single transaction)."""
         c = self.conn
-        if events:
-            c.executemany(
-                "INSERT INTO events(ts_ns,player,kind,raw) VALUES(?,?,?,?)", events
-            )
+        self.write_events(c, events)
         for name, p in state.players.items():
             c.execute(
                 "INSERT INTO players(name,total_playtime_seconds,session_count,"
@@ -306,11 +276,7 @@ class Store:
                     p["open_start"],
                 ),
             )
-        c.execute(
-            "INSERT INTO cursor(id,last_ts_ns) VALUES(1,?) "
-            "ON CONFLICT(id) DO UPDATE SET last_ts_ns=excluded.last_ts_ns",
-            (cursor_ns,),
-        )
+        self.write_cursor(c, cursor_ns)
         c.commit()
 
 
@@ -335,39 +301,21 @@ def run_cycle(state, store, cursor, end_ns, fetch):
 
 
 def main():
-    """Loads persisted state, starts the metrics server, and runs the poll loop.
-
-    Runs a single cycle and returns when invoked with --once or --backfill; otherwise
-    starts a background HTTP server for /metrics and /healthz and polls Loki forever at
-    POLL_INTERVAL. A poll cycle's own exception is caught and logged rather than
-    allowed to kill the loop.
-    """
-    once = "--once" in sys.argv
-    backfill = "--backfill" in sys.argv
-    store = Store(DB_PATH)
-    poll_state = stats_lib.PollState(store.load_state())
-    cursor = initial_cursor(store.get_cursor(), backfill, time.time(), BACKFILL_DAYS)
-    log(
-        "terraria-stats starting (loki=%s once=%s backfill=%s players=%d)"
-        % (LOKI_URL, once, backfill, len(poll_state.value.players))
-    )
-    if not (once or backfill):
-        # Threading server so a slow /metrics render can't head-of-line-block the /healthz
-        # probe (and trip autoheal). Handler reads in-memory state under the lock, no SQLite.
-        stats_lib.start_metrics_server(
-            stats_lib.make_handler(poll_state, render_metrics, HEALTH_MAX_AGE),
-            METRICS_PORT,
-        )
-    stats_lib.poll_forever(
-        poll_state,
-        store,
-        cursor,
+    """Runs the poll loop over stats_lib's shared entry point."""
+    stats_lib.run(
+        stats_lib.RunConfig(
+            service_name="terraria-stats",
+            loki_url=LOKI_URL,
+            backfill_days=BACKFILL_DAYS,
+            page_limit=LOKI_PAGE_LIMIT,
+            poll_interval=POLL_INTERVAL,
+            metrics_port=METRICS_PORT,
+            health_max_age=HEALTH_MAX_AGE,
+        ),
+        Store(DB_PATH),
         loki_fetch,
         apply_entries,
-        LOKI_PAGE_LIMIT,
-        once,
-        backfill,
-        POLL_INTERVAL,
+        render_metrics,
         lambda state: (
             "%d players, %d online" % (len(state.players), state.online_count())
         ),

@@ -12,6 +12,12 @@ non-comment lines of (see stats_lib.py's own docstring for the exact function li
 no per-game state and takes every game-specific bit — URLs, the parser's `apply_fn`, the
 render/log callbacks — as an argument, so it needs no test doubles patched onto it.
 
+`SqliteStore` is the one class here a game extends rather than calls: it owns the connection
+lifecycle and the `cursor`/`events` tables both games persist identically, and a game's
+`Store` subclasses it to declare its own `players` schema in `_init_game_schema` and to
+write `load_state`/`save`. `run` is the entry point both games' `main()` reduces to, reading
+its tunables from a `RunConfig` the game builds from its own env constants.
+
 ## How it ships
 Both stats roles run as `python:3.14-alpine` pods with `stats_lib.py` mounted alongside their
 own entry script by a ConfigMap, not on a host with a repo checkout — a directly-invoked

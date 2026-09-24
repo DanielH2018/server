@@ -308,3 +308,88 @@ def test_make_handler_healthz_is_stale_past_health_max_age():
         server.shutdown()
         thread.join(timeout=5)
         server.server_close()
+
+
+class _TinyStore(stats_lib.SqliteStore):
+    """Minimal subclass: one per-game table, no state to load."""
+
+    def _init_game_schema(self, conn):
+        conn.execute("CREATE TABLE IF NOT EXISTS players(name TEXT PRIMARY KEY)")
+
+    def load_state(self):
+        return _FakeState()
+
+    def save(self, state, cursor_ns, events=()):
+        self.write_events(self.conn, events)
+        self.write_cursor(self.conn, cursor_ns)
+        self.conn.commit()
+
+
+def test_sqlite_store_creates_the_shared_and_per_game_tables_and_round_trips_the_cursor(
+    tmp_path,
+):
+    db = str(tmp_path / "stats.db")
+    with _TinyStore(db) as store:
+        tables = {
+            row[0]
+            for row in store.conn.execute(
+                "SELECT name FROM sqlite_master WHERE type='table'"
+            )
+        }
+        assert {"cursor", "events", "players"} <= tables
+        assert store.get_cursor() == 0
+        store.save(None, 4_200, [(1, "p", "join", "raw")])
+        assert store.get_cursor() == 4_200
+        assert store.conn.execute("SELECT COUNT(*) FROM events").fetchone()[0] == 1
+    with _TinyStore(db) as reopened:
+        assert reopened.get_cursor() == 4_200
+
+
+class _FakeState:
+    def __init__(self):
+        self.players = {}
+
+
+class _FakeRunStore(_FakeStore):
+    def __init__(self, cursor=0):
+        super().__init__()
+        self._cursor = cursor
+
+    def load_state(self):
+        return _FakeState()
+
+    def get_cursor(self):
+        return self._cursor
+
+
+def test_run_with_once_runs_a_single_cycle_and_starts_no_metrics_server():
+    config = stats_lib.RunConfig(
+        service_name="test-stats",
+        loki_url="http://loki:3100",
+        backfill_days=28,
+        page_limit=3,
+        poll_interval=20,
+        metrics_port=9420,
+        health_max_age=90,
+    )
+    store = _FakeRunStore(cursor=1_000)
+    fetches = []
+
+    def fake_fetch(start_ns, end_ns):
+        fetches.append(start_ns)
+        return [(2_000, "a")] if len(fetches) == 1 else []
+
+    with mock.patch.object(stats_lib, "start_metrics_server") as start_server:
+        stats_lib.run(
+            config,
+            store,
+            fake_fetch,
+            lambda state, entries: (list(entries), entries[-1][0]),
+            lambda state, now: "x 1\n",
+            lambda state: "0 players",
+            argv=["stats.py", "--once"],
+        )
+
+    start_server.assert_not_called()
+    assert fetches == [1_000]
+    assert [c for c, _ in store.saved] == [2_000]

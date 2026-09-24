@@ -1,6 +1,5 @@
-{# Shared between the Docker pihole role (renders on daniel-server, where the default is
-   right) and roles/k8s/pihole's ConfigMap (renders on daniel-box, which must pin the
-   wildcard to daniel-server per slice-6 D7 — the LAN wildcard does NOT move with B3). #}
+{# Rendered into roles/k8s/pihole's ConfigMap on daniel-box, its only consumer. It pins the
+   wildcard to daniel-server per slice-6 D7 — the LAN wildcard does NOT move with B3. #}
 {# BT3 (2026-08-10): the wildcard answers the cluster ingress VIP on every Pi-hole — the
    cluster edge serves k8s natives and reverse-bridges Docker-hosted names. The old
    default(server_ip) fallback is gone on purpose: it made the answer depend on which host
