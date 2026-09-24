@@ -230,11 +230,86 @@ def handle_broad(
         state.record_broad_applied(origin, playbook, tags)
         state.clear_broad_hold(playbook, tags)
         deploy_defer.clear_applied(state, playbook, tags)
+    # After the loop, so a broad apply that failed or hit a busy lock has already returned:
+    # the k8s half rides on the plane below it, and applying a workload onto a host whose
+    # setup plane did not apply is the ordering `main()`'s broad-before-k8s branch exists to
+    # prevent.
+    failed = _apply_broad_k8s(tools, state, config, target, plan, recorded)
+    if failed is not None:
+        return failed
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
     deploy_alerts.alert_deferred(
-        tools, state, config, origin, set(), cs, plan.k8s_services
+        tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
     return 0
+
+
+def _apply_broad_k8s(
+    tools: DeployTools,
+    state: DeployerState,
+    config: Config,
+    target: TickTarget,
+    plan: TickPlan,
+    recorded: deploy_defer.Recorded,
+) -> int | None:
+    """Deploy the promoted image bumps that rode in on a broad range. Forward-only.
+
+    Returns:
+        None when the deploy succeeded or nothing was promoted, and the tick's exit code
+        when it failed.
+
+    Until #2348 `handle_broad` ended without this call and the promoted services were lost in
+    SILENCE, not deferred. `split_k8s_auto_deploy` moves an eligible bump OUT of `cs.k8s` into
+    `cs.k8s_deploy`, and `alert_deferred` fires its k8s channel on `cs.k8s` alone — so a broad
+    tick fast-forwarded the bumps, deployed none of them and named none of them either. The
+    01:45 tick on daniel-box on 2026-09-24 carried nine behind one `roles/setup/k3s` commit;
+    the next tick's range began after them, and every one of the nine pods was still serving
+    its old image when `kubectl` was read afterwards.
+
+    FORWARD-ONLY, and not for `handle_broad`'s budget reason. `_rollback_k8s` resets the tree
+    to `local`, which here would undo the ff-merge under a setup plane this tick already
+    applied — the tree would claim the old commit while the host runs the new one, which is
+    the exact state the broad arm's own no-reset rule exists to prevent. The budget agrees:
+    `gitops-deploy.service.j2` sizes `TimeoutStartSec` for 180 flock + BROAD_DEPLOY_TIMEOUT_S
+    + K8S_DEPLOY_TIMEOUT_S = 2880s, and adding K8S_ROLLBACK_TIMEOUT_S would put it at 4200s,
+    past the 3600s ceiling.
+
+    NO STAGING GATE, for a reason the gate's own `DECIDED:` states: `consult_staging` must run
+    BEFORE the ff-merge or a process death inside its window strands the range, and this arm
+    ff-merges first by construction so an unrelated commit lands even when the apply fails.
+    The two cannot both hold. `gitops_deploy_staging_gate` is false on every host, so this
+    changes nothing today; a tick that wanted both would have to defer the ff-merge, which
+    strands the tree behind pods already running the new images.
+    """
+    cs, origin = plan.cs, target.origin
+    if not cs.k8s_deploy:
+        return None
+    try:
+        deploy_io.deploy_k8s(config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s)
+    except deploy_locks.ServiceLockBusy as exc:
+        # Same shape as the broad loop's arm above, and for the same reason: nothing here was
+        # applied, the reset undoes the ff-merge, and the `manual_plane` lines this tick wrote
+        # describe a range that is no longer merged. The broad apply that already ran is
+        # idempotent, so the next tick re-crosses the whole range.
+        deploy_defer.unrecord(state, origin, recorded)
+        return deploy_defer.for_contention(tools, state, config, target, exc)
+    except Exception as exc:
+        log(f"k8s deploy failed for {sorted(cs.k8s_deploy)} on a broad tick: {exc}")
+        state.write_hold(origin)
+        # No `hold_plane`: that marker names a playbook and tag set for `clear_broad_hold` to
+        # match an apply against, and an image bump is a service, not a plane. Writing one
+        # here would leave a hold no broad apply can clear.
+        posted = deploy_alerts.discord(
+            tools,
+            config,
+            deploy_alerts.broad_k8s_failure_alert(
+                config.hostname, origin, cs.k8s_deploy, exc, state.path("hold")
+            ),
+        )
+        return 0 if posted else 1
+    state.clear_service_hold()
+    tools.emit_deploy_annotation(cs.k8s_deploy, origin)
+    return None
 
 
 def handle_k8s(

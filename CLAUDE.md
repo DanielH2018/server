@@ -186,8 +186,10 @@ Say which of these applies, then stop:
   own role, `roles/setup/gitops_deploy/`, was in this list until 2026-09-01 and parked three
   landings that day; it now applies itself — the `DECIDED:` marker above the list in
   `deploy_logic.py` has the evidence.)
-- The host's `manual_plane` marker names a setup role the deployer cannot apply. The range is
-  merged, so nothing is queued behind it; the role needs its playbook by hand, then
+- The host's `manual_plane` marker names a setup role the deployer cannot apply. The setup
+  role is the only thing outstanding — since #2348 the tick deploys the promoted k8s image
+  bumps that rode in on the same range rather than fast-forwarding past them. The role needs
+  its playbook by hand, then
   `gitops_state.py clear-manual-plane <role>` — add `--applied <tags>` where the apply you ran
   was narrowed, so a tag a later range added to the row stays pending rather than being
   cleared with yours. Another session's is theirs to clear.

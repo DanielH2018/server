@@ -163,9 +163,11 @@ Each arm below is a rule and the function that holds it. The record page has the
     routing; `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth.
   - **The ff-merge happens BEFORE the apply** — applying first renders from the pre-merge tree
     and deploys nothing. `test_broad_remediation_puts_the_ff_merge_before_the_playbook`.
-  - **Both arms are FORWARD-ONLY.** A failure writes `hold_sha` and `hold_plane`, alerts
-    saying nothing was rolled back, and leaves the tree fast-forwarded — no `git reset`, which
-    would leave the tree claiming the old commit over half-new live state.
+  - **A broad range also deploys the promoted image bumps that rode in on it (#2348), and
+    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` — and `hold_plane` for a
+    plane, never for a service — alerts saying nothing was rolled back, and leaves the tree
+    fast-forwarded: no `git reset`, which would leave the tree claiming the old commit over
+    half-new live state. `deploy_handlers._apply_broad_k8s` says why it gates on nothing;
     `deploy_logic.broad_budget_ok` has no production caller.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names

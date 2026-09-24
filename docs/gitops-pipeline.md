@@ -543,7 +543,35 @@ stay).
   `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
   **A range carrying both planes applies both, setup first** — `plan` returns one plan per
   plane and `handle_broad` runs them in order, sharing one `BROAD_DEPLOY_TIMEOUT_S` so the
-  unit's ceiling still reads the broad arm as a single apply.
+  two planes still read as a single apply against the unit's ceiling.
+  - **The promoted k8s image bumps in the same range are deployed too, after both planes**
+    (#2348, 2026-09-24). `split_k8s_auto_deploy` moves an eligible bump out of `ChangeSet.k8s`
+    into `k8s_deploy`, and `alert_deferred` fires its k8s channel on `k8s` alone — so a broad
+    tick used to fast-forward the bumps, deploy none of them and name none of them either, and
+    the fast-forward then removed them from every later tick's range. It was not a deferral, it
+    was silence. The 01:45 tick on daniel-box that day carried nine (`bentopdf`,
+    `flaresolverr`, `homepage`, `freshrss`, `home-assistant`, `speedtest`, `radarr`,
+    `prowlarr`, `bazarr`) behind one `roles/setup/k3s` commit; the 01:48 tick's range began
+    after them, and every one of the nine pods was still serving its old image when `kubectl`
+    was read. `deploy_handlers._apply_broad_k8s` runs after the plan loop, so a broad apply
+    that failed or hit a busy lock has already returned and the bumps are re-derived by the
+    next tick's range.
+    - **Forward-only, with no staging gate**, and each has its own reason. `_rollback_k8s`
+      resets the tree to `local`, which here would undo the ff-merge under a setup plane this
+      tick already applied — the tree would claim the old commit while the host runs the new
+      one, which is the state the broad arm's own no-reset rule exists to prevent.
+      `consult_staging` has to run BEFORE the ff-merge or a process death inside its window
+      strands the range, and this arm ff-merges first by construction so an unrelated commit
+      lands even when the apply fails; the two cannot both hold, and the gate is off on every
+      host. The budget agrees with both: 180 flock + 1800 broad + 900 k8s = 2880s fits the
+      unit's 3600s ceiling, and adding the 1320s rollback budget would not.
+    - **A failure writes `hold_sha` and no `hold_plane`.** `clear_broad_hold` matches a hold's
+      plane against the playbook and tags an apply ran, and a service tag is not a plane — a
+      `hold_plane` written here would be one no broad apply could ever clear.
+      `deploy_alerts.broad_k8s_failure_alert` is a separate body from `k8s_failure_alert` for
+      the same reason: it must not say "rolled back locally" or send the operator after a
+      volume revert that never ran. The pre-apply Longhorn snapshot IS taken — `k8s/manifests`
+      takes it on every apply of a claim-declaring service — so a hand revert stays available.
   It was an if/else until 2026-09-18 (#2046) and the setup arm won: two Pi retirements that
   day landed a `roles/setup/optimize_pi` edit beside a `host_vars/daniel-pi.yml` one, the
   tick applied `initial_setup.yml` and never planned the deploy plane, and `Release
