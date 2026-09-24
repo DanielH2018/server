@@ -244,12 +244,22 @@
   # After BOTH backup windows (03:30 daily, 04:30 weekly) and clear of the 05:15 manifest-prune
   # check, so a trim never contends with a snapshot being taken. Order matters more than the
   # hour: trimming before the day's snapshot would hand back blocks the snapshot then re-pins.
+  #
+  # `2>&1 | logger -t longhorn-trim-cron` for the journal reason on the secret-rotation cron in
+  # `initial_setup/tasks/crons.yml` (#2466): this mailed one `trim <volume>` or `skip <volume>`
+  # line per volume per day into a spool nothing opens.
+  #
+  # A DIFFERENT TAG FROM THE SCRIPT'S OWN `logger -t longhorn-trim`, deliberately. Check 9 of
+  # longhorn-backup-health reads that tag's window and matches `_TRIM_SUMMARY_RE` /
+  # `_TRIM_ABORT_RE` as written; pouring the per-volume chatter and the operator NOTE block into
+  # the same tag would put unrelated newest-first lines in front of the verdict the check reads
+  # backwards for. The verdict keeps its own tag and its own two lines.
   ansible.builtin.cron:
     name: "Longhorn filesystem trim"
     hour: "{{ k3s_longhorn_trim_cron_hour }}"
     minute: "{{ k3s_longhorn_trim_cron_minute }}"
     user: "{{ sys_user }}"
-    job: "/usr/local/bin/longhorn-trim-volumes.sh"
+    job: "/usr/local/bin/longhorn-trim-volumes.sh 2>&1 | logger -t longhorn-trim-cron"
     cron_file: longhorn-trim
   become: true
 

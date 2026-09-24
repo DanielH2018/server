@@ -112,7 +112,8 @@ if (( PINNED > 0 )); then
   echo "        sudo /usr/local/bin/longhorn-reap-orphan-snapshots.sh --apply"
 fi
 # A failure here is worth a non-zero exit, but the exit code is not what anyone reads: cron
-# discards it and mails stdout to /var/mail/ubuntu, which nothing opens. The reader is check 9 of
+# discards it, and since #2466 the cron entry pipes both streams to `logger -t longhorn-trim-cron`
+# rather than mailing them to /var/mail/ubuntu, which nothing opens. The reader is check 9 of
 # longhorn-backup-health.sh, which runs every 10 minutes and pushes the `k3s Longhorn Backup`
 # tile DOWN on the ABORT line above or on a `N failed` above zero in the summary line. That
 # claim was unbacked until 2026-09-24 — this comment named a Kuma push that did not exist

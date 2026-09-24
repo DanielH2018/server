@@ -8,6 +8,11 @@ it stopped being obvious which was which.
 A worktree is removable only when all three hold: its branch is merged into
 origin/master, it has no uncommitted changes, and no live session holds its lock.
 
+It also sweeps the BRANCHES those worktrees leave behind. Removing a worktree leaves its
+`worktree-*` branch, and nothing here removed those: the dotfiles `prune-worktrees.py`
+SessionStart hook did until its PR #626 (2026-09-24) made it skip any repo shipping this
+script. There were roughly 249 of them on that date. See orphan_branches.
+
 "Merged" is checked three ways, cheapest first: ancestry, then patch-id, then content. PRs
 land here rebased or squashed, never fast-forwarded, so the branch tip is not an ancestor of
 origin/master — on ancestry alone this script reported "nothing to remove" while merged trees
@@ -69,6 +74,7 @@ from claude_worktree import (
 REMOVABLE = "removable"
 KEEP = "keep"
 ORPHAN = "orphan"
+STALE = "stale"
 
 
 def find_orphan_dirs(worktrees_dir: str, registered: set[str]) -> list[str]:
@@ -132,11 +138,40 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     All four failures are closed: an unknown reads as NOT merged, because this decides what
     to DELETE.
     """
-    ancestor = git(
-        "merge-base", "--is-ancestor", head, "origin/master", cwd=repo, check=False
-    )
-    if ancestor.returncode == 0:
+    if locally_landed(repo, head):
         return True
+    # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
+    # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
+    # ("no verdict") and the wrong final one — the branch landed days ago and the tree sits there
+    # forever. Observed 2026-08-27: worktree-review-2026-08-24-remediation, landed as PR #400 on
+    # 2026-08-24, held by a later master change to wg-easy/tasks/main.yml.
+    #
+    # Ask the forge, which knows what it merged. This runs LAST because it is the only check
+    # needing a network round-trip and credentials; every branch the local checks settle never
+    # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
+    # The lookup and its SHA-equality rule live in the deployed claude_worktree module, which
+    # the dotfiles pruner and Stop hook also use (dotfiles #629).
+    return forge_says_merged(repo, branch, head)
+
+
+def locally_landed(repo: str, head: str, ancestry_known: bool = False) -> bool:
+    """The first three layers of is_merged — the ones that cost no network round-trip.
+
+    Split out for the branch sweep, which asks this question of every orphan `worktree-*`
+    branch and must not reach the forge to answer it. `is_merged`'s fourth layer is one
+    `gh pr list` per unsettled branch; the memo on `_memoised_merged` records what that class
+    of traffic already cost once (#1279), and a sweep over a couple of hundred branches is the
+    same bug at a larger N.
+
+    `ancestry_known` says the caller has already settled the ancestry layer in bulk, through
+    `ancestry_landed_branches`, so this skips the per-branch `merge-base` call.
+    """
+    if not ancestry_known:
+        ancestor = git(
+            "merge-base", "--is-ancestor", head, "origin/master", cwd=repo, check=False
+        )
+        if ancestor.returncode == 0:
+            return True
     cherry = git("cherry", "origin/master", head, cwd=repo, check=False)
     # A failed `git cherry` prints nothing, and empty output otherwise means "merged" — so
     # the return code has to gate this, or an unknown ref would read as safe to delete.
@@ -152,22 +187,110 @@ def is_merged(repo: str, head: str, branch: str = "") -> bool:
     merged_tree = git(
         "merge-tree", "--write-tree", "origin/master", head, cwd=repo, check=False
     )
-    if merged_tree.returncode == 0 and merge_tree_says_contained(
+    return merged_tree.returncode == 0 and merge_tree_says_contained(
         merged_tree.stdout, master_tree.stdout
-    ):
-        return True
-    # Fourth and last: squash-merged AND master has since drifted into a conflict on a file the
-    # branch also touched. `git merge-tree` then exits non-zero, which is the right local answer
-    # ("no verdict") and the wrong final one — the branch landed days ago and the tree sits there
-    # forever. Observed 2026-08-27: worktree-review-2026-08-24-remediation, landed as PR #400 on
-    # 2026-08-24, held by a later master change to wg-easy/tasks/main.yml.
-    #
-    # Ask the forge, which knows what it merged. This runs LAST because it is the only check
-    # needing a network round-trip and credentials; every branch the local checks settle never
-    # reaches it. No `gh`, no auth, or no answer all mean no verdict, which reads as not merged.
-    # The lookup and its SHA-equality rule live in the deployed claude_worktree module, which
-    # the dotfiles pruner and Stop hook also use (dotfiles #629).
-    return forge_says_merged(repo, branch, head)
+    )
+
+
+BRANCH_PREFIX = "worktree-"
+
+
+def orphan_branches(repo: str) -> list[str]:
+    """Local `worktree-*` branches that no worktree has checked out.
+
+    `EnterWorktree` derives a branch from the worktree name, so every session branch here
+    carries the prefix and nothing else does. Removing the worktree leaves the branch, and
+    nothing swept those: the dotfiles `prune-worktrees.py` SessionStart hook did until its
+    PR #626 (2026-09-24) made it skip any repo shipping this script, and it only ever accepted
+    what `git branch -d` accepted. On 2026-09-24 there were roughly 249 such branches here.
+
+    The prefix is the outer refusal: a branch outside it is not a session branch and this
+    never touches it. A branch a worktree still holds is excluded too, which is also what
+    makes the current branch safe — the primary checkout is a worktree in this list.
+    """
+    refs = _git(
+        ["for-each-ref", "--format=%(refname:short)", f"refs/heads/{BRANCH_PREFIX}*"],
+        cwd=repo,
+    ).split()
+    held = {
+        tree.branch
+        for tree in parse_worktree_list(
+            _git(["worktree", "list", "--porcelain"], cwd=repo)
+        )
+        if tree.branch
+    }
+    return [ref for ref in refs if ref not in held]
+
+
+def ancestry_landed_branches(repo: str) -> set[str]:
+    """Every local branch whose tip is an ancestor of origin/master, in ONE git call.
+
+    The bulk layer, and the reason the sweep is cheap enough to run from the SessionStart
+    banner. A per-branch `merge-base --is-ancestor` over a couple of hundred branches is a
+    couple of hundred processes; `git branch --merged` is one, and the issue's own count says
+    it settles most of them (172 of 249 on 2026-09-24).
+
+    An empty set on failure, which reads as "nothing settled" — the KEEP direction, because
+    every caller of this decides what to delete.
+    """
+    result = git(
+        "branch",
+        "--merged",
+        "origin/master",
+        "--format=%(refname:short)",
+        cwd=repo,
+        check=False,
+    )
+    return set(result.stdout.split()) if result.returncode == 0 else set()
+
+
+def landed_orphan_branches(repo: str, deep: bool) -> list[str]:
+    """The orphan `worktree-*` branches whose content is already on origin/master.
+
+    `deep` chooses how hard to look, and the two callers want different answers. The banner
+    passes False and gets the bulk ancestry layer alone — two git calls, no per-branch work,
+    and it UNDERCOUNTS a branch that landed by rebase or squash. That is the right trade for
+    a line whose job is to say "there is something to sweep": `--brief` is budgeted at 5s by
+    `.claude/hooks/session-health.py` and measured at 1.3s warm.
+
+    `--prune` passes True and pays `git cherry` plus `git merge-tree` on the residue the bulk
+    layer did not settle, because a deletion has to be right per branch rather than in
+    aggregate. Neither path reaches the forge; see locally_landed.
+    """
+    ancestry = ancestry_landed_branches(repo)
+    landed = []
+    for branch in orphan_branches(repo):
+        if branch in ancestry:
+            landed.append(branch)
+        elif deep and locally_landed(repo, branch, ancestry_known=True):
+            landed.append(branch)
+    return landed
+
+
+def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
+    """Delete one orphan branch, `-d` first and `-D` only if that refuses.
+
+    `git branch -d` accepts ancestry only, so it refuses every branch that landed by rebase or
+    squash — which is most of them here, and is why the dotfiles hook swept so few. `-D` throws
+    away git's own backstop, so the containment check in landed_orphan_branches IS the safety:
+    this is never called for a branch a local layer has not already settled.
+    """
+    result = git("branch", "-d", branch, cwd=repo, check=False)
+    if result.returncode == 0:
+        return True, ""
+    forced = git("branch", "-D", branch, cwd=repo, check=False)
+    return forced.returncode == 0, forced.stderr.strip()
+
+
+def sweep_branches(repo: str, branches: list[str]) -> None:
+    """Delete each already-settled orphan branch, printing one line per outcome.
+
+    Takes the list rather than deriving it, so the caller's report and its removals cannot
+    name different branches.
+    """
+    for branch in branches:
+        ok, error = delete_branch(repo, branch)
+        print(f"deleted {branch}" if ok else f"could not delete {branch}: {error}")
 
 
 def is_dirty(path: str) -> bool:
@@ -296,6 +419,17 @@ def brief(prune: bool = False) -> int:
     commits landed by squash or rebase, but each line ends by asking the reader to go run
     `gh pr list --state merged --head <branch>` themselves — the lookup is_merged() already
     performs. This prints the answer instead of the homework.
+
+    # DECIDED: the banner REPORTS, the weekly cron PRUNES. Both halves of the sweep are
+    # automatic, and neither runs from a SessionStart hook. `--prune` removes worktrees and
+    # deletes branches in the PRIMARY checkout, which every concurrent session shares, and it
+    # ends in `repair_object_store` — a `git gc` whose duration is unbounded against a hook
+    # budgeted at 5s in `.claude/hooks/session-health.py`. Running it at every session start
+    # would put N sessions' removals in a race for a saving one weekly run already gets. The
+    # cron in `ansible/roles/setup/initial_setup/tasks/crons.yml` is the arm that removes, for
+    # #1435's reason: a worktree-isolated session's git commands are refused against the
+    # primary checkout, so the sessions that SEE the mess are the ones structurally unable to
+    # clear it. Full reasoning in this docstring and at that cron.
     """
     repo = primary_checkout()
     if repo is None:
@@ -303,14 +437,25 @@ def brief(prune: bool = False) -> int:
     removable = [
         (tree, reason) for verdict, tree, reason in survey(repo) if verdict == REMOVABLE
     ]
-    if not removable:
-        return 0
-    print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
-    for tree, reason in removable:
-        print(f"  {Path(tree.path).name} — {reason}")
+    # Shallow for the report: the banner pays two git calls, not one per branch. See
+    # landed_orphan_branches for what that undercounts and why it is the right trade here.
+    stale = landed_orphan_branches(repo, deep=prune)
+    if removable:
+        print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
+        for tree, reason in removable:
+            print(f"  {Path(tree.path).name} — {reason}")
+    if stale and not prune:
+        print(
+            f"\U0001f9f9 {len(stale)} orphan {BRANCH_PREFIX}* branch(es) already on "
+            "origin/master"
+        )
     if prune:
+        # Unconditional, unlike the report above: the weekly cron runs this path for the
+        # object-store repair at prune_all's tail, which must still happen on a week with
+        # nothing to remove.
         prune_all(repo, [tree for tree, _ in removable])
-    else:
+        sweep_branches(repo, stale)
+    elif removable or stale:
         print("  → uv run python scripts/dev/prune_worktrees.py --prune")
     return 0
 
@@ -324,7 +469,10 @@ def main(argv: list[str] | None = None) -> int:
     parser.add_argument(
         "--prune",
         action="store_true",
-        help="remove the worktrees reported as removable (default: report only)",
+        help=(
+            "remove the worktrees reported as removable and delete the orphan worktree-* "
+            "branches already on origin/master (default: report only)"
+        ),
     )
     parser.add_argument(
         "--brief",
@@ -372,26 +520,34 @@ def main(argv: list[str] | None = None) -> int:
             f"[{ORPHAN:9}] {path}\n            git does not track this — remove by hand"
         )
 
-    surveyed = survey(repo)
-    if not surveyed:
-        print("no session worktrees")
-        return 0
+    # The long report names each branch, so it pays the deep containment check whether or not
+    # it is about to delete anything — a report that disagreed with what `--prune` then removed
+    # would be worse than a slow one.
+    stale = landed_orphan_branches(repo, deep=True)
+    for branch in stale:
+        print(
+            f"[{STALE:9}] {branch}\n            no worktree, content already on origin/master"
+        )
 
     removable = []
-    for verdict, tree, reason in surveyed:
+    for verdict, tree, reason in survey(repo):
         print(f"[{verdict:9}] {tree.path}\n            {reason}")
         if verdict == REMOVABLE:
             removable.append(tree)
 
-    if not removable:
+    if not removable and not stale:
         print("\nnothing to remove")
         return 0
 
     if not args.prune:
-        print(f"\n{len(removable)} removable — re-run with --prune to remove")
+        print(
+            f"\n{len(removable)} worktree(s) and {len(stale)} branch(es) removable — "
+            "re-run with --prune to remove"
+        )
         return 0
 
     prune_all(repo, removable)
+    sweep_branches(repo, stale)
     return 0
 
 

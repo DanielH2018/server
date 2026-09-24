@@ -35,13 +35,20 @@ uv run python scripts/dev/prune_worktrees.py --gc       # the object-store repai
 
 It applies the same content check, so it collects exactly what `ExitWorktree` refused.
 
+**`--prune` also deletes the orphan `worktree-*` branches** — the ones no worktree holds whose
+content is already on `origin/master` (#2430). Removing a worktree leaves its branch, and
+roughly 249 had accumulated by 2026-09-24. Report-only runs count them; the containment check
+is the same ladder, minus the forge lookup.
+
 **A prune also repairs the shared object store.** Removing a worktree makes its branch's objects
 unreachable, and `git gc --auto` only runs once loose objects pass 6700 or packs pass 50 — so the
 churn accumulates below the threshold and `git fetch` warns about it (#1435). `--prune` and `--gc`
 both drop unreachable objects older than a day and remove a stale `gc.log`. A weekly cron on
-daniel-box runs `--gc` (`Weekly git object-store repair`), because a worktree-isolated session's
-git commands are refused against the primary checkout: the sessions that see the warning are the
-ones that cannot clear it.
+daniel-box runs `--prune --brief` (`Weekly git object-store repair`), because a worktree-isolated
+session's git commands are refused against the primary checkout: the sessions that see the
+warning are the ones that cannot clear it. That cron is the only automatic remover — the
+SessionStart banner reports and removes nothing, for the reason in the `# DECIDED:` marker in
+`prune_worktrees.py`'s `brief()`.
 
 **Locks.** A lock held by a *running* session is never overridden. A lock whose process is gone
 is ignored, because Claude Code does not release the lock when a session ends — which is why
@@ -70,8 +77,10 @@ session had just merged the PR whose head was that branch tip. Treat the classif
 situation rather than the flag — don't hand the operator a chore you can finish, and don't assume
 the call in advance either way.
 
-`prune_worktrees.py` uses `-d` deliberately, so git arbitrates, and it reports rather than reaps
-anything the ancestor test misses.
+`prune_worktrees.py` tries `-d` first, so git arbitrates where it can, and falls back to `-D`
+only for a branch its own containment ladder has already settled — the ancestry test alone
+misses every rebase- and squash-landed branch, which is most of them here. It never forces a
+branch no layer settled.
 
 ## The stash trap
 

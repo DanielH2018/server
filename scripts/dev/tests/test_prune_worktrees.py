@@ -20,10 +20,14 @@ from prune_worktrees import (
     Worktree,
     _worktree_facts,
     classify,
+    delete_branch,
     find_orphan_dirs,
+    landed_orphan_branches,
     main,
+    orphan_branches,
     prune_all,
     remove,
+    sweep_branches,
 )
 
 
@@ -341,3 +345,111 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
     trees, _dirty, _merged, ok = _worktree_facts()
     assert ok is True
     assert trees == []
+
+
+# --- the orphan-branch sweep (#2430) ----------------------------------------------------
+#
+# Real git throughout, for the reason the on-disk removal test above gives: what is claimed
+# is that git ACCEPTS the sequence. `git branch -d` refusing a rebase-landed branch is the
+# whole reason the dotfiles hook swept so few, and a mock would happily accept it.
+
+
+def _scrub_git_env(monkeypatch) -> None:
+    """Drop every inherited GIT_* variable, as the on-disk removal test does and why."""
+    for var in [name for name in os.environ if name.startswith("GIT_")]:
+        monkeypatch.delenv(var, raising=False)
+
+
+def _branch_names(repo: Path) -> list[str]:
+    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    out = subprocess.run(
+        ["git", "branch", "--format=%(refname:short)"],
+        cwd=repo,
+        env=env,
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    return out.stdout.split()
+
+
+def _repo_with_branches(tmp_path: Path) -> Path:
+    """A scratch repo carrying one branch of each class the sweep has to tell apart."""
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    _git(
+        repo, "branch", "worktree-ancestry"
+    )  # tip IS master: `git branch -d` accepts it
+    _git(repo, "branch", "feature-landed")  # merged, but not a session branch
+    _git(repo, "checkout", "-q", "-b", "worktree-open")
+    (repo / "b.txt").write_text("two\n")
+    _git(repo, "add", "b.txt")
+    _git(repo, "commit", "-q", "-m", "open work", "--no-gpg-sign")
+    _git(repo, "checkout", "-q", "master")
+    _git(repo, "worktree", "add", "-q", "-b", "worktree-live", str(tmp_path / "live"))
+    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    return repo
+
+
+def test_the_sweep_sees_only_session_branches_no_worktree_holds(tmp_path, monkeypatch):
+    _scrub_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+
+    # feature-landed is excluded by the prefix though it is merged; worktree-live is excluded
+    # because a worktree holds it; master is excluded on both counts.
+    assert sorted(orphan_branches(str(repo))) == ["worktree-ancestry", "worktree-open"]
+
+
+def test_an_unmerged_session_branch_is_never_swept(tmp_path, monkeypatch):
+    # The RED half. worktree-open carries a commit master does not have, so no local layer
+    # settles it and it must survive a sweep that deletes its neighbour.
+    _scrub_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+
+    landed = landed_orphan_branches(str(repo), deep=True)
+
+    assert landed == ["worktree-ancestry"]
+    sweep_branches(str(repo), landed)
+    assert "worktree-open" in _branch_names(repo)
+    assert "worktree-ancestry" not in _branch_names(repo)
+
+
+def test_a_rebase_landed_branch_is_deleted_though_git_branch_d_refuses_it(
+    tmp_path, monkeypatch
+):
+    # The case the dotfiles hook could not sweep: the commit's content is on master under a
+    # different sha, so the tip is not an ancestor and `-d` says "not fully merged".
+    _scrub_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "worktree-rebased")
+    (repo / "c.txt").write_text("three\n")
+    _git(repo, "add", "c.txt")
+    _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
+    _git(repo, "checkout", "-q", "master")
+    _git(repo, "cherry-pick", "worktree-rebased")
+    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+
+    assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
+    ok, err = delete_branch(str(repo), "worktree-rebased")
+
+    assert ok, err
+    assert "worktree-rebased" not in _branch_names(repo)
+
+
+def test_the_shallow_sweep_stops_at_the_bulk_ancestry_layer(tmp_path, monkeypatch):
+    # The banner's budget is the constraint (`session-health.py` kills it at 5s), so deep=False
+    # settles what one `git branch --merged` settles and nothing more. Asserted by what it
+    # MISSES: a rebase-landed branch is exactly the case only the per-branch layers reach, so
+    # deep=False returning it would mean it paid for them.
+    _scrub_git_env(monkeypatch)
+    repo = _repo_with_branches(tmp_path)
+    _git(repo, "checkout", "-q", "-b", "worktree-rebased")
+    (repo / "c.txt").write_text("three\n")
+    _git(repo, "add", "c.txt")
+    _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
+    _git(repo, "checkout", "-q", "master")
+    _git(repo, "cherry-pick", "worktree-rebased")
+    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+
+    assert landed_orphan_branches(str(repo), deep=False) == ["worktree-ancestry"]
+    assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
