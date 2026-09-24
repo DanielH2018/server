@@ -199,13 +199,14 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
             continue
         if any(excludes_check_mode(when) for when in inherited):
             continue
-        # DECIDED: a consumer check mode skips is judged on its module args and its `when:`
-        # only (#2375). Ansible evaluates `failed_when`/`changed_when`/`until` on the result a
-        # module returned, and a skipped task returns none — so a read there cannot happen on
-        # the very run that makes the producer a skip result. The when-based rule in
-        # `_offenders` keeps them at full strength: its producer is skipped on a REAL run,
-        # where this consumer runs, its module returns, and its `failed_when` meets the skip
-        # dict.
+        # DECIDED: a consumer check mode skips is not judged on its `failed_when` or its
+        # `changed_when` (#2375). Ansible evaluates both on the result a module returned, and
+        # a skipped task returns none — so a read there cannot happen on the very run that
+        # makes the producer a skip result. Its module args, its `when:` and its `until:` stay
+        # judged; `_check_mode.POST_MODULE_KEYS` says why `until:` is not in the set. The
+        # when-based rule in `_offenders` drops nothing: its producer is skipped on a REAL
+        # run, where this consumer runs, its module returns, and its `failed_when` meets the
+        # skip dict.
         body = expressions(
             task, drop=POST_MODULE_KEYS if skips_in_check_mode(task) else ()
         )

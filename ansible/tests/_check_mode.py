@@ -44,12 +44,17 @@ SKIPPED_IN_CHECK_MODE = frozenset(
     }
 )
 
-# The keys Ansible evaluates AFTER the module returns. A task check mode SKIPS never reaches
-# them — no module ran, so there is no result to judge — while its module args and its `when:`
-# are templated before the skip and are read on every run. `POST_MODULE_KEYS` is therefore text
-# to drop when the CONSUMER is itself skipped under `--check`, and text to keep in every other
-# case (#2375).
-POST_MODULE_KEYS = ("failed_when", "changed_when", "until")
+# The two keys Ansible evaluates only on a result a module returned. `TaskExecutor._execute`
+# wraps both in `if 'skipped' not in result`, so a task check mode SKIPS never reaches either
+# — while its module args and its `when:` are templated before the skip and are read on every
+# run. `POST_MODULE_KEYS` is therefore text to drop when the CONSUMER is itself skipped under
+# `--check`, and text to keep in every other case (#2375).
+#
+# `until` is NOT one of them, though #2375 asked for it. Its retry loop sits outside that
+# guard and evaluates against the skip result, which is the premise
+# `test_retried_commands_survive_check_mode.py` rests on: "a `--check` run burns every retry
+# on a skip result and fails the play". A read there is reachable and stays judged.
+POST_MODULE_KEYS = ("failed_when", "changed_when")
 
 
 def skips_in_check_mode(task: dict) -> bool:

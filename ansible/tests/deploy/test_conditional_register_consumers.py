@@ -56,13 +56,14 @@ A fourth followed on the same day: both rules exempted the whole TASK once it re
 they tracked, so a task that reads a sibling's skip result and registers something of its own
 was judged by neither. `test_registering_consumers.py` holds those anchors.
 
-A fifth bounded that fourth (#2375). Judging every registering task judged its `failed_when`,
-`changed_when` and `until` too, and a task check mode SKIPS never evaluates those — Ansible
-evaluates them on a result its module returned, and a skipped module returns none. So the
-check-mode rule drops those three keys when the CONSUMER is itself skipped under `--check`,
-and reads its module args and its `when:` as before: both are templated ahead of the skip. The
-when-based rule keeps them, because its producer is skipped on a real run where the consumer
-runs. Those anchors sit with the fourth's.
+A fifth bounded that fourth (#2375). Judging every registering task judged its `failed_when`
+and its `changed_when` too, and a task check mode SKIPS never evaluates either — Ansible
+evaluates both on a result its module returned, and a skipped module returns none. So the
+check-mode rule drops those two keys when the CONSUMER is itself skipped under `--check`, and
+reads its module args and its `when:` as before: both are templated ahead of the skip. `until:`
+is not dropped, though the issue asked for it — the retry loop evaluates against the skip
+result. The when-based rule keeps everything, because its producer is skipped on a real run
+where the consumer runs. Those anchors sit with the fourth's.
 """
 
 from pathlib import Path

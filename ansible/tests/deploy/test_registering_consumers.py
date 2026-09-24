@@ -6,15 +6,16 @@ catches this class at all. The first three anchors cover one narrowing of it: bo
 to exempt a task from being judged as a consumer the moment it registered a name they tracked,
 so a task that reads a SIBLING's skip result and registers something of its own passed both.
 
-The five below them cover what #2360 then over-reported (#2375). Judging every registering
-task meant judging its `failed_when`, `changed_when` and `until` as well — and a task check
-mode SKIPS never evaluates those, because Ansible evaluates them on a result its module
-returned. `_check_mode_offenders` drops those three keys for such a consumer; its module args
-and its `when:` are templated before the skip, so they stay judged, and the when-based rule
-keeps all three.
+The anchors below them cover what #2360 then over-reported (#2375). Judging every registering
+task meant judging its `failed_when` and `changed_when` as well, and a task check mode SKIPS
+never evaluates either: `TaskExecutor._execute` wraps both in `if 'skipped' not in result`.
+`_check_mode_offenders` drops the two for such a consumer. Its module args, its `when:` and
+its `until:` stay judged, and the when-based rule keeps everything.
 """
 
 from pathlib import Path
+
+import pytest
 
 from _skip_result_rule import _offenders
 
@@ -126,27 +127,56 @@ def test_a_consumer_that_registers_is_judged_under_the_when_based_rule_too(
     )
 
 
-_FAILED_WHEN_ONLY = (
-    "- name: Prove the render node can actually be opened\n"
-    "  ansible.builtin.command:\n"
-    '    cmd: k3s kubectl exec tdarr -- sh -c "echo OPEN_OK"\n'
-    "  changed_when: false\n"
-    "  register: tdarr_k8s_device\n"
-    "  failed_when: tdarr_k8s_pod.stdout | length == 0\n"
-)
+# The keys `_check_mode_offenders` drops for a consumer check mode skips. Parametrised so each
+# is load-bearing: the tree has no consumer reading a sibling in its `changed_when`, so
+# dropping that member would leave every other anchor here green.
+_DROPPED_KEYS = ("failed_when", "changed_when")
 
 
-def test_a_skipped_consumer_is_not_judged_on_its_own_failed_when(
-    tmp_path: Path,
+def _skipped_consumer(key: str, expression: str) -> str:
+    """A `command` consumer that registers, reading `expression` under `key` alone."""
+    return (
+        "- name: Prove the render node can actually be opened\n"
+        "  ansible.builtin.command:\n"
+        '    cmd: k3s kubectl exec tdarr -- sh -c "echo OPEN_OK"\n'
+        "  register: tdarr_k8s_device\n"
+        f"  {key}: {expression}\n"
+    )
+
+
+_READS_THE_SIBLING = "tdarr_k8s_pod.stdout | length == 0"
+
+
+@pytest.mark.parametrize("key", _DROPPED_KEYS)
+def test_a_skipped_consumer_is_not_judged_on_a_condition_it_never_evaluates(
+    tmp_path: Path, key: str
 ) -> None:
-    """#2375: check mode skips this consumer, so its `failed_when` never evaluates.
+    """#2375: check mode skips this consumer, so Ansible never evaluates `key`.
 
-    Ansible evaluates `failed_when`, `changed_when` and `until` against the result a module
-    returned. A `command` task under `--check` returns none — it is skipped — so the read of
-    the sibling's skip result cannot happen on the very run that produced it. #2360 made this
-    reachable: before it, a task was exempt from being judged the moment it registered.
+    `TaskExecutor._execute` wraps `failed_when` and `changed_when` in
+    `if 'skipped' not in result`, so the read of the sibling's skip result cannot happen on
+    the very run that produced it. #2360 made this reachable: before it, a task was exempt
+    from being judged the moment it registered.
     """
-    assert _offenders(_write(tmp_path, _POD_LOOKUP + _FAILED_WHEN_ONLY)) == []
+    body = _POD_LOOKUP + _skipped_consumer(key, _READS_THE_SIBLING)
+    assert _offenders(_write(tmp_path, body)) == []
+
+
+def test_a_skipped_consumer_is_still_judged_on_its_until(tmp_path: Path) -> None:
+    """The key #2375 asked for that must NOT be dropped.
+
+    The retry loop sits outside that `if 'skipped' not in result` guard and evaluates against
+    the skip result — which is the premise `test_retried_commands_survive_check_mode.py`
+    rests on, that a `--check` run burns every retry on one. The read is reachable.
+    """
+    body = (
+        _POD_LOOKUP + _skipped_consumer("until", _READS_THE_SIBLING) + "  retries: 3\n"
+    )
+    problems = _offenders(_write(tmp_path, body))
+    assert [problem.task for problem in problems] == [
+        "Prove the render node can actually be opened"
+    ]
+    assert "tdarr_k8s_pod.stdout" in problems[0].message
 
 
 def test_the_same_consumer_is_still_flagged_for_the_read_in_its_cmd(
@@ -158,7 +188,7 @@ def test_the_same_consumer_is_still_flagged_for_the_read_in_its_cmd(
     errors under `--check` even though the task never runs. That is the tdarr shape #2360
     fixed, and the narrowing above must leave it flagged.
     """
-    in_cmd = _FAILED_WHEN_ONLY.replace(
+    in_cmd = _skipped_consumer("failed_when", _READS_THE_SIBLING).replace(
         'cmd: k3s kubectl exec tdarr -- sh -c "echo OPEN_OK"',
         'cmd: k3s kubectl exec {{ tdarr_k8s_pod.stdout }} -- sh -c "echo OPEN_OK"',
     )
@@ -178,8 +208,9 @@ def test_a_consumer_that_opts_out_of_check_mode_is_still_judged_on_its_failed_wh
     the sibling's skip result happens for real. The narrowing keys on the same opt-out the
     producer side does, so this task is judged in full.
     """
-    opted_in = _FAILED_WHEN_ONLY.replace(
-        "  changed_when: false\n", "  changed_when: false\n  check_mode: false\n"
+    opted_in = _skipped_consumer("failed_when", _READS_THE_SIBLING).replace(
+        "  register: tdarr_k8s_device\n",
+        "  register: tdarr_k8s_device\n  check_mode: false\n  changed_when: false\n",
     )
     problems = _offenders(_write(tmp_path, _POD_LOOKUP + opted_in))
     assert [problem.task for problem in problems] == [
@@ -203,7 +234,7 @@ def test_a_consumer_check_mode_runs_is_still_judged_on_its_failed_when(
             "  ansible.builtin.file:\n"
             "    path: /tmp/tdarr-probe\n"
             "    state: touch\n"
-            "  failed_when: tdarr_k8s_pod.stdout | length == 0\n",
+            f"  failed_when: {_READS_THE_SIBLING}\n",
         )
     )
     assert [problem.task for problem in problems] == [
