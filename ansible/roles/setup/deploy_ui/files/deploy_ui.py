@@ -309,13 +309,20 @@ class App:
         return 200, f"sent SIGTERM to {pid}"
 
     def hold_clear(self, body: dict) -> tuple[int, str]:
+        # Read the entries BEFORE the clear removes them: the operator asked to drop a hold,
+        # and what they are dropping with it is one unapplied plane per entry (#2453).
+        dropped = self.state()["hold_plane_entries"]
         refusal = writes.clear_hold(
             self.cfg.state_dir, str(body.get("expected_sha", ""))
         )
         if refusal:
             return 409, refusal
-        writes.audit(f"action=hold-clear sha={body.get('expected_sha')}")
-        return 200, "hold cleared (hold_sha and hold_plane)"
+        # A count, not the entries: an entry is `<playbook> <tags>` and the space would break
+        # the logfmt line Alloy ships to Loki. The reply below names them.
+        writes.audit(
+            f"action=hold-clear sha={body.get('expected_sha')} planes={len(dropped)}"
+        )
+        return 200, writes.hold_cleared_message(dropped)
 
     def staging_override(self, body: dict) -> tuple[int, str]:
         action = str(body.get("action", ""))

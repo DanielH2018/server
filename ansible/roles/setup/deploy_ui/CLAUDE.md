@@ -74,6 +74,10 @@ Each write spawns the command detached, logs to `~/.local/state/deploy-ui/`, and
 logfmt line via `logger -t deploy-ui`. Land and deploy refuse under `hold_sha`; the hold
 clears only as the `hold_sha` + `hold_plane` pair against a SHA the operator typed.
 
+`hold_plane` holds one entry per failed apply, and Clear drops all of them whatever is still
+unapplied. The state panel lists the entries one per line, the confirm prompt names them, and
+the reply repeats them — after the Clear nothing records those planes at all (#2453).
+
 `/api/deploy` takes one SERVICE tag. `deploy.sh --list-services` also prints the block tags
 (`config`, `deploy`, `cron`) and Ansible's `always`, each of which selects every container
 role at once, so `writes.NON_SERVICE_TAGS` subtracts them from the allowlist and the guard

@@ -171,8 +171,15 @@ def handle_broad(
     recorded = (
         deploy_defer.record(tools, state, config, target, pending)
         if pending
-        else deploy_defer.NOTHING_RECORDED
+        else deploy_defer.nothing_recorded(state)
     )
+    # BEFORE the apply loop, not after it (#2383). Every failure arm below returns, and the
+    # range has already fast-forwarded — `local == origin` makes `next_action` noop from the
+    # next tick on, so a page skipped here is never sent and the rotated value sits merged and
+    # stale in every consumer. The contention arm resets and re-crosses the range, and it
+    # deliberately leaves `secrets_alerted` standing: the post went out, its advice still holds
+    # once the next tick re-merges, and clearing the dedupe would page the same SHA twice.
+    deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
 
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
@@ -202,7 +209,8 @@ def handle_broad(
         except deploy_locks.ServiceLockBusy as exc:
             # Before the generic arm: nothing was applied, so this plane must not be held —
             # and the reset undoes the ff-merge, so the manual_plane lines this tick just
-            # wrote describe a range that is no longer merged. Take them back with their page.
+            # wrote describe a range that is no longer merged. Take them back with their page,
+            # and with the `broad_applied` an EARLIER plan in this loop wrote (#2382).
             deploy_defer.unrecord(state, origin, recorded)
             return deploy_defer.for_contention(tools, state, config, target, exc)
         except Exception as exc:

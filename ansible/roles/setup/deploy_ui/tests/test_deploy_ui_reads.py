@@ -143,6 +143,35 @@ def test_read_state_present_reads_value_is_flagged(state_dir):
     assert st["staging_gate_override"] == "set"
 
 
+def test_read_state_splits_hold_plane_into_its_entries_is_clean(state_dir):
+    """One entry per failed apply since #2381, and the page lists them before a Clear (#2453)."""
+    (state_dir / "hold_plane").write_text(
+        "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr\n"
+    )
+    assert reads.read_state(state_dir)["hold_plane_entries"] == [
+        "ansible/initial_setup.yml k3s",
+        "ansible/deploy.yml sonarr",
+    ]
+
+
+def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
+    assert reads.read_state(state_dir)["hold_plane_entries"] == []
+
+
+def test_hold_plane_sep_matches_the_deployers_own_separator():
+    """The oracle for the literal in `deploy_ui_reads`.
+
+    The daemon runs outside the repo venv and cannot import `deploy_git`, so the separator and
+    its parser are copied. pytest CAN import both: a change to how the deployer joins entries
+    fails here rather than leaving the page showing one run-on entry.
+    """
+    import deploy_git
+
+    held = "ansible/initial_setup.yml k3s; ansible/deploy.yml sonarr"
+    assert reads.HOLD_PLANE_SEP == deploy_git.HOLD_PLANE_SEP
+    assert reads.hold_plane_entries(held) == deploy_git.hold_plane_entries(held)
+
+
 def test_parse_stale_lines_is_clean():
     text = "homepage: roles/k8s/homepage changed in 5aab47af\nn8n: no release record"
     assert reads.parse_stale(text) == [

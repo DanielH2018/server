@@ -336,13 +336,19 @@ def test_deploy_known_tag_spawns_deploy_sh_is_clean(app, monkeypatch, tmp_path):
 
 
 def test_hold_clear_pair_is_clean(app, state_dir, monkeypatch):
+    """Both markers go, and the reply names every plane that went with them (#2453).
+
+    A Clear drops each `hold_plane` entry whatever is still unapplied, so the reply is the
+    last place that can name them: nothing records those planes afterwards.
+    """
     monkeypatch.setattr(deploy_ui.writes, "audit", lambda line: None)
     (state_dir / "hold_sha").write_text("deadbeef")
-    (state_dir / "hold_plane").write_text("k3s")
-    status, _ = app.post(
+    (state_dir / "hold_plane").write_text("k3s; ansible/deploy.yml sonarr")
+    status, text = app.post(
         "/api/hold/clear", HDRS, json.dumps({"expected_sha": "deadbeef"})
     )
     assert status == 200 and not (state_dir / "hold_plane").exists()
+    assert "k3s" in text and "ansible/deploy.yml sonarr" in text
 
 
 def test_cancel_deploy_row_is_flagged(app):

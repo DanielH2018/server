@@ -197,7 +197,10 @@ Each arm below is a rule and the function that holds it. The record page has the
   cannot game it (#1846, refuted). `manual_plane` is the second arm: `gitops_status` pages
   once the oldest pending line is older than the same 6 h, last of its four arms.
 - **Secrets-only pushes** (`secrets.yml` with no template) fast-forward but do not redeploy;
-  the deployer alerts once per SHA (`secrets_alerted_sha`) to redeploy the consumers.
+  the deployer alerts once per SHA (`secrets_alerted_sha`) to redeploy the consumers. On a
+  broad tick the page fires BEFORE the apply loop (`deploy_handlers.handle_broad`): every
+  failure arm returns, the range has already fast-forwarded, and a page skipped there is never
+  sent by any later tick (#2383).
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every
   other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` is diff-shape
   first, identity second: the only path touched under the role is `defaults/main.yml`, every
@@ -336,6 +339,11 @@ an early clear turns the tile green over an unapplied plane (#878). A hand `ansi
 run clears nothing: once every entry is applied, `rm /var/lib/gitops-deploy/hold_sha
 /var/lib/gitops-deploy/hold_plane`; the alert and the monitor both say so.
 
+**The Clear button in the deploy UI drops EVERY entry at once**, however many planes are still unapplied —
+it is the operator's override, not a per-entry clear. The page lists the entries beside the
+button and names them again in the reply, because after the Clear nothing records them
+(`deploy_ui_writes.hold_cleared_message`, #2453).
+
 ## A failed run's error string
 
 `run()` raises a `RuntimeError` carrying the argv, the exit code, then a bounded slice of
@@ -393,7 +401,12 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
 - **A busy service lock is contention, not a failed deploy** (`ServiceLockBusy`, caught ahead
   of each handler's failure arm; `deploy_defer.for_contention` resets to `local`, returns 0,
   writes no hold). The streak IS recorded in `contention_since` (#1847): monitor-bridge pages
-  past `GITOPS_CONTENTION_MAX_MIN` (30) and `gitops_state.py clear-contention` drops it. A
+  past `GITOPS_CONTENTION_MAX_MIN` (30) and `gitops_state.py clear-contention` drops it. **The
+  reset takes back every marker the tick wrote about the merge**, through
+  `deploy_defer.unrecord`: the `manual_plane` line and row (#2320), and the `broad_applied` an
+  earlier plan in the same loop wrote, which would otherwise name a SHA the tree no longer
+  carries (#2382). The bump's Grafana annotation is not emitted on this path either, because
+  the next tick re-applies the same plane and would annotate it twice (#2453). A
   broad apply takes `all` EXCLUSIVELY. **Waiting for a service lock spends the phase's own
   budget** (`deploy_locks.locked_budget`), so a queued phase can be SIGTERMed early and read
   as a failed deploy. The lock order is `all` first, then each service sorted — the

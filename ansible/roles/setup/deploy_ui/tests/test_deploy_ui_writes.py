@@ -100,6 +100,21 @@ def test_clear_hold_mismatch_touches_nothing_is_flagged(state_dir):
     assert (state_dir / "hold_plane").exists()
 
 
+def test_hold_cleared_message_names_every_dropped_plane_is_clean():
+    """A Clear drops every entry at once, and each is a plane nobody has applied (#2453)."""
+    message = w.hold_cleared_message(
+        ["ansible/initial_setup.yml k3s", "ansible/deploy.yml sonarr"]
+    )
+    assert "ansible/initial_setup.yml k3s" in message
+    assert "ansible/deploy.yml sonarr" in message
+    assert "by hand" in message
+
+
+def test_hold_cleared_message_with_no_plane_says_only_that_is_flagged():
+    """The rejecting half: a hold with no plane entry must not warn about applying nothing."""
+    assert w.hold_cleared_message([]) == "hold cleared (hold_sha and hold_plane)"
+
+
 def test_set_override_round_trip_is_clean(state_dir):
     assert w.set_override(state_dir, "set") is None
     assert (state_dir / "staging_gate_override").exists()

@@ -788,7 +788,10 @@ stay).
 - **Secrets-only pushes** (`ansible/vars/secrets.yml` changed with no service template — a
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
-  `secrets_alerted_sha` marker) to redeploy the consumers. `secrets.yml` is deliberately
+  `secrets_alerted_sha` marker) to redeploy the consumers. On a broad tick that page fires
+  BEFORE the apply loop (#2383): every failure arm returns, the range has already
+  fast-forwarded, and `alert_once` advances its marker on detection — so a page skipped there
+  is never sent, and the rotation sits merged and stale with nothing naming it. `secrets.yml` is deliberately
   NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
   stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
@@ -1029,7 +1032,12 @@ stay).
   inert for k8s roles**; they only ever act on `containers/<svc>/docker-compose.yml`, which no k8s
   role renders. Redeploy a k8s change by hand the same way the alert says:
   `uv run ansible-playbook ansible/deploy.yml --tags <svc>` (deploy.yml's k8s play picks up
-  `platform: k8s` entries the Docker play filtered out).
+  `platform: k8s` entries the Docker play filtered out). **A broad tick subtracts the roles its
+  own deploy plane applied before it posts this** (`deploy_broad_k8s.apply_broad_k8s`, #2453):
+  `narrow_broad` maps a role's changed path to its tag, so a range carrying a deploy-plane path
+  narrows to a list that names the role — and a refused narrowing runs the whole play. Without
+  the subtraction the tick ran `deploy.yml --tags radarr,sonarr` and then posted "fast-forwarded
+  but **not applied**" for those same roles, prescribing the command it had just run.
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
   are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
   `tasks_alerted_sha` / `meta_alerted_sha`) to redeploy the affected services by hand. `tasks/` and
@@ -1186,6 +1194,14 @@ deployer, so it clears nothing. Once every entry `hold_plane` lists is applied,
 `rm /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/hold_plane`. The Discord alert and
 the monitor's own message both print that; the monitor counts the entries still owed. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
 hold whose commits map to no service on this host.
+
+**The other way out is the Clear button in the deploy UI, and it drops every entry at once.**
+`deploy_ui_writes.clear_hold` removes `hold_sha` and `hold_plane` together as soon as the typed
+SHA matches, whatever is still unapplied — it is the operator's override, not a per-entry
+clear. Since #2381 that can be several planes, so the page lists the entries one per line, the
+confirm prompt names them, and the reply repeats them
+(`deploy_ui_writes.hold_cleared_message`, #2453). After the Clear nothing records those planes
+at all: no marker, no monitor sentence, no banner line.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns
 `run=False` for any non-empty `hold_sha`). That is the intended direction — an unapplied plane
@@ -1509,6 +1525,17 @@ page: nothing was applied, so holding the SHA would park every later tick behind
 has since been released, and the rollback would redeploy a version that is already live. The
 reset undoes the ff-merge, which is what keeps `local..origin` carrying the range for the next
 tick. `tests/test_gitops_deploy_lock_contention.py` drives all three handlers.
+
+**Every marker the tick wrote about that merge goes back with it**, through
+`deploy_defer.unrecord`. Three now: the `manual_plane` line this tick appended, the
+`manual_plane_tags` row it widened (#2320), and the `broad_applied` an earlier plan in the same
+loop wrote (#2382) — that one claimed a SHA the reset took away, and `land.sh` reads it to tell
+a plane the tick applied from one it merely fast-forwarded past. The reverse is a restore, not
+a delete: an earlier tick's `broad_applied` is still true. The promoted bumps a narrowed deploy
+plane applied are not annotated on this path either, for the same reason — the next tick
+re-applies the plane, and Grafana drew two annotations for one deploy (#2453). The one marker
+deliberately left standing is `secrets_alerted_sha`: the page has already been sent, its advice
+holds once the range re-merges, and clearing it would page the same SHA twice.
 
 **A contention streak IS recorded, in `contention_since`** (issue #1847). The reset leaves no
 other durable trace: `last_run` advances, `hold_sha` stays empty, and `behind_since` ages
