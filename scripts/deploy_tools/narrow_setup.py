@@ -18,11 +18,16 @@ to the tags of the tasks that read it:
     tags of every task file and template naming one of those keys, following another vars
     key that interpolates one.
 
-WHAT IT DOES NOT FOLLOW. A `set_fact` that derives a variable in one task file and is
-consumed in another with different tags reads as unread here: the scans see the name in both
-files, but nothing ties the two, so a change reaching only the setter narrows to the setter's
-tags. Both of `setup/k3s`'s `set_fact`s are consumed in the file that sets them, so this is
-inert in today's tree (#2371, item 7).
+A `set_fact` IS FOLLOWED, as a fourth edge. Its mapping keys become host variables that
+outlive the task file that set them, so a value derived under one tag and read under another
+is real work in both places. `RoleIndex.tags_of` therefore returns a task file's own tags
+UNION the tags of every task file and template reading a fact it sets. Until #2384 it did
+not, and a change reaching only the setter narrowed to the setter's tags while the consumer's
+were dropped — work left merged and unapplied under a marker the operator then clears. Every
+setup-role task file that derives a fact AND reaches `tags_of` reads that fact where its own
+tags already apply, so the edge widens no answer this tree can produce today.
+`test_the_fact_edge_widens_no_real_setup_role_today` is the census that measures it, and
+`MEASURED_SETTERS` beside it names the five files it covers.
 
 ANY DOUBT IS A REFUSAL, and the caller falls back to the role tag. A tag that matches nothing
 makes Ansible exit 0 having applied nothing — the silent-success failure
@@ -31,9 +36,9 @@ against — so a derivation that is not certain must widen rather than narrow. A
 no `tags:` of its own is the sharpest case: its tasks inherit from wherever it is imported,
 so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
 playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task
-file has to be statically imported from `tasks/main.yml`. `tasks/storage_smoke.yml` belongs to
-`k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags storage_smoke` selects only `always`
-tasks.
+file has to be statically imported from the role's `tasks/main`.
+`tasks/storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags
+storage_smoke` selects only `always` tasks.
 
 WHO CALLS IT. `deploy_defer.record` runs it as a SUBPROCESS through
 `deploy_narrow.narrow_setup_role`, because this module parses YAML and the deployer's unit
