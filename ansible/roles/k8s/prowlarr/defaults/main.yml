@@ -1,5 +1,5 @@
 ---
-prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.4.0.5397-ls150
+prowlarr_k8s_image: lscr.io/linuxserver/prowlarr:2.6.5.5623-ls162
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Migrating state — strategy is Recreate and the config volume (indexer definitions + API keys)
