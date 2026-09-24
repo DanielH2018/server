@@ -93,6 +93,16 @@ bedroom_bedtime:
     # The ONLY brightness change: a smooth 30-min fade from the current level to amber 3%. The bulb
     # ramps internally (single Zigbee command, ZCL caps ~6553s), so an HA/Z2M restart mid-fade
     # doesn't abort it. Lengthened 900 -> 1800 (2026-06-23): the 15-min descent felt too fast.
+    # DECIDED: the bedtime scene does NOT arm input_number.bedroom_light_expected_color_temp.
+    # scene.bedroom_nightlight sets rgb_color [255, 140, 40] (files/scenes.yaml), not a colour
+    # temperature, so the bulb leaves color-temp mode entirely. bedroom_color_track
+    # (files/automations/lighting.yaml) requires color_mode == 'color_temp' BEFORE it reaches its
+    # ~150K "still auto" check, so this state is excluded by the mode gate and the tracker's value
+    # decides nothing here. There is also no Kelvin to arm the tracker to. Every writer that puts
+    # the bulb back in color-temp mode arms on the way in — bedroom_set_natural_brightness,
+    # bedroom_apply_wake, and bedroom_lights_set's wake_fallback branch — so the tracker is never
+    # both stale and load-bearing, the same argument as the two `DECIDED: the release does NOT
+    # arm ...` markers in files/automations/wake-and-sleep.yaml. Filed and decided as #2500.
     - service: scene.turn_on
       target:
         entity_id: scene.bedroom_nightlight
