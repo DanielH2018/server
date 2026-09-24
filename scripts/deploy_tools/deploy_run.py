@@ -114,6 +114,11 @@ def say(*lines: str) -> None:
 def _call(fn, *args, **kwargs) -> int:
     try:
         return fn(*args, **kwargs)
+    # A helper's own `sys.exit` or argparse error is its exit status, as it was in a
+    # subprocess; it must not end this wrapper with the helper's number instead of the
+    # refusal that number maps to.
+    except SystemExit as exc:
+        return exc.code if isinstance(exc.code, int) else (0 if exc.code is None else 1)
     # Broad on purpose: a crashed helper refuses, as a crashed subprocess did.
     except Exception:
         traceback.print_exc()
@@ -128,7 +133,9 @@ def run_staleness(plan: Plan) -> int:
     if plan.at_sha:
         argv += ["--sha", plan.at_sha]
     if plan.tags:
-        argv += ["--tags", plan.tags_csv]
+        # The `=` form, so a tag that starts with `-` is a value and not a flag argparse
+        # refuses -- which would read as a stale tree, not as the bad tag it is.
+        argv.append(f"--tags={plan.tags_csv}")
     return _call(deploy_staleness.main, argv)
 
 
@@ -165,8 +172,8 @@ def clear_fact_cache(plan: Plan) -> None:
         from deploy_tools import fact_cache_guard
 
         fact_cache_guard.main(["--clear", "--repo-root", str(plan.repo_root)])
-    # Broad on purpose: the preflight fails open, per the DECIDED note above.
-    except Exception:
+    # Broad on purpose, SystemExit included: the preflight fails open, per the DECIDED note.
+    except Exception, SystemExit:
         traceback.print_exc()
 
 

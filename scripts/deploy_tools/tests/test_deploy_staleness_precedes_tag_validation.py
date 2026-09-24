@@ -78,3 +78,15 @@ def test_the_staleness_question_is_asked_before_the_tag_question(tmp_path, monke
     code, names, _ = _run(tmp_path, monkeypatch, stale=0, validate=0, tag="uptime-kuma")
     assert code is None, names
     assert names.index("staleness") < names.index("validate") < names.index("exec")
+
+
+def test_a_helper_that_exits_or_crashes_returns_a_status_instead_of_ending_the_run():
+    """In process, a helper's `sys.exit(2)` would otherwise end the WRAPPER with exit 2 -- a
+    tag miss to every consumer -- where the subprocess it replaced reported 2 as its status."""
+    import sys
+
+    import deploy_run
+
+    assert deploy_run._call(sys.exit, 2) == 2
+    assert deploy_run._call(lambda: 1 / 0) == 1
+    assert deploy_run._call(lambda: 0) == 0

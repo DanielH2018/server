@@ -610,7 +610,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
     """Record a successful auto-deploy where Grafana can draw it as a dashboard annotation.
 
     A LOG LINE, not a POST to Grafana's /api/annotations, and the peer of the identically-named
-    function in scripts/deploy_tools/deploy_locked.sh — the two deploy paths must annotate the same way or the
+    function in scripts/deploy.sh — the two deploy paths must annotate the same way or the
     dashboards show only half the deploys. Grafana has no hostPort and no pinned ClusterIP, and
     this runs on the HOST, so calling in would mean pinning a fourth address or routing through
     Traefik with a standing write credential. Neither is needed: the Alloy shipper already tails

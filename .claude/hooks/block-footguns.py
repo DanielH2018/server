@@ -290,7 +290,16 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
     invocation of it carries no flag, so it never reaches this rule.
     """
     words = strip_shell_keywords(stage)
-    if not words or words[0].rsplit("/", 1)[-1] != "deploy.sh":
+    names = [word.rsplit("/", 1)[-1] for word in words]
+    # The shim execs `deploy_run.py` (#2412), so an interpreter handed that module is the same
+    # deploy by another door. Keyed on the interpreter as the command word, so a `grep` that
+    # names the module and the flag as arguments stays clean.
+    runs_the_module = (
+        names[:1]
+        and names[0] in ("uv", "python", "python3")
+        and ("deploy_run.py" in names)
+    )
+    if not names or (names[0] != "deploy.sh" and not runs_the_module):
         return None
     if _STALENESS_FLAG not in words[1:]:
         return None

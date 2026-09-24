@@ -17,7 +17,7 @@ is a deadlock between a hand deploy and a tick (issue #2054).
 A leaf: it imports nothing from the rest of the deployer, so a test can drive it directly.
 
 Stdlib only: the unit runs it under `uv run --no-project`, and `scripts/deploy.sh` runs the
-CLI below through the repo's own `uv run python`, from its locked half `deploy_locked.sh`.
+CLI below through the repo's own `uv run python`.
 
 Typical usage example:
 
@@ -49,7 +49,7 @@ from typing import NamedTuple
 
 # The tree lock (ADR-0011): what the deployer unit's `flock` ExecStart, `deploy.sh` and the
 # `gitops_state.py` rewrite all take. Named here so the Python readers share one literal;
-# `deploy_locked.sh` cannot import it and carries its own default, pinned to this one by
+# `deploy.sh` cannot import it and carries its own default, pinned to this one by
 # `ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py`.
 TREE_LOCK = "/var/lock/server-git-tree.lock"
 # The lock a run with no tags takes exclusively, and every scoped run takes shared.
