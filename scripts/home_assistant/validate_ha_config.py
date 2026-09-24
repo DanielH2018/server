@@ -23,7 +23,7 @@ missing entity renders `unknown`, which sat inside the automation's own exclusio
 
 Only live HA can see a disappearance: `uv run python scripts/diagnostics/probe.py ha
 verify-entities` diffs the snapshot against live state and exits non-zero on anything that went
-away. It is a post-deploy gate in the `ha-deploy` skill, deliberately not a step here — this
+away. It is a post-deploy gate in the `ha-verify-state` skill, deliberately not a step here — this
 script has no HA dependency by design, and acquiring one to close the gap would cost more than
 the gate does. A green run of this file is not evidence an entity is alive.
 

@@ -96,6 +96,17 @@ bedroom_lights_set:
                 brightness_pct: "{{ brightness_pct | int }}"
                 color_temp_kelvin: 2200
                 transition: 60
+            # Arm the color tracker at the 2200K we just set, exactly as set_natural_brightness does
+            # for every other branch. bedroom_color_track is suppressed for the whole ramp window by
+            # in_wake_window, so this matters AFTER the window: tracking resumes comparing the live
+            # color against expected_color_temp, and without this the comparison runs against
+            # whatever a prior natural/wake/presence call left there — a stale value that reads as
+            # "manual" and silently parks tracking for the rest of the day.
+            - service: input_number.set_value
+              target:
+                entity_id: input_number.bedroom_light_expected_color_temp
+              data:
+                value: 2200
         - conditions: "{{ action == 'off' }}"
           sequence:
             - service: light.turn_off
