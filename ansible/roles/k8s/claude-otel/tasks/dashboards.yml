@@ -196,6 +196,10 @@
 
 - name: Write the dashboard ConfigMap manifests
   tags: [config]
+  # Not under --check (#2323). The build above is a check-mode skip, and it is left one on
+  # purpose: it reads dashboards-annotated/, which the inject step only simulated, so a
+  # check-mode build would diff last run's JSON and report no change for an edited board.
+  when: not ansible_check_mode
   ansible.builtin.copy:
     content: "{{ item.stdout }}\n"
     dest: "/etc/rancher/k3s/dashboard-manifests/grafana-dashboards-{{ item.item | lower }}.yaml"

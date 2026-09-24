@@ -60,6 +60,9 @@
   become: false
   changed_when: false
   failed_when: false
+  # A read of gh's stored credential, so it runs under --check too: skipped, it leaves no rc
+  # and the assert below errors on the attribute (#2323).
+  check_mode: false
 
 - name: Fail with a usable message if GitHub authentication is missing
   tags: [chezmoi]

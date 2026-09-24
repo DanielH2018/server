@@ -25,6 +25,10 @@
 
 - name: Verify janitorr
   ansible.builtin.import_tasks: verify.yml
+  # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
+  # out and skips the rollout wait, so the proofs would test the running pod and their reports
+  # would error on check-mode skip results (#2323).
+  when: not ansible_check_mode
 
 - name: Install the janitorr health reader directory
   tags: [config]

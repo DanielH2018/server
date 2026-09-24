@@ -38,6 +38,9 @@
   register: hypervisor_staging_nwfilter_info
   changed_when: false
   failed_when: false
+  # A read of libvirt's own state, so it runs under --check too: skipped, it leaves no rc and
+  # the define below errors on the attribute instead of skipping (#2323).
+  check_mode: false
   become: true
 
 - name: Define the staging egress fence
@@ -59,6 +62,8 @@
   register: hypervisor_staging_net_live_uuid
   changed_when: false
   failed_when: false
+  # A read, so it runs under --check too; the pin below reads its rc and stdout (#2323).
+  check_mode: false
   become: true
 
 - name: Pin the staging network's UUID
@@ -96,6 +101,8 @@
   register: hypervisor_staging_net_info
   changed_when: false
   failed_when: false
+  # A read, so it runs under --check too; the define below reads its rc (#2323).
+  check_mode: false
   become: true
 
 - name: Define the staging network
@@ -151,6 +158,11 @@
     cmd: virsh --connect qemu:///system net-info {{ hypervisor_staging_net_name }}
   register: hypervisor_staging_net_state
   changed_when: false
+  # A read, so it runs under --check too (#2323). On a host the network was never defined on,
+  # --check only simulated the define above, so the read has nothing to find; that is not a
+  # failure of the check run, and the start and autostart below then see an empty stdout.
+  check_mode: false
+  failed_when: hypervisor_staging_net_state.rc != 0 and not ansible_check_mode
   become: true
 
 - name: Start the staging network

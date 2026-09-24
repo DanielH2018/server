@@ -77,6 +77,9 @@
       -o jsonpath={.spec.clusterIP}
   become: true
   changed_when: false
+  # A read of the cluster's Service, so it runs under --check too: skipped, it leaves no stdout
+  # and the assert and the config render below error on the attribute (#2323).
+  check_mode: false
   register: fake_remux_sonarr_ip
 
 - name: Assert Sonarr resolved to an address

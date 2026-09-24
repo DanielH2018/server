@@ -354,6 +354,9 @@
   register: k3s_kube_system_pods
   become: true
   changed_when: false
+  # A read of the pods k3s already runs, so it runs under --check too: skipped, it leaves no
+  # stdout and the assert below errors on the attribute (#2323).
+  check_mode: false
 
 - name: Fail if the bundled Traefik, servicelb or local-path provisioner is running
   tags: [k3s_server]

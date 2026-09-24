@@ -105,6 +105,9 @@
       # reported text is checked too. It writes to stderr, not stdout (measured).
       ansible.builtin.command: rsyslogd -N1
       changed_when: false
+      # Read-only, so it runs under --check too (#2323). Under --check the copy above was only
+      # simulated, so a green check run proves the LIVE config parses, not the new fragment.
+      check_mode: false
       register: initial_setup_rsyslog_parse
       failed_when: >-
         initial_setup_rsyslog_parse.rc != 0

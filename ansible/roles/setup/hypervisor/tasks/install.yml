@@ -73,6 +73,9 @@
   register: hypervisor_default_net
   changed_when: false
   failed_when: false
+  # A read, so it runs under --check too: skipped, it leaves no stdout and the two guards
+  # below error on the attribute instead of skipping (#2323).
+  check_mode: false
   become: true
 
 - name: Stop libvirt's built-in default network

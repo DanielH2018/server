@@ -146,3 +146,7 @@
 - name: Prove the GPU is reachable from inside the pod
   tags: [deploy]
   ansible.builtin.include_tasks: verify.yml
+  # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
+  # out and skips the rollout wait, so the proofs would test the running pod and their reports
+  # would error on check-mode skip results (#2323).
+  when: not ansible_check_mode

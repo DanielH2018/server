@@ -26,6 +26,9 @@
       "find {{ media_volume_source_path }} -type f | wc -l"
   become: false
   changed_when: false
+  # A read of the source host, so it runs under --check too and the empty-source refusal
+  # below is exercised (#2323).
+  check_mode: false
   register: media_volume_src_files
 
 - name: Refuse to mirror an empty source
@@ -97,6 +100,8 @@
 
 - name: Fail if the volume does not match the source byte for byte
   tags: [deploy]
+  # --check copies nothing, so there is no copy to compare (#2323).
+  when: not ansible_check_mode
   ansible.builtin.assert:
     that:
       - media_volume_verify.stdout | trim | length == 0
@@ -110,6 +115,7 @@
 
 - name: Report the copy and the cutover-window number
   tags: [deploy]
+  when: not ansible_check_mode
   ansible.builtin.debug:
     msg:
       - "full copy: {{ media_volume_copy.delta }} — {{ media_volume_copy.stdout_lines | select('search', 'bytes/sec') | first | default('rate not reported') }}"
