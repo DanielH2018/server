@@ -120,7 +120,7 @@ class DeployerState:
 
     @property
     def hold_plane(self) -> str | None:
-        """The playbook (and tags) whose broad apply failed, or None."""
+        """Each failed apply's playbook (and tags), `; `-joined (`hold_plane_with`), or None."""
         return self.read("hold_plane")
 
     @property

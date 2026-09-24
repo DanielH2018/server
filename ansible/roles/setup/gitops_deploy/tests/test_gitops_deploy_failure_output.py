@@ -258,9 +258,10 @@ def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
     assert FATAL in message
     assert "--tags `k3s`" in message
     assert "not deployed" not in message, "a range with no bump names none"
-    assert "only by applying this same plane" not in message, (
-        "a service deploy covering a held entry clears it too, and hold_plane can hold "
-        "several entries, so the post must not send the operator to rm an earlier one"
+    hold_plane = gitops_deploy.STATE.path("hold_plane")
+    assert message.count(hold_plane) == 2, (
+        "hold_plane can hold several entries, each cleared on its own, so the post points "
+        "at that list before its rm rather than naming the marker only as a file to delete"
     )
 
 

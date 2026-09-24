@@ -138,9 +138,9 @@ Three outcomes, and the journal names which one it took on every tick:
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and
 what each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
 
-A failed narrowed apply holds the plane it named, so `hold_plane` reads
-`ansible/deploy.yml <tags>` and only an apply covering those tags clears it -- an untagged
-full run does, and a narrowed run covering a different service does not.
+A failed narrowed apply adds the plane it named to `hold_plane` as the entry
+`ansible/deploy.yml <tags>`, and only an apply covering those tags drops that entry -- an
+untagged full run does, and a narrowed run covering a different service does not.
 
 ### Both apply arms are forward-only
 
@@ -1182,9 +1182,9 @@ session while one is set. So the erasure turned **GitOps Deploy — Status** gre
 nothing had applied.
 
 **The way out is manual, and both surfaces name it.** A hand `ansible-playbook` run is not the
-deployer, so it clears nothing — after fixing forward, `rm /var/lib/gitops-deploy/hold_sha
-/var/lib/gitops-deploy/hold_plane`. The Discord alert and the monitor's own message both print
-that. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
+deployer, so it clears nothing. Once every entry `hold_plane` lists is applied,
+`rm /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/hold_plane`. The Discord alert and
+the monitor's own message both print that; the monitor counts the entries still owed. This is the same hand-clear the *Health gate + rollback* section already prescribes for a
 hold whose commits map to no service on this host.
 
 **The cost, stated: a surviving hold parks the Renovate agent** (`agent_logic.decide` returns

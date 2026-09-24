@@ -360,8 +360,10 @@ def test_a_bump_the_remaining_budget_cannot_fit_is_deferred(
     assert tick.head == ORIGIN
     assert _marker(state_dir, "hold_sha") is None
     assert _marker(state_dir, "k8s_alerted_sha") == ORIGIN
-    assert not any("Docker-platform" in post for post in tick.posts), (
-        "the deferral post must not claim this deployer never auto-deploys a k8s bump"
+    deferral = next(post for post in tick.posts if "sonarr" in post)
+    assert "`k8s_autodeploy`" in deferral, (
+        "the deferral post names the auto-deploy this bump was eligible for, rather than "
+        "claiming the deployer never auto-deploys a k8s bump"
     )
 
 

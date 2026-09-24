@@ -155,7 +155,7 @@ Each arm below is a rule and the function that holds it. The record page has the
     `narrowed-to-nothing`; any refusal → the full `deploy.yml` (the `# DECIDED:` at the
     fallback in `deploy_narrow.py`). The narrowed list is not filtered through
     `K8S_AUTODEPLOY_DENYLIST` (the `# DECIDED:` on `deploy_narrow.denylisted_in`). A failed
-    narrowed apply writes `hold_plane` naming its tags. The caller graph is read from the
+    narrowed apply adds a `hold_plane` entry naming its tags. The caller graph is read from the
     WORKING TREE, still on `local`, so a range adding a caller of a shared role refuses.
   - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`**: the
     playbook may not include the role (`k3s`, `common`) and the tag may not be the directory
@@ -164,7 +164,7 @@ Each arm below is a rule and the function that holds it. The record page has the
   - **The ff-merge happens BEFORE the apply** — applying first renders from the pre-merge tree
     and deploys nothing. `test_broad_remediation_puts_the_ff_merge_before_the_playbook`.
   - **A broad range also deploys the promoted image bumps that rode in on it (#2348), and
-    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` and `hold_plane` (a bump's
+    every arm here is FORWARD-ONLY.** A failure writes `hold_sha` and a `hold_plane` entry (a bump's
     is `ansible/deploy.yml <tags>`), says nothing was rolled back, and leaves the tree
     fast-forwarded: a `git reset` would claim the old commit over half-new live state. A bump
     the deploy plane covers deploys once, ungated; the rest pass the staging gate, and a block
@@ -334,7 +334,7 @@ tag set, a tagged run a held tag set it is a superset of, never an untagged hold
 consumer gates on `hold_sha` alone — `gitops_status`, `land.sh`, `renovate_agent.decide` — so
 an early clear turns the tile green over an unapplied plane (#878). A hand `ansible-playbook`
 run clears nothing: once every entry is applied, `rm /var/lib/gitops-deploy/hold_sha
-/var/lib/gitops-deploy/hold_plane`, as the alert and the monitor both print.
+/var/lib/gitops-deploy/hold_plane`; the alert and the monitor both say so.
 
 ## A failed run's error string
 

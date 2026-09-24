@@ -150,7 +150,7 @@ Say which of these applies, then stop:
 
 - Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
-  broad apply failed. `hold_plane` names the playbook when it was the latter.
+  broad apply failed. `hold_plane` names each failed playbook when it was the latter.
 - A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is

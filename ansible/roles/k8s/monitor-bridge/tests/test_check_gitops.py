@@ -187,6 +187,23 @@ def test_a_plane_hold_names_the_playbook_instead(cfg):
     assert "revert the offending PR" not in msg
 
 
+def test_a_hold_on_several_planes_counts_each_entry_the_rm_waits_for(cfg):
+    """`hold_plane` holds one `; `-joined entry per failed apply, and each clears on its own.
+
+    The SHA is the newest failure's, not each entry's. An rm after re-running only the newest
+    plane would erase an earlier one still unapplied, so the page counts what is owed.
+    """
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        "deadbeefcafe",
+        hold_plane="ansible/deploy.yml radarr; ansible/initial_setup.yml gitops_deploy",
+    )
+    assert not ok
+    assert "ansible/deploy.yml radarr" in msg
+    assert "ansible/initial_setup.yml gitops_deploy" in msg
+    assert "2 planes unapplied" in msg
+
+
 def test_a_plane_marker_without_a_hold_does_not_page(cfg):
     """hold_sha is still what decides.
 

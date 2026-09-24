@@ -142,13 +142,19 @@ def gitops_status(
         # partway, so reverting the PR undoes nothing and the operator has to fix forward
         # and re-run. hold_sha still decides whether we page — hold_plane only says which
         # sentence to print, so a stale marker left by a cleared hold cannot page alone.
-        if hold_plane:
+        # The marker holds one `; `-joined entry per failed apply (the deployer's
+        # `hold_plane_with`), and hold_sha is the NEWEST failure's SHA, not each entry's.
+        # An rm after re-running only one entry would erase another still unapplied.
+        planes = [p.strip() for p in (hold_plane or "").split(";") if p.strip()]
+        if planes:
             return False, (
-                "broad apply held at %s — %s failed, plane unapplied; fix forward and "
-                "re-run it, then rm %s + %s in %s"
+                "broad apply held at %s (the newest failure) — %d plane%s unapplied: %s; "
+                "fix forward and re-run each, then rm %s + %s in %s once all are applied"
                 % (
                     hold_sha[:8],
-                    hold_plane,
+                    len(planes),
+                    "s" if len(planes) > 1 else "",
+                    "; ".join(planes),
                     MARKERS["hold"],
                     MARKERS["hold_plane"],
                     STATE_DIR,

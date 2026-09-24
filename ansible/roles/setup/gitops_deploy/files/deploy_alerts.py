@@ -210,8 +210,8 @@ def k8s_deferred_alert(
     """
     return (
         f"⚠️ gitops-deploy: k8s role(s) `{', '.join(sorted(k8s))}` changed in "
-        f"`{origin[:8]}` — fast-forwarded but **not applied** (a k8s change is "
-        f"defer-and-alert unless this tick deployed it as an image bump). "
+        f"`{origin[:8]}` — fast-forwarded but **not applied** (a k8s change is defer-and-"
+        f"alert unless this tick deployed it as a `k8s_autodeploy` image bump). "
     ) + k8s_remediation(k8s, declared_k8s, consumers)
 
 
@@ -551,8 +551,8 @@ def alert_deferred(
             meta_deferred_alert(origin, pending_meta),
         )
     if cs.k8s:
-        # No `- deployed` subtraction (unlike tasks/meta): this deployer never auto-deploys a
-        # k8s-platform role at all, so there's no scoped redeploy for a k8s change to have ridden.
+        # No `- deployed` subtraction (unlike tasks/meta): a bump this tick deployed sits in
+        # `cs.k8s_deploy`, never in `cs.k8s`, so nothing in `cs.k8s` rode a redeploy here.
         #
         # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
         # origin SHA (alert_once) and the ff-merge below clears `behind_since` -- the deployer's
