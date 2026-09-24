@@ -68,6 +68,37 @@ spec:
             - name: wg-easy-config
               mountPath: /etc/wireguard
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
+        # Keeps WireGuard peers out of the cluster's pod and service networks. The server
+        # MASQUERADEs peer traffic out of this pod (ip_forward above), so without these rules a
+        # peer arrives at any ClusterIP or pod IP as the wg-easy pod and reaches every backend
+        # that no ingress NetworkPolicy fences, skipping the Authelia gate on its route. Peers
+        # keep the LAN: SSH to the nodes and the Pi (the way back in), and the Traefik and DNS
+        # VIPs, which are LAN addresses that kube-proxy DNATs in the HOST netns, after this
+        # pod's FORWARD chain has already passed them.
+        #
+        # DECIDED: a one-shot init container, not a re-asserting sidecar. v15 keeps PostUp in
+        # its SQLite DB (no env override), and upstream v15.4.0's default PostUp APPENDS
+        # `-A FORWARD -i wg0 -j ACCEPT` (migration 0001) while PostDown deletes exactly those
+        # rules; its firewall step (src/server/utils/firewall.ts) only ever touches the
+        # WG_CLIENTS chain and its jump. So a DROP inserted at position 1 before wg-easy starts
+        # stays above the ACCEPT through startup, a container restart (the pod netns survives
+        # it) and the UI's Restart Interface; a pod recreate reruns this. Same image as the
+        # main container on purpose: it selects iptables-legacy via update-alternatives, and
+        # another image could write the rules into the nft tables wg-quick never reads.
+        # Enabling per-client filtering in the UI inserts the WG_CLIENTS jump ABOVE these rules.
+        - name: peer-cluster-drop
+          image: {{ wg_easy_k8s_image }}
+          command:
+            - sh
+            - -ec
+            - |
+{% for cidr in [k3s_pod_cidr, k3s_service_cidr] %}
+              iptables -C FORWARD -i wg0 -d {{ cidr }} -j DROP 2>/dev/null || iptables -I FORWARD 1 -i wg0 -d {{ cidr }} -j DROP
+{% endfor %}
+              iptables -S FORWARD
+          # NET_RAW because iptables-legacy opens a raw socket; NET_ADMIN to write the table.
+{{ hardened_security_context(add=['NET_ADMIN', 'NET_RAW']) }}
+{{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       containers:
         - name: wg-easy
           image: {{ wg_easy_k8s_image }}

@@ -235,6 +235,8 @@ _HOST_OR_NETWORK_ROOT = {
     ("crowdsec", "crowdsec-agent"),
     # NET_ADMIN for wg-quick and iptables, plus two pod sysctls.
     ("wg-easy", "wg-easy"),
+    # NET_ADMIN + NET_RAW to insert the FORWARD drops for peer traffic to the cluster CIDRs.
+    ("wg-easy", "peer-cluster-drop"),
     ("qbittorrent", "wireguard"),
 }
 

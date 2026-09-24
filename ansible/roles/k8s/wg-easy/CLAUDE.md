@@ -60,6 +60,22 @@ there, because a reader who has only seen the Docker role's doc will not expect 
   upgrade. `container_item.default_dns` in host_vars stays only as the record of what the value
   should be; nothing renders it any more.
 
+## Peer reach: the LAN, not the cluster networks
+The server MASQUERADEs peer traffic out of its own pod, so a peer would arrive at any ClusterIP
+or pod IP as the wg-easy pod and bypass the Authelia gate on that service's route. The
+`peer-cluster-drop` init container stops that: it inserts `FORWARD -i wg0 -d <cidr> -j DROP` at
+position 1 for `k3s_pod_cidr` and `k3s_service_cidr`, and logs `iptables -S FORWARD` —
+`kubectl -n homelab logs deploy/wg-easy -c peer-cluster-drop` is the live proof.
+
+- Peers keep the LAN: SSH to the nodes and the Pi, and the Traefik and DNS VIPs. Those are LAN
+  addresses, and kube-proxy DNATs them in the host netns, after this pod's FORWARD chain.
+- Do not narrow peers to "the Traefik VIP and DNS only". That cuts SSH, the way back in.
+- The rules are rendered from the repo, never set as a PostUp in the admin UI: the app's DB is
+  lost on a PVC rebuild. Why an init container is enough is the `DECIDED:` marker in
+  `templates/deployment.yaml.j2`.
+- Enabling per-client filtering in the UI inserts wg-easy's `WG_CLIENTS` jump above these DROPs,
+  so a per-client allow rule naming a cluster CIDR would take effect.
+
 ## In-cluster reachability
 Authelia gates the Traefik ingress, not the in-cluster ClusterIP path. The
 `netpol-baseline` policy for this workload is what stands between an arbitrary pod and the admin
