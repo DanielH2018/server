@@ -159,7 +159,9 @@
   # `5:29.8.1-1~ubuntu.24.04~noble` -- because that is what the pin names and apt chooses the
   # Debian revision (docker_install_apt_suffix globs it, #2357). Comparing the whole installed
   # string against the suffix would report every correctly-pinned host as behind, a glob being
-  # nothing a dpkg version equals literally.
+  # nothing a dpkg version equals literally. It assumes the pin carries the `5:` epoch exactly
+  # as dpkg reports it; drop the epoch from docker_install_package_versions and this report
+  # fires on every run instead.
   ansible.builtin.debug:
     msg: >-
       docker-ce is {{ docker_install_installed_engine.stdout }} and the pin is
