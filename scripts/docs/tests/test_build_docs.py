@@ -8,6 +8,7 @@ Run: uv run pytest scripts/docs/tests/test_build_docs.py
 
 import importlib.util
 import subprocess
+import time
 from pathlib import Path
 
 import json
@@ -69,6 +70,35 @@ def test_a_generator_that_exits_is_one_failure_not_an_aborted_run():
         raise SystemExit(2)
 
     assert build_docs.guarded("scripts/docs/x.py", bail) == 2
+
+
+def test_a_generator_that_exits_with_a_message_is_still_one_failure():
+    """`sys.exit("boom")` gives a string exit code, which `int()` would choke on.
+
+    The choke happens inside the handler that exists to contain the failure, so it escapes
+    `guarded` and takes the remaining generators with it.
+    """
+
+    def bail():
+        raise SystemExit("no readable kubeconfig")
+
+    assert build_docs.guarded("scripts/docs/x.py", bail) == 1
+
+
+def test_a_generator_that_overruns_its_timeout_is_one_failure():
+    """The reject half of the SIGALRM guard that replaced `subprocess.run(timeout=...)`.
+
+    `reference/backlog.py` reaches the network. Without a deadline a hung read holds the
+    git-tree lock the docs cron takes for its whole life.
+    """
+    assert (
+        build_docs.guarded("scripts/docs/x.py", lambda: time.sleep(5), timeout=1) == 1
+    )
+
+
+def test_a_generator_inside_its_timeout_is_untouched():
+    """The accept half: the deadline must not fire on a generator that finishes."""
+    assert build_docs.guarded("scripts/docs/x.py", lambda: 0, timeout=5) == 0
 
 
 def test_a_generator_that_succeeds_keeps_its_exit_code():

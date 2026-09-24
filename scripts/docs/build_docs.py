@@ -35,6 +35,7 @@ Usage::
 """
 
 import argparse
+import contextlib
 import datetime as dt
 import importlib
 import json
@@ -167,8 +168,9 @@ def _module_name(script: str) -> str:
     return script.removeprefix("scripts/").removesuffix(".py").replace("/", ".")
 
 
+@contextlib.contextmanager
 def _timeout(seconds: int):
-    """SIGALRM after `seconds`, restored on exit. A no-op off the main thread.
+    """Raise `TimeoutError` after `seconds`. A no-op off the main thread.
 
     Replaces `subprocess.run(timeout=...)`, which went away with the subprocess. It is
     still needed: `reference/backlog.py` calls `gh` over the network, and an `http.client`
@@ -176,29 +178,25 @@ def _timeout(seconds: int):
     its lifetime -- rather than costing one stale page.
     """
 
-    class _Guard:
-        def __enter__(self):
-            def fire(signum, frame):
-                raise TimeoutError(f"generator exceeded {seconds}s")
+    def fire(signum, frame):
+        raise TimeoutError(f"generator exceeded {seconds}s")
 
-            try:
-                self.previous = signal.signal(signal.SIGALRM, fire)
-            except ValueError:
-                self.previous = None  # Not the main thread; no alarm available.
-                return self
-            signal.alarm(seconds)
-            return self
-
-        def __exit__(self, *exc):
-            if self.previous is not None:
-                signal.alarm(0)
-                signal.signal(signal.SIGALRM, self.previous)
-            return False
-
-    return _Guard()
+    try:
+        previous = signal.signal(signal.SIGALRM, fire)
+    except ValueError:
+        # Not the main thread, where `signal.signal` refuses. A generator called from a
+        # worker gets no deadline rather than no run.
+        yield
+        return
+    signal.alarm(seconds)
+    try:
+        yield
+    finally:
+        signal.alarm(0)
+        signal.signal(signal.SIGALRM, previous)
 
 
-def guarded(script: str, invoke) -> int:
+def guarded(script: str, invoke, timeout: int = GENERATOR_TIMEOUT) -> int:
     """Call `invoke` under the timeout, converting any failure into an exit code.
 
     This is the whole of the failure policy now that the generators share a process.
@@ -211,15 +209,20 @@ def guarded(script: str, invoke) -> int:
     Args:
         script: the generator's repo-relative path, for the failure line.
         invoke: a no-argument callable returning the generator's exit code.
+        timeout: seconds before the call is interrupted.
 
     Returns:
         The generator's exit code, or 1 if it raised.
     """
     try:
-        with _timeout(GENERATOR_TIMEOUT):
+        with _timeout(timeout):
             return int(invoke() or 0)
     except SystemExit as exc:
-        return int(exc.code or 0)
+        # `sys.exit("message")` is a documented idiom, so the code is not always an int.
+        # `int()` on a string raises, out of the handler that exists to contain failures.
+        if exc.code is None:
+            return 0
+        return exc.code if isinstance(exc.code, int) else 1
     except Exception as exc:
         traceback.print_exc()
         print(f"build_docs: {script} raised {type(exc).__name__}", file=sys.stderr)
