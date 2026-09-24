@@ -19,10 +19,27 @@ spec:
     burst: 150
     period: 1m
 ---
+# The authelia unit: strip, forwardAuth, then the `authelia` chain the route names. A copy of
+# roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
+# (why these three headers and never X-Forwarded-For or -Proto). Keep it in lockstep;
+# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: authelia
+  name: authelia-strip-forwarded-target
+  namespace: {{ k8s_longhorn_namespace }}
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Host: ""
+      X-Forwarded-Uri: ""
+      X-Forwarded-Method: ""
+---
+# Never reference this directly from a route: only the `authelia` chain below may name it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia-forwardauth
   namespace: {{ k8s_longhorn_namespace }}
 spec:
   forwardAuth:
@@ -36,6 +53,17 @@ spec:
       - Remote-Name
       - Remote-Email
     maxResponseBodySize: 1048576
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+  namespace: {{ k8s_longhorn_namespace }}
+spec:
+  chain:
+    middlewares:
+      - name: authelia-strip-forwarded-target
+      - name: authelia-forwardauth
 ---
 # A TLSOption resolves in the ROUTE's namespace, so the `modern` the ingressroute() macro
 # names must exist here too. Without it the router never builds and the TLS handshake is
