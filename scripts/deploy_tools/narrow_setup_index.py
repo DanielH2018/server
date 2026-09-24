@@ -131,8 +131,10 @@ def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> s
     is the direction this module always fails in.
 
     Raises:
-        CannotNarrow: another role's task file does not parse, so which tags it declares is
-            unknown. Unknown is not "no collision".
+        CannotNarrow: another role's task file does not parse, or parses to something other
+            than a list of tasks, so which tags it declares is unknown. Unknown is not
+            "no collision" — the shape `file_tags` refuses on the changed role's own file is
+            refused here too (#2445).
     """
     out: set[str] = set()
     for other in sorted(playbook_roles(playbook_text) - {role}):
@@ -147,8 +149,25 @@ def foreign_tags(role: str, playbook_text: str | None, ref: str, repo: str) -> s
                 doc = yaml_fast.safe_load(text)
             except yaml.YAMLError as exc:
                 raise CannotNarrow(f"{path} does not parse: {exc}") from exc
-            if isinstance(doc, list):
-                out |= declared_tags(doc)
+            # A mapping here is unreadable, not empty: `declared_tags` walks a list, so a
+            # file of some other shape contributes no tags and a collision it alone declares
+            # would be missed — the printed `--tags` would then run the other role's tasks
+            # too, which is the #2350 failure this function exists to prevent. Skipping it
+            # silently also left the module disagreeing with itself: `file_tags` raises on
+            # the same shape (#2445). Reachable since #2437 widened the filter above to every
+            # extension Ansible loads, so a `tasks/main.json` holding a mapping gets here.
+            if doc is None:
+                # An EMPTY document is the one non-list shape that is knowable rather than
+                # unreadable: a file with no tasks declares no tags, so it cannot hide a
+                # collision. Refusing on it would be a false refusal with the widest possible
+                # blast radius — this loop reads every OTHER setup role, so one empty
+                # `tasks/*.yml` anywhere in `roles/setup/` would stop narrowing for every
+                # setup change. `file_tags` reads one file, the changed role's own, and can
+                # afford to refuse.
+                continue
+            if not isinstance(doc, list):
+                raise CannotNarrow(f"{path} is not a list of tasks")
+            out |= declared_tags(doc)
     return out
 
 

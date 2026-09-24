@@ -374,3 +374,43 @@ def test_the_real_setup_tree_has_a_tag_two_roles_declare():
     text = (REPO / "ansible/initial_setup.yml").read_text()
     shared = narrow_setup.foreign_tags("initial_setup", text, "HEAD", str(REPO))
     assert "firewall" in shared, sorted(shared)
+
+
+# ── another role's task file that is not a list of tasks ────────────────────────────────
+#
+# `foreign_tags`' own refusal, which `file_tags` already had for the changed role's own file.
+# #2437 widened the filter above it from `.yml`/`.yaml` to every extension Ansible loads, so a
+# `tasks/main.json` holding a mapping reaches the parse — and skipping it silently would hide
+# whatever tags it declares, which is the collision the function exists to refuse (#2445).
+
+
+def _two_role_tree_json(tree: Tree, body: str, name: str = "main.json") -> str:
+    """Commit a second role in the same playbook whose `tasks/<name>` holds `body` verbatim."""
+    tree.write(TWO_ROLE_PLAYBOOK, TWO_ROLE_PLAYBOOK_TEXT)
+    tree.write(f"ansible/roles/setup/other/tasks/{name}", body)
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA.replace("[alpha]", "[firewall]"))
+    return tree.commit("a second role whose task file is not a list")
+
+
+def test_another_roles_task_file_holding_a_mapping_is_flagged(tree):
+    """The issue's verify-by: a mapping declares tags this walk cannot read, so refuse.
+
+    Skipping it contributed no tags, so `firewall` read as this role's alone and the printed
+    `--tags firewall` would have run the other role's tasks too — the #2350 failure.
+    """
+    old = _two_role_tree_json(tree, '{"name": "not a list of tasks"}\n')
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="is not a list of tasks"):
+        _narrow_two(tree, old, tree.commit("edit alpha"))
+
+
+def test_another_roles_empty_task_file_still_narrows(tree):
+    """The one non-list shape that is knowable: no tasks means no tags, so no collision.
+
+    Refusing here would be the widest possible false refusal — this walk reads every OTHER
+    setup role, so one empty `tasks/*.yml` anywhere under `roles/setup/` would stop narrowing
+    for every setup change.
+    """
+    old = _two_role_tree_json(tree, "---\n# nothing here yet\n", name="empty.yml")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    assert _narrow_two(tree, old, tree.commit("edit alpha")) == frozenset({"firewall"})

@@ -258,6 +258,14 @@ gate 3 needs the API server up.
    --s3` as root is the other listing. The read needs `k3s.cattle.io` in
    `k3s_readonly_crd_api_groups` (#2243); without it the gate exits 69 on a Forbidden.
 
+   **This gate is drilled weekly, unlike gates 1 and 2.** Since 2026-09-24 the `--list-only`
+   drill on daniel-box runs `k3s_etcd_restore_gates.py --gate 3` against the snapshot it just
+   listed, and treats any non-zero exit — 69 included — as a drill failure (#2420). So a k3s
+   change to the `ETCDSnapshotFile` CR, or a loss of the read-only ServiceAccount's access to
+   it, shows up on the **etcd Restore Drill** tile within a week rather than on the day you
+   read this page. The drill cannot run gates 1 and 2: gate 1 reads the stamp that drill
+   writes, and gate 2's stamp is taken by hand.
+
    **Exit 69 is the expected path when the API server is already down**, which is a large
    share of the reasons to be reading this page at all. It means gate 3 could not look, not
    that the snapshot is bad. Gates 1 and 2 are the ones that still bind — they read daniel-box,

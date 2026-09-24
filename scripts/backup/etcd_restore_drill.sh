@@ -45,7 +45,9 @@
 # STATUS, 2026-09-11. The FULL drill passes, in a throwaway guest: offbox-daniel-box-1789094702.zip
 # restored and served 8 namespaces, 72 Deployments, 45 PVCs, 48 CRDs and 51 Secrets, 50 seconds
 # end to end. `--list-only` works too and remains the weekly cheap proof of the off-box leg on
-# daniel-box (first proven 2026-08-22 with offbox-daniel-box-1787366702.zip).
+# daniel-box (first proven 2026-08-22 with offbox-daniel-box-1787366702.zip). Since 2026-09-24 it
+# also runs restore gate 3 against the snapshot it lists, so the runbook's ETCDSnapshotFile read
+# is drilled weekly rather than on the day of an outage (#2420) — see require_snapshot_restorable.
 #
 # It does NOT pass beside a live k3s, and that is structural rather than a bug here: `k3s server
 # --cluster-reset` assumes it is the only k3s on the host, and every workaround found the next
@@ -202,6 +204,88 @@ stamp_success() {
   # one already chmods its stamps for the same reason.
   chmod 0644 "${STAMP_DIR}/last-success-${mode}" 2>/dev/null || true
   return 0
+}
+
+# Where this script sits in the checkout it runs from, so the gate below can be found without a
+# hardcoded home directory. The weekly cron runs the drill in place (health-crons.yml), and the
+# guest that runs the FULL drill has no checkout at all — which is why the gate is called only on
+# the --list-only path.
+REPO_ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
+
+# Restore gate 3 of docs/k3s-etcd-restore.md, run against the snapshot this drill just named.
+#
+# WHY IT IS HERE. Gate 3 asks the cluster whether the named snapshot has an `ETCDSnapshotFile`
+# that reports `readyToUse`. Until 2026-09-24 its only caller was the runbook, so it ran on the
+# day of a real restore and never before it: a k3s change to that CR, or to the readonly
+# ServiceAccount's access to it, would first surface during the outage (#2420). The weekly
+# --list-only drill already resolves a snapshot name off-box, which is exactly gate 3's subject,
+# so it runs the gate on that name and a refusal fails the drill.
+#
+# GATE 3 ONLY. Gate 1 reads the `last-success-list-only` stamp THIS drill writes, so running it
+# here is circular and would fail on a host where the drill has never passed. Gate 2 checks a
+# stamp the operator takes out of band.
+#
+# THE OBVIOUS FALSE FAILURE DOES NOT HAPPEN, and the two measurements are why. The drill names the
+# newest `offbox-*` object in the bucket, and gate 3 matches `spec.snapshotName` EXACTLY against
+# the CRs — so a name mismatch, or a CR k3s had not yet written, would fail the drill on a
+# snapshot that is fine. Measured on daniel-box 2026-09-24: an off-box snapshot gets TWO CRs, one
+# `file://` and one `s3://`, carrying the same bare `offbox-<node>-<epoch>.zip` name the S3
+# listing's first column prints; and `metadata.creationTimestamp` runs 3 seconds behind
+# `status.creationTime` on all four of the last four s3 records, so the CR is written at upload
+# rather than reconciled later. The weekly drill runs 7.6 hours after the 02:45 upload.
+#
+# ANY NON-ZERO IS A FAILURE, exit 69 included. 69 is "could not ask the cluster" — no kubectl, an
+# unreadable kubeconfig, the wrong cluster, or a Forbidden read. That is the RBAC half of what
+# this call exists to exercise, so passing the drill on it would leave the same blind spot the
+# call closes. Same fail-closed posture as `stamp_dir_missing` in runbook_gates.py.
+#
+# THE CHECKOUT'S OWN INTERPRETER, not `uv run`, and that is measured rather than stylistic. This
+# cron runs as ROOT with `PATH=/usr/local/bin:/usr/bin:/bin`, and on daniel-box (2026-09-24) root
+# has no uv-managed python at all — `/root/.local/share/uv/python/` does not exist, `python3` on
+# that PATH is 3.12.3, and the only `python3.14` is `/home/ubuntu/.local/bin/python3.14`, which is
+# not on it. So `uv run --no-python-downloads --python 3.14` as root resolves nothing and would
+# fail every week. The `/opt/...` host scripts that do use that form run as {{ sys_user }}, whose
+# uv python dir is the one it finds. `.venv/bin/python` here is a symlink INTO that dir
+# (3.14.7 on daniel-box), root can read it, and running it directly syncs nothing — a root cron
+# must not write to the sys_user-owned .venv.
+#
+# The uv form is the fallback because `.venv` is gitignored, so a fresh checkout has none. The
+# gate's import closure is stdlib plus `lib.kubectl` and `deploy_tools.runbook_gates`, so
+# `--no-project` is enough for it and the python version comes from the repo's own
+# `.python-version` rather than a second copy of the number here.
+#
+# GATE_CMD is an array so the test can stub it — ansible/tests/setup/test_etcd_restore_drill_gate.py
+# drives a refusal and a pass through it without a cluster.
+GATE_SCRIPT="$REPO_ROOT/scripts/deploy_tools/k3s_etcd_restore_gates.py"
+if [[ -x "$REPO_ROOT/.venv/bin/python" ]]; then
+  GATE_CMD=("$REPO_ROOT/.venv/bin/python" "$GATE_SCRIPT" --gate 3)
+else
+  GATE_CMD=(
+    /usr/local/bin/uv run --no-project --no-python-downloads
+    --python "$(cat "$REPO_ROOT/.python-version" 2>/dev/null || echo 3.14)"
+    "$GATE_SCRIPT" --gate 3
+  )
+fi
+
+require_snapshot_restorable() {
+  local snapshot="$1" rc=0
+  log "restore gate 3: does the cluster call $snapshot restorable?"
+  # stdout is left alone so the gate's own verdict line lands in the cron's journal, which is
+  # where the operator reads whether the gate ran at all.
+  "${GATE_CMD[@]}" "$snapshot" || rc=$?
+  [[ "$rc" == "0" ]] || die "restore gate 3 refused $snapshot (exit $rc) — the snapshot this drill listed is not one the cluster would restore, so this drill has not passed"
+}
+
+# The whole of what `--list-only` does once it has a snapshot name, as one function so the ORDER
+# below is testable: the gate runs before the stamp, so a refusal leaves no
+# `last-success-list-only` behind. That order is the point of the gate — restore gate 1 reads
+# that stamp as proof this leg works, so stamping first and refusing afterwards would leave the
+# gate's own evidence in place and make this call cosmetic. Reads SNAPSHOT.
+finish_list_only() {
+  log "--list-only: the off-box leg works (credentials, bucket, folder, a named snapshot)"
+  log "nothing was restored; re-run without --list-only for the actual drill"
+  require_snapshot_restorable "$SNAPSHOT"
+  stamp_success list-only
 }
 
 # The verification stage, pulled out so it can be exercised without a real restore: a fixture
@@ -432,9 +516,7 @@ fi
 log "drilling snapshot: $SNAPSHOT"
 
 if [[ "$LIST_ONLY" == "1" ]]; then
-  log "--list-only: the off-box leg works (credentials, bucket, folder, a named snapshot)"
-  log "nothing was restored; re-run without --list-only for the actual drill"
-  stamp_success list-only
+  finish_list_only
   exit 0
 fi
 

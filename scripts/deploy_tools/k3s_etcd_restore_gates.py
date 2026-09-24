@@ -34,14 +34,24 @@ as a pass. `ETCD_DRILL_STATE_DIR` and `HOMELAB_STATE_DIR` point them elsewhere. 
 one cluster read, through `lib.kubectl` naming `prod`, so a staging kubectl is refused here too
 (#1663) — run it before `systemctl stop k3s`, while the API server still answers.
 
+A SINGLE GATE CAN BE RUN ON ITS OWN, and that is how gate 3 stops being exercised only on the
+day of a real restore. Gate 3's live dependencies — the readonly SA's access to
+`etcdsnapshotfiles`, and k3s still recording that CR at all — would otherwise first be read
+during an outage, so the weekly `--list-only` etcd restore drill runs `--gate 3` against the
+snapshot name it just listed and treats any refusal as a drill failure (#2420). That drill
+cannot run the whole runner: gate 1 reads the stamp the same drill writes, which is circular,
+and gate 2's stamp is the operator's to take.
+
 Exit codes:
-  0      every gate passed
+  0      every gate run passed
   1..3   the first gate that failed, by its number above
+  64     usage
   69     the cluster could not be asked (no kubectl, no readable kubeconfig, wrong cluster,
          or a list that returned nothing parseable)
 
 Usage:
     uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py <snapshot-name>
+    uv run python scripts/deploy_tools/k3s_etcd_restore_gates.py --gate 3 <snapshot-name>
 """
 
 import os
@@ -231,20 +241,46 @@ def run_gates(
     now: float | None = None,
     tools: Tools = DEFAULT_TOOLS,
     out=sys.stdout,
+    only: int | None = None,
 ) -> int:
-    """Run every gate in order, print one line per gate, and return the exit code."""
+    """Run the gates in order, print one line per gate, and return the exit code.
+
+    `only` restricts the run to the gate of that NUMBER, and does not change the exit code:
+    `runbook_gates.run_gates` returns `gate.number`, not a position in the sequence it was
+    handed, so `--gate 3` still exits 3 on a refusal.
+    """
     drill_dir = drill_dir or os.environ.get("ETCD_DRILL_STATE_DIR") or DRILL_STATE_DIR
     homelab_dir = (
         homelab_dir or os.environ.get("HOMELAB_STATE_DIR") or HOMELAB_STATE_DIR
     )
     now = time.time() if now is None else now
+    selected = GATES if only is None else tuple(g for g in GATES if g.number == only)
+    if not selected:
+        print(f"no gate numbered {only} — this runbook has {len(GATES)}", file=out)
+        return runbook_gates.EX_USAGE
     return runbook_gates.run_gates(
-        GATES, RUNBOOK, drill_dir, homelab_dir, now, snapshot, tools, out=out
+        selected, RUNBOOK, drill_dir, homelab_dir, now, snapshot, tools, out=out
     )
 
 
 def main(argv: list[str] | None = None) -> int:
-    return runbook_gates.cli(__doc__, argv, run_gates, takes=1)
+    """`--gate N` is peeled off here rather than in the shared `cli`.
+
+    `runbook_gates.cli` reads any argument starting with `-` as usage, and says in its own
+    docstring that no gate script has a flag. That stays true of the shared entry point: this
+    script takes its one flag off the front and hands `cli` the positionals it expects, so the
+    other four gate scripts are untouched and `--bogus` is still usage here.
+    """
+    argv = sys.argv[1:] if argv is None else argv
+    only: int | None = None
+    if argv[:1] == ["--gate"]:
+        if len(argv) < 2 or not argv[1].isdigit():
+            print(__doc__, file=sys.stderr)
+            return runbook_gates.EX_USAGE
+        only, argv = int(argv[1]), argv[2:]
+    return runbook_gates.cli(
+        __doc__, argv, lambda snapshot: run_gates(snapshot, only=only), takes=1
+    )
 
 
 if __name__ == "__main__":
