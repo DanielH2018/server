@@ -1,6 +1,31 @@
 {#
   Service for a k8s-hosted service — the single-port ClusterIP Service every plain web-app role
-  ships. 19 roles' service.yaml.j2 were byte-identical but for the name; this macro is that body.
+  ships. Those roles' service.yaml.j2 were byte-identical but for the name; this macro is that
+  body.
+
+  A Service that does NOT fit, and why each stays hand-written — check these before filing
+  "role X still inlines a Service", because each one was converted and reverted or measured
+  and refused:
+
+    selector ≠ name   The macro sets `selector.app` to the Service NAME. traefik's
+                      metrics-service, freshrss's `feed-cache` (pod label
+                      `freshrss-feed-cache`) and qbittorrent's service-wireguard all point a
+                      Service at a differently-labelled pod, so none can use it.
+    port ≠ targetPort qbittorrent's service.yaml.j2 publishes `container_item.port` and
+                      targets `qbittorrent_k8s_webui_port`. This macro emits one number for
+                      both, which is why the `port` argument above says there is only one.
+    a comment INSIDE  tdarr's ports list carries "The web UI only. tdarr_k8s_server_port is
+    the body          deliberately absent" on the line above `- port:`. Unlike pvc(), this
+                      macro has no `{% call %}` slot, so converting tdarr can only move that
+                      reasoning off the line it governs. Same refusal pvc() makes for
+                      pi-peer-backup and valheim.
+    extra metadata    registry's Service carries a `homelab/role` label (the --prune selector
+                      keys on it) and a pinned `clusterIP`. The macro emits neither.
+    no selector AT ALL  deploy-ui's Service is selector-less on purpose — its backend is a host
+                      process reached through a hand-written EndpointSlice, not a pod.
+    LoadBalancer      the macro is ClusterIP-only (it emits no `type:`), which rules out
+                      jellyfin's service-lan, mosquitto, pihole, valheim, terraria, traefik and
+                      wg-easy.
 
   Arguments mirror ingressroute()'s style:
     name       Service (and selector `app` label) name; matches the Deployment's own label and

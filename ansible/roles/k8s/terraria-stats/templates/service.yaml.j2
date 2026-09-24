@@ -1,13 +1,3 @@
+{% from 'service.yml.j2' import service with context %}
 ---
-apiVersion: v1
-kind: Service
-metadata:
-  name: terraria-stats
-  namespace: {{ k8s_namespace }}
-spec:
-  selector:
-    app: terraria-stats
-  ports:
-    - name: metrics
-      port: 9420
-      targetPort: 9420
+{{ service('terraria-stats', 9420, port_name='metrics') -}}
