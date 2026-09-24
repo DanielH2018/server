@@ -194,7 +194,15 @@ pythonpath = [
 # Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so
 # don't restate one here. `ansible/collections` is the vendored third-party tree, never
 # linted or formatted.
-extend-exclude = ["ansible/collections", "*.md"]
+# DECIDED: the claude_worktree stand-in is out of scope too. It is a byte-identical copy of
+# a dotfiles module that the dotfiles repo lints at its own 3.10 floor, and a deployed-host
+# test diffs the two. This repo's 3.14 target rewrites `except (A, B):` into PEP 758's
+# unparenthesized form, which is a SyntaxError on 3.10 and breaks the byte match.
+extend-exclude = [
+  "ansible/collections",
+  "*.md",
+  "ansible/tests/_claude_worktree_stand_in/claude_worktree.py",
+]
 
 [tool.ruff.lint]
 # Bug-catching rules only — pyflakes F (unused imports, undefined names, f-string bugs),

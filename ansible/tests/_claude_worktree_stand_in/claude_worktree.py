@@ -8,17 +8,22 @@ says a branch has landed — and disagree on what to DO about it: the hook repor
 squash-merge match and never removes it, the server script removes it and asks the forge
 first. This module is the shared reading; each caller keeps its own delete authority.
 
-Every function here takes text and returns a verdict, or runs a single read-only git
-query. None of them removes anything. A caller that needs the deployed copy imports it
-from `~/.local/share/claude-worktree` (`CLAUDE_WORKTREE_HOME` overrides the path), the
-way `claude_guard` is reached from `~/.local/share/claude-guard`.
+Every function here takes text and returns a verdict, or runs a single read-only
+query: git, or one `gh pr list` for `forge_says_merged`. None of them removes anything.
+A caller that needs the deployed copy imports it from `~/.local/share/claude-worktree`
+(`CLAUDE_WORKTREE_HOME` overrides the path), the way `claude_guard` is reached from
+`~/.local/share/claude-guard`. The `worktree-landed.sh` Stop hook is bash, so it runs
+this file as a script: `python3 claude_worktree.py forge-merged <branch> <head>`.
 
 Python 3.10 is the floor, not 3.14: the SessionStart hook runs under the system
 interpreter, so nothing here may use syntax the system python3 lacks.
 """
 
+import json
+import os
 import re
 import subprocess
+import sys
 from dataclasses import dataclass
 from pathlib import Path
 
@@ -151,3 +156,95 @@ def default_ref(repo: str) -> str | None:
         if _git_stdout(["rev-parse", "--verify", "--quiet", guess], cwd=repo):
             return guess
     return None
+
+
+def pr_head_says_merged(stdout: str, head: str) -> bool:
+    """Read `gh pr list --state merged --head <branch> --json headRefOid`.
+
+    True when one of those merged PRs was merged from exactly this commit.
+
+    Matching on the head SHA, never on "a merged PR exists for this branch name".
+    Branch names are reused: on 2026-08-27 one session in DanielH2018/server landed
+    three PRs from `worktree-pi-detached-container-arm`, each with a different tip, so
+    a name match would delete a branch carrying work that never landed. SHA equality is
+    the whole guarantee.
+    """
+    try:
+        prs = json.loads(stdout or "[]")
+    except json.JSONDecodeError:
+        return False
+    if not isinstance(prs, list):
+        return False
+    return any(isinstance(p, dict) and p.get("headRefOid") == head for p in prs)
+
+
+# One answer per (repo, branch, head) for the life of the process. A fan-out asks the
+# same question once per claimed issue, and each ask is a network round-trip (server
+# #1279).
+_FORGE_MEMO: dict[tuple[str, str, str], bool] = {}
+
+
+def forge_says_merged(repo: str, branch: str, head: str, timeout: float = 10.0) -> bool:
+    """Did GitHub merge a PR whose head was exactly `head`, from branch `branch`?
+
+    This is the one signal that settles a squash merge after the default branch drifted
+    into a conflict with it: ancestry, patch-id and merge-tree all fail there, and only
+    the forge still knows what it merged. It is also the only reader here that needs the
+    network and credentials, so callers ask it last.
+
+    Every failure is no verdict and reads False: no `gh`, no auth, a timeout, or output
+    that does not parse. Both callers act on True by deleting, so unknown must keep.
+    `--limit 30`: with a reused branch name, the PR whose head is this tip need not be
+    the newest one. `GH_BIN` overrides the executable, which is how tests stub it.
+    """
+    if not branch or not head:
+        return False
+    key = (repo, branch, head)
+    if key in _FORGE_MEMO:
+        return _FORGE_MEMO[key]
+    argv = [
+        os.environ.get("GH_BIN", "gh"),
+        "pr",
+        "list",
+        "--state",
+        "merged",
+        "--head",
+        branch,
+        "--limit",
+        "30",
+        "--json",
+        "headRefOid",
+    ]
+    env = dict(os.environ, GH_PROMPT_DISABLED="1", GH_NO_UPDATE_NOTIFIER="1")
+    try:
+        result = subprocess.run(
+            argv,
+            cwd=repo,
+            env=env,
+            capture_output=True,
+            text=True,
+            check=False,
+            timeout=timeout,
+        )
+    except (OSError, subprocess.TimeoutExpired):
+        verdict = False
+    else:
+        verdict = result.returncode == 0 and pr_head_says_merged(result.stdout, head)
+    _FORGE_MEMO[key] = verdict
+    return verdict
+
+
+def main(argv: list[str]) -> int:
+    """`forge-merged <branch> <head>`: exit 0 when the forge merged that head, else 1.
+
+    The entry point for the bash Stop hook, so both hooks and the server pruner share
+    one lookup. It runs from the current directory, which the hook sets to the worktree.
+    """
+    if len(argv) != 3 or argv[0] != "forge-merged":
+        print("usage: claude_worktree.py forge-merged <branch> <head>", file=sys.stderr)
+        return 2
+    return 0 if forge_says_merged(os.getcwd(), argv[1], argv[2]) else 1
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv[1:]))
