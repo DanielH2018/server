@@ -170,27 +170,31 @@ gitops_deploy_k8s_timeout_s: 900
 # ignore_errors/failed_when anywhere in this chain — so it can never compound with an
 # independent failure elsewhere; see CLAUDE.md's rollback-timeout section).
 #
-# Re-sized (round 2, this fix): the prior 900s residual named 180s for "the rest of the run"
-# and never named the forward apply's OWN rollout wait — `manifests_rollout_timeout`, which
-# `radarr`/`sonarr` override to 660s (first-boot DOCKER_MODS install) while everything else
-# defaults to 300s. Sized here against every currently-promoted (`k8s_autodeploy: true`) role
-# that also declares `k8s_autodeploy_snapshot_pvcs`, at task 6b's drill-sized
-# volume_revert_state_timeout/api_timeout (90/30) and volume_snapshot_timeout (120):
+# Sized against every currently-promoted (`k8s_autodeploy: true`) role that also declares
+# `k8s_autodeploy_snapshot_pvcs`, at task 6b's drill-sized volume_revert_state_timeout/api_timeout
+# (90/30) and volume_snapshot_timeout (120):
 #   ceiling = claims x (volume_snapshot_timeout + 3xvolume_revert_state_timeout
-#             + 3xvolume_revert_api_timeout) + manifests_rollout_timeout
-#             + k8s_rollout_stabilise_seconds (60)
-# 1320 was derived from `tdarr` (2 claims, default 300s rollout): 2x(120+360) + 300 + 60. tdarr
-# has since been re-denied (`k8s_autodeploy: false`, 2026-08-22) over its shared-media coupling,
-# so it is no longer in the promoted set and no longer the worst PROMOTED service — that is now
-# radarr/sonarr's single-claim 660s-rollout case at 1200s. The constant is therefore 120s larger
-# than today's worst case, which errs safe; the test below computes the real ceiling from role
-# sources rather than trusting this number, so a future promotion re-tightens it automatically.
+#             + 3xvolume_revert_api_timeout) + the role's OWN in-role waits
+#             + manifests_rollout_timeout + k8s_rollout_stabilise_seconds (60)
+#
+# The in-role term arrived with #2399, and it moved the worst case. A role's own `tasks/` run
+# before k8s/rollout-drain, so what they wait for adds to the drain rather than overlapping it:
+# prowlarr waits `--timeout=300s` for its flaresolverr isolation probe Job, on top of its 780s
+# rollout. That makes prowlarr the worst promoted service at 480 + 300 + 780 + 60 = 1620s, where
+# the derivation that counted the drain alone read it as 1320. An inline `rollout status` gate is
+# NOT counted — sonarr's 660s gate waits for the rollout the drain also waits for, so the two are
+# alternatives on one timeline, not additions.
+#
+# 1620 is today's worst case exactly, with no slack, and that is deliberate: it is the largest
+# value the four tree-lock waiters (3300s) still clear. The test below computes the real ceiling
+# from role sources rather than trusting this number, so a new in-role wait or a rollout bump
+# fails there instead of being absorbed silently.
 #
 # The multi-service case is NOT covered by this constant and is not meant to be. Every role in a
-# batch runs its own snapshot+revert phase in sequence inside the one playbook run (only the
-# rollout WAIT is batched/deduped via roles/k8s/rollout-drain), so a batch's snapshot+revert cost
-# is additive — radarr and sonarr together come to 2x(120+360) + 660 + 60 = 1680s, and three
-# such services to ~2160s. Past this budget `run()`'s killpg fires MID-REVERT, after
+# batch runs its own snapshot+revert phase and its own in-role waits in sequence inside the one
+# playbook run (only the rollout WAIT is batched/deduped via roles/k8s/rollout-drain), so a
+# batch's cost is additive — radarr and sonarr together come to 2x(120+360) + 660 + 60 = 1680s,
+# and three such services to ~2160s. Past this budget `run()`'s killpg fires MID-REVERT, after
 # k8s/volume-revert has scaled the workload to zero replicas and attached its volume with
 # disableFrontend: true.
 #
@@ -208,7 +212,7 @@ gitops_deploy_k8s_timeout_s: 900
 # cron take) can now be held past the 30-minute timer interval in the pathological case both
 # k8s timeouts are spent in full — see CLAUDE.md for what that does to a concurrent
 # ./scripts/deploy.sh (exit 75, nothing deployed) or the secret-rotate cron (waits on the lock).
-gitops_deploy_k8s_rollback_timeout_s: 1320
+gitops_deploy_k8s_rollback_timeout_s: 1620
 
 # Bounds ONE broad-plane apply: `initial_setup.yml --tags <role>` for a setup-plane change, or
 # a full `deploy.yml` for a shared-template/inventory one. That arm is FORWARD-ONLY, so this is

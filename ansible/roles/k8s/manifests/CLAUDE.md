@@ -25,7 +25,7 @@ with the Docker-side `roles/containers/common` namespace.
 
 Optional, and empty by default: `manifests_extra_rollouts` (below), `manifests_self_rollouts`
 (below, under the release record; it also feeds the pod-template fingerprints),
-`manifests_rollout_timeout` (default `300s`),
+`manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`),
 `k8s_autodeploy_snapshot_pvcs` (below).
 
 **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`. The

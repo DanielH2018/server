@@ -18,7 +18,7 @@
   vars:
     manifests_service: radarr
     # The startupProbe allows up to 10 min of first-boot DOCKER_MODS install
-    # (2026-08-09); the default 300s rollout wait times out against it and aborts
+    # (2026-08-09); the shared rollout default times out against it and aborts
     # the whole deploy while the pod is still coming up healthy. The number lives in
     # defaults/main.yml because deployment.yaml.j2's progressDeadlineSeconds reads it too.
     manifests_rollout_timeout: "{{ radarr_k8s_rollout_timeout }}"

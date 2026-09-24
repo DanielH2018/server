@@ -14,6 +14,27 @@
 # (2026-09-09) is the wrapper's own release.
 valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
 
+# The first-boot budget for this server, declared ONCE. Read by the `manifests_rollout_timeout`
+# passed to k8s/manifests in tasks/main.yml (the drain's `rollout status --timeout`) and by
+# `progressDeadlineSeconds` in templates/deployment.yaml.j2. The two have to move together: at a
+# deadline below the budget, `rollout status` fails on ProgressDeadlineExceeded whatever
+# `--timeout` says, and at a budget below the deadline the drain gives up first and the extra
+# deadline is never reached.
+#
+# 1800s, the larger of the two numbers this role used to carry (#2409). The role declared 900s at
+# the manifests call site and 1800 in the template, and the template's comment named the deadline
+# as the binding one, which stopped being true once the drain started passing a `--timeout`.
+# 1800 rather than 900 because nothing in the repo records a first boot completing inside 900s:
+# the 2026-08-13 measurement is the opposite, a rollout still pulling this image at 10 minutes
+# and marked ProgressDeadlineExceeded at the 600s Kubernetes default while the pod carried on
+# fine underneath. Between that pull and the ~1.8 G SteamCMD download into an empty install PVC,
+# first boot needs the room; a cached restart rolls in seconds and never spends it.
+#
+# valheim is NOT auto-deployed (`k8s_autodeploy: false`), so this budget is outside
+# gitops_deploy's forward and rollback caps — raising it costs an operator deploy a slower
+# failure on a genuinely stuck rollout and nothing else.
+valheim_k8s_rollout_timeout: 1800s
+
 # ── BepInEx and the mod set ─────────────────────────────────────────────────────────────
 # BEPINEX=true makes the image install BepInExPack Valheim beside the vanilla server in
 # /opt/valheim/bepinex and run the server through it. Mutually exclusive with VALHEIM_PLUS,

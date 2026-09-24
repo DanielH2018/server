@@ -24,6 +24,7 @@ import pytest
 import yaml
 
 from _helpers import manifests_rollout_timeout_s
+from _role_tasks import in_role_wait_s
 
 # "The rollback survives max flock contention" is an invariant split across two templates:
 #   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
@@ -243,8 +244,9 @@ def test_a_short_lock_waiter_is_flagged():
 
 # K8S_ROLLBACK_TIMEOUT_S must cover one full rollback cycle for the most expensive currently-
 # promoted (k8s_autodeploy: true) service that also declares k8s_autodeploy_snapshot_pvcs: the
-# pre-revert snapshot wait, the revert itself, the forward apply's own rollout wait, and the
-# post-rollout stabilisation soak — all inside the SAME playbook run, on one continuous timeline
+# pre-revert snapshot wait, the revert itself, whatever the role waits for in its OWN tasks, the
+# forward apply's rollout wait, and the post-rollout stabilisation soak — all inside the SAME
+# playbook run, on one continuous timeline
 # where nothing fails (a failure aborts the whole play immediately, so it can never compound with
 # an independent failure elsewhere — see docs/gitops-pipeline.md, *The rollback timeout, derived*).
 #
@@ -263,10 +265,27 @@ _ALL_VARS = pathlib.Path(__file__).parents[4] / "inventory" / "group_vars" / "al
 
 def _rollout_timeout_s(role: str) -> int:
     # Shared with ansible/tests/longhorn/test_rollback_timeout_budget.py and the inline-gate
-    # census. The literal read this replaced returned the 300s default for a role that names
+    # census. The literal read this replaced returned the shared default for a role that names
     # its budget in a variable (sonarr), sizing a 660s service as a 300s one with every test
     # green.
     return manifests_rollout_timeout_s(_K8S_ROLES_DIR / role)
+
+
+# The role whose in-role wait this derivation must find. prowlarr's flaresolverr isolation probe
+# waits `--timeout=300s` for a Job, before the batch drain runs and on top of it, and the
+# derivation below counted only the drain until #2399. Named rather than counted: the reader
+# finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
+# quietly smaller and every assertion here still green.
+_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300}
+
+
+def test_the_in_role_wait_census_is_non_vacuous():
+    for role, seconds in _IN_ROLE_WAIT_CENSUS.items():
+        assert in_role_wait_s(role) >= seconds, (
+            f"{role} no longer contributes {seconds}s of in-role waiting, so the budget "
+            "derivations below are sizing against the drain alone again — find where that "
+            "wait went before trusting a green run"
+        )
 
 
 def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
@@ -295,7 +314,12 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
         claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
         if not claims:
             continue
-        ceiling = len(claims) * per_claim + _rollout_timeout_s(role) + stabilise
+        ceiling = (
+            len(claims) * per_claim
+            + in_role_wait_s(role)
+            + _rollout_timeout_s(role)
+            + stabilise
+        )
         if ceiling > worst_ceiling:
             worst_role, worst_ceiling, worst_claims = role, ceiling, len(claims)
 
@@ -305,7 +329,7 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
     )
     assert worst_ceiling <= rollback_timeout, (
         f"{worst_role} needs {worst_ceiling}s for one full rollback cycle "
-        f"({worst_claims} claim(s), "
+        f"({worst_claims} claim(s), {in_role_wait_s(worst_role)}s of in-role waits, "
         f"{_rollout_timeout_s(worst_role)}s rollout), which exceeds "
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "

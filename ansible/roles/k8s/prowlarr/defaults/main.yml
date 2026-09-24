@@ -42,11 +42,12 @@ prowlarr_k8s_size: 2Gi
 # The 300s default failed that deploy after its apply while the old flaresolverr pod served
 # throughout. That pod started 535s after it was scheduled.
 # DECIDED: 780s, the most the rollback budget allows. A failed auto-deploy's rollback run must fit
-# the snapshot, the revert, this wait and the stabilisation soak inside
-# gitops_deploy_k8s_rollback_timeout_s (1320s), and those other terms take 540s.
-# test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that sum. 780s leaves
-# 245s over the one measured pull. A slower link needs the rollback budget raised first. A cached
-# image rolls in seconds, so the budget costs time only on a real hang.
+# the snapshot, the revert, the netpol probe's own 300s wait, this wait and the stabilisation soak
+# inside gitops_deploy_k8s_rollback_timeout_s (1620s), and those other terms take 840s.
+# test_k8s_rollback_budget_covers_the_worst_single_promoted_service enforces that sum, and counts
+# the probe wait since #2399. 780s leaves 245s over the one measured pull. A slower link needs the
+# rollback budget raised first, and that budget is already at the ceiling the four tree-lock
+# waiters clear. A cached image rolls in seconds, so the budget costs time only on a real hang.
 prowlarr_k8s_rollout_timeout: 780s
 
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────

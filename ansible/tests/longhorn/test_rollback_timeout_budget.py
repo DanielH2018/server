@@ -49,10 +49,16 @@ rollback_budget` below closes it by reading the per-tick cap, and it takes the r
 `max()` over promoted roles rather than a `sum()` — a `sum()` would demand a budget larger than
 reality, since only one service's rollout wait is ever the binding one (k8s/rollout-drain
 batches them).
+
+IN-ROLE WAITS ARE A THIRD TERM (#2399). What a role waits for in its own `tasks/` — prowlarr's
+flaresolverr isolation probe waits 300s for a Job — runs before the drain and adds to it, and
+both derivations here counted the drain alone. `_role_tasks.in_role_wait_s` reads the term and
+excludes an inline `rollout status` gate, which waits for a rollout the drain also waits for.
 """
 
 from lib import yaml_fast
 from _helpers import REPO as _REPO, manifests_rollout_timeout_s
+from _role_tasks import in_role_wait_s
 
 
 _K8S_ROLES = _REPO / "ansible/roles/k8s"
@@ -188,17 +194,29 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     )
 
     # The worst batch the cap still permits: the `cap` most expensive claim-declaring services.
+    #
+    # The cost key is the whole per-service cost, not the claim count alone. Every promoted
+    # claim-declaring role declares exactly one claim today, so a claims-only key left every
+    # candidate tied and `sorted` picked the alphabetically first — bazarr, at the shared
+    # rollout default — while prowlarr cost 980s more (#2399).
     per_claim = snapshot_timeout + 3 * (state_timeout + api_timeout)
-    by_cost = sorted(promoted, key=lambda rc: rc[1] * per_claim, reverse=True)[:cap]
+
+    def cost(role: str, claims: int) -> int:
+        return claims * per_claim + in_role_wait_s(role) + _rollout_timeout_s(role)
+
+    by_cost = sorted(promoted, key=lambda rc: cost(*rc), reverse=True)[:cap]
     batch_revert = sum(claims * per_claim for _, claims in by_cost)
+    # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
+    batch_in_role = sum(in_role_wait_s(role) for role, _ in by_cost)
     # Deduped across the batch by k8s/rollout-drain, so max() not sum().
     batch_rollout = max(_rollout_timeout_s(role) for role, _ in by_cost)
-    worst_batch = batch_revert + batch_rollout + stabilise
+    worst_batch = batch_revert + batch_in_role + batch_rollout + stabilise
 
     assert worst_batch <= rollback_timeout, (
         f"the worst batch the cap permits ({cap} claim-declaring service(s): "
         f"{[r for r, _ in by_cost]}) costs {worst_batch}s "
-        f"(revert {batch_revert}s + rollout {batch_rollout}s + stabilise {stabilise}s), over "
+        f"(revert {batch_revert}s + in-role waits {batch_in_role}s + rollout {batch_rollout}s "
+        f"+ stabilise {stabilise}s), over "
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s). Past that budget run()'s "
         f"killpg fires MID-REVERT — after volume-revert scaled the workload to zero replicas "
         f"and attached its volume with disableFrontend: true. Lower "

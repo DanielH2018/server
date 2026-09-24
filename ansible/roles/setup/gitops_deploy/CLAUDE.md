@@ -397,7 +397,7 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
   not fail safe: a timed-out consultation is NO VERDICT.
 - **All four tree-lock waiters are pinned as a census** (`_LOCK_WAITERS`,
   `_worst_lock_hold()` in the same test file): `deploy.sh`, secret-rotate, docs-refresh and
-  eval-run each wait 3000 s, derived from the four timeouts.
+  eval-run each wait 3300 s, derived from the four timeouts.
 - **A busy service lock is contention, not a failed deploy** (`ServiceLockBusy`, caught ahead
   of each handler's failure arm; `deploy_defer.for_contention` resets to `local`, returns 0,
   writes no hold). The streak IS recorded in `contention_since` (#1847): monitor-bridge pages

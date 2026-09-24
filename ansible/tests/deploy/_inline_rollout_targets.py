@@ -10,7 +10,7 @@ from `test_inline_rollout_gates.py` on 2026-09-02; that module's docstring is th
 import re
 from collections import defaultdict
 
-from _inline_rollout_tasks import _JINJA, _Task, _tasks
+from _role_tasks import _JINJA, _Task, _tasks
 from _k8s_render import rendered_docs
 
 

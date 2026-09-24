@@ -19,10 +19,18 @@ from _k8s_render import rendered_docs
 _K8S_ROLES = REPO / "ansible/roles/k8s"
 _DEFAULT_DEADLINE_S = 600
 
-# Non-vacuity: the Deployments whose budget exceeds the default and that DO cover it. If the
-# census stops finding them, the check below passes over nothing. sonarr and radarr are named
-# here because the check was written for them (#2370) — the guard has no exception set, so a
-# role that stopped rendering its deadline would otherwise leave the census quietly smaller.
+# Non-vacuity: the Deployments whose budget exceeds the Kubernetes default deadline and that DO
+# cover it. If the census stops finding them, the check below passes over nothing. sonarr and
+# radarr are named here because the check was written for them (#2370) — the guard has no
+# exception set, so a role that stopped rendering its deadline would otherwise leave the census
+# quietly smaller.
+#
+# The floor this census tests against is `_DEFAULT_DEADLINE_S` (600), NOT the shared rollout
+# budget, and the two stopped being different numbers when #2377 raised that budget from 300s to
+# 600s. Every role that passes no override now sits AT the floor and contributes nothing here, so
+# these five carry the whole census: sonarr and radarr clear it by 60s, prowlarr and flaresolverr
+# by 180s, valheim by 1200s. A bump of `_DEFAULT_DEADLINE_S` past 660 would make the first two
+# vacuous rather than red — re-derive the set if that number moves.
 _MUST_COVER = frozenset({"prowlarr", "flaresolverr", "valheim", "sonarr", "radarr"})
 
 

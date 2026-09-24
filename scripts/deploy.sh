@@ -107,8 +107,8 @@ LOCK="${HOMELAB_DEPLOY_TREE_LOCK:-/var/lock/server-git-tree.lock}"
 DEPLOY_LOCKS=ansible/roles/setup/gitops_deploy/files/deploy_locks.py
 # Where a run's detached snapshot worktree is created. Overridable for the same reason.
 SNAPSHOT_ROOT="${HOMELAB_DEPLOY_SNAPSHOT_ROOT:-/tmp/homelab-deploy-snapshots}"
-# Covers gitops-deploy's worst-case hold of 2940s (STAGING_GATE_TIMEOUT_S 600 +
-# STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 900 + K8S_ROLLBACK_TIMEOUT_S 1320), not its
+# Covers gitops-deploy's worst-case hold of 3240s (STAGING_GATE_TIMEOUT_S 600 +
+# STAGING_EXPECT_TIMEOUT_S 120 + K8S_DEPLOY_TIMEOUT_S 900 + K8S_ROLLBACK_TIMEOUT_S 1620), not its
 # TimeoutStartSec. Was 1500 from d1a5b6c9 until 2026-08-23, when the unit's TimeoutStartSec really
 # was 25min; it then went 25 -> 35 -> 45min and this value was left behind, so a deploy launched
 # during a pathological gitops run gave up having deployed nothing while the run it was queued
@@ -116,7 +116,7 @@ SNAPSHOT_ROOT="${HOMELAB_DEPLOY_SNAPSHOT_ROOT:-/tmp/homelab-deploy-snapshots}"
 # and pinned by test_deploy_lock_wait_budget.py, so raising any of the four fails that test
 # rather than silently shortening this wait again. It is also the budget each per-service lock
 # waits: a service lock is held across the same playbook the tree lock used to cover.
-LOCK_WAIT=3000
+LOCK_WAIT=3300
 LOCK_BUSY=75
 # flock failed for a reason that is NOT contention -- a bad descriptor (65), a lock file this
 # user cannot open (1), anything else it returns. Nothing was deployed, exactly as 75 promises,
