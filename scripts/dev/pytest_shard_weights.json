@@ -214,6 +214,7 @@
  "ansible/tests/deploy/test_platform_filter.py": 0.0,
  "ansible/tests/deploy/test_platform_filter_real_inventory.py": 0.0,
  "ansible/tests/deploy/test_playbook_spawns_pin_interpreter.py": 3.34,
+ "ansible/tests/deploy/test_registering_consumers.py": 0.0,
  "ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py": 0.67,
  "ansible/tests/deploy/test_renovate_per_package_manual_rules_carry_the_denylist_marker.py": 0.66,
  "ansible/tests/deploy/test_retried_commands_survive_check_mode.py": 0.78,

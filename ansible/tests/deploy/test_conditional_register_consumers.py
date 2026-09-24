@@ -51,6 +51,10 @@ break inside `stdout_lines`, so a consumer reading the `_lines` form passed (#23
 child's own `failed_when` against the block's name (#2352). And `_check_mode_producers` skipped
 any register the when-based rule already covered, so a consumer that repeated its producer's
 `when:` was called clean even though check mode skips the producer regardless (#2353).
+
+A fourth followed on the same day: both rules exempted the whole TASK once it registered a name
+they tracked, so a task that reads a sibling's skip result and registers something of its own
+was judged by neither. `test_registering_consumers.py` holds those anchors.
 """
 
 from pathlib import Path

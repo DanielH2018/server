@@ -147,12 +147,17 @@ def _offenders(path: Path) -> list[Problem]:
 
     problems = _check_mode_offenders(path, pairs, skipped)
     for task in tasks:
-        if task.get("register") in conditional:
-            continue  # the producer itself
         body = expressions(task)
         consumer_when = _when_text(task)
         loop = str(task.get("loop", ""))
         for reg, producer_conditions in conditional.items():
+            if task.get("register") == reg:
+                # DECIDED: the exemption is per REGISTER, not per task (#2360). Ansible never
+                # evaluates a skipped task's own `failed_when`, so a producer cannot meet its
+                # own skip result — but exempting the whole task hid its reads of every OTHER
+                # producer. Keyed on the register NAME rather than task identity: no task file
+                # in this tree registers one name twice, so the two are the same rule here.
+                continue
             deref = [attr for attr in SKIP_MISSING if unguarded_deref(body, reg, attr)]
             if not deref:
                 continue
@@ -191,8 +196,6 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
     """Consumers that dereference a register check mode turns into a skip result."""
     problems = []
     for task, inherited in pairs:
-        if task.get("register") in skipped:
-            continue  # the producer itself
         if excludes_check_mode(task.get("when")):
             continue
         if any(excludes_check_mode(when) for when in inherited):
@@ -202,6 +205,8 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
         if any(skip_filter in loop for skip_filter in SKIP_FILTERS):
             continue
         for reg, producer in skipped.items():
+            if task.get("register") == reg:
+                continue  # this pairing only, per the marker in `_offenders`
             deref = [attr for attr in SKIP_MISSING if unguarded_deref(body, reg, attr)]
             if not deref:
                 continue
