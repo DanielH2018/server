@@ -4,18 +4,19 @@
 #   matcher: Bash
 #   timeout: 15
 #   order: 10
-# PreToolUse(Bash) hook — the one process that runs all five Bash arms: the read-only
-# classifier, the protected-file guard, the land.sh nudge, the footgun guard and the
-# nested-docs injector. Each used to be its own hook with its own `uv run` start; issue
-# #2394 merged them because all five import the same two modules. `bash-pretool.py`'s
+# PreToolUse(Bash) hook — the one process that runs all four Bash arms: the
+# protected-file guard, the land.sh nudge, the footgun guard and the nested-docs
+# injector. Each used to be its own hook with its own `uv run` start; issue #2394 merged
+# them because all import the same two modules. The read-only classifier that was a
+# fifth arm moved to the dotfiles `claude_guard` package (dotfiles #628). `bash-pretool.py`'s
 # docstring owns the merge rule and the per-arm failure posture.
 #
 # Routed through uv so the project-pinned interpreter runs (not the system python3, which
 # cannot parse this repo); --no-sync skips the env reconcile to stay fast on the hot path.
 # `exec` preserves the hook's stdin JSON. No output -> normal permission flow.
 #
-# The timeout is 15s, the largest of the five it replaces (block-protected-bash's): one
-# process now does all five arms' work, so the budget has to cover the slowest of them.
+# The timeout is 15s, the largest of the shims it replaced (block-protected-bash's): one
+# process now does every arm's work, so the budget has to cover the slowest of them.
 #
 # DECIDED: the `cd` arm asks; every other failure stays fail-open. Issue #1014 made all
 # three failure paths fail-open so that a broken guard does not brick every tool call, and

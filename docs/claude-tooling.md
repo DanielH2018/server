@@ -420,27 +420,28 @@ section is the summary a reader needs before opening one.
 
 ### `bash-pretool` (PreToolUse, Bash)
 
-It *decides nothing itself*. It is the one process that runs the five Bash arms —
-`auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`, `block-footguns` and
-`inject-nested-docs` — each of which used to be its own hook with its own `uv run` start. All
-five import `_hook_common` and `claude_guard.segment`, so four of those five interpreter starts
-bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
+It *decides nothing itself*. It is the one process that runs the four Bash arms —
+`block-protected-bash`, `nudge-land-sh`, `block-footguns` and `inject-nested-docs` — each of
+which used to be its own hook with its own `uv run` start. A fifth arm,
+`auto-approve-readonly`, moved into the dotfiles `claude_guard` package as `readonly.py`
+(dotfiles #628). When #2394 merged them, all five imported `_hook_common` and
+`claude_guard.segment`, so four of those five interpreter starts bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
 the dispatcher's 60 ms, and 96 ms when the five ran concurrently (#2394).
 
 Each arm runs under its own `try/except` and contributes a `(decision, reason)` pair or
 nothing. `bash-pretool.py` then merges them the way the harness merges separate hooks — `deny`
 over `ask` over `allow`, the earliest arm at the winning level keeping the reason — and emits
 one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
-`additionalContext`. An arm that raises loses its own verdict, keeps the other four, and says
-so on stderr naming itself.
+`additionalContext`. An arm that raises loses its own verdict, keeps the others, and says so
+on stderr naming itself.
 
 `uv-python.sh` stays a separate hook: it rewrites the command rather than judging it, so it has
-no verdict to merge. `bash-pretool.sh` runs ahead of it, which is where `auto-approve-readonly`
-already sat, so every arm reads the command the session typed.
+no verdict to merge. `bash-pretool.sh` runs ahead of it, so every arm reads the command the
+session typed.
 
 A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash`,
-`nudge-land-sh` and `block-footguns` as the guards that did not run. Three of the five arms
-asked in that case before the merge and two stayed silent; one process can only do one thing,
+`nudge-land-sh` and `block-footguns` as the guards that did not run. Three of the five
+separate hooks asked in that case before the merge and two stayed silent; one process can only do one thing,
 and a missed approval or doc injection is a prompt and a re-read, where a missed deny is a
 bypass.
 

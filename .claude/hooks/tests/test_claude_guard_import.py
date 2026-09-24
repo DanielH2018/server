@@ -1,17 +1,14 @@
 """Tests for `_claude_guard.py`, the bootstrap onto the deployed `claude_guard` package.
 
-This is slice 5's narrowed exit criterion (docs/specs/2026-09-06-claude-guard-design.md,
-dotfiles repo): `.claude/hooks/_readonly_tables.py` now imports `SSH_HOSTS` and `_SSH_SECRET`
-from `claude_guard.tables` rather than carrying its own copies. The deployed-import test was
-red before this change — nothing in this repo's `uv` environment could import `claude_guard`
-at all, so the two tables could only ever be duplicates, not the same object.
+`_hook_common.py` imports `claude_guard.segment` through it, and every Bash guard here cuts
+its stages with that segmenter. The read-only classifier that also read `claude_guard.tables`
+through it moved into the package itself (dotfiles #628), along with the stand-in, boundary
+and shared-verdict tests that compared the two copies.
 
 Run: uv run pytest .claude/hooks
 """
 
 import importlib
-import importlib.util
-import json
 import os
 import re
 import shutil
@@ -26,10 +23,7 @@ REPO = (
     HOOKS.parent.parent
 )  # .claude/hooks/tests -> .claude/hooks -> .claude -> repo root
 
-sys.path.insert(0, str(HOOKS))  # _readonly_tables imports _claude_guard by bare name
-
-import _readonly_tables  # noqa: E402
-import claude_guard.tables as _tables  # noqa: E402
+sys.path.insert(0, str(HOOKS))  # _claude_guard is imported by bare name
 
 # The `uv` that is running this suite: `uv run` exports its own path as `UV`, and PATH is
 # the fallback for a bare `pytest`. Resolved at import, before leakguard swaps PATH for a
@@ -38,14 +32,8 @@ import claude_guard.tables as _tables  # noqa: E402
 UV_BIN = os.environ.get("UV") or shutil.which("uv") or ""
 _CLAUDE_GUARD_DIR = Path("~/.local/share/claude-guard").expanduser()
 
-_no_uv = pytest.mark.skipif(not UV_BIN, reason="no `uv` on PATH to spawn")
-
-# The subprocess tests spawn a SEPARATE interpreter, which starts its own sys.modules and
-# never sees conftest.py's in-process stand-in, so on a host that genuinely lacks the
-# dotfiles deploy this one can only ever fail, not prove anything — the same reasoning as
-# the e2e wrapper tests below. A skip with the state named, not an xfail: against the
-# stand-in the in-process diffs below would compare a copy to itself and PASS, which a
-# strict xfail reports as a failure and a lax one hides.
+# A separate interpreter never sees this process's sys.modules, so the deployed-import test
+# can only fail, not prove anything, on a host that lacks the dotfiles deploy.
 _runnable = pytest.mark.skipif(
     not UV_BIN or not _CLAUDE_GUARD_DIR.is_dir(),
     reason="no `uv` on PATH to spawn"
@@ -53,27 +41,12 @@ _runnable = pytest.mark.skipif(
     else f"the deployed claude_guard package is not present at {_CLAUDE_GUARD_DIR}",
 )
 
-# The tests that compare against the deployed package skip on what fed the tables, not on
-# whether the directory exists: conftest.py installs its stand-in for a deploy that predates
-# a name the hooks read as well as for a missing one (#2078), and against the stand-in these
-# would compare a copy to itself. The reason names which of the two states it is.
-_STAND_IN = getattr(sys.modules.get("claude_guard"), "__claude_guard_stand_in__", False)
-_deployed_only = pytest.mark.skipif(
-    _STAND_IN,
-    reason=(
-        "the deployed claude_guard package predates a name the hooks read (run `chezmoi apply`)"
-        if _CLAUDE_GUARD_DIR.is_dir()
-        else "the deployed claude_guard package is not present"
-    )
-    + ", so conftest's stand-in fed the tables and there is nothing deployed to check against",
-)
-
 
 @_runnable
-def test_deployed_import_reaches_both_trusted_hosts():
+def test_deployed_import_reaches_the_segmenter():
     """Run the real invocation path: `uv run python`, hooks dir on the path via PYTHONPATH.
 
-    This is the shape `auto-approve-readonly.sh` actually runs under — `cd
+    This is the shape `bash-pretool.sh` actually runs under — `cd
     /home/ubuntu/server && exec uv run --no-sync --quiet python <hooks-dir>/<script>.py`,
     which puts the hooks dir at `sys.path[0]` because that is where the invoked script lives.
     `python -c` has no script file, so `sys.path[0]` is the cwd instead; PYTHONPATH is what
@@ -89,8 +62,8 @@ def test_deployed_import_reaches_both_trusted_hosts():
             "--quiet",
             "python",
             "-c",
-            "import _claude_guard, claude_guard.tables as t; "
-            "print(sorted(t.TRUSTED_SSH_HOSTS))",
+            "import _claude_guard, claude_guard.segment as s; "
+            "print([x.text.strip() for x in s.parse('ls; pwd').segments])",
         ],
         cwd=REPO,
         env=env,
@@ -99,8 +72,7 @@ def test_deployed_import_reaches_both_trusted_hosts():
         timeout=120,
     )
     assert proc.returncode == 0, proc.stderr
-    assert "daniel-pi" in proc.stdout
-    assert "daniel-server" in proc.stdout
+    assert proc.stdout.strip() == "['ls', 'pwd']"
 
 
 def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
@@ -130,342 +102,3 @@ def test_bootstrap_raises_when_the_deploy_is_missing(tmp_path, monkeypatch):
             if name == "_claude_guard" or name.startswith("claude_guard"):
                 del sys.modules[name]
         sys.modules.update(saved_modules)
-
-
-@_deployed_only
-def test_the_ci_stand_in_matches_the_deployed_tables(claude_guard_stand_in):
-    """conftest.py's stand-in is a second copy by construction; this is what diffs it.
-
-    Skips where the real package is absent (every CI run), since that is exactly where the
-    stand-in is the only copy. Goes red on a deployed host the moment `claude_guard.tables`
-    moves and the stand-in does not — and `prek run` executes this suite before every commit
-    from such a host.
-    """
-    hosts, secret_re, base, remote_verbs = claude_guard_stand_in
-    assert hosts == frozenset(_tables.TRUSTED_SSH_HOSTS)
-    assert secret_re.pattern == _tables.SECRET_PATH_RE.pattern
-    assert secret_re.flags == _tables.SECRET_PATH_RE.flags
-    assert base == frozenset(_tables.READONLY_BASE)
-    # The union too, so a name the package adds to its remote-only delta is seen here.
-    assert remote_verbs == frozenset(_tables.REMOTE_READONLY_VERBS)
-
-
-# The names `_readonly_tables.py` reads off `claude_guard.tables`. CI runs against conftest's
-# stand-in, so an import the stand-in lacks fails every test that touches the hook at
-# collection -- this pins the two lists together on the CI side, where the diff above skips.
-# Indented too: `_readonly_tables.py` keeps its import inside the fail-open `try` (#2078).
-_TABLES_IMPORT = re.compile(r"^\s*from claude_guard\.tables import (.+)$", re.MULTILINE)
-
-
-def test_the_stand_in_carries_every_name_the_hooks_import_from_the_tables(
-    claude_guard_stand_in,
-):
-    imported = set()
-    for hook in HOOKS.glob("*.py"):
-        for match in _TABLES_IMPORT.finditer(hook.read_text()):
-            imported.update(n.strip() for n in match.group(1).split(","))
-    assert {"READONLY_BASE", "SECRET_PATH_RE"} <= imported  # non-vacuity
-    stand_in = {
-        "TRUSTED_SSH_HOSTS",
-        "SECRET_PATH_RE",
-        "READONLY_BASE",
-        "REMOTE_READONLY_VERBS",
-    }
-    assert len(claude_guard_stand_in) == len(stand_in)
-    assert imported <= stand_in, imported - stand_in
-
-
-# --- #2052/#2078: TIER1 is the package's shared base plus the local-only delta ---------------
-
-
-def test_tier1_is_the_shared_base_plus_the_local_only_names():
-    """The derivation, spelled out: the names the package exports as read-only on both sides
-    of the ssh boundary, plus what is read-only only locally. #2052 derived it from the
-    REMOTE table and subtracted two named sets; #2078 replaced that with `READONLY_BASE`, so
-    a name the package adds for the far shell alone cannot widen local auto-approve."""
-    tier1 = _readonly_tables.TIER1
-    assert tier1 == frozenset(_tables.READONLY_BASE) | _readonly_tables._LOCAL_ONLY
-    # Non-vacuity on both halves: readers the table must carry, and names it must not --
-    # the package's remote-only pair and the five verbs each side guards.
-    assert {"ls", "cat", "grep", "jq", "df"} <= tier1
-    assert {"cd", "false", "printenv"} <= tier1
-    assert not (
-        {"ss", "journalctl", "rg", "sensors", "dmesg", "htop", "nvidia-smi"} & tier1
-    )
-
-
-def test_the_flag_guarded_verbs_reach_the_classifier_through_a_handler():
-    """The five verbs `READONLY_BASE` leaves out are read-only under MOST arguments, and the
-    server admits them through a `HANDLERS` guard -- one with no handler is a name silently
-    dropped from local auto-approve."""
-    spec = importlib.util.spec_from_file_location(
-        "aar_2052", HOOKS / "auto-approve-readonly.py"
-    )
-    assert spec and spec.loader
-    aar = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(aar)
-    assert {"journalctl", "dmesg", "ss", "rg", "sensors"} <= set(aar.HANDLERS)
-
-
-@_no_uv
-def test_the_hook_fails_open_when_the_deploy_is_missing(tmp_path):
-    """The shims' contract, one layer down: no package -> one stderr line, exit 0, no stdout.
-
-    `test_hook_shim_fail_open.py` pins this shape for the `.sh` shims' own failures; it walks
-    `*.sh` only, so a failure inside the Python they exec is out of its reach. HOME is pointed
-    at an empty directory so `~/.local/share/claude-guard` is absent; the process is the real
-    entry point under the real `uv run` shape, so nothing in-process (conftest's stand-in
-    included) can reach it.
-    """
-    env = dict(os.environ)
-    env["HOME"] = str(tmp_path)
-    payload = json.dumps(
-        {"tool_name": "Bash", "tool_input": {"command": "ssh daniel-server uptime"}}
-    )
-    proc = subprocess.run(
-        [
-            UV_BIN,
-            "run",
-            "--no-sync",
-            "--quiet",
-            "python",
-            str(HOOKS / "auto-approve-readonly.py"),
-        ],
-        cwd=REPO,
-        env=env,
-        input=payload,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == ""
-    assert "classifier did not run" in proc.stderr
-    assert str(tmp_path) in proc.stderr
-    assert "Traceback" not in proc.stderr
-
-
-@_no_uv
-def test_the_hook_fails_open_when_the_deploy_predates_a_name_it_reads(tmp_path):
-    """A deployed package without `READONLY_BASE` -- the host has the new hook and the old
-    package -- fails open the same way a missing one does, naming the missing name (#2078).
-
-    Before #2078 the tables import sat outside `_readonly_tables.py`'s `try`, so this state
-    was a traceback and exit 1 on every Bash command until `chezmoi apply` ran.
-    """
-    stale = tmp_path / ".local" / "share" / "claude-guard" / "claude_guard"
-    stale.mkdir(parents=True)
-    (stale / "__init__.py").write_text("")
-    (stale / "tables.py").write_text(
-        "import re\n"
-        'TRUSTED_SSH_HOSTS = frozenset({"daniel-server", "daniel-pi"})\n'
-        'SECRET_PATH_RE = re.compile(r"\\.env")\n'
-    )
-    env = dict(os.environ)
-    env["HOME"] = str(tmp_path)
-    payload = json.dumps({"tool_name": "Bash", "tool_input": {"command": "ls"}})
-    proc = subprocess.run(
-        [
-            UV_BIN,
-            "run",
-            "--no-sync",
-            "--quiet",
-            "python",
-            str(HOOKS / "auto-approve-readonly.py"),
-        ],
-        cwd=REPO,
-        env=env,
-        input=payload,
-        capture_output=True,
-        text=True,
-        timeout=120,
-    )
-    assert proc.returncode == 0, proc.stderr
-    assert proc.stdout == ""
-    assert "classifier did not run" in proc.stderr
-    assert "READONLY_BASE" in proc.stderr
-    assert "Traceback" not in proc.stderr
-
-
-def test_readonly_tables_ssh_objects_are_claude_guards_own():
-    """Identity, not just equal value — a future local redefinition breaks this, not `==`.
-
-    This pins the WIRING, not the values: wherever conftest.py's stand-in is in play (every
-    CI run, since CI has no dotfiles deploy), `_tables` IS that stand-in, so the assertion is
-    `x is x` regardless of what the real `claude_guard.tables` holds. Only a run with the real
-    package deployed exercises the values this identity check is meant to protect.
-    """
-    assert _readonly_tables.SSH_HOSTS == frozenset(_tables.TRUSTED_SSH_HOSTS)
-    assert _readonly_tables._SSH_SECRET is _tables.SECRET_PATH_RE
-
-
-# --- #1982: a verb guarded on one side of the boundary is never bare on the other ----------------
-# The verbs `claude_guard/checks/remote.py` guards before its bare-table lookup. Read from the
-# package (`REMOTE_GUARDED_VERBS`, exported for this test by dotfiles PR #521) rather than
-# copied: the literal this used to carry went stale the moment the package added a guard.
-
-
-def boundary_violations(handlers, tier1, remote_verbs, package_guarded):
-    """Names guarded on one side and listed bare on the other, each tagged with its side.
-
-    Four instances were found in one sweep on 2026-09-18 (`rg --pre`, `sensors -s` and
-    `nvidia-smi` bare in the package; `ss -K` bare in TIER1), fixed by hand, and pinned as
-    static lists. This is the derived form.
-    """
-    server_guards_package_bare = set(handlers) & (
-        set(remote_verbs) - set(package_guarded)
-    )
-    package_guards_server_bare = set(package_guarded) & set(tier1)
-    return sorted(
-        f"server guards, package lists bare: {v}" for v in server_guards_package_bare
-    ) + sorted(
-        f"package guards, TIER1 lists bare: {v}" for v in package_guards_server_bare
-    )
-
-
-def test_boundary_check_is_flagged_on_a_guard_missing_from_either_side():
-    out = boundary_violations(
-        handlers={"sed", "rg"},
-        tier1={"ls", "ss"},
-        remote_verbs={"rg", "ls"},
-        package_guarded={"ss"},
-    )
-    assert out == [
-        "server guards, package lists bare: rg",
-        "package guards, TIER1 lists bare: ss",
-    ]
-
-
-@_deployed_only
-def test_no_verb_is_guarded_on_one_side_of_the_boundary_and_bare_on_the_other():
-    """The live check, on a deployed host only; CI's stand-in carries no verb tables.
-
-    A verb this repo reaches through a `HANDLERS` guard must not sit bare in the package's
-    `REMOTE_READONLY_VERBS`, and a verb the package guards must not sit in `TIER1`, whose
-    contract is "read-only under ANY argument". The replay corpus cannot see a remote
-    fail-open (4 of 1058 prompted records touch ssh), so this assertion is the evidence.
-    Placement only: a verb guarded on BOTH sides with different guards is #1898's move.
-    """
-    spec = importlib.util.spec_from_file_location(
-        "aar_1982", HOOKS / "auto-approve-readonly.py"
-    )
-    assert spec and spec.loader
-    aar = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(aar)
-    from claude_guard.checks.remote import REMOTE_GUARDED_VERBS
-
-    # Non-vacuity: the guarded set the package exports must still carry the five verbs both
-    # sides guard, and none of them may sit bare in either table (#2078 moved them out of
-    # the package's), so an empty result below cannot come from a renamed or emptied export.
-    flag_guarded = {"journalctl", "dmesg", "ss", "rg", "sensors"}
-    assert flag_guarded <= REMOTE_GUARDED_VERBS
-    assert not (flag_guarded & _tables.REMOTE_READONLY_VERBS)
-    assert not (flag_guarded & _readonly_tables.TIER1)
-    assert (
-        boundary_violations(
-            aar.HANDLERS,
-            _readonly_tables.TIER1,
-            _tables.REMOTE_READONLY_VERBS,
-            REMOTE_GUARDED_VERBS,
-        )
-        == []
-    )
-
-
-# --- #1898: a guard that exists on both sides of the boundary reaches the same verdict ----------
-# The package's `checks/remote_guards.py` is a copy of this repo's `HANDLERS` guards for the
-# verbs both reach (git, sed, awk, find, sort, uniq, apt, dpkg, crontab, pipx, ...): this
-# side keeps its copy for LOCAL commands, the package holds the one that judges an ssh
-# stage. Nothing but this replay keeps the two copies agreeing. The vectors are the local
-# tables this suite already maintains, filtered to the shared verbs.
-
-
-def shared_guard_disagreements(argv_readonly, remote_argv_readonly, shared, vectors):
-    """Vectors (argv lists) on a shared guarded verb where the two sides disagree."""
-    bad = []
-    for argv in vectors:
-        if not argv or argv[0].rsplit("/", 1)[-1] not in shared:
-            continue
-        if bool(argv_readonly(argv)) != remote_argv_readonly(argv):
-            bad.append(argv)
-    return bad
-
-
-def test_shared_guard_check_is_flagged_when_the_sides_disagree():
-    def local(argv):
-        return "git" if argv == ["git", "status"] else None
-
-    def remote(argv):
-        return argv == ["git", "push"]
-
-    bad = shared_guard_disagreements(
-        local, remote, {"git"}, [["git", "status"], ["git", "push"], ["ls"]]
-    )
-    assert bad == [["git", "status"], ["git", "push"]]
-
-
-def test_shared_guard_check_is_clean_when_the_sides_agree():
-    def both(argv):
-        return argv == ["git", "status"]
-
-    assert (
-        shared_guard_disagreements(both, both, {"git"}, [["git", "status"], ["ls"]])
-        == []
-    )
-
-
-@_deployed_only
-def test_every_guard_carried_on_both_sides_reaches_the_same_verdict():
-    import shlex
-
-    from claude_guard.checks.remote import remote_argv_readonly
-    from claude_guard.checks.remote_guards import GUARDS
-
-    import test_auto_approve_readonly as suite
-
-    spec = importlib.util.spec_from_file_location(
-        "aar_1898", HOOKS / "auto-approve-readonly.py"
-    )
-    assert spec and spec.loader
-    aar = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(aar)
-
-    shared = set(aar.HANDLERS) & set(GUARDS)
-    # Non-vacuity: the port carried these thirteen and #2078 moved the five flag guards
-    # under this replay, so an empty intersection is a rename.
-    assert {
-        "git",
-        "sed",
-        "awk",
-        "find",
-        "sort",
-        "uniq",
-        "apt",
-        "dpkg",
-        "crontab",
-        "pipx",
-        "journalctl",
-        "dmesg",
-        "ss",
-        "rg",
-        "sensors",
-    } <= shared
-    vectors = []
-    for command, _label in suite.APPROVE_LOCAL + suite.REJECT_LOCAL:
-        if any(ch in command for ch in "|;&$`()<>\n"):
-            continue  # a single argv only; the shapes above are classify()'s, not a guard's
-        try:
-            vectors.append(shlex.split(command))
-        except ValueError:
-            continue
-    on_shared = [v for v in vectors if v and v[0] in shared]
-    assert len(on_shared) >= 40, on_shared
-    # The five flag guards must contribute vectors, not just membership in `shared`: the
-    # count above is met by git/sed/awk alone, so without this they could replay nothing.
-    assert {"journalctl", "dmesg", "ss", "rg", "sensors"} <= {v[0] for v in on_shared}
-    assert (
-        shared_guard_disagreements(
-            aar._argv_readonly, remote_argv_readonly, shared, vectors
-        )
-        == []
-    )

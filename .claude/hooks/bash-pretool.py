@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: the five PreToolUse:Bash arms, run in one process by bash-pretool.sh
-"""One PreToolUse:Bash hook that runs the five Bash arms in a single process.
+#   reason: the four PreToolUse:Bash arms, run in one process by bash-pretool.sh
+"""One PreToolUse:Bash hook that runs the four Bash arms in a single process.
 
 WHY. Each Bash tool call used to start five `uv run --no-sync --quiet python <arm>.py`
 processes — `auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`,
@@ -9,6 +9,10 @@ processes — `auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`,
 7 days to 2026-09-24 at a mean of about 92 ms per call, and four of those five interpreter
 starts buy nothing: all five arms import `_hook_common` and `claude_guard.segment`, so one
 process loads that once and calls each arm's own function. Issue #2394.
+
+The fifth arm, `auto-approve-readonly`, moved into the dotfiles `claude_guard` package
+(`claude_guard/readonly.py`, dotfiles #628), whose user-level PreToolUse hook allows a
+provably read-only command in every trusted checkout. No arm here returns `allow` since.
 
 `uv-python.sh` stays a separate hook. It rewrites the command rather than judging it, so it
 has no verdict to merge, and a rewrite arm inside a verdict dispatcher would have to decide
@@ -18,9 +22,9 @@ THE MERGE is the one Claude Code performs across separate hooks, read from the 2
 bundle: `deny` is sticky, `defer` outranks `ask`, `ask` outranks `allow`, and `allow` only
 stands when nothing else was returned. The surfaced reason belongs to the FIRST hook whose
 decision equals the winner, so the arms run here in the order their registrations used to
-give them (auto-approve 10, block-protected-bash 30, nudge-land-sh 40, block-footguns 50,
+give them (block-protected-bash 30, nudge-land-sh 40, block-footguns 50,
 inject-nested-docs 70) and the first arm at the winning level keeps the reason. No arm
-returns `defer`, so in practice this carries `deny > ask > allow`.
+returns `defer` or `allow`, so in practice this carries `deny > ask`.
 
 `permissionDecision` and `additionalContext` ride in ONE `hookSpecificOutput` object. The
 bundle's PreToolUse branch reads the two keys independently off the same object
@@ -30,7 +34,7 @@ context. So a denied command keeps the nested-docs injection it had when the inj
 its own hook.
 
 DECIDED: every arm runs under its own `try/except`, and an arm that raises loses its verdict
-while the other four keep theirs. That matches what five separate processes did — an
+while the others keep theirs. That matches what separate processes did — an
 unhandled raise in one `.py` exited non-zero with no stdout, which the harness reads as "no
 decision" for that hook alone. What it must never become is silent: the traceback goes to
 stderr named by arm, because an arm that has stopped judging while the dispatcher still
@@ -51,7 +55,6 @@ _HERE = os.path.dirname(os.path.abspath(__file__))
 # surfaced when two arms return the same decision, so it is data here rather than an accident
 # of import order.
 _DECISION_ARMS = (
-    ("auto-approve-readonly", "auto_approve_readonly"),
     ("block-protected-bash", "block_protected_bash"),
     ("nudge-land-sh", "nudge_land_sh"),
     ("block-footguns", "block_footguns"),

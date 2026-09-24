@@ -63,7 +63,7 @@ def _pinned_uv_lines():
     The discriminator is `--python`. A `uv run` that names an interpreter is a standalone host
     script and must not touch a project; a `uv run` without one is deliberately using the repo
     project's environment because it needs repo dependencies. The repo has several of the latter
-    and they are all correct — auto-approve-readonly.sh, block-protected-edits.sh
+    and they are all correct — bash-pretool.sh, block-protected-edits.sh
     (`--no-sync --quiet python`) and secret-rotation-audit.sh.j2
     (`--frozen`). An earlier draft of this guard scanned every
     `uv run` line and would have failed on all of them.

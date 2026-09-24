@@ -341,13 +341,13 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
-# auto-approve-readonly Bash classifier (a permission security boundary), and the
+# PreToolUse Bash guards (a permission security boundary), and the
 # smoke_extract image-diff parser. Deps + test paths come from pyproject.toml (the `dev`
 # group + [tool.pytest.ini_options] testpaths); `uv run` auto-syncs from uv.lock, so it
 # works regardless of the system Python. Requires uv on PATH (CI installs astral-sh/setup-uv).
 [[repos.hooks]]
 id = "pytest"
-name = "Run Python unit tests (toposort + monitor-bridge + readonly-hook + smoke + gitops)"
+name = "Run Python unit tests (toposort + monitor-bridge + bash-guards + smoke + gitops)"
 entry = "uv run --frozen python -m pytest"
 language = "system"
 pass_filenames = false

@@ -38,9 +38,6 @@ KNOWN_LIBRARIES = frozenset(
     {
         "_claude_guard.py",
         "_hook_common.py",
-        "_readonly_shell.py",
-        "_readonly_tables.py",
-        "auto-approve-readonly.py",
         "bash-pretool.py",
         "session-health.py",
     }
