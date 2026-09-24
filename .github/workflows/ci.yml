@@ -136,7 +136,7 @@ jobs:
     # the toolcache holds that day, while a three-part one moves only through Renovate.
     # Every `runs-on` in .github/workflows is a versioned label, ENFORCED by
     # ansible/tests/repo/test_workflow_runners_are_pinned.py.
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged network hook so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -343,7 +343,7 @@ jobs:
   # install` before linting — warm that is a 0.4s no-op, cold a ~40 MB download.
   ansible_lint:
     name: ansible-lint
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # cap a wedged ansible-galaxy install so it can't burn to the 6h default
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
@@ -491,7 +491,7 @@ jobs:
   # hide another's.
   pytest:
     name: pytest (shard ${{ matrix.shard }} of ${{ strategy.job-total }})
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20
     strategy:
       fail-fast: false
@@ -593,7 +593,7 @@ jobs:
   # too, which is the "no verdict" every reader already handles.
   prek:
     name: prek (lint + validate + tests + secrets)
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     needs: [hooks, pytest, ansible_lint]
     if: always()
     steps:
@@ -616,7 +616,7 @@ jobs:
     # so it stays on every PR and self-scopes below; merge_group is treated like a PR whose
     # scope step found nothing to diff, the same as every other job here.
     if: github.event_name != 'push'
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-26.04
     timeout-minutes: 20  # six install attempts at 60s, plus a wedged fetch
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
