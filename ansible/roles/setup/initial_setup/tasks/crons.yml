@@ -104,13 +104,23 @@
   tags: [crons]
   # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
   # have all settled; quiet window minimises any clash with a concurrent operator session.
+  #
+  # `2>&1 | logger -t secret-rotate` FOR THE REASON EVERY CRON BELOW CARRIES ONE (#2466). cron
+  # mails whatever a job writes into /var/mail/ubuntu, and nothing opens that spool — so a
+  # per-run success line is not a record, it is one more message a real failure has to be found
+  # among. The journal is a record: Promtail ships it to Loki, `journalctl -t secret-rotate`
+  # reads it, and it ages out on its own. This drops NO alert, because the mail was never the
+  # alert — a failed rotation reverts the tree and shows up on the "Secret Rotation" Kuma tile
+  # that the daily audit pushes. Both streams go, not stdout alone: this script's own output is
+  # a full ansible-playbook run on a rotating week, and splitting it across two sinks by stream
+  # would leave half a run in each.
   when: has_gitops
   ansible.builtin.cron:
     name: "Weekly secret rotation (auto tier)"
     minute: "0"
     hour: "9"
     weekday: "0"
-    job: "/usr/local/bin/secret-rotate.sh"
+    job: "/usr/local/bin/secret-rotate.sh 2>&1 | logger -t secret-rotate"
     user: "{{ sys_user }}"
   become: true
 
@@ -262,19 +272,29 @@
   # a broken thing successfully is invisible to every check that watches the deploy.
   when: has_repo_checkout
 
-- name: Schedule the weekly git object-store repair (box only)
+- name: Schedule the weekly worktree sweep and git object-store repair (box only)
   tags: [crons]
   # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
-  # each removal leaves that branch's objects unreachable. `scripts/dev/prune_worktrees.py --gc`
-  # drops the ones older than a day and clears a stale gc.log — see repair_object_store for why
-  # the grace period is not `now`.
+  # each removal leaves that branch's objects unreachable. `prune_worktrees.py --prune --brief`
+  # removes the merged worktrees, deletes the orphan `worktree-*` branches whose content is on
+  # origin/master, then drops the unreachable objects older than a day and clears a stale
+  # gc.log — see repair_object_store for why the grace period is not `now`.
+  #
+  # THIS IS THE ARM THAT REMOVES; the SessionStart banner only reports. The reasoning is the
+  # `# DECIDED:` marker in `prune_worktrees.py`'s brief() — a hook budgeted at 5s must not run
+  # an unbounded `git gc`, and N concurrent sessions racing to delete the same branch buys
+  # nothing this one weekly run does not. The repair still runs on a week with nothing to
+  # remove: prune_all ends in it unconditionally.
   #
   # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT (#1435). A
   # worktree-isolated session's git commands are refused against the primary checkout, so the
-  # warning `git fetch` prints reaches only the agents structurally unable to act on it. Arming
-  # it on the prune path alone would leave the repair waiting on someone typing `--prune`.
+  # warning `git fetch` prints reaches only the agents structurally unable to act on it.
   #
   # daniel-box only: the primary checkout and every worktree under it live there.
+  #
+  # The cron `name:` is unchanged from when this ran `--gc` alone. `cron_file` entries are
+  # tracked by that comment, so renaming one adds a second entry beside the first rather than
+  # replacing it.
   when: inventory_hostname == 'daniel-box'
   ansible.builtin.cron:
     name: "Weekly git object-store repair"
@@ -283,7 +303,12 @@
     weekday: "0" # 0 is Sunday
     # PATH explicitly: cron inherits neither /usr/local/bin nor the user's ~/.local/bin, so a
     # bare `uv` is not found and the job fails silently on stderr nothing reads.
-    job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --gc"
+    #
+    # `2>&1 | logger -t worktree-sweep` for the journal reason on the secret-rotation cron
+    # above (#2466): a week that removes anything prints a line per removal, and mailing those
+    # is the spool problem this sweep's own siblings were fixed for. Braced, because `|` binds
+    # tighter than the `&&` before it.
+    job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; } 2>&1 | logger -t worktree-sweep"
     user: "{{ sys_user }}"
     cron_file: git-object-store-repair
   become: true
@@ -373,7 +398,15 @@
     # runs (it already treats a missing webhook as log-only, see lib/watcher.py's
     # run_watcher). The outer `cd ... &&`, by contrast, is meant to abort -- the watcher's
     # module path is relative to the repo root.
-    job: "cd /home/{{ sys_user }}/server && { [ -r /etc/homelab/cert-expiry-webhook.env ] && set -a && . /etc/homelab/cert-expiry-webhook.env && set +a || true; } && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/watchers/cert_expiry.py"
+    #
+    # THE WHOLE CHAIN IS BRACED BEFORE THE PIPE, and has to be: `|` binds tighter than `&&` in
+    # sh, so `a && b | logger` pipes only `b` and leaves `a`'s output mailing. The journal
+    # rationale is on the secret-rotation cron above (#2466). BOTH streams, because the line
+    # this silences -- `cert-expiry: no state change.`, one per day -- comes from
+    # `scripts/lib/watcher.py`'s logger, and `logging.basicConfig` writes to STDERR: a
+    # stdout-only redirect would change nothing here. The alert is untouched, because the mail
+    # was never it -- `run_watcher` sends a state change AND a fetch failure to Discord.
+    job: "{ cd /home/{{ sys_user }}/server && { [ -r /etc/homelab/cert-expiry-webhook.env ] && set -a && . /etc/homelab/cert-expiry-webhook.env && set +a || true; } && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/watchers/cert_expiry.py; } 2>&1 | logger -t cert-expiry"
     user: "{{ sys_user }}"
   become: true
 
@@ -676,7 +709,13 @@
     # Same PATH/KUBECONFIG reasoning as the infra-map cron above: cron inherits neither,
     # and gen_infra_map runs inside build_docs.py. Without them the topology SVG silently
     # renders declared-only while everything else looks healthy.
-    job: "PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /usr/local/bin/docs-refresh.sh"
+    #
+    # `2>&1 | logger -t docs-refresh` for the journal reason on the secret-rotation cron above
+    # (#2466). This one mailed the most of the six: 61 messages of `build_docs: <script> ok ->
+    # <page>`, one line per generator per run, twice a day. The redirect belongs here rather
+    # than at `scripts/docs/build_docs.py`'s print, which an operator and CI both read
+    # interactively.
+    job: "PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /usr/local/bin/docs-refresh.sh 2>&1 | logger -t docs-refresh"
     user: "{{ sys_user }}"
     cron_file: docs-refresh
   become: true

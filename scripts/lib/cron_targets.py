@@ -72,8 +72,16 @@ CRONTAB_PATH_ENV = re.compile(
 # docs-refresh.sh — whose job line sets PATH and KUBECONFIG inline — outside every rule below.
 # A guard that skips the one job doing something interesting with its environment is the guard
 # scope drifting from the hazard, so the assignments are parsed and consulted instead.
+# The trailing `2>&1 | logger -t <tag>` is the journal routing #2466 gave every cron that
+# prints on a successful run, and it must not take the script back out of scope: the `$` anchor
+# alone silently dropped longhorn-trim-volumes.sh.j2 and docs-refresh.sh.j2 the moment they were
+# routed, which is the same coverage loss the `env` group above was added to stop. Only this one
+# suffix is accepted — anything else after the script name is a job shape nothing here has
+# parsed, and reading it as a plain target would claim coverage of a line this does not
+# understand.
 CRON_JOB_TARGET = re.compile(
-    r"^(?P<env>(?:\w+=\S+\s+)*)/usr/local/bin/(?P<script>[\w.-]+\.sh)$"
+    r"^(?P<env>(?:\w+=\S+\s+)*)/usr/local/bin/(?P<script>[\w.-]+\.sh)"
+    r"(?:\s+2>&1\s*\|\s*logger\s+-t\s+[\w.-]+)?$"
 )
 # Root reads /etc/rancher/k3s/k3s.yaml automatically; nobody else can. Measured 2026-08-27 on
 # daniel-box: the file is 0640 root:root, so `ubuntu` cannot read it. `ansible.builtin.cron`
