@@ -12,6 +12,7 @@ Run: uv run pytest scripts/dev/tests/test_prune_worktrees.py
 
 import os
 import subprocess
+import sys
 from pathlib import Path
 
 from prune_worktrees import (
@@ -29,6 +30,8 @@ from prune_worktrees import (
     remove,
     sweep_branches,
 )
+
+PRUNER = Path(__file__).resolve().parents[1] / "prune_worktrees.py"
 
 
 def test_orphan_dirs_are_those_git_does_not_track(tmp_path):
@@ -453,3 +456,32 @@ def test_the_shallow_sweep_stops_at_the_bulk_ancestry_layer(tmp_path, monkeypatc
 
     assert landed_orphan_branches(str(repo), deep=False) == ["worktree-ancestry"]
     assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
+
+
+def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
+    tmp_path, monkeypatch
+):
+    # One pass converges. A branch is only orphan once its worktree is gone, so a list read
+    # before the removals names none of the branches those removals free — and the sweep
+    # would leave its own leavings for the next run, forever.
+    #
+    # A subprocess, so main() resolves the checkout itself from cwd: the alternative is
+    # patching primary_checkout, and the monkeypatch ratchet in ansible/tests/repo/ only ever
+    # falls. CLAUDE_WORKTREE_HOME is inherited, which is how the stand-in reaches it in CI.
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    _git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
+    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+
+    run = subprocess.run(
+        [sys.executable, str(PRUNER), "--prune"],
+        cwd=repo,
+        env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        capture_output=True,
+        text=True,
+    )
+
+    assert run.returncode == 0, run.stderr
+    assert not (tmp_path / "done").exists()
+    assert "worktree-done" not in _branch_names(repo)

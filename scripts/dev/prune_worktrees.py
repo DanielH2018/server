@@ -437,9 +437,10 @@ def brief(prune: bool = False) -> int:
     removable = [
         (tree, reason) for verdict, tree, reason in survey(repo) if verdict == REMOVABLE
     ]
-    # Shallow for the report: the banner pays two git calls, not one per branch. See
-    # landed_orphan_branches for what that undercounts and why it is the right trade here.
-    stale = landed_orphan_branches(repo, deep=prune)
+    # Shallow, and only for the report: the banner pays two git calls, not one per branch. See
+    # landed_orphan_branches for what that undercounts and why it is the right trade here. The
+    # pruning path reads its own list below, AFTER the removals.
+    stale = [] if prune else landed_orphan_branches(repo, deep=False)
     if removable:
         print(f"\U0001f9f9 {len(removable)} merged worktree(s) can be removed:")
         for tree, reason in removable:
@@ -454,7 +455,10 @@ def brief(prune: bool = False) -> int:
         # object-store repair at prune_all's tail, which must still happen on a week with
         # nothing to remove.
         prune_all(repo, [tree for tree, _ in removable])
-        sweep_branches(repo, stale)
+        # Read AFTER the removals, because each one frees a branch: a list taken before them
+        # names none of those, and the sweep would leave its own leavings for next week
+        # instead of converging in one pass.
+        sweep_branches(repo, landed_orphan_branches(repo, deep=True))
     elif removable or stale:
         print("  → uv run python scripts/dev/prune_worktrees.py --prune")
     return 0
@@ -547,7 +551,8 @@ def main(argv: list[str] | None = None) -> int:
         return 0
 
     prune_all(repo, removable)
-    sweep_branches(repo, stale)
+    # Re-read for brief()'s reason: the removals above just freed a branch each.
+    sweep_branches(repo, landed_orphan_branches(repo, deep=True))
     return 0
 
 
