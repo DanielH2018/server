@@ -30,10 +30,10 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     docs site those placeholders become links, resolved in the browser against the URL
     the reader is on — see scripts/docs/route_facts.py. WHICH names a service answers on is
     derivable and is stated outright; only the suffix is not.
-  - Docker (Pi) routes. daniel-pi sets `expose_mode: lan` — its services are bound to
-    the LAN IP directly rather than routed through Traefik (see host_vars comment), so
-    "route" for a docker service is a fixed LAN-direct marker, never a hostname. A
-    future non-lan docker host would need its own derivation; this only handles `lan`.
+  - Docker (Pi) routes. daniel-pi is the only Docker host and is LAN-only — its services
+    are bound to the LAN IP directly rather than routed through Traefik
+    (ansible/templates/expose.yml.j2), so "route" for a docker service is a fixed
+    LAN-direct marker, never a hostname.
   - Backup tier PVC claim names. A PVC's `metadata.name` is very often a Jinja var
     (`{{ foo_k8s_claim }}`) rather than a literal string. This script resolves a
     single-variable reference by grepping that role's own defaults/main.yml for a
@@ -123,7 +123,7 @@ def build_rows(
                     name=name,
                     host=host,
                     platform=platform,
-                    route=route_for(entry, platform, host_data, k8s_roles, all_vars),
+                    route=route_for(entry, platform, k8s_roles, all_vars),
                     auth_tier=auth_tier(entry),
                     backup_tier=backup_tier(
                         entry,

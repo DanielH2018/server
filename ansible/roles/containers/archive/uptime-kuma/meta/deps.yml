@@ -1,5 +1,0 @@
----
-role_deps:
-  - traefik
-  - authelia
-  - docker-proxy  # AutoKuma sidecar (in this stack) needs the read-only docker socket proxy

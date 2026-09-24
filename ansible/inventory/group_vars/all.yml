@@ -67,10 +67,6 @@ docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
 # False by default — override to true in a host's host_vars if the machine has one.
 has_igpu: false
-# Default web-UI exposure mode for hosts. `traefik` = route UIs through Traefik
-# (Authelia-gated when use_authelia). Override to `lan` on LAN-only hosts (daniel-pi)
-# to publish UI ports bound to the host's LAN IP instead. Consumed by expose.yml.j2.
-expose_mode: traefik
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
 kuma_notification_id: discord

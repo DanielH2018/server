@@ -183,7 +183,7 @@ def test_setup_roles_are_recorded_for_both_broad_setup_arms():
 BROAD_AUTO_SETUP = ["ansible/roles/setup/renovate_notify/tasks/main.yml"]
 BROAD_AUTO_SELF = ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
 BROAD_MANUAL_BRINGUP = ["ansible/k3s-bringup.yml"]
-BROAD_AUTO_DEPLOY = ["ansible/templates/traefik.yml.j2"]
+BROAD_AUTO_DEPLOY = ["ansible/templates/resources.yml.j2"]
 
 
 def test_ordinary_setup_role_is_clean_for_auto_apply():

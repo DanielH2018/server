@@ -76,7 +76,8 @@ the port split only makes sense read together.
   `containers/wg-easy/config/` (root-owned `0600`/`0640`, so the Pi's NOPASSWD `sudo rsync` is
   required to read them) into `containers/wg-easy/pi-peers/` on that host — inside Kopia's snapshot
   source. Tasks are gated on `inventory_hostname == backup_controller_host` (NOT `containers_list` —
-  a tagged deploy filters that). The kopia role that owned the snapshot is now at `roles/containers/archive/kopia/`.
+  a tagged deploy filters that). The kopia role that owned the snapshot was deleted in #2385:
+  `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/`.
 - **The pull is watchdogged (2026-07-05).** It uses **no `--delete`**, so a silently-failing pull
   (Pi unreachable, SSH/sudo break) leaves the last-good copy in place and the nightly Kopia snapshot
   still succeeds — **Backup Freshness would stay green while the un-rebuildable peer keys go stale**.

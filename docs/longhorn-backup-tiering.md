@@ -13,7 +13,7 @@
 
 2026-08-12, after the fifth B2 transaction-cap event. The operator declined to raise the
 caps, so usage had to fit them. Kopia's path-level ignore rules
-(`ansible/roles/containers/archive/kopia/templates/kopiaignore.j2`) encode two years of
+(`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/templates/kopiaignore.j2`) encode two years of
 what is and isn't worth backing up; Longhorn backs up whole block volumes and cannot
 express a path exclude, so each rule translates one of three ways:
 

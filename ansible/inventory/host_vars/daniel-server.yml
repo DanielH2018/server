@@ -8,18 +8,10 @@ has_code_server: false
 # scrutiny-collector's SMART source device (see scrutiny role CLAUDE.md) — override per host
 # if the NVMe enumerates differently, or drop the scrutiny role entirely if the host has none.
 scrutiny_nvme_device: /dev/nvme0
-# Pinned upstream commit for the git checkout that becomes the happy Docker build context.
-# No usable release tag exists: the newest tag (v3) predates the standalone.ts/PGlite
-# architecture, and the cli-* tags are the npm CLI package's own releases, not the server.
-#
-# DEAD as it stands: the only consumer is roles/containers/archive/happy, and this host has
-# no Docker. It is kept so a revival does not have to re-derive the SHA.
-happy_git_version: 3f161de70541b1cedaf0b7547ed70889d8dae22d
 # Empty since Docker was uninstalled here on 2026-08-14. This host now runs the k3s agent,
 # the nut pod's hardware, and the nut_host shutdown chain — nothing else. Every service
-# that used to be listed here moved to roles/k8s/ or retired to
-# roles/containers/archive/; the per-service migration record is in git history and
-# docs/archive/k3s-migration/.
+# that used to be listed here moved to roles/k8s/ or retired; the retired roles and the
+# per-service migration record are in git history and docs/archive/k3s-migration/.
 containers_list: []
 
 # No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge

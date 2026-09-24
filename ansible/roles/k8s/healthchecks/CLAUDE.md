@@ -27,8 +27,7 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   (Django's session and password-reset signing key). `healthchecks_smtp_user` was removed on
   2026-09-10 (#1453): it lost its last reader when `EMAIL_HOST_USER` moved to `email`, and its
   value compared EQUAL to `email`, so it was a duplicate rather than a separate login. The
-  retired Docker role under `roles/containers/archive/healthchecks/` still names it and now
-  renders nothing — that tree is reference-only and no `containers_list` entry reaches it.
+  retired Docker role named it too, and #2385 deleted that role from the tree.
 
 ## Notable
 - **Alerts leave over Discord, and the channel is declared rather than clicked.** A

@@ -39,9 +39,7 @@ GITOPS_DEPLOY_FILES = ROLES / "setup" / "gitops_deploy" / "files"
 # not need it, which `test_deploy_logic_imports_without_the_common_files_path` enforces from
 # the other side.
 HOST_LIB_FILES = ROLES / "setup" / "common" / "files"
-SHARED_TPL = (
-    ANSIBLE / "templates"
-)  # shared macros (and the labels-macro traefik.yml.j2)
+SHARED_TPL = ANSIBLE / "templates"  # shared macros
 
 INVENTORY = ANSIBLE / "inventory"
 HOSTS_INI = INVENTORY / "hosts.ini"

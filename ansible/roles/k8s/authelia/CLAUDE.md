@@ -211,8 +211,8 @@ If mail is down and you need the break-glass path, the file notifier is one edit
 ### `authelia_session*` is a cookie name, not a secret name
 
 The session secret is **`authelia_secret`**. That one SOPS key fills `session.secret` on both
-portals — the retired Docker one (the `configuration.yml` template under
-`ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
+portals — the retired Docker one (the `configuration.yml` template, deleted in #2385:
+`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
 `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`). Every `authelia_session*`
 string in the tree is a **cookie** name instead: `authelia_session` on the Docker portal,
 `authelia_session_k8s` here (`ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name`).

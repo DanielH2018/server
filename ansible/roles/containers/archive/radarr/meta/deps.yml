@@ -1,7 +1,0 @@
----
-role_deps:
-  - traefik
-  - authelia
-  # prowlarr is a REAL runtime dependency — Prowlarr pushes its indexer list into Radarr over the
-  # API — not just toposort ordering, unlike tdarr/janitorr/bazarr's sonarr/radarr deps. Keep it.
-  - prowlarr

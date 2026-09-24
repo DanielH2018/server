@@ -27,7 +27,7 @@ ansible/tests/deploy/test_k8s_dry_run.py 569
 ansible/tests/deploy/test_setup_render_manifest.py 513
 ansible/tests/longhorn/test_longhorn_restore_drill.py 516
 ansible/tests/repo/test_documented_paths_exist.py 553
-ansible/tests/setup/test_cron_scripts_publish_via_pr.py 689
+ansible/tests/setup/test_cron_scripts_publish_via_pr.py 684
 ansible/tests/staging/test_staging_manifests_have_their_variables.py 586
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
 scripts/deploy_tools/tests/test_land_tags.py 507

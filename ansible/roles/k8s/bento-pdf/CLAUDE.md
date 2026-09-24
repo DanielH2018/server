@@ -24,8 +24,8 @@ conventions.
   also used as `fsGroup` for the container's tmpfs scratch dirs — `emptyDir` mounts
   `0755` root-owned with no equivalent of the Compose template's `tmpfs mode=1777`, so
   without the matching `fsGroup` the container hits `EPERM` on write.
-- Pins the same image tag as the retired `roles/containers/archive/bento-pdf` Docker role,
-  kept in sync deliberately so a behavior difference between the two is never the image.
+- Pinned the same image tag as the retired Docker role while both existed, so a behavior
+  difference between the two was never the image. #2385 deleted that role from the tree.
 
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,

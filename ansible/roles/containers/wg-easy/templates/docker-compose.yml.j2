@@ -1,7 +1,6 @@
 {% from 'autokuma.yml.j2' import labels as kuma with context %}
 {% from 'networks.yml.j2' import service_networks, external_networks with context %}
 {% from 'resources.yml.j2' import resources %}
-{% from 'expose.yml.j2' import web_ui_labels with context %}
 ---
 
 services:
@@ -28,11 +27,9 @@ services:
       - net.ipv4.conf.all.src_valid_mark=1
     ports:
       - "{{ container_item.udp_port }}:{{ container_item.udp_port }}/udp"
-{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) == 'lan' %}
       # LAN-only hosts (daniel-pi): bind the admin UI to the host's LAN IP, not 0.0.0.0,
       # so it isn't reachable on the WireGuard tunnel or other interfaces.
       - "{{ server_ip }}:{{ container_item.port }}:51821/tcp"
-{% endif %}
     environment:
       - LANG=en
       - WG_HOST=wireguard.{{ domain }}
@@ -77,7 +74,7 @@ services:
       # The digest already blocks a float, but this keeps wg-easy out of the auto-update pool
       # (and out of WATCHTOWER_AUTOUPDATE) so a future digest-drop can't silently re-enrol it.
       - "com.centurylinklabs.watchtower.enable=false"
-{{ web_ui_labels('51821') }}
+
       {{ kuma(container_item.name) }}
     # Resource caps for blast-radius containment (M1); tune from cAdvisor/Grafana.
     {{ resources('0.50', '256M', '0.05', '32M') }}
