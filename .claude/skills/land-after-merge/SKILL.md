@@ -257,7 +257,8 @@ the PR, the merge SHA, the verdict, and seconds spent in each phase — `wait_me
 a deploy lock (a sub-part of `tick` and `deploy`, not a fifth phase), and `holder`, the
 command that held it. `lock` books two kinds of wait: an attempt that LOST the lock and
 exited 75, and a wait a wrapper rode out and then reported itself — `deploy.sh` queuing
-inside `flock -w` for the tree lock or for one of its per-service locks, `gitops_tick.sh`
+in a timed flock(2) (`deploy_under_locks.LOCK_WAIT`) for the tree lock or for one of its
+per-service locks, `gitops_tick.sh`
 watching a tick another actor had already started. Both of those exit 0, so before they
 reported it the seconds landed in `deploy` and `tick` and every row read `lock=0`. Since
 [ADR-0017](../../../docs/adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) most of
