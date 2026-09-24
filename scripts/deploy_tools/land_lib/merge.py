@@ -25,12 +25,18 @@ so and trusts the exit code.
 -> one backgrounded land.sh is the whole procedure. Every landing on 2026-09-01 hand-wrote
 that wait.
 
+--arm-merge also refuses a PR whose body carries a closing keyword outside a `Closes #N` line,
+before any merge call. A "Filed and not fixed: #N" line closes #N on merge, because GitHub
+reads the keyword and not the sentence around it (issue #2513). `stray_closing_refs` owns the
+rule.
+
 `opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
 `app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
 agent's contract said "never a PR by another author" and nothing checked (#2170); an
 interactive session leaves the variable unset and is unaffected.
 """
 
+import re
 import subprocess
 from enum import StrEnum
 
@@ -64,6 +70,78 @@ def arm_merge_fallback_decision(state: str, merge_state_status: str) -> ArmDecis
     if merge_state_status == "CLEAN":
         return ArmDecision.MERGE_DIRECT
     return ArmDecision.DIE
+
+
+# GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
+# body, with or without a colon, closes the issue it points at when the PR merges — the
+# surrounding words decide nothing, so "not fixed: #N" closes #N exactly as "Fixes #N" does.
+_CLOSING_REF = re.compile(
+    r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+#(\d+)", re.IGNORECASE
+)
+# What may precede a DELIBERATE closing reference on its own line: list markers, blockquote
+# markers, heading hashes and bold/italic runs. Anything else before the keyword means the
+# reference is a phrase inside a sentence, which is where the accidental ones live.
+_LINE_DECORATION = re.compile(r"^[\s>*_#-]*$")
+
+
+def stray_closing_refs(body: str) -> list[str]:
+    """The lines of `body` whose closing keyword is NOT a deliberate `Closes #N` line.
+
+    PR #2510's body said "Filed and not fixed: #2509". GitHub read `fixed: #2509` as a closing
+    keyword and closed the unfixed follow-up two seconds after the merge, which dropped it from
+    `findings.py list` until the operator reopened it by hand (issue #2513).
+
+    Set membership cannot tell the two apart: the intentional form and the accidental one are
+    the same construct, so a closing reference the PR does not intend looks exactly like one it
+    does. POSITION is the discriminator this uses — a closing keyword that opens its own line is
+    the convention every PR body here writes, and one buried mid-sentence is the accident. A
+    body that wants to name an unfixed follow-up writes it without a keyword in front of the
+    number: `Filed for later: #N`.
+
+    Over-flagging costs one `gh pr edit`; under-flagging costs a silently closed finding. So a
+    keyword inside a fenced code block or a quoted issue body is flagged too, rather than
+    parsed around.
+
+    A pure function of one string so the branch is testable without gh.
+
+    Args:
+        body: the PR body, as `gh pr view --json body` returns it.
+
+    Returns:
+        The stripped offending lines, in order, without duplicates.
+    """
+    found: list[str] = []
+    for line in body.splitlines():
+        for match in _CLOSING_REF.finditer(line):
+            if _LINE_DECORATION.match(line[: match.start()]):
+                continue
+            if line.strip() not in found:
+                found.append(line.strip())
+    return found
+
+
+def _refuse_stray_closing_refs(ln: Landing, body: str) -> None:
+    """Die when the PR body carries a closing reference that is not its own `Closes #N` line.
+
+    Runs beside `_require_author`, before any merge call, because the damage happens AT the
+    merge and is not undone by one: reopening the issue is a hand step the operator only takes
+    once they notice. The session that hits this is usually not the session that wrote the
+    body — the fan-out agent opens the PR on daniel-server and daniel-box lands it — so the
+    message says what to rewrite rather than assuming the reader chose the wording.
+    """
+    stray = stray_closing_refs(body)
+    if not stray:
+        return
+    lines = "\n  ".join(stray)
+    ln.die(
+        f"PR #{ln.opts.pr}'s body carries a closing keyword that is not a `Closes #N` line, "
+        f"so merging it closes an issue this PR may not have fixed (issue #2513):\n"
+        f"  {lines}\n"
+        "Rewrite the reference without a closing keyword in front of the number — "
+        '"Filed for later: #N" — or move a deliberate close onto its own `Closes #N` line, '
+        "then `gh pr edit` the body and re-run this.",
+        1,
+    )
 
 
 def _merge_direct(ln: Landing, subject: str) -> None:
@@ -103,13 +181,14 @@ def _require_author(ln: Landing) -> None:
 def arm_merge(ln: Landing) -> None:
     """Run `gh pr merge --squash --auto` for this PR, unless it is already merged."""
     pr = ln.opts.pr
-    view = ln.view("state,title")
+    view = ln.view("state,title,body")
     if view.get("state") == "MERGED":
         say("already merged; --arm-merge is a no-op")
         return
     if view.get("state") == "CLOSED":
         ln.die(f"PR #{pr} was closed without merging — nothing to arm", 1)
     _require_author(ln)
+    _refuse_stray_closing_refs(ln, view.get("body") or "")
     subject = ln.opts.subject or view.get("title", "")
     try:
         ln.tools.gh("pr", "merge", pr, "--squash", "--auto", "--subject", subject)

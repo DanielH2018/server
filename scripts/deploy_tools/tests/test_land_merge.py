@@ -24,7 +24,7 @@ from _land_fakes import Fakes
 from deploy_tools.land_lib import merge
 from deploy_tools.land_lib.outcome import Outcome
 
-_OPEN = {"state": "OPEN", "title": "Bump vale to 3.19.0"}
+_OPEN = {"state": "OPEN", "title": "Bump vale to 3.19.0", "body": "Closes #12\n"}
 
 
 def _wait(states: list[str]):
@@ -35,7 +35,7 @@ def _wait(states: list[str]):
 
 
 def test_arm_merge_calls_gh_pr_merge_with_the_pr_title(landing):
-    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), arm_merge=True)
+    ln, calls = landing(Fakes(gh_views={"state,title,body": _OPEN}), arm_merge=True)
     merge.arm_merge(ln)
     assert next(c for c in calls if c[0] == "gh")[1] == (
         "pr",
@@ -49,19 +49,21 @@ def test_arm_merge_calls_gh_pr_merge_with_the_pr_title(landing):
 
 
 def test_arm_merge_subject_overrides_the_pr_title(landing):
-    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), subject="Pin vale")
+    ln, calls = landing(Fakes(gh_views={"state,title,body": _OPEN}), subject="Pin vale")
     merge.arm_merge(ln)
     assert next(c for c in calls if c[0] == "gh")[1][-1] == "Pin vale"
 
 
 def test_arm_merge_is_a_no_op_on_a_merged_pr(landing):
-    ln, calls = landing(Fakes(gh_views={"state,title": {**_OPEN, "state": "MERGED"}}))
+    ln, calls = landing(
+        Fakes(gh_views={"state,title,body": {**_OPEN, "state": "MERGED"}})
+    )
     merge.arm_merge(ln)
     assert not [c for c in calls if c[0] == "gh"]
 
 
 def test_arm_merge_dies_on_a_closed_pr(landing):
-    ln, _ = landing(Fakes(gh_views={"state,title": {**_OPEN, "state": "CLOSED"}}))
+    ln, _ = landing(Fakes(gh_views={"state,title,body": {**_OPEN, "state": "CLOSED"}}))
     with pytest.raises(Outcome) as exc:
         merge.arm_merge(ln)
     assert exc.value.rc == 1 and "closed without merging" in exc.value.error
@@ -74,7 +76,7 @@ def _by(login: str) -> dict:
 def test_arm_merge_refuses_another_author_when_one_is_required(landing):
     """The renovate agent's contract, enforced: a human's PR is never armed by its session."""
     ln, calls = landing(
-        Fakes(gh_views={"state,title": _OPEN, "author": _by("DanielH2018")}),
+        Fakes(gh_views={"state,title,body": _OPEN, "author": _by("DanielH2018")}),
         arm_merge=True,
         require_author="app/renovate",
     )
@@ -86,7 +88,7 @@ def test_arm_merge_refuses_another_author_when_one_is_required(landing):
 
 def test_arm_merge_arms_the_required_authors_pr(landing):
     ln, calls = landing(
-        Fakes(gh_views={"state,title": _OPEN, "author": _by("app/renovate")}),
+        Fakes(gh_views={"state,title,body": _OPEN, "author": _by("app/renovate")}),
         arm_merge=True,
         require_author="app/renovate",
     )
@@ -94,16 +96,60 @@ def test_arm_merge_arms_the_required_authors_pr(landing):
     assert [c for c in calls if c[0] == "gh"]
 
 
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Filed and not fixed: #2509",  # PR #2510's own wording, which closed #2509
+        "This also resolves #17 eventually.",
+        "Half of it fixes #17.",
+    ],
+)
+def test_a_closing_keyword_inside_a_sentence_is_stray(body):
+    assert merge.stray_closing_refs(body) == [body]
+
+
+@pytest.mark.parametrize(
+    "body",
+    [
+        "Closes #2513",
+        "- Closes #2513\n- Closes #2514",
+        "**Fixes #12**",
+        "Filed for later: #2509",
+        "See #2509 for the follow-up.",
+    ],
+)
+def test_a_deliberate_close_and_a_bare_reference_are_clean(body):
+    assert merge.stray_closing_refs(body) == []
+
+
+def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
+    """Issue #2513: "not fixed: #N" closes #N on merge, so the arm refuses before merging."""
+    ln, calls = landing(
+        Fakes(
+            gh_views={
+                "state,title,body": {**_OPEN, "body": "Filed and not fixed: #2509\n"}
+            }
+        ),
+        arm_merge=True,
+    )
+    with pytest.raises(Outcome) as exc:
+        merge.arm_merge(ln)
+    assert exc.value.rc == 1 and "Filed and not fixed: #2509" in exc.value.error
+    # The refusal is worth nothing unless it happens BEFORE the merge call: the damage is
+    # done at merge time and reopening the issue is a hand step.
+    assert not [c for c in calls if c[0] == "gh"]
+
+
 def test_arm_merge_reads_no_author_when_none_is_required(landing):
     """An interactive landing makes exactly the calls it made before the check existed."""
-    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}), arm_merge=True)
+    ln, calls = landing(Fakes(gh_views={"state,title,body": _OPEN}), arm_merge=True)
     merge.arm_merge(ln)
     assert not [c for c in calls if c[0] == "gh:author"], calls
 
 
 def test_arm_merge_on_a_merged_pr_stays_a_no_op_under_a_required_author(landing):
     ln, calls = landing(
-        Fakes(gh_views={"state,title": {**_OPEN, "state": "MERGED"}}),
+        Fakes(gh_views={"state,title,body": {**_OPEN, "state": "MERGED"}}),
         require_author="app/renovate",
     )
     merge.arm_merge(ln)
@@ -203,7 +249,7 @@ def test_a_clean_pr_falls_through_to_a_direct_merge(landing):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus": {
                     "state": "OPEN",
                     "mergeStateStatus": "CLEAN",
@@ -229,7 +275,7 @@ def test_a_dirty_pr_still_dies(landing):
     ln, _ = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus": {
                     "state": "OPEN",
                     "mergeStateStatus": "DIRTY",
@@ -247,7 +293,7 @@ def test_a_merge_that_lands_while_arming_reads_as_success(landing):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus": {
                     "state": "MERGED",
                     "mergeStateStatus": "CLEAN",
@@ -266,7 +312,7 @@ def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus,autoMergeRequest": {
                     "state": "OPEN",
                     "mergeStateStatus": "CLEAN",
@@ -285,7 +331,7 @@ def test_an_unarmed_pr_that_is_not_clean_dies_rather_than_merging(landing):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus,autoMergeRequest": {
                     "state": "OPEN",
                     "mergeStateStatus": "BLOCKED",
@@ -306,7 +352,7 @@ def test_a_pr_that_merged_during_the_arm_is_not_merged_again(landing, capsys):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus,autoMergeRequest": {
                     "state": "MERGED",
                     "mergeStateStatus": "CLEAN",
@@ -323,7 +369,7 @@ def test_a_pr_that_merged_during_the_arm_is_not_merged_again(landing, capsys):
 def test_a_read_back_that_fails_trusts_the_exit_code(landing, capsys):
     """A read-back is a confirmation, not a gate: gh failing here must not fail a landing
     whose arm may well have worked, and must not double-merge on a guess."""
-    ln, calls = landing(Fakes(gh_views={"state,title": _OPEN}))
+    ln, calls = landing(Fakes(gh_views={"state,title,body": _OPEN}))
     real = ln.tools.gh_json
 
     def gh_json(*args, **kwargs):
@@ -341,7 +387,7 @@ def test_a_verified_arm_says_armed_and_merges_nothing_directly(landing, capsys):
     ln, calls = landing(
         Fakes(
             gh_views={
-                "state,title": _OPEN,
+                "state,title,body": _OPEN,
                 "state,mergeStateStatus,autoMergeRequest": {
                     "state": "OPEN",
                     "mergeStateStatus": "BLOCKED",
