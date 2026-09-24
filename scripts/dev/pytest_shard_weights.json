@@ -236,6 +236,7 @@
  "ansible/tests/k8s/test_deploy_strategy.py": 0.0,
  "ansible/tests/k8s/test_deployment_revision_history_limit.py": 0.0,
  "ansible/tests/k8s/test_empty_rollout_still_restarts_on_secret_change.py": 0.09,
+ "ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py": 1.12,
  "ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py": 0.23,
  "ansible/tests/k8s/test_hardened_macro_is_not_a_dac_bypass.py": 0.01,
  "ansible/tests/k8s/test_headlamp_plugins_install.py": 0.09,

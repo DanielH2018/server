@@ -16,6 +16,13 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 - **`use_authelia: false` on its own route**, since it is the middleware every other route
   calls.
 - **`authelia-config` is on the daily R2 tier.** Sessions live in redis, not on the claim.
+- **Routes name the `authelia` Middleware, which is a chain, not the forwardAuth.** Its first member,
+  `authelia-strip-forwarded-target`, clears X-Forwarded-Host/-Uri/-Method so forwardAuth
+  rebuilds them from the request; `authelia-forwardauth` follows it. No route names
+  `authelia-forwardauth` directly. The same three-document unit is copied into the
+  longhorn-ui and claude-otel namespaces. `templates/forwardauth-middleware.yaml.j2` has the
+  reasoning (why X-Forwarded-For and -Proto stay untouched), and
+  `ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py` checks every copy.
 
 ## Access control comes from containers_list
 
