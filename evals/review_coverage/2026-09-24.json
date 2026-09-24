@@ -1,0 +1,128 @@
+[
+  {
+    "date": "2026-09-24",
+    "domain": "security",
+    "agent": "security-review (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/setup/initial_setup/tasks/access.yml",
+      "ansible/roles/setup/initial_setup/tasks/network.yml",
+      "ansible/roles/k8s/authelia/templates",
+      "ansible/filter_plugins/authelia_access.py",
+      "ansible/roles/k8s/traefik/templates",
+      "ansible/templates/ingressroute.yml.j2",
+      "ansible/roles/k8s/netpol-baseline",
+      "ansible/roles/k8s/wg-easy/templates",
+      "ansible/roles/k8s/crowdsec/templates/node-agent-daemonset.yaml.j2",
+      "ansible/roles/k8s/loki-homelab/templates/alloy-daemonset.yaml.j2",
+      "ansible/roles/k8s/ical-proxy",
+      "ansible/roles/k8s/homelab-mcp",
+      "ansible/roles/k8s/pi-peer-backup/files/pi-peer-backup-shell.sh",
+      "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2",
+      "ansible/roles/setup/k3s/templates/audit-policy.yaml.j2"
+    ],
+    "findings": ["PR#2447", "PR#2441", "PR#2442+PR#2447", "#2413"],
+    "leads": ["PR#2442", "sec-lead-refuted-1", "PR#2441", "sec-lead-refuted-2"],
+    "notes": "No Bash, so every live question went to a lead. Not reviewed: 4b914f620 (classifier segmenter) and 626550162 (staleness-check deny). Closes the 2026-09-18 holes on access.yml, netpol-baseline, wg-easy and the node-agent hostPath sets."
+  },
+  {
+    "date": "2026-09-24",
+    "domain": "network",
+    "agent": "homelab-network-diagnostician (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/traefik",
+      "ansible/roles/k8s/netpol-baseline",
+      "ansible/roles/k8s/crowdsec",
+      "ansible/roles/k8s/pihole",
+      "ansible/roles/k8s/wg-easy",
+      "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2",
+      "ansible/roles/setup/k3s/templates/coredns-corefile.j2",
+      "live: nodes, MetalLB servicel2statuses, NetworkPolicies, cert, DDNS, etcd snapshot journal"
+    ],
+    "findings": ["#2403", "#2423"],
+    "leads": [],
+    "notes": "Control plane assigned here: both nodes v1.36.4+k3s1, no pressure or taints, all six VIPs announced from and backed on daniel-box."
+  },
+  {
+    "date": "2026-09-24",
+    "domain": "backup-observability",
+    "agent": "homelab-backup-observability-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      ".claude/hooks/hooklib/service_lines.py",
+      "ansible/roles/setup/k3s/tasks/health-crons.yml",
+      "ansible/roles/setup/k3s/templates/release-staleness-check.sh.j2",
+      "ansible/roles/setup/k3s/templates/longhorn-restore-drill.sh.j2",
+      "ansible/roles/setup/k3s/templates/longhorn-trim-volumes.sh.j2",
+      "ansible/roles/k8s/monitor-bridge/files",
+      "ansible/roles/setup/nut_host",
+      "ansible/roles/setup/hypervisor",
+      "scripts/diagnostics/probe_lib/releases.py",
+      "live: Longhorn CRs, RecurringJobs, ETCDSnapshotFiles, Prometheus, Loki, Kuma, scrutiny, UPS, /var/mail"
+    ],
+    "findings": ["#2390", "#2393", "#2348", "#2416", "#2418", "#2420"],
+    "leads": [],
+    "notes": "Host OS/hardware and cost/quota assigned here. B2 43%, R2 9.5%, UPS OL, scrutiny 2/2, restore drill PASS nightly 09-21 to 09-24."
+  },
+  {
+    "date": "2026-09-24",
+    "domain": "cicd",
+    "agent": "homelab-cicd-reviewer (opus, effort medium)",
+    "status": "covered",
+    "reviewed": [
+      ".github/workflows/ci.yml",
+      "renovate.json",
+      "ansible/roles/setup/docker_install",
+      "ansible/roles/setup/gitops_deploy",
+      "scripts/deploy_tools/narrow_setup.py",
+      "ansible/roles/k8s/manifests/tasks/main.yml",
+      "ansible/roles/k8s/rollout-drain",
+      "ansible/roles/k8s/valheim",
+      "ansible/roles/k8s/prowlarr",
+      "ansible/tests/k8s/test_progress_deadline_covers_rollout_timeout.py",
+      "scripts/secrets_mgmt/secret_rotation.py"
+    ],
+    "findings": ["#2397", "#2399", "#2402", "#2407", "#2409", "#2377", "#2371", "#2375", "#2370"],
+    "leads": ["gh-workflow-run-default-ref", "check-runs-filter-latest-dedupe", "prowlarr-forward-deploy-overhead"],
+    "notes": "1728 tests passed in the gitops/deploy_tools/progress-deadline/docker-engine suites. Secret rotation audit clean, nothing due within 90 days."
+  },
+  {
+    "date": "2026-09-24",
+    "domain": "container",
+    "agent": "homelab-container-reviewer (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/{sonarr,radarr,prowlarr,bazarr,jellyfin,qbittorrent,tdarr,configarr,janitorr,karakeep}",
+      "ansible/templates/exportarr.yml.j2",
+      "ansible/roles/k8s/volume-claim",
+      "ansible/tests/k8s/test_readiness_coverage.py",
+      "ansible/roles/containers/{alloy,autoheal,docker-proxy,wg-easy}/templates/docker-compose.yml.j2",
+      "renovate.json",
+      "live: deployments, pods, PVCs, throttling metrics, gh pr view 2332-2339"
+    ],
+    "findings": ["#2348", "#2392", "#2421"],
+    "leads": [],
+    "notes": "home-assistant live image 2026.6.3-ls221 vs repo 2026.9.3-ls249."
+  },
+  {
+    "date": "2026-09-24",
+    "domain": "docs",
+    "agent": "homelab-docs-freshness-reviewer (sonnet)",
+    "status": "covered",
+    "reviewed": [
+      "ansible/roles/k8s/janitorr/CLAUDE.md",
+      "ansible/roles/k8s/configarr/CLAUDE.md",
+      "ansible/roles/k8s/image-builder/CLAUDE.md",
+      "ansible/roles/k8s/prowlarr/CLAUDE.md",
+      "ansible/roles/k8s/sonarr/CLAUDE.md",
+      "docs/k3s-etcd-restore.md",
+      "docs/self-hosted-runner-spike.md",
+      "docs/deploying.md",
+      "CLAUDE.md"
+    ],
+    "findings": ["#2411"],
+    "leads": [],
+    "notes": "Closes the 2026-09-18 configarr/janitorr per-file hole. Narrow sweep: roughly nine docs traced against the high-movement commits, not the full docs tree."
+  }
+]
