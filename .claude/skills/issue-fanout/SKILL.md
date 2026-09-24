@@ -298,7 +298,11 @@ Each agent starts with none of this conversation's context, so its brief must ca
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent
   holding that authority could bury a real finding invisibly.
-- That anything it does not fix gets filed with `findings.py open`, not left unmentioned.
+- That anything it does not fix gets filed with `findings.py open`, not left unmentioned, and
+  named in the PR body as `Filed for later: #N`. GitHub reads a closing keyword before the
+  number as a close whatever the sentence says, so "Filed and not fixed: #2509" closed #2509
+  two seconds after PR #2510 merged (issue #2513). `land.sh --arm-merge` refuses such a body
+  now, which costs the LANDING session a `gh pr edit` on a body it did not write.
 
 **Width is bounded by memory, not by a number here.** This fallback path takes no
 agent-count parameter — the bound is the host cgroup. `user.slice` carries a 12G `MemoryHigh`

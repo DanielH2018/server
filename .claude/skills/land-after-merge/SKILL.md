@@ -33,6 +33,14 @@ PR by any other author (renovate-agent.service sets it to `app/renovate`, so the
 agent can only merge Renovate's PRs — #2170); `--any-author` lifts it for a session that is
 allowed to merge the PR. An interactive shell leaves the variable unset and never sees this.
 
+**The arm also refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub
+closes an issue named after `close`/`fixes`/`resolved` however the sentence reads, so PR
+#2510's "Filed and not fixed: #2509" closed the unfixed follow-up two seconds after the merge
+(issue #2513). The refusal prints the offending line: `gh pr edit <n> --body-file` with the
+reference reworded (`Filed for later: #N`), then re-run the same landing command. You will
+often be rewording a body another session wrote, since the fan-out agent opens the PR and a
+daniel-box session lands it.
+
 **Open the PR with `--fill`, then replace the body — the same evasion, one command earlier.**
 The worktree-containment check judges a command on its TEXT, so `gh pr create --title "…"` is
 refused whenever the title carries `git`, `cd`, `worktree`, `write` or a construct the check
