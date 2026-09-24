@@ -68,7 +68,8 @@ established pattern that keeps the next review high-signal.
   `/ha-verify-state`) stays an explicit, operator-gated sequence — keep it out of this skill.
 - For a whole-homelab review across the other domains, use `/homelab-review` (HA was split out of it
   into this skill).
-- **Kept as its own skill rather than folded back into `/homelab-review` as a domain** (#2428,
-  2026-09-24), despite low invocation counts. `evals/cases/homelab-review/007-ha-out-of-scope.json`
-  asserts that `/homelab-review` treats Home Assistant as OUT of scope, so folding this skill in
-  contradicts a live eval case. Re-open the question by changing that case first.
+- **DECIDED: `ha-review` stays its own skill, not a `/homelab-review` domain** (#2428,
+  2026-09-24), despite low invocation counts.
+  `evals/cases/homelab-review/007-ha-out-of-scope.json` asserts that `/homelab-review` treats Home
+  Assistant as OUT of scope, so folding this skill in contradicts a live eval case. Re-open the
+  question by changing that case first.
