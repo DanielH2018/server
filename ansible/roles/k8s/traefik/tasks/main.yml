@@ -63,7 +63,8 @@
          + (['acme-pvc.yaml'] if traefik_k8s_manage_acme | bool else [])
          + ['static-config.yaml', 'dynamic.yaml', 'deployment.yaml', 'service.yaml',
             'metrics-service.yaml', 'dashboard-ingressroute.yaml']
-         + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
+         + (['edge-selfcheck-ingressroute.yaml'] if traefik_k8s_manage_crowdsec | bool else [])
+         + (['cloudflare-realip-plugin.yaml'] if traefik_k8s_manage_crowdsec | bool else []) }}
     manifests_secret_files: >-
       {{ ['origin-pull-secret.yaml']
          + (['cf-token-secret.yaml'] if traefik_k8s_manage_acme | bool else [])

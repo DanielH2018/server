@@ -116,6 +116,15 @@ traefik_k8s_mem_request: 128Mi
 # ships signals to the in-cluster LAPI, so its collections are the HTTP-side subset — the
 # syslog/authelia parsers stay with the agents that read those logs (daniel-server, B2).
 traefik_k8s_bouncer_plugin_version: v1.7.1
+
+# The Cloudflare real-IP middleware: an in-repo Traefik local plugin (files/cloudflare-realip/),
+# not a downloaded one, so it has no version to pin — git holds its source. The name is the key
+# under experimental.localPlugins and under the Middleware's `plugin:`. The module is the
+# directory under /plugins-local/src/ and must prefix the manifest's `import`
+# (files/cloudflare-realip/traefik-plugin.yml). ansible/tests/k8s/test_traefik_cloudflare_realip.py
+# checks all four agree.
+traefik_k8s_realip_plugin_name: cloudflarerealip
+traefik_k8s_realip_plugin_module: homelab/cloudflarerealip
 traefik_k8s_agent_collections: >-
   crowdsecurity/traefik crowdsecurity/http-cve crowdsecurity/whitelist-good-actors
 traefik_k8s_agent_cpu_limit: "0.5"
