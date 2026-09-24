@@ -23,7 +23,7 @@ from _check_mode import (
     lazily_guarded,
     skips_in_check_mode,
     unguarded_deref,
-    walk_with_inherited_when,
+    walk_with_inherited,
 )
 from _helpers import REPO as _REPO_ROOT
 from _helpers import ROLES as _ROLES
@@ -94,7 +94,7 @@ def _producers(tasks: list[dict]) -> dict[str, list[str]]:
 def _check_mode_producers(pairs) -> dict[str, str]:
     """register -> producer task name, for producers a `--check` run skips outright.
 
-    `pairs` is `walk_with_inherited_when(tasks)`. A producer that also carries a `when:` is
+    `pairs` is `walk_with_inherited(tasks)`. A producer that also carries a `when:` is
     reported here as well as by the when-based rule, so a consumer is clean only when BOTH
     rules accept it. Skipping those registers was #2353: the when-based rule accepts a
     consumer that repeats the producer's condition, which is enough on a real run and not
@@ -104,15 +104,18 @@ def _check_mode_producers(pairs) -> dict[str, str]:
     against a running guest while the guard called it clean.
 
     `check_mode: false` is the opt-out: the task runs for real under `--check` and its
-    register carries a real result. A `when:` that excludes check mode — on the task or on an
-    enclosing block — means the producer is skipped, but so is every consumer beside it.
+    register carries a real result. It counts whether the producer carries it itself or
+    inherits it from an enclosing `block:` — reading only the task's own key reported a
+    producer that actually runs, for a consumer that meets a real result (#2379). A `when:`
+    that excludes check mode — on the task or on an enclosing block — means the producer is
+    skipped, but so is every consumer beside it.
     """
     found = {}
-    for task, inherited in pairs:
+    for task, inherited, check_mode in pairs:
         reg = task.get("register")
         if not reg:
             continue
-        if not skips_in_check_mode(task):
+        if not skips_in_check_mode(task, check_mode):
             continue
         if excludes_check_mode(task.get("when")):
             continue
@@ -129,8 +132,8 @@ def _offenders(path: Path) -> list[Problem]:
         return []  # the manifest/lint hooks own YAML validity; this check owns semantics
     if not isinstance(loaded, list):
         return []
-    pairs = list(walk_with_inherited_when(loaded))
-    tasks = [task for task, _ in pairs]
+    pairs = list(walk_with_inherited(loaded))
+    tasks = [task for task, _, _ in pairs]
     conditional = _producers(tasks)
     # A file imported under a guard no `--check` run satisfies has no reachable task in it,
     # producer or consumer. The when-based rule above does not consult this: an importer
@@ -194,7 +197,7 @@ def _where(path: Path) -> Path:
 def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
     """Consumers that dereference a register check mode turns into a skip result."""
     problems = []
-    for task, inherited in pairs:
+    for task, inherited, consumer_check_mode in pairs:
         if excludes_check_mode(task.get("when")):
             continue
         if any(excludes_check_mode(when) for when in inherited):
@@ -206,9 +209,14 @@ def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
         # judged; `_check_mode.POST_MODULE_KEYS` says why `until:` is not in the set. The
         # when-based rule in `_offenders` drops nothing: its producer is skipped on a REAL
         # run, where this consumer runs, its module returns, and its `failed_when` meets the
-        # skip dict.
+        # skip dict. The opt-out counts whether the consumer carries `check_mode: false`
+        # itself or inherits it from an enclosing `block:`; reading only its own key dropped
+        # the two keys for a consumer that in fact runs and evaluates them (#2379).
         body = expressions(
-            task, drop=POST_MODULE_KEYS if skips_in_check_mode(task) else ()
+            task,
+            drop=POST_MODULE_KEYS
+            if skips_in_check_mode(task, consumer_check_mode)
+            else (),
         )
         loop = str(task.get("loop", ""))
         if any(skip_filter in loop for skip_filter in SKIP_FILTERS):

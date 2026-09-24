@@ -273,3 +273,56 @@ def test_the_when_based_rule_still_judges_a_skipped_consumers_failed_when(
         "the check-mode rule reported this, not the when-based rule — the producer carries "
         "`check_mode: false`, so the check-mode rule is supposed to ignore it"
     )
+
+
+# A `check_mode:` on a `block:` propagates to every child, and both arms above used to read
+# only the task's own key (#2379). The tree has no such block, so both anchors below are
+# `tmp_path` fixtures — the shape they pin is one an edit is free to introduce tomorrow.
+_BLOCK_OPTS_OUT = (
+    "- name: Read state that exists independently of this play\n"
+    "  check_mode: false\n"
+    "  block:\n"
+)
+
+
+def test_a_producer_inheriting_the_opt_out_from_its_block_is_not_a_skip_source(
+    tmp_path: Path,
+) -> None:
+    """#2379, the false positive: this producer RUNS under `--check`.
+
+    Its `check_mode: false` sits on the enclosing block rather than on itself, so its
+    register carries a real result and the consumer below reads one. Reading only the task's
+    own key made `_check_mode_producers` call it a skip source and report the consumer for a
+    read that cannot fail.
+    """
+    producer = "".join(f"    {line}\n" for line in _POD_LOOKUP.splitlines())
+    consumer = (
+        "- name: Prove the render node can actually be opened\n"
+        "  ansible.builtin.command:\n"
+        '    cmd: k3s kubectl exec {{ tdarr_k8s_pod.stdout }} -- sh -c "echo OPEN_OK"\n'
+        "  changed_when: false\n"
+    )
+    assert _offenders(_write(tmp_path, _BLOCK_OPTS_OUT + producer + consumer)) == []
+
+
+@pytest.mark.parametrize("key", _DROPPED_KEYS)
+def test_a_consumer_inheriting_the_opt_out_from_its_block_is_judged_on_that_key(
+    tmp_path: Path, key: str
+) -> None:
+    """#2379, the false negative: this consumer RUNS under `--check`.
+
+    The producer above it is an unguarded `command`, so `--check` leaves `tdarr_k8s_pod` a
+    skip result. The consumer's block carries `check_mode: false`, so its module returns,
+    Ansible evaluates `key` against that result, and the read of the sibling's skip result
+    happens for real. Reading only the consumer's own key dropped `key` from the judged text
+    and reported nothing at all.
+    """
+    consumer = "".join(
+        f"    {line}\n"
+        for line in _skipped_consumer(key, _READS_THE_SIBLING).splitlines()
+    )
+    problems = _offenders(_write(tmp_path, _POD_LOOKUP + _BLOCK_OPTS_OUT + consumer))
+    assert [problem.task for problem in problems] == [
+        "Prove the render node can actually be opened"
+    ]
+    assert "tdarr_k8s_pod.stdout" in problems[0].message
