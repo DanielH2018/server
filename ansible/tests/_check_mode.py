@@ -124,7 +124,11 @@ def walk_with_inherited_when(tasks, inherited=()) -> Iterator[tuple[dict, list]]
 # Attributes a skip result does not carry. `results` is deliberately absent: a skipped
 # looped task DOES carry `results`, which is why looping it is safe and reading `.stdout`
 # off its entries is not.
-SKIP_MISSING = ("stdout", "stderr", "rc")
+#
+# `stdout_lines`, `stderr_lines` and `delta` are listed separately rather than left to the
+# bare names: `unguarded_deref` anchors on `\b<reg>.<attr>\b`, and `_` is a word character,
+# so there is no boundary inside `stdout_lines` for the `stdout` entry to match (#2351).
+SKIP_MISSING = ("stdout", "stdout_lines", "stderr", "stderr_lines", "rc", "delta")
 
 SKIP_FILTERS = (
     "rejectattr('skipped'",
@@ -135,8 +139,18 @@ SKIP_FILTERS = (
 
 
 def expressions(task: dict) -> str:
-    """Every templated string in the task, so a reference anywhere is seen."""
-    return yaml.safe_dump(task, default_flow_style=False)
+    """Every templated string in the task itself, so a reference anywhere is seen.
+
+    `block:`, `rescue:` and `always:` are dropped. `walk_with_inherited_when` yields each
+    child on its own, so a wrapper that kept them would show a child's expressions twice —
+    once as the child, once as part of the wrapper — and report the child's read against the
+    wrapper's name, pointing the reader at the wrong task. `initial_setup`'s
+    "Keep the info-level forwarding out of /var/log/syslog" block was flagged that way for
+    a `failed_when:` on its own child, which Ansible never evaluates on a skipped task
+    (#2352).
+    """
+    body = {key: value for key, value in task.items() if key not in _NESTING_KEYS}
+    return yaml.safe_dump(body, default_flow_style=False)
 
 
 def unguarded_deref(body: str, reg: str, attr: str) -> bool:

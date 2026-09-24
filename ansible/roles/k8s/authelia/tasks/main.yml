@@ -121,7 +121,14 @@
   # interleave its own lines with the container's output, so anchor on the hash itself.
   ansible.builtin.set_fact:
     authelia_password_hash: "{{ authelia_k8s_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
-  when: authelia_password_hash is not defined
+  when:
+    # The generate task above is a `command`, so `--check` skips it whatever its `when:`
+    # says and leaves a skip result with no `stdout`. On a cluster that already holds the
+    # Secret the read-back defines the hash and neither task is reached; on a fresh one a
+    # dry run falls through to here, and without this it errors on the attribute instead
+    # of reaching the assert below, which says what is actually wrong (#2353).
+    - not ansible_check_mode
+    - authelia_password_hash is not defined
   no_log: true
 
 - name: Hash the claude-ui password
@@ -150,6 +157,8 @@
   ansible.builtin.set_fact:
     authelia_claude_password_hash: "{{ authelia_k8s_claude_hash.stdout | regex_search('\\$argon2[^\\s]+') }}"
   when:
+    # Same reasoning as the operator digest above (#2353).
+    - not ansible_check_mode
     - authelia_k8s_manage_claude_user | bool
     - authelia_claude_password_hash is not defined
   no_log: true

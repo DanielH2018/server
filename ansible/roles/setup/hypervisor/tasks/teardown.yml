@@ -18,6 +18,9 @@
   register: hypervisor_defined_guests
   changed_when: false
   failed_when: false
+  # A read, and the refusals below judge a one-way door on its output — a dry run that
+  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
+  check_mode: false
   become: true
 
 - name: Refuse to remove a hypervisor that still has guests
@@ -43,6 +46,9 @@
   register: hypervisor_teardown_net_info
   changed_when: false
   failed_when: false
+  # A read, and the refusals below judge a one-way door on its output — a dry run that
+  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
+  check_mode: false
   become: true
 
 - name: Stop the staging network
@@ -119,6 +125,9 @@
   register: hypervisor_teardown_gate_dirty
   changed_when: false
   failed_when: false
+  # A read, and the refusals below judge a one-way door on its output — a dry run that
+  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
+  check_mode: false
   become: true
   become_user: "{{ sys_user }}"
 
