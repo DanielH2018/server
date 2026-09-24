@@ -15,7 +15,8 @@ to the tags of the tasks that read it:
   - `templates/<f>` or `files/<f>`: the tags of every task file naming `<f>`, following a
     template that another template includes or imports.
   - `defaults/main.yml` or `vars/<f>.yml`: the top-level keys whose value changed, then the
-    tags of every task file and template naming one of those keys.
+    tags of every task file and template naming one of those keys, following another vars
+    key that interpolates one.
 
 ANY DOUBT IS A REFUSAL, and the caller falls back to the role tag. A tag that matches nothing
 makes Ansible exit 0 having applied nothing — the silent-success failure
@@ -222,13 +223,17 @@ def file_tags(text: str) -> frozenset[str] | None:
     return frozenset().union(*per_task)
 
 
-def _top_level_keys_naming(text: str, name: str) -> set[str]:
+def _top_level_keys_naming(text: str, name: str | re.Pattern) -> set[str]:
     """The top-level keys of a vars file whose block of lines mentions `name`.
 
     A line scan rather than a parse, because the value may be a nested structure and what is
     wanted is only "which key's block holds this string". A top-level key is a line starting in
-    column zero with a `key:`; everything indented under it belongs to that key.
+    column zero with a `key:`; everything indented under it belongs to that key. A compiled
+    pattern matches by `search`, for a variable name that must not match inside a longer one.
     """
+    mentions = (
+        name if isinstance(name, re.Pattern) else re.compile(re.escape(name))
+    ).search
     keys: set[str] = set()
     current = None
     for line in text.splitlines():
@@ -239,7 +244,7 @@ def _top_level_keys_naming(text: str, name: str) -> set[str]:
             if not line.strip():
                 current = None
             continue
-        if current and name in line:
+        if current and mentions(line):
             keys.add(current)
     return keys
 
@@ -405,10 +410,24 @@ class RoleIndex:
         the two can recurse into each other and still terminate: a template that names a key
         whose only reader is that same template would otherwise loop forever once the vars
         answer stopped being a fallback (#2344).
+
+        ANOTHER `defaults/` OR `vars/` KEY interpolating this one is a reader too, and the
+        same question is asked of it: `k3s_node_dns_options` interpolates
+        `k3s_node_dns_timeout`, so every reader of the first also reads the second. Keys go on
+        `seen` under a `key:` prefix, so two keys naming each other terminate — with an empty
+        answer, which `path_tags` refuses.
         """
+        marker = f"key:{key}"
+        if marker in seen:
+            return frozenset()
+        seen = seen | {marker}
         mention = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
         tags: set[str] = set()
         hit = False
+        naming = [_top_level_keys_naming(t, mention) for t in self.vars_text.values()]
+        for other in sorted(set().union(*naming) - {key}):
+            hit = True
+            tags |= self.key_readers(other, seen)
         for rel, text in self.task_text.items():
             if mention.search(text):
                 hit = True
@@ -461,7 +480,14 @@ def path_tags(
     if rel.startswith(("defaults/", "vars/")):
         tags: set[str] = set()
         for key in sorted(changed_keys(f"{index.prefix}{rel}", old, new, repo)):
-            tags |= index.key_readers(key)
+            got = index.key_readers(key)
+            if not got:
+                # Per key, not over the union: a key whose only readers are keys naming it
+                # back would otherwise drop out silently beside one that did narrow.
+                raise CannotNarrow(
+                    f"{key} reaches no task file, only vars keys naming each other"
+                )
+            tags |= got
         if not tags:
             raise CannotNarrow(
                 f"{rel} changed no key, so nothing says which tag to run"

@@ -16,7 +16,9 @@ import pytest
 import narrow_setup
 
 from _narrow_fixtures import _refs
-from _setup_role_fixtures import ALPHA, MAIN, ROLE, Tree, build, narrow
+from _setup_role_fixtures import ALPHA, DEFAULTS, MAIN, ROLE, Tree, build, narrow
+
+DEFAULTS_WITH_A_DERIVED_KEY = DEFAULTS + 'demo_derived: "x{{ demo_alpha_mode }}"\n'
 
 
 @pytest.fixture
@@ -103,6 +105,46 @@ def test_a_changed_vars_key_nothing_reads_is_flagged(tree):
     )
     with pytest.raises(narrow_setup.CannotNarrow, match="reads demo_vars_orphan"):
         narrow(tree, old, tree.commit("change the unread key"))
+
+
+# ── a key another defaults key interpolates reaches that key's readers too ──────────────
+
+
+def test_a_key_another_defaults_key_interpolates_names_both_readers(tree):
+    """`k3s_node_dns_options` interpolates `k3s_node_dns_timeout`: the real role's shape.
+
+    `demo_derived` carries `demo_alpha_mode` into `beta.conf.j2`, so a change to the mode
+    reaches `beta` as surely as `alpha`. Scanning only task files and templates returned
+    `alpha` alone, and the operator cleared the marker over an unapplied `beta` change.
+    """
+    tree.write(f"{ROLE}/defaults/main.yml", DEFAULTS_WITH_A_DERIVED_KEY)
+    tree.write(f"{ROLE}/templates/beta.conf.j2", "mode = {{ demo_derived }}\n")
+    old = tree.commit("derive a key from the alpha mode")
+    tree.write(
+        f"{ROLE}/defaults/main.yml",
+        DEFAULTS_WITH_A_DERIVED_KEY.replace("mode: fast", "mode: faster"),
+    )
+    assert narrow(tree, old, tree.commit("change the mode")) == frozenset(
+        {"alpha", "beta"}
+    )
+
+
+def test_keys_only_naming_each_other_are_flagged_beside_a_key_that_narrows(tree):
+    """The fail-closed half: a key cycle reaching no task file refuses per key.
+
+    It must not simply drop out of the union beside `demo_alpha_mode`, which does narrow.
+    """
+    cyclic = DEFAULTS + 'demo_ping: "{{ demo_pong }}"\ndemo_pong: "{{ demo_ping }}"\n'
+    tree.write(f"{ROLE}/defaults/main.yml", cyclic)
+    old = tree.commit("two keys naming each other")
+    tree.write(
+        f"{ROLE}/defaults/main.yml",
+        cyclic.replace("mode: fast", "mode: faster").replace(
+            'demo_ping: "{{ demo_pong }}"', 'demo_ping: "x{{ demo_pong }}"'
+        ),
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="demo_ping reaches no task"):
+        narrow(tree, old, tree.commit("change both"))
 
 
 # ── a tag a `block:` carries selects the tasks inside it ────────────────────────────────
