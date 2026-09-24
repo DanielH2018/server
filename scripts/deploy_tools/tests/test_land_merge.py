@@ -116,6 +116,11 @@ def test_a_closing_keyword_inside_a_sentence_is_stray(body):
         "**Fixes #12**",
         "Filed for later: #2509",
         "See #2509 for the follow-up.",
+        # The three shapes the corpus of 60 merged bodies turned up on 2026-09-24. A rule
+        # keyed on the LINE rather than the clause flagged all of them.
+        "Closes #2428, closes #2429.",
+        "Three test-tree issues from one fan-out batch. Closes #2379. Closes #2404.",
+        "**`Closes #2413` — the SSH directory task hardened root's `.ssh`.**",
     ],
 )
 def test_a_deliberate_close_and_a_bare_reference_are_clean(body):

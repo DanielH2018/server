@@ -75,17 +75,32 @@ def arm_merge_fallback_decision(state: str, merge_state_status: str) -> ArmDecis
 # GitHub's closing keywords, all three tenses of all three verbs. A keyword anywhere in the
 # body, with or without a colon, closes the issue it points at when the PR merges — the
 # surrounding words decide nothing, so "not fixed: #N" closes #N exactly as "Fixes #N" does.
-_CLOSING_REF = re.compile(
-    r"\b(close[sd]?|fix(?:e[sd])?|resolve[sd]?)\b:?\s+#(\d+)", re.IGNORECASE
-)
-# What may precede a DELIBERATE closing reference on its own line: list markers, blockquote
-# markers, heading hashes and bold/italic runs. Anything else before the keyword means the
-# reference is a phrase inside a sentence, which is where the accidental ones live.
-_LINE_DECORATION = re.compile(r"^[\s>*_#-]*$")
+_KEYWORD = r"close[sd]?|fix(?:e[sd])?|resolve[sd]?"
+_CLOSING_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#(\d+)", re.IGNORECASE)
+# One DELIBERATE closing reference with its trailing punctuation, so a second keyword on the
+# same line is read against what is left rather than against the first reference's text.
+# `Closes #2428, closes #2429` and `Closes #2412. Closes #2477:` are both ordinary here.
+_CANONICAL_REF = re.compile(rf"\b({_KEYWORD})\b:?\s+#\d+[.,;:)\]]*\s*", re.IGNORECASE)
+# Markdown that carries no meaning in front of a reference: list and blockquote markers,
+# heading hashes, bold/italic runs, and the backticks of a code span — GitHub creates no
+# reference at all inside one.
+_DECORATION = re.compile(r"^[\s>*_#`~-]+|[\s>*_#`~-]+$")
+_SENTENCE_END = re.compile(r"[.!?]$")
+
+
+def _reference_is_deliberate(prefix: str) -> bool:
+    """Whether a closing keyword preceded by `prefix` on its line is the intended kind.
+
+    Deliberate means the keyword opens a clause of its own: it starts the line, follows
+    another closing reference, or follows a finished sentence. `Filed and not fixed: #N`
+    fails all three, which is the accident issue #2513 is about.
+    """
+    rest = _DECORATION.sub("", _CANONICAL_REF.sub("", prefix))
+    return not rest or _SENTENCE_END.search(rest) is not None
 
 
 def stray_closing_refs(body: str) -> list[str]:
-    """The lines of `body` whose closing keyword is NOT a deliberate `Closes #N` line.
+    """The lines of `body` whose closing keyword is not a deliberate closing reference.
 
     PR #2510's body said "Filed and not fixed: #2509". GitHub read `fixed: #2509` as a closing
     keyword and closed the unfixed follow-up two seconds after the merge, which dropped it from
@@ -93,14 +108,20 @@ def stray_closing_refs(body: str) -> list[str]:
 
     Set membership cannot tell the two apart: the intentional form and the accidental one are
     the same construct, so a closing reference the PR does not intend looks exactly like one it
-    does. POSITION is the discriminator this uses — a closing keyword that opens its own line is
-    the convention every PR body here writes, and one buried mid-sentence is the accident. A
-    body that wants to name an unfixed follow-up writes it without a keyword in front of the
-    number: `Filed for later: #N`.
+    does. POSITION is the discriminator — a keyword that opens a clause is the convention every
+    PR body here writes, and one buried mid-sentence is the accident. A body naming an unfixed
+    follow-up writes it without a keyword in front of the number: `Filed for later: #N`.
 
-    Over-flagging costs one `gh pr edit`; under-flagging costs a silently closed finding. So a
-    keyword inside a fenced code block or a quoted issue body is flagged too, rather than
-    parsed around.
+    The clause test is what the corpus forced. Read against 60 merged PR bodies on 2026-09-24,
+    a keyword-opens-the-LINE rule flagged 13, of which 12 were the repo's ordinary
+    `Closes #A. Closes #B.` on one line — a guard that refuses a fifth of all landings is one
+    the operator turns off. Flagging only a keyword that opens no clause leaves exactly PR
+    #2510 flagged out of those 60.
+
+    Known limits, both deliberate. A keyword inside a fenced code block is still flagged:
+    over-flagging costs one `gh pr edit` and under-flagging costs a silently closed finding.
+    And only the bare `#N` form is matched, not `owner/repo#N` or a full issue URL, which
+    GitHub also closes on — no agent or template here writes either.
 
     A pure function of one string so the branch is testable without gh.
 
@@ -113,7 +134,7 @@ def stray_closing_refs(body: str) -> list[str]:
     found: list[str] = []
     for line in body.splitlines():
         for match in _CLOSING_REF.finditer(line):
-            if _LINE_DECORATION.match(line[: match.start()]):
+            if _reference_is_deliberate(line[: match.start()]):
                 continue
             if line.strip() not in found:
                 found.append(line.strip())
