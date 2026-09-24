@@ -89,10 +89,21 @@ def _report(arm_name, exc):
     traceback.print_exception(type(exc), exc, exc.__traceback__, file=sys.stderr)
 
 
+def _attributed(arm_name, reason):
+    """`reason` prefixed with the arm that returned it, as `[<arm>] <reason>`.
+
+    The OTEL `tool_decision` stream names the hook that decided, and since the merge that
+    hook is `bash-pretool.sh` for every Bash verdict. The prefix puts back what the stream
+    lost: which arm decided, greppable in the reason itself (#2469).
+    """
+    return f"[{arm_name}] {reason}"
+
+
 def collect(payload, arms=_DECISION_ARMS, context_arm=_CONTEXT_ARM, load=load_arm):
     """Every arm's verdict for `payload`: a list of (decision, reason), plus the context text.
 
-    An arm that raises — including one that cannot be imported — contributes nothing and is
+    Each reason carries its arm's name as a `[<arm>] ` prefix, so the merged verdict still
+    says which arm decided. An arm that raises — including one that cannot be imported — contributes nothing and is
     reported on stderr. An arm with no opinion contributes nothing and is silent.
 
     Args:
@@ -111,7 +122,8 @@ def collect(payload, arms=_DECISION_ARMS, context_arm=_CONTEXT_ARM, load=load_ar
             _report(filename, exc)
             continue
         if verdict:
-            verdicts.append(verdict)
+            decision, reason = verdict
+            verdicts.append((decision, _attributed(filename, reason)))
     context = None
     try:
         context = load(*context_arm).context(payload)

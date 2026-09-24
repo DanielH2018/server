@@ -119,11 +119,14 @@
   # root, not sys_user: the script execs into the engine pod, which needs the root
   # kubeconfig — the readonly SA cannot exec. Every 5 min like its daniel-server
   # predecessor; it pushes the same Kuma monitor directly (no monitor-bridge hop).
+  # Output goes to the journal under the script's own tag (#2487): cscli prints on every
+  # home-IP change and curl on a retried push, and neither is a failure. A failure is the
+  # Kuma monitor going down.
   ansible.builtin.cron:
     name: "CrowdSec home allowlist"
     minute: "*/5"
     user: root
-    job: "/usr/local/bin/crowdsec-update-home-allowlist.sh"
+    job: "/usr/local/bin/crowdsec-update-home-allowlist.sh 2>&1 | logger -t crowdsec-home-allowlist"
     cron_file: crowdsec-home-allowlist
   become: true
 

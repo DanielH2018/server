@@ -108,6 +108,7 @@ def test_accept_a_write_to_a_sops_file_asks(sandbox, monkeypatch, capsys):
         "sed -i s/a/b/ ansible/vars/secrets.yml", sandbox, monkeypatch, capsys
     )
     assert out["permissionDecision"] == "ask"
+    assert out["permissionDecisionReason"].startswith("[block-protected-bash] ")
     assert "SOPS-encrypted" in out["permissionDecisionReason"]
 
 
@@ -122,6 +123,7 @@ def test_reject_a_write_to_an_ordinary_file_is_not_asked(sandbox, monkeypatch, c
 def test_accept_a_blocking_ci_wait_is_denied(sandbox, monkeypatch, capsys):
     out = dispatch("gh run watch 12345", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"].startswith("[nudge-land-sh] ")
     assert "land.sh" in out["permissionDecisionReason"]
 
 
@@ -136,6 +138,7 @@ def test_reject_a_first_ci_status_read_is_not_denied(sandbox, monkeypatch, capsy
 def test_accept_a_rollout_restart_is_denied(sandbox, monkeypatch, capsys):
     out = dispatch("kubectl rollout restart deploy/x", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "deny"
+    assert out["permissionDecisionReason"].startswith("[block-footguns] ")
     assert "deploy.sh" in out["permissionDecisionReason"]
 
 

@@ -573,6 +573,9 @@
   # --list-only ONLY. See the k3s_etcd_restore_drill_cron block in defaults/main.yml for why the
   # full restore must not be scheduled; the short version is that it cannot pass on this host and
   # every failure would hold a restored etcd database in /var/tmp for 30 days.
+  #
+  # Output goes to the journal (#2487): the drill's `log()` prints progress lines on every
+  # pass. A failure is still seen, because monitor-bridge reads the drill's success stamp.
   ansible.builtin.cron:
     name: "etcd restore drill"
     minute: "{{ k3s_etcd_restore_drill_cron.split()[0] }}"
@@ -582,6 +585,7 @@
     job: >-
       PATH=/usr/local/bin:/usr/bin:/bin
       /home/{{ sys_user }}/server/scripts/backup/etcd_restore_drill.sh --list-only
+      2>&1 | logger -t etcd-restore-drill
     cron_file: etcd-restore-drill
     state: "{{ 'present' if k3s_etcd_restore_drill_armed else 'absent' }}"
   become: true
