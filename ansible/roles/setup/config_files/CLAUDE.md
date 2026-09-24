@@ -13,7 +13,8 @@ See repo-root `CLAUDE.md` for conventions.
 
 ## Where it runs
 - **First** role in `ansible/initial_setup.yml` (before [[initial_setup]], [[sops_setup]],
-  [[docker_install]]) — every host, no host guard.
+  [[docker_install]]) — every host. Both copies skip a host whose dotfiles chezmoi owns
+  (see Notable).
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "config_files"`
   (sub-tags `git`, `bash` select one file).
 
@@ -32,8 +33,9 @@ See repo-root `CLAUDE.md` for conventions.
   it with `lineinfile` instead, and a `config_files`-only run stripped it until the next
   `sops_setup`. The chezmoi-managed hosts carry the same line in the dotfiles repo's
   `home/dot_bashrc`, above `ble-attach`.
-- **This role overwrites whatever `.bashrc` a host has, chezmoi's included.** It has no host
-  guard, and `files/.bashrc` is not chezmoi's version: it lacks the `ble-attach` tail. A
-  `--tags config_files` run against daniel-box or daniel-server replaces the chezmoi file
-  (keeping a `.bak`).
+- **Both copies skip a host whose dotfiles chezmoi owns.** A `stat` of
+  `/home/{{ sys_user }}/.local/share/chezmoi` gates them, so daniel-box and daniel-server
+  keep chezmoi's `.bashrc` and templated `.gitconfig`, which carries commit signing. Only
+  daniel-pi takes these files. Before #2322 the role had no guard, and a run against a
+  cluster node replaced both chezmoi files (keeping a `.bak`).
 - Dotfiles are static — edit `files/.bashrc` / `files/.gitconfig` directly (no Jinja).

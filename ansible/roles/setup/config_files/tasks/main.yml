@@ -3,6 +3,17 @@
 # needed to avoid shipping these dotfiles to /root. The deploy user's home is just
 # /home/{{ sys_user }} (also hardcoded in sops_setup's .bashrc path), so hardcode it directly
 # and drop the extra shell task.
+# chezmoi owns .bashrc and .gitconfig on the hosts that have its source directory (daniel-box
+# and daniel-server; `chezmoi source-path` resolves both there), and neither file here is
+# chezmoi's version. Copying over them replaced the dotfiles' .bashrc and the templated
+# .gitconfig that carries commit signing (#2322). Only daniel-pi, which has no chezmoi, takes
+# these files. The stat carries both sub-tags so a `--tags bash` or `--tags git` run sets it.
+- name: Check whether chezmoi manages this host's dotfiles
+  ansible.builtin.stat:
+    path: "/home/{{ sys_user }}/.local/share/chezmoi"
+  register: config_files_chezmoi_source
+  tags: [git, bash]
+
 - name: Copy .gitconfig to home directory
   ansible.builtin.copy:
     src: .gitconfig
@@ -11,6 +22,7 @@
     group: "{{ sys_user }}"
     mode: "0644"
     backup: true
+  when: not config_files_chezmoi_source.stat.exists
   tags: git
 
 - name: Copy .bashrc to home directory
@@ -21,6 +33,7 @@
     group: "{{ sys_user }}"
     mode: "0644"
     backup: true
+  when: not config_files_chezmoi_source.stat.exists
   tags: bash
 
 - name: Display completion message
