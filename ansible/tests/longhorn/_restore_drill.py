@@ -33,13 +33,13 @@ case "$*" in
   *"apply -f"*) [[ "$K3S_STUB_RESTORE" == pass ]] || return 1 ;;
   *"get volume restore-drill-"*) printf 'detached false' ;;
   *"get pod "*) printf 'Succeeded' ;;
-  *"logs "*) printf 'files=3 bytes=4096\n' ;;
+  *"logs "*) printf '%s\n' "${K3S_STUB_PROBE:-files=3 bytes=4096}" ;;
   *) : ;;
 esac
 """
 
 
-def volume(pvc: str) -> dict:
+def volume(pvc: str, actual_size: int = 1024) -> dict:
     return {
         "metadata": {
             "name": f"pvc-{pvc}",
@@ -47,7 +47,7 @@ def volume(pvc: str) -> dict:
         },
         "spec": {"size": "16777216", "backupBlockSize": "16777216"},
         "status": {
-            "actualSize": 1024,
+            "actualSize": actual_size,
             "kubernetesStatus": {"pvcName": pvc, "namespace": "homelab"},
         },
     }
@@ -71,12 +71,22 @@ def render(stamp_dir: Path) -> str:
     return Environment().from_string(DRILL.read_text()).render(**defaults)
 
 
-def harness(tmp_path: Path, pvcs: list[str], backed: list[str] | None = None):
-    """A rendered drill plus a runner: `run(argv, env=..., restore=...)` -> CompletedProcess."""
+def harness(
+    tmp_path: Path,
+    pvcs: list[str],
+    backed: list[str] | None = None,
+    actual_sizes: dict[str, int] | None = None,
+):
+    """A rendered drill plus a runner: `run(argv, env=..., restore=...)` -> CompletedProcess.
+
+    `actual_sizes` overrides a volume's `status.actualSize`, which the empty-content waiver reads
+    to decide whether a declared-empty volume is still empty.
+    """
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
+    sizes = actual_sizes or {}
     (fixtures / "volumes.json").write_text(
-        json.dumps({"items": [volume(p) for p in pvcs]})
+        json.dumps({"items": [volume(p, sizes.get(p, 1024)) for p in pvcs]})
     )
     (fixtures / "backups.json").write_text(
         json.dumps({"items": [backup(p) for p in (pvcs if backed is None else backed)]})
