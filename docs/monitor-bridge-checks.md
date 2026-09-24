@@ -267,8 +267,15 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   this pages once it is older than `GITOPS_CONTENTION_MAX_MIN` (30 = the deployer's longest
   apply budget, `gitops_deploy_broad_timeout_s`), naming the lock; the tick clears the marker
   on its next run that is not deferred, and `gitops_state.py clear-contention` clears it by
-  hand. Pure `gitops_status()` and its parsers are unit-tested; an unparseable marker reads as
-  not-behind rather than paging forever on garbage.)
+  hand. The last arm is **`k8s_deferred`** (#2449): a promoted image bump a broad tick
+  fast-forwarded and then deferred because the shared budget left less than
+  `K8S_DEPLOY_TIMEOUT_S`. The range is merged, so `behind_since` is empty and no later tick's
+  range carries the bump — the defer-and-alert post names it once and then nothing does. This
+  pages once the oldest line is older than the same six hours, naming the
+  `./scripts/deploy.sh --tags <svc>` that applies it and the
+  `gitops_state.py clear-k8s-deferred <svc>` that follows; any tick that deploys the service
+  clears the line itself. Pure `gitops_status()` and its parsers are unit-tested; an
+  unparseable marker reads as not-behind rather than paging forever on garbage.)
 - **WG Pi Peer Backup** — RETIRED from this container at the host flips (2026-08-14). The pull
   became the `pi-peer-backup` k8s CronJob, which pushes its Kuma monitor directly, so there is
   no `/pi-peers/state.json` on this host and no `pi_peers()` check here. The monitor and the

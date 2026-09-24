@@ -599,9 +599,20 @@ stay).
       budget a k8s-only tick grants the same bump. With less left, the run would die at the
       timeout (a hold and a page, often for a healthy service) or its lock wait would raise
       `ServiceLockBusy` and reset the tree under planes that applied. So it defers instead,
-      with no hold and no reset: the bump joins `ChangeSet.k8s`, the defer-and-alert post
-      names it, and `Release Staleness Drift` reads the unapplied pin from the release
-      records until something deploys it.
+      with no hold and no reset: the bump joins `ChangeSet.k8s` and the defer-and-alert post
+      names it. That post fires **once**, and the tick has already merged the bump, so no
+      later tick's range carries it. `Release Staleness Drift` reads the unapplied pin from
+      the release records, and it is not a dependable backstop on its own: the monitor is DOWN
+      for any stale record anywhere in the fleet, so a new deferral adds nothing an operator
+      can see on a tile that is already red (the state PR #2381's second review found it in).
+      So the deferral is also written to **`k8s_deferred`**, one line per service, and
+      `gitops_status` pages on the oldest line's age at the six hours `manual_plane` uses
+      (#2449). Scoped to the BUDGET deferral: a hand-edited or denylisted k8s role on the same
+      channel is merged by a person who is landing it, and forty of the fifty-four k8s roles
+      are denylisted, so recording those would hold GitOps Deploy — Status red as normal
+      operation. Any tick that deploys the service clears the line; an operator's own
+      `./scripts/deploy.sh` is invisible to the deployer, so it clears with
+      `gitops_state.py clear-k8s-deferred <svc>`, the same shape `clear-manual-plane` has.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,
       the run that failed, beside any plane already held. With no plane recorded, the next unrelated service deploy cleared the hold
       through `clear_service_hold`, and GitOps Deploy — Status went green over the failed pin.
@@ -794,9 +805,11 @@ stay).
   rotation pushed from another machine) are fast-forwarded but **not** redeployed: the new
   value only reaches a container on its next deploy, so the deployer alerts (once per SHA,
   `secrets_alerted_sha` marker) to redeploy the consumers. On a broad tick that page fires
-  BEFORE the apply loop (#2383): every failure arm returns, the range has already
-  fast-forwarded, and `alert_once` advances its marker on detection — so a page skipped there
-  is never sent, and the rotation sits merged and stale with nothing naming it. `secrets.yml` is deliberately
+  from every exit that leaves the range merged (#2383): each of them returns with the range
+  already fast-forwarded, and `alert_once` advances its marker on detection — so a page
+  skipped there is never sent, and the rotation sits merged and stale with nothing naming it.
+  The contention arm is the exception and sends nothing, because it resets the tree (#2459).
+  `secrets.yml` is deliberately
   NOT in the broad list — the `/add-secret` flow ships it WITH the consuming template, which
   stays a scoped single-service deploy (`deploy_logic.ChangeSet.secrets`).
 - **k8s-platform roles are auto-deployed ONLY for an image-pin bump to a non-denylisted service;
@@ -1547,9 +1560,11 @@ loop wrote (#2382) — that one claimed a SHA the reset took away, and `land.sh`
 a plane the tick applied from one it merely fast-forwarded past. The reverse is a restore, not
 a delete: an earlier tick's `broad_applied` is still true. The promoted bumps a narrowed deploy
 plane applied are not annotated on this path either, for the same reason — the next tick
-re-applies the plane, and Grafana drew two annotations for one deploy (#2453). The one marker
-deliberately left standing is `secrets_alerted_sha`: the page has already been sent, its advice
-holds once the range re-merges, and clearing it would page the same SHA twice.
+re-applies the plane, and Grafana drew two annotations for one deploy (#2453). `restore_broad_applied`
+is pinned on this path from the bump's own contention arm as well as the plan loop's
+(`test_a_contended_bump_takes_back_the_planes_broad_applied`). There is no `secrets_alerted_sha`
+to take back: the secrets page is sent from the non-contention exits only, so a contended tick
+never wrote one (#2459).
 
 **A contention streak IS recorded, in `contention_since`** (issue #1847). The reset leaves no
 other durable trace: `last_run` advances, `hold_sha` stays empty, and `behind_since` ages

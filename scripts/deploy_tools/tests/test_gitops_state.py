@@ -422,3 +422,39 @@ def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
     assert run(tmp_path, "clear-manual-plane", "common", "--applied", "something") == 0
     out = capsys.readouterr().out
     assert "kept common" in out and "WARNING" not in out
+
+
+# ── clear-k8s-deferred: the same shape one plane over (#2449) ─────────────────────────────
+
+SONARR = "abc123def4567890 sonarr 1000.0"
+RADARR = "def456abc7890123 radarr 2000.0"
+
+
+@pytest.fixture
+def deferred(tmp_path: Path) -> Path:
+    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n{RADARR}\n")
+    return tmp_path / "k8s_deferred"
+
+
+def test_clearing_one_deferred_bump_leaves_the_other(deferred, run, capsys, journal):
+    assert run(deferred.parent, "clear-k8s-deferred", "sonarr") == 0
+    assert deferred.read_text().splitlines() == [RADARR]
+    assert "sonarr" in capsys.readouterr().out
+    service, dropped, _ = journal[0]
+    assert (service, dropped.origin) == ("sonarr", "abc123def4567890")
+
+
+def test_clearing_a_bump_that_is_not_deferred_exits_zero_and_says_so(
+    deferred, run, capsys, journal
+):
+    """The rejecting half: a command that cleared everything reads the same from here."""
+    assert run(deferred.parent, "clear-k8s-deferred", "jellyfin") == 0
+    assert deferred.read_text().splitlines() == [SONARR, RADARR]
+    assert "not pending" in capsys.readouterr().out
+    assert journal[0][1] is None, "nothing was dropped, so the line says so"
+
+
+def test_clearing_the_last_deferred_bump_removes_the_marker(tmp_path, run):
+    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n")
+    assert run(tmp_path, "clear-k8s-deferred", "sonarr") == 0
+    assert not (tmp_path / "k8s_deferred").exists()

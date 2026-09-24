@@ -28,13 +28,14 @@ from _broad_k8s_range import (
     SECRETS,
     marker,
     mixed,
+    plane_applies_radarr,
 )
 
 
 def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2383: the page fires before the apply loop, so no failure arm can skip it.
+    """#2383: every arm that leaves the range merged sends the page itself.
 
     `alert_once` advances its marker on DETECTION and the range has already fast-forwarded, so
     `local == origin` and every later tick noops. A page skipped here is never sent, and the
@@ -50,7 +51,7 @@ def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
 def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The rejecting half: firing before the loop must not mean firing unconditionally."""
+    """The rejecting half: firing on the failure arm must not mean firing unconditionally."""
     config = mixed(settings, tick, APPLYABLE_ROLE)
     tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
     assert gitops_deploy.main(tick.tools, config) == 0
@@ -58,24 +59,28 @@ def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
     assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
 
 
-def test_a_contended_tick_pages_a_secret_once_across_the_retry(
+def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The contention arm resets the ff-merge, and the secrets page must not be sent twice.
+    """#2459: the contention arm resets the ff-merge, so its page would be false.
 
-    The reset is the one path that re-crosses the range, so the next tick detects the same
-    rotation again. `secrets_alerted_sha` is deliberately NOT taken back with the merge: the
-    post already went out, and its advice — redeploy the consumers — still holds once the
-    range re-merges.
+    The post says the range was fast-forwarded and sends the operator at `ansible-playbook
+    ansible/deploy.yml --tags <svc>`. After a reset the tree is back on `local`, so that
+    command redeploys the OLD secret — and it is an operator's own `deploy.sh` holding the
+    lock, so they are at a prompt to run it. The page belongs to the tick that leaves the
+    range merged, which is the retry.
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, SECRETS)
     tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("service lock busy")]
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == LOCAL, "the ff-merge was undone"
+    assert not [post for post in tick.posts if "`secrets.yml` changed" in post]
+    assert marker(state_dir, "secrets_alerted_sha") is None
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the retry merged and applied"
     secrets_posts = [post for post in tick.posts if "`secrets.yml` changed" in post]
-    assert len(secrets_posts) == 1, "the same SHA was paged twice"
+    assert len(secrets_posts) == 1, "the retry owes exactly one page"
+    assert marker(state_dir, "secrets_alerted_sha") == ORIGIN
 
 
 # ── a k8s role the deploy plane applied is not reported as deferred ───────────────────────
@@ -165,12 +170,81 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     BECAUSE no plan applied it — so it can never be plane-covered. Losing it from the post
     would leave the bump merged, unapplied and named nowhere.
     """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
+    assert any("sonarr" in post for post in tick.posts)
+
+
+# ── the k8s_deferred marker: the durable half of a budget deferral (#2449) ────────────────
+
+
+def _out_of_budget(settings, tick):
+    """A mixed range whose deploy plane leaves too little budget for the sonarr bump.
+
+    The plane is narrowed to a service the range does not carry, so it applies and covers
+    nothing — the bump is left to `apply_broad_k8s`, which finds the broad deadline already
+    inside `k8s_deploy_timeout_s` and defers.
+    """
     config = dataclasses.replace(
         mixed(settings, tick, DEPLOY_PLANE),
         broad_deploy_timeout_s=60,
         k8s_deploy_timeout_s=900,
     )
     tick.narrow = (0, "jellyfin")
+    return config
+
+
+def test_a_budget_deferred_bump_is_recorded_in_the_k8s_deferred_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The post fires once and the range is merged, so the marker is the durable half.
+
+    `Release Staleness Drift` reads the unapplied pin too, but that monitor goes DOWN for any
+    stale record in the fleet — a new deferral adds nothing an operator can see on a tile that
+    is already red. The marker pages GitOps Deploy — Status on its own age instead.
+    """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    origin, service, stamp = marker(state_dir, "k8s_deferred").split()
+    assert (origin, service) == (ORIGIN, "sonarr")
+    assert float(stamp) > 0, "the first-seen stamp is what monitor-bridge pages on"
+
+
+def test_a_bump_the_tick_deployed_is_not_recorded(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The rejecting half: recording every promoted bump would page on the happy path."""
+    config = mixed(settings, tick, DEPLOY_PLANE)
+    tick.narrow = (0, "jellyfin")
     assert gitops_deploy.main(tick.tools, config) == 0
-    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN
-    assert any("sonarr" in post for post in tick.posts)
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "the bump was deployed, not deferred"
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The way out the deployer owns. Without it the page never stops (#2449).
+
+    An operator's own `./scripts/deploy.sh` is invisible here, which is what
+    `gitops_state.py clear-k8s-deferred` exists for; a deploy the TICK runs is not.
+    """
+    assert gitops_deploy.main(tick.tools, _out_of_budget(settings, tick)) == 0
+    assert marker(state_dir, "k8s_deferred") is not None
+    tick.head = LOCAL
+    assert gitops_deploy.main(tick.tools, mixed(settings, tick)) == 0
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "the retry deployed the bump"
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The second way out: a later broad range's plane applies the service on its own.
+
+    The pending set is asked rather than the range, because the tick that deferred the bump
+    merged it — no later `local..origin` carries that commit.
+    """
+    (state_dir / "k8s_deferred").write_text(f"{'9' * 40} radarr 1000.0\n")
+    assert gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick)) == 0
+    assert tick.playbooks[0] == [*DEPLOY_SONARR[:-1], "radarr"], "the plane ran"
+    assert marker(state_dir, "k8s_deferred") is None

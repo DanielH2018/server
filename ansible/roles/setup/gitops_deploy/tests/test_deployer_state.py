@@ -46,6 +46,7 @@ EXPECTED_MARKERS = frozenset(
         ("manual_plane", "manual_plane"),
         ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),
+        ("k8s_deferred", "k8s_deferred"),
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),
@@ -358,3 +359,28 @@ def test_an_operators_clear_removes_the_marker(state):
     state.record_contention(SHA, "all", 1.0)
     assert state.clear_contention()
     assert state.read("contention") is None
+
+
+# ── the k8s_deferred marker (issue #2449) ─────────────────────────────────────────────────
+def test_a_deferred_bump_keeps_its_first_seen_stamp(state):
+    """The age monitor-bridge pages on, so a second deferral must not reset it."""
+    assert state.record_k8s_deferred(SHA, {"sonarr"}, 1000.0) == ["sonarr"]
+    assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
+    assert [(e.service, e.at) for e in state.k8s_deferred_pending()] == [
+        ("sonarr", 1000.0)
+    ]
+
+
+def test_clearing_one_deferred_bump_leaves_the_others(state):
+    state.record_k8s_deferred(SHA, {"sonarr", "radarr"}, 1000.0)
+    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
+    assert [e.service for e in state.k8s_deferred_pending()] == ["radarr"]
+    assert state.clear_k8s_deferred({"radarr"}) == ["radarr"]
+    assert state.read("k8s_deferred") is None
+
+
+def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):
+    """Skipped by every reader, never dropped: it is the only record of a deferral."""
+    state.write("k8s_deferred", f"garbage\n{SHA} sonarr 1000.0")
+    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
+    assert state.read("k8s_deferred") == "garbage"

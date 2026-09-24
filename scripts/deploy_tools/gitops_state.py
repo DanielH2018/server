@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Operate on the GitOps deployer's own state markers, from the deploy host's shell.
 
-Two subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the
+Three subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the
 marker the deployer writes while consecutive ticks defer on one busy service lock (issue
 #1847); the tick clears it itself on its next run that is not deferred, so this is for a
 marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's line from
@@ -19,6 +19,15 @@ with no apply behind it leaves its trace (#2022: `k3s` was cleared by hand on 20
 with the apply still owed, and the marker's own truncation recorded nothing).
 `clear-contention` writes no such line on purpose: it silences no page, and the tick
 rewrites that marker itself on its next undeferred run.
+
+`clear-k8s-deferred <service>` is the same shape one plane over. `/var/lib/gitops-deploy/
+k8s_deferred` holds one line per promoted image bump a BROAD tick fast-forwarded and then
+deferred for lack of budget (#2449): the range is merged, so no later tick's `local..origin`
+carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once
+the oldest line is six hours old. The deployer clears a line itself on any tick that deploys
+the service; this command is for the `./scripts/deploy.sh` an operator ran, which the deployer
+cannot see. The apply comes first here too, and the clear writes the same journal line under
+`event=clear-k8s-deferred`.
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real
@@ -153,6 +162,7 @@ def journal_clear(
     dropped: ManualPlaneEntry | None,
     remaining: frozenset[str] = frozenset(),
     run: Callable[..., object] = subprocess.run,
+    event: str = "clear-manual-plane",
 ) -> None:
     """Write the one line that says an operator cleared `role`, who, and from where.
 
@@ -165,9 +175,11 @@ def journal_clear(
 
     Args:
       run: what executes `logger`; `subprocess.run` outside a test.
+      event: which clear this was. `journal_clear_k8s_deferred` passes the deferred-bump one,
+        so `journalctl -t gitops-state` distinguishes the two markers an operator can clear.
     """
     fields = [
-        "event=clear-manual-plane",
+        f"event={event}",
         f"role={role}",
         f"cleared={'true' if dropped else 'false'}",
         f"user={operator()}",
@@ -190,6 +202,16 @@ def journal_clear(
         )
     except OSError, subprocess.SubprocessError:
         pass
+
+
+def journal_clear_k8s_deferred(
+    service: str,
+    dropped: ManualPlaneEntry | None,
+    remaining: frozenset[str] = frozenset(),
+    run: Callable[..., object] = subprocess.run,
+) -> None:
+    """`journal_clear` under the deferred-bump event name, for `clear_k8s_deferred`."""
+    journal_clear(service, dropped, remaining, run, event="clear-k8s-deferred")
 
 
 def clear_manual_plane(
@@ -289,6 +311,73 @@ def clear_manual_plane(
     return 0
 
 
+def clear_k8s_deferred(
+    state: DeployerState,
+    service: str,
+    lock_path: str | None = None,
+    lock_wait_s: float | None = None,
+    journal: Journal | None = None,
+) -> int:
+    """Drop `service`'s deferred-bump line. Exit 0 whether or not there was one to drop.
+
+    **The deploy comes first, this second**, for the reason `clear_manual_plane` states: the
+    marker is the only durable signal that a bump a broad tick merged is still unapplied, and
+    clearing it without deploying silences that. The deployer clears the line itself whenever a
+    tick deploys the service; this is for the hand deploy it cannot see.
+
+    Args:
+      lock_path: the tree lock to serialise the rewrite against. None reads `TREE_LOCK`.
+      lock_wait_s: how long to wait for it. None reads `LOCK_WAIT_S`.
+      journal: what records the clear, called with the service, the line it dropped and an
+        empty remaining set. None means `journal_clear_k8s_deferred`.
+    """
+    try:
+        with tree_lock(TREE_LOCK if lock_path is None else lock_path, lock_wait_s):
+            dropped = next(
+                (e for e in state.k8s_deferred_pending() if e.service == service), None
+            )
+            cleared = bool(state.clear_k8s_deferred({service}))
+    except LockBusy as busy:
+        print(
+            f"{busy.args[0]} is held — a deploy or a gitops tick is running. Nothing was "
+            "changed; re-run this when it finishes.",
+            file=sys.stderr,
+        )
+        return 1
+    except LockUnavailable as bad_lock:
+        path, exc = bad_lock.args
+        print(
+            f"cannot open the tree lock {path}: {exc}. Nothing was changed — this command "
+            "serialises against that lock and will not write the marker without it.",
+            file=sys.stderr,
+        )
+        return 1
+    except PermissionError:
+        print(
+            f"cannot write {state.path('k8s_deferred')} as this user — the state directory "
+            "is owned by the deploy user; retry with `sudo -u ubuntu`",
+            file=sys.stderr,
+        )
+        return 1
+    (journal_clear_k8s_deferred if journal is None else journal)(
+        service,
+        # The two markers keep different line shapes, and the journal only needs the SHA the
+        # clear was owed against. `ManualPlaneEntry` is what `journal_clear` reads, so the
+        # deferred entry is rendered into one rather than given a second formatter.
+        ManualPlaneEntry(dropped.origin, "ansible/deploy.yml", service, dropped.at)
+        if cleared and dropped
+        else None,
+        frozenset(),
+    )
+    if not cleared:
+        print(
+            f"{service} is not pending in {state.path('k8s_deferred')} — nothing to clear"
+        )
+        return 0
+    print(f"cleared {service} from {state.path('k8s_deferred')}")
+    return 0
+
+
 def clear_contention(
     state: DeployerState,
     lock_path: str | None = None,
@@ -374,10 +463,17 @@ def main(
         "clear-contention",
         help="drop the busy-service-lock streak marker, AFTER ending the lock's holder",
     )
+    deferred = sub.add_parser(
+        "clear-k8s-deferred",
+        help="drop one deferred image bump's line, AFTER deploying that service",
+    )
+    deferred.add_argument("service", help="the k8s service, e.g. sonarr")
     args = parser.parse_args(argv)
     state = DeployerState(args.state_dir)
     if args.command == "clear-contention":
         return clear_contention(state, lock_path, lock_wait_s)
+    if args.command == "clear-k8s-deferred":
+        return clear_k8s_deferred(state, args.service, lock_path, lock_wait_s, journal)
     if args.command != "clear-manual-plane":
         # argparse refuses any other value, so this catches a subcommand added to the parser
         # and not to this dispatch — which would otherwise run the clear with its arguments.

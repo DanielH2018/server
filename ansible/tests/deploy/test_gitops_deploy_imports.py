@@ -69,6 +69,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
+        "gitops_markers",
     },
     "deploy_tick_types": {"deploy_changes"},
     # The staging gate's I/O shell: it runs the scripts deploy_staging only decides about.

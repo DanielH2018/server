@@ -178,6 +178,18 @@ Each arm below is a rule and the function that holds it. The record page has the
     or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
     (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
+    - **A BUDGET deferral is also recorded in `k8s_deferred`** (#2449), one line per service
+      as `"<origin_sha> <service> <unix_ts>"`. The post names it once and the range is merged,
+      so no later tick's `local..origin` carries the bump — `Release Staleness Drift` reads
+      the unapplied pin, but that monitor is DOWN for any stale record in the fleet, so a new
+      deferral adds nothing to an already-red tile. `gitops_status` pages on the marker's own
+      age at the six hours `manual_plane` uses. It is scoped to the budget deferral and to
+      nothing else on the defer-and-alert channel: a hand-edited or denylisted k8s role is
+      merged by a person who is landing it, and forty of the fifty-four k8s roles are
+      denylisted, so recording those would hold Status red as normal operation. Any tick that
+      deploys the service clears the line (`deploy_defer.clear_applied_k8s_deferred`, called from both
+      k8s deploy paths and from the plane-covered set); an operator's own `deploy.sh` is
+      invisible to the deployer, so it clears with `gitops_state.py clear-k8s-deferred <svc>`.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
     the park's reason every tick (`deploy_remediation.broad_park_reason`). **A setup ROLE whose
@@ -205,9 +217,12 @@ Each arm below is a rule and the function that holds it. The record page has the
   once the oldest pending line is older than the same 6 h, last of its four arms.
 - **Secrets-only pushes** (`secrets.yml` with no template) fast-forward but do not redeploy;
   the deployer alerts once per SHA (`secrets_alerted_sha`) to redeploy the consumers. On a
-  broad tick the page fires BEFORE the apply loop (`deploy_handlers.handle_broad`): every
-  failure arm returns, the range has already fast-forwarded, and a page skipped there is never
-  sent by any later tick (#2383).
+  broad tick the page fires from EVERY exit that leaves the range merged — the failure arm in
+  `deploy_handlers.handle_broad`, and the failure arm and tail of
+  `deploy_broad_k8s.apply_broad_k8s`. Each of those returns with the range fast-forwarded, so
+  a page skipped there is never sent by any later tick (#2383). The contention arm sends
+  nothing: it resets the tree, so the post's "fast-forwarded, redeploy the consumers" would
+  send the operator holding the lock at a tree back on `local` (#2459).
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every
   other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` is diff-shape
   first, identity second: the only path touched under the role is `defaults/main.yml`, every

@@ -129,12 +129,15 @@ unreachable source pages through `_evaluate` unless a streak is named.
   trackers. Pairs with Prowlarr's `includeHealthWarnings=false`.
 - **GitOps Deploy — Alive** (`gitops_alive`): `/gitops-state/last_run` older than
   `GITOPS_MAX_AGE_MIN` is `down`. The deployer pushes nothing to Kuma itself.
-- **GitOps Deploy — Status** (`gitops_status`): four arms over the deployer's markers,
+- **GitOps Deploy — Status** (`gitops_status`): six arms over the deployer's markers,
   reported in urgency order — a non-empty `hold_sha`; a `diverged_sha`; `contention_since`
   older than `GITOPS_CONTENTION_MAX_MIN` (30); `behind_since` older than
-  `GITOPS_BEHIND_MAX_MIN` (360) — then `manual_plane` LAST, once its oldest line is older
-  than the same six hours, because a pending role blocks nobody where a stopped deployer
-  blocks every landing. Age-gated, not presence-gated: a routine push is behind for one tick.
+  `GITOPS_BEHIND_MAX_MIN` (360) — then `manual_plane` and `k8s_deferred` LAST, each once its
+  oldest line is older than the same six hours, because neither blocks anybody where a
+  stopped deployer blocks every landing. `k8s_deferred` holds the promoted image bumps a
+  broad tick fast-forwarded and then deferred for lack of budget (#2449); the page names the
+  `./scripts/deploy.sh` that applies them and the `gitops_state.py clear-k8s-deferred` that
+  follows it. Age-gated, not presence-gated: a routine push is behind for one tick.
   Parsers come from `gitops_markers.py`, a generated copy of the deployer's module
   (`scripts/dev/gen_gitops_markers.py`). An unparseable marker reads as not-behind.
 - **etcd Restore Drill** (`etcd_restore_drill`): the weekly drill's stamp, read fail-closed —

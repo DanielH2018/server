@@ -33,9 +33,11 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     NO_PLAYBOOK,
     STATE_DIR,
     ContentionEntry,
+    K8sDeferredEntry,
     ManualPlaneEntry,
     format_manual_plane_tags,
     parse_contention,
+    parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
@@ -355,6 +357,53 @@ class DeployerState:
         for role in cleared:
             self.clear_manual_plane(role)
         return cleared
+
+    # ── the promoted bumps a broad tick deferred for lack of budget ───────────────────────
+
+    def k8s_deferred_pending(self) -> list[K8sDeferredEntry]:
+        """Every bump the `k8s_deferred` marker still holds, oldest line first."""
+        return parse_k8s_deferred(self.read("k8s_deferred"))
+
+    def record_k8s_deferred(self, origin: str, services, now: float) -> list[str]:
+        """Record the bumps this tick merged and could not deploy. Returns the ones added.
+
+        A service already listed keeps its first-seen stamp, which is the age monitor-bridge
+        pages on, exactly as `record_manual_plane` keeps a role's. The stamp is what makes the
+        marker safe to page on at all: a bump deferred ten minutes ago is a tick that ran out
+        of wall clock, not a fault.
+
+        Args:
+            origin: the origin SHA the tick merged. The bump is live in the tree at that
+                commit, so an operator's deploy applies exactly it.
+            services: the deferred service tags.
+            now: the first-seen stamp, in `time.time()` terms.
+        """
+        lines: list[str] = (self.read("k8s_deferred") or "").splitlines()
+        listed = {e.service for e in self.k8s_deferred_pending()}
+        added = sorted(set(services) - listed)
+        lines.extend(f"{origin} {service} {now:.0f}" for service in added)
+        if added:
+            self.write("k8s_deferred", "\n".join(lines))
+        return added
+
+    def clear_k8s_deferred(self, services) -> list[str]:
+        """Drop the lines naming any of `services`. Returns the service names cleared.
+
+        A line this cannot parse is carried through untouched, the way
+        `clear_manual_plane` carries one: a torn line is skipped by every reader, and dropping
+        it here would lose the only record that something was deferred.
+        """
+        wanted = set(services)
+        kept, cleared = [], []
+        for line in (self.read("k8s_deferred") or "").splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1] in wanted:
+                cleared.append(parts[1])
+                continue
+            kept.append(line)
+        if cleared:
+            self.write("k8s_deferred", "\n".join(kept) or None)
+        return sorted(set(cleared))
 
     # ── consecutive ticks deferred on a busy service lock ─────────────────────────────────
 

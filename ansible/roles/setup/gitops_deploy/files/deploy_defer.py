@@ -41,6 +41,7 @@ from deploy_remediation import (
     manual_plane_remediation,
 )
 from deploy_state import NO_PLAYBOOK, DeployerState
+from gitops_markers import k8s_deferred_clear_cmd, k8s_deferred_deploy_cmd
 from deploy_tick_types import TickTarget
 from deploy_toolbox import DeployTools
 
@@ -331,6 +332,40 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
     # SHA on every contended tick.
     if recorded.roles and state.read("broad_alerted") == origin:
         state.write("broad_alerted", None)
+
+
+def pending_k8s_deferred(state: DeployerState) -> set[str]:
+    """The services the `k8s_deferred` marker still holds."""
+    return {entry.service for entry in state.k8s_deferred_pending()}
+
+
+def clear_applied_k8s_deferred(state: DeployerState, services) -> None:
+    """Drop the `k8s_deferred` lines an apply of `services` covers, and say so.
+
+    The deployer's own reverse of `DeployerState.record_k8s_deferred`, called wherever a tick
+    applies a k8s service. The operator's reverse is `gitops_state.py clear-k8s-deferred`,
+    which is what a hand deploy needs: the deployer cannot see a `deploy.sh` somebody else ran,
+    the same gap `clear-manual-plane` fills for a pending setup role.
+    """
+    cleared = state.clear_k8s_deferred(services)
+    if cleared:
+        log(f"k8s_deferred cleared for {', '.join(cleared)}: this tick applied them")
+
+
+def log_k8s_deferred(state: DeployerState) -> None:
+    """Name every bump the `k8s_deferred` marker still holds, in the journal.
+
+    Called from `main()` beside `log_pending`, and for the reason that call gives: the tick
+    that recorded the bump fast-forwarded, so no later tick's range carries it and a line
+    written only where the marker is written would appear once.
+    """
+    services = sorted(pending_k8s_deferred(state))
+    if not services:
+        return
+    log(
+        f"k8s_deferred pending: {', '.join(services)} — merged, not applied. Deploy: "
+        f"{k8s_deferred_deploy_cmd(services)}, then {k8s_deferred_clear_cmd()}"
+    )
 
 
 def clear_applied(state: DeployerState, playbook: str, tags: list[str]) -> None:
