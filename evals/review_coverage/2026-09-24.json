@@ -21,8 +21,8 @@
       "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2",
       "ansible/roles/setup/k3s/templates/audit-policy.yaml.j2"
     ],
-    "findings": ["sec-held-2", "sec-held-3", "sec-held-4", "#2413"],
-    "leads": ["sec-held-1", "sec-lead-refuted-1", "sec-held-3-lead", "sec-lead-refuted-2"],
+    "findings": ["PR#2447", "PR#2441", "PR#2442+PR#2447", "#2413"],
+    "leads": ["PR#2442", "sec-lead-refuted-1", "PR#2441", "sec-lead-refuted-2"],
     "notes": "No Bash, so every live question went to a lead. Not reviewed: 4b914f620 (classifier segmenter) and 626550162 (staleness-check deny). Closes the 2026-09-18 holes on access.yml, netpol-baseline, wg-easy and the node-agent hostPath sets."
   },
   {
