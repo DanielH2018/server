@@ -216,3 +216,39 @@ def unacknowledged_downgrades(entries: list[PinEntry]) -> list[str]:
 
 def last_pin_per_image(entries: list[PinEntry]) -> dict[str, PinEntry]:
     return {entry.image: entry for entry in entries}
+
+
+def _resolve_group_name(
+    dep_name: str,
+    rel_path: str,
+    update_type: str,
+    datasource: str,
+    rules: list[dict] = _PACKAGE_RULES,
+) -> str | None:
+    """The `groupName` Renovate would resolve for a dep, walking packageRules in order.
+
+    Later rules win a field they set, so the last matching rule with a `groupName` decides —
+    this mirrors `_is_disabled_by_packagerule`'s walk, for `groupName` instead of `enabled`.
+    """
+    group_name = None
+    for rule in rules:
+        if "matchManagers" in rule and "custom.regex" not in rule["matchManagers"]:
+            continue
+        if "matchFileNames" in rule and not any(
+            _minimatch_to_regex(g).match(rel_path) for g in rule["matchFileNames"]
+        ):
+            continue
+        if "matchDatasources" in rule and datasource not in rule["matchDatasources"]:
+            continue
+        if "matchPackageNames" in rule and not any(
+            re.search(n[1:-1], dep_name)
+            if n.startswith("/") and n.endswith("/")
+            else n == dep_name
+            for n in rule["matchPackageNames"]
+        ):
+            continue
+        if "matchUpdateTypes" in rule and update_type not in rule["matchUpdateTypes"]:
+            continue
+        if "groupName" in rule:
+            group_name = rule["groupName"]
+    return group_name

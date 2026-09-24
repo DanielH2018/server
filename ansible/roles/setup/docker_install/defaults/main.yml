@@ -13,12 +13,15 @@ docker_install_stale_crons:
 # download.docker.com served that day and the deliberate upgrade moved to whatever it served
 # on the day it ran, so the Pi's engine was a function of the calendar. Four upstream
 # versions, not one: docker-ce and docker-ce-cli share the Moby version, and the other three
-# packages each carry their own. Renovate tracks each on github-releases (moby/moby,
-# containerd/containerd, docker/compose, docker/buildx) in ONE manual group -- merging a bump
-# moves nothing on the Pi by itself; tasks/install.yml refuses to move an installed engine
-# and engine-upgrade.yml is the path that applies it (it stops every Compose project first,
-# #1961). Pinned 2026-09-21 to what daniel-pi already ran, so the first run with these is a
-# no-op.
+# packages each carry their own. Renovate tracks each on the `deb` datasource against
+# download.docker.com's own noble/arm64 index (docker-ce, containerd.io,
+# docker-compose-plugin, docker-buildx-plugin) in ONE manual group. It read the upstream
+# GitHub releases until #2341: Docker packages a release days-to-weeks after upstream tags
+# it, so a bump could name a version apt had no package for, and the play that applies it
+# would fail AFTER stopping every Compose project. Merging a bump still moves nothing on the
+# Pi by itself; tasks/install.yml refuses to move an installed engine and engine-upgrade.yml
+# is the path that applies it (it stops every Compose project first, #1961). Pinned
+# 2026-09-21 to what daniel-pi already ran, so the first run with these is a no-op.
 docker_install_engine_version: "29.8.1"
 docker_install_containerd_version: "2.3.5"
 docker_install_compose_plugin_version: "5.5.1"

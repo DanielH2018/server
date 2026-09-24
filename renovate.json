@@ -188,55 +188,63 @@
     },
     {
       "customType": "regex",
-      "description": "The Pi's Docker engine pins in docker_install/defaults/main.yml (#2153). FOUR managers on one file, one per upstream project, because the five held apt packages carry four independent versions: docker-ce and docker-ce-cli share Moby's, and containerd.io, docker-compose-plugin and docker-buildx-plugin each have their own. There is no deb datasource here; the apt version string is `<upstream>-1~ubuntu.<release>~<codename>` with a `5:` epoch on the two Moby packages, and the role templates that suffix itself, so the upstream release IS the whole floating part and github-releases resolves it. extractVersionTemplate strips the tag's `v`. NEVER automerged (packageRule below, one group for all four): a merged bump moves nothing on the Pi by itself, and applying it is the `docker-engine-upgrade` play, which stops every Compose project (#1961) -- the PR is the work order.",
+      "description": "The Pi's Docker engine pins in docker_install/defaults/main.yml (#2153; retargeted onto Docker's apt repo by #2341). FOUR managers on one file, one per apt package version, because the five held packages carry four independent versions: docker-ce and docker-ce-cli share Moby's, and containerd.io, docker-compose-plugin and docker-buildx-plugin each have their own. The datasource is `deb` against Docker's OWN apt index, not the upstream GitHub releases, because the pin feeds an APT SPEC: `docker_install_package_specs` renders `<pkg>=<version>-1~ubuntu.24.04~noble`, and Docker packages an upstream release days-to-weeks after it is tagged. On github-releases a bump therefore opened a PR whose apply could not succeed -- #2341 measured containerd 2.4.0 offered (PR #2327) while the noble/arm64 index topped out at 2.3.5, so `docker-engine-upgrade` would have failed at apt AFTER stopping every Compose project. Tracking the index means the PR opens only once the Pi can install the version. `suite` and `binaryArch` are daniel-pi's own, measured 2026-09-24 (`dpkg --print-architecture` -> arm64, `VERSION_CODENAME` -> noble); it is the only host with `has_docker: true`, and a second Docker host on another release or arch needs its own registryUrl. extractVersionTemplate strips apt's epoch and Debian revision (`5:29.8.1-1~ubuntu.24.04~noble` -> `29.8.1`) so the extracted space matches the bare version the file pins; it is deliberately NOT anchored on `~ubuntu`, because the same index carries bare `<version>-<rev>` rows for containerd.io and a version extractVersion cannot match is dropped from the version space entirely. NOTE the stripped revision is the blind spot, the same shape as the k3s `+k3sN` note below: `2.3.4-1` and `2.3.4-2` collapse to one version, so a revision-only repackage offers no PR -- upstream-version moves are the axis worth having here. versioningTemplate pins `semver` rather than inheriting the deb datasource's default `deb` versioning, so the extracted bare versions still classify major/minor/patch exactly as they did on github-releases and the packageRules below keep matching what they matched. NEVER automerged (packageRule below, one group for all four): a merged bump moves nothing on the Pi by itself, and applying it is the `docker-engine-upgrade` play, which stops every Compose project (#1961) -- the PR is the work order.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "docker_install_engine_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
-      "depNameTemplate": "moby/moby",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
+      "depNameTemplate": "docker-ce",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
+      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
-      "description": "containerd.io pin on the Pi -- the second of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "description": "containerd.io pin on the Pi -- the second of the four docker_install managers; the docker-ce one above has the reasoning.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "docker_install_containerd_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
-      "depNameTemplate": "containerd/containerd",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
+      "depNameTemplate": "containerd.io",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
+      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
-      "description": "docker-compose-plugin pin on the Pi -- the third of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "description": "docker-compose-plugin pin on the Pi -- the third of the four docker_install managers; the docker-ce one above has the reasoning.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "docker_install_compose_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
-      "depNameTemplate": "docker/compose",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
+      "depNameTemplate": "docker-compose-plugin",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
+      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
-      "description": "docker-buildx-plugin pin on the Pi -- the fourth of the four docker_install managers; the moby/moby one above has the reasoning.",
+      "description": "docker-buildx-plugin pin on the Pi -- the fourth of the four docker_install managers; the docker-ce one above has the reasoning.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/docker_install/defaults/main\\.yml$/"
       ],
       "matchStrings": [
         "docker_install_buildx_plugin_version:\\s*\"(?<currentValue>[\\d.]+)\""
       ],
-      "depNameTemplate": "docker/buildx",
-      "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.+)$"
+      "depNameTemplate": "docker-buildx-plugin",
+      "datasourceTemplate": "deb",
+      "registryUrlTemplate": "https://download.docker.com/linux/ubuntu?suite=noble&components=stable&binaryArch=arm64",
+      "extractVersionTemplate": "^(?:\\d+:)?(?<version>[\\d.]+)-",
+      "versioningTemplate": "semver"
     },
     {
       "customType": "regex",
@@ -725,15 +733,15 @@
       "automerge": false
     },
     {
-      "description": "The Pi's Docker engine (moby/moby, containerd/containerd, docker/compose, docker/buildx) \u2014 one group, NO automerge. Merging moves nothing: docker_install refuses to move an installed engine, and the apply is the docker-engine-upgrade play, which stops every Compose project on the Pi (#1961). The PR is the work order; the operator merges it and runs the play from a LAN session.",
+      "description": "The Pi's Docker engine (docker-ce, containerd.io, docker-compose-plugin, docker-buildx-plugin) \u2014 one group, NO automerge. Merging moves nothing: docker_install refuses to move an installed engine, and the apply is the docker-engine-upgrade play, which stops every Compose project on the Pi (#1961). The PR is the work order; the operator merges it and runs the play from a LAN session. The selector MOVES WITH the managers: #2341 retargeted them from github-releases onto the `deb` datasource, and a rule left matching the old datasource and depNames would have stopped matching entirely, dropping all four into the `container images (non-major)` catch-all above -- which automerges minor and patch. ENFORCED by scripts/tests/test_renovate_docker_engine_pins.py::test_pins_resolve_to_the_manual_group.",
       "matchDatasources": [
-        "github-releases"
+        "deb"
       ],
       "matchPackageNames": [
-        "moby/moby",
-        "containerd/containerd",
-        "docker/compose",
-        "docker/buildx"
+        "docker-ce",
+        "containerd.io",
+        "docker-compose-plugin",
+        "docker-buildx-plugin"
       ],
       "groupName": "docker engine on the Pi (manual \u2014 merge, then run docker-engine-upgrade; it stops every Compose project)",
       "automerge": false
