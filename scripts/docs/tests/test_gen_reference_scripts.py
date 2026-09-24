@@ -281,13 +281,13 @@ def test_an_argv_element_in_python_source_is_an_invocation(tmp_path):
     assert "runner.py" in verdicts["lonely.py"][1]
 
 
-def test_the_live_tree_classifies_the_names_we_already_know():
+def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
     """A derivation that quietly narrows reads exactly like one that works.
 
     Every name here has an invocation site someone can open. If one moves to `adhoc`,
     either the tree changed or the census stopped seeing a whole class of caller.
     """
-    verdicts = sc.classify()
+    verdicts = live_verdicts
     expected = {
         "build_docs.py": "scheduled",
         "gen_infra_map.py": "scheduled",
@@ -322,7 +322,7 @@ def test_the_live_tree_classifies_the_names_we_already_know():
     assert {name: verdicts[name][0] for name in expected} == expected
 
 
-def test_every_reference_generator_is_reached_from_the_docs_cron():
+def test_every_reference_generator_is_reached_from_the_docs_cron(live_verdicts):
     """build_docs.py runs them, docs-refresh.sh runs build_docs.py, a cron runs that.
 
     The generators are found by DIRECTORY, not by a `gen_reference_` filename prefix. They
@@ -330,7 +330,7 @@ def test_every_reference_generator_is_reached_from_the_docs_cron():
     prefix match returned an empty list — the `>= 5` below is what said so, since a vacuous
     `all()` over nothing passes.
     """
-    verdicts = sc.classify()
+    verdicts = live_verdicts
     generators = [p.name for p in (g.SCRIPTS / "docs" / "reference").glob("*.py")]
     assert len(generators) >= 5
     assert all(verdicts[name][0] == "scheduled" for name in generators)

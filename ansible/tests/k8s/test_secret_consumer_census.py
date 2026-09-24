@@ -46,7 +46,8 @@ def _consumers(name: str):
     """`tree_consumers` for one secret, cached.
 
     The two parametrized tests below both run over `sops_names()`, so without the cache
-    the tree is walked twice for every secret. The mapping is read-only here.
+    every secret is matched against the corpus twice. The tree itself is read once per
+    process by `consumers._census_corpus`. The mapping is read-only here.
     """
     return tree_consumers(name)
 
