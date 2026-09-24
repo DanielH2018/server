@@ -15,6 +15,7 @@ import pathlib
 import yaml
 
 import deploy_remediation
+import gitops_markers
 import narrow_setup
 
 from deploy_remediation import broad_remediation, manual_plane_remediation
@@ -182,6 +183,22 @@ def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     assert not unwatched, (
         f"gated tasks carry tags the warning does not watch: {unwatched}"
     )
+
+
+def test_the_banners_warning_roles_are_the_remediations_warning_roles():
+    """`gitops_markers` holds the banner's one-line warnings, this module the long prose.
+
+    Two maps keyed by role, in two files, because the SessionStart banner cannot import this
+    module. A role added to one and not the other prints its control-plane apply bare on one
+    surface.
+    """
+    short = set(gitops_markers.MAXIMAL_ROLE_WARNING)
+    assert "k3s" in short, "the census is empty, so it compares nothing"
+    assert short == set(deploy_remediation._MAXIMAL_ROLE_TAGS)
+    assert set(deploy_remediation.MAXIMAL_ROLE_GATED_TAGS) == set(
+        deploy_remediation._MAXIMAL_ROLE_GATED_WARNING
+    )
+    assert set(deploy_remediation.MAXIMAL_ROLE_GATED_TAGS) <= short
 
 
 def test_a_task_notifying_a_restart_outside_server_yml_would_be_found(tmp_path):
