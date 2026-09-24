@@ -56,7 +56,9 @@ child on an inherited descriptor — which is why the holder comes from fuser an
 waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files takes 45 ms.
 
 `ps` with `ppid` folds each process family — a landing with the `deploy.sh` it spawned, a
-`deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. A
+`deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. The run
+pattern also matches `deploy_run.py`, the Python the `deploy.sh` shim execs once #2412's
+port lands (`docs/deploy-sh-python-port.md`); from then no process names `deploy.sh`. A
 holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
 than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy
 POST, is excluded by name. fuser lists only processes whose `/proc/<pid>/fd` this user can

@@ -88,6 +88,31 @@ def test_runs_ignore_grep_shells_and_list_services_is_flagged():
     assert not {412, 5200, 7000} & set(_rows())
 
 
+# The same queued deploy after #2412: the shim has exec'd `uv run … deploy_run.py`, whose
+# python child blocks in flock(2) itself rather than through a `flock` child.
+PORTED_PS = """\
+ 8000     1    30 uv run --project /s/scripts/.. python /s/scripts/deploy_tools/deploy_run.py --tags n8n
+ 8001  8000    29 /x/python3 /s/scripts/deploy_tools/deploy_run.py --tags n8n
+ 8100     1     2 grep deploy_run.py
+"""
+PORTED_N8N = "/var/lock/server-deploy-n8n.lock"
+
+
+def test_runs_ported_deploy_is_one_waiting_row_is_clean():
+    rows = reads.runs(
+        reads.parse_ps(PORTED_PS),
+        {PORTED_N8N: {8000, 8001}},
+        {PORTED_N8N: reads.FileLock(True, frozenset({8001}))},
+    )
+    assert [(r.pid, r.kind, r.tag) for r in rows] == [(8000, "deploy", "n8n")]
+    assert rows[0].waiting_on == ("server-deploy-n8n.lock",)
+
+
+def test_runs_ported_deploy_ignores_a_grep_for_it_is_flagged():
+    rows = reads.runs(reads.parse_ps(PORTED_PS), {}, {})
+    assert 8100 not in {r.pid for r in rows}
+
+
 def test_parse_fuser_pairs_each_held_path_with_its_pids_is_clean():
     text = "/var/lock/a.lock: 10 11\n/var/lock/c.lock:  12\n"
     assert reads.parse_fuser(text) == {
