@@ -169,7 +169,7 @@ def test_the_identity_read_happens_once_per_process(cluster):
 
 
 def test_the_identity_read_has_its_own_budget_not_the_callers(cluster):
-    """measure_rollout_gap polls at a 2s budget mid-rollout; `get nodes` must not share it."""
+    """A caller polling at a 2s budget mid-rollout must not hand that budget to `get nodes`."""
     cluster.kubectl("prod", "get", "pods", timeout=2.0)
     identity_timeout, call_timeout = cluster.timeouts
     assert identity_timeout == kubectl_lib.IDENTITY_TIMEOUT
@@ -281,7 +281,6 @@ KNOWN_CALLERS = frozenset(
         "diagnostics/probe_lib/health.py",
         "diagnostics/probe_lib/vip_placement.py",
         "infra_map/live.py",
-        "dev/measure_rollout_gap.py",
         "grafana/export_grafana_dashboards.py",
     }
 )

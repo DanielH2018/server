@@ -202,18 +202,6 @@ def _build_parser():
     )
     b2s.add_argument("--since", default="24h", help="window, e.g. 30m/6h/2d/1w")
     b2s.add_argument("--limit", type=int, default=1000)
-    b2r = sub.add_parser(
-        "b2-record",
-        help="record a tool's B2 transaction spend in today's ledger, so maintenance "
-        "spend stops being reconstructed from memory",
-    )
-    b2r.add_argument(
-        "--tool", required=True, help="what spent them, e.g. drain, inventory"
-    )
-    b2r.add_argument("--class-a", type=int, default=0, dest="class_a")
-    b2r.add_argument("--class-b", type=int, default=0, dest="class_b")
-    b2r.add_argument("--class-c", type=int, default=0, dest="class_c")
-    b2r.add_argument("--note", default="")
     b2d = sub.add_parser(
         "b2-deletions",
         help="charge completed Longhorn backup deletions to today's ledger, priced from the "

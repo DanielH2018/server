@@ -4,7 +4,7 @@ Extracted from monitor-bridge's ``CHECKS`` list (``ansible/roles/k8s/monitor-bri
 check.py``) — the same shape, generalised: a name maps to a description and a callable, plus
 optional flags. monitor-bridge itself keeps its own copy (it ships inside a container image
 and must not import from ``scripts/``); this module is for everything that CAN import from
-``scripts/`` — ``probe.py`` and ``scripts/validate/run_all.py`` today.
+``scripts/`` — ``probe.py``.
 
 The name carries the ``cli_`` prefix because monitor-bridge's copy is
 ``ansible/roles/k8s/monitor-bridge/files/registry.py``, and both directories sit on
