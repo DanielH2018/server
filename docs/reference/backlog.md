@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-23 18:17 UTC
-generated_sha: 710e420f1
+generated_at: 2026-09-24 06:17 UTC
+generated_sha: f8e7cb7ea
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,16 +16,20 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2291](https://github.com/DanielH2018/server/issues/2291) | high | gap | cicd | Every dotfiles Actions run has failed before its first step since 2026-09-22, leaving that repo with no server-side gate | 2026-09-22 | 0 | - | ✓ |
-| [#2290](https://github.com/DanielH2018/server/issues/2290) | medium | gap | cicd | A background job cannot isolate for a dotfiles-only change: EnterWorktree is bound to the session's repo | 2026-09-22 | 0 | - | ✓ |
-| [#2294](https://github.com/DanielH2018/server/issues/2294) | medium | improvement | cicd | needs-manual-apply names the whole k3s role tag, which restarts k3s and re-encrypts etcd for a one-line RBAC change | 2026-09-22 | 0 | - | ✓ |
-| [#2081](https://github.com/DanielH2018/server/issues/2081) | low | improvement | container | Apply the dockerd/containerd GOGC=off drop-ins on daniel-pi one a day and grade each the day after | 2026-09-18 | 0 | - | ✓ |
+| [#2348](https://github.com/DanielH2018/server/issues/2348) | high | gap | cicd | A mixed-range tick fast-forwards k8s image bumps past their own deploy and never re-derives them | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2349](https://github.com/DanielH2018/server/issues/2349) | medium | gap | cicd | clear-manual-plane clears a whole role after a narrowed apply, dropping a second pending change | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2351](https://github.com/DanielH2018/server/issues/2351) | medium | gap | cicd | The check-mode skip guard misses consumers that read stdout_lines, stderr_lines or delta | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2353](https://github.com/DanielH2018/server/issues/2353) | medium | gap | cicd | The check-mode skip guard skips when-gated producers, so a consumer repeating the when still errors under --check | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2360](https://github.com/DanielH2018/server/issues/2360) | medium | gap | cicd | The skipped-register guard never judges a task that registers, so a producer reading a sibling's skip result is invisible | 2026-09-24 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
-| [#2279](https://github.com/DanielH2018/server/issues/2279) | low | gap | container | sonarr's new inline rollout gate has never waited on a real roll | 2026-09-22 | 1 | - | ✓ |
-| [#2293](https://github.com/DanielH2018/server/issues/2293) | low | gap | cicd | A --check of k3s-bringup's kubeconfig tag always fails: a retried command task counts check mode's skip as failure | 2026-09-22 | 0 | - | ✓ |
-| [#2301](https://github.com/DanielH2018/server/issues/2301) | low | gap | cicd | Renovate #2297 (uv 0.12.15) needs the installer sha256 the unattended agent cannot fetch | 2026-09-23 | 0 | - | - |
-| [#2302](https://github.com/DanielH2018/server/issues/2302) | low | gap | cicd | Renovate #2259 (CI runner ubuntu-26.04) fails actionlint and the systemd-verify red-proof tests | 2026-09-23 | 0 | - | - |
+| [#2320](https://github.com/DanielH2018/server/issues/2320) | low | gap | cicd | Roll back the sidecar tags a contended tick recorded for an already-pending role | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2344](https://github.com/DanielH2018/server/issues/2344) | low | gap | cicd | narrow_setup.readers_of skips the defaults path once a task names the file, so a narrowing can miss a reader | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2345](https://github.com/DanielH2018/server/issues/2345) | low | gap | cicd | SessionStart banner prints the k3s apply command with no control-plane warning | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2347](https://github.com/DanielH2018/server/issues/2347) | low | gap | cicd | narrow_setup lacks tests for template includes, files/, vars/, block tags and parse failures | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2350](https://github.com/DanielH2018/server/issues/2350) | low | gap | cicd | narrow_setup's latent gaps: special and shared tags, a server.yml-only warning test, weak red-proofs | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | - |
+| [#2352](https://github.com/DanielH2018/server/issues/2352) | low | gap | cicd | The check-mode skip guard flags a block wrapper for its children's own failed_when | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
+| [#2363](https://github.com/DanielH2018/server/issues/2363) | low | improvement | cicd | Several #2324 tests go red on a changed signature rather than on the defect they name | 2026-09-24 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
