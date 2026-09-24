@@ -14,6 +14,9 @@ bump.
 The rest is ordinary: triage by class, finish what needs finishing, then land each one through
 `land-after-merge`.
 
+A daily timer runs this same skill unattended where it is armed —
+`ansible/roles/setup/renovate_agent/CLAUDE.md`.
+
 ## 0. An update with no PR is still an update
 
 `gh pr list` cannot see an update Renovate detected but never raised. Those sit in the

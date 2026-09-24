@@ -29,33 +29,26 @@ docs/             # Runbooks, design specs, security notes
 > **`roles/containers/` is now only the Pi.** Every role there is a Docker service live on `daniel-pi` — `alloy`, `autoheal`, `docker-proxy`, `wg-easy` — plus the shared `common` deploy path and `archive/`. (`containers_list` in `ansible/inventory/host_vars/daniel-pi.yml` is the source of truth for which are deployed.) A service's config lives in the role that deploys it, on both trees: **if a k3s workload reads it, it is under `roles/k8s/<name>/`**, not across the tree boundary. (Until 2026-08-14 some roles here were config-only sources for a k8s counterpart; they moved into it. To revive one as a Docker service, take its Compose plumbing from git history.)
 
 ## Where to Look (task → start here)
-Route to the source of truth by what you're doing, before reading linearly:
+Route to the source of truth by what you're doing, before reading linearly. A task a skill
+covers — deploying, landing, secrets, Renovate PRs, a GitOps tick, worktree cleanup, a homelab
+review — routes through the skill listing rather than this table.
 
 | If you're… | Start here |
 |---|---|
 | Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
-| Adding / changing a Docker service (the Pi only) | `/new-container` skill (daniel-pi only — neither cluster node has Docker) |
-| Deploying or redeploying a service | `/deploy` skill (also owns the exit-code table) |
-| Retiring a finished worktree, or `ExitWorktree` refuses to remove one | `/worktree-cleanup` skill |
-| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands). Default is pull → deploy → verify in the same session, no ask. |
-| Going through the open Renovate PRs | `/renovate-prs` skill. Every `automerge: false` rule names the manual half in its group name — merging one on green CI ships half a bump, and a `k8s_autodeploy: false` role's image bump is manual so that the merge and the deploy happen together (#1886). A daily timer runs that same skill unattended where it is armed — `ansible/roles/setup/renovate_agent/CLAUDE.md`. |
+| A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
 | Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once · `findings.py claims` shows who holds what, `findings.py reap` releases the claims whose worktree is gone. Claim before you start: `findings.py claim <n> --worktree <branch>`. A claim `next` marks stale is reaped by `claim` itself, so a refusal there means the claim is LIVE — find the other session before you take the issue. |
-| Checking a k8s manifest change without deploying it | `/deploy` skill → *Checking a k8s change without deploying it* (`--dry-run` vs `--check` vs `prek` — they check different things) |
-| Running or testing a GitOps tick without waiting for the timer | `/gitops-tick` skill. A real tick, not a rehearsal — there is no dry-run mode, and an uneventful tick logs nothing. |
-| Adding / rotating a secret | `/add-secret` skill · `docs/secret-rotation.md` · `## Secrets Management` |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
 | Editing HA automations / lighting / fans | `ansible/roles/k8s/home-assistant/CLAUDE.md` (config and workload both live there; it routes to `docs/` for per-topic behaviour) · `/ha-edit-automation` |
-| Reviewing the homelab for gaps | `/homelab-review` skill (per-domain reviewer agents) |
-| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** — `.claude/hooks/block-protected-edits.py` (and `block-protected-bash.py` for a `sed -i`/`tee`/heredoc write) denies any write to a file carrying a `generated_from:` banner. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
+| Answering "what runs here / where / behind what" | `docs/reference/` — generated from the tree by the `docs-refresh` cron, browsable at `docs.local.<domain>`. Services, hosts, secret rotation, scheduled jobs, networking. **Never hand-edit a generated page** (a file carrying a `generated_from:` banner); a hook denies the write. Change the generator instead (`scripts/docs/build_docs.py` lists them). |
 | CI fails on `test_every_committed_fragment_matches_what_the_generator_writes_now` | You changed a tunable a docs fragment reads. `.claude/rules/generated-docs.md` has the regenerate command, the generator whose `FRAGMENTS` names the tunables, and why this one gate is not left to the cron. |
 | CI fails on `test_every_deployed_role_block_matches_what_the_generator_writes_now` | You changed a role's defaults, templates, tasks, playbook entry or `containers_list` entry (k8s, setup or the Pi's compose roles), or hand-edited its generated `## At a glance` block. Run `uv run python scripts/docs/gen_role_glance.py` and commit; the reasoning goes in the bullets below the block. |
 | CI fails on `test_every_recorded_atom_hashes_as_recorded` | A `CLAUDE.md` section's support no longer matches what `docs/facts.lock` recorded. The finding names which of five causes: you changed a cited symbol, value, test or marker (`moved`/`missing`); you added a citation to an already-verified section (`unrecorded-atom`); you dropped one (`atom-no-longer-cited`); you cited a marker prefix that now matches twice (`ambiguous`); or the interpreter moved (`interpreter-moved`). Edit the section, or `uv run python scripts/dev/fact_status.py verify '<doc>#<heading>'` and commit `docs/facts.lock`. A RENAMED heading reads as `section-gone` instead: verify the new key, then `fact_status.py forget '<old key>'`. `.claude/rules/facts.md` has the citation grammar. |
 | Writing a Python module or a test, and deciding where it goes | `.claude/rules/python-layout.md` — the `sys.path` bootstrap a cross-directory import needs, the `tests/` sibling rule and the `ansible/tests/` taxonomy. It loads on its own when you touch a path it governs; read it first when you are choosing the path. |
 | Chasing a reliability / monitoring "gap" | The role's `CLAUDE.md` + monitor-bridge `ansible/roles/k8s/monitor-bridge/files/registry.py` (the check registry) **first** — mature setup, most are handled |
-| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server — see `## Claude Tooling in This Repo` below, and `docs/claude-tooling.md` for the full reference. `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. That tier logs in through Authelia's OIDC provider and types no credential; the admin form stays on as break-glass. OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`. |
+| Checking that a service's UI actually renders, not just that its pod is Ready | The `homelab-ui` MCP server (`docs/claude-tooling.md`). `probe.py health` cannot see a broken UI behind a healthy pod. **Grafana is the exception** — it still serves a login page behind Authelia, so drive it with `uv run pytest -m ui -k grafana` rather than by hand. |
 | A config edit won't restart the pod (k3s) | A ConfigMap/Secret change alone doesn't roll a Deployment. The general mechanism is the central rollout-restart in `ansible/roles/k8s/manifests/CLAUDE.md`, which fires when a role's rendered manifests change. A role whose pod depends on a file the manifests *don't* carry adds its own `checksum/<thing>` pod annotation instead — monitor-bridge names its `check-script`, rendered in `ansible/roles/k8s/monitor-bridge/templates/deployment.yaml.j2`. |
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
-| A host can't decrypt secrets | `add-secret` skill → *Onboarding a host that cannot decrypt yet* |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` — `ansible/tests/setup/test_setup_roles_have_claude_md.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions |
 | Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
@@ -89,31 +82,21 @@ Two facts stay here because they bite from outside those procedures:
 Run ansible through `uv run` so it uses the repo's pinned env (`ansible-core` + the
 `community.docker` deps `requests`/`docker` — see **Python & Tests**). Bare `ansible-playbook`
 (the uv-tool shim) lacks those module deps and deploys will fail.
-**Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. It
-takes `/var/lock/server-git-tree.lock` — the same lock `gitops-deploy.service` (10-min timer)
-and the weekly secret-rotate cron hold — for as long as it takes to copy `HEAD` into a
-detached worktree under `/tmp/homelab-deploy-snapshots/`, then releases it and runs the
-playbook from that snapshot under one lock per deploy tag
-(`/var/lock/server-deploy-<tag>.lock`). So a deploy cannot interleave with the automated
-pipeline on the tree, nor with another deploy of the SAME service on the cluster — while two
-deploys of different services now run at once. `docs/adr/0017-…` is the record.
+**Deploy through `./scripts/deploy.sh --tags "<service>"`**, not the playbook directly. A
+deploy cannot interleave with the GitOps deployer or the weekly secret-rotate cron on the tree,
+nor with another deploy of the SAME service on the cluster, while deploys of different services
+run at once. The `deploy` skill has the lock and snapshot mechanics.
 
 **It deploys `HEAD`, not your working tree.** An uncommitted edit is not deployed, and nothing
 on the run says so. Commit first. `--check` and `--dry-run` still read the working tree, which
 is where an uncommitted edit is meant to be exercised.
 
-Before it takes the lock it clears an Ansible fact cache pinning another worktree's interpreter
-(`scripts/deploy_tools/fact_cache_guard.py`). That cache is keyed by host, not by checkout, so a
-pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
-error naming a module rather than the cache, after the ~9-minute wait on the lock.
-
 Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO_VERDICT`
 (`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
 than a playbook failure. `DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command
 line rather than a retry. `DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a
-task failed, and changes before it are live — not a safe re-run. The per-code table, why 20
-collides with ansible's own exit codes, the Pi's `-e target=`, config-only runs, the GitOps
-tick, and initial setup are all in the **`deploy` skill**.
+task failed, and changes before it are live — not a safe re-run. The per-code table, the fact-cache
+guard, the Pi's `-e target=`, config-only runs and initial setup are in the **`deploy` skill**.
 
 ### Checking a k8s change without deploying it
 `prek run --all-files`, `--check` and `--dry-run` check genuinely different things, and
@@ -137,60 +120,46 @@ refuses outright — and then say which command and why.
 ### The procedure
 
 Arm the merge, then hand the follow-through to `land.sh` as ONE backgrounded command with
-output redirected to a file — the exact commands, the `VERDICT:` values, why the redirect is
-load-bearing, and why `--since` is needed are in the **`land-after-merge` skill**. **Do not
-hand-poll CI and do not hand-merge** — hand-polling cost 835 polls across 213 wait episodes
-before `land.sh` existed.
-
-`land.sh` deploys a PR's own merge commit (`deploy.sh --at <sha>`) and kicks the tick
-afterwards; it awaits the tick only where the tick is the apply for part of the PR's range.
-The skill says which ranges those are and how to read `tick=` and `lock=` on the Landings
-board.
+output redirected to a file. The exact commands, the `VERDICT:` values and what `land.sh` does
+with the tick are in the **`land-after-merge` skill**. **Do not hand-poll CI and do not
+hand-merge.**
 
 `cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
 SHA is bad* — `ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`
 is the list, and the **`land-after-merge` skill** owns the rule (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
-**Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
-restart window; it cannot see whether *your change* took effect (an Authelia 302 fires before
-the backend is reached). Exercise the thing you actually changed as well.
+**Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
+change* took effect, so exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
-- **Deploys of the same service serialize; the tree lock is held for the snapshot only** — the
-  full exit-code table is in the **`deploy` skill**, and they are resume points rather than
-  failures. Two mean another session got there first: 75 (a lock stayed busy — the tree lock,
-  or one of your services') and 4 (the tree is behind `origin/master`; under `--at`, a commit
-  merged after yours renders what your tags render, and that landing owns the service). Two
-  landings on disjoint services no longer queue behind each other at all.
+- **Two exits mean another session got there first**, and both are resume points: 75 (a lock
+  stayed busy) and 4 (the tree is behind `origin/master`; under `--at`, a commit merged after
+  yours renders what your tags render, and that landing owns the service).
 - **The tick pulls all of master, not just your commit.** Another session's merged work
   fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
   `--tags`, keep it to your own services.
 - **Check the SessionStart banner before deploying a shared role.** It lists the other live
   sessions and the paths each has touched.
-- **`--detach` returning is not a verified deploy.** It backgrounds the rollout wait, which is
-  most of the deploy. Wait for the health gate before reporting success.
+- **`--detach` returning is not a verified deploy.** Wait for the health gate before reporting
+  success.
 
 ### When to wait
 
 Say which of these applies, then stop:
 
-- Master CI is red. (Pending is no longer a reason to stop — `land.sh` waits on it for you.)
+- Master CI is red. Pending is not a reason to stop, because `land.sh` waits on it.
 - The host holds a non-empty `hold_sha` — a previous SHA already failed its health gate, or a
   broad apply failed. `hold_plane` names the playbook when it was the latter.
 - A change in `_BROAD_MANUAL_PREFIXES` — `bootstrap.yml`, `k3s-bringup.yml`,
   `initial_setup.yml` — sits in the `local..origin` range. The deployer applies every other broad
   change itself, but not the bring-up playbooks: those run by hand by construction. If it is
-  another session's, clearing it means applying their change; name it and stop. (The deployer's
-  own role, `roles/setup/gitops_deploy/`, was in this list until 2026-09-01 and parked three
-  landings that day; it now applies itself — the `DECIDED:` marker above the list in
-  `deploy_logic.py` has the evidence.)
-- The host's `manual_plane` marker names a setup role the deployer cannot apply. The range is
-  merged, so nothing is queued behind it; the role needs its playbook by hand, then
-  `gitops_state.py clear-manual-plane <role>` — add `--applied <tags>` where the apply you ran
-  was narrowed, so a tag a later range added to the row stays pending rather than being
-  cleared with yours. Another session's is theirs to clear.
+  another session's, clearing it means applying their change; name it and stop.
+- The host's `manual_plane` marker names a setup role the deployer cannot apply. The role needs
+  its playbook by hand, then `gitops_state.py clear-manual-plane <role>`; the
+  `land-after-merge` skill has the `--applied` form for a narrowed apply. Another session's is
+  theirs to clear.
 - `deploy.sh` exits 3: the change is broad (shared templates, inventory, the setup plane) and
   maps to no single service.
 - The change is docs- or `tasks/`-only — the deployer skips those deliberately, and so do you.
@@ -209,25 +178,13 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
 
-- **The remote-ssh auto-approve depends on a package deployed outside this repo.**
-  `.claude/hooks/_readonly_tables.py` imports its trusted-host set and secret-path pattern from
-  the dotfiles `claude_guard` package (`~/.local/share/claude-guard`) via
-  `.claude/hooks/_claude_guard.py`. A machine without that dotfiles deploy gets no auto-approve
-  on that path rather than a stale local copy: the hook prints one `classifier did not run`
-  line to stderr and exits 0 with no stdout, the same fail-open shape as
-  `auto-approve-readonly.sh`'s own cd guard, so the prompt stands. The four deny guards'
-  shims take the other posture on a failed cd: an **ask** naming the shim, because a bare
-  exit 0 from a deny guard is an allow (#2171).
-  `.claude/hooks/tests/test_claude_guard_import.py` measures the allow side end to end, and
-  diffs the CI stand-in in `tests/conftest.py` against the deployed tables — a diff CI itself
-  cannot run, since CI has no dotfiles deploy; it goes red under `prek run` on a deployed
-  host.
+- **The remote-ssh auto-approve depends on the dotfiles `claude_guard` package**
+  (`~/.local/share/claude-guard`). A machine without that deploy prompts on that path;
+  `docs/claude-shell-permissions.md` has both guards' failure postures.
 
-- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed** — it is a write,
-  so the auto-mode classifier judges it on its own text and sometimes denies it. A denial is
-  the classifier, not a broken script: re-run it, and check `last_run` first. The measurement,
-  the retry hook and the `classifyAllShell` caveat are in the **`gitops-tick` skill**, *When it
-  is denied* — the one owner of that paragraph (#2164).
+- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** A denial is
+  the classifier, not a broken script: re-run it, and check `last_run` first. The **`gitops-tick`
+  skill**, *When it is denied*, owns the rest (#2164).
 
 Full tables, hook wiring and measurement history: `docs/claude-shell-permissions.md`.
 
@@ -244,100 +201,34 @@ Full tables, hook wiring and measurement history: `docs/claude-shell-permissions
 Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
-The gotchas below are the ones that change a verdict. The full reference — probe's `alerts`
-history, the `homelab-ui` DNS/auth/secrecy triad and its `-m ui` suite, per-file edit costs,
-`auto-mode-bridge` internals, and the `/audit-permissions` Loki break — is in
-`docs/claude-tooling.md`.
+One directive per tool. `docs/claude-tooling.md` is the full reference, and a hook that
+denies prints its own reason.
 
-- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt):
-  `uv run python scripts/diagnostics/probe.py <targets | metric | loki-query | alerts |
-  monitors | kuma-drift | scrutiny | pi <path> | cert <host> | health <svc> | ha …>`.
-  - `monitors` answers "what is down"; **`kuma-drift` answers "what is missing"**, which
-    `monitors` structurally cannot.
-  - **`health <svc>` is the k8s post-deploy gate**, and its argument is a deploy TAG, not a
-    workload name. It fails closed on a rollout that is not complete, a container that
-    restarted in the last 180s, and a queued restart that never rolled (#1867). **It gates the
-    PRODUCTION cluster unless you say otherwise** — pass `--cluster prod|stage`, and
-    `scripts/lib/kubectl.py` refuses when the local kubectl serves a different cluster (#1663).
-    `--docker` is the only mode that touches the Pi's Docker.
-  - `ha …` reads live Home Assistant state; `ha automation <id-or-alias>` resolves the
-    alias-slug≠id trap. See the home-assistant role's CLAUDE.md.
-- **`homelab-ui` MCP server** — a headless Chromium Claude drives against the LAN routes, so it
-  can *see* a service's UI rather than infer it from a status code — the half `probe.py health`
-  structurally cannot cover. Launched by `scripts/diagnostics/ui_mcp.sh`; the `two_factor`
-  services need `ui_mcp.sh --two-factor`. Going through Traefik is the only path — a ClusterIP
-  reaches only pods on the node you run from, and `kubectl port-forward` is denied.
-- **block-protected-edits** (PreToolUse) — *denies* direct edits to (a) anything under
-  `containers/` (edit the `ansible/roles/containers/<svc>/templates/` source instead) and
-  (b) SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill).
-- **block-protected-bash** (PreToolUse, Bash) — the same two rules on the surface auto mode
-  actually uses. `block-protected-edits` matches `Edit|Write` only, and auto mode instructs
-  file changes through `sed`, heredocs and short scripts, so `sed -i … ansible/vars/secrets.yml`
-  reached a bare permission prompt with nothing saying the file was encrypted. A write here
-  becomes an **ask** carrying `classify()`'s reason — never a deny, because the path extraction
-  is a heuristic over command text and a wrong extraction must not block work. It also **denies**
-  a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a deployed host
-  script that renders a credential inline; `scripts/secrets_mgmt/secret_bearing_host_paths.py`
-  derives that set from the tree. A third arm **denies** a Bash write that
-  leaves an isolated session's worktree — `isolation-guard.sh` covers `Edit|Write` only, so
-  `cd /home/ubuntu/server && python3 - <<'EOF'` escaped into the primary checkout and parked
-  the GitOps deployer on 2026-09-06 (#1419). It carries the `cd` through the command a segment
-  at a time, and is inert outside a `.claude/worktrees/` session. A deny here, where a
-  protected-file write only asks: a write outside the worktree is never the right call.
-  The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a
-  quoted `;` stays inside its word; text it cannot split — no `claude_guard` deploy on the
-  host, or an unbalanced quote — is an **ask** naming the fix, never a silent pass.
-  `block-footguns` and `nudge-land-sh` split with the same segmenter through
-  `_hook_common.split_stages` (#2134), so a newline separates stages for them too, and a
-  heredoc body is never one. On text it cannot split, `block-footguns` asks when the command
-  names a binary one of its rules keys on and stays silent otherwise; `nudge-land-sh` stays
-  silent, since a missed nudge costs one hand-written poll. The allow-side classifier keeps
-  its own tokeniser: the package splits `cmd &>/dev/null` at the `&`, which would turn a
-  redirect the classifier allows into a background job it refuses.
-- **inject-nested-docs** (PreToolUse, Bash) — *adds context*, never a decision. A role's
-  `CLAUDE.md` and a `.claude/rules/*.md` load only when Read/Edit/Write touches a matching
-  path; a `cat`/`sed -n` through Bash — the form auto mode instructs — loads neither, and 74
-  of 113 Bash-only session×role pairs never saw the role doc (measured 2026-09-19, #2125).
-  `.claude/hooks/inject-nested-docs.py` reads the paths a command names, returns each
-  ancestor `CLAUDE.md` and matching rule as `additionalContext` once per session, and logs
-  the row to `.claude/logs/instructions.log` as `bash_path_match` so the same log grades it.
-  A doc over 7,500 chars arrives as its heading outline plus a read pointer: the harness
-  persists a longer `additionalContext` to disk and hands the model a preview stub instead.
-- **nudge-land-sh** (PreToolUse, Bash) — *denies* a command that blocks on CI (`gh run watch`,
-  `gh pr checks --watch`) and the third or later CI-status read in one session, naming the
-  `land.sh --pr <n> --since <sha>` form instead. The first two reads are an ordinary glance and
-  pass. Measured over the 7 days to 2026-08-29: 173 `gh pr checks` + 75 `gh run list` + 61
-  `gh run watch` against 29 `land.sh` runs, which is why the CLAUDE.md paragraph became a hook.
-- **block-footguns** (PreToolUse, Bash) — *denies* a growing set of commands that return a
-  plausible wrong answer rather than an error, each with a deterministic signature and a
-  recorded incident: `grep -Z`/`-z` (this host's grep is ugrep, where those mean `--fuzzy` and
-  `--decompress`, not the NUL flags — use `--null`/`--null-data`) and a bare `git stash
-  pop`/`apply` (the stash stack is per-repository, so it can take another session's WIP) are
-  two of them; the docstring of `.claude/hooks/block-footguns.py` is the full list.
-- **validate-compose** (PostToolUse) — re-renders all compose templates after you edit a
-  `docker-compose.yml.j2`, an `ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`;
-  fails on malformed YAML (catches Jinja indent bugs `ansible-lint` misses) and on an
-  un-escaped `$` in a `command`/`entrypoint`/`healthcheck.test` (Compose interpolates a lone
-  `$VAR`/`$(…)` at parse time — shell `$` must be doubled `$$`; legit `${VAR-…}` in
-  `environment:` is not flagged). Editing a `tasks/main.yml` costs ~1.6 s to `ansible-lint`,
-  an order of magnitude more than any other file type — that is coverage, not a stuck hook.
-- **auto-mode-bridge** (PermissionDenied + PostToolUseFailure, both Bash) — retries a denied
-  `gitops_tick.sh` (classifier variance, ~1 run in 7), and decodes a `deploy.sh` exit into the
-  meaning *Common Commands* above gives it (`test_auto_mode_bridge.py` pins its `_DEPLOY_EXITS`
-  table to `exit_codes.py`).
-- **session-health** (SessionStart) — on opening a session here, prints a banner of any unhealthy/
-  restarting containers + down Prometheus targets (silent when all-green; read-only, timeout-bounded).
-  It also names a **dirty primary checkout**, a **GitOps deployer parked behind origin**, and a
-  **setup role the tick merged but cannot apply** (the `manual_plane` marker). The first
-  two states stop every deploy in the fleet, and a worktree session cannot look at either for
-  itself — the isolation guard refuses a git command targeting the shared checkout, and the
-  failure it does see (`deploy.sh` exit 4) names its own tree instead. The banner is the only
-  place that cause reaches the session that pays for it.
-- **homelab-network-diagnostician** agent — connectivity/DNS/Traefik/WireGuard/CrowdSec triage (read-only).
-- **home-assistant-engineer** agent — read+write HA engineer (automations/scenes/scripts/macros)
-  that knows the copy-not-template + tested-macro conventions and the verification traps; pairs
-  with the `ha-edit-automation` / `ha-deploy` / `ha-verify-state` / `z2m-device-setting` skills.
-- **`/add-secret`** skill — guided SOPS add → `secret_rotation.py sync` → commit.
+- **`scripts/diagnostics/probe.py`** — read-only homelab diagnostics, allow-listed (no prompt);
+  `--list` prints every subcommand. `monitors` answers "what is down"; **`kuma-drift` answers
+  "what is missing"**. **`health <svc>` is the k8s post-deploy gate**: its argument is a deploy
+  TAG, and it gates the PRODUCTION cluster unless you pass `--cluster stage`. `ha automation
+  <id-or-alias>` resolves the alias-slug≠id trap.
+- **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
+  service's UI — the half `probe.py health` structurally cannot cover.
+- **block-protected-edits** and **block-protected-bash** — guard anything under `containers/`,
+  SOPS-encrypted files and generated pages. Edit the `ansible/roles/containers/<svc>/templates/`
+  source, use `sops` / the `/add-secret` skill, or change the generator. The Bash guard also
+  denies a write that leaves an isolated session's worktree.
+- **inject-nested-docs** — adds a role's `CLAUDE.md` and matching `.claude/rules/*.md` as context
+  when a Bash command names their paths. It never makes a decision.
+- **nudge-land-sh** — denies a command that blocks on CI and the third CI-status read in one
+  session. Use `land.sh --pr <n> --since <sha>` instead.
+- **block-footguns** — denies commands that return a plausible wrong answer rather than an
+  error, such as `grep -Z` (this host's grep is `ugrep`) and a bare `git stash pop`. Its
+  docstring is the full list.
+- **validate-compose** — re-renders the compose templates after a template or vars edit. Shell
+  `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.
+- **auto-mode-bridge** — retries a denied `gitops_tick.sh` and decodes a `deploy.sh` exit.
+- **session-health** — the SessionStart banner. It names unhealthy workloads, a dirty primary
+  checkout, a GitOps deployer parked behind origin, and a setup role the tick merged but cannot
+  apply. The first two stop every deploy in the fleet, and the banner is the only place a
+  worktree session sees them.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 Two rules keep the review→memory loop from compounding noise (adapted from harness-engineering's
@@ -396,37 +287,27 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   `scripts/dev/prune_worktrees.py`, which collects what `ExitWorktree` refused.
 
 ## Secrets Management
-- Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age
+- Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age. Edit them with `sops`
+  or the `/add-secret` skill.
 - `ansible/.sops.yaml` (tracked — public keys only) lists the age recipients new/updated
   secrets are encrypted to, and auto-encrypts any `.yml`/`.yaml` in `vars/` or `secrets/`
   directories (SOPS searches upward from the file, so this lives at `ansible/`, not root)
 - At runtime, `community.sops.sops_decrypt` lookup decrypts values
-- **Rotation tracking** is `ansible/secret_rotation.yml` (a plaintext registry — names, dates,
-  tiers, no values) plus `scripts/secrets_mgmt/secret_rotation.py`. After adding a secret, run
-  `uv run python scripts/secrets_mgmt/secret_rotation.py sync` and commit. The tiers, the
-  DANGER `pinned` procedure, and how to rename or retire a key without resetting its clock
-  (`RENAMED_FROM` / `RETIRED` in `scripts/secrets_mgmt/git_dates.py`) are in
+- **After adding a secret, run `uv run python scripts/secrets_mgmt/secret_rotation.py sync`
+  and commit.** `ansible/secret_rotation.yml` is the rotation registry. The tiers, the DANGER
+  `pinned` procedure, and how to rename or retire a key without resetting its clock are in
   `docs/secret-rotation.md`.
 - **`git diff ansible/vars/secrets.yml` prints plaintext credentials.** `.gitattributes:1` sets
-  `diff=sops`, so git decrypts the file before diffing it. The committed blob stays properly
-  encrypted — this is a review-hygiene trap, not a repo defect, and the driver is worth keeping
-  because an encrypted diff is unreadable. But the plaintext lands in the terminal, the scrollback,
-  and any agent transcript that captured the command, so a value exposed that way needs rotating.
-  To see THAT it changed without seeing anything it holds, use `git diff --stat
-  ansible/vars/secrets.yml` or `--name-only`: the driver still decrypts, but those emit no file
-  content, so no plaintext reaches stdout. To see what actually changed, open it with `sops
-  ansible/vars/secrets.yml`.
-  **Do not filter the plaintext through a pipe.** The user-level deny hook (`claude_guard.deny`,
-  behind `~/.claude/hooks/guard-pre-tool-use.sh`) denies every `git diff`/`show`/`log -p` naming a
-  SOPS path unless one of the content-free flags above is present. A filter that leaks everything
-  when mistyped is the wrong shape for the job; a flag that emits no content cannot leak however
-  it is typed. `docs/claude-shell-permissions.md` has the incidents behind the rule.
+  `diff=sops`, so git decrypts the file before diffing it, and a value exposed that way needs
+  rotating. To see THAT it changed without seeing anything it holds, use `git diff --stat
+  ansible/vars/secrets.yml` or `--name-only`. To see what actually changed, open it with `sops
+  ansible/vars/secrets.yml`. Do not filter the plaintext through a pipe; the deny hook refuses
+  it, and `docs/claude-shell-permissions.md` has why.
 - **Never commit plaintext secrets** (private age keys never leave `~/.config/sops/age/keys.txt`;
   `.gitignore` blocks `keys.txt`/`*.agekey`/`*.key` and gitleaks scans every commit)
 - **A host that can't decrypt yet** fails `initial_setup.yml`/`deploy.yml` at their
-  secret-load `pre_task`, which reads as a playbook bug rather than a missing key.
-  `ansible/bootstrap.yml` is the way in — it has no secret dependency. The four-step
-  onboarding is in the **`add-secret` skill**.
+  secret-load `pre_task`, which reads as a playbook bug rather than a missing key. The
+  **`add-secret` skill** has the onboarding through `ansible/bootstrap.yml`.
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
@@ -447,13 +328,8 @@ uv run pytest                 # all repo unit tests (auto-syncs the env from uv.
 uv run pytest scripts         # just one suite
 ```
 
-- **Bare `python3` cannot parse this repo.** `requires-python = ">=3.14"`, and files across the
-  tree use PEP 758 syntax — unparenthesized `except OSError, yaml.YAMLError:`. Ubuntu's
-  `/usr/bin/python3` is 3.12, so a bare `pytest` reports a `SyntaxError` naming a repo file,
-  which reads as a repo bug. ENFORCED by `.claude/hooks/uv-python.sh`, a PreToolUse hook that
-  rewrites a bare `python`/`python3`/`pytest`/`ansible-playbook`/`*.py` invocation into
-  `uv run …`. It rewrites rather than pins a PATH, because `uv run` resolves the venv from the
-  caller's working directory and a pinned `/home/ubuntu/server/.venv/bin` would cross worktrees.
+- **Bare `python3` cannot parse this repo** (it needs 3.14; Ubuntu's is 3.12).
+  `.claude/hooks/uv-python.sh` rewrites a bare invocation into `uv run …`.
 - **What runs is defined once** in `pyproject.toml` `[tool.pytest.ini_options]` `testpaths` —
   consumed by both `uv run pytest` and the prek `pytest` hook. It deliberately excludes the
   vendored `ansible/collections/**` third-party tests.
@@ -464,40 +340,9 @@ uv run pytest scripts         # just one suite
   what each covers. Tests never sit beside the code they cover; where a new test or module
   goes, and the `sys.path` bootstrap a cross-directory import needs, is
   `.claude/rules/python-layout.md`, which loads when you touch a path it governs.
-- **A new check ships with a proof it can go RED.** Any validator, guard, health check or probe
-  lands with a paired test: one input it must accept, and one input it must reject. A check is only
-  ever observed passing, so without the rejecting half there is no evidence it can fail — and this
-  repo has paid for that twice. `volume-claim`'s short-circuit shipped behind 16 passing tests and a
-  mutation test, then fired for 0 of 25 claims across two full deploys. `image-smoke`'s bare-boot
-  rule never caught a real image problem across 11 failures. Both read green throughout.
-  `scripts/validate/tests/test_validate_compose_templates.py` is the worked example: every rule there is
-  a `..._is_clean` / `..._is_flagged` pair, so a rule that silently stopped matching fails its own
-  test. Name the pair that way — a guard that fires on everything and one that fires on nothing are
-  indistinguishable from the passing side alone.
-- **A check that finds its own subject by pattern ships with a named member it must find.** A
-  guard that globs for the files it checks (`validate_*.py`, a `gen_reference_` prefix, a
-  one-level `DIR.glob("*.py")`) returns an EMPTY set the moment those files are renamed or move
-  one directory down, and an `all(...)` over nothing passes. That is a second way to be green
-  while checking nothing, and unlike the red-proof pair above it survives the pair — both halves
-  still pass, because both still fire on the inputs the test hands them. Assert non-vacuity
-  against something concrete: `assert len(found) >= <n>`, or better a frozenset of names the
-  census must contain, so the failure message says which member went missing rather than that a
-  count moved. `KNOWN_CONSUMERS` in `scripts/diagnostics/tests/test_probe_boundaries.py` is the
-  worked example. Nine guards broke this way in six consecutive PRs (#838, #846, #852, two in
-  #858, four in the monitor-bridge package move); every one was caught solely by the
-  non-vacuity assertion, and the guards that lacked it had to be found by running the entry
-  point instead.
-- **If the check reaches out over a network, measure the transport before you ship it.** The
-  paired test above proves the *verdict* can go red; it says nothing about whether the fetch that
-  feeds the verdict returns in time. A check whose source is slow or flaky fails open on every
-  slow cycle and is inert behind a green monitor — which the red-proof pair cannot see, because
-  it never runs the transport. Time each endpoint against the live source, more than once. The
-  Pi-detached arm (PR #482) shipped polling glances' `/api/4/containers`; measured afterwards that
-  endpoint took 4.43s on an idle Pi and then timed out at the 10s `HTTP_TIMEOUT` on the very next
-  call, where the sibling endpoints answer in 0.03-0.06s. PR #484 reshaped it so the cheap signal
-  decides and the expensive one only explains. **A slow source is a design input, not a detail:**
-  when one exists, make it conditional on the cheap signal having already fired, and make its
-  failure downgrade the diagnosis rather than the verdict.
+- **A new check ships with a proof it can go RED**, a named member it must find if it finds its
+  subject by pattern, and a measured transport if it reaches over a network.
+  `.claude/rules/python-layout.md` has the three rules and the incidents behind them.
 
 CI (`.github/workflows/ci.yml`) runs `prek run --all-files` on every PR and on push to master:
 these tests plus lint, template validation, and secret scanning.
