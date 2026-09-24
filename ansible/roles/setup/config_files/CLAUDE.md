@@ -13,7 +13,8 @@ See repo-root `CLAUDE.md` for conventions.
 
 ## Where it runs
 - **First** role in `ansible/initial_setup.yml` (before [[initial_setup]], [[sops_setup]],
-  [[docker_install]]) — every host, no host guard.
+  [[docker_install]]) — every host. Both copies skip a host whose dotfiles chezmoi owns
+  (see Notable).
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "config_files"`
   (sub-tags `git`, `bash` select one file).
 
@@ -27,10 +28,14 @@ See repo-root `CLAUDE.md` for conventions.
   [[sops_setup]]'s `.bashrc` path.
 
 ## Notable
-- **Run-order coupling with SOPS:** [[sops_setup]] later *appends*
-  `export SOPS_AGE_KEY_FILE=…` to `.bashrc` via `lineinfile`. The tracked `files/.bashrc`
-  does **not** contain that line, and this role uses `copy` (full overwrite). In a normal
-  full `initial_setup.yml` run that's fine — config_files runs first, sops_setup re-adds the
-  export after. But running **`--tags config_files` alone strips the SOPS export** until the
-  next `sops_setup` run. Re-add it by re-running `--tags sops_setup` (or a full setup).
+- **The SOPS export lives in `files/.bashrc`.** `export SOPS_AGE_KEY_FILE=…` is part of the
+  tracked file, so a `--tags config_files` run keeps it. Until #2319, [[sops_setup]] appended
+  it with `lineinfile` instead, and a `config_files`-only run stripped it until the next
+  `sops_setup`. The chezmoi-managed hosts carry the same line in the dotfiles repo's
+  `home/dot_bashrc`, above `ble-attach`.
+- **Both copies skip a host whose dotfiles chezmoi owns.** A `stat` of
+  `/home/{{ sys_user }}/.local/share/chezmoi` gates them, so daniel-box and daniel-server
+  keep chezmoi's `.bashrc` and templated `.gitconfig`, which carries commit signing. Only
+  daniel-pi takes these files. Before #2322 the role had no guard, and a run against a
+  cluster node replaced both chezmoi files (keeping a `.bak`).
 - Dotfiles are static — edit `files/.bashrc` / `files/.gitconfig` directly (no Jinja).
