@@ -1,5 +1,6 @@
 """Tests for validate.config_templates — the non-compose config-template render guard."""
 
+from lib.ansible_jinja_env import template_env
 from validate import config_templates as v
 
 
@@ -20,7 +21,7 @@ def test_yaml_error_passes_valid_and_catches_invalid():
 
 def test_stub_undefined_survives_indent_filter():
     # The tricky case that a plain Undefined can't handle: `{{ secret | indent(n) }}`.
-    env = v.build_env("authelia")
+    env = template_env(v.ROLES / "authelia" / "templates")
     assert env.from_string("{{ missing | indent(4) }}").render() == "STUB"
 
 

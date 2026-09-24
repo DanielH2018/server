@@ -18,11 +18,9 @@ Run directly (``python3 scripts/validate/compose_templates.py``) or via the
 render or produces invalid YAML.
 """
 
-import hashlib
 import sys
 
 import yaml
-from jinja2 import Environment
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -32,45 +30,18 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
     HOST_VARS,
-    SHARED_TPL,
     dump_numbered,
     load_yaml,
-    make_env,
     render_or_error,
 )
 
-
-def _ansible_hash(value, algo="sha1"):
-    """Mirror Ansible's `hash` filter so templates using it render identically here."""
-    return hashlib.new(algo, str(value).encode("utf-8")).hexdigest()
-
-
 ROLES = ANSIBLE / "roles" / "containers"
-
-
-def build_env(role: str) -> Environment:
-    """Build the Jinja environment for `role`'s compose templates, its own dir plus the shared one.
-
-    Args:
-        role: The container role name under `ROLES`.
-
-    Returns:
-        A Jinja `Environment` with Ansible's `hash` filter added.
-    """
-    env = make_env([ROLES / role / "templates", SHARED_TPL])
-    # Ansible's `hash` filter, which this Jinja environment does not get for free. No LIVE
-    # compose template uses it since dozzle retired 2026-08-29 — dozzle's inlined jittered
-    # healthcheck interval was the last caller, inherited from a shared healthcheck.yml.j2
-    # macro that no longer exists. Kept anyway: the job of this environment is to render what
-    # Ansible would, so dropping a filter Ansible provides would make the validator reject a
-    # template Ansible accepts — a false failure on the next template that reaches for it.
-    env.filters["hash"] = _ansible_hash
-    return env
 
 
 def _unescaped_dollars(value) -> list[str]:
@@ -278,7 +249,7 @@ def check_container(host_ctx: dict, ci: dict) -> str | None:
             "docker-compose.yml.j2 — a Docker entry must render a compose file"
         )
 
-    env = build_env(name)
+    env = template_env(ROLES / name / "templates")
     ctx = {**host_ctx, "container_item": ci}
     rendered, err = render_or_error(env, "docker-compose.yml.j2", ctx)
     if rendered is None:

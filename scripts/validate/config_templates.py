@@ -17,7 +17,6 @@ render failure or invalid YAML.
 import sys
 
 import yaml
-from jinja2 import Environment
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -27,17 +26,15 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
-    SHARED_TPL,
     dump_numbered,
     load_yaml,
-    make_env,
     render_or_error,
 )
-from lib.render_guard import StubUndefined as _BaseStubUndefined
 
 ROLES = ANSIBLE / "roles" / "containers"
 
@@ -58,26 +55,6 @@ CONFIG_TEMPLATES = [
 ]
 
 
-class StubUndefined(_BaseStubUndefined):
-    """Extends the shared base so ``{{ secret | indent(n) }}`` renders instead of aborting.
-
-    Adds ``__add__``/``__radd__`` because Jinja's ``indent`` filter concatenates a newline
-    onto the value, which the bare Undefined can't do.
-    """
-
-    def __add__(self, other):
-        return self._FILL + str(other)
-
-    def __radd__(self, other):
-        return str(other) + self._FILL
-
-
-def build_env(role: str) -> Environment:
-    return make_env(
-        [ROLES / role / "templates", SHARED_TPL], undefined_cls=StubUndefined
-    )
-
-
 def yaml_error(rendered: str) -> str | None:
     """Return an error string if ``rendered`` is not parseable YAML, else None."""
     try:
@@ -94,7 +71,7 @@ def check_template(rel: str, ctx: dict) -> str | None:
     if not tpl.exists():
         return f"missing template {tpl}"
 
-    env = build_env(role)
+    env = template_env(ROLES / role / "templates")
     rendered, err = render_or_error(env, name, ctx)
     if rendered is None:
         return err

@@ -52,18 +52,15 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from ansible.plugins.filter.core import comment, mandatory, to_bool, to_uuid
-
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
-    SHARED_TPL,
     dump_numbered,
     host_files,
     load_yaml,
-    make_env,
     render_or_error,
 )
 from lib.repo_paths import ROLES
@@ -204,24 +201,6 @@ def discover_templates(setup: Path = SETUP) -> list[Path]:
     return sorted(setup.glob("*/templates/*.j2"))
 
 
-def build_env(template_dir: Path, undefined_cls):
-    """The render environment, carrying the Ansible filters the setup templates reach for.
-
-    `bool` is ansible-core's own `to_bool` for the reason `k8s_manifests.register_ansible_filters`
-    gives: `bool("false")` is True in Python, so a hand-rolled shim would take the opposite
-    branch from a real deploy. `comment` and `to_uuid` are likewise the real implementations —
-    `to_uuid` is a deterministic UUIDv5, so a stub would render a different file every run.
-    `mandatory` is the real one too: it raises only on Ansible's own UndefinedMarker, so the
-    tracking Undefined this guard renders with passes through it and is judged by name as usual.
-    """
-    env = make_env([template_dir, SHARED_TPL], undefined_cls=undefined_cls)
-    env.filters["bool"] = to_bool
-    env.filters["comment"] = comment
-    env.filters["to_uuid"] = to_uuid
-    env.filters["mandatory"] = mandatory
-    return env
-
-
 def repo_relative(tpl: Path) -> str:
     """A short label for one template: repo-relative where it is in the tree, else its path.
 
@@ -242,7 +221,7 @@ def check_template(tpl: Path, ctx: dict, known: frozenset[str]) -> list[str]:
     """
     rel = repo_relative(tpl)
     seen: dict[str, set[str]] = defaultdict(set)
-    env = build_env(tpl.parent, _tracking_undefined(seen, rel))
+    env = template_env(tpl.parent, undefined_cls=_tracking_undefined(seen, rel))
     rendered, err = render_or_error(env, tpl.name, ctx)
     if rendered is None:
         return [err or "render error"]

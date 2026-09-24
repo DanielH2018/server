@@ -27,6 +27,7 @@ __all__ = [
     "AppTagLoader",
     "StrictKeyLoader",
     "make_lookup",
+    "to_json_stub",
     "yaml_error",
 ]
 
@@ -114,7 +115,7 @@ def _from_json(value) -> object:
         return {}
 
 
-def _to_json(value) -> str:
+def to_json_stub(value) -> str:
     """Ansible's ``to_json`` for looked-up templates.
 
     ``default=str`` so a StubUndefined serializes as its placeholder instead of aborting the render.
@@ -168,7 +169,7 @@ def make_lookup(ctx: dict):
             env = make_env([path.parent])
             env.globals["lookup"] = lookup
             env.filters["from_json"] = _from_json
-            env.filters["to_json"] = _to_json
+            env.filters["to_json"] = to_json_stub
             return env.get_template(path.name).render(ctx).rstrip("\n")
         raise ValueError(
             "lib.k8s_yaml implements lookup('file'), lookup('pipe') and lookup('template'), "

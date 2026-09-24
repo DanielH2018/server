@@ -52,9 +52,9 @@ from lib.render_guard import (
     render_or_error,
 )
 from lib.repo_paths import ROLES
+from lib.ansible_jinja_env import template_env
 from lib.shell_lint import (
     bash_syntax_check,
-    build_env,
     find_shellcheck,
     shellcheck_batch,
     shellcheck_check,
@@ -104,7 +104,7 @@ def check_template(
         An error string, or None on success.
     """
     rel = path.relative_to(ANSIBLE)
-    env = build_env(path.parent)
+    env = template_env(path.parent)
     rendered, err = render_or_error(env, path.name, ctx)
     if rendered is None:
         return err

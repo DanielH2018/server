@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Render a Jinja-templated shell script, then lint the output with `bash -n` and shellcheck.
 
-The render half builds a vanilla Jinja2 environment carrying Ansible's `search` test and
-`bool` filter (`scripts/lib/ansible_jinja_compat.py`), because a template written for Ansible
-reaches for both. The lint half wraps the two external linters and returns error strings
+The render half is `lib.ansible_jinja_env`, the environment every render guard shares;
+`render_template` is re-exported here because this module is where the shell guard's callers
+already reach for it. The lint half wraps the two external linters and returns error strings
 rather than raising, so a caller can report every failing template in one pass.
 
 `scripts/validate/shell_templates.py` is the entry point that sweeps the tree with these.
@@ -15,15 +15,20 @@ import sys
 from collections.abc import Callable
 from pathlib import Path
 
-from jinja2 import Environment
-
 # A directly-invoked script gets only its own directory on sys.path, and pyproject's
 # `pythonpath` is a pytest setting — so the cross-directory imports below need the
 # scripts/ root here, the same way its siblings reach it.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.ansible_jinja_compat import ansible_bool, ansible_search
-from lib.render_guard import SHARED_TPL, make_env, render_or_error
+from lib.ansible_jinja_env import render_template
+
+__all__ = [
+    "bash_syntax_check",
+    "find_shellcheck",
+    "render_template",
+    "shellcheck_batch",
+    "shellcheck_check",
+]
 
 
 def find_shellcheck(which: Callable[[str], str | None] = shutil.which) -> str | None:
@@ -33,26 +38,6 @@ def find_shellcheck(which: Callable[[str], str | None] = shutil.which) -> str | 
     `shutil` on some module — the seam the repo's monkeypatch ratchet exists to remove.
     """
     return which("shellcheck")
-
-
-def build_env(template_dir: Path) -> Environment:
-    env = make_env([template_dir, SHARED_TPL])
-    env.tests["search"] = ansible_search
-    env.filters["bool"] = ansible_bool
-    return env
-
-
-def render_template(path: Path, ctx: dict) -> str:
-    """Render one template and return the text, RAISING RuntimeError if it will not render.
-
-    The raising form is for a caller checking one template. A sweep over the tree wants every
-    failure rather than the first, so it uses `render_or_error` directly and reports the string.
-    """
-    env = build_env(path.parent)
-    rendered, err = render_or_error(env, path.name, ctx)
-    if rendered is None:
-        raise RuntimeError(err)
-    return rendered
 
 
 def bash_syntax_check(path: Path) -> str | None:

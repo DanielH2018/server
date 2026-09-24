@@ -17,8 +17,8 @@ import pytest
 
 from _helpers import ANSIBLE, load_yaml
 from lib import yaml_fast
+from lib.ansible_jinja_env import template_env
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, HOST_VARS, render_or_error
-from validate import compose_templates as vct
 
 PI_HOST_VARS = HOST_VARS / "daniel-pi.yml"
 TEMPLATE = (
@@ -33,7 +33,7 @@ def _render(host_vars: dict) -> dict:
     entry = next(c for c in host_vars["containers_list"] if c["name"] == "wg-easy")
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **host_vars, "container_item": entry}
     ctx.pop("containers_list", None)
-    rendered, err = render_or_error(vct.build_env("wg-easy"), TEMPLATE.name, ctx)
+    rendered, err = render_or_error(template_env(TEMPLATE.parent), TEMPLATE.name, ctx)
     assert rendered is not None, err
     return yaml_fast.safe_load(rendered)["services"]["wg-easy"]
 

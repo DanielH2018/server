@@ -1,32 +1,17 @@
 #!/usr/bin/env python3
-"""Ansible's `search` test and `bool` filter, reimplemented for a vanilla Jinja2 environment.
+"""Ansible's `bool` filter, reimplemented for a vanilla Jinja2 environment.
 
-A render guard builds its own `jinja2.Environment`, which has neither of these. A template
-written for Ansible that uses `x | bool` or `list | reject('search', pattern)` therefore fails
-to render under the guard with `TemplateRuntimeError`, even though production renders it fine.
-Registering these two restores the pair the templates in this repo actually reach for.
+A render guard builds its own `jinja2.Environment`, which has no `bool`. A template written
+for Ansible that uses `x | bool` therefore fails to render there with
+`TemplateRuntimeError: No filter named 'bool' found`, even though production renders it fine.
 
-Faithfulness to Ansible matters more than convenience here — see `ansible_bool` for the input
-shape that makes a naive stub agree with Ansible everywhere except the cases the filter exists
-for. `scripts/lib/shell_lint.py` registers both on the environment it builds;
-`scripts/lib/k8s_context.py` registers `bool`.
+This is the LIGHT tier, and it exists for exactly one caller: `lib.k8s_context`, whose own
+`DECIDED:` marker gives the reason — importing `ansible.plugins.filter.core` costs ~190 ms and
+`probe_lib/monitors.py` reaches that module. Every render guard takes the real filters from
+`lib.ansible_jinja_env` instead. Faithfulness to Ansible matters more than convenience here —
+see `ansible_bool` for the input shape that makes a naive stub agree with Ansible everywhere
+except the cases the filter exists for.
 """
-
-import re
-
-
-def ansible_search(value, pattern, ignorecase=False, multiline=False) -> bool:
-    """Mirror Ansible's `search` Jinja test — a plain regex search, not a full match.
-
-    Vanilla Jinja2 has no `search` test, so any template using Ansible's `search` (e.g.
-    `list | reject('search', pattern)`) would otherwise fail to render here with
-    `TemplateRuntimeError: No test named 'search'`. No current template needs it
-    (docker-user-rules.sh.j2, the last one that did, retired at E7 2026-08-13) — kept
-    registered so the next one that does just works.
-    """
-    flags = (re.I if ignorecase else 0) | (re.M if multiline else 0)
-    return bool(re.search(pattern, str(value), flags))
-
 
 # `ansible.plugins.filter.core._valid_bool_true` / `_valid_bool_false`, copied rather than
 # imported: importing `ansible.plugins.filter.core` costs ~190 ms and `probe_lib/monitors.py`
