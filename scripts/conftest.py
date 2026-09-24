@@ -106,3 +106,16 @@ def live_script_rows():
     from docs.reference import scripts as g
 
     return tuple(g.build_rows())
+
+
+# The `scripts/` classification, built once per worker for the same reason as the rows above.
+#
+# `lib.script_classify.classify()` re-reads every cron template, prek hook and workflow to
+# decide how each script is run. Two live-tree tests in `docs/tests/test_gen_reference_scripts.py`
+# assert against that result and each paid for its own derivation (issue #2401). Verdicts are a
+# plain mapping and read-only for both.
+@pytest.fixture(scope="session")
+def live_verdicts():
+    from lib import script_classify as sc
+
+    return sc.classify()

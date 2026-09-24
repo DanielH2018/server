@@ -11,6 +11,7 @@ Both are pure reads: nothing here decrypts, writes or shells out.
 """
 
 import os
+from functools import lru_cache
 
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
@@ -215,6 +216,53 @@ _CENSUS_SKIP_FILES = {"secrets.yml", "secret_rotation.yml"}
 _CENSUS_SKIP_SUFFIXES = (".md",)
 
 
+@lru_cache(maxsize=None)
+def _census_corpus(repo: str = REPO) -> tuple[tuple[str, str, str], ...]:
+    """Every censusable file under `ansible/`, read once — (text, role, plane) per file.
+
+    `tree_consumers()` used to walk and read the whole tree per secret name. The two
+    parametrized tests in `ansible/tests/k8s/test_secret_consumer_census.py` run over all
+    ~180 names in `sops_names()`, so the suite paid for ~180 full reads of the same 1600
+    files to answer one question per read. Reading once and matching every name against the
+    one corpus gives the identical answer for a fraction of the I/O (issue #2401).
+
+    Only files that belong to a role on a known plane are kept: a hit anywhere else cannot
+    name a consumer, so carrying its text would cost memory for a match that is discarded.
+
+    The corpus is cached for the process, which is correct for every caller here — the
+    rotation tools and their tests read a tree that does not change under them. A caller that
+    edits the tree mid-process must call `_census_corpus.cache_clear()`.
+    """
+    corpus: list[tuple[str, str, str]] = []
+    ansible_dir = os.path.join(repo, "ansible")
+    for dirpath, dirnames, filenames in os.walk(ansible_dir):
+        rel = os.path.relpath(dirpath, ansible_dir)
+        if any(skip in rel for skip in _CENSUS_SKIP):
+            dirnames[:] = []
+            continue
+        parts = rel.split(os.sep)
+        if not (len(parts) >= 3 and parts[0] == "roles" and parts[1] in _ROLE_PLANES):
+            continue
+        role, plane = parts[2], _ROLE_PLANES[parts[1]]
+        for filename in filenames:
+            if filename in _CENSUS_SKIP_FILES or filename.endswith(
+                _CENSUS_SKIP_SUFFIXES
+            ):
+                continue
+            try:
+                with open(
+                    os.path.join(dirpath, filename), encoding="utf-8", errors="ignore"
+                ) as handle:
+                    text = handle.read()
+            except OSError:
+                # A file this process cannot read is not evidence of absence, but it is also
+                # not something a census can act on. Skipping is right; failing the whole
+                # census on one unreadable file would make the tool useless in a worktree.
+                continue
+            corpus.append((text, role, plane))
+    return tuple(corpus)
+
+
 def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     """Every role that REFERENCES this secret, measured from the tree — role -> plane.
 
@@ -234,31 +282,9 @@ def tree_consumers(name: str, repo: str = REPO) -> dict[str, str]:
     unreachable from `deploy.sh` — see `_ROLE_PLANES`.
     """
     found: dict[str, str] = {}
-    ansible_dir = os.path.join(repo, "ansible")
-    for dirpath, dirnames, filenames in os.walk(ansible_dir):
-        rel = os.path.relpath(dirpath, ansible_dir)
-        if any(skip in rel for skip in _CENSUS_SKIP):
-            dirnames[:] = []
-            continue
-        for filename in filenames:
-            if filename in _CENSUS_SKIP_FILES or filename.endswith(
-                _CENSUS_SKIP_SUFFIXES
-            ):
-                continue
-            path = os.path.join(dirpath, filename)
-            try:
-                with open(path, encoding="utf-8", errors="ignore") as handle:
-                    text = handle.read()
-            except OSError:
-                # A file this process cannot read is not evidence of absence, but it is also
-                # not something a census can act on. Skipping is right; failing the whole
-                # census on one unreadable file would make the tool useless in a worktree.
-                continue
-            if name not in text:
-                continue
-            parts = os.path.relpath(path, ansible_dir).split(os.sep)
-            if len(parts) >= 3 and parts[0] == "roles" and parts[1] in _ROLE_PLANES:
-                found[parts[2]] = _ROLE_PLANES[parts[1]]
+    for text, role, plane in _census_corpus(repo):
+        if name in text:
+            found[role] = plane
     return found
 
 
