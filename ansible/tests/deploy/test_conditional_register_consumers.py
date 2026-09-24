@@ -264,41 +264,52 @@ _LINES_PRODUCER = (
     "  changed_when: false\n"
     "  register: labelled\n"
 )
-_LINES_CONSUMER = (
-    "- name: Relabel each one\n"
-    "  ansible.builtin.command: kubectl label volume {{ item }} group=default\n"
-    '  loop: "{{ labelled.stdout_lines }}"\n'
-    "  changed_when: true\n"
-)
+
+# The attributes #2351 added to SKIP_MISSING. Parametrised so each one is load-bearing: the
+# tree has no consumer of `stderr_lines` or `delta`, so dropping either from the tuple would
+# leave the census green and every other anchor here passing.
+_ADDED_ATTRS = ("stdout_lines", "stderr_lines", "delta")
 
 
-def test_the_check_flags_a_consumer_that_reads_only_stdout_lines(
-    tmp_path: Path,
-) -> None:
-    """#2351: the `stdout` entry does not cover `stdout_lines`.
+def _reader(attr: str) -> str:
+    return (
+        "- name: Report what it found\n"
+        "  ansible.builtin.debug:\n"
+        f'    msg: "{{{{ labelled.{attr} }}}}"\n'
+    )
+
+
+def test_stdout_does_not_match_inside_stdout_lines() -> None:
+    """Why `stdout_lines` needs its own SKIP_MISSING entry rather than riding on `stdout`.
 
     `unguarded_deref` anchors on `\\b<reg>.<attr>\\b`, and `_` is a word character, so there is
-    no boundary inside `stdout_lines` for `stdout` to match. Before `stdout_lines` was listed
-    in SKIP_MISSING this shape passed — it is how `setup/k3s/tasks/longhorn.yml` and the two
-    other Longhorn label reconcilers went unflagged.
+    no boundary inside `stdout_lines` for `stdout` to find. That is how the Longhorn label
+    reconcilers, jellyfin's and janitorr's reports and media-volume's sync all read a skip
+    result past this guard.
     """
-    assert not unguarded_deref("{{ labelled.stdout_lines }}", "labelled", "stdout"), (
-        "`stdout` now matches inside `stdout_lines`, so listing both in SKIP_MISSING would "
-        "double-report and this test no longer proves the boundary it was written for"
-    )
-    problems = _offenders(_write(tmp_path, _LINES_PRODUCER + _LINES_CONSUMER))
+    assert unguarded_deref("{{ labelled.stdout }}", "labelled", "stdout")
+    assert not unguarded_deref("{{ labelled.stdout_lines }}", "labelled", "stdout")
+
+
+@pytest.mark.parametrize("attr", _ADDED_ATTRS)
+def test_the_check_flags_a_consumer_of_each_attribute_a_skip_result_lacks(
+    tmp_path: Path, attr: str
+) -> None:
+    """#2351: an unguarded `command` producer leaves no `<attr>` for the reader below it."""
+    problems = _offenders(_write(tmp_path, _LINES_PRODUCER + _reader(attr)))
     assert len(problems) == 1
-    assert "labelled.stdout_lines" in problems[0].message
+    assert f"labelled.{attr}" in problems[0].message
 
 
-def test_the_check_accepts_a_stdout_lines_read_of_an_opted_out_producer(
-    tmp_path: Path,
+@pytest.mark.parametrize("attr", _ADDED_ATTRS)
+def test_the_check_accepts_those_reads_of_an_opted_out_producer(
+    tmp_path: Path, attr: str
 ) -> None:
     """The accepting half: `check_mode: false` makes the read a real result under `--check`."""
     opted_out = _LINES_PRODUCER.replace(
         "  register: labelled\n", "  register: labelled\n  check_mode: false\n"
     )
-    assert _offenders(_write(tmp_path, opted_out + _LINES_CONSUMER)) == []
+    assert _offenders(_write(tmp_path, opted_out + _reader(attr))) == []
 
 
 def test_a_block_is_not_flagged_for_its_own_childs_failed_when(tmp_path: Path) -> None:
