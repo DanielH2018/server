@@ -19,6 +19,7 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 import pytest
 
 import deploy_defer
+import deploy_locks
 from deploy_tick_types import TickTarget
 
 # The two SHAs the `tick` fixture bounds a range with; see test_gitops_deploy_main_branches.py
@@ -290,3 +291,70 @@ def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
     assert [e.role for e in gitops_deploy.STATE.manual_plane_pending()] == ["k3s"]
     assert gitops_deploy.STATE.broad_applied is None
     assert gitops_deploy.STATE.hold_sha == ORIGIN, "the failed apply is still held"
+
+
+# ── #2320: a rolled-back tick takes back exactly what it wrote, and no more ─────────────
+
+
+def test_a_rolled_back_tick_leaves_an_earlier_ranges_tag_standing(gitops_deploy, tick):
+    """The row this tick WIDENED goes back to what it was; the earlier range's tag survives.
+
+    `record` wrote the sidecar row for every role it was handed, including one an earlier
+    range had already made pending, while `unrecord` only took back the roles whose LINE it
+    appended. A rolled-back second range therefore left `coredns` in a row no merged tree
+    carried — and the whole-line reverse would have been worse, dropping the first range's
+    line while its change is still merged.
+    """
+    config = gitops_deploy.tick_config()
+    state = gitops_deploy.STATE
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+    tick.narrow_setup["k3s"] = (0, "coredns")
+    recorded = deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+    assert state.manual_plane_tags_pending() == {
+        "k3s": frozenset({"coredns", "kubeconfig"})
+    }
+    deploy_defer.unrecord(state, ORIGIN, recorded)
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"], (
+        "the first range is still merged, so its line stays"
+    )
+
+
+def test_a_rolled_back_tick_takes_its_own_line_and_row_with_it(gitops_deploy, tick):
+    """The other half: a role THIS tick made pending leaves nothing behind.
+
+    Without it a fix that only ever restored rows would read identically from the passing
+    side, and the marker would page for six hours over a range no tree carries.
+    """
+    config = gitops_deploy.tick_config()
+    state = gitops_deploy.STATE
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    recorded = deploy_defer.record(tick.tools, state, config, TARGET, ["k3s"])
+    deploy_defer.unrecord(state, ORIGIN, recorded)
+    assert state.manual_plane is None
+    assert state.manual_plane_tags_pending() == {}
+    assert state.read("broad_alerted") is None, "the page for this SHA goes too"
+
+
+def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
+    gitops_deploy, tick, state_dir
+):
+    """The same sequence through a real tick, which is where the marker is actually written.
+
+    A busy service lock resets the tree to `local`, so the second range stops being merged.
+    The sidecar must read what the FIRST range needed, and nothing else.
+    """
+    state = gitops_deploy.STATE
+    state.record_manual_plane(LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0)
+    state.record_manual_plane_tags(
+        "k3s", frozenset({"kubeconfig"}), line_predates=False
+    )
+    tick.paths = [GROUP_VARS, K3S_SETUP]
+    tick.narrow = (0, "sonarr")
+    tick.narrow_setup["k3s"] = (0, "coredns")
+    tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("busy")]
+    assert gitops_deploy.main(tick.tools) == 0
+    assert tick.head == LOCAL, "the ff-merge was undone, so the range is not merged"
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
+    assert [e.role for e in state.manual_plane_pending()] == ["k3s"]

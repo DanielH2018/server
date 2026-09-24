@@ -230,6 +230,26 @@ class DeployerState:
             pending[role] = pending.get(role, frozenset()) | tags
         self.write("manual_plane_tags", format_manual_plane_tags(pending))
 
+    def restore_manual_plane_tags(self, role: str, tags: frozenset[str] | None) -> None:
+        """Put `role`'s narrow-tag row back to a value a caller snapshotted, or remove it.
+
+        Args:
+            role: the role, under the `--tags` value that selects it.
+            tags: the row as it stood before, or None when the role had no row at all.
+
+        The inverse of `record_manual_plane_tags` for a tick whose ff-merge was undone, and it
+        restores rather than subtracting because the union is not invertible: a refusal
+        collapses the row to the empty set, which no subtraction can unwind back to the
+        earlier range's tags. `deploy_defer.record` takes the snapshot, `unrecord` hands it
+        back (#2320).
+        """
+        pending = self.manual_plane_tags_pending()
+        if tags is None:
+            pending.pop(role, None)
+        else:
+            pending[role] = tags
+        self.write("manual_plane_tags", format_manual_plane_tags(pending))
+
     def _drop_manual_plane_tags(self, role: str) -> None:
         """Drop one role's narrow-tag row, removing the marker when it was the last one."""
         pending = self.manual_plane_tags_pending()
