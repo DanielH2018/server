@@ -147,6 +147,9 @@ class DeployTools:
     narrow_deploy_plane: Callable[..., tuple[int, str]] = (
         deploy_narrow.narrow_deploy_plane
     )
+    # The setup-role narrowing, a subprocess for the same reason and a field for the same
+    # reason: `deploy_defer.record`'s tests script an exit code rather than a process.
+    narrow_setup_role: Callable[..., tuple[int, str]] = deploy_narrow.narrow_setup_role
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )

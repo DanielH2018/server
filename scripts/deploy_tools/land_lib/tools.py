@@ -438,6 +438,7 @@ class PlaneNote(Protocol):
         declared: set[str] | None = None,
         *,
         quiet: Iterable[str] = (),
+        narrow_tags: dict[str, frozenset[str]] | None = None,
     ) -> str: ...
 
 
@@ -503,6 +504,11 @@ class Tools:
         land_tags.landing_hosts_at
     )
     read_state: Callable[[Path, str], str | None] = read_state
+    # Runs git over the PR's range, which is why it is a boundary here rather than a
+    # `Classifier`. `classify.narrow_plane` is its one caller.
+    confirm_narrowing: Callable[
+        [list[str], str, Path, str | None], dict[str, frozenset[str]]
+    ] = land_tags.confirmed_narrow_tags
     lock_holder: Callable[[], str] = lock_holder
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog

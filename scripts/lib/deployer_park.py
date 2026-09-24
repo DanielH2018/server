@@ -28,8 +28,11 @@ nothing while the change sits merged and unapplied — only the banner names it.
 The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
 generated copy of the deployer's own module (its header says how it is kept fresh), so this
 module and monitor-bridge read exactly the lines the deployer wrote. What stays here is the
-banner's own judgement: the thresholds, and the readers that collapse an unreadable marker to
-"no park".
+banner's own judgement: the thresholds, the readers that collapse an unreadable marker to
+"no park", and the functions that render a marker as banner lines. Those renderers sit here
+rather than in the hook because the hook is at its module-length cap and they belong beside
+the readers and thresholds they consume; ``behind_park_lines`` is the exception, still in the
+hook, and moving it is somebody else's change.
 
 Stdlib plus that one generated sibling, and nothing else from this repo: the SessionStart
 hook imports it with only ``scripts/`` on ``sys.path``.
@@ -44,7 +47,16 @@ from pathlib import Path as _Path
 # The SessionStart hook and every other caller already put it there; this is for a direct
 # `import lib.deployer_park` from anywhere else (the repo-root CLAUDE.md rule).
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from lib.gitops_markers import CONTENTION_PAGE_SECONDS, MARKERS, STATE_DIR
+from lib.gitops_markers import (
+    CONTENTION_CLEAR_CMD,
+    CONTENTION_PAGE_SECONDS,
+    MANUAL_PLANE_CLEAR_CMD,
+    MARKERS,
+    STATE_DIR,
+    parse_contention,
+    parse_manual_plane,
+    parse_manual_plane_tags,
+)
 
 # The deployer's marker directory on the host that runs the tick (daniel-box). Mode 0750 owned
 # by `ubuntu`, so a session running as that user reads it; on any other host it is absent and
@@ -125,9 +137,97 @@ def read_manual_plane_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
     return _read(state_dir, MARKERS["manual_plane"])
 
 
+def read_manual_plane_tags_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's `manual_plane_tags` marker text, or None when it cannot be read.
+
+    The sidecar naming the narrowest `--tags` value each pending role's change needs (#2307).
+    Absent and unreadable collapse to the same answer for the reason the two readers above
+    give, and that answer is the safe one here: a caller with no narrowing prints the
+    whole-role tag, which is what every surface printed before the sidecar existed.
+    `gitops_markers.parse_manual_plane_tags` turns the text into the mapping.
+    """
+    return _read(state_dir, MARKERS["manual_plane_tags"])
+
+
 # How long a contention streak may run before the banner names it: the same number
 # monitor-bridge pages on, which is why it is the shared module's and not this one's.
 CONTENTION_PARK_SECONDS = CONTENTION_PAGE_SECONDS
+
+
+def _age_phrase(seconds):
+    """`"45 min"` under two hours, `"7h"` above it.
+
+    Minutes match `behind_park_lines`, which never reports more than a few hours. A pending
+    setup role waits on work nobody has started and is routinely days old, where a count in
+    minutes is a number the reader has to divide.
+    """
+    # Clamped at zero: `park_age`'s threshold hid a stamp ahead of the clock, and this line has
+    # no threshold, so a backward NTP step on the deployer would otherwise print a negative age.
+    seconds = max(0.0, seconds)
+    if seconds < 2 * 3600:
+        return f"{int(seconds // 60)} min"
+    return f"{int(seconds // 3600)}h"
+
+
+def manual_plane_lines(marker, now, tags_marker=None):
+    """One banner line per setup role the deployer merged but cannot apply, or [].
+
+    The tick fast-forwards a range carrying `roles/setup/k3s/` or `roles/setup/common/` and
+    records the role in `manual_plane` rather than parking the whole range — parking held every
+    other session's landing behind one role only a hand can apply. So `behind_since` is empty
+    and the park line above says nothing, while a change sits merged and unapplied.
+
+    # DECIDED: not age-gated, unlike `behind_park_lines` and monitor-bridge's `gitops_status`.
+    Being behind origin IS routine in the small — one tick — so those need a threshold to tell
+    a queue from a park. A `manual_plane` entry is never routine: the tick writes it only for a
+    role no tick can apply, and nothing but an operator's hand clears it. monitor-bridge gates
+    because it PAGES; this is a passive notice on a banner the reader is already reading.
+
+    The line carries the way out, because the session that reads it is usually not the session
+    that landed the change: `land.sh` printed the apply command to whoever merged it, and the
+    banner is the only place the fact reaches anyone else.
+
+    `tags_marker` is the `manual_plane_tags` sidecar, so the way out names the narrowest tags
+    the change needs rather than the whole-role tag (#2307). It is READ, not re-derived: an
+    isolated worktree cannot ask git about the primary checkout. An absent sidecar reads as
+    the role tag.
+    """
+    lines = []
+    narrow = parse_manual_plane_tags(tags_marker) if tags_marker else {}
+    for e in sorted(parse_manual_plane(marker), key=lambda e: e.at):
+        tags = ",".join(sorted(narrow.get(e.role) or {e.role}))
+        how = (
+            f"apply `{e.playbook} --tags {tags}` by hand"
+            if e.playbook != "none"
+            else "apply the role by hand"
+        )
+        lines.append(
+            f"  ✗ the GitOps deployer merged a change to the `{e.role}` setup role "
+            f"{_age_phrase(now - e.at)} ago and cannot apply it itself — {how}, then "
+            f"`{MANUAL_PLANE_CLEAR_CMD.replace('<role>', e.role)}`"
+        )
+    return lines
+
+
+def contention_lines(marker, now):
+    """One banner line while the deployer has deferred on a busy service lock for too long.
+
+    A contention defer resets the tree and returns 0, so `last_run` advances, `hold_sha` stays
+    empty and only `behind_since` ages — toward the six-hour page sized for a dirty tree. This
+    names the lock and its holder's shape instead (issue #1847). Age-gated like
+    `behind_park_lines`: one operator deploy holding a lock for a tick is routine.
+    """
+    pending = parse_contention(marker)
+    if pending is None or now - pending.first_seen < CONTENTION_PARK_SECONDS:
+        return []
+    lock, first_seen, count = pending.lock, pending.first_seen, pending.count
+    age = now - first_seen
+    return [
+        f"  ✗ the GitOps deployer has deferred {count} consecutive tick(s) on service lock "
+        f"`{lock}` for {_age_phrase(age)} — a deploy.sh holding "
+        f"/var/lock/server-deploy-{lock}.lock has outlived any legitimate deploy; find it "
+        f"(fuser), end it, then `{CONTENTION_CLEAR_CMD}`"
+    ]
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

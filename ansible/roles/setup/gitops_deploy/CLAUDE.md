@@ -167,14 +167,18 @@ Each arm below is a rule and the function that holds it. The record page has the
     saying nothing was rolled back, and leaves the tree fast-forwarded — no `git reset`, which
     would leave the tree claiming the old commit over half-new live state.
     `deploy_logic.broad_budget_ok` has no production caller.
-  - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a
-    setup-plane path that resolves to no role. Staying parked keeps `behind_since` set. **A
-    setup ROLE whose tag cannot be derived fast-forwards and is recorded in `manual_plane`**
-    instead (`k3s`, `common`; the `DECIDED:` in `deploy_defer.py`'s docstring) — one line per
-    role, first-seen stamp kept, logged on EVERY later tick, paged once per SHA, cleared by
-    the tick applying the role's real playbook or by `gitops_state.py clear-manual-plane
-    <role>`, which logs who cleared what. A park names its reason in the journal on every
-    tick (`deploy_remediation.broad_park_reason`).
+  - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
+    path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
+    the park's reason every tick (`deploy_remediation.broad_park_reason`). **A setup ROLE whose
+    tag cannot be derived fast-forwards and is recorded in `manual_plane`** instead (`k3s`,
+    `common`; the `DECIDED:` in `deploy_defer.py`'s docstring) — one line per role, first-seen
+    stamp kept, logged on EVERY later tick, paged once per SHA, cleared by the tick applying the
+    role's real playbook or by `gitops_state.py clear-manual-plane <role>`. **Its remediation
+    names the NARROWEST tag the change needs** (#2307), derived by `deploy_defer.record` into the
+    `manual_plane_tags` sidecar every surface READS; on doubt, the role tag plus
+    `deploy_remediation.maximal_tag_warning`. A line pending with no row stays at the role
+    tag, and `land.sh` quotes a row only after its awaited tick and only where the row
+    contains its own PR's tags (`docs/gitops-pipeline.md` has the rules).
   - **This role applies itself.** The `Run gitops-deploy once` handler is `state: started`,
     which Ansible skips for an `activating` unit. The `DECIDED:` above
     `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py`.
@@ -361,17 +365,11 @@ so an unbounded error evicts the remediation prose after it
 
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), so it gets its own timeout, sized for the worst SINGLE promoted,
-claim-declaring service:
-
-```text
-ceiling = claims x (volume_snapshot_timeout + 3 x volume_revert_state_timeout
-                    + 3 x volume_revert_api_timeout)
-          + manifests_rollout_timeout + k8s_rollout_stabilise_seconds
-```
-
-`test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
-`tests/test_gitops_deploy_timeout_budgets.py` computes it from role sources, so a rollout
-bump or a new promoted claim-declaring role fails it rather than under-sizing the budget.
+claim-declaring service. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
+`tests/test_gitops_deploy_timeout_budgets.py` computes the ceiling from role sources, so a
+rollout bump or a new promoted claim-declaring role fails it rather than under-sizing the
+budget; the arithmetic and the re-sizing that produced today's figure are in
+`docs/gitops-pipeline.md`.
 
 - Two claim-declaring services in one batch stack additively;
   `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` bounds that (the `DECIDED:` in

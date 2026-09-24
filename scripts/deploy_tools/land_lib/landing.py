@@ -55,6 +55,12 @@ class Landing:
         self.merge_sha = ""
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.plane = ""
+        # What `plane` was classified from, kept so `classify.narrow_plane` can re-render it
+        # once the tick has recorded this PR's range in the deployer's narrowing (#2307).
+        self.pr_paths: list[str] = []
+        self.pr_range = ""
+        self.declared: set[str] | None = None
+        self.quiet: set[str] = set()
         self.self_applied = False
         self.self_applied_command = ""
         self.remaining_setup = ""

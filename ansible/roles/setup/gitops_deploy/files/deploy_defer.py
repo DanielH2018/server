@@ -31,6 +31,7 @@ Reach `deploy_alerts` qualified, never by from-import.
 import time
 
 import deploy_alerts
+import deploy_narrow
 from deploy_changes import setup_role_playbook, setup_role_tag
 from deploy_config import Config, log
 from deploy_remediation import (
@@ -147,11 +148,54 @@ def park(
     )
 
 
+def narrow_tags_for(
+    tools: DeployTools, config: Config, target: TickTarget, role: str
+) -> frozenset[str] | None:
+    """The narrowest tags `role`'s own change needs, or None when nothing could narrow it.
+
+    The role tag applies far more than any one change to it needs: `--tags k3s` reapplies
+    MetalLB, Longhorn, the crons, CoreDNS and the node config and arms three gated
+    control-plane tasks, where a `templates/readonly-rbac.yaml.j2` edit needs `--tags
+    kubeconfig` (#2294, #2307). `scripts/deploy_tools/narrow_setup.py` maps the changed paths
+    to the tags of the tasks that read them.
+
+    ANY failure is None, which every reader renders as today's role tag. A derivation that
+    cannot answer must widen: a `--tags` value matching nothing makes Ansible exit 0 having
+    applied nothing, and an operator reading a green recap over an unapplied change is worse
+    off than one reading a command that applies too much. `except Exception` is the right
+    width for the same reason `deploy_narrow._deploy_plane` uses it — the call decodes a
+    subprocess's output, so it raises more than `SubprocessError`, and an escape here would
+    park a tick that has already fast-forwarded.
+
+    A role no playbook applies is None without asking: its remediation names no `--tags`
+    at all, so there is nothing a narrowing could replace.
+    """
+    playbook = setup_role_playbook(role)
+    if playbook is None:
+        return None
+    try:
+        rc, out = tools.narrow_setup_role(
+            config.repo,
+            role,
+            setup_role_tag(role),
+            playbook,
+            target.local,
+            target.origin,
+            deploy_narrow.NARROW_SETUP_TIMEOUT_S,
+        )
+    except Exception as exc:
+        log(f"narrow-setup: {role} not narrowed ({type(exc).__name__}: {exc})")
+        return None
+    if rc != 0:
+        return None
+    return frozenset(tag for tag in out.split(",") if tag) or None
+
+
 def record(
     tools: DeployTools,
     state: DeployerState,
     config: Config,
-    origin: str,
+    target: TickTarget,
     roles: list[str],
 ) -> list[str]:
     """Record each role this tick merged past and cannot apply, then page once per SHA.
@@ -159,6 +203,10 @@ def record(
     A role already in the marker keeps its first-seen stamp, which is the age monitor-bridge
     pages on. The page goes out on the `broad` channel — the same one `park` uses, which a
     range can never take as well as this one.
+
+    The narrow tags go in a sidecar marker for EVERY role in `roles`, not only the ones this
+    tick added: a second range touching an already-pending role adds work the first line
+    cannot describe, and `record_manual_plane_tags` unions the two.
 
     The journal line here names only what this tick ADDED. `main()` already logs the whole
     pending set on every tick, including this one, so logging the set again here printed it
@@ -169,6 +217,7 @@ def record(
         made them pending is rolled back. A role a previous tick recorded is not in it.
     """
     now = time.time()
+    origin = target.origin
     recorded = [
         role
         for role in roles
@@ -176,10 +225,17 @@ def record(
             origin, setup_role_playbook(role) or NO_PLAYBOOK, setup_role_tag(role), now
         )
     ]
+    for role in roles:
+        state.record_manual_plane_tags(
+            setup_role_tag(role),
+            narrow_tags_for(tools, config, target, role),
+            line_predates=role not in recorded,
+        )
+    narrow = state.manual_plane_tags_pending()
     if recorded:
         log(
             f"manual_plane recorded: {', '.join(recorded)} — merged, not applied; "
-            + manual_plane_remediation(set(recorded))
+            + manual_plane_remediation(set(recorded), narrow)
         )
     deploy_alerts.alert_once(
         tools,
@@ -189,7 +245,9 @@ def record(
         "broad",
         origin,
         deploy_alerts.manual_plane_alert(
-            origin, manual_plane_remediation(set(roles)), state.path("manual_plane")
+            origin,
+            manual_plane_remediation(set(roles), narrow),
+            state.path("manual_plane"),
         ),
     )
     return recorded
@@ -243,5 +301,5 @@ def log_pending(state: DeployerState) -> None:
         return
     log(
         f"manual_plane pending: {', '.join(roles)} — apply by hand: "
-        + manual_plane_remediation(set(roles))
+        + manual_plane_remediation(set(roles), state.manual_plane_tags_pending())
     )

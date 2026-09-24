@@ -19,11 +19,12 @@ through every phase, so this table is the contract no signature states:
 | `merge.arm_merge` | `opts.subject`, `opts.require_author` | -- |
 | `merge.await_merge` | `opts.merge_timeout`, `opts.merge_poll` | -- |
 | `classify.resolve` | `opts.pr` | `merge_sha`, `ledger.t_merged`, `ledger.merge_sha` |
-| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff` |
+| `classify.classify` | `merge_sha`, `opts.since`, `opts.primary` | `resolved_tags`, `plane`, `self_applied`, `remaining_setup`, `needs_diff`, `pr_paths`, `pr_range`, `declared`, `quiet` |
 | `classify.shortcut_if_nothing` | `resolved_tags`, `plane`, `self_applied`, `needs_diff` | -- |
 | `ci.preflight` | `opts.primary` | -- |
 | `ci.wait_master_ci` | `merge_sha`, `opts.ci_timeout` | `ledger.t_ci` |
 | `tick.run_tick` | `opts.lock_retries`, `opts.lock_backoff` | `ledger.lock_waited`, `ledger.lock_holder`, `ledger.t_tick`, `tick_watch_abandoned` |
+| `classify.narrow_plane` (after an awaited tick only) | `plane`, `pr_paths`, `pr_range`, `declared`, `quiet`, `opts.primary` | `plane` |
 | `deploy.deploy_phase` | `resolved_tags`, `needs_diff`, `merge_sha`, `tick_watch_abandoned` | `resolved_tags`, `deployed_hosts`, `deployed_at`, `ledger.tags_label`, `ledger.cause`, `ledger.kick`, `ledger.t_ci`, `ledger.t_tick`, `ledger.t_deploy` |
 | `health_verdict.health` | `resolved_tags`, `deployed_at`, `plane`, `self_applied`, `remaining_setup`, `tick_watch_abandoned`, `ledger.kick` | `ledger.cause`, `ledger.kick` |
 
@@ -97,6 +98,9 @@ def _step_tick(ln: Landing) -> None:
         return
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()
+    # Only here, after an awaited tick: before it, the deployer's narrowing holds no row for
+    # this PR's range. The fast path above keeps the whole-role tag.
+    classify.narrow_plane(ln)
 
 
 # The numbered steps, in order. The label is formatted with `pr=`; the number and the
