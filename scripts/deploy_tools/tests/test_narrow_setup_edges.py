@@ -147,6 +147,27 @@ def test_keys_only_naming_each_other_are_flagged_beside_a_key_that_narrows(tree)
         narrow(tree, old, tree.commit("change both"))
 
 
+def test_a_template_listed_in_a_key_cycle_is_flagged_beside_its_src_reader(tree):
+    """The same fail-closed half through `readers_of`, where the template is named directly.
+
+    `alpha.yml`'s `src:` reads the template, and `demo_group` lists it too. `demo_group` is
+    read only by a key it names back, so that half reaches no task file and must refuse
+    rather than leave `alpha` standing as the whole answer.
+    """
+    tree.write(
+        f"{ROLE}/defaults/main.yml",
+        DEFAULTS
+        + 'demo_group:\n  via: "{{ demo_echo }}"\n  templates:\n    - alpha.conf.j2\n'
+        + 'demo_echo: "{{ demo_group }}"\n',
+    )
+    old = tree.commit("list the template in a key cycle")
+    tree.write(
+        f"{ROLE}/templates/alpha.conf.j2", "mode = {{ demo_alpha_mode }} # more\n"
+    )
+    with pytest.raises(narrow_setup.CannotNarrow, match="demo_group reaches no task"):
+        narrow(tree, old, tree.commit("edit the template"))
+
+
 # ── a tag a `block:` carries selects the tasks inside it ────────────────────────────────
 
 DELTA_TAGGED_BLOCK = """\

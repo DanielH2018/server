@@ -373,7 +373,13 @@ class RoleIndex:
         if keys:
             hit = True
             for key in sorted(keys):
-                tags |= self.key_readers(key, seen)
+                got = self.key_readers(key, seen)
+                if not got:
+                    # A key reaching only a cycle: dropping it narrows to the rest alone.
+                    raise CannotNarrow(
+                        f"{key} reaches no task file, only names in a cycle"
+                    )
+                tags |= got
         if not hit:
             raise CannotNarrow(f"nothing in this role names {name}")
         return frozenset(tags)
