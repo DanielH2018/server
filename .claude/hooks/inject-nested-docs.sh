@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Bash
-#   timeout: 10
-#   order: 70
+# gen-hooks: library
+#   reason: kept for sessions started before bash-pretool.sh, which run this shim by path; delete once they have cycled (#2465)
 # PreToolUse(Bash) hook — inject the nested CLAUDE.md / .claude/rules a Bash read of a
 # role file would otherwise never load (issue #2125), once per session, logged to
 # instructions.log as `bash_path_match`. Routed through uv so the project-pinned interpreter

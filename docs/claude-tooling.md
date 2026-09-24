@@ -418,6 +418,32 @@ The two_factor session also gets its own state file and is never a fallback for 
 Each hook's module docstring under `.claude/hooks/` is the full record of its rules. This
 section is the summary a reader needs before opening one.
 
+### `bash-pretool` (PreToolUse, Bash)
+
+It *decides nothing itself*. It is the one process that runs the five Bash arms —
+`auto-approve-readonly`, `block-protected-bash`, `nudge-land-sh`, `block-footguns` and
+`inject-nested-docs` — each of which used to be its own hook with its own `uv run` start. All
+five import `_hook_common` and `claude_guard.segment`, so four of those five interpreter starts
+bought nothing: measured on daniel-server, five sequential shims took a median 233 ms against
+the dispatcher's 60 ms, and 96 ms when the five ran concurrently (#2394).
+
+Each arm runs under its own `try/except` and contributes a `(decision, reason)` pair or
+nothing. `bash-pretool.py` then merges them the way the harness merges separate hooks — `deny`
+over `ask` over `allow`, the earliest arm at the winning level keeping the reason — and emits
+one `hookSpecificOutput` carrying both that decision and `inject-nested-docs`'s
+`additionalContext`. An arm that raises loses its own verdict, keeps the other four, and says
+so on stderr naming itself.
+
+`uv-python.sh` stays a separate hook: it rewrites the command rather than judging it, so it has
+no verdict to merge. `bash-pretool.sh` runs ahead of it, which is where `auto-approve-readonly`
+already sat, so every arm reads the command the session typed.
+
+A failed `cd` into the repo makes the shim **ask**, naming `block-protected-bash`,
+`nudge-land-sh` and `block-footguns` as the guards that did not run. Three of the five arms
+asked in that case before the merge and two stayed silent; one process can only do one thing,
+and a missed approval or doc injection is a prompt and a re-read, where a missed deny is a
+bypass.
+
 ### `block-protected-edits` (PreToolUse, `Edit|Write`)
 
 It *denies* direct edits to (a) anything under `containers/` (edit the
@@ -425,7 +451,7 @@ It *denies* direct edits to (a) anything under `containers/` (edit the
 `ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill). It also denies a write to a
 generated page, meaning any file carrying a `generated_from:` banner.
 
-### `block-protected-bash` (PreToolUse, Bash)
+### `block-protected-bash` (a `bash-pretool` arm)
 
 It applies the same two rules on the surface auto mode actually uses. `block-protected-edits`
 matches `Edit|Write` only, and auto mode instructs file changes through `sed`, here-documents and
@@ -455,7 +481,7 @@ otherwise; `nudge-land-sh` stays silent, since a missed nudge costs one hand-wri
 allow-side classifier keeps its own splitter: the package splits `cmd &>/dev/null` at the `&`,
 which would turn a redirect the classifier allows into a background job it refuses.
 
-### `inject-nested-docs` (PreToolUse, Bash)
+### `inject-nested-docs` (a `bash-pretool` arm)
 
 It *adds context* and never makes a decision. A role's `CLAUDE.md` and a `.claude/rules/*.md`
 load only when Read/Edit/Write touches a matching path. A `cat`/`sed -n` through Bash — the form
@@ -467,7 +493,7 @@ same log grades it. A doc over 7,500 chars arrives as its heading outline plus a
 the harness persists a longer `additionalContext` to disk and hands the model a preview stub
 instead.
 
-### `nudge-land-sh` (PreToolUse, Bash)
+### `nudge-land-sh` (a `bash-pretool` arm)
 
 It *denies* a command that blocks on CI (`gh run watch`, `gh pr checks --watch`) and the third or
 later CI-status read in one session, naming the `land.sh --pr <n> --since <sha>` form instead.
@@ -475,7 +501,7 @@ The first two reads are an ordinary glance and pass. Measured over the 7 days to
 `gh pr checks` + 75 `gh run list` + 61 `gh run watch` against 29 `land.sh` runs, which is why the
 CLAUDE.md paragraph became a hook.
 
-### `block-footguns` (PreToolUse, Bash)
+### `block-footguns` (a `bash-pretool` arm)
 
 It *denies* a growing set of commands that return a plausible wrong answer rather than an error,
 each with a deterministic signature and a recorded incident. Two of them: `grep -Z`/`-z` (this

@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Bash
-#   timeout: 10
-#   order: 10
+# gen-hooks: library
+#   reason: kept for sessions started before bash-pretool.sh, which run this shim by path; delete once they have cycled (#2465)
 # PreToolUse(Bash) hook — auto-approve provably read-only commands so they don't
 # prompt. Delegates to the Python classifier (exec keeps the hook's stdin JSON).
 # Unrecognized commands produce no output -> normal permission flow.

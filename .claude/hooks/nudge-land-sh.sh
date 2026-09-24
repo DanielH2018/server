@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Bash
-#   timeout: 10
-#   order: 40
+# gen-hooks: library
+#   reason: kept for sessions started before bash-pretool.sh, which run this shim by path; delete once they have cycled (#2465)
 # PreToolUse(Bash) hook — deny hand-polled CI in favour of land.sh. Routed through uv so the
 # project-pinned interpreter runs (not the system python3); --no-sync skips the env reconcile
 # to stay fast on the per-command hot path. `exec` preserves the hook's stdin JSON. No output

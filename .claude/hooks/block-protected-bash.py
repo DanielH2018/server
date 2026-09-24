@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: run by block-protected-bash.sh through `uv run python`
+#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
 WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to the generated `containers/`
@@ -393,21 +393,17 @@ def decide(command, repo_root, session_cwd=None, split=segments):
     return None, None
 
 
-def main():
-    """Read the hook payload from stdin and gate a Bash command via `decide`.
+def decision(payload):
+    """The `(decision, reason)` pair `decide` returns for this payload, or None.
 
-    Emits the PreToolUse deny or ask decision `decide` returns; ignores non-Bash tool
-    calls and commands `decide` has no opinion on. Always returns 0.
+    The arm entry point `bash-pretool.py` calls. `main()` below is the same arm run as its
+    own process, which is what the tests and a hand invocation use.
     """
-    try:
-        data = json.load(sys.stdin)
-    except Exception:
-        return 0
-    if data.get("tool_name") != "Bash":
-        return 0
-    command = (data.get("tool_input") or {}).get("command") or ""
+    if payload.get("tool_name") != "Bash":
+        return None
+    command = (payload.get("tool_input") or {}).get("command") or ""
     if not command:
-        return 0
+        return None
     # DECIDED: the process cwd, not `claude_guard.hook.read_cwd`'s `""`, when the payload
     # carries no `cwd`. Every arm joins `repo_root` as a path prefix — `os.path.join` for
     # a relative write target and for `scripts/secrets_mgmt`, `relpath` inside `classify`
@@ -417,10 +413,24 @@ def main():
     # primary checkout, a real repo root, so arms 1 and 2 keep a tree to read; arm 3 reads
     # the same thing either way, because `_in_a_worktree` of the primary checkout is False
     # and the escape guard is inert on a missing `cwd` under both spellings. Issue #2135.
-    repo_root = data.get("cwd") or os.getcwd()
-    decision, reason = decide(command, repo_root)
-    if decision:
-        emit_pretooluse_decision(decision, reason)
+    repo_root = payload.get("cwd") or os.getcwd()
+    verdict, reason = decide(command, repo_root)
+    return (verdict, reason) if verdict else None
+
+
+def main():
+    """Read the hook payload from stdin and gate a Bash command via `decision`.
+
+    Emits the PreToolUse deny or ask decision it returns; ignores non-Bash tool calls and
+    commands `decide` has no opinion on. Always returns 0.
+    """
+    try:
+        data = json.load(sys.stdin)
+    except Exception:
+        return 0
+    verdict = decision(data)
+    if verdict:
+        emit_pretooluse_decision(*verdict)
     return 0
 
 

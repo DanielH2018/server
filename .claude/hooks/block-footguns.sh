@@ -1,9 +1,6 @@
 #!/bin/bash
-# gen-hooks: register
-#   event: PreToolUse
-#   matcher: Bash
-#   timeout: 10
-#   order: 50
+# gen-hooks: library
+#   reason: kept for sessions started before bash-pretool.sh, which run this shim by path; delete once they have cycled (#2465)
 # PreToolUse(Bash) hook — deny four commands that fail silently on this machine (ugrep's -Z/-z,
 # a bare `git stash pop`, a Forbidden `kubectl rollout restart`, remote git with no `cd`).
 # Routed through uv so the project-pinned interpreter runs (not the system python3); --no-sync

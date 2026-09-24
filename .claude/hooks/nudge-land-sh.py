@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: run by nudge-land-sh.sh through `uv run python`
+#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """PreToolUse(Bash) guard: stop hand-polling CI when land.sh already waits for it.
 
 THE PROBLEM. `scripts/deploy_tools/land.sh` exists so that merging a PR is followed through to
@@ -118,45 +118,56 @@ def bump(session_id: str, now: float | None = None) -> int:
     return count
 
 
-def main() -> int:
-    """Read the hook payload from stdin and deny a CI-status command `classify` flags.
+def decision(payload) -> tuple[str, str] | None:
+    """The `(decision, reason)` pair for this payload, or None.
 
     Denies a command that blocks on CI outright, and denies the third or later CI-status
-    read in the session (tracked per session_id via `bump`), naming `land.sh` in both cases.
+    read in the session, naming `land.sh` in both cases. The counter `bump` keeps is a side
+    effect, so this runs at most once per payload: calling it twice would move the threshold
+    from the third read to the second. The arm entry point `bash-pretool.py` calls; `main()`
+    below is the same arm run as its own process.
+    """
+    command = (payload.get("tool_input") or {}).get("command", "")
+    if not command:
+        return None
+
+    # land.sh runs gh itself. Its own invocation is the fix, never the problem.
+    if "land.sh" in command or "land.py" in command:
+        return None
+
+    kind = classify(command)
+    if kind is None:
+        return None
+
+    if kind == "watch":
+        return (
+            "deny",
+            "This command blocks until CI finishes, which is what land.sh already does. "
+            + _LAND,
+        )
+
+    count = bump(str(payload.get("session_id", "")))
+    if count > _FREE_READS:
+        return (
+            "deny",
+            f"This is CI status read #{count} in this session -- a poll loop written by "
+            "hand. " + _LAND,
+        )
+    return None
+
+
+def main() -> int:
+    """Read the hook payload from stdin and deny a CI-status command `decision` flags.
+
     Always returns 0; a deny is expressed through emitted JSON, not the exit code.
     """
     try:
         payload = json.loads(sys.stdin.read() or "{}")
     except json.JSONDecodeError:
         return 0
-
-    command = (payload.get("tool_input") or {}).get("command", "")
-    if not command:
-        return 0
-
-    # land.sh runs gh itself. Its own invocation is the fix, never the problem.
-    if "land.sh" in command or "land.py" in command:
-        return 0
-
-    kind = classify(command)
-    if kind is None:
-        return 0
-
-    if kind == "watch":
-        emit_pretooluse_decision(
-            "deny",
-            "This command blocks until CI finishes, which is what land.sh already does. "
-            + _LAND,
-        )
-        return 0
-
-    count = bump(str(payload.get("session_id", "")))
-    if count > _FREE_READS:
-        emit_pretooluse_decision(
-            "deny",
-            f"This is CI status read #{count} in this session -- a poll loop written by "
-            "hand. " + _LAND,
-        )
+    verdict = decision(payload)
+    if verdict:
+        emit_pretooluse_decision(*verdict)
     return 0
 
 

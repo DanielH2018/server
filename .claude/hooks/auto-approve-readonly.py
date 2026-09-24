@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 # gen-hooks: library
-#   reason: run by auto-approve-readonly.sh through `uv run python`
+#   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """Bash classifier: auto-approve provably read-only commands.
 
 Reads the hook JSON on stdin. Prints a PreToolUse "allow" decision iff the WHOLE command line is
@@ -24,6 +24,14 @@ Safety model (deny by default):
     the program's mutating forms (git, docker, sort, uniq, find, ip, systemctl,
     journalctl, rg).
 The hook can only ever REDUCE prompts for safe commands; it can never approve a write.
+
+DECIDED (#1864, #1898): this file no longer answers PermissionRequest. The
+`--permission-request` entry point and its `auto-approve-remote-ssh.sh` shim stayed beside
+the user-level judge hook for one day (2026-09-18) because they walked a local pipeline
+around an ssh stage and guarded git/sed/awk/find/... over ssh, and the judge did neither.
+Both moved into the dotfiles package that day (dotfiles PR #521: `judge_segment`'s ssh/hl
+arm, `checks/remote_guards.py`), so the shim retired. The `_ssh` handler below stays: it
+serves THIS entry point. docs/claude-shell-permissions.md has the long form.
 """
 
 import json
@@ -612,29 +620,21 @@ def classify(command, parse=_deployed_parse):
     return "read-only: " + " | ".join(reasons)
 
 
+def decision(payload):
+    """`("allow", reason)` when this payload's command is provably read-only, else None."""
+    reason = classify(((payload.get("tool_input") or {}).get("command")) or "")
+    return ("allow", reason) if reason else None
+
+
 def main():
-    """Read the hook payload from stdin and emit an allow decision for a read-only command.
-
-    Allows a PreToolUse command whenever `classify` recognizes it as read-only. Emits
-    nothing, and always exits 0, when no rule matches.
-
-    # DECIDED (#1864, #1898): this file no longer answers PermissionRequest. The
-    # `--permission-request` entry point and its `auto-approve-remote-ssh.sh` shim stayed
-    # beside the user-level judge hook for one day (2026-09-18) because they walked a local
-    # pipeline around an ssh stage and guarded git/sed/awk/find/... over ssh, and the judge
-    # did neither. Both moved into the dotfiles package that day (dotfiles PR #521:
-    # `judge_segment`'s ssh/hl arm, `checks/remote_guards.py`), so the shim retired. The
-    # `_ssh` handler above stays: it serves THIS entry point, the PreToolUse one.
-    # docs/claude-shell-permissions.md has the long form.
-    """
+    """Run this arm as its own process: read the payload from stdin, emit any allow."""
     try:
         data = json.load(sys.stdin)
     except Exception:
         return 0
-    command = ((data.get("tool_input") or {}).get("command")) or ""
-    reason = classify(command)
-    if reason:
-        emit_pretooluse_decision("allow", reason)
+    verdict = decision(data)
+    if verdict:
+        emit_pretooluse_decision(*verdict)
     return 0
 
 
