@@ -147,6 +147,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_volume_targets
+  # A read of state that exists independently of this play, and the routing tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 # Declarative in both directions, like the recurring-job group pairs above: this claims the
 # listed volumes, the next task releases anything no longer listed. Both skip themselves once

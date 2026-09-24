@@ -40,3 +40,7 @@
 - name: Prove the GPU and the library are reachable from inside the pod
   tags: [deploy]
   ansible.builtin.include_tasks: verify.yml
+  # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
+  # out and skips the pod lookup, so the proofs would exec against nothing and their reports
+  # would error on check-mode skip results. Same gate as jellyfin's (#2351).
+  when: not ansible_check_mode

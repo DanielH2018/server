@@ -43,221 +43,25 @@ the same tasks for the retry-loop version of this bug.
 
 The widening found 33 consumers that predated it. They sat in an allowlist until #2323 fixed
 the last of them, so the rule has no exemptions.
+
+Three holes in that widening were drained on 2026-09-24, each with its own pair of anchors at
+the foot of this file. `SKIP_MISSING` named only `stdout`/`stderr`/`rc`, and `\b` does not
+break inside `stdout_lines`, so a consumer reading the `_lines` form passed (#2351).
+`expressions()` dumped a `block:` wrapper's children as part of the wrapper, reporting a
+child's own `failed_when` against the block's name (#2352). And `_check_mode_producers` skipped
+any register the when-based rule already covered, so a consumer that repeated its producer's
+`when:` was called clean even though check mode skips the producer regardless (#2353).
 """
 
-import re
 from pathlib import Path
-from typing import NamedTuple
 
 import pytest
 import yaml
 from lib import yaml_fast
 
-from _check_mode import (
-    SKIP_FILTERS,
-    SKIP_MISSING,
-    SKIPPED_IN_CHECK_MODE,
-    excludes_check_mode,
-    expressions,
-    importer_guards,
-    lazily_guarded,
-    unguarded_deref,
-    walk_with_inherited_when,
-)
-from _helpers import REPO as _REPO_ROOT
+from _check_mode import unguarded_deref
 from _helpers import ROLES as _ROLES
-
-# The synthetic condition a check-mode producer is gated on. It carries no `when:`, but the
-# effect is exactly `when: not ansible_check_mode` — so the lazy-guard exemption below, which
-# keys on the variables the producer's conditions name, reads it the same way.
-_CHECK_MODE_CONDITION = "not ansible_check_mode"
-
-
-class Problem(NamedTuple):
-    """One consumer that errors on a skip result, and why."""
-
-    task: str
-    message: str
-
-
-def _task_files() -> list[Path]:
-    return sorted(p for p in _ROLES.rglob("tasks/*.yml") if "archive" not in p.parts)
-
-
-def _when_text(task: dict) -> str:
-    when = task.get("when")
-    if when is None:
-        return ""
-    if isinstance(when, list):
-        return " and ".join(str(w) for w in when)
-    return str(when)
-
-
-def _conditions(task: dict) -> list[str]:
-    when = task.get("when")
-    if when is None:
-        return []
-    if isinstance(when, list):
-        return [str(w).strip() for w in when]
-    return [str(when).strip()]
-
-
-def _producers(tasks: list[dict]) -> dict[str, list[str]]:
-    """register name -> the producer conditions that can yield per-item SKIP results.
-
-    A condition that references the producer's own `loop:` source is excluded: when it is
-    false the loop is empty, so the register's `results` is an empty list and every consumer
-    iterates zero times. That is safe, and it is how k8s/rollout-drain is written. Only a
-    condition orthogonal to the loop (a `changed` check, `not ansible_check_mode`) leaves
-    skip entries behind for a consumer to trip over.
-    """
-    found = {}
-    for task in tasks:
-        reg = task.get("register")
-        if not reg:
-            continue
-        loop_src = str(task.get("loop", ""))
-        risky = [
-            cond
-            for cond in _conditions(task)
-            if not any(
-                name and name in loop_src
-                for name in re.findall(r"[A-Za-z_][A-Za-z0-9_]*", cond)
-            )
-        ]
-        if risky:
-            found[reg] = risky
-    return found
-
-
-def _check_mode_producers(pairs, when_based) -> dict[str, str]:
-    """register -> producer task name, for producers a `--check` run skips outright.
-
-    `pairs` is `walk_with_inherited_when(tasks)`. A producer already in `when_based` is
-    reported by the older rule and is not repeated here.
-
-    `check_mode: false` is the opt-out: the task runs for real under `--check` and its
-    register carries a real result. A `when:` that excludes check mode — on the task or on an
-    enclosing block — means the producer is skipped, but so is every consumer beside it.
-    """
-    found = {}
-    for task, inherited in pairs:
-        reg = task.get("register")
-        if not reg or reg in when_based:
-            continue
-        if not SKIPPED_IN_CHECK_MODE & set(task):
-            continue
-        if task.get("check_mode") is False:
-            continue
-        if excludes_check_mode(task.get("when")):
-            continue
-        if any(excludes_check_mode(when) for when in inherited):
-            continue
-        found[reg] = str(task.get("name", "<unnamed>"))
-    return found
-
-
-def _offenders(path: Path) -> list[Problem]:
-    try:
-        loaded = yaml_fast.safe_load(path.read_text())
-    except yaml.YAMLError:
-        return []  # the manifest/lint hooks own YAML validity; this check owns semantics
-    if not isinstance(loaded, list):
-        return []
-    pairs = list(walk_with_inherited_when(loaded))
-    tasks = [task for task, _ in pairs]
-    conditional = _producers(tasks)
-    # A file imported under a guard no `--check` run satisfies has no reachable task in it,
-    # producer or consumer. The when-based rule above does not consult this: an importer
-    # saying "not under check mode" proves nothing about some other producer's `when:`.
-    importer = importer_guards(path.parent).get(path.name, [])
-    skipped = (
-        {}
-        if any(excludes_check_mode(when) for when in importer)
-        else _check_mode_producers(pairs, conditional)
-    )
-    if not conditional and not skipped:
-        return []
-
-    problems = _check_mode_offenders(path, pairs, skipped)
-    for task in tasks:
-        if task.get("register") in conditional:
-            continue  # the producer itself
-        body = expressions(task)
-        consumer_when = _when_text(task)
-        loop = str(task.get("loop", ""))
-        for reg, producer_conditions in conditional.items():
-            deref = [attr for attr in SKIP_MISSING if unguarded_deref(body, reg, attr)]
-            if not deref:
-                continue
-            if all(cond in consumer_when for cond in producer_conditions):
-                continue  # consumer repeats every risky guard the producer carries
-            if any(f in loop for f in SKIP_FILTERS):
-                continue  # consumer filters the skip results out
-            if any(
-                lazily_guarded(body, reg, attr, producer_conditions) for attr in deref
-            ):
-                continue  # deref sits behind a lazy `if <same gate> else` and is unreachable
-            producer_when = " and ".join(producer_conditions)
-            name = str(task.get("name", "<unnamed>"))
-            problems.append(
-                Problem(
-                    name,
-                    f"{_where(path)}: task {name!r} reads "
-                    f"{reg}.{deref[0]} but {reg}'s producer is gated on "
-                    f"`{producer_when.strip()}`. A skipped task still sets its register, and "
-                    f"the skip result has no `{deref[0]}`. Either repeat the producer's "
-                    "condition, or filter the loop with "
-                    "`| rejectattr('skipped', 'defined') | list`.",
-                )
-            )
-    return problems
-
-
-def _where(path: Path) -> Path:
-    try:
-        return path.relative_to(_REPO_ROOT)
-    except ValueError:
-        return path  # a tmp_path fixture in this file's own tests
-
-
-def _check_mode_offenders(path: Path, pairs, skipped) -> list[Problem]:
-    """Consumers that dereference a register check mode turns into a skip result."""
-    problems = []
-    for task, inherited in pairs:
-        if task.get("register") in skipped:
-            continue  # the producer itself
-        if excludes_check_mode(task.get("when")):
-            continue
-        if any(excludes_check_mode(when) for when in inherited):
-            continue
-        body = expressions(task)
-        loop = str(task.get("loop", ""))
-        if any(skip_filter in loop for skip_filter in SKIP_FILTERS):
-            continue
-        for reg, producer in skipped.items():
-            deref = [attr for attr in SKIP_MISSING if unguarded_deref(body, reg, attr)]
-            if not deref:
-                continue
-            if any(
-                lazily_guarded(body, reg, attr, [_CHECK_MODE_CONDITION])
-                for attr in deref
-            ):
-                continue
-            name = str(task.get("name", "<unnamed>"))
-            problems.append(
-                Problem(
-                    name,
-                    f"{_where(path)}: task {name!r} reads {reg}.{deref[0]}, but {reg}'s "
-                    f"producer {producer!r} is a module check mode SKIPS whatever its "
-                    f"`when:` says. Under `--check` the register is a skip result with no "
-                    f"`{deref[0]}`, so this errors with \"object of type 'dict' has no "
-                    f"attribute '{deref[0]}'\". Give the producer `check_mode: false` + "
-                    "`changed_when: false` if it reads state that exists independently of "
-                    "this play, or give this consumer `when: not ansible_check_mode`.",
-                )
-            )
-    return problems
+from _skip_result_rule import _offenders, _task_files
 
 
 _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
@@ -270,6 +74,17 @@ _KNOWN_TASK_FILES = frozenset(
         "setup/hypervisor/tasks/guest.yml",
         "k8s/jellyfin/tasks/verify.yml",
         "k8s/media-volume/tasks/sync.yml",
+        # The 2026-09-24 widenings: #2351 added `stdout_lines`/`stderr_lines`/`delta` to
+        # SKIP_MISSING, #2353 stopped skipping a when-gated producer under the check-mode
+        # rule. Each of these held a consumer one of the two flagged.
+        "k8s/authelia/tasks/main.yml",
+        "k8s/headlamp/tasks/main.yml",
+        "k8s/prowlarr/tasks/main.yml",
+        "k8s/tdarr/tasks/verify.yml",
+        "setup/hypervisor/tasks/teardown.yml",
+        "setup/k3s/tasks/longhorn.yml",
+        "setup/k3s/tasks/longhorn-backup.yml",
+        "setup/k3s/tasks/longhorn-weekly-shard.yml",
     }
 )
 
@@ -374,6 +189,9 @@ def test_the_check_accepts_a_lazy_conditional_guard(tmp_path: Path) -> None:
         "  when: not (seed_volume_short_circuit | bool)\n"
         "  ansible.builtin.command: kubectl exec test -f .seeded\n"
         "  register: seed_volume_marker\n"
+        # Anchors the WHEN-based rule. The check-mode rule also reaches a when-gated
+        # producer since #2353, and would report the same consumer for a second reason.
+        "  check_mode: false\n"
         "- name: Decide whether this run copies\n"
         "  ansible.builtin.set_fact:\n"
         "    seed_volume_copying: >-\n"
@@ -397,6 +215,9 @@ def test_the_lazy_guard_still_catches_an_unrelated_gate(tmp_path: Path) -> None:
         "  when: not (seed_volume_short_circuit | bool)\n"
         "  ansible.builtin.command: kubectl exec test -f .seeded\n"
         "  register: seed_volume_marker\n"
+        # Anchors the WHEN-based rule. The check-mode rule also reaches a when-gated
+        # producer since #2353, and would report the same consumer for a second reason.
+        "  check_mode: false\n"
         "- name: Decide whether this run copies\n"
         "  ansible.builtin.set_fact:\n"
         "    seed_volume_copying: >-\n"
@@ -426,3 +247,166 @@ def test_the_check_accepts_a_filtered_loop(tmp_path: Path) -> None:
         "  when: not ansible_check_mode\n"
     )
     assert _offenders(fixed) == []
+
+
+def _write(tmp_path: Path, body: str) -> Path:
+    """One task file under a `tasks/` directory, which `importer_guards` needs to walk."""
+    tasks = tmp_path / "tasks"
+    tasks.mkdir()
+    path = tasks / "main.yml"
+    path.write_text(body)
+    return path
+
+
+_LINES_PRODUCER = (
+    "- name: List the labelled volumes\n"
+    "  ansible.builtin.command: kubectl get volumes -o jsonpath={.items[*].metadata.name}\n"
+    "  changed_when: false\n"
+    "  register: labelled\n"
+)
+
+# The attributes #2351 added to SKIP_MISSING. Parametrised so each one is load-bearing: the
+# tree has no consumer of `stderr_lines` or `delta`, so dropping either from the tuple would
+# leave the census green and every other anchor here passing.
+_ADDED_ATTRS = ("stdout_lines", "stderr_lines", "delta")
+
+
+def _reader(attr: str) -> str:
+    return (
+        "- name: Report what it found\n"
+        "  ansible.builtin.debug:\n"
+        f'    msg: "{{{{ labelled.{attr} }}}}"\n'
+    )
+
+
+def test_stdout_does_not_match_inside_stdout_lines() -> None:
+    """Why `stdout_lines` needs its own SKIP_MISSING entry rather than riding on `stdout`.
+
+    `unguarded_deref` anchors on `\\b<reg>.<attr>\\b`, and `_` is a word character, so there is
+    no boundary inside `stdout_lines` for `stdout` to find. That is how the Longhorn label
+    reconcilers, jellyfin's and janitorr's reports and media-volume's sync all read a skip
+    result past this guard.
+    """
+    assert unguarded_deref("{{ labelled.stdout }}", "labelled", "stdout")
+    assert not unguarded_deref("{{ labelled.stdout_lines }}", "labelled", "stdout")
+
+
+@pytest.mark.parametrize("attr", _ADDED_ATTRS)
+def test_the_check_flags_a_consumer_of_each_attribute_a_skip_result_lacks(
+    tmp_path: Path, attr: str
+) -> None:
+    """#2351: an unguarded `command` producer leaves no `<attr>` for the reader below it."""
+    problems = _offenders(_write(tmp_path, _LINES_PRODUCER + _reader(attr)))
+    assert len(problems) == 1
+    assert f"labelled.{attr}" in problems[0].message
+
+
+@pytest.mark.parametrize("attr", _ADDED_ATTRS)
+def test_the_check_accepts_those_reads_of_an_opted_out_producer(
+    tmp_path: Path, attr: str
+) -> None:
+    """The accepting half: `check_mode: false` makes the read a real result under `--check`."""
+    opted_out = _LINES_PRODUCER.replace(
+        "  register: labelled\n", "  register: labelled\n  check_mode: false\n"
+    )
+    assert _offenders(_write(tmp_path, opted_out + _reader(attr))) == []
+
+
+def test_a_block_is_not_flagged_for_its_own_childs_failed_when(tmp_path: Path) -> None:
+    """#2352: `expressions()` drops `block`/`rescue`/`always`.
+
+    `walk_with_inherited_when` yields the child on its own, so a wrapper that kept its
+    children's text saw the child's expressions twice and reported the read against the
+    BLOCK's name. Ansible never evaluates a skipped task's own `failed_when`, so the only
+    read here is one that cannot happen — `setup/initial_setup/tasks/system-tuning.yml` was
+    allowlisted for exactly this.
+    """
+    assert (
+        _offenders(
+            _write(
+                tmp_path,
+                "- name: Keep the info-level forwarding out of syslog\n"
+                "  block:\n"
+                "    - name: Check the rsyslog config parses\n"
+                "      ansible.builtin.command: rsyslogd -N1\n"
+                "      changed_when: false\n"
+                "      register: rsyslog_parse\n"
+                "      failed_when: rsyslog_parse.rc != 0\n",
+            )
+        )
+        == []
+    )
+
+
+def test_a_block_is_still_flagged_for_a_childs_read_of_a_sibling(
+    tmp_path: Path,
+) -> None:
+    """Control for the above: dropping the nesting keys must not blind the walk.
+
+    A child reading a SIBLING's register is still reachable on a skip, and the problem is
+    reported against the child's own name rather than the wrapper's.
+    """
+    problems = _offenders(
+        _write(
+            tmp_path,
+            "- name: Keep the info-level forwarding out of syslog\n"
+            "  block:\n"
+            "    - name: Check the rsyslog config parses\n"
+            "      ansible.builtin.command: rsyslogd -N1\n"
+            "      changed_when: false\n"
+            "      register: rsyslog_parse\n"
+            "    - name: Report what it said\n"
+            "      ansible.builtin.debug:\n"
+            '        msg: "{{ rsyslog_parse.stdout }}"\n',
+        )
+    )
+    assert [problem.task for problem in problems] == ["Report what it said"]
+
+
+_GUEST_PRODUCER = (
+    "- name: Read the running guest's live interface\n"
+    "  when: hypervisor_staging_vm_info.stdout is search('State:\\s+running')\n"
+    "  ansible.builtin.command:\n"
+    "    cmd: virsh --connect qemu:///system dumpxml daniel-stage\n"
+    "  changed_when: false\n"
+    "  register: hypervisor_staging_vm_live_xml\n"
+)
+_GUEST_CONSUMER = (
+    "- name: Stop a running guest whose live interface carries no egress fence\n"
+    "  when:\n"
+    "    - hypervisor_staging_vm_info.stdout is search('State:\\s+running')\n"
+    "    - hypervisor_staging_vm_live_xml.stdout is not search('filterref')\n"
+    "  ansible.builtin.command:\n"
+    "    cmd: virsh --connect qemu:///system destroy daniel-stage\n"
+    "  changed_when: true\n"
+)
+
+
+def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
+    tmp_path: Path,
+) -> None:
+    """#2353: repeating the producer's `when:` is enough on a real run, not under `--check`.
+
+    `setup/hypervisor/tasks/guest.yml` as it was written. The consumer repeats the producer's
+    condition, so the when-based rule accepts it — and check mode skips the producer whatever
+    its `when:` says, so against a running guest the consumer still read a skip result. The
+    old `reg in when_based` early-out meant the check-mode rule never looked.
+    """
+    problems = _offenders(_write(tmp_path, _GUEST_PRODUCER + _GUEST_CONSUMER))
+    assert len(problems) == 1
+    assert "hypervisor_staging_vm_live_xml.stdout" in problems[0].message
+    assert "check mode SKIPS" in problems[0].message, (
+        "the when-based rule reported this, not the check-mode rule — the consumer repeats "
+        "the producer's condition, so the when-based rule is supposed to accept it"
+    )
+
+
+def test_a_when_gated_producer_that_opts_out_of_check_mode_is_clean(
+    tmp_path: Path,
+) -> None:
+    """The accepting half, and the fix guest.yml carries: `check_mode: false` on the read."""
+    opted_out = _GUEST_PRODUCER.replace(
+        "  register: hypervisor_staging_vm_live_xml\n",
+        "  register: hypervisor_staging_vm_live_xml\n  check_mode: false\n",
+    )
+    assert _offenders(_write(tmp_path, opted_out + _GUEST_CONSUMER)) == []

@@ -394,6 +394,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_backed_up
+  # A read of state that exists independently of this play, and the label tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 # Naturally idempotent: a volume that has already moved no longer carries the `default` label, so
 # it does not come back from the query above and this loop has nothing to do on a second run.
@@ -435,6 +439,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_backup_class_pvcs
+  # A read of state that exists independently of this play, and the label tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 - name: Find excluded Longhorn volumes that should be backed up again
   tags: [longhorn]
@@ -453,6 +461,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_excluded
+  # A read of state that exists independently of this play, and the label tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 # Idempotent for the same reason as its mirror: a volume that has moved back no longer carries the
 # `no-backup` label, so the query above stops returning it.
@@ -508,6 +520,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_weekly_labelled
+  # A read of state that exists independently of this play, and the label tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 - name: Migrate legacy weekly-backup labels to their weekday shard
   tags: [longhorn]

@@ -19,6 +19,10 @@
   become: true
   changed_when: false
   register: k3s_longhorn_shard_labelled
+  # A read of state that exists independently of this play, and the label tasks below
+  # loop its `stdout_lines`. Without this `--check` skips it and they error on the
+  # attribute instead of skipping (#2351).
+  check_mode: false
 
 - name: Return de-listed volumes to the default recurring-job group from shard d{{ shard }}
   ansible.builtin.command:
