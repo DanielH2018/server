@@ -86,7 +86,12 @@ def gate_broad_k8s(
     either: the range merges below, so `skip_hold` could never match it again, and a hold
     nothing can clear turns GitOps Deploy — Status red for good.
     """
-    gated = cs.k8s_deploy - covered_by_plane(plans, cs.k8s_deploy)
+    covered = covered_by_plane(plans, cs.k8s_deploy)
+    if covered:
+        log(
+            f"{sorted(covered)}: the deploy plane applies these, so staging is not asked"
+        )
+    gated = cs.k8s_deploy - covered
     if not gated:
         return cs
     origin = target.origin
