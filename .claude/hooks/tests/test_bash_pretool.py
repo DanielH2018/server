@@ -148,17 +148,15 @@ def test_reject_a_first_ci_status_read_is_not_denied(sandbox, monkeypatch, capsy
 # ── arm 4: block-footguns ────────────────────────────────────────────────────────────
 
 
-def test_accept_a_ugrep_null_flag_is_denied(sandbox, monkeypatch, capsys):
-    out = dispatch("grep -lZ needle .", sandbox, monkeypatch, capsys)
+def test_accept_a_rollout_restart_is_denied(sandbox, monkeypatch, capsys):
+    out = dispatch("kubectl rollout restart deploy/x", sandbox, monkeypatch, capsys)
     assert out["permissionDecision"] == "deny"
-    assert "ugrep" in out["permissionDecisionReason"]
+    assert "deploy.sh" in out["permissionDecisionReason"]
 
 
-def test_reject_the_same_grep_without_the_flag_is_not_denied(
-    sandbox, monkeypatch, capsys
-):
-    out = dispatch("grep -l needle .", sandbox, monkeypatch, capsys)
-    assert out["permissionDecision"] == "allow"
+def test_reject_a_rollout_status_is_not_denied(sandbox, monkeypatch, capsys):
+    out = dispatch("kubectl rollout status deploy/x", sandbox, monkeypatch, capsys)
+    assert out is None or out["permissionDecision"] != "deny"
 
 
 # ── arm 5: inject-nested-docs ────────────────────────────────────────────────────────
@@ -185,10 +183,12 @@ def test_reject_a_command_naming_no_path_injects_nothing(sandbox, monkeypatch, c
 
 
 def test_a_deny_outranks_an_allow_on_the_same_command(sandbox, monkeypatch, capsys):
-    """`grep -lZ` is read-only to arm 1 and a footgun to arm 4. Five separate hooks let the
-    harness rank them; one process has to do it here, and ranking it the other way would
+    """A remote `git log` with no `cd` is read-only to arm 1 and a footgun to arm 4. Five
+    separate hooks let the harness rank them; one process has to do it here, and ranking it the other way would
     auto-approve the exact command the footgun guard exists to stop."""
-    out = dispatch("grep -lZ needle .", sandbox, monkeypatch, capsys)
+    out = dispatch(
+        "ssh daniel-server 'git log --oneline -1'", sandbox, monkeypatch, capsys
+    )
     assert out["permissionDecision"] == "deny"
 
 
@@ -211,7 +211,7 @@ def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, 
     """The injector used to be its own hook, so a denied command still got its docs. One
     object carries both keys; dropping the context on a deny would be a silent loss."""
     out = dispatch(
-        "grep -lZ needle ansible/roles/k8s/home-assistant/tasks/main.yml",
+        "ssh daniel-server 'git log -1 ansible/roles/k8s/home-assistant/tasks/main.yml'",
         sandbox,
         monkeypatch,
         capsys,
@@ -235,7 +235,7 @@ def test_an_arm_that_raises_loses_only_its_own_verdict(sandbox, monkeypatch, cap
         "tool_name": "Bash",
         "cwd": _REPO,
         "session_id": f"test-{uuid.uuid4()}",
-        "tool_input": {"command": "grep -lZ needle ."},
+        "tool_input": {"command": "ssh daniel-server 'git log --oneline -1'"},
     }
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(payload)))
     assert _mod.main(load=load) == 0
