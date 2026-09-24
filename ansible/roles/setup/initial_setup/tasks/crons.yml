@@ -158,12 +158,14 @@
   # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
   # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
   # the reboot must happen even if the ping fails. UUID = the check's dashed code.
+  # Both stages go to the journal (#2487): on a healthy run curl prints the ping's `OK` and
+  # shutdown prints "Shutdown scheduled for ...", which cron mailed to root every week.
   ansible.builtin.cron:
     name: "Weekly system restart"
     minute: "30"
     hour: "7"
     weekday: "0"
-    job: "curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +5"
+    job: "{ curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +5; } 2>&1 | logger -t weekly-restart"
     user: root
   become: true
 
@@ -229,12 +231,14 @@
   # 2026-08-14 k3s migration completed; the ping lives inside this same job, so gating it
   # here (rather than skipping only the `docker` call) also retires the monitor cleanly
   # instead of leaving a dead-man that never pings on those two hosts.
+  # The chain is braced and sent to the journal (#2487): prune prints "Total reclaimed space"
+  # and curl the ping's `OK` on every healthy run. A failure is the un-pinged dead-man above.
   when: has_docker
   ansible.builtin.cron:
     name: "Clean unused Docker images"
     minute: "30"
     hour: "6"
-    job: '/usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35'
+    job: '{ /usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35; } 2>&1 | logger -t docker-prune'
     user: "{{ ansible_facts.user_id }}"
   become: true
   tags: [prune, crons]
