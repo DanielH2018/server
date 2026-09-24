@@ -116,23 +116,6 @@ def test_absent_crons_are_skipped(tmp_path):
     assert "Retired job" not in {r["name"] for r in g.build_rows(tmp_path)}
 
 
-def test_archive_roles_are_skipped(tmp_path):
-    """roles/containers/archive/ is retired code, not installed crons."""
-    _role(
-        tmp_path,
-        "containers/archive/kopia",
-        """\
-        ---
-        - name: Schedule a retired backup
-          ansible.builtin.cron:
-            name: "Old backup"
-            minute: "0"
-            job: "/usr/local/bin/backup.sh"
-        """,
-    )
-    assert "Old backup" not in {r["name"] for r in g.build_rows(tmp_path)}
-
-
 def test_unresolved_jinja_is_printed_not_guessed(tmp_path):
     """These pages never run Ansible, so a template is the honest rendering."""
     _role(

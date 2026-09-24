@@ -197,13 +197,10 @@ _ROLE_PLANES = {
     "setup": "setup",
 }
 
-# Directories whose hits are not consumers. `archive/` is retired code; `collections/` is
-# vendored third-party; the registry and secrets file name every secret by definition, so
-# including them would make every census non-empty and the check vacuous.
-_CENSUS_SKIP = (
-    os.path.join("roles", "containers", "archive"),
-    "collections",
-)
+# Directories whose hits are not consumers. `collections/` is vendored third-party; the
+# registry and secrets file name every secret by definition, so including them would make
+# every census non-empty and the check vacuous.
+_CENSUS_SKIP = ("collections",)
 _CENSUS_SKIP_FILES = {"secrets.yml", "secret_rotation.yml"}
 
 # Markdown is EXCLUDED, and this is a correctness fix rather than tidiness. A role's CLAUDE.md

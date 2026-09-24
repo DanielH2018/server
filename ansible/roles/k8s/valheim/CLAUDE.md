@@ -2,8 +2,8 @@
 
 Archived on Docker 2026-01-07 (`6f942bd2`), reactivated 2026-08-13 **straight onto k3s**.
 It did not go back to Docker: the Docker edge retired at E7 and Phase F is draining
-daniel-server, so both the archived compose role (`roles/containers/archive/valheim`) and
-`roles/containers/archive/CLAUDE.md`'s four-step reactivation recipe describe a topology
+daniel-server, so both the archived compose role and the archive's four-step reactivation
+recipe (both deleted in #2385; `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/CLAUDE.md`) describe a topology
 that no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance

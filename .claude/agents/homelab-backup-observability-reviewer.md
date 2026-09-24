@@ -14,8 +14,8 @@ operator's time).
 
 ## The mental model
 - **Backups: Longhorn volume backups → Backblaze B2** (free 10GB plan; B2 IS the offsite copy).
-  **Kopia is retired** — repo deleted 2026-08-14, role archived at
-  `roles/containers/archive/kopia`, `kopia_password` removed from SOPS. Do not propose Kopia
+  **Kopia is retired** — repo deleted 2026-08-14, role deleted from the tree in #2385,
+  `kopia_password` removed from SOPS. Do not propose Kopia
   changes or read the kopia role as live. Per-volume tiers (daily / weekly / **no-backup**) and
   the reasoning inherited from the old `.kopiaignore` are in `docs/longhorn-backup-tiering.md`;
   recovery is `docs/longhorn-disaster-recovery.md`. Volumes deliberately NOT backed up include

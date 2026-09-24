@@ -66,8 +66,8 @@ sops -d --extract '["longhorn_b2_key_id"]' ansible/vars/secrets.yml
 ```
 
 ## Step 1 — connect to the repository from a fresh host
-Mirrors `ansible/roles/containers/archive/kopia/templates/entrypoint.sh.j2` (the role moved under
-`archive/` when it was retired). Export the five values
+Mirrors the retired kopia role's entrypoint, deleted from the tree in #2385. Read it with
+`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/templates/entrypoint.sh.j2`. Export the five values
 first, then (the repo speaks B2's **S3** endpoint):
 
 > **The image tag below is pinned to match production** (`docker-compose.yml.j2`), not `latest`.

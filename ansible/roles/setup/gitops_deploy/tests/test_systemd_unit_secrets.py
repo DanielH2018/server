@@ -32,11 +32,7 @@ def _unit_templates() -> list[pathlib.Path]:
     (2026-08-24 review M-2). A guard written alongside its fix inherits the fix's scope unless
     it derives its own corpus.
     """
-    return sorted(
-        p
-        for p in _ROLES.rglob("*.service.j2")
-        if "archive" not in p.parts  # roles/containers/archive/ is retired code
-    )
+    return sorted(_ROLES.rglob("*.service.j2"))
 
 
 def test_no_unit_template_embeds_a_secret_in_execstart():

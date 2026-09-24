@@ -375,3 +375,50 @@ def test_clear_contention_refuses_while_the_tree_lock_is_held(
         os.close(fd)
     assert (tmp_path / "contention_since").exists()
     assert "is held" in capsys.readouterr().err
+
+
+def test_an_empty_applied_is_refused(tmp_path, run):
+    """`--applied "$TAGS"` with TAGS unset parsed to the empty set, which clears the line.
+
+    The empty set means a WHOLE-role apply here, so the row was dropped however it had grown
+    (#2371). Refusing costs a retype; clearing silences the only signal that the role is
+    unapplied.
+    """
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    for empty in ("", ",", " "):
+        with pytest.raises(SystemExit) as exc:
+            run(tmp_path, "clear-manual-plane", "k3s", "--applied", empty)
+        assert exc.value.code == 2
+    assert (tmp_path / "manual_plane").read_text().splitlines() == [K3S]
+
+
+def test_a_non_empty_applied_still_clears_its_tags(tmp_path, run):
+    """The accepting half: the refusal above must not swallow an ordinary narrowed clear."""
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s coredns,kubeconfig\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert (tmp_path / "manual_plane_tags").read_text().strip() == "k3s coredns"
+
+
+def test_the_kept_message_warns_about_the_whole_role_apply_it_prescribes(
+    tmp_path, run, capsys
+):
+    """It sends the operator to `--tags k3s`, which arms the gated tasks (#2345).
+
+    Every other surface printing that command carries `maximal_apply_warning`; this one
+    printed it bare.
+    """
+    (tmp_path / "manual_plane").write_text(f"{K3S}\n")
+    (tmp_path / "manual_plane_tags").write_text("k3s -\n")
+    assert run(tmp_path, "clear-manual-plane", "k3s", "--applied", "kubeconfig") == 0
+    assert "rotate-keys" in capsys.readouterr().out
+
+
+def test_the_kept_message_for_a_role_with_no_gated_tasks_carries_no_warning(
+    tmp_path, run, capsys
+):
+    """The rejecting half: `common` arms nothing, so it gets no warning to ignore."""
+    (tmp_path / "manual_plane").write_text(f"{COMMON}\n")
+    assert run(tmp_path, "clear-manual-plane", "common", "--applied", "something") == 0
+    out = capsys.readouterr().out
+    assert "kept common" in out and "WARNING" not in out

@@ -25,14 +25,14 @@ highest-signal findings.
   Traefik-CRD and authelia edges, so a new entry's position no longer needs checking.)
 - **Egress NetworkPolicies are not enforced** by this cluster's CNI. Never report one as a control,
   and don't propose an egress policy as a fix.
-- **`ansible/roles/containers/archive/`** is retired code kept for reference — never flag it.
-  A few live `roles/containers/` roles (`grafana`, `home-assistant`) have no `containers_list`
-  entry on purpose: they are the git-owned config source a k8s role mounts.
+- **Retired Compose roles live in git history only.** #2385 deleted
+  `ansible/roles/containers/archive/`. Every role left under `roles/containers/` except `common`
+  is a live daniel-pi service named in `host_vars/daniel-pi.yml` `containers_list`.
 - **Docker (daniel-pi only)** — `containers/` is generated/read-only; the source of truth is
   `ansible/roles/containers/<svc>/templates/docker-compose.yml.j2` + `tasks/main.yml`. Always cite
   the ansible path, never `containers/`.
 - **Shared macros** (`ansible/templates/`) are the house style — new services USE them, don't
-  hand-roll: `traefik.yml.j2` `labels()`, `autokuma.yml.j2` `kuma()`,
+  hand-roll: `expose.yml.j2` `web_ui_ports_block()`, `autokuma.yml.j2` `kuma()`,
   `networks.yml.j2` `service_networks()`/`external_networks()`, `resources.yml.j2`
   `resources(cpu_limit, mem_limit, cpu_res, mem_res)`. There is **no shared healthcheck
   macro** — it was deleted, and the one compose file that still inlined its jittered-interval

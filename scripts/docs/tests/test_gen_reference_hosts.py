@@ -36,7 +36,6 @@ def _make_inventory(tmp_path):
     (host_vars / "daniel-pi.yml").write_text(
         textwrap.dedent("""\
         server_ip: 10.0.0.139
-        expose_mode: lan
         has_gitops: false
         containers_list:
           - name: c
@@ -66,14 +65,6 @@ def test_counts_services_per_host(tmp_path):
     rows = {r["name"]: r for r in g.build_rows(ini, host_vars)}
     assert rows["daniel-server"]["services"] == "2"
     assert rows["daniel-pi"]["services"] == "1"
-
-
-def test_expose_mode_defaults_are_labelled(tmp_path):
-    """A default must read as a default, not as a declared value."""
-    ini, host_vars = _make_inventory(tmp_path)
-    rows = {r["name"]: r for r in g.build_rows(ini, host_vars)}
-    assert rows["daniel-pi"]["expose_mode"] == "lan"
-    assert "default" in rows["daniel-server"]["expose_mode"]
 
 
 def test_an_undeclared_flag_is_unknown_not_false(tmp_path):

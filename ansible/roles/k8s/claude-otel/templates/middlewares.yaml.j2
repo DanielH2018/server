@@ -37,10 +37,27 @@ spec:
       ipStrategy:
         depth: 1
 ---
+# The authelia unit: strip, forwardAuth, then the `authelia` chain the routes name. A copy of
+# roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2, which carries the reasoning
+# (why these three headers and never X-Forwarded-For or -Proto). Keep it in lockstep;
+# ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py checks every copy.
 apiVersion: traefik.io/v1alpha1
 kind: Middleware
 metadata:
-  name: authelia
+  name: authelia-strip-forwarded-target
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  headers:
+    customRequestHeaders:
+      X-Forwarded-Host: ""
+      X-Forwarded-Uri: ""
+      X-Forwarded-Method: ""
+---
+# Never reference this directly from a route: only the `authelia` chain below may name it.
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia-forwardauth
   namespace: {{ k8s_observability_namespace }}
 spec:
   forwardAuth:
@@ -54,6 +71,17 @@ spec:
       - Remote-Name
       - Remote-Email
     maxResponseBodySize: 1048576
+---
+apiVersion: traefik.io/v1alpha1
+kind: Middleware
+metadata:
+  name: authelia
+  namespace: {{ k8s_observability_namespace }}
+spec:
+  chain:
+    middlewares:
+      - name: authelia-strip-forwarded-target
+      - name: authelia-forwardauth
 ---
 # A TLSOption is resolved in the ROUTE's namespace, not globally: an IngressRoute here that
 # names `modern` looks up observability-modern@kubernetescrd, and the homelab copy does not

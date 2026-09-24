@@ -10,8 +10,6 @@ ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
 # future Pi-exposed service a "daniel-pi" hostname, use a `pi.`-prefixed subdomain of the
 # working zone (e.g. glances.pi.daniel-hunter.com — real DNS via cloudflare-ddns), not a
 # separate daniel-pi.com zone.
-# LAN-only host: publish web UIs bound to the LAN IP instead of routing through Traefik.
-expose_mode: lan
 # Escalation-prompt budget for a 456 MB Zero 2 W. ansible-core's ssh plugin waits
 # `2 + timeout` seconds for sudo's prompt (plugins/connection/ssh.py, "Timeout (%ds) waiting
 # for privilege escalation prompt"), and `timeout` defaults to 10 — so a sudo that takes
@@ -81,22 +79,22 @@ containers_list:
   # tenant — plus a containerd shim, for load/memory/disk facts node_exporter already
   # exports on the `node-pi` scrape job. Its last reader, monitor-bridge's Pi Pressure
   # check, reads those series now (PR #2038); its Kuma HTTP monitor went with it. Container
-  # and image removed by hand at retire time, like dozzle below. Role in
-  # roles/containers/archive/.
+  # and image removed by hand at retire time, like dozzle below. The role is in git history
+  # only (#2385 deleted the archive).
   # dozzle retired 2026-08-29. It was a live-tail UI for container logs, and promtail has
   # shipped this host's container logs to loki-homelab since the slice-7 work — so Grafana
   # already answers what dozzle answered, with history dozzle never had. What it still cost
   # was ~15 MiB of a 456 MB board (9.3 MiB RSS plus its ~6 MiB containerd-shim), on a host
   # measured at 8% sustained full memory stall, where that shim tax is the only lever left
   # short of removing a container. This contradicts the marker in
-  # roles/containers/archive/portainer-agent/CLAUDE.md ("dozzle stays … dozzle is 6 MB, a
+  # the retired portainer-agent role's CLAUDE.md ("dozzle stays … dozzle is 6 MB, a
   # nicer merged live-tail"): it is 9.3 MiB now, and the log path it was kept ahead of has
   # since been built. Its container and image were removed from the Pi imperatively at
-  # retire time; nothing in Ansible recreates them. Role in roles/containers/archive/.
+  # retire time; nothing in Ansible recreates them. The role is in git history only.
   # portainer-agent retired 2026-08-09 with the server's Portainer (slice-7 Phase B, design
   # decision 4). Its host artifacts — /etc/portainer-agent-firewall.sh, the systemd oneshot,
   # and the DOCKER-USER rules for :9001 — were removed imperatively at retire time; nothing
-  # in Ansible recreates them. Role in roles/containers/archive/.
+  # in Ansible recreates them. The role is in git history only.
   - name: autoheal
     use_authelia: false
     networks:
@@ -105,7 +103,7 @@ containers_list:
   # Host metrics for the central Prometheus are NOT a container here since 2026-09-18:
   # node_exporter runs as a host unit from roles/setup/optimize_pi (section 10), on the same
   # LAN IP and port 9100 the container published, so the cluster's `node-pi` scrape job did
-  # not move (#2005; the role is in roles/containers/archive/node-exporter). The Pi's history
+  # not move (#2005; the container role is in git history only). The Pi's history
   # still holds: until node-exporter landed here the Pi contributed no time series at all —
   # the cluster `node` scrape job uses pod discovery, so it covers the two k3s nodes and
   # structurally cannot reach a host that runs no kubelet.

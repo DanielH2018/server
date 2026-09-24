@@ -13,6 +13,7 @@ from dataclasses import replace
 import pytest
 
 import checks.gitops
+import gates
 
 # The last_run marker is written against this epoch and the check reads the same one, so
 # "fresh" and "stale" are exact distances from the 90m default rather than a race with the
@@ -250,7 +251,9 @@ def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
         manual_plane_tags="common -\nk3s kubeconfig",
     )
     assert not ok
-    assert "clear-manual-plane common && " in msg
+    assert "apply the role by hand, then `" in msg  # `common` has no playbook
+    assert "clear-manual-plane common`" in msg
+    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
     assert msg.endswith("clear-manual-plane k3s --applied kubeconfig`")
     assert "<role>" not in msg
 
@@ -378,3 +381,98 @@ def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
     ok, msg = checks.gitops.check_gitops_status(cfg)
     assert not ok
     assert "service lock all" in msg
+
+
+def test_the_page_names_the_apply_the_clear_belongs_to(cfg):
+    """The clear carries `--applied <the row>`; the apply beside it must name the same tags.
+
+    Without it the page said "apply by hand, then `... --applied kubeconfig`", so an operator
+    who applied an earlier, narrower set and pasted the clear dropped the tags a later range
+    had added (#2371). The whole-role apply carries `maximal_apply_warning`, as every other
+    surface printing that command does.
+    """
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+        manual_plane_tags="k3s -",
+    )
+    assert not ok
+    assert "apply `ansible/k3s-bringup.yml --tags k3s` by hand" in msg
+    assert "rotate-keys" in msg, "the whole-role tag arms the gated tasks"
+
+
+def test_a_narrowed_apply_off_the_gated_tags_carries_no_warning(cfg):
+    """The rejecting half: a warning printed beside every command is one nobody reads."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=1000.0 + 7 * 3600,
+        manual_plane=_K3S_PENDING,
+        manual_plane_tags="k3s kubeconfig",
+    )
+    assert not ok
+    assert "apply `ansible/k3s-bringup.yml --tags kubeconfig` by hand" in msg
+    assert "rotate-keys" not in msg
+
+
+def test_a_role_no_playbook_applies_is_not_told_to_run_none(cfg):
+    """`common`'s playbook field is the literal `none`, which is not a command to print."""
+    ok, msg = checks.gitops.gitops_status(
+        cfg,
+        None,
+        now=25000.0 + 7 * 3600,
+        manual_plane="def456abc7890123 none common 25000.0",
+    )
+    assert not ok
+    assert "apply the role by hand" in msg
+    assert "--tags common" not in msg and "none --tags" not in msg
+
+
+def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
+    """An undecodable `manual_plane_tags` sidecar is not a check error (#2371).
+
+    Raising here turned `gitops_status` into DOWN "check error" every cycle, which masks the
+    hold, diverged, behind and contention arms — the four this monitor exists to raise.
+    """
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "hold_sha", "held123abc456789")
+    (tmp_path / "manual_plane_tags").write_bytes(b"k3s \xff\xfe kubeconfig\n")
+    ok, msg = checks.gitops.check_gitops_status(cfg)
+    assert not ok
+    assert "deploy held at held123a" in msg
+
+
+def test_an_undecodable_sidecar_line_is_skipped_and_the_rest_is_read(tmp_path, cfg):
+    """The sidecar's accepting half: one torn line must not cost the valid line beside it.
+
+    `common kube\\xffconfig` still splits into two fields once decoded with replacement, so
+    the skip is per line, which also keeps a tag that selects nothing out of the page.
+    """
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    _gw(tmp_path, "manual_plane", "abc123def4567890 ansible/k3s-bringup.yml k3s 1.0")
+    (tmp_path / "manual_plane_tags").write_bytes(
+        b"common kube\xffconfig\nk3s kubeconfig\n"
+    )
+    ok, msg = checks.gitops.check_gitops_status(cfg)
+    assert not ok
+    assert "k3s --applied kubeconfig" in msg
+    assert "�" not in msg
+
+
+@pytest.mark.parametrize("marker", ["hold_sha", "manual_plane"])
+def test_an_undecodable_marker_other_than_the_sidecar_is_a_check_error(
+    tmp_path, cfg, marker
+):
+    """The decode tolerance is the sidecar's alone: a torn hold is NOT "no held deploy".
+
+    A `hold_sha` or `manual_plane` the check cannot decode says nothing about whether a
+    deploy is held, so it raises and `_evaluate` reports DOWN "check error" — the rule
+    `deploy_state.py` states for an unreadable state directory.
+    """
+    cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
+    (tmp_path / marker).write_bytes(b"held\xff123abc456789\n")
+    ok, msg = gates._evaluate(cfg, "gitops_status", checks.gitops.check_gitops_status)
+    assert not ok
+    assert "gitops_status check error" in msg

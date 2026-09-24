@@ -187,24 +187,85 @@ def test_k8s_namespace_is_none_when_the_file_is_missing(tmp_path):
     assert service_lines.k8s_namespace(str(tmp_path)) is None
 
 
-# ── the release-staleness cron's last verdict (#1993) ────────────────────────────────────
+# ── the release-staleness cron's last verdict (#1993, #2390) ─────────────────────────────
+#
+# The cron has run `probe.py releases --stale-only --kuma` since b8467ea73, so every verdict
+# reaching the journal is one of `bridge.msgfmt`'s three DOWN shapes. The fixtures below are
+# those three; `test_..._parses_what_msgfmt_actually_renders` holds them against the producer
+# so a shape change goes red here rather than putting every DOWN on the banner as a broken
+# check, which is the #2390 regression the old per-line fixtures could not see.
 
-_DOWN = (
-    "status=down sonarr: changed since applied: ansible/inventory/group_vars/all.yml "
-    "(lan_subnet)\nhomepage: no release record\n"
+_ONE_SERVICE = (
+    "status=down 1 service stale: freshrss — freshrss/defaults/main.yml. "
+    "Details: probe.py releases --stale-only\n"
+)
+
+_ONE_REASON = (
+    "status=down 4 services stale — inventory/group_vars/all.yml (lan_subnet) "
+    "(freshrss, jellyfin, sonarr, tdarr). Details: probe.py releases --stale-only\n"
+)
+
+_MANY_REASONS = (
+    "status=down 4 services stale — 3 reasons. manifests/tasks/apply.yml "
+    "(2: jellyfin, sonarr). freshrss/defaults/main.yml (1: freshrss). "
+    "no release record (1: tdarr). Details: probe.py releases --stale-only\n"
 )
 
 
-def test_stale_release_problems_names_the_services_a_down_verdict_lists():
-    (line,) = service_lines.stale_release_problems(_answers(_result(_DOWN)))
+def _stale_line(journal):
+    (line,) = service_lines.stale_release_problems(_answers(_result(journal)))
+    return line
+
+
+def test_stale_release_problems_reads_the_one_service_shape():
+    line = _stale_line(_ONE_SERVICE)
     assert line.startswith(
-        "  ⚠ release staleness: sonarr, homepage run manifests behind"
+        "  ⚠ release staleness: 1 service runs manifests behind origin/master, "
+        "e.g. freshrss"
     )
     assert "releases --stale-only" in line
 
 
+def test_stale_release_problems_reads_the_single_reason_shape():
+    # The reason carries parentheses of its own — `(lan_subnet)` must not read as a service.
+    line = _stale_line(_ONE_REASON)
+    assert line.startswith(
+        "  ⚠ release staleness: 4 services run manifests behind origin/master, "
+        "e.g. freshrss, jellyfin, sonarr"
+    )
+    assert "lan_subnet" not in line
+
+
+def test_stale_release_problems_reads_the_grouped_reasons_shape():
+    line = _stale_line(_MANY_REASONS)
+    assert line.startswith(
+        "  ⚠ release staleness: 4 services run manifests behind origin/master, "
+        "e.g. jellyfin, sonarr, freshrss"
+    )
+
+
+def test_stale_release_problems_keeps_the_headline_count_over_the_names_it_recovered():
+    # msgfmt cuts a long message from the right, so the names can run out while the count
+    # stays exact. The banner must report the count it was given, not len(names).
+    truncated = (
+        "status=down 57 services stale — 2 reasons. manifests/tasks/apply.yml "
+        "(56: alloy, authelia, +54). freshrss/defaults/main.yml (1 …(+240 chars)\n"
+    )
+    line = _stale_line(truncated)
+    assert "57 services run manifests behind" in line
+    assert "e.g. alloy, authelia" in line
+
+
+def test_stale_release_problems_reports_a_count_with_no_recoverable_names():
+    hard_cut = "status=down 9 services stale — 9 reasons …(+412 chars)\n"
+    line = _stale_line(hard_cut)
+    assert line.startswith(
+        "  ⚠ release staleness: 9 services run manifests behind origin/master — "
+    )
+
+
 def test_stale_release_problems_is_silent_on_an_up_verdict():
-    up = "status=up 0 service(s) stale; every known k8s service has a current record.\n"
+    up = "status=up 0 services stale; every known k8s service has a current record.\n"
     assert service_lines.stale_release_problems(_answers(_result(up))) == []
 
 
@@ -216,15 +277,66 @@ def test_stale_release_problems_is_silent_when_the_cron_never_ran_here():
     )
 
 
-def test_stale_release_problems_counts_the_services_past_the_first_three():
-    six = "status=down " + "\n".join(
-        f"svc{i}: changed since applied: x" for i in range(6)
-    )
-    (line,) = service_lines.stale_release_problems(_answers(_result(six)))
-    assert "svc0, svc1, svc2 (+3 more) run" in line
-
-
-def test_stale_release_problems_shows_a_broken_check_as_broken():
+def test_stale_release_problems_shows_a_failed_probe_as_broken():
     broken = "status=down probe.py releases --stale-only exited 2: no release records\n"
-    (line,) = service_lines.stale_release_problems(_answers(_result(broken)))
+    line = _stale_line(broken)
     assert line.startswith("  ⚠ release staleness check is broken: probe.py releases")
+
+
+def test_stale_release_problems_shows_a_traceback_as_broken_not_as_a_stale_list():
+    # A probe that raises exits 1, which the cron maps to status=down with the output
+    # unmodified — the same status a real stale list arrives under, and with no `exited N:`
+    # prefix. Only the text shape separates them, which is why an unrecognised verdict has
+    # to read as broken rather than falling through to the stale branch.
+    crash = (
+        "status=down Traceback (most recent call last): "
+        'File "scripts/diagnostics/probe.py", line 1, in <module>\n'
+    )
+    line = _stale_line(crash)
+    assert line.startswith(
+        "  ⚠ release staleness check returned an unrecognised verdict"
+    )
+
+
+def test_stale_release_problems_shows_a_failed_git_fetch_as_unrecognised():
+    # The cron pushes this one itself, before probe.py runs at all.
+    fetch = "status=down git fetch origin master failed in /home/ubuntu/server: boom\n"
+    assert _stale_line(fetch).startswith(
+        "  ⚠ release staleness check returned an unrecognised verdict"
+    )
+
+
+def test_stale_release_problems_parses_what_msgfmt_actually_renders():
+    """The producer is the oracle: msgfmt renders, this parser reads, the count agrees.
+
+    Without this the fixtures above are only assertions that the parser matches text
+    written beside it. #2390 is exactly that failure — #2013 changed msgfmt's shape and the
+    hand-written fixtures kept passing while every live DOWN reached the banner as broken.
+    """
+    # `pythonpath` in pyproject.toml already carries the bridge's `files/`.
+    from bridge import msgfmt
+
+    cases = {
+        1: {"freshrss": "freshrss/defaults/main.yml"},
+        4: {
+            "freshrss": "one reason",
+            "jellyfin": "one reason",
+            "sonarr": "one reason",
+            "tdarr": "one reason",
+        },
+        3: {
+            "freshrss": "freshrss/defaults/main.yml",
+            "jellyfin": "manifests/tasks/apply.yml",
+            "tdarr": "no release record",
+        },
+    }
+    for count, items in cases.items():
+        rendered = msgfmt.format_down(
+            "service", "stale", items, details="probe.py releases --stale-only"
+        )
+        line = _stale_line(f"status=down {rendered}\n")
+        assert f"{count} service" in line, rendered
+        assert "check is broken" not in line and "unrecognised" not in line, rendered
+        # Every name is recovered — none of these cases is long enough for msgfmt to drop
+        # one. The banner then names the first `_STALE_NAMED` of them.
+        assert set(service_lines.stale_verdict_names(rendered)) == set(items), rendered

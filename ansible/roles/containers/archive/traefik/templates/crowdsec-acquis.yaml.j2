@@ -1,9 +1,0 @@
----
-# Slimmed at E7 (2026-08-13): the traefik access-log and authelia stanzas retired with the
-# Docker edge, and the appsec listener moved to the cluster engine's own acquis
-# (roles/k8s/crowdsec/templates/config-secret.yaml.j2). This agent now feeds the cluster
-# LAPI from auth.log only.
-filenames:
-  - /var/log/auth.log
-labels:
-  type: syslog

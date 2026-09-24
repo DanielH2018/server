@@ -16,6 +16,13 @@ Authelia guards most public routes as a Traefik forward-auth middleware. See rep
 - **`use_authelia: false` on its own route**, since it is the middleware every other route
   calls.
 - **`authelia-config` is on the daily R2 tier.** Sessions live in redis, not on the claim.
+- **Routes name the `authelia` Middleware, which is a chain, not the forwardAuth.** Its first member,
+  `authelia-strip-forwarded-target`, clears X-Forwarded-Host/-Uri/-Method so forwardAuth
+  rebuilds them from the request; `authelia-forwardauth` follows it. No route names
+  `authelia-forwardauth` directly. The same three-document unit is copied into the
+  longhorn-ui and claude-otel namespaces. `templates/forwardauth-middleware.yaml.j2` has the
+  reasoning (why X-Forwarded-For and -Proto stay untouched), and
+  `ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py` checks every copy.
 
 ## Access control comes from containers_list
 
@@ -211,8 +218,8 @@ If mail is down and you need the break-glass path, the file notifier is one edit
 ### `authelia_session*` is a cookie name, not a secret name
 
 The session secret is **`authelia_secret`**. That one SOPS key fills `session.secret` on both
-portals — the retired Docker one (the `configuration.yml` template under
-`ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
+portals — the retired Docker one (the `configuration.yml` template, deleted in #2385:
+`git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/templates/`) and this one (the `session:` block of
 `ansible/roles/k8s/authelia/templates/config-secret.yaml.j2`). Every `authelia_session*`
 string in the tree is a **cookie** name instead: `authelia_session` on the Docker portal,
 `authelia_session_k8s` here (`ansible/roles/k8s/authelia/defaults/main.yml:authelia_k8s_cookie_name`).

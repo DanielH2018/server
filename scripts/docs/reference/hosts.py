@@ -117,7 +117,6 @@ def build_rows(
                 "role": ROLES.get(name, f"{UNKNOWN} (no description recorded)"),
                 "ip": str(data.get("server_ip", f"{UNKNOWN} (server_ip not declared)")),
                 "connection": entry.get("ansible_connection", "ssh"),
-                "expose_mode": str(data.get("expose_mode", "traefik (default)")),
                 "services": str(len(services)) if isinstance(services, list) else "0",
                 "gitops": _flag(data, "has_gitops", defaults),
                 "docker": _flag(data, "has_docker", defaults),
@@ -148,7 +147,6 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         parts.append("|---|---|")
         parts.append(f"| LAN address | `{row['ip']}` |")
         parts.append(f"| Ansible connection | `{row['connection']}` |")
-        parts.append(f"| Service exposure | {row['expose_mode']} |")
         parts.append(f"| Services declared | {row['services']} |")
         parts.append(f"| Runs the GitOps timer | {row['gitops']} |")
         parts.append(f"| Has Docker | {row['docker']} |")

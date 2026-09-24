@@ -22,14 +22,9 @@ from route_facts import reachability, route_cell
 __all__ = [
     "auth_tier",
     "docker_route",
-    "host_expose_mode",
     "k8s_route",
     "route_for",
 ]
-
-
-def host_expose_mode(host_data: dict[str, Any]) -> str | None:
-    return host_data.get("expose_mode")
 
 
 # Route
@@ -66,27 +61,28 @@ def k8s_route(
     return route_cell(label, reachability(role_dir, all_vars))
 
 
-def docker_route(entry: dict[str, Any], host_data: dict[str, Any]) -> str:
-    if host_expose_mode(host_data) == "lan":
-        return "LAN-direct (no Traefik route)"
-    return UNKNOWN + " (docker route derivation only handles expose_mode: lan)"
+def docker_route(entry: dict[str, Any]) -> str:
+    # daniel-pi is the only Docker host and is LAN-only: a service publishes its UI on the
+    # host's LAN IP (ansible/templates/expose.yml.j2), never behind a Traefik route. The
+    # Docker Traefik-label path and the `expose_mode` switch that chose it were deleted in
+    # #2385, so there is no other shape to derive.
+    return "LAN-direct (no Traefik route)"
 
 
 def route_for(
     entry: dict[str, Any],
     platform: str,
-    host_data: dict[str, Any],
     k8s_roles: Path = K8S_ROLES,
     all_vars: Path = ALL_VARS,
 ) -> str:
     """Derive `entry`'s route cell, dispatching to `k8s_route` or `docker_route` by platform."""
     if platform == "k8s":
         return k8s_route(entry, k8s_roles, all_vars)
-    return docker_route(entry, host_data)
+    return docker_route(entry)
 
 
 # Auth tier — containers_list.use_authelia is read directly by the IngressRoute macro
-# (`container_item.use_authelia`) and by the docker traefik.yml.j2 macro alike, so this
+# (`container_item.use_authelia`), so this
 # is a direct field read, not an inference from the route template. The policy beside it
 # (`auth_tier: one_factor | two_factor`) is what the authelia role renders into its
 # access_control rules, so an SSO entry reports both.

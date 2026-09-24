@@ -1,41 +1,21 @@
-{# Host-aware web-UI exposure. Driven by `expose_mode` (host var; default 'traefik',
-   'lan' on LAN-only hosts like daniel-pi). A per-container `expose_mode` key overrides
-   the host default. Two modes:
+{# LAN-bound web-UI exposure for a Docker service on daniel-pi, the only Docker host.
 
-     traefik — Traefik routes the UI via labels (Authelia-gated when use_authelia);
-               no host port is published. (main server)
-     lan     — no Traefik labels; the UI port is published bound to the host's LAN IP
-               ({{ server_ip }}), reachable only on the local network. (the Pi)
+   The Pi is LAN-only: a service's UI port is published bound to the host's LAN IP
+   ({{ server_ip }}), so it is reachable on the local network and not on the WireGuard tunnel
+   or any other interface. There is no Traefik in front of it. Neither cluster node runs
+   Docker, so the Docker Traefik-label path (`traefik.yml.j2`, and the `expose_mode` switch
+   that chose between it and this one) was deleted in #2385.
 
-   Invoke BOTH macros at COLUMN 0 on their own line (NOT indented — each bakes in the
-   service-block indentation itself, and renders empty, one harmless blank line, in the
-   other mode). The surrounding template lines keep their normal indent, e.g.:
-
-       labels:
-{{ web_ui_labels('8096') }}
-         {{ kuma(container_item.name) }}
+   `web_ui_ports_block` emits a complete `ports:` block, so it is for services whose only
+   published port is the UI. Invoke it at COLUMN 0 on its own line: it bakes in the
+   service-block indentation itself, e.g.
 
 {{ web_ui_ports_block('8096') }}
 
-   `web_ui_ports_block` emits a complete `ports:` block, so it is for services whose only
-   published port is the UI (glances was the consumer until it retired 2026-09-18; none
-   remains). wg-easy, which always publishes its
-   WireGuard UDP port, appends its LAN UI port with an inline conditional instead.
+   No live template calls it (glances was the last, retired 2026-09-18). wg-easy, which also
+   publishes its WireGuard UDP port, writes its LAN UI port into its own `ports:` list instead.
 #}
-{% from 'traefik.yml.j2' import labels with context %}
-{% macro web_ui_labels(internal_port=none) -%}
-{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) != 'lan' %}
-      {{ labels(
-          container_item.hostname | default(container_item.name),
-          (internal_port if internal_port is not none else container_item.port) | string,
-          (container_item.networks | default([docker_network]))[0],
-          container_item.use_authelia
-        ) }}
-{%- endif %}
-{%- endmacro %}
 {% macro web_ui_ports_block(internal_port) -%}
-{% if (container_item.expose_mode | default(expose_mode | default('traefik'))) == 'lan' %}
     ports:
       - "{{ server_ip }}:{{ container_item.port }}:{{ internal_port }}/tcp"
-{%- endif %}
 {%- endmacro %}
