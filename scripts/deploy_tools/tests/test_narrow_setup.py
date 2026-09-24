@@ -15,6 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py
 
 import pytest
 
+import deploy_narrow
 import narrow_setup
 from lib.repo_paths import REPO
 
@@ -74,9 +75,22 @@ demo_release_groups:
 """
 
 
+# The playbook the remediation prints for `demo`. The derivation refuses a role no play in it
+# lists, since none of the role's own tags reach a host through it.
+PLAYBOOK = "ansible/demo.yml"
+PLAYBOOK_TEXT = """\
+---
+- name: Apply the demo role
+  hosts: localhost
+  roles:
+    - { role: demo, tags: ["demo"] }
+"""
+
+
 def build(tmp_path) -> Tree:
     """A checkout holding one setup role with two tagged task files and one untagged one."""
     tree = Tree(tmp_path / "repo")
+    tree.write(PLAYBOOK, PLAYBOOK_TEXT)
     tree.write(f"{ROLE}/tasks/main.yml", MAIN)
     tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA)
     tree.write(f"{ROLE}/tasks/beta.yml", BETA)
@@ -97,7 +111,7 @@ def tree(tmp_path) -> Tree:
 
 
 def narrow(tree: Tree, old: str, new: str) -> frozenset[str]:
-    return narrow_setup.role_tags("demo", "demo", old, new, str(tree.root))
+    return narrow_setup.role_tags("demo", "demo", old, new, str(tree.root), PLAYBOOK)
 
 
 # ── a template maps to the tags of the task file that renders it ────────────────────────
@@ -229,3 +243,148 @@ def test_a_range_of_nothing_but_prose_is_flagged(tree):
     tree.write(f"{ROLE}/CLAUDE.md", "# Demo\n")
     with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
         narrow(tree, *_refs(tree))
+
+
+# ── a derived tag must be reachable in the playbook the remediation prints ─────────────
+
+GAMMA = """\
+---
+- name: A topic another playbook imports on its own
+  ansible.builtin.debug:
+    msg: gamma
+  tags: [gamma]
+"""
+
+
+def test_a_task_file_main_yml_imports_inside_a_block_is_clean(tree):
+    """A static import nested in a block still runs under the role's entry."""
+    tree.write(
+        f"{ROLE}/tasks/main.yml",
+        MAIN
+        + "- name: A grouped topic\n  block:\n"
+        + "    - name: The third topic\n      ansible.builtin.import_tasks: gamma.yml\n",
+    )
+    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
+    old = tree.commit("import gamma")
+    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA + "# touched\n")
+    assert narrow(tree, old, tree.commit("touch gamma")) == frozenset({"gamma"})
+
+
+def test_a_task_file_main_yml_never_imports_is_flagged(tree):
+    """`tasks/storage_smoke.yml` is imported by `k3s-storage-smoke.yml`, not by `main.yml`.
+
+    `k3s-bringup.yml --tags storage_smoke` therefore selects only `always` tasks and exits 0.
+    """
+    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
+    with pytest.raises(narrow_setup.CannotNarrow, match="not statically imported"):
+        narrow(tree, *_refs(tree))
+
+
+def test_a_task_file_reached_only_by_include_tasks_is_flagged(tree):
+    """A dynamic include runs only when the include task itself is selected."""
+    tree.write(
+        f"{ROLE}/tasks/main.yml",
+        MAIN + "- name: Dynamic\n  ansible.builtin.include_tasks: gamma.yml\n",
+    )
+    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA)
+    old = tree.commit("include gamma")
+    tree.write(f"{ROLE}/tasks/gamma.yml", GAMMA + "# touched\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="not statically imported"):
+        narrow(tree, old, tree.commit("touch gamma"))
+
+
+def test_a_role_the_printed_playbook_does_not_list_is_flagged(tree):
+    tree.write(PLAYBOOK, PLAYBOOK_TEXT.replace("role: demo", "role: other"))
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="lists demo under roles"):
+        narrow(tree, *_refs(tree))
+
+
+def test_the_real_k3s_roles_reachable_task_files_are_named_as_such():
+    """Named members both ways, so a walk that went empty or all-inclusive fails by name.
+
+    `storage_smoke.yml` belongs to `k3s-storage-smoke.yml`, and `agent.yml`/`agent_verify.yml`
+    to the `k3s_agent` plays whose hosts are empty without `-e join_agent=...`.
+    """
+    reachable = narrow_setup.RoleIndex("k3s", "HEAD", str(REPO)).reachable
+    assert {
+        "tasks/server.yml",
+        "tasks/kubeconfig.yml",
+        "tasks/coredns.yml",
+    } <= reachable
+    assert not reachable & {
+        "tasks/storage_smoke.yml",
+        "tasks/agent.yml",
+        "tasks/agent_verify.yml",
+    }
+
+
+# ── the cheap refusals: a template cycle, a rendered `.md`, a binary file ──────────────
+
+
+def test_a_template_cycle_reaching_no_task_file_is_flagged(tree):
+    """Two templates naming only each other answer an empty set, which is not "nothing"."""
+    tree.write(f"{ROLE}/templates/a.j2", "{% include 'b.j2' %}\n")
+    tree.write(f"{ROLE}/templates/b.j2", "{% include 'a.j2' %}\n")
+    old = tree.commit("cycle")
+    tree.write(f"{ROLE}/templates/a.j2", "{% include 'b.j2' %} x\n")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    with pytest.raises(
+        narrow_setup.CannotNarrow, match="only templates naming each other"
+    ):
+        narrow(tree, old, tree.commit("touch a"))
+
+
+def test_a_markdown_file_a_task_renders_narrows_like_any_template(tree):
+    """A `.md` under `templates/` reaches a host; skipping it as prose dropped it."""
+    tree.write(
+        f"{ROLE}/tasks/alpha.yml",
+        ALPHA
+        + "- name: Render the alpha notes\n  ansible.builtin.template:\n"
+        + "    src: alpha-notes.md\n    dest: /etc/alpha.md\n  tags: [alpha]\n",
+    )
+    tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes\n")
+    old = tree.commit("notes")
+    tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes, edited\n")
+    assert narrow(tree, old, tree.commit("edit notes")) == frozenset({"alpha"})
+
+
+def test_a_binary_file_under_files_does_not_block_the_narrowing(tree):
+    """`files/` is matched by name only, so its bytes are never decoded."""
+    (tree.root / ROLE / "files").mkdir(parents=True)
+    (tree.root / ROLE / "files" / "blob.bin").write_bytes(b"\xff\xfe\x00")
+    old = tree.commit("blob")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    assert narrow(tree, old, tree.commit("touch alpha")) == frozenset({"alpha"})
+
+
+def test_a_binary_template_is_flagged_rather_than_raised(tree):
+    (tree.root / ROLE / "templates" / "blob.j2").write_bytes(b"\xff\xfe\x00")
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    with pytest.raises(narrow_setup.CannotNarrow, match="is not text"):
+        narrow(tree, *_refs(tree))
+
+
+# ── the deployer's real argv reaches this module's real CLI ────────────────────────────
+
+
+def test_the_deployers_argv_is_one_narrow_setup_main_accepts(tree, capsys):
+    """The tick fakes replace the subprocess, so only this sees a flag the CLI does not take."""
+
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    old, new = _refs(tree)
+    argv = deploy_narrow.narrow_setup_argv("demo", "demo", PLAYBOOK, old, new)
+    assert argv[4] == deploy_narrow.NARROW_SETUP_SCRIPT
+    assert narrow_setup.main([*argv[5:], "--repo", str(tree.root)]) == 0
+    assert capsys.readouterr().out.strip() == "alpha"
+
+
+def test_the_deployers_argv_for_an_unlisted_role_is_refused(tree, capsys):
+
+    tree.write(f"{ROLE}/templates/alpha.conf.j2", "a\n")
+    old, new = _refs(tree)
+    argv = deploy_narrow.narrow_setup_argv(
+        "demo", "demo", "ansible/absent.yml", old, new
+    )
+    assert narrow_setup.main([*argv[5:], "--repo", str(tree.root)]) == 1
+    assert capsys.readouterr().out == ""

@@ -112,6 +112,8 @@ class ScriptedTick:
         # from this map refuses, which is production's own fallback and the behaviour every
         # test written before the narrowing expects.
         self.narrow_setup: dict[str, tuple[int, str]] = {}
+        # Raised instead of answering, for `narrow_tags_for`'s `except Exception` arm.
+        self.narrow_setup_error: Exception | None = None
         self.discord_ok = True
         self.log: list[tuple] = []
         self.repo = repo
@@ -302,7 +304,14 @@ class ScriptedTick:
         return self.narrow
 
     def narrow_setup_role(
-        self, _repo: str, role: str, _role_tag: str, old: str, new: str, _timeout: float
+        self,
+        _repo: str,
+        role: str,
+        _role_tag: str,
+        playbook: str,
+        old: str,
+        new: str,
+        _timeout: float,
     ) -> tuple[int, str]:
         """The scripted setup-role narrowing, asserted against THIS tick's own range.
 
@@ -314,7 +323,9 @@ class ScriptedTick:
             f"the setup narrowing asked about {old[:8]}..{new[:8]}, not this tick's "
             f"{self.local[:8]}..{self.origin[:8]}"
         )
-        self.log.append(("narrow_setup", [role, old, new]))
+        self.log.append(("narrow_setup", [role, playbook, old, new]))
+        if self.narrow_setup_error is not None:
+            raise self.narrow_setup_error
         return self.narrow_setup.get(role, (1, ""))
 
     def run_staging_scripts(

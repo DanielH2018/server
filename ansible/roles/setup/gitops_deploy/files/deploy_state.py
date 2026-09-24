@@ -198,23 +198,33 @@ class DeployerState:
         """The narrowest tags each pending role needs, by role; empty means "use the role tag"."""
         return parse_manual_plane_tags(self.read("manual_plane_tags"))
 
-    def record_manual_plane_tags(self, role: str, tags: frozenset[str] | None) -> None:
+    def record_manual_plane_tags(
+        self, role: str, tags: frozenset[str] | None, line_predates: bool
+    ) -> None:
         """Record the narrowest tags `role`'s pending change needs, widening on doubt.
 
         Args:
             role: the role, under the `--tags` value that selects it — the same key
                 `record_manual_plane` writes, so a reader joins the two by one name.
             tags: what the derivation returned, or None when it refused.
+            line_predates: the role's `manual_plane` line was already there before this
+                range recorded it, so an earlier range made it pending.
 
         Two ranges can make one role pending, because `record_manual_plane` keeps the first
         line and its first-seen stamp. The tags then UNION: both changes are merged and
         unapplied, so both tags have to run. A refusal on either side absorbs the pair — a
         range nothing could narrow needs the whole role, and a narrow tag beside it would
         under-describe the work while reading like the complete answer.
+
+        A line that predates this range with NO row is the same refusal. Its earlier range's
+        needs are unknown: the line was written by a deployer from before this sidecar, or
+        its row was too garbled for `parse_manual_plane_tags`. Unknown joined with anything
+        is the whole role.
         """
         pending = self.manual_plane_tags_pending()
         known = role in pending
-        if tags is None or (known and not pending[role]):
+        unknown_earlier = line_predates and not known
+        if tags is None or unknown_earlier or (known and not pending[role]):
             pending[role] = frozenset()
         else:
             pending[role] = pending.get(role, frozenset()) | tags

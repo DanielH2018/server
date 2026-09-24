@@ -94,8 +94,38 @@ def narrow_deploy_plane(
     return r.returncode, r.stdout.strip()
 
 
+def narrow_setup_argv(
+    role: str, role_tag: str, playbook: str, old: str, new: str
+) -> list[str]:
+    """The command `narrow_setup_role` runs.
+
+    Split out so a test can hand its arguments to `narrow_setup.main` itself. The fakes
+    replace the subprocess, and with it the only place a mismatched flag would otherwise show.
+    """
+    return [
+        "uv",
+        "run",
+        "--frozen",
+        "python",
+        NARROW_SETUP_SCRIPT,
+        role,
+        old,
+        new,
+        "--role-tag",
+        role_tag,
+        "--playbook",
+        playbook,
+    ]
+
+
 def narrow_setup_role(
-    repo: str, role: str, role_tag: str, old: str, new: str, timeout: float
+    repo: str,
+    role: str,
+    role_tag: str,
+    playbook: str,
+    old: str,
+    new: str,
+    timeout: float,
 ) -> tuple[int, str]:
     """Ask `narrow_setup.py` which of `role`'s own tags the range `old..new` actually needs.
 
@@ -103,6 +133,8 @@ def narrow_setup_role(
         repo: the checkout to run in, which is also the tree the derivation reads.
         role: the role directory under `ansible/roles/setup/`.
         role_tag: the `--tags` value selecting the whole role, which the answer must not be.
+        playbook: the playbook the remediation prints for `role`. The derivation refuses a
+            tag that playbook's entry for the role cannot reach.
         old: the commit the checkout was on.
         new: the commit carrying the change.
         timeout: seconds before the child is killed.
@@ -116,18 +148,7 @@ def narrow_setup_role(
     carries the per-path derivation the marker was written from.
     """
     r = subprocess.run(
-        [
-            "uv",
-            "run",
-            "--frozen",
-            "python",
-            NARROW_SETUP_SCRIPT,
-            role,
-            old,
-            new,
-            "--role-tag",
-            role_tag,
-        ],
+        narrow_setup_argv(role, role_tag, playbook, old, new),
         cwd=repo,
         capture_output=True,
         text=True,

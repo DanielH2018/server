@@ -22,7 +22,11 @@ makes Ansible exit 0 having applied nothing — the silent-success failure
 `deploy_changes.setup_tags_for` and `deploy_remediation.k8s_remediation` both already guard
 against — so a derivation that is not certain must widen rather than narrow. A task file with
 no `tags:` of its own is the sharpest case: its tasks inherit from wherever it is imported,
-so a hit there says nothing about which tag selects it.
+so a hit there says nothing about which tag selects it. A tag must also be REACHABLE in the
+playbook the remediation prints: the role has to sit in that playbook's `roles:`, and the task
+file has to be statically imported from `tasks/main.yml`. `tasks/storage_smoke.yml` belongs to
+`k3s-storage-smoke.yml`, and `k3s-bringup.yml --tags storage_smoke` selects only `always`
+tasks.
 
 WHO CALLS IT. `deploy_defer.record` runs it as a SUBPROCESS through
 `deploy_narrow.narrow_setup_role`, because this module parses YAML and the deployer's unit
@@ -40,6 +44,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import argparse
+import posixpath
 import re
 import sys
 
@@ -62,7 +67,12 @@ NARROWABLE = ("tasks/", "templates/", "files/", "defaults/", "vars/")
 # refused, because a role `CLAUDE.md` rides along in most real ranges and refusing on one
 # would leave the narrowing almost never firing — measured against the k3s role's history,
 # where 4 of the 5 most recent ranges carry the role's own CLAUDE.md.
+#
+# A `.md` under `files/` or `templates/` is NOT prose: a task can copy or render it onto a
+# host, so it narrows like any other file there.
 def _reaches_no_host(rel: str) -> bool:
+    if rel.startswith(("files/", "templates/")):
+        return False
     return rel.endswith(".md") or rel.startswith("tests/")
 
 
@@ -77,9 +87,68 @@ class CannotNarrow(Exception):
 
 
 def _show(ref: str, path: str, repo: str) -> str | None:
-    """The file's text at `ref`, or None when the ref does not carry it."""
-    r = git("show", f"{ref}:{path}", cwd=repo, check=False)
+    """The file's text at `ref`, or None when the ref does not carry it.
+
+    A file that is not UTF-8 text refuses rather than raising: the scans below read text, and
+    a traceback in the deployer's journal is a worse way to say "cannot narrow" than this.
+    """
+    try:
+        r = git("show", f"{ref}:{path}", cwd=repo, check=False)
+    except UnicodeDecodeError as exc:
+        raise CannotNarrow(f"{path} is not text at {ref}") from exc
     return r.stdout if r.returncode == 0 else None
+
+
+# The spellings of a STATIC task import. `include_tasks` is deliberately absent: a dynamic
+# include's tasks run only when the include task itself is selected, and the tags on the
+# included file's own tasks do not select the include — so a hit in such a file names a tag
+# that may run nothing.
+_STATIC_IMPORTS = (
+    "import_tasks",
+    "ansible.builtin.import_tasks",
+    "ansible.legacy.import_tasks",
+)
+
+
+def _static_imports(tasks) -> list[str]:
+    """The literal file names a task list imports statically, blocks walked through.
+
+    A templated name (`{{ role_path }}/...`) is left out: which file it names is only known at
+    run time, so a file reached only that way is not provably reachable.
+    """
+    out: list[str] = []
+    for task in tasks or []:
+        if not isinstance(task, dict):
+            continue
+        for key in ("block", "rescue", "always"):
+            if isinstance(task.get(key), list):
+                out += _static_imports(task[key])
+        for key in _STATIC_IMPORTS:
+            value = task.get(key)
+            if isinstance(value, dict):
+                value = value.get("file")
+            if isinstance(value, str) and "{{" not in value:
+                out.append(value)
+    return out
+
+
+def _playbook_applies_role(text: str | None, role: str) -> bool:
+    """Whether a playbook lists `role` in some play's `roles:`, the path its role tag takes."""
+    if text is None:
+        return False
+    try:
+        plays = yaml_fast.safe_load(text)
+    except yaml.YAMLError:
+        return False
+    for play in plays if isinstance(plays, list) else []:
+        if not isinstance(play, dict):
+            continue
+        for entry in play.get("roles") or []:
+            if isinstance(entry, dict):
+                entry = entry.get("role") or entry.get("name")
+            if entry == role:
+                return True
+    return False
 
 
 def _task_tags(tasks, inherited: frozenset[str]) -> list[frozenset[str]]:
@@ -163,6 +232,10 @@ class RoleIndex:
         tags: task-file basename -> the tags selecting it, or None when it is untagged.
         task_text: task-file basename -> its text, for the name scans.
         template_text: template path below the role -> its text, for the include edges.
+        reachable: the task files `tasks/main.yml` reaches through static imports — the only
+            ones the role's entry in its playbook runs. A tag read off any other file (one a
+            separate playbook imports, one only a play-level `include_role` with
+            `tasks_from:` reaches) can select nothing under the printed command.
     """
 
     def __init__(self, role: str, ref: str, repo: str) -> None:
@@ -173,6 +246,10 @@ class RoleIndex:
         self.vars_text: dict[str, str] = {}
         for path in _tracked(ref, self.prefix, repo):
             rel = path[len(self.prefix) :]
+            if not rel.startswith(("tasks/", "templates/", "defaults/", "vars/")):
+                # `files/` and the rest are matched by NAME only and never read, so a binary
+                # file there cannot stop the scans that do read text.
+                continue
             text = _show(ref, path, repo)
             if text is None:
                 raise CannotNarrow(f"{path} is listed at {ref} but does not read back")
@@ -185,11 +262,34 @@ class RoleIndex:
                 self.vars_text[rel] = text
         if not self.tags:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
+        self.reachable = self._reachable_from("tasks/main.yml")
+
+    def _reachable_from(self, start: str) -> frozenset[str]:
+        """Every task file `start` imports statically, itself included, transitively."""
+        seen: set[str] = set()
+        todo = [start]
+        while todo:
+            rel = todo.pop()
+            if rel in seen or rel not in self.task_text:
+                continue
+            seen.add(rel)
+            try:
+                doc = yaml_fast.safe_load(self.task_text[rel])
+            except yaml.YAMLError as exc:
+                raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
+            for name in _static_imports(doc if isinstance(doc, list) else []):
+                todo.append(posixpath.normpath(f"tasks/{name}"))
+        return frozenset(seen)
 
     def tags_of(self, rel: str) -> frozenset[str]:
-        """The tags selecting one task file, refusing when it is untagged or unknown."""
+        """The tags selecting one task file; refuses one untagged, unknown or unreached."""
         if rel not in self.tags:
             raise CannotNarrow(f"{rel} is not a task file of this role")
+        if rel not in self.reachable:
+            raise CannotNarrow(
+                f"{rel} is not statically imported from tasks/main.yml, so the role's entry "
+                "in its playbook never runs it under its own tags"
+            )
         tags = self.tags[rel]
         if tags is None:
             raise CannotNarrow(
@@ -299,7 +399,15 @@ def path_tags(
     if rel.startswith("tasks/"):
         return index.tags_of(rel)
     if rel.startswith(("templates/", "files/")):
-        return index.readers_of(rel.rsplit("/", 1)[-1])
+        tags = index.readers_of(rel.rsplit("/", 1)[-1])
+        if not tags:
+            # Only a template cycle ends here: every reader found was a template already
+            # visited. An empty answer is not "needs nothing" — it would drop this path from
+            # the range's union without a word.
+            raise CannotNarrow(
+                f"{rel} reaches no task file, only templates naming each other"
+            )
+        return tags
     if rel.startswith(("defaults/", "vars/")):
         tags: set[str] = set()
         for key in sorted(changed_keys(f"{index.prefix}{rel}", old, new, repo)):
@@ -313,7 +421,7 @@ def path_tags(
 
 
 def role_tags(
-    role: str, role_tag: str, old: str, new: str, repo: str
+    role: str, role_tag: str, old: str, new: str, repo: str, playbook: str
 ) -> frozenset[str]:
     """The narrow tags the range `old..new` needs for one setup role, or a refusal.
 
@@ -325,6 +433,9 @@ def role_tags(
         new: the commit carrying the change.
         repo: the checkout to read, which is only ever read through `git show`/`ls-tree`, so
             a dirty or already-fast-forwarded working tree does not change the answer.
+        playbook: the repo-relative playbook the remediation prints. A role no play in it
+            lists under `roles:` refuses: none of the role's own tags reach a host through
+            it, and `RoleIndex.reachable` assumes that entry is the path the tags take.
 
     Raises:
         CannotNarrow: any doubt at all. The caller prints the role tag instead.
@@ -338,6 +449,8 @@ def role_tags(
     changed = [line for line in r.stdout.splitlines() if line]
     if not changed:
         raise CannotNarrow(f"{old}..{new} changes nothing under {prefix}")
+    if not _playbook_applies_role(_show(new, playbook, repo), role):
+        raise CannotNarrow(f"no play in {playbook} lists {role} under roles:")
     index = RoleIndex(role, new, repo)
     tags: set[str] = set()
     for path in changed:
@@ -368,12 +481,22 @@ def main(argv: list[str] | None = None) -> int:
         help="the --tags value selecting the whole role (default: the role name)",
     )
     parser.add_argument(
+        "--playbook",
+        required=True,
+        help="the playbook the remediation prints, e.g. ansible/k3s-bringup.yml",
+    )
+    parser.add_argument(
         "--repo", default=".", help="the checkout to read (default: the cwd)"
     )
     args = parser.parse_args(argv)
     try:
         tags = role_tags(
-            args.role, args.role_tag or args.role, args.old, args.new, args.repo
+            args.role,
+            args.role_tag or args.role,
+            args.old,
+            args.new,
+            args.repo,
+            args.playbook,
         )
     except CannotNarrow as exc:
         print(f"narrow-setup: cannot narrow {args.role} ({exc})", file=sys.stderr)

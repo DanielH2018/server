@@ -166,12 +166,19 @@ def narrow_tags_for(
     width for the same reason `deploy_narrow._deploy_plane` uses it — the call decodes a
     subprocess's output, so it raises more than `SubprocessError`, and an escape here would
     park a tick that has already fast-forwarded.
+
+    A role no playbook applies is None without asking: its remediation names no `--tags`
+    at all, so there is nothing a narrowing could replace.
     """
+    playbook = setup_role_playbook(role)
+    if playbook is None:
+        return None
     try:
         rc, out = tools.narrow_setup_role(
             config.repo,
             role,
             setup_role_tag(role),
+            playbook,
             target.local,
             target.origin,
             deploy_narrow.NARROW_SETUP_TIMEOUT_S,
@@ -220,7 +227,9 @@ def record(
     ]
     for role in roles:
         state.record_manual_plane_tags(
-            setup_role_tag(role), narrow_tags_for(tools, config, target, role)
+            setup_role_tag(role),
+            narrow_tags_for(tools, config, target, role),
+            line_predates=role not in recorded,
         )
     narrow = state.manual_plane_tags_pending()
     if recorded:

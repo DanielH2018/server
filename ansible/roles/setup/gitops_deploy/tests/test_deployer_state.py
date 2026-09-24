@@ -205,14 +205,18 @@ def test_clearing_the_last_role_removes_the_marker_entirely(state):
 
 
 def test_the_narrow_tags_of_a_pending_role_round_trip(state):
-    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    state.record_manual_plane_tags(
+        "k3s", frozenset({"kubeconfig"}), line_predates=False
+    )
     assert state.manual_plane_tags_pending() == {"k3s": frozenset({"kubeconfig"})}
 
 
 def test_a_second_range_on_the_same_role_unions_its_tags(state):
     """Both changes are merged and unapplied, so both tags have to run."""
-    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
-    state.record_manual_plane_tags("k3s", frozenset({"coredns"}))
+    state.record_manual_plane_tags(
+        "k3s", frozenset({"kubeconfig"}), line_predates=False
+    )
+    state.record_manual_plane_tags("k3s", frozenset({"coredns"}), line_predates=True)
     assert state.manual_plane_tags_pending() == {
         "k3s": frozenset({"coredns", "kubeconfig"})
     }
@@ -225,13 +229,27 @@ def test_a_refusal_widens_a_role_that_was_already_narrowed(state):
     like the complete answer while describing half the work, so the refusal absorbs the pair —
     in both arrival orders, since the tick order is not ours to choose.
     """
-    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
-    state.record_manual_plane_tags("k3s", None)
+    state.record_manual_plane_tags(
+        "k3s", frozenset({"kubeconfig"}), line_predates=False
+    )
+    state.record_manual_plane_tags("k3s", None, line_predates=True)
     assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
-    state.record_manual_plane_tags("k3s", frozenset({"coredns"}))
+    state.record_manual_plane_tags("k3s", frozenset({"coredns"}), line_predates=True)
     assert state.manual_plane_tags_pending() == {"k3s": frozenset()}, (
         "a refusal already recorded is not narrowed away by a later range"
     )
+
+
+def test_a_line_that_predates_the_range_with_no_row_is_flagged_as_the_whole_role(state):
+    """Unknown joined with anything is the whole role (#2307 review, finding 2).
+
+    A line written by the deployer from before the sidecar has no row, so what its range
+    needed is unknown. Narrowing it to the NEXT range's answer would leave the first change
+    unapplied behind a clear command.
+    """
+    state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
+    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}), line_predates=True)
+    assert state.manual_plane_tags_pending() == {"k3s": frozenset()}
 
 
 def test_clearing_a_role_takes_its_narrow_tags_with_it(state):
@@ -242,9 +260,11 @@ def test_clearing_a_role_takes_its_narrow_tags_with_it(state):
     range never touched.
     """
     state.record_manual_plane(SHA, *K3S_LINE, 1000.0)
-    state.record_manual_plane_tags("k3s", frozenset({"kubeconfig"}))
+    state.record_manual_plane_tags(
+        "k3s", frozenset({"kubeconfig"}), line_predates=False
+    )
     state.record_manual_plane(SHA, *COMMON_LINE, 2000.0)
-    state.record_manual_plane_tags("common", frozenset({"resolv"}))
+    state.record_manual_plane_tags("common", frozenset({"resolv"}), line_predates=False)
     assert state.clear_manual_plane("k3s") is True
     assert state.manual_plane_tags_pending() == {"common": frozenset({"resolv"})}
     state.clear_manual_plane("common")

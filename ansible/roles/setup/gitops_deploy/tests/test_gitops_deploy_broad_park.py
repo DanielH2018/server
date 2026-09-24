@@ -16,6 +16,8 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_br
 
 # ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 
+import pytest
+
 import deploy_defer
 from deploy_tick_types import TickTarget
 
@@ -159,6 +161,68 @@ def test_a_refused_narrowing_records_nothing_and_keeps_the_role_tag(
     assert "WARNING" in out, (
         "and the warning about what that tag does comes back with it"
     )
+
+
+def test_a_second_narrowable_range_on_a_role_with_a_row_unions_the_tags(
+    gitops_deploy, tick, capsys
+):
+    """The accepting half of the upgrade case: a row the deployer wrote is extended, not reset.
+
+    A line recorded WITH a row tells the second range what the first one needed, so the union
+    of the two is the complete answer and stays narrow.
+    """
+    config = gitops_deploy.tick_config()
+    tick.narrow_setup["k3s"] = (0, "coredns")
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, TARGET, ["k3s"])
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    deploy_defer.record(tick.tools, gitops_deploy.STATE, config, TARGET, ["k3s"])
+    assert gitops_deploy.STATE.manual_plane_tags_pending() == {
+        "k3s": frozenset({"coredns", "kubeconfig"})
+    }
+
+
+@pytest.mark.parametrize(
+    "sidecar",
+    [None, "k3s"],
+    ids=["line-written-before-the-sidecar-existed", "row-too-garbled-to-parse"],
+)
+def test_a_role_pending_with_no_row_stays_at_the_role_tag(
+    gitops_deploy, tick, capsys, sidecar
+):
+    """A pending line nobody narrowed must not be narrowed by the NEXT range's answer.
+
+    The pre-upgrade deployer writes `manual_plane` with no sidecar row — and so does the tick
+    that merges #2307 itself. Whatever made that line pending is unknown here, so a second
+    range answering `kubeconfig` would print `--tags kubeconfig` and leave the first range's
+    change unapplied behind a clear command. Unknown absorbs anything: the role tag.
+    """
+    gitops_deploy.STATE.record_manual_plane(
+        LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0
+    )
+    if sidecar is not None:
+        gitops_deploy.STATE.write("manual_plane_tags", sidecar)
+    tick.paths = [RBAC]
+    tick.narrow_setup["k3s"] = (0, "kubeconfig")
+    assert gitops_deploy.main(tick.tools) == 0
+    out = capsys.readouterr().out
+    assert gitops_deploy.STATE.manual_plane_tags_pending() == {"k3s": frozenset()}
+    assert "ansible/k3s-bringup.yml --tags k3s" in out
+    assert "--tags kubeconfig" not in out
+
+
+def test_a_narrowing_that_raises_keeps_the_role_tag(gitops_deploy, tick, capsys):
+    """`narrow_tags_for`'s `except Exception` arm: a crash is a refusal, never an escape.
+
+    The call decodes a subprocess's output, so it can raise a `UnicodeDecodeError` that is no
+    `SubprocessError`. An escape here would fail a tick that has already fast-forwarded.
+    """
+    tick.paths = [RBAC]
+    tick.narrow_setup_error = UnicodeDecodeError("utf-8", b"\xff", 0, 1, "bad byte")
+    assert gitops_deploy.main(tick.tools) == 0
+    out = capsys.readouterr().out
+    assert "narrow-setup: k3s not narrowed (UnicodeDecodeError" in out
+    assert gitops_deploy.STATE.manual_plane_tags_pending() == {"k3s": frozenset()}
+    assert "ansible/k3s-bringup.yml --tags k3s" in out
 
 
 def test_a_role_already_recorded_is_not_announced_again(gitops_deploy, tick, capsys):
