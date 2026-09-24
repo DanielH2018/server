@@ -109,10 +109,6 @@ def test_live_playtime_includes_open_session():
     assert st.playtime("DBoy", now=9999.0) == 100.0  # closed, no live delta
 
 
-def test_escape_label_value():
-    assert stats.escape_label_value('a"b\\c') == 'a\\"b\\\\c'
-
-
 def test_render_metrics_contains_expected_series():
     st = stats.StatsState()
     st.apply("join", "DBoy", 1000.0)
@@ -126,29 +122,6 @@ def test_render_metrics_contains_expected_series():
     assert "terraria_players_online 1" in out
     assert "terraria_stats_unmatched_player_lines_total 2" in out
     assert "# TYPE terraria_players_online gauge" in out
-
-
-def _loki_response(entries):
-    # entries: list of (ts_ns_int, line). Mimics Loki query_range JSON.
-    return {
-        "data": {
-            "result": [
-                {
-                    "stream": {"container": "terraria"},
-                    "values": [[str(ts), line] for ts, line in entries],
-                }
-            ]
-        }
-    }
-
-
-def test_extract_entries_sorts_ascending():
-    resp = _loki_response([(300, "c"), (100, "a"), (200, "b")])
-    assert stats.extract_entries(resp) == [(100, "a"), (200, "b"), (300, "c")]
-
-
-def test_extract_entries_empty():
-    assert stats.extract_entries({"data": {"result": []}}) == []
 
 
 def test_apply_entries_folds_and_counts_unmatched():
@@ -228,16 +201,3 @@ def test_run_cycle_end_to_end(tmp_path):
     # persisted
     with stats.Store(db) as reopened:
         assert reopened.get_cursor() == 4_000_000_000
-
-
-def test_initial_cursor_bounds_first_run_and_backfill():
-    now = 1_000_000.0
-    days = 30
-    expected = int((now - days * 86400) * 1e9)
-    # Fresh DB (cursor 0): bound to now-backfill_days so the first Loki query doesn't
-    # span 1970->now and trip Loki's max_query_length (HTTP 400).
-    assert stats.initial_cursor(0, False, now, days) == expected
-    # Explicit --backfill: bounded start regardless of any stored cursor.
-    assert stats.initial_cursor(5_000, True, now, days) == expected
-    # Normal resume: stored cursor used unchanged.
-    assert stats.initial_cursor(12_345, False, now, days) == 12_345

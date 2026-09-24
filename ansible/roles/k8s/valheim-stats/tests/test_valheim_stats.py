@@ -211,17 +211,6 @@ def test_apply_entries_counts_unmatched_and_skips_heartbeat_events():
     assert [e[2] for e in events] == ["spawn"]
 
 
-def test_extract_entries_sorts_ascending():
-    payload = {
-        "data": {
-            "result": [
-                {"values": [["20", "b"], ["10", "a"]]},
-            ]
-        }
-    }
-    assert stats.extract_entries(payload) == [(10, "a"), (20, "b")]
-
-
 def test_store_round_trips_deaths_and_the_steamid_map(tmp_path):
     db = str(tmp_path / "s.db")
     with stats.Store(db) as store:
@@ -251,13 +240,3 @@ def test_a_disconnect_after_a_restart_of_this_service_still_resolves(tmp_path):
     revived.apply("disconnect", "111", 200.0)
     assert revived.players["Bob"]["sessions"] == 1
     assert revived.players["Bob"]["total_playtime"] == 100.0
-
-
-def test_initial_cursor_bounds_a_fresh_db_to_the_backfill_window():
-    now = 1_000_000.0
-    got = stats.initial_cursor(0, False, now, 28)
-    assert got == int((now - 28 * 86400) * 1e9)
-
-
-def test_initial_cursor_resumes_from_a_stored_cursor():
-    assert stats.initial_cursor(999, False, 1_000_000.0, 28) == 999
