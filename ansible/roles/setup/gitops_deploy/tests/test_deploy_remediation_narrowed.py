@@ -43,9 +43,9 @@ def _tagged_tasks(tasks, inherited=frozenset()):
             yield task, effective
 
 
-def _restart_handlers() -> set[str]:
+def _restart_handlers(path=_K3S_ROLE / "handlers" / "main.yml") -> set[str]:
     """The role's handler names that restart a service, read from `handlers/main.yml`."""
-    handlers = yaml.safe_load((_K3S_ROLE / "handlers" / "main.yml").read_text())
+    handlers = yaml.safe_load(path.read_text())
     return {h["name"] for h in handlers if "restarted" in yaml.safe_dump(h)}
 
 
@@ -70,8 +70,11 @@ def _reachable_task_files() -> list[pathlib.Path]:
     return sorted(seen)
 
 
-def _gated_tasks() -> list[tuple[str, frozenset[str]]]:
+def _gated_tasks(paths=None, handlers=None) -> list[tuple[str, frozenset[str]]]:
     """Every reachable task in the role that a narrowed `--tags` must warn about, with its tags.
+
+    `paths` and `handlers` default to the role's reachable task files and `handlers/main.yml`;
+    a test passes its own to prove the notify arm fires.
 
     Two ways to qualify. A task naming a control-plane gate, `rotate-keys` or the log drop-in
     restart — the markers the warning's own prose names. And a task that NOTIFIES a restart
@@ -84,9 +87,9 @@ def _gated_tasks() -> list[tuple[str, frozenset[str]]]:
         "rotate-keys",
         "Restart k3s",
     )
-    restarts = _restart_handlers()
+    restarts = _restart_handlers(*([handlers] if handlers else []))
     out = []
-    for path in _reachable_task_files():
+    for path in _reachable_task_files() if paths is None else paths:
         doc = yaml.safe_load(path.read_text())
         if not isinstance(doc, list):
             continue
@@ -181,27 +184,43 @@ def test_the_gated_tags_are_every_tag_the_gated_tasks_carry():
     )
 
 
-def test_a_task_notifying_a_restart_outside_server_yml_would_be_found():
+def test_a_task_notifying_a_restart_outside_server_yml_would_be_found(tmp_path):
     """The rejecting half: the notify arm fires on a task the marker arm does not match.
 
-    Without it the walk would pass on markers alone, and the server.yml-only gap #2350 names
-    would still be open.
+    Driven through `_gated_tasks` itself, so deleting its notify arm fails here. The role's
+    one restart handler today is `Restart k3s`, which the marker arm matches by name, so the
+    handler here is renamed: a second restart handler is exactly what the arm exists for.
+    The quiet twin notifying nothing is the control, and must not count.
     """
-    task = {
-        "name": "Raise the inotify instance limit",
-        "ansible.builtin.sysctl": {"name": "fs.inotify.max_user_instances"},
-        "notify": sorted(_restart_handlers())[:1],
-        "tags": ["node-sysctl"],
-    }
-    assert _restart_handlers(), "the role declares no restart handler"
-    markers = (
-        *deploy_remediation._K3S_CONTROL_PLANE_GATES,
-        "rotate-keys",
-        "Restart k3s",
+    handlers = tmp_path / "handlers.yml"
+    handlers.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Bounce the API server",
+                    "ansible.builtin.systemd": {"state": "restarted"},
+                }
+            ]
+        )
     )
-    dumped = yaml.safe_dump({k: v for k, v in task.items() if k != "notify"})
-    assert not any(m in dumped for m in markers), "the marker arm would have caught it"
-    assert set(task["notify"]) & _restart_handlers()
+    sysctl = {"ansible.builtin.sysctl": {"name": "fs.inotify.max_user_instances"}}
+    node = tmp_path / "node.yml"
+    node.write_text(
+        yaml.safe_dump(
+            [
+                {
+                    "name": "Raise and bounce",
+                    **sysctl,
+                    "notify": "Bounce the API server",
+                    "tags": ["node-sysctl"],
+                },
+                {"name": "Raise quietly", **sysctl, "tags": ["node-quiet"]},
+            ]
+        )
+    )
+    assert _gated_tasks([node], handlers) == [
+        ("node.yml:Raise and bounce", frozenset({"node-sysctl"}))
+    ]
 
 
 # ── #2349: the clear command names the tags the apply beside it ran ─────────────────────
