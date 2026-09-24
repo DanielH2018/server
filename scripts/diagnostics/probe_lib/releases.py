@@ -64,6 +64,13 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
 # reason the renderers do: this one is at the 600-line cap.
 from diagnostics.probe_lib.releases_diff import drop_check_mode_only  # noqa: E402
 
+# Which services a shared role's bytes reach, and so which paths decide one service's staleness.
+# Its own module for the reason above; that module's docstring says what it reuses and why.
+from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
+    consumers_for,
+    role_paths_for,
+)
+
 
 def _git(*args, cwd, **kwargs):
     """Run git against `cwd` and nothing else, through the shared runner.
@@ -220,13 +227,6 @@ def manifest_affecting_shared_roles(k8s_roles_dir=None, host_vars=None):
         for r in shared_k8s_roles(k8s_roles_dir, host_vars)
         if _supplies_manifest_bytes(k8s_roles_dir / r)
     )
-
-
-def role_paths_for(service, shared_roles):
-    """The `ansible/roles/k8s/` paths whose history decides whether `service` is stale."""
-    return [f"ansible/roles/k8s/{service}/"] + [
-        f"ansible/roles/k8s/{r}/" for r in sorted(shared_roles)
-    ]
 
 
 # Subdirectories of a shared role that decide how a deploy RUNS rather than what it applies.
@@ -435,6 +435,7 @@ def compute_stale(
     repo_root=REPO_ROOT,
     ref="origin/master",
     shared_roles=None,
+    consumers=None,
     declared=None,
     callers=None,
     grace_seconds=0,
@@ -442,6 +443,9 @@ def compute_stale(
     pending=None,
 ):
     """{service: reason} for every record whose own, shared or deploy-plane paths changed since `ref`.
+
+    `consumers` decides WHICH services a shared role's change can make stale
+    (`releases_consumers.consumers_for`, read from `repo_root`'s caller graph when omitted).
 
     `declared` and `callers` are `narrow_broad.context_for`'s two derived fields, read from
     `repo_root` at `ref` when omitted. They are parameters so a test can drive a throwaway
@@ -464,6 +468,8 @@ def compute_stale(
         shared_roles if shared_roles is not None else manifest_affecting_shared_roles()
     )
     deploy_time_roles = _deploy_time_shared_roles(shared_roles)
+    if consumers is None:
+        consumers = consumers_for(shared_roles, repo_root, renderer=MANIFEST_RENDERER)
     by_commit = {}
     for rec in records:
         if "error" in rec:
@@ -478,7 +484,11 @@ def compute_stale(
     context = None
     for commit, services in by_commit.items():
         paths = sorted(
-            {p for svc in services for p in role_paths_for(svc, shared_roles)}
+            {
+                p
+                for svc in services
+                for p in role_paths_for(svc, shared_roles, consumers)
+            }
         )
         changed = _changed_files(commit, paths, repo_root, ref, deploy_time_roles)
         if changed is None:
@@ -500,7 +510,7 @@ def compute_stale(
                 )
             plane = _deploy_plane_stale(commit, services, plane_changed, context)
         for svc in services:
-            svc_paths = role_paths_for(svc, shared_roles)
+            svc_paths = role_paths_for(svc, shared_roles, consumers)
             hits = [p for p in changed if any(p.startswith(rp) for rp in svc_paths)]
             hits += plane.get(svc, [])
             if not hits:

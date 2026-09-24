@@ -683,6 +683,7 @@
  "scripts/diagnostics/tests/test_probe_registry.py": 0.03,
  "scripts/diagnostics/tests/test_probe_releases.py": 0.01,
  "scripts/diagnostics/tests/test_probe_releases_check_mode.py": 0.11,
+ "scripts/diagnostics/tests/test_probe_releases_consumers.py": 0.13,
  "scripts/diagnostics/tests/test_probe_releases_grace.py": 0.12,
  "scripts/diagnostics/tests/test_probe_releases_stale.py": 0.35,
  "scripts/diagnostics/tests/test_probe_vip_placement.py": 0.0,
