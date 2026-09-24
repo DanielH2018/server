@@ -1,9 +1,10 @@
 # Claude tooling in this repo — reference
 
-The long form of `CLAUDE.md` → *Claude Tooling in This Repo*. That section keeps what has to
-be in context whether or not anyone opens this page: what each tool is, and the gotchas that
-would otherwise produce a wrong verdict. Everything here is detail you read when you are
-working on one of these tools, or when one of them has just surprised you.
+The long form of `CLAUDE.md` → *Claude Tooling in This Repo*. That section keeps one directive
+per tool, the part that has to be in context whether or not anyone opens this page. Everything
+here is detail you read when you are working on one of these tools, or when one of them has
+just surprised you. A hook's own docstring is the fullest record of its rules and incidents,
+and a hook that denies prints its reason.
 
 ## `scripts/diagnostics/probe.py`
 
@@ -13,7 +14,7 @@ Read-only homelab diagnostics, allow-listed (no prompt). It resolves the live co
 ```
 uv run python scripts/diagnostics/probe.py <targets | metric '<promql>' | loki-query '<logql>' |
   alerts | monitors | kuma-drift | releases | scrutiny | pi containers | cert <host> | health <svc> |
-  ha <state|automation|get> …>
+  ha <state|automation|get> … | b2-spend | longhorn-blocks | vip-placement | readonly-rbac>
 ```
 
 `uv run python scripts/diagnostics/probe.py --list` prints every subcommand with a one-line
@@ -24,6 +25,25 @@ guard (`scripts/diagnostics/tests/test_probe_registry.py`, asserting every `prob
 with a `run_*`/`main` entry point is covered). Running a subcommand is owned elsewhere and is
 unchanged: argparse in `probe_lib/cli_parser.py`, `plan()` in `probe_lib/curl_pipeline.py`, and
 the `handlers` table in `probe.py`'s `main()`.
+
+### Measurements and invariant checks: `b2-spend`, `longhorn-blocks`, `vip-placement`, `readonly-rbac`
+
+Four subcommands turn a fact an operator once had to remember into one they can re-derive. Each
+has its own test under `scripts/diagnostics/tests/`.
+
+- **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
+  blocks" log lines, because B2 has no usage API (`probe_lib/b2_ledger.py`). It reads Loki
+  only and spends nothing on B2. The model covers backups only, so it is a lower bound on the
+  console's figure.
+- **`longhorn-blocks`** censuses the live Volume CRs by backup tier and block size, and exits 1
+  when a `weekly-backup-*` volume is not on 16 MiB blocks (`probe_lib/longhorn.py`).
+- **`vip-placement`** reads the Services, EndpointSlices, L2Advertisements and Nodes, and exits
+  1 naming any `externalTrafficPolicy: Local` MetalLB VIP with no Ready endpoint on the node
+  that announces it (`probe_lib/vip_placement.py`). Host probes stay green through that
+  blackout, which is why it exists.
+- **`readonly-rbac`** asks live RBAC whether the SA plain `kubectl` runs as still refuses
+  `get`/`list` on Secrets and `create`/`delete` on pods, and exits 1 naming any verb it gained
+  (`probe_lib/readonly_rbac.py`).
 
 ### `alerts [--days N --check X]`
 
@@ -153,7 +173,11 @@ is for, since every record names a commit.
 
 ### `health <svc>`
 
-A k8s post-deploy gate. It exits 0 only when the Deployment **or DaemonSet** is fully rolled out
+A k8s post-deploy gate. Its argument is a deploy TAG, not a workload name. It gates the
+PRODUCTION cluster unless you say otherwise: pass `--cluster prod|stage`, and
+`scripts/lib/kubectl.py` refuses when the local kubectl serves a different cluster (#1663).
+
+It exits 0 only when the Deployment **or DaemonSet** is fully rolled out
 (observed generation caught up, every replica updated + ready + available) **and** no container
 restarted in the last 180s. An unreadable restart time counts as recent, so it fails closed.
 
@@ -313,6 +337,7 @@ the tier signs out of whatever session the browser profile carried, navigates to
 redirect chain. **No credential is typed.** It then asserts `/api/user` reports the Authelia
 username, which is the half a 302 cannot prove: the forward-auth middleware redirects before
 the backend is reached, so only the logged-in identity shows the OIDC round trip finished.
+OIDC login is LAN-only: `root_url` pins the callback to `grafana.local.<domain>`.
 
 **This tier is still how a Claude session verifies a Grafana board.** A
 `mcp__homelab-ui__browser_navigate` to `/d/<uid>/` lands on Grafana's own login page — the
@@ -388,6 +413,97 @@ The two_factor session also gets its own state file and is never a fallback for 
 `ui_mcp.sh` loads a jar unconditionally, so promoting it would put a shell as the repo user
 (code-server) and volume deletion (longhorn) behind every page load.
 
+## Hooks
+
+Each hook's module docstring under `.claude/hooks/` is the full record of its rules. This
+section is the summary a reader needs before opening one.
+
+### `block-protected-edits` (PreToolUse, `Edit|Write`)
+
+It *denies* direct edits to (a) anything under `containers/` (edit the
+`ansible/roles/containers/<svc>/templates/` source instead) and (b) SOPS-encrypted files like
+`ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill). It also denies a write to a
+generated page, meaning any file carrying a `generated_from:` banner.
+
+### `block-protected-bash` (PreToolUse, Bash)
+
+It applies the same two rules on the surface auto mode actually uses. `block-protected-edits`
+matches `Edit|Write` only, and auto mode instructs file changes through `sed`, here-documents and
+short scripts, so `sed -i … ansible/vars/secrets.yml` reached a bare permission prompt with
+nothing saying the file was encrypted. A write here becomes an **ask** carrying `classify()`'s
+reason — never a deny, because the path extraction is a heuristic over command text and a wrong
+extraction must not block work.
+
+It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`-c`/`-l`) of a
+deployed host script that renders a credential inline;
+`scripts/secrets_mgmt/secret_bearing_host_paths.py` derives that set from the tree.
+
+A third arm **denies** a Bash write that leaves an isolated session's worktree.
+`isolation-guard.sh` covers `Edit|Write` only, so `cd /home/ubuntu/server && python3 - <<'EOF'`
+escaped into the primary checkout and parked the GitOps deployer on 2026-09-06 (#1419). The arm
+carries the `cd` through the command a segment at a time, and is inert outside a
+`.claude/worktrees/` session. It denies where a protected-file write only asks, because a write
+outside the worktree is never the right call.
+
+The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a quoted `;`
+stays inside its word. Text it cannot split — no `claude_guard` deploy on the host, or an
+unbalanced quote — is an **ask** naming the fix, never a silent pass. `block-footguns` and
+`nudge-land-sh` split with the same segment parser through `_hook_common.split_stages` (#2134), so a
+newline separates stages for them too, and a here-document body is never one. On text it cannot split,
+`block-footguns` asks when the command names a binary one of its rules keys on and stays silent
+otherwise; `nudge-land-sh` stays silent, since a missed nudge costs one hand-written poll. The
+allow-side classifier keeps its own splitter: the package splits `cmd &>/dev/null` at the `&`,
+which would turn a redirect the classifier allows into a background job it refuses.
+
+### `inject-nested-docs` (PreToolUse, Bash)
+
+It *adds context* and never makes a decision. A role's `CLAUDE.md` and a `.claude/rules/*.md`
+load only when Read/Edit/Write touches a matching path. A `cat`/`sed -n` through Bash — the form
+auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pairs never saw the
+role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
+command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
+per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
+same log grades it. A doc over 7,500 chars arrives as its heading outline plus a read pointer:
+the harness persists a longer `additionalContext` to disk and hands the model a preview stub
+instead.
+
+### `nudge-land-sh` (PreToolUse, Bash)
+
+It *denies* a command that blocks on CI (`gh run watch`, `gh pr checks --watch`) and the third or
+later CI-status read in one session, naming the `land.sh --pr <n> --since <sha>` form instead.
+The first two reads are an ordinary glance and pass. Measured over the 7 days to 2026-08-29: 173
+`gh pr checks` + 75 `gh run list` + 61 `gh run watch` against 29 `land.sh` runs, which is why the
+CLAUDE.md paragraph became a hook.
+
+### `block-footguns` (PreToolUse, Bash)
+
+It *denies* a growing set of commands that return a plausible wrong answer rather than an error,
+each with a deterministic signature and a recorded incident. Two of them: `grep -Z`/`-z` (this
+host's grep is `ugrep`, where those mean `--fuzzy` and `--decompress`, not the NUL flags — use
+`--null`/`--null-data`), and a bare `git stash pop`/`apply` (the stash stack is per-repository,
+so it can take another session's WIP). The docstring of `.claude/hooks/block-footguns.py` is the
+full list.
+
+### `validate-compose` (PostToolUse)
+
+It re-renders all compose templates after you edit a `docker-compose.yml.j2`, an
+`ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`. It fails on malformed YAML,
+which catches Jinja indent bugs `ansible-lint` misses. It also fails on an un-escaped `$` in a
+`command`/`entrypoint`/`healthcheck.test`: Compose interpolates a lone `$VAR`/`$(…)` at parse
+time, so shell `$` must be doubled `$$`. A legitimate `${VAR-…}` in `environment:` is not
+flagged.
+
+### `session-health` (SessionStart)
+
+On opening a session here, it prints a banner of any unhealthy or restarting containers and down
+Prometheus targets. It is silent when all-green, read-only and timeout-bounded. It also names a
+**dirty primary checkout**, a **GitOps deployer parked behind origin**, and a **setup role the
+tick merged but cannot apply** (the `manual_plane` marker). The first two states stop every
+deploy in the fleet, and a worktree session cannot look at either for itself: the isolation
+guard refuses a git command targeting the shared checkout, and the failure it does see
+(`deploy.sh` exit 4) names its own tree instead. The banner is the only place that cause
+reaches the session that pays for it.
+
 ## What an edit costs, by file type
 
 Six hooks match `Edit|Write`, and each is a ~7 ms no-op except on the paths it owns. Measured
@@ -413,7 +529,8 @@ a compound command that merely contains the tick gets none — the classifier ju
 
 On a **failure**, it decodes `deploy.sh` exits 75/4/3/2 into what each one means, because all four
 mean *nothing was deployed* and they reach Claude as a bare `Exit code N` that reads like a
-playbook failure.
+playbook failure. `test_auto_mode_bridge.py` pins its `_DEPLOY_EXITS` table to
+`scripts/deploy_tools/exit_codes.py`.
 
 It does **not** use `classifierContext`: that field is PostToolUse-only, so a failed deploy can't
 carry one, and the standing facts (public repo, read-only kubectl SA) already live in
