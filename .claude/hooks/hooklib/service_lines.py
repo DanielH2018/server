@@ -12,6 +12,7 @@ drives these against a table of canned results, without patching a first-party m
 
 import json
 import os
+import re
 import subprocess
 
 
@@ -160,8 +161,63 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
     return bad
 
 
-# Services in a stale-release verdict named on the banner line before "(+N more)".
+# Services in a stale-release verdict named on the banner line after "e.g.".
 _STALE_NAMED = 3
+
+# The headline `bridge.msgfmt._render` puts first in every DOWN verdict: a count, the unit,
+# then `stale` followed by `: ` (the one-service shape) or ` — ` (both plural shapes). The
+# space inside the character class is load-bearing — tidying it to `[:—]` drops both plural
+# shapes into the unrecognised branch, which is the bug this pattern exists to end (#2390).
+_STALE_HEADLINE = re.compile(r"^(\d+) services? stale[: —]")
+
+# The one shape that carries a service name outside a parenthesised group.
+_ONE_STALE = re.compile(r"^1 service stale: (\S+) —")
+
+# `<reason> (<k>: a, b, +N)` — the per-reason name list of the multi-reason shape.
+_COUNTED_GROUP = re.compile(r"\((\d+): ([^)]*)\)")
+
+_PARENTHESISED = re.compile(r"\(([^)]*)\)")
+
+# A deploy tag is a role directory name: lowercase, digits and hyphens. This is what keeps a
+# reason's own parenthetical out of the name list — `group_vars/all.yml (lan_subnet)` holds
+# an underscore, so `lan_subnet` is rejected where `home-assistant` is kept.
+_SERVICE_NAME = re.compile(r"^[a-z0-9][a-z0-9-]*$")
+
+# What `release-staleness-check.sh` prepends when probe.py exits neither 0 nor 1.
+_PROBE_FAILED_PREFIX = "probe.py releases --stale-only exited "
+
+
+def stale_verdict_names(verdict):
+    """Service names recovered from a kuma stale verdict, in order, possibly empty.
+
+    Best-effort by construction: `bridge.msgfmt.format_down` shrinks the names shown per
+    reason from five to one to fit 900 chars, and cuts the line from the right when even
+    that does not fit. The count on the headline survives all of that, so the caller takes
+    the count from there and treats these as examples.
+
+    Args:
+        verdict: the journal line with `status=down ` already stripped.
+
+    Returns:
+        The names that parse as deploy tags, de-duplicated, first occurrence first.
+    """
+    body = verdict.split(". Details:")[0]
+    groups = _COUNTED_GROUP.findall(body)
+    one = _ONE_STALE.match(body)
+    if groups:
+        raw = [name for _count, names in groups for name in names.split(",")]
+    elif one:
+        raw = [one.group(1)]
+    else:
+        # `N services stale — <reason> (a, b, c)`: the names are the LAST parenthesised
+        # group, because the reason ahead of them carries parentheses of its own.
+        tail = _PARENTHESISED.findall(body)
+        raw = tail[-1].split(",") if tail else []
+    names = []
+    for name in (candidate.strip() for candidate in raw):
+        if _SERVICE_NAME.match(name) and name not in names:
+            names.append(name)
+    return names
 
 
 def stale_release_problems(run):
@@ -175,8 +231,14 @@ def stale_release_problems(run):
     banner — the Kuma tile pages for the dead cron itself. A host that never runs the cron
     (an agent node, a laptop) has no such entry and stays silent, like a host with no docker.
 
-    The verdict is `probe.py releases --stale-only`'s output, one `<service>: <reason>` per
-    line; a line that is not that shape is the check itself breaking, and is shown as such.
+    The verdict is `probe.py releases --stale-only --kuma`'s output, one line in one of
+    `bridge.msgfmt`'s three DOWN shapes. Three branches read it: the headline makes it a
+    stale verdict, the `exited N:` prefix makes it the check breaking, and anything else is
+    a verdict neither this parser nor the producer agrees on — also shown as broken. That
+    last branch cannot be dropped. The cron maps a probe exit of 1 to `status=down` with
+    the output unmodified, and an uncaught Python exception exits 1 too, so a traceback and
+    a real stale list reach the journal under the same status with no `exited N:` prefix
+    between them; the text shape is the only thing that tells them apart.
 
     Args:
         run: the subprocess runner, as in `docker_problems`.
@@ -189,19 +251,27 @@ def stale_release_problems(run):
     lines = res.stdout.strip().splitlines() if res.returncode == 0 else []
     if not lines or not lines[0].startswith("status=down "):
         return []
-    lines[0] = lines[0][len("status=down ") :]
-    verdicts = [line.partition(": ") for line in lines if line.strip()]
-    services = [name for name, sep, _reason in verdicts if sep and " " not in name]
-    if len(services) != len(verdicts):
-        return [f"  ⚠ release staleness check is broken: {lines[0][:110]}"]
-    more = (
-        f" (+{len(services) - _STALE_NAMED} more)"
-        if len(services) > _STALE_NAMED
-        else ""
-    )
+    verdict = lines[0][len("status=down ") :]
+    if verdict.startswith(_PROBE_FAILED_PREFIX):
+        return [f"  ⚠ release staleness check is broken: {verdict[:110]}"]
+    head = _STALE_HEADLINE.match(verdict)
+    if not head:
+        return [
+            "  ⚠ release staleness check returned an unrecognised verdict: "
+            f"{verdict[:110]}"
+        ]
+    count = int(head.group(1))
+    names = stale_verdict_names(verdict)
+    # "e.g." even when the names happen to cover the count: the count comes off the headline
+    # and is authoritative, while the names are whatever survived a message msgfmt may have
+    # shrunk to one name per reason or cut from the right.
+    named = f", e.g. {', '.join(names[:_STALE_NAMED])}" if names else ""
     return [
-        "  ⚠ release staleness: {}{} run manifests behind origin/master — "
+        "  ⚠ release staleness: {} {} {} manifests behind origin/master{} — "
         "uv run python scripts/diagnostics/probe.py releases --stale-only".format(
-            ", ".join(services[:_STALE_NAMED]), more
+            count,
+            "service" if count == 1 else "services",
+            "runs" if count == 1 else "run",
+            named,
         )
     ]
