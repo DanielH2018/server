@@ -26,7 +26,6 @@ from diagnostics.probe_lib.alerts import run_alerts
 from diagnostics.probe_lib.arr import run_arr
 from diagnostics.probe_lib.b2_ledger import (
     run_b2_deletions,
-    run_b2_record,
     run_b2_spend,
 )
 from diagnostics.probe_lib.ha import run_ha, run_ha_state
@@ -98,12 +97,6 @@ SUBCOMMANDS = [
         "MEASURED Class B spend from Longhorn's own logs (Loki-only, spends nothing on B2)",
         "b2_ledger",
         run_b2_spend,
-    ),
-    (
-        "b2-record",
-        "record a tool's B2 transaction spend in today's ledger",
-        "b2_ledger",
-        run_b2_record,
     ),
     (
         "b2-deletions",

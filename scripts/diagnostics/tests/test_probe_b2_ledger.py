@@ -1,4 +1,4 @@
-"""`probe.py b2-spend` and `probe.py b2-record`: the B2 transaction ledger.
+"""`probe.py b2-spend` and `probe.py b2-deletions`: the B2 transaction ledger.
 
 B2 publishes no usage API, so backup spend is measured from Longhorn's own logs and
 maintenance spend is recorded here, into a local ledger, so it is not reconstructed from

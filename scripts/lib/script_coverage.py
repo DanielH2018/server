@@ -95,9 +95,9 @@ def indirect_test(
         )
     else:
         # A hyphenated filename is not a valid module name, so NO import statement can
-        # name it — `glenstone-bot.py` is loadable only via spec_from_file_location. Its
-        # test quotes the filename, which is a load and not a mention, so it counts as an
-        # import. Requiring a bare `import` here reported two genuinely tested bots as
+        # name it — a `foo-bot.py` is loadable only via spec_from_file_location. Its test
+        # quotes the filename, which is a load and not a mention, so it counts as an
+        # import. Requiring a bare `import` here reported two genuinely tested scripts as
         # untested, which is the page telling a story about coverage that isn't true.
         import_re = re.compile(rf"""['"]{re.escape(name)}['"]""")
 
