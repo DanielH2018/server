@@ -64,6 +64,26 @@
     - janitorr_health_logic.py
   become: true
 
+# The reader scripts and their host_lib sibling were `copy:`-deployed and watched by nothing
+# (#2590): setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so a
+# stale copy here ran behind a drift check reporting "deployed code matches the repo". Tagged
+# `config` like the copies above, so a `--tags config` run stamps exactly what it just wrote.
+- name: Record the deployed janitorr health reader code
+  tags: [config]
+  ansible.builtin.import_tasks: "{{ role_path }}/../../setup/common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: janitorr
+    stamp_deployed_pairs:
+      # Spelled as literals, not through a var: the copy<->stamp guard in
+      # ansible/tests/setup/test_host_lib_sibling_copies.py compares these strings against the
+      # include's `host_lib_dir` as written, so a var here reads to it as the wrong directory.
+      - live: /opt/janitorr-health/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py
+      - live: /opt/janitorr-health/janitorr_health.py
+        src: ansible/roles/k8s/janitorr/files/janitorr_health.py
+      - live: /opt/janitorr-health/janitorr_health_logic.py
+        src: ansible/roles/k8s/janitorr/files/janitorr_health_logic.py
+
 - name: Deploy the janitorr error heartbeat
   tags: [cron]
   ansible.builtin.template:

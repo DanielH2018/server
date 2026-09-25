@@ -15,11 +15,10 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. Six of the
-eight sites (gitops_deploy, renovate_notify, renovate_agent, fake_remux, and k3s twice) record a
-host_lib pair and the other two (configarr, janitorr) declare no group for one to join; emitting
-one for those two would change host state. The copy and the pair are therefore joined here rather
-than in the task file, in both directions:
+second fragment written from inside the shared file would overwrite the caller's. All eight
+sites record a host_lib pair in a group their own role declares, and which pairs belong in that
+group is the caller's knowledge, not the shared file's. The copy and the pair are therefore
+joined here rather than in the task file, in both directions:
 `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` catches a pair naming the
 wrong directory, and `test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean`
 catches a pair that is missing (#2564).
@@ -56,16 +55,6 @@ EXPECTED_CONSUMERS = frozenset(
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
 OWNER_ROLE = "common"
-
-# The two consumers that declare no `stamp_deployed` group at all, so there is no group for a
-# host_lib pair to join. Both are k8s-plane roles whose health readers are `copy:`-deployed host
-# code watched by nothing — a wider gap than one missing host_lib line, and a change to
-# daniel-box state for two roles, so it is filed (#2590) rather than closed here.
-#
-# Named, not derived from "does this role declare a group". That condition is self-maintaining
-# and passes the next role that copies host_lib and stamps nothing — the vacuity failure
-# .claude/rules/python-layout.md is about. An entry here has to be argued for.
-CONSUMERS_WITH_NO_STAMP_GROUP = frozenset({"configarr", "janitorr"})
 
 
 def _imports_host_lib(source: str) -> bool:
@@ -306,7 +295,7 @@ def test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean():
     """
     offenders = {
         name: unstamped
-        for name in sorted(EXPECTED_CONSUMERS - CONSUMERS_WITH_NO_STAMP_GROUP)
+        for name in sorted(EXPECTED_CONSUMERS)
         if (unstamped := unstamped_host_lib_installs(_role(name)))
     }
     assert not offenders, (
@@ -348,23 +337,6 @@ def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path
         + f"        src: {HOST_LIB_SRC}\n"
     )
     assert unstamped_host_lib_installs(role.parent) == []
-
-
-def test_the_exempt_consumers_still_declare_no_stamp_group():
-    """The exemption is for a role with NO group, and must not outlive that.
-
-    A role that starts recording its deployed code and keeps the exemption would be listed as
-    'nothing to join' while it has a group to join, which is the finding wearing the exemption as
-    cover. Closing #2590 deletes entries from CONSUMERS_WITH_NO_STAMP_GROUP and this test is how
-    a half-closure is noticed.
-    """
-    assert CONSUMERS_WITH_NO_STAMP_GROUP <= EXPECTED_CONSUMERS
-    for name in sorted(CONSUMERS_WITH_NO_STAMP_GROUP):
-        assert not stamp_pairs_of(_role(name)), (
-            f"{name} now declares stamp_deployed pairs, so it is no longer exempt from "
-            f"test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean — add its "
-            f"host_lib pair and drop it from CONSUMERS_WITH_NO_STAMP_GROUP."
-        )
 
 
 def test_a_notified_handler_exists_in_the_calling_role():
