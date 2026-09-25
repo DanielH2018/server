@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-25 06:17 UTC
-generated_sha: e5c8c55d8
+generated_at: 2026-09-25 18:17 UTC
+generated_sha: 77c9f0418
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: e5c8c55d8
 
 # Scripts
 
-208 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+209 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 49 scripts that run unattended have no test; 8 of all 208 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**1 of the 49 scripts that run unattended have no test; 8 of all 209 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -94,7 +94,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Imported, never run on their own
 
-118 script(s) — imported by another script — not an entry point.
+119 script(s) — imported by another script — not an entry point.
 
 | Script | What it does | Reached by | Tests |
 |---|---|---|---|
@@ -132,6 +132,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/doc_freshness.py` | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | The provenance banner every generated documentation page opens with. | imported by backlog.py, catalog_render.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` |
 | `scripts/deploy_tools/exit_codes.py` | Every exit-code contract the deploy tools share, named once. | imported by _land_fakes.py, ci.py, deploy.py, deploy_detach.py, deploy_detach_notify.py, deploy_playbook.py, deploy_run.py, deploy_tags.py, deploy_under_locks.py, merge.py, narrow_broad.py, publish_pr.py, staging_gate.py, tick.py, tools.py | `test_exit_codes.py` |
+| `scripts/dev/foreign_owned.py` | Find the paths under a directory that another uid owns, and say how to clear them. | imported by prune_worktrees.py | `test_foreign_owned.py` |
 | `scripts/docs/fragment_readers.py` | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/docs/fragment_renderers.py` | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/lib/gh.py` | One way to run the GitHub CLI from a script, with no prompt and no notifier. | imported by boundaries.py, publish_pr.py, renovate_branch_sweep.py, renovate_rebase.py, signing.py, tools.py, transport.py | `test_gh.py` |
@@ -161,7 +162,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/k8s_schema.py` | Schema validation for a rendered k8s object: the core OpenAPI check and the vendored CRDs. | imported by k8s_manifests.py | `test_k8s_schema.py` |
 | `scripts/lib/k8s_yaml.py` | YAML parsing for rendered k8s manifests: the strict loaders and the ``lookup()`` stub. | imported by ansible_jinja_env.py, k8s_manifests.py, k8s_pvc.py | `test_k8s_yaml.py` |
 | `scripts/lib/kubectl.py` | One way to run kubectl from a script, and every call names the cluster it must reach. | imported by _gates_fakes.py, arr.py, b2_ledger.py, cli_parser.py, export_grafana_dashboards.py, gen_infra_map.py, health.py, health_docker.py, k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, live.py, longhorn.py, longhorn_cluster.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, monitors.py, pinned_rotation_gates.py, postflight.py, probe.py, readonly_rbac.py, runbook_gates.py, vip_placement.py | `test_kubectl.py` |
-| `scripts/deploy_tools/land_changes.py` | One reading of a landing's changed-path list, for the four callers that need it. | imported by land_reach.py, land_tags.py | `test_land_changes.py` |
+| `scripts/deploy_tools/land_changes.py` | One reading of a changed-path list, for the five callers that need it. | imported by deploy_tags.py, land_reach.py, land_tags.py | `test_land_changes.py` |
 | `scripts/deploy_tools/land_reach.py` | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | `test_land_reach.py` |
 | `scripts/deploy_tools/land_tags.py` | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, shared_role_reach.py, tools.py | `test_land_tags.py` |
 | `scripts/deploy_tools/land_lib/landing.py` | One PR's landing: the state every phase reads and writes, and the ways it ends. | imported by _land_fakes.py, ci.py, classify.py, deploy.py, health_verdict.py, land.py, merge.py, pipeline.py, tick.py | `test_land_landing.py` *(indirect)* |
