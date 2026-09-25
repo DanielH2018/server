@@ -16,10 +16,23 @@ incident ledger before its history moved to `docs/monitor-bridge-checks.md`. A
 doc over `MAX_LINES` fails unless `OVER_CEILING` names the role with the reason,
 and an entry there for a role that has since shrunk fails too, so the list
 cannot rot. `wc -l` lines, to match the issue's verify-by, not non-blank ones.
+
+The warning band (issue #2557): a ceiling that only fails OVER the ceiling tells
+nobody anything until the ceiling is already breached, so the first author to
+learn about it is the one whose bullet does not fit. #2539 reports what that
+costs: monitor-bridge's `etcd DB Size` bullet went in as one unwrapped physical
+line to stay under the count, and it was rewrapped only afterwards. A doc
+between `WARN_LINES` and `MAX_LINES` is reported through a `RoleDocNearCeiling`
+warning, which `pyproject.toml`'s `filterwarnings` shows rather than errors, so
+the signal arrives with room left to write the bullet and the guard still fails
+only over the ceiling.
 """
 
+import tomllib
+import warnings
 from pathlib import Path
 
+from _doc_size import RoleDocNearCeiling
 from _helpers import REPO
 
 K8S_ROLES_DIR = REPO / "ansible" / "roles" / "k8s"
@@ -33,6 +46,11 @@ EXCLUDED_DIRS = {"manifests"}
 
 MIN_NON_BLANK_LINES = 8
 MAX_LINES = 400
+# The band is a fraction of the ceiling rather than a second hand-set number, so moving
+# MAX_LINES moves both. 0.9 leaves 40 lines — room for a bullet and its evidence, and narrow
+# enough that a doc sitting in the band is genuinely close rather than merely large.
+WARN_FRACTION = 0.9
+WARN_LINES = int(MAX_LINES * WARN_FRACTION)
 
 # Roles whose CLAUDE.md is allowed over MAX_LINES, each with the reason. A new
 # entry is a justification, not a waiver: say what in the doc is an operating
@@ -113,6 +131,28 @@ def _check_role_doc(
             f"{role_dir.name}: CLAUDE.md doesn't mention the role's deploy tag"
         )
     return problems
+
+
+def _band_notice(
+    role_dir: Path, over_ceiling: dict[str, str] = OVER_CEILING
+) -> str | None:
+    """Return a notice if role_dir's CLAUDE.md sits in the warning band, else None.
+
+    A doc already past MAX_LINES is left alone: an unjustified one is a FAILURE of
+    `_check_role_doc`, and a justified one is an OVER_CEILING entry whose reason already says
+    what to do. Warning about either would report a doc the author cannot act on differently.
+    """
+    doc = role_dir / "CLAUDE.md"
+    if not doc.exists() or role_dir.name in over_ceiling:
+        return None
+    lines = _line_count(doc.read_text())
+    if not WARN_LINES <= lines <= MAX_LINES:
+        return None
+    return (
+        f"{role_dir.name}: CLAUDE.md is {lines} lines (wc -l), {MAX_LINES - lines} short of the "
+        f"{MAX_LINES}-line ceiling — move history and measurements to a docs/ page now, while "
+        f"there is still room for the bullet you came to write (issue #2557)"
+    )
 
 
 def test_every_k8s_role_has_an_adequate_claude_md():
@@ -216,3 +256,62 @@ def test_over_ceiling_entries_are_still_over_the_ceiling():
     assert not stale, (
         f"OVER_CEILING names docs no longer over {MAX_LINES} lines: {stale}"
     )
+
+
+def test_role_docs_near_the_ceiling_are_reported_without_failing():
+    """Always green: it reports the band, it never judges it.
+
+    Non-vacuity comes from `test_census_sees_at_least_60_roles`, which pins the role list this
+    walks; the fixture pair below pins the band arithmetic itself.
+    """
+    for role_dir in _role_dirs():
+        notice = _band_notice(role_dir)
+        if notice:
+            warnings.warn(notice, RoleDocNearCeiling, stacklevel=2)
+
+
+def test_fixture_role_at_the_warning_band_is_reported(tmp_path):
+    role = tmp_path / "widget"
+    role.mkdir()
+    (role / "CLAUDE.md").write_text(_sized_doc(WARN_LINES))
+    notice = _band_notice(role, over_ceiling={})
+    assert notice is not None and notice.startswith(
+        f"widget: CLAUDE.md is {WARN_LINES} lines (wc -l), {MAX_LINES - WARN_LINES} short of the"
+    ), notice
+    # The band reports; it does not fail.
+    assert _check_role_doc(role, over_ceiling={}) == []
+
+
+def test_fixture_role_below_the_warning_band_is_not_reported(tmp_path):
+    role = tmp_path / "widget"
+    role.mkdir()
+    (role / "CLAUDE.md").write_text(_sized_doc(WARN_LINES - 1))
+    assert _band_notice(role, over_ceiling={}) is None
+
+
+def test_fixture_role_over_the_ceiling_fails_instead_of_being_reported(tmp_path):
+    role = tmp_path / "widget"
+    role.mkdir()
+    (role / "CLAUDE.md").write_text(_sized_doc(MAX_LINES + 1))
+    assert _band_notice(role, over_ceiling={}) is None
+    assert len(_check_role_doc(role, over_ceiling={})) == 1
+
+
+def test_fixture_role_justified_over_the_ceiling_is_not_reported(tmp_path):
+    role = tmp_path / "widget"
+    role.mkdir()
+    (role / "CLAUDE.md").write_text(_sized_doc(WARN_LINES + 1))
+    assert _band_notice(role, over_ceiling={"widget": "a reason"}) is None
+
+
+def test_the_band_warning_is_shown_rather_than_raised():
+    """The `always::` filter entry is what keeps the band a report instead of a failure.
+
+    Without it `filterwarnings = ["error"]` turns every notice into the failure the band exists
+    to arrive before, and the census test above would go red the day a doc reached WARN_LINES.
+    Nothing else in the suite would notice, because no fixture can observe the session's own
+    warning filters.
+    """
+    config = tomllib.loads((REPO / "pyproject.toml").read_text())
+    filters = config["tool"]["pytest"]["ini_options"]["filterwarnings"]
+    assert "always::_doc_size.RoleDocNearCeiling" in filters, filters
