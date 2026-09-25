@@ -45,6 +45,7 @@ from deploy_changes import (  # noqa: F401
     setup_role_playbook,
     setup_role_tag,
     setup_tags_for,
+    _content_lines,
     shared_module_consumers,
 )
 from deploy_git import (  # noqa: F401

@@ -20,7 +20,6 @@ from deploy_tools.land_lib.outcome import (
     Verdict,
     remaining_hosts_note,
     say,
-    unrecorded_apply_note,
 )
 
 
@@ -72,6 +71,15 @@ def health(ln: Landing) -> NoReturn:
         # this function never runs (#2569).
         if ln.remaining_setup:
             print(remaining_hosts_note(ln.remaining_setup))
+        # The tick's own half too: a PR carrying BOTH ends here without ever reading the
+        # deployer's state, so the converged-but-unapplied case went unreported (#2579).
+        if ln.tick_half_unrecorded():
+            print(
+                "  The tick also converged without recording an apply of this PR "
+                f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
+            )
+            for line in ln.tick_half_remediation():
+                print(line)
     if not settled:
         ln.finish(Verdict.UNHEALTHY, 1, f"PR #{pr}, {sha}, tags: {tags}")
     if ln.plane:
@@ -146,9 +154,8 @@ def health(ln: Landing) -> NoReturn:
                     "watching a tick still applying, so whether it recorded an apply of "
                     "this PR is not yet known",
                 )
-            print(unrecorded_apply_note(ln.state("behind_since")))
-            if ln.self_applied_command:
-                print(f"  Apply it: {ln.self_applied_command}")
+            for line in ln.tick_half_remediation():
+                print(line)
             ln.finish(
                 Verdict.NEEDS_MANUAL_APPLY,
                 1,

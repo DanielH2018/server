@@ -556,12 +556,12 @@ def alert_deferred(
         # `deploy_broad_k8s` subtracts what that applied from `cs` before calling this (#2453).
         #
         # DECIDED: this alert is a one-shot detection, not the durable signal. It fires once per
-        # origin SHA (alert_once) and the ff-merge below clears `behind_since` -- the deployer's
-        # own "still behind" marker -- so every other monitored marker reads clean while the
-        # cluster keeps running the old manifests (issue #947). The durable signal is a daniel-box
-        # cron reading `probe.py releases --stale-only` against the release records
-        # `roles/k8s/manifests/tasks/release_stamp.yml` writes on every real apply -- see this
-        # role's CLAUDE.md, "k8s-platform roles are auto-deployed ONLY for an image-pin bump...".
+        # origin SHA (alert_once) and the ff-merge below clears `behind_since`, so every other
+        # monitored marker reads clean while the cluster keeps running the old manifests (#947).
+        # TWO durable signals carry it: the `k8s_unapplied` marker, which the caller one frame up
+        # (`deploy_defer.alert_and_record_deferred`) writes for the hand-edited and denylisted
+        # classes (#2570), and the daniel-box cron reading `probe.py releases --stale-only`
+        # against the records `roles/k8s/manifests/tasks/release_stamp.yml` writes on a real apply.
         alert_once(
             tools,
             state,
