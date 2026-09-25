@@ -14,11 +14,6 @@
     port ≠ targetPort qbittorrent's service.yaml.j2 publishes `container_item.port` and
                       targets `qbittorrent_k8s_webui_port`. This macro emits one number for
                       both, which is why the `port` argument above says there is only one.
-    a comment INSIDE  tdarr's ports list carries "The web UI only. tdarr_k8s_server_port is
-    the body          deliberately absent" on the line above `- port:`. Unlike pvc(), this
-                      macro has no `{% call %}` slot, so converting tdarr can only move that
-                      reasoning off the line it governs. Same refusal pvc() makes for
-                      pi-peer-backup and valheim.
     extra metadata    registry's Service carries a `homelab/role` label (the --prune selector
                       keys on it) and a pinned `clusterIP`. The macro emits neither.
     no selector AT ALL  deploy-ui's Service is selector-less on purpose — its backend is a host
@@ -40,6 +35,13 @@
                after every repo-side check has read green. So passing extra_ports forces the
                primary port to be named too (`http` unless port_name says otherwise) rather than
                leaving that as something each caller has to remember.
+
+  Call with a body to insert a comment block between `ports:` and the first `- port:` entry;
+  call plain (no `{% call %}`) when there's nothing to say there. tdarr is the one caller: its
+  list carries "The web UI only. tdarr_k8s_server_port is deliberately absent" on the line the
+  fact governs. pvc()'s slot exists for the same reason, and pvc() refuses pi-peer-backup and
+  valheim because its slot cannot reach THEIR line (`storageClassName`); this slot does reach
+  tdarr's, so that refusal does not carry over.
 #}
 {% macro service(name, port, port_name=none, extra_ports=[]) -%}
 apiVersion: v1
@@ -51,6 +53,7 @@ spec:
   selector:
     app: {{ name }}
   ports:
+{% if caller is defined %}{{ caller() }}{% endif %}
 {% if port_name or extra_ports %}
     - name: {{ port_name | default('http', true) }}
       port: {{ port }}
