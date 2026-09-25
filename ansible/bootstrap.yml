@@ -27,6 +27,11 @@
 # the per-host-key flow above is preferred.)
 - name: Bootstrap a host for SOPS (no encrypted-secret dependency)
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   become: true
   gather_facts: true
   roles:
