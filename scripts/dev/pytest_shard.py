@@ -169,7 +169,7 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # Used as the divisor's floor, which cannot then be zero.
 _DURATIONS_MIN_SECONDS = 0.005
 
-# The repair for every arm of the coverage gate, spelled once and read by the ratchet test
+# The repair for every arm that finds a MISSING entry, spelled once and read by the ratchet test
 # too, so the two can never offer different instructions. `census()` reads
 # `git ls-files`, so the file has to be staged before the measurement can see it.
 RECORD_MISSING_HINT = (
