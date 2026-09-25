@@ -110,10 +110,10 @@ gitops_deploy_k8s_autodeploy_enabled: false
 gitops_deploy_k8s_autodeploy_pilot: []
 
 # Most services one tick may promote; 0 disables the cap. deploy_k8s joins every promoted
-# service into a SINGLE ansible-playbook run under one K8S_DEPLOY_TIMEOUT_S (900s), and the
+# service into a SINGLE ansible-playbook run under one K8S_DEPLOY_TIMEOUT_S (1440s), and the
 # failure path is `git reset --hard local` over the whole merged range — so a batch that
 # overruns discards the good bumps along with the bad one. At roughly 2.5 min of rollout and
-# soak per service, 900s is spent around five or six.
+# soak per service, 1440s is spent around nine; the cap is sized for the worst SINGLE role.
 #
 # renovate.json states the intent ("keeps each auto-deploy tick to a single service, which is
 # what the deploy timeout is sized for") but nothing enforced it: a tick diffs local..origin,
@@ -160,27 +160,33 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # deploy only; the rollback redeploy has its own budget below. RUN_BUDGET_S does NOT cover this
 # path — it bounds only the Docker health gate (gate_services), which is inert on an all-k8s host.
 #
-# 900 DOES NOT COVER THE WORST PROMOTED ROLE, and that gap is open rather than accepted (#2397).
-# The same terms the rollback budget below sums, minus the revert ones, run inside this one
-# budget: claims x volume_snapshot_timeout (the pre-apply snapshot) + the role's OWN in-role
-# waits + manifests_rollout_timeout + k8s_rollout_stabilise_seconds. The service-lock wait is
-# spent out of this budget too (`deploy_locks.locked_budget`), so it is overhead on top.
-# prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The rollout term is counted only for a
-# role that queues one: netpol-baseline has the most in-role waiting in the repo (five probe Jobs
-# at `--timeout=130s`) and passes `manifests_rollout: ""`, so it pays 710s rather than the 1310s
-# its own rollout budget would suggest. A cap kill is a killpg MID-DRAIN that routes to
-# _rollback_k8s, as a rollout timeout does.
+# DERIVED from the worst promoted role (#2397). The same terms the rollback budget below sums,
+# minus the revert ones, run inside this one budget in sequence: claims x volume_snapshot_timeout
+# (the pre-apply snapshot) + the role's OWN in-role waits + manifests_rollout_timeout +
+# k8s_rollout_stabilise_seconds. prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The
+# rollout term is counted only for a role that queues one: netpol-baseline has the most in-role
+# waiting in the repo (five probe Jobs at `--timeout=130s`) and passes `manifests_rollout: ""`,
+# so it pays 710s rather than the 1310s its own rollout budget would suggest.
 #
-# It is not raised here because raising it alone is unsafe: `_worst_lock_hold` is 3240s against
-# the 3300s every tree-lock waiter allows, so 900 -> 1260 would silently take the four waiters
-# (secret-rotate, docs-refresh, eval-run, deploy.sh's LOCK_WAIT) under the deployer's hold and
-# make each of them skip a run and page for ordinary contention, and 180 + 3600 would not fit the
-# unit's TimeoutStartSec either. Closing it means either #2369's pre-pull — which takes the cold
-# image pull out of the rollout wait, growing no budget — or one change that raises the cap, all
-# four waiters and TimeoutStartSec together.
-# `test_the_forward_cap_shortfall_does_not_widen` ratchets the gap at today's 360s meanwhile, so
-# a new in-role wait or a rollout bump on a promoted role fails there rather than in production.
-gitops_deploy_k8s_timeout_s: 900
+# On top of the role terms the tick pays two things no role declares:
+#   - the service-lock wait, spent out of this same budget (`deploy_locks.locked_budget`). 90s
+#     allowance: the 2026-09-23 sonarr tick showed a 70s gap consistent with one.
+#   - playbook overhead (start-up, facts, renders). 60s allowance: the 2026-09-23 sonarr tick
+#     was 27.8s in total, of which the snapshot was 4.74s and the probe 0.27s.
+# 1260 + 90 + 60 = 1410, rounded up to 1440. Under 1410 a cap kill lands as a killpg MID-DRAIN
+# that routes to _rollback_k8s, and it binds before prowlarr's own 780s rollout timeout does.
+#
+# Every second here is inside `_worst_lock_hold` (600 + 120 + 1440 + 1620 = 3780s), so raising
+# this moves four other values with it, in the same change: the tree-lock waits of secret-rotate,
+# docs-refresh and eval-run (`flock -w`) and deploy.sh's LOCK_WAIT, all 3840, and the unit's
+# TimeoutStartSec (70min). `test_gitops_deploy_timeout_budgets.py` derives the forward worst case
+# from role sources and fails if it outgrows this cap, and its waiter census fails if a waiter
+# falls under the hold.
+#
+# The broad arm starts a promoted bump only while this much of BROAD_DEPLOY_TIMEOUT_S (1800) is
+# left, so a larger cap defers a bump out of a broad tick sooner. The deferral is the safe side:
+# the bump defer-and-alerts, and the next k8s tick deploys it.
+gitops_deploy_k8s_timeout_s: 1440
 
 # Wall-clock cap for the ROLLBACK redeploy specifically — the run that also reverts each claimed
 # volume to its pre-deploy snapshot (k8s/volume-revert), which does strictly more work than a
@@ -207,7 +213,7 @@ gitops_deploy_k8s_timeout_s: 900
 # alternatives on one timeline, not additions.
 #
 # 1620 is today's worst case exactly, with no slack, and that is deliberate: it is the largest
-# value the four tree-lock waiters (3300s) still clear. The test below computes the real ceiling
+# value the four tree-lock waiters (3840s) still clear with a 60s margin. The test below computes the real ceiling
 # from role sources rather than trusting this number, so a new in-role wait or a rollout bump
 # fails there instead of being absorbed silently.
 #
@@ -222,10 +228,10 @@ gitops_deploy_k8s_timeout_s: 900
 # What closes it is gitops_deploy_k8s_autodeploy_max_claim_services_per_tick (below), which caps
 # claim-declaring services per tick so this single-service ceiling is always the binding one.
 # Per-service invocation on the rollback path — the fix this comment used to name — does NOT fit:
-# 3 x 1200 + 900 forward + 180 flock = 4680s exceeds the unit's TimeoutStartSec (3600s as of
-# 2026-08-29; gitops-deploy.service.j2 is the live value).
+# 3 x 1200 + 1440 forward + 180 flock = 5220s exceeds the unit's TimeoutStartSec (4200s as of
+# 2026-09-25; gitops-deploy.service.j2 is the live value).
 #
-# This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (900) at runtime
+# This value has its OWN budget rather than sharing gitops_deploy_k8s_timeout_s (1440) at runtime
 # because the two runs are sequential within one systemd unit activation — see
 # gitops-deploy.service.j2's TimeoutStartSec (raised past 25min for exactly this) and that
 # template's own arithmetic comment. Consequence: the lock this unit holds

@@ -31,7 +31,7 @@ def kick_tick(ln: Landing) -> None:
     as `ledger.kick`, because the board is the only place the answer outlives the log.
 
     DECIDED: called AFTER `deploy.sh` returns, not before it. `gitops-deploy.service` wraps
-    its whole unit run in the git-tree lock, and deploy.sh waits up to LOCK_WAIT (3300s) for
+    its whole unit run in the git-tree lock, and deploy.sh waits up to LOCK_WAIT (3840s) for
     that same lock to cut its snapshot -- so a tick kicked first does not remove the wait, it
     moves it out of `tick=` and into `lock=`. Kicked after, it runs while this landing gates,
     and the gate's own snapshot takes no lock at all.

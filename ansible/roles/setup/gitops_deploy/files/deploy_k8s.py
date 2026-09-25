@@ -305,9 +305,9 @@ def split_k8s_auto_deploy(
     #
     # Capping claim-declaring services rather than lowering max_per_tick is deliberate: claim-free
     # services cost nothing on the revert path and should still batch. Per-service ROLLBACK
-    # invocation — the alternative the role CLAUDE.md proposes — does NOT fit: 3 x 1200 + 900
-    # forward + 180 flock = 4680s exceeds the unit's TimeoutStartSec (60min = 3600s as of
-    # 2026-08-29; gitops-deploy.service.j2 is the live value).
+    # invocation — the alternative the role CLAUDE.md proposes — does NOT fit: 3 x 1200 + 1440
+    # forward + 180 flock = 5220s exceeds the unit's TimeoutStartSec (70min = 4200s as of
+    # 2026-09-25; gitops-deploy.service.j2 is the live value).
     #
     # `declares_claims` is injected (like `image_only`) so this stays a pure function; the caller
     # reads each role's defaults at the PINNED origin SHA. It resolves False for a declaration the

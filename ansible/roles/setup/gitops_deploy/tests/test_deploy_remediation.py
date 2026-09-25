@@ -350,7 +350,9 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
     If TimeoutStartSec is raised in gitops-deploy.service.j2, this fails and the decision gets
     revisited deliberately rather than drifting.
 
-    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to 60min.
+    It fired as designed on 2026-08-29, when the staging gate's budgets raised the ceiling to 60min,
+    and again on 2026-09-25, when #2397's forward cap raised it to 70min. The verdict below is
+    unchanged at 70min: a ceiling that fits at 3600 fits at 4200.
     Re-derived at that ceiling: 180 + 1212 + 1212 + 300 = 2904 against 3600 now FITS, so the budget
     is no longer what makes the deploy-plane arm forward-only. Nothing was armed by that —
     broad_budget_ok has no production caller; it is the reasoning made executable, and
@@ -364,13 +366,13 @@ def test_the_budget_predicate_tracks_the_units_real_timeout():
         / "templates"
         / "gitops-deploy.service.j2"
     )
-    assert "TimeoutStartSec=60min" in unit.read_text(), (
+    assert "TimeoutStartSec=70min" in unit.read_text(), (
         "TimeoutStartSec moved — re-derive broad_budget_ok's verdict before trusting it"
     )
     assert broad_budget_ok(
-        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=3600
+        forward_s=1212, rollback_s=1212, flock_s=180, timeout_s=4200
     ), (
-        "the re-derivation above says a broad rollback now fits at 60min; if this goes red the "
+        "the re-derivation above says a broad rollback now fits at 70min; if this goes red the "
         "note in this docstring is stale and forward-only needs re-arguing from the budget again"
     )
 

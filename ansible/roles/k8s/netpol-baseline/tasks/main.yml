@@ -218,8 +218,8 @@
 #     `until nc -w 5 -z speedtest 80` retry loop in the probe scripts is bounded at 12
 #     iterations and can legitimately run into the deadline on a DROP path. So the Job's own
 #     deadline stays the thing that decides, and this only has to outlast it.
-#   * the CEILING is `K8S_DEPLOY_TIMEOUT_S` (900s), which gitops_deploy gives the whole
-#     unattended deploy. Measured live 2026-08-20, all five probes on daniel-box with the image
+#   * the CEILING is `K8S_DEPLOY_TIMEOUT_S` (900s when this was sized, 1440s since #2397),
+#     which gitops_deploy gives the whole unattended deploy. Measured live 2026-08-20, all five probes on daniel-box with the image
 #     cached: 8s, 10s, 4s, 5s, 8s — 35s of waiting in total. The 180s form put the arithmetic
 #     worst case at 5 x 180 = the entire budget.
 #

@@ -63,7 +63,7 @@ reaches — is a posture change on the write side, tracked as #2207.
   test `subject.active`/`subject.local` and must return `polkit.Result.YES`, or a caller with
   no active local seat (a cron, a `systemd-run` job, a Claude Code Bash call) matches the rule
   and is still refused. `ansible/tests/deploy/test_gitops_manual_trigger.py` pins that.
-- **`Type=oneshot` + `TimeoutStartSec=60min`.** A blocking start returns only when the tick
+- **`Type=oneshot` + `TimeoutStartSec=70min`.** A blocking start returns only when the tick
   finishes, which reads as a hang to anything with less patience. The wrapper starts with
   `--no-block`, waits on its own budget, then prints the journal for that run and exits with
   its status.
