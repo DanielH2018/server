@@ -19,32 +19,30 @@ from dataclasses import dataclass, field
 # authelia configuration.yml.j2, monitor-bridge/files/check.py). A change here only reaches the
 # container on its next deploy, so it maps to a scoped, health-gated redeploy — closing the GitOps
 # loop instead of a silent ff-merge. tasks/ and the role CLAUDE.md are deliberately NOT matched
-# (structural / docs — deploy those manually). The negative lookahead excludes archive/<svc>/...
-_ACTIVE_CONFIG = re.compile(
-    r"^ansible/roles/containers/(?!archive/)([^/]+)/(?:templates|files)/"
-)
+# (structural / docs — deploy those manually).
+_ACTIVE_CONFIG = re.compile(r"^ansible/roles/containers/([^/]+)/(?:templates|files)/")
 # A change under an active container role's tasks/ dir. tasks/ is deliberately NOT auto-deployed
 # (structural — deploy manually), but unlike a CLAUDE.md/doc edit it DOES change what a deploy would
 # do, so a tasks-only push must be flagged (defer-and-alert), not silently ff-merged and left
 # unapplied with no signal — the same asymmetry the secrets / requirements.yml paths already close.
-# Same archive/ exclusion; common/tasks is caught earlier by the _BROAD_PREFIXES check.
-_ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/tasks/")
+# common/tasks is caught earlier by the _BROAD_PREFIXES check.
+_ACTIVE_TASKS = re.compile(r"^ansible/roles/containers/([^/]+)/tasks/")
 # A change under an active container role's meta/ dir (meta/deps.yml). meta/ is NOT auto-deployed
 # (structural, like tasks/), but unlike a doc edit it DOES change what a deploy does:
 # `ansible/filter_plugins/toposort.py` reads meta/deps.yml to build the cross-service deploy ORDER
 # and the dep CLOSURE a scoped `--tags` deploy expands. So a meta-only push must be flagged
 # (defer-and-alert), not silently ff-merged as an invisible graph change — the same asymmetry the
 # tasks / secrets / requirements paths already close. (The toposort LOGIC in filter_plugins/ is
-# already _BROAD_PREFIXES; this is its DATA.) Same archive/ exclusion; common/meta is caught earlier
-# by the _BROAD_PREFIXES check.
-_ACTIVE_META = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/meta/")
+# already _BROAD_PREFIXES; this is its DATA.) common/meta is caught earlier by the
+# _BROAD_PREFIXES check.
+_ACTIVE_META = re.compile(r"^ansible/roles/containers/([^/]+)/meta/")
 # Catch-all for ANY other non-doc file under an active container role — `defaults/`, `vars/`,
 # `handlers/`, or a future dir. Like tasks/ these change what a deploy of that service does but
 # aren't auto-deployed, so a change here must defer-and-alert (via the tasks channel) rather than
 # fall through to the silent docs-only ff-merge. Checked LAST, so templates/files (deploy), tasks/,
 # and meta/ have already claimed their paths; only the structural remainder reaches it. CLAUDE.md /
-# *.md are docs and keep the silent path (the caller excludes them). Same archive/ exclusion.
-_ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/(?!archive/)([^/]+)/")
+# *.md are docs and keep the silent path (the caller excludes them).
+_ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/([^/]+)/")
 # A change under a k8s-platform role's dir (ansible/roles/k8s/<role>/...). This deployer only ever
 # auto-deploys DOCKER-platform services (deploy(cs.services) runs the same --tags path _ACTIVE_CONFIG
 # feeds), so unlike _ACTIVE_TASKS/_ACTIVE_META there is no "rode the scoped redeploy" case to

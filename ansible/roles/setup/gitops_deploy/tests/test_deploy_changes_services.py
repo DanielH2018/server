@@ -28,15 +28,6 @@ def test_multiple_services():
     assert cs.broad is False
 
 
-def test_archived_service_is_ignored():
-    paths = [
-        "ansible/roles/containers/archive/duplicati/templates/docker-compose.yml.j2"
-    ]
-    cs = services_from_changed_paths(paths)
-    assert cs.services == set()
-    assert cs.broad is False
-
-
 def test_unrelated_path_ignored():
     paths = ["docs/superpowers/specs/x.md", "README.md"]
     cs = services_from_changed_paths(paths)
@@ -113,14 +104,6 @@ def test_files_asset_change_maps_to_service():
     assert cs.broad is False
 
 
-def test_archived_config_change_is_ignored():
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/archive/duplicati/templates/foo.yml.j2"]
-    )
-    assert cs.services == set()
-    assert cs.broad is False
-
-
 def test_common_role_change_stays_broad_not_scoped():
     # common/ is the shared deploy path — it must remain BROAD (manual full deploy), so the
     # broad-prefix check must win over the new service-scoped config match.
@@ -162,15 +145,6 @@ def test_common_tasks_change_stays_broad_not_tasks():
     assert cs.broad is True
     assert cs.tasks == set()
     assert cs.services == set()
-
-
-def test_archived_tasks_change_is_ignored():
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/archive/duplicati/tasks/main.yml"]
-    )
-    assert cs.tasks == set()
-    assert cs.services == set()
-    assert cs.broad is False
 
 
 def test_template_and_tasks_same_service_deploys_and_flags_tasks():
@@ -278,15 +252,6 @@ def test_role_readme_md_stays_silent_like_claude_md():
     assert cs.broad is False
 
 
-def test_archived_defaults_change_is_ignored():
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/archive/duplicati/defaults/main.yml"]
-    )
-    assert cs.tasks == set()
-    assert cs.services == set()
-    assert cs.broad is False
-
-
 def test_common_defaults_change_stays_broad_not_tasks():
     # common/ is the shared deploy path — a defaults change there is BROAD (manual full deploy);
     # the broad-prefix check must win over the catch-all.
@@ -305,15 +270,6 @@ def test_common_meta_change_stays_broad_not_meta():
     assert cs.broad is True
     assert cs.meta == set()
     assert cs.services == set()
-
-
-def test_archived_meta_change_is_ignored():
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/archive/duplicati/meta/deps.yml"]
-    )
-    assert cs.meta == set()
-    assert cs.services == set()
-    assert cs.broad is False
 
 
 def test_template_and_meta_same_service_deploys_and_flags_meta():
