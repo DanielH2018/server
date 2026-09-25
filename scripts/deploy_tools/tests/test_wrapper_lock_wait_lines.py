@@ -10,7 +10,7 @@ change on either side that the other does not follow is exactly the drift this f
 
 No test here touches /var/lock/server-git-tree.lock, the real systemd units, or the host's
 syslog. A foreground deploy takes real flock(2) locks on tmp_path files, contended by a
-real `flock` holder, in both the foreground and `--detach`. `fuser`,
+real flock(2) holder in this process, in both the foreground and `--detach`. `fuser`,
 `ps`, `uv`, `logger`, `systemctl` and `journalctl` are stubbed on PATH. The only live reads are
 gitops_tick.sh's own `/var/lib/gitops-deploy` markers.
 
@@ -20,8 +20,8 @@ Run: uv run pytest scripts/deploy_tools/tests/test_wrapper_lock_wait_lines.py
 import contextlib
 import fcntl
 import os
-import shutil
 import subprocess
+import threading
 import time
 from pathlib import Path
 
@@ -110,35 +110,69 @@ def _run_deploy(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess
     )
 
 
+def _is_blocked_on(inode: int) -> bool:
+    """Is some process waiting on an flock over this inode?
+
+    /proc/locks prints a blocked waiter with a `->` marker before its type, and names the
+    file as `<major>:<minor>:<inode>`. The inode alone identifies a lock file under
+    `tmp_path`, which no other process on this host opens.
+    """
+    for line in Path("/proc/locks").read_text().splitlines():
+        fields = line.split()
+        if len(fields) > 5 and fields[1] == "->" and fields[5].endswith(f":{inode}"):
+            return True
+    return False
+
+
 @contextlib.contextmanager
-def _held(path: Path, seconds: float):
-    """Another process holding `path` for `seconds`, with the lock taken before this yields."""
+def _held(path: Path, release_after_contention: float | None = None):
+    """This process holding `path`, with the lock taken before the block runs.
+
+    The default holds it until the block exits. `release_after_contention` instead releases
+    it that many seconds after deploy.sh BLOCKS on it, which is how the two tests that assert
+    on the reported seconds stop depending on how long this host takes to start a deploy: a
+    fixed hold expires during `stub_bin`, `make_snapshot_repo` and deploy.sh's own startup on
+    a loaded box, and the run then takes the lock uncontended and reports nothing (#2521).
+    """
     path.parent.mkdir(parents=True, exist_ok=True)
-    holder = subprocess.Popen(
-        [shutil.which("flock") or "flock", str(path), "sleep", str(seconds)]
-    )
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT)
+    released = threading.Event()
+
+    def release_once_contended(grace: float) -> None:
+        inode = os.fstat(fd).st_ino
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline and not _is_blocked_on(inode):
+            if released.wait(0.02):
+                return
+        time.sleep(grace)
+        fcntl.flock(fd, fcntl.LOCK_UN)
+        released.set()
+
     try:
-        fd = os.open(path, os.O_WRONLY | os.O_CREAT)
+        fcntl.flock(fd, fcntl.LOCK_EX)
+        waiter = None
+        if release_after_contention is not None:
+            waiter = threading.Thread(
+                target=release_once_contended,
+                args=(release_after_contention,),
+                daemon=True,
+            )
+            waiter.start()
         try:
-            deadline = time.monotonic() + 10
-            while time.monotonic() < deadline:
-                try:
-                    fcntl.flock(fd, fcntl.LOCK_EX | fcntl.LOCK_NB)
-                    fcntl.flock(fd, fcntl.LOCK_UN)
-                except BlockingIOError:
-                    break
-                time.sleep(0.02)
+            yield
         finally:
-            os.close(fd)
-        yield
+            released.set()
+            if waiter is not None:
+                waiter.join(timeout=10)
     finally:
-        holder.kill()
-        holder.wait()
+        os.close(fd)
 
 
 def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_path):
     """FLAGGED half: the wait deploy.sh rides out on the tree lock must reach the log."""
-    with _held(tmp_path / "locks" / "server-git-tree.lock", 1.5):
+    with _held(
+        tmp_path / "locks" / "server-git-tree.lock", release_after_contention=1.5
+    ):
         result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "lock acquired" in x), "")
@@ -172,7 +206,10 @@ def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
     Without this line a landing behind another deploy of the same service books `lock=0` and
     charges the wait to `deploy` — the same gap the tree-lock line closed for the tree lock.
     """
-    with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock", 1.5):
+    with _held(
+        tmp_path / "locks" / "server-deploy-uptime-kuma.lock",
+        release_after_contention=1.5,
+    ):
         result = _run_deploy(tmp_path)
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "service lock" in x), "")
@@ -201,7 +238,7 @@ def test_the_service_lock_refusal_is_not_booked_as_a_wait():
 
 def test_a_lock_timeout_is_still_reported_as_contention(tmp_path):
     """CLEAN half for exit 75: the wait really did elapse, so nothing was deployed."""
-    with _held(tmp_path / "locks" / "server-git-tree.lock", 10):
+    with _held(tmp_path / "locks" / "server-git-tree.lock"):
         result = _run_deploy(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == 75, result.stderr
     assert "nothing was deployed" in result.stderr
@@ -272,7 +309,7 @@ def _run_detach(tmp_path: Path, **env_extra: str) -> subprocess.CompletedProcess
 
 def test_detach_still_reports_a_held_lock_as_contention(tmp_path):
     """CLEAN half: --detach fails fast on a real holder, and 75 says retry shortly."""
-    with _held(tmp_path / "locks" / "server-git-tree.lock", 10):
+    with _held(tmp_path / "locks" / "server-git-tree.lock"):
         result = _run_detach(tmp_path)
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
     assert "A deploy is already running" in result.stderr
@@ -297,7 +334,7 @@ def test_detach_reports_a_busy_service_lock_as_contention(tmp_path):
     75: another deploy of the same service holds the lock and will release it, so retrying is
     the whole remedy. 76 would tell the session retrying changes nothing.
     """
-    with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock", 10):
+    with _held(tmp_path / "locks" / "server-deploy-uptime-kuma.lock"):
         result = _run_detach(tmp_path, HOMELAB_DEPLOY_LOCK_WAIT="1")
     assert result.returncode == ec.DEPLOY_LOCK_BUSY, result.stderr
     assert "deploy --detach: a deploy of one of these services held its lock" in (
