@@ -86,6 +86,10 @@ fi
 # A missing library skips the push rather than exiting: the sync is the job and the push only
 # reports on it. Silence then turns the tile DOWN at its deadline. The override exists for the
 # tests, which must not push to the live Kuma from a host that has the real library.
+#
+# set +e first: every other caller of the library runs without -e, and the sync's own outcome is
+# already in $status, so nothing in the push may end the script before `exit "$status"`.
+set +e
 kuma_lib="${SYNC_ARTIFACTS_KUMA_LIB:-/usr/local/lib/kuma-push-lib.sh}"
 if [ -r "$kuma_lib" ]; then
   # shellcheck source=/dev/null
