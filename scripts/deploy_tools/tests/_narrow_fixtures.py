@@ -1,7 +1,8 @@
-"""The throwaway checkout the `narrow_broad` rule tests drive, shared by the two suites.
+"""The throwaway checkout the `narrow_broad` rule tests drive, shared by three suites.
 
-`test_deploy_tags_narrow.py` (the rules) and `test_deploy_tags_narrow_cmd.py` (the command
-wrapper) both need a repo with the shape the rules read -- a `containers_list`, two
+`test_deploy_tags_narrow.py` (the rules), `test_deploy_tags_narrow_cmd.py` (the command
+wrapper) and `test_shared_role_reach.py` (the shared-role reach question, which builds its
+own tree from `Tree` rather than from `build_tree`) all need a repo with the shape the rules read -- a `containers_list`, two
 `group_vars` keys with different consumer spreads, a shared macro with one importer, and a
 play-level file -- with every `GIT_*` variable stripped from the git calls that build it.
 Under a prek hook `GIT_DIR`/`GIT_INDEX_FILE` are exported and `cwd` loses, so an unscrubbed

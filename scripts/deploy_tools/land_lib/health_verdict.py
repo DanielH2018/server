@@ -127,6 +127,19 @@ def health(ln: Landing) -> NoReturn:
                 "  services deployed, but the tick recorded no broad apply covering this PR "
                 f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
             )
+            # The same hole `deploy.no_tag_outcome` carries, one arm over and for the same
+            # reason: `broad_applied` is written only after the apply returns, and a tick that
+            # already ff-merged this PR answers CONVERGED rather than BEHIND, so the
+            # abandoned-watch arm above never sees it (#2448).
+            if ln.tick_watch_abandoned:
+                print(ABANDONED_WATCH_NOTE)
+                ln.finish(
+                    Verdict.DEFERRED,
+                    75,
+                    f"PR #{pr}, {sha}, tags: {tags} — services deployed; this run stopped "
+                    "watching a tick still applying, so whether it recorded an apply of "
+                    "this PR is not yet known",
+                )
             print(unrecorded_apply_note(ln.state("behind_since")))
             if ln.self_applied_command:
                 print(f"  Apply it: {ln.self_applied_command}")

@@ -49,7 +49,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # has to be on the path for the one constant this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
-from deploy_tools import await_ci, land_reach, land_tags
+from deploy_tools import await_ci, land_reach, land_tags, shared_role_reach
 from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
 from deploy_tools.exit_codes import CI_DISARMED
@@ -509,6 +509,11 @@ class Tools:
     confirm_narrowing: Callable[
         [list[str], str, Path, str | None], dict[str, frozenset[str]]
     ] = land_tags.confirmed_narrow_tags
+    # Also runs git over the PR's range -- the key diff of a shared role's `defaults/main.yml`
+    # and a grep of every template for those keys (#2462). `classify.classify` is its caller.
+    paths_a_hand_must_apply: Callable[
+        [list[str], str, Path, set[str] | None], list[str]
+    ] = shared_role_reach.paths_a_hand_must_apply
     lock_holder: Callable[[], str] = lock_holder
     hostname: Callable[[], str] = socket.gethostname
     logger: Callable[[str], None] = syslog

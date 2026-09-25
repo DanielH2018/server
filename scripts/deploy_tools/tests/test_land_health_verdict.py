@@ -170,6 +170,20 @@ def test_an_apply_recorded_at_a_commit_without_this_pr_is_not_settled(landing):
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
 
 
+def test_an_unrecorded_apply_read_mid_tick_is_deferred_not_owed_to_a_hand(
+    landing, capsys
+):
+    """A tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the
+    abandoned-watch arm above cannot catch it — and `broad_applied` is written only once the
+    apply returns. PR #2437 was told to deploy by hand mid-apply (#2448)."""
+    ln, _ = _deployed(landing, Fakes(self_applied=True, state={}, merge_applied_rc=0))
+    ln.tick_watch_abandoned = True
+    with pytest.raises(Outcome) as exc:
+        health_verdict.health(ln)
+    assert (exc.value.rc, exc.value.verdict) == (75, "deferred")
+    assert "stopped watching a tick that was still applying" in capsys.readouterr().out
+
+
 def test_an_ordinary_service_pr_never_asks_about_a_broad_apply(landing):
     """`broad_applied` speaks to a landing only when the tick applies part of THIS PR."""
     ln, _ = _deployed(landing, Fakes(self_applied=False, state={}))
