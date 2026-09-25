@@ -23,6 +23,9 @@ ANY DOUBT IS A REFUSAL, and `deploy_handlers.handle_broad` turns a refusal back 
 full run. A missed consumer is a service left silently stale until something unrelated
 redeploys it; a full run is only slow.
 
+`lib.narrow_git` holds the primitives this shares with `narrow_setup`: `CannotNarrow`,
+`show_at` and the YAML mapping parse, one copy each since #2419.
+
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
 range goes through the same `services_from_changed_paths` mapper. Where `changed` prints a
 tag list PLUS a note about a shared role a human must still apply, `narrow` refuses instead —
@@ -50,12 +53,10 @@ import sys
 from pathlib import Path
 from typing import Callable, NamedTuple
 
-import yaml
-
 from deploy_tools import narrow_containers, narrow_paths
 from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK
-from lib import yaml_fast
 from lib.git import git, git_stdout
+from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from lib.render_guard import service_tags_at
 from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
@@ -96,13 +97,12 @@ _ROLE_PATH = re.compile(r"^ansible/roles/(?:k8s|containers)/([^/]+)/")
 # since #1993 the same refusal marks every service on a record stale and pages (#2001). A
 # variable is different: a filter plugin can read one, so the variable scan keeps refusing.
 _FILTER_PLUGINS = "ansible/filter_plugins/"
-# Directories under the role trees that are not services, as `land_tags._NOT_SERVICES` has
-# them: `common` is the shared Docker deploy path and `archive` holds retired roles.
-_NOT_SERVICES = frozenset({"common", "archive"})
-
-
-class CannotNarrow(Exception):
-    """This range reaches something no tag list can scope. The caller runs the whole play."""
+# The one directory under the role trees that is not a service: `common`, the shared Docker
+# deploy path. Every grep here reads the TREE at `ctx.ref`, where `roles/containers/archive/`
+# no longer exists (#2385), so no `archive` entry is needed. `land_tags._NOT_SERVICES` still
+# carries one because it reads DIFF paths, and a range spanning the deleting merge carries 270
+# of them.
+_NOT_SERVICES = frozenset({"common"})
 
 
 class Importers(NamedTuple):
@@ -130,18 +130,6 @@ class Context(NamedTuple):
     declared: set[str]
     callers: dict[str, set[str]]
     explain: Callable[[str], None]
-
-
-def _show(ref: str, path: str, cwd: Path) -> str | None:
-    """The file's text at `ref`, or None when the ref does not carry it.
-
-    A non-UTF-8 file refuses rather than raising, as `narrow_setup._show` does.
-    """
-    try:
-        r = git("show", f"{ref}:{path}", cwd=cwd, check=False)
-    except UnicodeDecodeError as exc:
-        raise CannotNarrow(f"{path} is not text at {ref}") from exc
-    return r.stdout if r.returncode == 0 else None
 
 
 def _grep(
@@ -197,7 +185,7 @@ def _defines_only(key: str, path: str, ctx: Context) -> bool:
     """
     defines = re.compile(rf"^{re.escape(key)}\s*:")
     mentions = re.compile(rf"(?<!\w){re.escape(key)}(?!\w)")
-    for line in (_show(ctx.ref, path, ctx.cwd) or "").splitlines():
+    for line in (show_at(ctx.ref, path, ctx.cwd) or "").splitlines():
         if line.lstrip().startswith("#"):
             continue
         if mentions.search(line) and not defines.match(line):
@@ -321,7 +309,7 @@ def _list_reader_tags(ctx: Context, path: str) -> set[str]:
     hits = narrow_containers.reader_paths(
         _grep(ctx, "containers_list", word=True),
         PLAY_PREFIXES,
-        lambda hit: _show(ctx.ref, hit, ctx.cwd),
+        lambda hit: show_at(ctx.ref, hit, ctx.cwd),
     )
     found = _sort_hits(hits, "containers_list", ctx, "containers_list")
     roles = set(found.roles)
@@ -379,17 +367,11 @@ def _inventory_tags(
         raise CannotNarrow(f"{path} is not an inventory YAML file")
     if name.startswith("_"):
         return set()
-    try:
-        old = yaml_fast.safe_load(before or "") or {}
-        new = yaml_fast.safe_load(after) or {}
-    except yaml.YAMLError as exc:
-        raise CannotNarrow(f"{path} did not parse as YAML: {exc}") from exc
-    if not isinstance(old, dict) or not isinstance(new, dict):
-        raise CannotNarrow(f"{path} is not a mapping of variables")
+    # An inventory file the range ADDS has no before-state, and every key in it is new.
+    old = mapping_at(before or "", path)
+    new = mapping_at(after, path)
     tags: set[str] = set()
-    for key in sorted(set(old) | set(new)):
-        if old.get(key) == new.get(key):
-            continue
+    for key in sorted(changed_mapping_keys(old, new, path)):
         if key == "containers_list":
             tags |= _containers_list_tags(old, new, ctx, path)
         else:
@@ -411,14 +393,26 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
         return set()
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
-    after = _show(ctx.ref, path, ctx.cwd)
-    if after is None:
-        raise CannotNarrow(f"{path} was deleted, so nothing can be read from it")
+    after = show_at(ctx.ref, path, ctx.cwd)
     if path.startswith(SHARED_TEMPLATES):
         name = path[len(SHARED_TEMPLATES) :]
         roles: set[str] = set()
         try:
             roles = template_importers(name, ctx.ref, ctx.cwd, {name}, ctx.explain)
+            if after is None:
+                # A DELETED macro nothing imports reaches no render, and that is provable
+                # rather than a guess: an importer left behind would fail to render, and CI
+                # renders every template — so every importer it had at `old_ref` changed or
+                # was deleted in the same range and narrows on its own. Commit `8d825a872`
+                # deleted the unimported `ansible/templates/traefik.yml.j2` and the blanket
+                # refusal bought the whole ~20-minute `deploy.yml` play for it (#2440). An
+                # importer that survived, or a scan that cannot run, still refuses.
+                if roles:
+                    raise CannotNarrow(
+                        f"it is deleted but {','.join(sorted(roles))} imports it"
+                    )
+                ctx.explain(f"narrow: {name} deleted -> (nothing) via {path}")
+                return set()
             tags = _role_tags(roles, ctx)
         except CannotNarrow as exc:
             # The same treatment `_key_tags` gives its own refusal, for the same reason:
@@ -430,8 +424,10 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
             f"narrow: {name} -> {','.join(sorted(tags)) or '(nothing)'} via {path}"
         )
         return tags
+    if after is None:
+        raise CannotNarrow(f"{path} was deleted, so nothing can be read from it")
     if path.startswith(INVENTORY):
-        return _inventory_tags(path, _show(old_ref, path, ctx.cwd), after, ctx)
+        return _inventory_tags(path, show_at(old_ref, path, ctx.cwd), after, ctx)
     raise CannotNarrow(f"{path} is a broad path no narrowing rule reads")
 
 

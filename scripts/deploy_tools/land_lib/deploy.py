@@ -36,6 +36,35 @@ from deploy_tools.land_lib.outcome import (
 )
 
 
+def _narrowed(ln: Landing):
+    """The deployer's own narrowing of the range, or None when it refuses too (#2520).
+
+    `deploy_tags.py changed` refuses a range wholesale as soon as ONE path is broad, so a
+    >100-file PR that touches `group_vars` alongside a service role derived no tags at all —
+    and the service half went undeployed behind whatever verdict the broad half reached. #2448
+    measured it on PR #2437, where the tick's own broad apply happened to cover the services;
+    a range the tick does not apply would have left them stale.
+
+    `narrow` is the mapper the deployer already trusts for this question, and it answers MORE
+    than the service half: it maps each broad path to the services whose render it reaches, so
+    a list it returns accounts for the whole deploy plane of the range rather than leaving a
+    residue. Where it cannot — a path no rule reads, or a list covering most of the fleet — it
+    refuses, and the landing falls back to grading from the deployer's markers exactly as
+    before. The setup plane is untouched either way: `narrow` never answers for it, and
+    `plane_note` and `self_applied` still own it.
+
+    The range is WIDER than this PR, as `--since` always is here, so this can deploy a service
+    another session's merge inside the range reached. That is what `deploy.sh --changed
+    <since>` did before #2448, and it is the safe direction: wider than the truth is
+    recoverable, narrower is not.
+    """
+    r = ln.tools.deploy_tags(ln.opts.primary, ["narrow", ln.opts.since, "HEAD"])
+    if r.returncode != DEPLOY_OK:
+        return None
+    say("`changed` refused the range as broad; the deployer's own narrowing scopes it")
+    return r
+
+
 def derive_from_diff(ln: Landing) -> None:
     """Resolve the fallback to a tag list HERE rather than handing deploy.sh --changed.
 
@@ -45,6 +74,8 @@ def derive_from_diff(ln: Landing) -> None:
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
+    if r.returncode == DEPLOY_BROAD:
+        r = _narrowed(ln) or r
     if r.returncode == DEPLOY_BROAD:
         # The tick is the apply for this range, so the deployer's own markers answer this
         # landing and `no_tag_outcome` is where they are read. This used to exit 1 with NO

@@ -293,10 +293,30 @@ def test_hosts_ini_is_flagged(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
-def test_a_deleted_broad_path_is_flagged(tree: Tree):
-    """Nothing can be read at the new ref, so nothing can be derived from it."""
+def test_a_deleted_unimported_macro_narrows_to_nothing(tree: Tree):
+    """CLEAN half: no template imports it at the new ref, so it reaches no render (#2440).
+
+    Deleting `ansible/templates/traefik.yml.j2` in `8d825a872` refused and bought the whole
+    ~20-minute `deploy.yml` play, and `probe.py releases --stale-only` then called all 58
+    services stale until that run finished.
+    """
     tree.remove("ansible/templates/orphan.yml.j2")
-    with pytest.raises(narrow_broad.CannotNarrow, match="deleted"):
+    assert tree.narrow(*_refs(tree)) == set()
+
+
+def test_a_deleted_macro_a_template_still_imports_is_flagged(tree: Tree):
+    """FLAGGED half: sonarr still imports it, so the empty answer is not provable."""
+    tree.remove("ansible/templates/container-resources.yml.j2")
+    with pytest.raises(
+        narrow_broad.CannotNarrow, match="deleted but sonarr imports it"
+    ):
+        tree.narrow(*_refs(tree))
+
+
+def test_a_deleted_inventory_file_is_flagged(tree: Tree):
+    """Only a shared template narrows on deletion: an inventory file leaves no keys to diff."""
+    tree.remove("ansible/inventory/group_vars/all.yml")
+    with pytest.raises(narrow_broad.CannotNarrow, match="was deleted"):
         tree.narrow(*_refs(tree))
 
 

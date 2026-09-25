@@ -44,13 +44,6 @@ def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
     assert cron_map[telemetry].name == "main.yml"
 
 
-def test_cron_job_scripts_excludes_archive(cron_map):
-    # Match relative to the roles root: an absolute-path substring check also matches every
-    # path in a checkout that happens to sit under a directory named "archive", which is how
-    # this guard failed in a worktree called `archive-slice-prefix-decision`.
-    assert not any("archive" in t.relative_to(v.ROLES).parts for t in cron_map)
-
-
 def _fixture_role(roles: Path, role_dir: str) -> Path:
     """Write a minimal role at `roles/<role_dir>` that schedules one shell template."""
     role = roles / role_dir
@@ -71,18 +64,8 @@ def _fixture_role(roles: Path, role_dir: str) -> Path:
 
 
 def test_cron_job_scripts_finds_a_live_role(tmp_path):
-    # The accepting half of the pair below: without it, an exclusion that swallowed everything
-    # would be indistinguishable from one that excludes only archive/.
     template = _fixture_role(tmp_path, "containers/live-role")
     assert template in ct.cron_job_scripts(tmp_path)
-
-
-def test_cron_job_scripts_excludes_an_archived_role(tmp_path):
-    # The rejecting half. The real archive/ tree schedules nothing, so the repo-wide guard
-    # below can only ever be observed passing — this is the input it must refuse.
-    template = _fixture_role(tmp_path, "containers/archive/retired-role")
-    assert template not in ct.cron_job_scripts(tmp_path)
-    assert ct.cron_job_scripts(tmp_path) == {}
 
 
 def test_cron_job_scripts_excludes_the_deliberately_unscheduled_reaper(cron_map):

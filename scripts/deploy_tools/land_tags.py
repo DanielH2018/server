@@ -50,7 +50,6 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (
-    _BROAD_MANUAL_PREFIXES,
     broad_remediation,
     expand_build_couplings,
     k8s_remediation,
@@ -65,16 +64,17 @@ from deploy_logic import (
 # answered identically here and in deploy.sh's own validation.
 import deploy_tags
 import narrow_setup
+from land_changes import changes_for
 from land_reach import remaining_setup_hosts_note
 from lib.k8s_roles import role_callers
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
 
-# Directories under the role trees that are not services. `common` is the shared Docker
-# deploy path and `archive` holds roles retired by the k3s migration; `--tags` for either
-# matches no containers_list entry, and Ansible exits 0 on a tag that selects nothing --
-# so a green run would prove only that nothing happened.
+# Directories under the role trees that are not services: `common`, the shared Docker deploy
+# path, and `archive`, the k3s migration's retired roles. `--tags` for either matches no
+# containers_list entry, and Ansible exits 0 on a tag selecting nothing. `archive` outlives
+# the tree #2385 deleted because this reads DIFF paths, not the tree at a ref (#2432).
 _NOT_SERVICES = frozenset({"common", "archive"})
 
 # The remediation for a rotated secret. Flat text rather than derived from the file list,
@@ -352,14 +352,13 @@ def plane_note(
     # roles here made land.sh exit 1 with `needs-manual-apply` for #723 while the next tick was
     # applying exactly those roles (2026-09-01). land.sh reads the deployer's own state for
     # that case instead.
-    loud = [p for p in files if p not in quiet]
-    manual = [p for p in loud if any(p.startswith(x) for x in _BROAD_MANUAL_PREFIXES)]
+    loud = changes_for(files, quiet)
     unroutable = {
         r
-        for r in services_from_changed_paths(loud).setup_roles
+        for r in loud.changes.setup_roles
         if setup_role_playbook(r) != "ansible/initial_setup.yml"
     }
-    if manual or unroutable:
+    if loud.manual or unroutable:
         notes.append(
             broad_remediation(
                 False,
@@ -368,7 +367,7 @@ def plane_note(
                 narrow_tags=narrow_tags if narrow_tags is not None else {},
             )
         )
-    if unroutable and not manual:
+    if unroutable and not loud.manual:
         # The tick MERGED this PR and recorded the role in `manual_plane`, so applying it by
         # hand is only half the job: a role left in the marker pages GitOps Deploy — Status
         # six hours later over work that is already live.
@@ -418,8 +417,7 @@ def self_applied(files, quiet=()) -> bool:
     edit is nothing for the tick to apply, so waiting on the deployer's state to prove it
     did is waiting on a convergence that means something else.
     """
-    quiet = set(quiet)
-    cs = services_from_changed_paths([p for p in files if p not in quiet])
+    cs = changes_for(files, quiet).changes
     if cs.broad_deploy:
         return True
     return any(
@@ -442,7 +440,7 @@ def self_applied_command(files, quiet=()) -> str:
     four days stale on disk (issue #1537). This is the line `land.sh` prints when the deployer
     recorded no apply covering the PR.
     """
-    cs = services_from_changed_paths([p for p in files if p not in set(quiet)])
+    cs = changes_for(files, quiet).changes
     routable = {
         r
         for r in cs.setup_roles

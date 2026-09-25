@@ -161,12 +161,59 @@ def _argv_references(text: str) -> set[str]:
     return found
 
 
+def _literal_segments(node: ast.AST) -> list[str]:
+    """The string literals a path-building expression supplies, in order.
+
+    Two shapes, because both are written here: `os.path.join(repo, "scripts", "x.py")` and
+    `root / "scripts" / "x.py"`. A segment a variable supplies contributes nothing — the
+    filename still has to be spelled out for the caller to count.
+    """
+    if isinstance(node, ast.Call):
+        if not (isinstance(node.func, ast.Attribute) and node.func.attr == "join"):
+            return []
+        args = node.args
+    elif isinstance(node, ast.BinOp) and isinstance(node.op, ast.Div):
+        args = [node.left, node.right]
+    else:
+        return []
+    out: list[str] = []
+    for arg in args:
+        if isinstance(arg, ast.Constant) and isinstance(arg.value, str):
+            out.append(arg.value)
+        else:
+            out += _literal_segments(arg)
+    return out
+
+
+def _constructed_path_references(text: str) -> set[str]:
+    """Script filenames an expression assembles out of separate path segments.
+
+    `deploy_io.staging_expect_script` builds `os.path.join(repo, "scripts", "deploy_tools",
+    "staging_expectations.py")`, so no string literal in the file spells the filename next to
+    its directory and `_argv_references` cannot see it. The GitOps deployer runs both staging
+    scripts that way, and the generated page called one of them "no automated caller in the
+    tree" (#2424).
+    """
+    try:
+        tree = ast.parse(text)
+    except SyntaxError, ValueError:
+        return set()
+    found: set[str] = set()
+    for node in ast.walk(tree):
+        if not isinstance(node, (ast.Call, ast.BinOp)):
+            continue
+        match = ARGV_RE.fullmatch("/".join(_literal_segments(node)))
+        if match:
+            found.add(match.group(1))
+    return found
+
+
 def _invoked_by(path: Path, scripts: Path) -> set[str]:
     """Everything one file invokes, by whichever reading its language allows."""
     text = file_text(path)
     found = _invoked_in(text)
     if path.suffix == ".py":
-        found |= _argv_references(text)
+        found |= _argv_references(text) | _constructed_path_references(text)
     found.discard(path.name)
     return {n for n in found if n in by_name(scripts)}
 
@@ -228,7 +275,7 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     ansible = repo / "ansible"
     for pattern in ("roles/**/tasks/*.yml", "roles/**/templates/*", "roles/**/files/*"):
         for path in sorted(ansible.glob(pattern)):
-            if not path.is_file() or "/archive/" in path.as_posix():
+            if not path.is_file():
                 continue
             if path.name.startswith("test_"):
                 continue

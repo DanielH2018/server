@@ -50,7 +50,9 @@ SessionStart banner and `land.sh` all quote ONE derivation rather than each repe
 but only as a guard: `land.sh` prints the stored row, and only when it contains that answer.
 
 The READING those rules do — the git reads, the YAML parses and `RoleIndex` — is
-`narrow_setup_index.py` beside this. One derivation, split at the 600-line module cap.
+`narrow_setup_index.py` beside this. One derivation, split at the 600-line module cap. The
+primitives underneath both — `CannotNarrow`, `show_at` and the mapping parse — are
+`lib.narrow_git`, shared with `narrow_broad` since #2419.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_narrow_setup.py
 """
@@ -63,17 +65,9 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import argparse
 import sys
 
-import yaml
-
-from lib import yaml_fast
 from lib.git import git
-from narrow_setup_index import (
-    SETUP_TREE,
-    CannotNarrow,
-    RoleIndex,
-    foreign_tags,
-    show_at,
-)
+from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
+from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
 from narrow_setup_playbook import playbook_applies_role
 
 # The directories under a role a changed path can be narrowed from. Everything else in the
@@ -107,19 +101,7 @@ def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:
     before, after = show_at(old, path, repo), show_at(new, path, repo)
     if before is None or after is None:
         raise CannotNarrow(f"{path} is absent at {old if before is None else new}")
-    try:
-        a = yaml_fast.safe_load(before) or {}
-        b = yaml_fast.safe_load(after) or {}
-    except yaml.YAMLError as exc:
-        raise CannotNarrow(f"{path} does not parse: {exc}") from exc
-    if not isinstance(a, dict) or not isinstance(b, dict):
-        raise CannotNarrow(f"{path} is not a mapping of keys")
-    try:
-        return {k for k in set(a) | set(b) if a.get(k) != b.get(k)}
-    except RecursionError as exc:
-        # A recursive alias (`k: &l [1, *l]`) loads as a value containing itself, and `!=`
-        # recurses into it until the stack runs out.
-        raise CannotNarrow(f"{path} holds a recursive alias") from exc
+    return changed_mapping_keys(mapping_at(before, path), mapping_at(after, path), path)
 
 
 def path_tags(

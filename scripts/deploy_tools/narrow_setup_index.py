@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """One setup role's task files, templates and vars, read at a single git ref.
 
+`lib.narrow_git` holds the three primitives this module shares with `narrow_broad` — the
+`CannotNarrow` refusal, `show_at` and the YAML mapping parse (#2419).
+
 `narrow_setup` asks the questions — which tags does this changed path reach, and does the
 answer narrow anything — and this module holds the reading that answers them: the git reads,
 the YAML parses, and `RoleIndex`, which walks the role's own name and variable edges.
@@ -24,6 +27,7 @@ import yaml
 
 from lib import yaml_fast
 from lib.git import git
+from lib.narrow_git import CannotNarrow, mapping_at, show_at
 from narrow_setup_playbook import declared_tags, playbook_roles
 
 SETUP_TREE = "ansible/roles/setup"
@@ -41,23 +45,6 @@ _TEMPLATE_EDGE = re.compile(r"{%-?\s*(?:import|include|from)\s")
 # `tasks/install.yml` carries both `never` and `docker-engine-upgrade`, and printing that pair
 # would tell an operator to run the engine upgrade a config edit never asked for (#2350).
 _SPECIAL_TAGS = frozenset({"never", "always"})
-
-
-class CannotNarrow(Exception):
-    """This change reaches something no narrow tag list covers. The caller uses the role tag."""
-
-
-def show_at(ref: str, path: str, repo: str) -> str | None:
-    """The file's text at `ref`, or None when the ref does not carry it.
-
-    A file that is not UTF-8 text refuses rather than raising: the scans below read text, and
-    a traceback in the deployer's journal is a worse way to say "cannot narrow" than this.
-    """
-    try:
-        r = git("show", f"{ref}:{path}", cwd=repo, check=False)
-    except UnicodeDecodeError as exc:
-        raise CannotNarrow(f"{path} is not text at {ref}") from exc
-    return r.stdout if r.returncode == 0 else None
 
 
 # The spellings of a STATIC task import. `include_tasks` is deliberately absent: a dynamic
@@ -340,28 +327,13 @@ class RoleIndex:
             elif rel.startswith("templates/"):
                 self.template_text[rel] = text
             elif rel.startswith(("defaults/", "vars/")) and _is_role_yaml(rel):
-                self.vars_doc[rel] = self._vars_mapping(rel, text)
+                # A vars file that does not parse refuses the whole narrowing, the way a task
+                # file that does not parse already does: the key walk is what says which tags a
+                # changed key reaches, and a file it cannot read is a reader it cannot see.
+                self.vars_doc[rel] = mapping_at(text, rel)
         if not self.tags:
             raise CannotNarrow(f"{self.prefix}tasks/ holds no task file at {ref}")
         self.reachable = self._reachable_from(self._main_task_file(ref))
-
-    @staticmethod
-    def _vars_mapping(rel: str, text: str) -> dict:
-        """One `defaults/` or `vars/` file as a mapping, or a refusal.
-
-        A file that does not parse refuses the whole narrowing, the way a task file that does
-        not parse already does: the key walk is what says which tags a changed key reaches,
-        and a file it cannot read is a reader it cannot see.
-        """
-        try:
-            doc = yaml_fast.safe_load(text)
-        except yaml.YAMLError as exc:
-            raise CannotNarrow(f"{rel} does not parse: {exc}") from exc
-        if doc is None:
-            return {}
-        if not isinstance(doc, dict):
-            raise CannotNarrow(f"{rel} is not a mapping of keys")
-        return doc
 
     def _facts_set_by(self, rel: str) -> frozenset[str]:
         """The facts one task file derives, read off its parsed tasks."""

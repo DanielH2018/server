@@ -18,6 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from deploy_tools.deploy_detach_notify import GateResult
+from deploy_tools.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools
@@ -74,6 +75,10 @@ class Fakes:
     hosts_at: dict[str, list[str]] | None = None
     changed: str = ""
     changed_rc: int = 0
+    # `deploy_tags.py narrow`, the second derivation a broad `changed` refusal falls back to
+    # (#2520). It refuses by default, which is what every range written before it did.
+    narrowed: str = ""
+    narrowed_rc: int = DEPLOY_BROAD
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
@@ -212,6 +217,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.hosts_rc, f.hosts)
         if args[0] == "changed":
             return _cp(f.changed_rc, f.changed)
+        if args[0] == "narrow":
+            return _cp(f.narrowed_rc, f.narrowed)
         raise AssertionError(args)
 
     def landing_hosts_at(tags, ref, primary):

@@ -73,3 +73,34 @@ def test_a_broad_fallback_the_tick_does_not_apply_still_names_a_verdict(landing)
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)
     assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)
+
+
+# ── the deployer's own narrowing, tried before the range is called broad (issue #2520) ──
+
+
+def test_a_broad_fallback_the_narrowing_can_scope_deploys_those_tags(landing):
+    """CLEAN half. `changed` refuses a range wholesale on ONE broad path, so a >100-file PR
+    touching group_vars alongside a service role deployed nothing at all."""
+    ln, calls = _broad_fallback(
+        landing,
+        Fakes(changed_rc=DEPLOY_BROAD, narrowed_rc=0, narrowed="bazarr,sonarr\n"),
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.resolved_tags == ["bazarr", "sonarr"]
+    assert [c[1] for c in calls if c[0] == "deploy_tags"] == [
+        ("changed", "beefbeef"),
+        ("narrow", "beefbeef", "HEAD"),
+    ]
+
+
+def test_a_narrowing_that_reaches_nothing_deploys_nothing_rather_than_settling(landing):
+    """Exit 0 with empty stdout is `narrow` answering "this range moves no rendered output".
+
+    `deploy_phase` sends an empty tag list to `no_tag_outcome`, which grades from the
+    deployer's markers — not to a deploy of nothing reported as settled.
+    """
+    ln, _calls = _broad_fallback(
+        landing, Fakes(changed_rc=DEPLOY_BROAD, narrowed_rc=0, narrowed="\n")
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.resolved_tags == []

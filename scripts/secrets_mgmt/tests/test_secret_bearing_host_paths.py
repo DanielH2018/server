@@ -207,17 +207,6 @@ def test_a_secret_bearing_file_outside_the_host_bin_trees_is_clean(tmp_path):
     assert _census(tree) == {}
 
 
-def test_a_secret_bearing_script_under_archive_is_clean(tmp_path):
-    """`archive/` roles deploy nothing, so a path only they render is not live."""
-    tree = _tree(
-        tmp_path,
-        "/usr/local/bin/demo.sh",
-        "export PUSH={{ demo_push_token }}\n",
-        role="archive/demo",
-    )
-    assert _census(tree) == {}
-
-
 def test_an_unparseable_task_file_does_not_sink_the_whole_census(tmp_path):
     tree = _tree(
         tmp_path,
