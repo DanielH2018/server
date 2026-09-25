@@ -19,6 +19,6 @@
 # `asset_pins.py` can render it: the checker reads `defaults/main.yml` alone, and an inline
 # URL leaves the digest unpaired — the finish an unattended renovate_agent run could not do
 # without a raw `curl` (#2301).
-initial_setup_uv_version: "0.12.15"
+initial_setup_uv_version: "0.12.16"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
-initial_setup_uv_installer_sha256: 716a1d6844740756c68770fcec2f79c2013fb9b03869a113f61e15f6f482a6a1
+initial_setup_uv_installer_sha256: 889a5745afddc78b389841caede74711003b782e2ec8c2f29b3c03cbd7b580a9
