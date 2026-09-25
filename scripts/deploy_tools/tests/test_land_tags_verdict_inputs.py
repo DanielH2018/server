@@ -24,6 +24,14 @@ import deploy_tags
 import land_tags
 from deploy_tools.land_lib import tools
 
+# THE RETIREMENT CONVENTION, settled in #2432: a retired role is DELETED, and the same PR
+# names its tag here. Roles retired before that moved to `roles/*/archive/<tag>/` instead, and
+# the census below recognised a retirement by that new home — but #2385 deleted the archive
+# tree, and a deleted role is indistinguishable from the reader dropping an entry, so an
+# explicit list is the only honest signal. An entry earns its place for one PR: once the
+# retiring commit is HEAD, the tag is gone from both sides and the line can go.
+RETIRED_TAGS: frozenset[str] = frozenset()
+
 
 # ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
 
@@ -118,21 +126,16 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     keep an empty or near-empty read from passing.
 
     A RETIREMENT is the one honest way to lose a tag, and it too is committed against a HEAD
-    that still declares it (glances, #2004). It is told apart by the role's new home: a lost
-    tag whose role sits under `roles/*/archive/<tag>/` in the working tree is a retirement, and
-    any other lost tag is still the reader dropping an entry.
+    that still declares it (glances, #2004). It is told apart by `RETIRED_TAGS` above: a lost
+    tag named there is a retirement, and any other lost tag is still the reader dropping an
+    entry.
     """
     at_head = land_tags.service_tags_at("HEAD", deploy_tags.REPO)
     in_tree = deploy_tags.service_tags()
     assert "traefik" in at_head
     assert len(at_head) >= 50, sorted(at_head)
     lost = at_head - in_tree
-    retired = {
-        tag
-        for tag in lost
-        if any((deploy_tags.REPO / "ansible/roles").glob(f"*/archive/{tag}/"))
-    }
-    assert lost <= retired, sorted(lost - retired)
+    assert lost <= RETIRED_TAGS, sorted(lost - RETIRED_TAGS)
 
 
 # ── self_applied_command: the hand-apply the tick would otherwise have done (issue #1537) ──

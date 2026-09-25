@@ -134,8 +134,6 @@ def secret_bearing_host_paths(
 
     Walks every role task file, not just k8s: the `setup/` plane (`nut_host` among them) deploys host
     scripts too, and `setup/fake_remux` is the consumer `deploy.sh` structurally cannot reach.
-    `archive/` is skipped — those roles deploy nothing.
-
     Args:
       ansible: the Ansible tree to walk.
       registry: the rotation registry the tracked secret names come from. Both are parameters
@@ -145,8 +143,6 @@ def secret_bearing_host_paths(
     names = secret_names(registry)
     found: dict[str, list[str]] = {}
     for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
-        if "/archive/" in str(task_file):
-            continue
         try:
             doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
         except yaml.YAMLError:
@@ -184,8 +180,6 @@ def world_readable_secret_bearing_tasks(
     secret_paths = secret_bearing_host_paths(ansible, registry)
     offenders = []
     for task_file in sorted(ansible.glob("roles/**/tasks/*.yml")):
-        if "/archive/" in str(task_file):
-            continue
         try:
             doc = yaml_fast.safe_load(task_file.read_text(errors="replace"))
         except yaml.YAMLError:

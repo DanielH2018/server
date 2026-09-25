@@ -97,9 +97,12 @@ _ROLE_PATH = re.compile(r"^ansible/roles/(?:k8s|containers)/([^/]+)/")
 # since #1993 the same refusal marks every service on a record stale and pages (#2001). A
 # variable is different: a filter plugin can read one, so the variable scan keeps refusing.
 _FILTER_PLUGINS = "ansible/filter_plugins/"
-# Directories under the role trees that are not services, as `land_tags._NOT_SERVICES` has
-# them: `common` is the shared Docker deploy path and `archive` holds retired roles.
-_NOT_SERVICES = frozenset({"common", "archive"})
+# The one directory under the role trees that is not a service: `common`, the shared Docker
+# deploy path. Every grep here reads the TREE at `ctx.ref`, where `roles/containers/archive/`
+# no longer exists (#2385), so no `archive` entry is needed. `land_tags._NOT_SERVICES` still
+# carries one because it reads DIFF paths, and a range spanning the deleting merge carries 270
+# of them.
+_NOT_SERVICES = frozenset({"common"})
 
 
 class Importers(NamedTuple):

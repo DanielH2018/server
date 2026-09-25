@@ -122,19 +122,6 @@ def test_cron_jobs_skips_an_absent_cron(tmp_path):
     assert cron_jobs(tmp_path) == []
 
 
-def test_cron_jobs_skips_an_archived_role(tmp_path):
-    _write(
-        tmp_path / "ansible" / "roles" / "archive" / "old" / "tasks" / "main.yml",
-        """
-        - name: Old job
-          ansible.builtin.cron:
-            name: Old job
-            job: "uv run python scripts/dev/old.py"
-        """,
-    )
-    assert cron_jobs(tmp_path) == []
-
-
 # --- shell-wrapper templates ---------------------------------------------------------------
 
 
@@ -145,14 +132,6 @@ def test_sh_j2_templates_finds_a_template_anywhere_in_the_tree(tmp_path):
     )
     found = sh_j2_templates(tmp_path)
     assert [p.name for p in found] == ["wrap.sh.j2"]
-
-
-def test_sh_j2_templates_skips_an_archived_template(tmp_path):
-    _write(
-        tmp_path / "ansible" / "roles" / "archive" / "r" / "templates" / "wrap.sh.j2",
-        "#!/bin/sh\nuv run python scripts/dev/wrapped.py\n",
-    )
-    assert sh_j2_templates(tmp_path) == []
 
 
 # --- .claude/hooks wrappers ------------------------------------------------------------------

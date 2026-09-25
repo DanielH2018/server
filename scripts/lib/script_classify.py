@@ -275,7 +275,7 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     ansible = repo / "ansible"
     for pattern in ("roles/**/tasks/*.yml", "roles/**/templates/*", "roles/**/files/*"):
         for path in sorted(ansible.glob(pattern)):
-            if not path.is_file() or "/archive/" in path.as_posix():
+            if not path.is_file():
                 continue
             if path.name.startswith("test_"):
                 continue

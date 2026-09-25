@@ -106,8 +106,6 @@ def _walk(node):
 def iter_sources(roles: Path):
     """Yield (task_file, src) for every release_bin.yml import under `roles`."""
     for path in sorted(roles.glob("**/tasks/*.yml")):
-        if "/archive/" in str(path):
-            continue
         try:
             doc = yaml_fast.safe_load(path.read_text())
         except yaml.YAMLError:

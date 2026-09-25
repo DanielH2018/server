@@ -45,10 +45,6 @@ from lib import yaml_fast
 from lib.repo_paths import REPO
 
 
-def _is_archived(path: Path) -> bool:
-    return "/archive/" in path.as_posix()
-
-
 # --- prek.toml --------------------------------------------------------------------------
 
 
@@ -113,8 +109,6 @@ def cron_jobs(repo: Path = REPO) -> list[CronJob]:
     """
     jobs = []
     for path in sorted((repo / "ansible").rglob("tasks/*.yml")):
-        if _is_archived(path):
-            continue
         try:
             loaded = yaml_fast.safe_load(path.read_text())
         except OSError, yaml.YAMLError:
@@ -142,9 +136,7 @@ def sh_j2_templates(repo: Path = REPO) -> list[Path]:
     A cron's `job:` can name one by basename, and `initial_setup`'s templates are
     themselves a stale-path invocation site.
     """
-    return sorted(
-        p for p in (repo / "ansible").rglob("templates/*.sh.j2") if not _is_archived(p)
-    )
+    return sorted(p for p in (repo / "ansible").rglob("templates/*.sh.j2"))
 
 
 # --- .claude/hooks wrappers ------------------------------------------------------------------

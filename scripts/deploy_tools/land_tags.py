@@ -71,10 +71,10 @@ from lib.k8s_roles import role_callers
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
 
-# Directories under the role trees that are not services. `common` is the shared Docker
-# deploy path and `archive` holds roles retired by the k3s migration; `--tags` for either
-# matches no containers_list entry, and Ansible exits 0 on a tag that selects nothing --
-# so a green run would prove only that nothing happened.
+# Directories under the role trees that are not services: `common`, the shared Docker deploy
+# path, and `archive`, the k3s migration's retired roles. `--tags` for either matches no
+# containers_list entry, and Ansible exits 0 on a tag selecting nothing. `archive` outlives
+# the tree #2385 deleted because this reads DIFF paths, not the tree at a ref (#2432).
 _NOT_SERVICES = frozenset({"common", "archive"})
 
 # The remediation for a rotated secret. Flat text rather than derived from the file list,

@@ -165,9 +165,6 @@ def iter_cron_targets(roles: Path = ROLES):
     the dest. So this resolves `job:` -> dest basename -> the `ansible.builtin.template` task in
     the SAME file whose `dest:` matches -> that task's `src:`, and only then has a template.
 
-    archive/ is excluded — nothing there is included by any play, so its cron tasks never
-    actually run.
-
     The single walk exists so `cron_job_scripts` and `cron_checks.cron_kubeconfig_error` cannot
     disagree about which templates are cron targets. They ask different questions of the same
     task, and a guard whose selector drifts from its sibling's is how a rule ends up covering
@@ -176,8 +173,6 @@ def iter_cron_targets(roles: Path = ROLES):
     # Roles are nested two levels under ROLES (roles/{containers,k8s,setup}/<role>/tasks/...),
     # so this needs rglob, not a fixed-depth glob.
     for task_file in sorted(roles.rglob("tasks/*.yml")):
-        if "archive" in task_file.parts:
-            continue
         try:
             tasks = yaml_fast.safe_load(task_file.read_text())
         except yaml.YAMLError:
