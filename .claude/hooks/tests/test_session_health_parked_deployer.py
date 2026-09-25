@@ -50,6 +50,9 @@ def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
         # marker, so on daniel-box a pending setup role would add a line to every assertion
         # here (issue #1774). `test_session_health_manual_plane.py` owns that line.
         read_manual=lambda: None,
+        read_manual_tags=lambda: None,
+        read_contention=lambda: None,
+        read_k8s_deferred=lambda: None,
     )
 
 
@@ -154,6 +157,10 @@ def test_a_failed_read_degrades_to_silence_rather_than_raising():
         status=lambda path: "",
         read_marker=boom,
         now=0.0,
+        read_manual=lambda: None,
+        read_manual_tags=lambda: None,
+        read_contention=lambda: None,
+        read_k8s_deferred=lambda: None,
     )
     assert lines == []
 
@@ -167,6 +174,10 @@ def test_a_dirty_line_survives_a_failing_marker_read():
         status=lambda path: _DIRTY,
         read_marker=boom,
         now=0.0,
+        read_manual=lambda: None,
+        read_manual_tags=lambda: None,
+        read_contention=lambda: None,
+        read_k8s_deferred=lambda: None,
     )
     assert len(lines) == 1
     assert "is dirty" in lines[0]

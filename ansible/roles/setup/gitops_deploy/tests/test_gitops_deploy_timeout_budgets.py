@@ -282,7 +282,7 @@ def _rollout_timeout_s(role: str) -> int:
 # derivation below counted only the drain until #2399. Named rather than counted: the reader
 # finds its subject by pattern, so a rename or a moved task would otherwise leave the sum
 # quietly smaller and every assertion here still green.
-_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300}
+_IN_ROLE_WAIT_CENSUS = {"prowlarr": 300, "netpol-baseline": 650}
 
 
 def test_the_in_role_wait_census_is_non_vacuous():
@@ -352,10 +352,14 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
 # (`deploy_locks.locked_budget`), so it is overhead on top of all four.
 #
 # EVERY promoted role is counted, not just the claim-declaring ones the rollback derivation
-# narrows to. A claim-free role still pays the other three terms, and the worst forward case in
-# the repo is exactly such a role: netpol-baseline waits 5 x --timeout=130s for its probe Jobs
-# on top of a 600s rollout. #2397 measured prowlarr (1260s) as the worst by looking only at the
-# claim-declaring set.
+# narrows to: a claim-free role still pays the other three terms. That widening costs this
+# derivation a guarantee the narrow one got for free — a claim-declaring role has a workload by
+# construction, and a claim-free one may have none. `roles/k8s/manifests` queues the drain only
+# when `manifests_rollout | default(manifests_service) | length > 0`, so a role passing
+# `manifests_rollout: ""` waits for no rollout however long its own
+# `manifests_rollout_timeout` reads. Counting the term anyway made netpol-baseline look like the
+# worst role in the repo at 1310s when it pays 710s, and `manifests_rollout_timeout_s` cannot
+# see the difference: it reads the budget, not whether anything spends it.
 #
 # THIS TEST IS A RATCHET, NOT A PROOF THE BUDGET FITS. The gap is real and open: raising the cap
 # to cover it would push `_worst_lock_hold` past the 3300s every tree-lock waiter above allows,
@@ -363,7 +367,30 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
 # coordinated raise of the cap, all four waiters and the unit's TimeoutStartSec. Until one of
 # those lands, what must not happen silently is the gap GROWING — a new in-role wait or a rollout
 # bump on a promoted role. That is what this catches.
-_KNOWN_FORWARD_SHORTFALL_S = 410
+_KNOWN_FORWARD_SHORTFALL_S = 360
+
+# The roles whose forward ceiling this derivation must keep reading the way it reads today. Both
+# are found by pattern — the in-role waits by walking `tasks/`, the rollout term by looking for
+# an empty `manifests_rollout` — so a rename or a moved task would leave the sum quietly smaller
+# with every assertion below still green, the failure `_IN_ROLE_WAIT_CENSUS` above exists for.
+#
+#   prowlarr:        the worst promoted role, and the one the shortfall is measured against.
+#   netpol-baseline: the role with the most in-role waiting in the repo and NO rollout to wait
+#                    on. It is here because it is the shape that breaks the derivation, not
+#                    because it is close to the cap.
+_FORWARD_CEILING_CENSUS = {"prowlarr": 1260, "netpol-baseline": 710}
+
+
+def _waits_for_a_rollout(role: str) -> bool:
+    """Whether `roles/k8s/manifests` queues the drain for this role at all.
+
+    False for a role that passes `manifests_rollout: ""` — NetworkPolicies, a PVC, a ConfigMap
+    consumed by somebody else. Read off the role's own tasks rather than from the rendered
+    manifests, because the empty override is what the queueing task's `when` reads.
+    """
+    tasks = _K8S_ROLES_DIR / role / "tasks" / "main.yml"
+    text = tasks.read_text() if tasks.is_file() else ""
+    return 'manifests_rollout: ""' not in text
 
 
 def _forward_ceiling(
@@ -371,12 +398,8 @@ def _forward_ceiling(
 ) -> int:
     """One promoted role's worst case inside K8S_DEPLOY_TIMEOUT_S, excluding the lock wait."""
     claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
-    return (
-        len(claims) * snapshot_timeout
-        + in_role_wait_s(role)
-        + _rollout_timeout_s(role)
-        + stabilise
-    )
+    rollout = _rollout_timeout_s(role) if _waits_for_a_rollout(role) else 0
+    return len(claims) * snapshot_timeout + in_role_wait_s(role) + rollout + stabilise
 
 
 def _worst_forward_case(snapshot_timeout: int, stabilise: int) -> tuple[str, int]:
@@ -407,6 +430,32 @@ def _forward_terms() -> tuple[int, int, int]:
     )
 
 
+def _shortfall_ok(worst: int, cap: int, shortfall: int) -> bool:
+    """Whether the worst forward ceiling is still within the recorded shortfall of the cap."""
+    return worst - cap <= shortfall
+
+
+@pytest.mark.parametrize("role", sorted(_FORWARD_CEILING_CENSUS))
+def test_the_forward_ceiling_census_is_non_vacuous(role):
+    snapshot_timeout, stabilise, _ = _forward_terms()
+    role_defaults = (
+        yaml.safe_load((_K8S_ROLES_DIR / role / "defaults" / "main.yml").read_text())
+        or {}
+    )
+    assert role_defaults.get("k8s_autodeploy"), (
+        f"{role} is no longer promoted, so the derivation below never reaches it; find what "
+        "the worst promoted role is now before trusting a green run"
+    )
+    ceiling = _forward_ceiling(role, role_defaults, snapshot_timeout, stabilise)
+    assert ceiling == _FORWARD_CEILING_CENSUS[role], (
+        f"{role}'s forward ceiling reads {ceiling}s, not the recorded "
+        f"{_FORWARD_CEILING_CENSUS[role]}s ({in_role_wait_s(role)}s of in-role waits, rollout "
+        f"{'counted' if _waits_for_a_rollout(role) else 'NOT counted'} at "
+        f"{_rollout_timeout_s(role)}s). A moved wait or a changed `manifests_rollout` reads as "
+        "a smaller sum here and leaves the ratchet below green over a wider gap."
+    )
+
+
 def test_the_forward_cap_shortfall_does_not_widen():
     snapshot_timeout, stabilise, cap = _forward_terms()
     worst_role, worst = _worst_forward_case(snapshot_timeout, stabilise)
@@ -414,26 +463,34 @@ def test_the_forward_cap_shortfall_does_not_widen():
         "no promoted (k8s_autodeploy: true) k8s role found — the sizing model this test "
         "encodes no longer matches the repo; update it rather than deleting it"
     )
-    assert worst - cap <= _KNOWN_FORWARD_SHORTFALL_S, (
-        f"{worst_role} needs {worst} s inside gitops_deploy_k8s_timeout_s ({cap}s) "
-        f"({len(yaml.safe_load((_K8S_ROLES_DIR / worst_role / 'defaults' / 'main.yml').read_text()).get('k8s_autodeploy_snapshot_pvcs') or [])} "
-        f"claim(s) x {snapshot_timeout}s snapshot, {in_role_wait_s(worst_role)}s of in-role "
-        f"waits, {_rollout_timeout_s(worst_role)}s rollout, {stabilise}s soak), which is "
-        f"{worst - cap}s over it — past the {_KNOWN_FORWARD_SHORTFALL_S}s shortfall #2397 "
-        f"recorded. A cap kill is a killpg MID-DRAIN that routes to _rollback_k8s. Close the "
-        f"gap (#2369's pre-pull) or raise the cap WITH all four tree-lock waiters and the "
-        f"unit's TimeoutStartSec; do not widen this constant to make the run green."
+    assert _shortfall_ok(worst, cap, _KNOWN_FORWARD_SHORTFALL_S), (
+        f"{worst_role} needs {worst}s inside gitops_deploy_k8s_timeout_s ({cap}s) "
+        f"({in_role_wait_s(worst_role)}s of in-role waits, {_rollout_timeout_s(worst_role)}s "
+        f"rollout, {stabilise}s soak, plus one {snapshot_timeout}s snapshot per declared "
+        f"claim), which is {worst - cap}s over it — past the {_KNOWN_FORWARD_SHORTFALL_S}s "
+        f"shortfall #2397 recorded. A cap kill is a killpg MID-DRAIN that routes to "
+        f"_rollback_k8s. Close the gap (#2369's pre-pull) or raise the cap WITH all four "
+        f"tree-lock waiters and the unit's TimeoutStartSec; do not widen this constant to make "
+        f"the run green."
     )
 
 
 def test_a_widened_forward_shortfall_is_caught():
-    # Red proof for the ratchet above, which can only ever be observed passing: the same
-    # verdict, driven on a role that grew an in-role wait past the recorded shortfall.
+    # Red proof for the ratchet above, which can only ever be observed passing. Driven on the
+    # verdict function with synthetic numbers, the way `test_an_uncounted_staging_budget_is_caught`
+    # drives `_budget_fits`: today's worst case fits the recorded shortfall, and one in-role wait
+    # longer does not.
+    assert _shortfall_ok(1260, 900, 360)
+    assert not _shortfall_ok(1261, 900, 360), (
+        "the ratchet must REJECT a ceiling one second past the recorded shortfall; a check "
+        "that passes it is measuring nothing"
+    )
+
     snapshot_timeout, stabilise, cap = _forward_terms()
     _, worst = _worst_forward_case(snapshot_timeout, stabilise)
     assert worst - cap == _KNOWN_FORWARD_SHORTFALL_S, (
         f"the recorded shortfall is stale: the worst promoted role now needs {worst - cap}s "
-        f"more than the {cap}s cap, not {_KNOWN_FORWARD_SHORTFALL_S}s. If the gap CLOSED, "
-        f"drop the constant to 0 and this test with it — the ratchet becomes the real budget "
-        f"check #2397 asked for. If it grew, the test above already says so."
+        f"more than the {cap}s cap, not {_KNOWN_FORWARD_SHORTFALL_S}s. If the gap CLOSED, drop "
+        f"the constant to 0 and this assertion with it — the ratchet becomes the real budget "
+        f"check #2397 asked for. If it GREW, the test above already says so."
     )

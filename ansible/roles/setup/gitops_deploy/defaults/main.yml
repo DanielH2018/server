@@ -165,17 +165,20 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # budget: claims x volume_snapshot_timeout (the pre-apply snapshot) + the role's OWN in-role
 # waits + manifests_rollout_timeout + k8s_rollout_stabilise_seconds. The service-lock wait is
 # spent out of this budget too (`deploy_locks.locked_budget`), so it is overhead on top.
-# netpol-baseline is the worst at 0 + 650 + 600 + 60 = 1310s (five probe Jobs at
-# `--timeout=130s`), and prowlarr next at 120 + 300 + 780 + 60 = 1260s. A cap kill is a killpg
-# MID-DRAIN that routes to _rollback_k8s, as a rollout timeout does.
+# prowlarr is the worst at 120 + 300 + 780 + 60 = 1260s. The rollout term is counted only for a
+# role that queues one: netpol-baseline has the most in-role waiting in the repo (five probe Jobs
+# at `--timeout=130s`) and passes `manifests_rollout: ""`, so it pays 710s rather than the 1310s
+# its own rollout budget would suggest. A cap kill is a killpg MID-DRAIN that routes to
+# _rollback_k8s, as a rollout timeout does.
 #
 # It is not raised here because raising it alone is unsafe: `_worst_lock_hold` is 3240s against
-# the 3300s every tree-lock waiter allows, so 900 -> 1310 would silently take the four waiters
+# the 3300s every tree-lock waiter allows, so 900 -> 1260 would silently take the four waiters
 # (secret-rotate, docs-refresh, eval-run, deploy.sh's LOCK_WAIT) under the deployer's hold and
-# make each of them skip a run and page for ordinary contention. Closing it means either #2369's
-# pre-pull — which takes the cold image pull out of the rollout wait, growing no budget — or one
-# change that raises the cap, all four waiters and the unit's TimeoutStartSec together.
-# `test_the_forward_cap_shortfall_does_not_widen` ratchets the gap at today's 410s meanwhile, so
+# make each of them skip a run and page for ordinary contention, and 180 + 3600 would not fit the
+# unit's TimeoutStartSec either. Closing it means either #2369's pre-pull — which takes the cold
+# image pull out of the rollout wait, growing no budget — or one change that raises the cap, all
+# four waiters and TimeoutStartSec together.
+# `test_the_forward_cap_shortfall_does_not_widen` ratchets the gap at today's 360s meanwhile, so
 # a new in-role wait or a rollout bump on a promoted role fails there rather than in production.
 gitops_deploy_k8s_timeout_s: 900
 
