@@ -26,6 +26,11 @@
 # volume that no longer exists, for a PVC of this name.
 - name: Drop a migrated volume's stranded backup chain
   hosts: daniel-box
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   connection: local
   gather_facts: false
   vars:

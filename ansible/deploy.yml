@@ -1,6 +1,11 @@
 ---
 - name: Deploy Containers
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: true
   pre_tasks:
     # `-e target=<other host>` looks like it drives that host remotely. For daniel-server and
@@ -129,6 +134,11 @@
 # daniel-server.
 - name: Deploy k8s workloads
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: true
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)

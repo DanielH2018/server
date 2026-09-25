@@ -19,6 +19,11 @@
 # the assert is always-tagged by design. Do not fold this back in.
 - name: Verify Longhorn can bind a volume
   hosts: "{{ storage_smoke | default([]) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
