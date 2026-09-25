@@ -195,6 +195,29 @@ def test_read_state_with_no_hold_plane_lists_no_entry_is_flagged(state_dir):
     assert reads.read_state(state_dir)["hold_plane_entries"] == []
 
 
+def test_read_state_lists_a_deferred_bump_with_its_deploy_then_clear_is_clean(
+    state_dir,
+):
+    """A merged, unapplied image bump is the one park the page could not name (#2522)."""
+    marker = f"{'a' * 40} sonarr 2000.0\n{'b' * 40} radarr 1000.0\n"
+    (state_dir / "k8s_deferred").write_text(marker)
+    rows = reads.k8s_deferred_rows(marker)
+    assert [r["service"] for r in rows] == ["radarr", "sonarr"]
+    assert rows[0]["origin"] == "b" * 8
+    assert rows[0]["deploy"] == './scripts/deploy.sh --tags "radarr"'
+    assert "clear-k8s-deferred radarr" in rows[0]["clear"]
+    assert reads.read_state(state_dir)["k8s_deferred_entries"] == rows
+
+
+def test_read_state_with_no_deferred_bump_lists_no_entry_is_flagged(state_dir):
+    assert reads.read_state(state_dir)["k8s_deferred_entries"] == []
+
+
+def test_k8s_deferred_rows_skips_a_garbled_line_is_flagged():
+    """A torn line names no service, so a row built from one could not be cleared."""
+    assert reads.k8s_deferred_rows("garbage\ndeadbeef sonarr not-a-time") == []
+
+
 def test_hold_plane_sep_matches_the_deployers_own_separator():
     """The oracle for the literal in `deploy_ui_reads`.
 

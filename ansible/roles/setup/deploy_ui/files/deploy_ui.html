@@ -43,7 +43,12 @@ function state(b){const row=(k,v,extra='')=>`<tr><td>${k}</td><td>${v?`<code>${e
   const hold=b.hold_sha?'<button class="warn" onclick="clearHold()">clear hold</button>':'';
   const planeCell=planes.length?planes.map(p=>`<code>${esc(p)}</code>`).join('<br>'):'<span class="clear">clear</span>';
   const ov=b.staging_gate_override?`<button onclick="post('/api/staging-override',{action:'clear'})">clear override</button>`:`<button class="warn" onclick="post('/api/staging-override',{action:'set'})">set override</button>`;
-  return '<table>'+row('hold_sha',b.hold_sha,hold)+`<tr><td>hold_plane</td><td>${planeCell}</td><td></td></tr>`+row('last_run',b.last_run)+row('behind_since',b.behind_since)+row('staging_gate_override',b.staging_gate_override,ov)+'</table>';}
+  // No deploy button beside a deferred bump, unlike the stale panel above: the tick deferred it
+  // for lack of wall clock, so the operator picks the moment. The two commands are printed in
+  // the order they are run — deploy, then clear.
+  const def=b.k8s_deferred_entries||[];
+  const defCell=def.length?def.map(d=>`${esc(d.service)} <span class="mute">${esc(d.origin)}</span><br><code>${esc(d.deploy)}</code><br><code>${esc(d.clear)}</code>`).join('<br>'):'<span class="clear">clear</span>';
+  return '<table>'+row('hold_sha',b.hold_sha,hold)+`<tr><td>hold_plane</td><td>${planeCell}</td><td></td></tr>`+row('last_run',b.last_run)+row('behind_since',b.behind_since)+row('staging_gate_override',b.staging_gate_override,ov)+`<tr><td>k8s_deferred</td><td>${defCell}</td><td></td></tr>`+'</table>';}
 function prs(b){if(!b.prs.length)return '<p class="mute">no open PRs</p>';
   return '<table><tr><th>#</th><th>title</th><th>CI</th><th></th></tr>'+b.prs.map(p=>`<tr><td>${p.number}</td><td>${esc(p.title)}${p.draft?' <span class="mute">draft</span>':''}<br><span class="mute">${esc(p.branch)}</span></td><td>${p.ci}</td><td><button onclick="{const s=prompt('--since SHA (master before the merge)');if(s)post('/api/land',{pr:'${p.number}',since:s})}">land</button></td></tr>`).join('')+'</table>';}
 async function tail(){if(!logPath)return;const r=await fetch('/api/log?path='+encodeURIComponent(logPath));document.getElementById('log').textContent=await r.text();}

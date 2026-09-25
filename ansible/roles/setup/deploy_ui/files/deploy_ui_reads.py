@@ -14,15 +14,23 @@ from pathlib import Path
 
 import gitops_markers
 
-# The five markers the panels show, by basename — `gitops_markers` is the deployer's own table,
+# The six markers the panels show, by basename — `gitops_markers` is the deployer's own table,
 # copied into this `files/` (its header says how it is kept fresh). The basenames are also the
 # keys `/api/state` serves, which is what the page reads.
 MARKERS = tuple(
     gitops_markers.MARKERS[m]
-    for m in ("hold", "hold_plane", "last_run", "behind", "staging_override")
+    for m in (
+        "hold",
+        "hold_plane",
+        "last_run",
+        "behind",
+        "staging_override",
+        "k8s_deferred",
+    )
 )
 _OVERRIDE = gitops_markers.MARKERS["staging_override"]
 _HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
+_K8S_DEFERRED = gitops_markers.MARKERS["k8s_deferred"]
 
 # Between the entries of a `hold_plane` that more than one failed apply wrote (#2381). A
 # literal, because the daemon runs under `uv run --no-project` outside the repo venv and
@@ -239,19 +247,41 @@ def hold_plane_entries(held: str) -> list[str]:
     return [e.strip() for e in held.split(";") if e.strip()]
 
 
-def read_state(state_dir: Path) -> dict[str, str | list[str]]:
-    """Read the five markers, plus `hold_plane` split into its entries.
+def k8s_deferred_rows(marker: str) -> list[dict[str, str]]:
+    """Each image bump the `k8s_deferred` marker still holds, oldest deferral first.
+
+    One row per service, carrying the two commands an operator runs in order: the deploy that
+    applies the merged bump, then the clear that drops its line. The page prints both rather
+    than offering a button, because this daemon's deploy button takes the service lock and a
+    budget deferral means the tick ran out of wall clock — the operator picks the moment.
+
+    A garbled line is skipped by `parse_k8s_deferred`, never guessed at, for the reason that
+    function gives.
+    """
+    return [
+        {
+            "service": e.service,
+            "origin": e.origin[:8],
+            "deploy": gitops_markers.k8s_deferred_deploy_cmd([e.service]),
+            "clear": gitops_markers.k8s_deferred_clear_cmd(e.service),
+        }
+        for e in sorted(gitops_markers.parse_k8s_deferred(marker), key=lambda e: e.at)
+    ]
+
+
+def read_state(state_dir: Path) -> dict[str, str | list]:
+    """Read the six markers, plus `hold_plane` and `k8s_deferred` split into their entries.
 
     A missing marker is ''. The override is presence-only, so it reads 'set' or ''. The
-    `hold_plane_entries` key is the parsed form of `hold_plane`, and it is what the page
-    lists; the raw string stays beside it.
+    `hold_plane_entries` and `k8s_deferred_entries` keys are the parsed forms of their
+    markers, and they are what the page lists; the raw strings stay beside them.
 
     Raises:
         OSError: a marker exists but can't be read (e.g. permission denied). Only a
             missing marker is a clear state; anything else that stops the read must not
             be mistaken for one.
     """
-    st: dict[str, str | list[str]] = {}
+    st: dict[str, str | list] = {}
     for name in MARKERS:
         p = state_dir / name
         try:
@@ -261,6 +291,7 @@ def read_state(state_dir: Path) -> dict[str, str | list[str]]:
             continue
         st[name] = "set" if name == _OVERRIDE else text.strip()
     st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
+    st["k8s_deferred_entries"] = k8s_deferred_rows(str(st[_K8S_DEFERRED]))
     return st
 
 

@@ -186,6 +186,23 @@ def kubectl_runner(binary: str, namespace: str, timeout: int):
     return kubectl
 
 
+def file_mtime(path):
+    """(mtime, unreadable) for `path` — (None, False) when it simply does not exist.
+
+    `unreadable` is True only when the path EXISTS but could not be stat'd, which on these
+    hosts means a permissions change. A caller that folded the two together would report "the
+    file is gone" for a file it merely could not look at, and those have different fixes — the
+    lesson longhorn_backup_health._read_stamp records from the 2026-08-19 restore-drill
+    incident. The Longhorn heartbeat's check 10 reads a cron file's install time this way.
+    """
+    try:
+        return os.stat(path).st_mtime, False
+    except FileNotFoundError:
+        return None, False
+    except OSError:
+        return None, True
+
+
 def journal_reader(binary, window_hours, timeout):
     """Return a `journal(tag) -> list or None` bound to one binary, window and timeout.
 

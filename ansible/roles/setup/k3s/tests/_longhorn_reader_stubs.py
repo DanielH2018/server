@@ -49,7 +49,7 @@ def _reader_env(tmp_path, **overrides) -> dict:
 
     Every one of these is REQUIRED by the reader (`_require_env` et al — no hardcoded fallback,
     the 2026-09-04 review's finding #3), so a subprocess test that used to set only a couple of
-    vars and rely on module-level defaults for the rest now has to set all thirteen or the reader
+    vars and rely on module-level defaults for the rest now has to set all seventeen or the reader
     exits nonzero before doing anything else. Centralised here so each test only names the ONE
     var it cares about overriding. LONGHORN_BACKUP_KUBECTL is the exception: every subprocess
     test points it at its own stub, so it has no default here.
@@ -78,10 +78,34 @@ def _reader_env(tmp_path, **overrides) -> dict:
             "LONGHORN_JOURNALCTL": "/bin/true",
             "LONGHORN_JOURNAL_TIMEOUT_S": "10",
             "LONGHORN_CRON_EVIDENCE_WINDOW_HOURS": "26",
+            # Check 10's crons, installed an hour before NOW: the reader stats these paths, sees them
+            # inside the window, and grants the freshly-provisioned grace — so the empty
+            # journal above stays silent and the green path stays green. A test about check 10
+            # overrides a path with one that does not exist, or backdates its mtime further.
+            "LONGHORN_TRIM_CRON_FILE": str(_touch_cron(tmp_path, "longhorn-trim")),
+            "LONGHORN_TRIM_CRON_EXPECTED": "True",
+            "LONGHORN_B2_DELETIONS_CRON_FILE": str(
+                _touch_cron(tmp_path, "b2-deletion-accounting")
+            ),
+            "LONGHORN_B2_DELETIONS_CRON_EXPECTED": "True",
         }
     )
     env.update(overrides)
     return env
+
+
+def _touch_cron(tmp_path, name: str) -> Path:
+    """A stand-in for `/etc/cron.d/<name>`, installed an hour before the pinned clock.
+
+    Its mtime is set against NOW rather than left at the real wall clock: the subprocess
+    tests pin `now` to NOW, and a file stamped with today's date would read to check 10 as
+    installed months before that and page for a cron it was handed no journal for.
+    """
+    path = tmp_path / "cron.d" / name
+    path.parent.mkdir(parents=True, exist_ok=True)
+    path.touch()
+    os.utime(path, (NOW - 3600, NOW - 3600))
+    return path
 
 
 def _rfc3339(epoch: float) -> str:

@@ -6,6 +6,7 @@ un-importable discord() previously pinned via AST guards (test_gitops_deploy_ale
 """
 
 import json
+import os
 from unittest import mock
 
 import host_lib
@@ -254,3 +255,22 @@ def test_journal_reader_returns_none_when_the_read_itself_failed():
     """None and [] are different answers: a broken journalctl must not read as a quiet cron."""
     assert host_lib.journal_reader("/bin/false", 26, 10)("longhorn-trim") is None
     assert host_lib.journal_reader("/nonexistent/journalctl", 26, 10)("x") is None
+
+
+# ── file_mtime: "the file is gone" and "I could not look" are different answers ────────────
+
+
+def test_file_mtime_reads_an_existing_files_install_time(tmp_path):
+    path = tmp_path / "longhorn-trim"
+    path.touch()
+    os.utime(path, (1_700_000_000, 1_700_000_000))
+    assert host_lib.file_mtime(str(path)) == (1_700_000_000, False)
+
+
+def test_file_mtime_separates_a_missing_file_from_one_it_cannot_stat(tmp_path):
+    """A missing cron entry is a fault; an unstattable one is a permissions problem."""
+    assert host_lib.file_mtime(str(tmp_path / "no-such-cron")) == (None, False)
+    # A path under a non-directory: the stat raises ENOTDIR, not FileNotFoundError.
+    not_a_dir = tmp_path / "file"
+    not_a_dir.write_text("")
+    assert host_lib.file_mtime(str(not_a_dir / "child")) == (None, True)
