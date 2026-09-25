@@ -88,8 +88,10 @@ try:
         read_contention_marker,
         contention_lines,
         k8s_deferred_lines,
+        k8s_unapplied_lines,
         manual_plane_lines,
         read_k8s_deferred_marker,
+        read_k8s_unapplied_marker,
         read_manual_plane_marker,
         read_manual_plane_tags_marker,
     )
@@ -118,6 +120,8 @@ except ImportError as exc:
     read_contention_marker = _park_unavailable
     k8s_deferred_lines = _park_unavailable
     read_k8s_deferred_marker = _park_unavailable
+    k8s_unapplied_lines = _park_unavailable
+    read_k8s_unapplied_marker = _park_unavailable
 
 __all__ = ["BEHIND_PARK_SECONDS", "GITOPS_STATE_DIR"]
 
@@ -223,6 +227,7 @@ def parked_deployer_problems(
     read_contention=None,
     read_manual_tags=None,
     read_k8s_deferred=None,
+    read_k8s_unapplied=None,
 ):
     """The primary-checkout and deployer-park banner lines, as one list.
 
@@ -280,6 +285,11 @@ def parked_deployer_problems(
         def read_k8s_deferred():
             return read_k8s_deferred_marker(GITOPS_STATE_DIR)
 
+    if read_k8s_unapplied is None:
+
+        def read_k8s_unapplied():
+            return read_k8s_unapplied_marker(GITOPS_STATE_DIR)
+
     # Deferred like the `lib.git` import above, and for the same reason the rest of this file
     # defers: nothing at module scope may be able to stop the banner. The one module-scope
     # import this file does keep — `lib.deployer_park` — is wrapped up there and reported here.
@@ -317,6 +327,10 @@ def parked_deployer_problems(
         # reaches the session that can run it — `land.sh` printed the command to whoever merged
         # the bump, and nothing printed it again (#2470).
         lines += k8s_deferred_lines(read_k8s_deferred(), clock)
+        # Last of all, because it is the only one nothing pages on: a k8s role this deployer
+        # never applies is owed to a hand indefinitely, and the banner is where that is said
+        # (#2570).
+        lines += k8s_unapplied_lines(read_k8s_unapplied(), clock)
     except Exception:
         return lines
     return lines

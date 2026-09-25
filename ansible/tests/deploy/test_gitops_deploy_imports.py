@@ -47,6 +47,10 @@ ALLOWED: dict[str, set[str] | None] = {
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.
     "gitops_markers": set(),
+    # The k8s release records, read to discharge a `k8s_unapplied` line. Stdlib only, for the
+    # reason `gitops_markers` is: `deploy_toolbox` imports it for the `release_commit`
+    # default, so an import back would be a cycle.
+    "deploy_release": set(),
     "deploy_config": set(),
     "deploy_failtext": set(),
     "deploy_git": set(),
@@ -110,7 +114,13 @@ ALLOWED: dict[str, set[str] | None] = {
     # `deploy_config` for the Config it binds. It holds `post`, the webhook itself, so that
     # `deploy_alerts` can import IT rather than the other way round. Never `gitops_deploy` —
     # that is rule 1.
-    "deploy_toolbox": {"deploy_config", "deploy_git", "deploy_io", "deploy_narrow"},
+    "deploy_toolbox": {
+        "deploy_config",
+        "deploy_git",
+        "deploy_io",
+        "deploy_narrow",
+        "deploy_release",
+    },
     "deploy_alerts": {
         "deploy_changes",
         "deploy_config",

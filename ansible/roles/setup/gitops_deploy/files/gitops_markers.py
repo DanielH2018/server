@@ -73,6 +73,32 @@ MARKERS: dict[str, str] = {
     # denylisted, so recording those would hold GitOps Deploy — Status red as normal operation.
     # A budget deferral has no such person: nothing chose it, and nothing reports it again.
     "k8s_deferred": "k8s_deferred",
+    # One line per HAND-EDITED or DENYLISTED k8s role change a tick fast-forwarded and will
+    # never apply, in the same `"<origin_sha> <service> <unix_ts>"` format as `k8s_deferred`.
+    # See `parse_k8s_deferred`, which reads both.
+    #
+    # A SEPARATE FILE RATHER THAN A FOURTH FIELD ON THE LINE ABOVE, and rather than a fourth
+    # arm in `gitops_status` (#2570). `parse_k8s_deferred` accepts exactly three fields and
+    # skips anything else, so a class tag appended to a `k8s_deferred` line would read as NO
+    # pending bump in an un-redeployed monitor-bridge and silence the page that marker exists
+    # to raise — the failure `manual_plane_tags` was made a sidecar to avoid. A reader that
+    # has never heard of this basename ignores it, which is exactly the posture this class
+    # wants: NOTHING PAGES ON THIS MARKER. `gitops_status` does not read it, by construction
+    # and not by omission. Forty of the fifty-four k8s roles are denylisted
+    # (`docs/reference/decisions.md`), so a page on their ordinary changes would hold GitOps
+    # Deploy — Status red as normal operation. The durable readers are the SessionStart banner
+    # and the deployer's own journal, both of which a person reads when they are already
+    # looking.
+    #
+    # THE LINE DISCHARGES ITSELF. A denylisted role is by definition one this deployer never
+    # applies, so a marker with only a deployer-side clear would accumulate one line per
+    # routine landing and rebuild the always-red tile on the banner. Every tick therefore
+    # asks, per pending line, whether the service's release record
+    # (`roles/k8s/manifests/tasks/release_stamp.yml`) now names a commit that CONTAINS the
+    # recorded SHA — one `git merge-base --is-ancestor`, which is a different question from
+    # `probe.py releases --stale-only`'s path comparison and cannot drift against it. That
+    # discharges an operator's own `deploy.sh`, which the deployer cannot otherwise see.
+    "k8s_unapplied": "k8s_unapplied",
     # The unix time the last tick completed; monitor-bridge's GitOps Alive reads its age.
     "last_run": "last_run",
     # Origin SHA recorded while local and origin have DIVERGED (`deploy_logic.is_diverged`):
@@ -186,9 +212,24 @@ K8S_DEFERRED_CLEAR_CMD = (
 )
 
 
+K8S_UNAPPLIED_CLEAR_CMD = (
+    "uv run python scripts/deploy_tools/gitops_state.py clear-k8s-unapplied <service>"
+)
+
+
 def k8s_deferred_clear_cmd(service: str = "<service>") -> str:
     """The clear command to print beside a deferred bump's own deploy command."""
     return K8S_DEFERRED_CLEAR_CMD.replace("<service>", service)
+
+
+def k8s_unapplied_clear_cmd(service: str = "<service>") -> str:
+    """The clear command for a merged-and-unapplied k8s role change.
+
+    A hand clear exists even though the marker discharges itself off the release record: a
+    role whose change was reverted rather than deployed never gets a record naming it, and a
+    line nobody can drop is a banner entry forever.
+    """
+    return K8S_UNAPPLIED_CLEAR_CMD.replace("<service>", service)
 
 
 def k8s_deferred_deploy_cmd(services) -> str:
@@ -409,7 +450,10 @@ def format_manual_plane_tags(tags: dict[str, frozenset[str]]) -> str | None:
 
 
 def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
-    """Every pending bump in the `k8s_deferred` marker, in the order the lines stand.
+    """Every pending line of `k8s_deferred` OR `k8s_unapplied`, in the order they stand.
+
+    The two markers share this format and this parser, and differ only in who reads them:
+    `gitops_status` pages on the first and never opens the second (#2570).
 
     A line this cannot parse is SKIPPED, never guessed at, for the reason
     `parse_manual_plane` skips one: a page raised off a torn line names no service and cannot

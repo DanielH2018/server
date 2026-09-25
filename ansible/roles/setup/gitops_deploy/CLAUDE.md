@@ -186,9 +186,20 @@ Each arm below is a rule and the function that holds it. The record page has the
       age at the six hours `manual_plane` uses. **So is a bump the STAGING gate demoted**,
       decided per class rather than per channel (#2471): a demotion has the same two properties
       the budget case has, in that the tick chose it and nothing reports it again. A hand-edited
-      or denylisted k8s role on that channel is not recorded — it is merged by a person who is
-      landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
-      hold Status red as normal operation. The demotion is recorded at the ff-merge
+      or denylisted k8s role on that channel is not recorded HERE — forty of the fifty-four k8s
+      roles are denylisted, so paging on those would hold Status red as normal operation.
+      **Those two classes go to `k8s_unapplied` instead** (#2570), the same line format in a
+      second file that `gitops_status` never opens: a durable record that does not page, read
+      by the SessionStart banner and by the journal. `deploy_alerts.alert_deferred` writes it,
+      which covers every exit that leaves the range merged — the contention arm resets and
+      returns before reaching any of them, so `unrecord` owns no reverse for it. Every tick
+      DISCHARGES a line whose service has since been deployed
+      (`deploy_defer.discharge_k8s_unapplied`), from the service's release record and one
+      `git merge-base --is-ancestor`; that is what drops the line for an operator's own
+      `deploy.sh`, which this deployer cannot see, and without it the marker would hold a
+      permanent line per routine landing. A record that is absent or undatable KEEPS the line.
+      `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear, needed only for a change
+      that was reverted rather than applied. The demotion is recorded at the ff-merge
       (`deploy_defer.record_demoted`), not in the `gate_broad_k8s` that decided it: the gate
       runs before that merge, and a contention arm after it resets the tree. A contention arm
       takes the line back with the `manual_plane` lines beside it; a failed broad apply keeps
