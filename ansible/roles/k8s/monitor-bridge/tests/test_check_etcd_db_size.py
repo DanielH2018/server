@@ -102,10 +102,12 @@ def test_the_query_collapses_the_two_scrape_jobs_to_one_value(cfg):
     assert seen["base"] == cfg.CLUSTER_PROM_URL
 
 
-def test_the_default_quota_is_etcds_own_because_k3s_overrides_nothing(cfg):
-    """2 GiB is in force only while `k3s_server_args` carries no --etcd-arg override.
+def test_the_in_code_quota_default_is_etcds_own(cfg):
+    """The fallback an unset `ETCD_DB_QUOTA_BYTES` leaves the check on is etcd's own 2 GiB.
 
-    The env-secret comment says the two move together; this pins the default the check falls
-    back to, so a change to one without the other fails here rather than in production.
+    This pins the DEFAULT only. Whether the deployed value still matches the quota the cluster
+    actually runs is the two-sided pin in
+    `ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py`, which reads
+    `k3s_server_args` as well — this suite cannot, having no repo root.
     """
     assert cfg.ETCD_DB_QUOTA_BYTES == QUOTA

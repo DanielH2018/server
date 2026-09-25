@@ -282,7 +282,7 @@ def cluster_config(
         # have. Deployed value in monitor-bridge's env-secret.yaml.j2.
         ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES", "2147483648"),
         # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
-        # The DB read 2.6% on 2026-09-25 and had been flat for five weeks, so any breach is
-        # pathological growth rather than a slow fill and the exact figure is not load-bearing.
+        # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather
+        # than a slow fill and the exact figure is not load-bearing.
         ETCD_DB_MAX_PCT=_num("ETCD_DB_MAX_PCT", "80"),
     )

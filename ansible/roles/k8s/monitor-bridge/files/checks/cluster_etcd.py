@@ -2,10 +2,10 @@
 
 etcd's own series — `etcd_mvcc_db_total_size_in_bytes` and the WAL fsync histograms — are
 empty here, because `k3s_etcd_expose_metrics` is off and the comment at that switch
-(group_vars/all.yml) records why it stays off. `apiserver_storage_size_bytes` is the proxy
-that is scraped unconditionally: it reports the same number the etcd snapshot weighs, and the
-DB filling its quota is the failure the restore runbook exists for. At the quota etcd goes
-read-only and the whole control plane stops accepting writes (#2403).
+(group_vars/all.yml) records why it stays off. `apiserver_storage_size_bytes` is the proxy that
+is scraped unconditionally, and #2403 reports it matching the etcd snapshot's size. The DB
+filling its quota is the failure the restore runbook exists for: at the quota etcd goes
+read-only and the whole control plane stops accepting writes.
 
 Its own module for the reason `cluster_zero.py` is one: `checks/cluster.py` sits near the
 600-line cap the module-length ratchet enforces. Config as `cfg.X`, the fetch through
@@ -36,8 +36,13 @@ def check_etcd_db_size(cfg: Config, fetch=bridge.net.prom_scalar) -> tuple[bool,
     the discriminator is partial coverage. There, volume stats come from two jobs over 43
     claims, so a dead kubelet job still answers for 27 of them and silence hides a real gap.
     Here one series is carried by both jobs, so an empty vector means the apiserver is not
-    being scraped at all — which `targets` and `cluster_targets` already page on, and paging a
-    second monitor for that one root cause is what the gate sets exist to prevent.
+    being scraped at all — and paging a second monitor for that one root cause is what the gate
+    sets exist to prevent. The compensating control was checked rather than assumed:
+    `verdicts.cluster.targets_verdict` pages on ANY series with `up == 0`, not on a count floor
+    alone, and `check_cluster_targets` selects `up{origin!="daniel-server"}`, which matches the
+    apiserver target (it carries no `origin` label, and PromQL reads an absent label as empty).
+    A 403 on that scrape — the failure prometheus.yaml.j2's RBAC note warns about — sets
+    `up = 0` there, so it pages on Cluster Scrape Targets rather than going silent.
 
     No streak. A DB at 80% of its quota does not self-heal the way a Longhorn replica rebuild
     or a Recreate rollout does, so holding the verdict through consecutive cycles would only

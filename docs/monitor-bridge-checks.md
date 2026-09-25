@@ -963,9 +963,10 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   no data. The
   `DECIDED:` marker at that switch in `group_vars/all.yml` records why it stays off — arming it
   restarts k3s and re-encrypts every Secret (#2294) from a manual-plane playbook, and opens an
-  unauthenticated `:2381`. `apiserver_storage_size_bytes` is scraped unconditionally and matches
-  the etcd snapshot to the byte: 56,389,632 on 2026-09-25, 2.6% of the quota and flat for five
-  weeks before that. **`max(...)` over the bare series, no `by` and no `job` selector:** k3s
+  unauthenticated `:2381`. `apiserver_storage_size_bytes` is scraped unconditionally, and #2403
+  reports it matching the etcd snapshot's size — 53,768,192 there on 2026-09-24, 56,389,632 read
+  the next day, 2.6% of the quota. **`max(...)` over the bare series, no `by` and no `job`
+  selector:** k3s
   serves the apiserver and the kubelet from one process, so the series is scraped TWICE with the
   same value — under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"` — and two
   identical series would make `prom_scalar`'s `result[0]` an arbitrary pick, while selecting on

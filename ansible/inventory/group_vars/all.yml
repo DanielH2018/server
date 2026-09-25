@@ -387,8 +387,8 @@ k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 # flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter,
 # where leader changes and WAL fsync latency carry little signal anyway. The one series that
 # does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag:
-# `apiserver_storage_size_bytes` is scraped unconditionally and matches the etcd snapshot to
-# the byte. monitor-bridge's `etcd_db_size` check reads it (files/checks/cluster_etcd.py,
+# `apiserver_storage_size_bytes` is scraped unconditionally, and #2403 reports it matching the
+# etcd snapshot's size. monitor-bridge's `etcd_db_size` check reads it (files/checks/cluster_etcd.py,
 # #2403). Reopen this with evidence that fsync latency or leader churn is what broke, not
 # with the observation that the etcd series are empty — that is this decision, not a finding.
 k3s_etcd_expose_metrics: false
