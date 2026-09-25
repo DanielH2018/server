@@ -578,11 +578,17 @@ jobs:
       # separates a heavy module from a light one elsewhere. This step has the measurement,
       # because the shard just ran the file.
       #
+      # Two arms, and the second needs the measurement just as much (#2514): a recorded weight
+      # far HIGHER than what the module measured here reserves shard time the file does not
+      # cost, and every static arm asks only whether a file is missing from the table. The
+      # complaint names its own repair, which differs per arm — `--record-missing` fills a gap
+      # and `--record-files` refreshes an entry that is merely wrong.
+      #
       # A `run:` step and NOT a pytest test. The docs-refresh and eval-run crons commit with
       # the prek chain on and deselect exactly one ratchet node id; a second test that went red
       # on an unweighted file would fail their commits the way #1899 did, and neither cron can
       # run the repair. Nothing a cron commits passes through a workflow step.
-      - name: Check no heavy module ran unweighted
+      - name: Check every heavy module's recorded weight
         run: uv run python scripts/dev/pytest_shard.py --check-durations "$RUNNER_TEMP/durations.log"
 
   # The required status context. Branch protection, the deployer's CI_CONTEXTS, await_ci.py
