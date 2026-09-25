@@ -33,7 +33,9 @@ and fires false alarms.
 
 These live only in the Healthchecks.io console; nothing in this repo can set them. Until
 2026-08-30 only three of the seven were written down anywhere, so the other four could not be
-verified against their crons at all. Set them to match this table.
+verified against their crons at all. Set them to match this table. monitor-bridge's
+*Healthchecks.io Console Drift* tile compares the console against it every day (see *The
+console drifts* below).
 
 The period or expression is the cron in the table above: a `*/10` minute cron is a Simple
 check with a 10-minute period, and every other slug is a Cron check carrying that expression
@@ -249,7 +251,7 @@ the incident left open — "did anything external notice" — is answered yes, w
 
 The 25-minute grace on the other two cost five minutes of detection.
 
-### The console drifts, and nothing checks it
+### The console drifts, and monitor-bridge checks it
 
 A read on 2026-09-25 found two console settings that broke their checks (#2563):
 
@@ -263,9 +265,18 @@ A read on 2026-09-25 found two console settings that broke their checks (#2563):
 The operator corrected both the same day. The graces that differed from this doc were
 recorded as the documented values instead, and the table above now matches the console.
 
-Nothing in the repo can set these values, and nothing checks them. The read-only key that
-can read them has no other consumer. #1949 named that gap and closed with doc changes only,
-so the guard is filed again as #2566.
+Nothing in the repo can set these values. Since #2566, monitor-bridge reads them.
+`checks/healthchecks.py` calls `GET /api/v3/checks/` with `healthchecks_api_read_only_key` and
+compares every slug above against `monitor_bridge_healthchecks_expected`. It checks the
+schedule type, the Simple period or the Cron expression and timezone, and the grace. A
+difference or a missing slug turns the *Healthchecks.io Console Drift* tile DOWN, and the
+message names the slug and field. A clean read is cached for a day, and a red one is re-read
+every five minutes, so the tile clears one cycle after the console is fixed.
+
+That expectation list is a literal in monitor-bridge's defaults.
+`ansible/tests/services/test_monitor_bridge_healthchecks_expected.py` holds it to the cron
+variables in the fragment above and to the period-and-grace table on this page. To change a
+cron or a grace, change the variable, this table and the list in the same PR.
 
 ## Verifying
 

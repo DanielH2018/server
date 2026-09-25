@@ -47,6 +47,7 @@ monitor_bridge_modules:
   - checks/gitops.py
   - checks/notify.py
   - checks/cloudflare_ips.py
+  - checks/healthchecks.py
   - bridge/common.py
   - bridge/parsing.py
   - verdicts/cluster.py
@@ -66,3 +67,26 @@ monitor_bridge_modules:
 # class: `rollout status` would return the moment the pod reports Running and prove nothing.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "observability — this IS the alert pipeline; a broken deploy cannot page about being broken. ALSO no readinessProbe (probe-less) — two independent reasons"  # noqa var-naming[no-role-prefix]
+
+# What the Healthchecks.io console must carry for each off-site dead-man check, which
+# checks/healthchecks.py compares against `GET /api/v3/checks/` every day (#2566). A Simple
+# check's `timeout` and every `grace` are seconds, as the API returns them; a Cron check carries
+# its expression and timezone.
+#
+# A literal rather than a reference to the cron variables, because those live in the setup/k3s,
+# k8s/pi-peer-backup and k8s/registry defaults, and role defaults do not cross the deploy play's
+# include_role loop. ansible/tests/services/test_monitor_bridge_healthchecks_expected.py holds
+# this list to those variables (through the deadman-cadences fragment's reader) and to the
+# period-and-grace table in docs/healthchecks-io-deadman.md, so a cron or a grace cannot move
+# in one place alone.
+#
+# pi-peer-backup alone runs in `tz`: it is a k8s CronJob with `timeZone: {{ tz }}`, and every
+# other slug is a daniel-box host cron, which runs in UTC.
+monitor_bridge_healthchecks_expected:
+  - {slug: longhorn-backup-health, kind: simple, timeout: 600, grace: 1200}
+  - {slug: daniel-box-disk-health, kind: simple, timeout: 600, grace: 1500}
+  - {slug: uptime-kuma-alive, kind: simple, timeout: 600, grace: 1200}
+  - {slug: manifest-prune-check, kind: cron, schedule: "15 5 * * *", tz: UTC, grace: 7200}
+  - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
+  - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
+  - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}

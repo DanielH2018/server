@@ -375,6 +375,19 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   the tile clears one cycle after `cloudflare_ips` is fixed. That is why it moved here from
   k8s/traefik's daily root cron on 2026-09-19: the cron left a red tile until the next 05:25.
   Empty expected list = disabled (stays up). Pure `cloudflare_ips_verdict()` is unit-tested.)
+- **Healthchecks.io Console Drift** (`checks/healthchecks.py`, #2566: `GET /api/v3/checks/` with
+  the read-only `healthchecks_api_read_only_key`, compared per slug against
+  `HEALTHCHECKS_EXPECTED` — the schedule type, the Simple period or the Cron expression and
+  timezone, and the grace). The console is the only place those values live, and it drifted
+  twice before anything noticed (#2563). `monitor_bridge_healthchecks_expected` in
+  `defaults/main.yml` is the expectation; `ansible/tests/services/test_monitor_bridge_healthchecks_expected.py`
+  holds it to the cron variables and to `docs/healthchecks-io-deadman.md`'s period-and-grace
+  table. A documented slug missing from the console is DOWN; an undocumented console check is
+  named and does not page (the `DECIDED:` in `healthchecks_verdict`). Same cache as Cloudflare
+  IP Drift: a success is cached for `HEALTHCHECKS_PROBE_INTERVAL_S` (a day), a failure is
+  re-probed every cycle, and it sits in `STARTUP_GRACE` because the fetch has no gate. The API
+  answered a request without a key in 0.40-0.59 s across three calls on 2026-09-25, far inside
+  `HTTP_TIMEOUT`. Empty key or expected list = disabled (stays up).)
 - **SMART Data / Health** (Scrutiny's web API `/api/summary` over `monitoring`: every
   non-archived device must have a `collector_date` within 26 h **AND a passing `device_status`**
   (0 = SMART self-assessment + Scrutiny's attribute thresholds both OK; non-zero decodes to

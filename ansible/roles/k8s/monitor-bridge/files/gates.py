@@ -195,6 +195,9 @@ STARTUP_GRACE = frozenset(
         "scrutiny",
         "r2_usage",
         "speedtest",
+        # A reach-out to healthchecks.io with no gate of its own (#2566); a failed read is
+        # never cached, so the post-reboot blip would page without this.
+        "healthchecks_drift",
     }
 )
 

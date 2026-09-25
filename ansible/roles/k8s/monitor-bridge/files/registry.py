@@ -48,6 +48,7 @@ from checks.b2 import (
 )
 from checks.r2 import check_r2_usage
 from checks.cloudflare_ips import check_cloudflare_ips_drift
+from checks.healthchecks import check_healthchecks_drift
 from checks.storage import (
     check_kubelet_plugin_readonly,
     check_longhorn_volumes,
@@ -170,6 +171,11 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             "cloudflare_ips_drift",
             tok("KUMA_PUSH_CLOUDFLARE_IPS_DRIFT"),
             check_cloudflare_ips_drift,
+        ),
+        Check(
+            "healthchecks_drift",
+            tok("KUMA_PUSH_HEALTHCHECKS_DRIFT"),
+            check_healthchecks_drift,
         ),
         Check("b2_storage", tok("KUMA_PUSH_B2_STORAGE"), check_b2_storage),
         Check("k8s_workloads", tok("KUMA_PUSH_K8S_WORKLOADS"), check_k8s_workloads),
