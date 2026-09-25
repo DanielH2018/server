@@ -154,6 +154,15 @@
   become: true
   register: manifests_secret_render
 
+- name: Record the render digest for {{ manifests_service }}
+  tags: [deploy]
+  # Render-only mode (#2574): the digest the staleness reader compares against the release
+  # record's. Straight after the renders, so nothing an apply does can reach the bytes.
+  ansible.builtin.include_tasks: render_record.yml
+  when:
+    - k8s_dry_run | bool
+    - manifests_render_record | bool
+
 - name: Find staged manifests for {{ manifests_service }}
   tags: [config]
   ansible.builtin.find:

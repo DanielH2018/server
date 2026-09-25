@@ -1,0 +1,62 @@
+---
+# Record the digest a render of THIS tree produces for one service, without applying it (#2574).
+#
+# THE PROBLEM. `probe.py releases --stale-only` decides whether a service's applied manifests
+# lag origin/master from the paths a merge touched. A path is a proxy: five narrowings exist
+# because a path moved while the rendered bytes did not. The release record already carries
+# `manifests_digest` for the bytes an apply wrote. Comparing it against the digest of a fresh
+# render answers the real question, and only a play can produce that render faithfully: the
+# offline harness stubs SOPS values and renders a placeholder domain, so it reproduced the
+# applied bytes for 9 of 57 services when measured on 2026-09-25.
+#
+# This runs inside the dry-run render, so it reads the same vars, the same decrypted secrets
+# and the same host_vars a deploy reads. It adds no read path over `no_log` output: the digest
+# comes from release_digest.yml, which stats `manifests_files` and never the secret files.
+#
+# Included from main.yml after the renders, only under `k8s_dry_run` with
+# `manifests_render_record`. A render record is not a release, so it lives in its own
+# directory and never touches the release record or its `.previous.json`.
+
+- name: Resolve the render identity for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.include_tasks: release_digest.yml
+
+- name: Create the k8s render record directory
+  tags: [deploy]
+  ansible.builtin.file:
+    path: "{{ manifests_render_record_dir }}"
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Write the render record for {{ manifests_service }}
+  tags: [deploy]
+  ansible.builtin.copy:
+    dest: "{{ manifests_render_record_dir }}/{{ manifests_service }}.json"
+    mode: "0644"
+    owner: root
+    group: root
+    content: "{{ manifests_render_entry | to_nice_json }}\n"
+  become: true
+  vars:
+    # Not `manifests_render_record`: that is the mode flag the cron passes with -e, and extra
+    # vars outrank task vars, so a dict of that name renders as the string "true".
+    manifests_render_entry:
+      service: "{{ manifests_service }}"
+      commit: "{{ manifests_release_sha }}"
+      # A reader must refuse a dirty render as evidence: its bytes belong to no commit, so a
+      # match against it says nothing about origin/master.
+      tree_dirty: "{{ manifests_release_dirty }}"
+      rendered_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+      # Same field and same meaning as the release record's: a digest from another host's
+      # vars is not comparable.
+      host: "{{ inventory_hostname }}"
+      manifests: "{{ manifests_release_files }}"
+      manifests_digest: "{{ manifests_release_digest }}"
+      # Names only, as in the release record. A matching digest says nothing about these
+      # files: a line added to uptime-kuma's `static-monitors.yaml.j2`, which is one, left the
+      # digest identical on 2026-09-25. A reader may treat a match as "not stale" only where
+      # this list is empty on both sides.
+      secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
