@@ -263,10 +263,9 @@ class Landing:
 
         True only for that one state: the PR carries something the TICK applies, the tick
         answers CONVERGED, and it recorded no broad apply covering the merge commit. HELD,
-        BEHIND and UNKNOWN are all false here, because each has a verdict of its own at the
-        foot of `health_verdict.health` and `deploy.no_tag_outcome`; this predicate exists so
-        a landing that ENDS at its plane arm can still print the remediation those arms own
-        (#2579).
+        BEHIND and UNKNOWN are false here — each has a verdict of its own at the foot of
+        `health_verdict.health` and `deploy.no_tag_outcome`, and `tick_half_open_lines` is
+        what reports them at an arm that ends above those verdicts (#2601).
         """
         return (
             bool(self.self_applied)
@@ -288,6 +287,54 @@ class Landing:
         if self.self_applied_command:
             lines.append(f"  Apply it: {self.self_applied_command}")
         return lines
+
+    def tick_half_open_lines(self) -> list[str]:
+        """What the deployer's own state still owes this landing, as printable lines.
+
+        Empty when the PR carries no self-applied half, and when the tick's half is settled.
+        Otherwise one report per `tick_state()`: the hold, the deferral, the unreadable state
+        directory, or the converged-but-unapplied #1537 shape and its remediation.
+
+        DECIDED: this REPORTS the tick's state, it does not re-verdict the landing. The arms
+        that call it end at `needs-manual-apply` for a plane only a hand can apply, and every
+        tick-state verdict is weaker than that: `deferred` (exit 75) is a resume point, and
+        re-running a landing never applies a bring-up playbook. Letting BEHIND win would
+        downgrade "a human must apply this" to "wait and retry", so the plane verdict stands
+        and the tick's half is printed beside it. Extends #2579's stance from CONVERGED to
+        all four states (#2601). For the same reason nothing here sets `ledger.cause`, which
+        `outcome.Cause` scopes to a `deploy-failed` verdict.
+        """
+        if not self.self_applied:
+            return []
+        state = self.tick_state()
+        if state == TickState.UNKNOWN:
+            return [
+                f"  The deployer's state directory ({self.opts.deployer_state}) could not "
+                "be read, so whether the tick applied its own half is unknown"
+            ]
+        if state == TickState.HELD:
+            return [
+                f"  The deployer is also holding {self.state('hold_sha')}: its own apply "
+                "failed — see hold_plane and the gitops-deploy journal. A hold blocks every "
+                "session's deploy until it is cleared, so this PR's half stays unapplied."
+            ]
+        if state == TickState.BEHIND:
+            lines = [
+                "  The tick has also not fast-forwarded to origin (parked since: "
+                f"{self.state('behind_since')}), so its own half of this PR is not applied "
+                "yet. Usually a newer merge whose CI is still running; the next tick crosses "
+                "it, and the plane above still needs a hand either way."
+            ]
+            if self.tick_watch_abandoned:
+                lines.append(ABANDONED_WATCH_NOTE)
+            return lines
+        if not self.tick_half_unrecorded():
+            return []
+        return [
+            "  The tick also converged without recording an apply of this PR "
+            f"(broad_applied: {self.state('broad_applied') or 'absent'})",
+            *self.tick_half_remediation(),
+        ]
 
     def tick_already_deployed(self, sha: str, tags: list[str]) -> bool:
         """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?

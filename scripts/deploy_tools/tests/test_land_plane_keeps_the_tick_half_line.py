@@ -66,3 +66,67 @@ def test_a_plane_beside_an_applied_tick_half_prints_only_the_plane(
     out = capsys.readouterr().out
     assert "k3s-bringup.yml" in out
     assert "Apply it:" not in out
+
+
+# Each tick state's own marker, and the substring the plane arm must print for it (#2601).
+_TICK_STATES = [
+    pytest.param({"hold_sha": "deadbeef"}, "holding deadbeef", id="held"),
+    pytest.param(
+        {"behind_since": "2026-09-25T10:00:00Z"},
+        "not fast-forwarded to origin",
+        id="behind",
+    ),
+]
+
+
+@pytest.mark.parametrize("site", [health_verdict.health, deploy.no_tag_outcome])
+@pytest.mark.parametrize("state,expected", _TICK_STATES)
+def test_a_plane_reports_the_tick_state_beside_it(
+    landing, capsys, site, state, expected
+):
+    """A hold or a deferral under a plane is printed, and the plane's verdict still wins."""
+    ln = _landing_at(
+        landing,
+        Fakes(
+            plane=_PLANE,
+            self_applied=True,
+            self_applied_command=_COMMAND,
+            state=state,
+        ),
+    )
+    with pytest.raises(Outcome) as exc:
+        site(ln)
+    # Not `deploy-failed` for the hold, and not `deferred`/75 for the deferral: a bring-up
+    # playbook never applies itself on a re-run, so the plane's verdict is the severe one.
+    assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
+    out = capsys.readouterr().out
+    assert "k3s-bringup.yml" in out
+    assert expected in out
+
+
+@pytest.mark.parametrize("site", [health_verdict.health, deploy.no_tag_outcome])
+def test_a_plane_reports_an_unreadable_deployer_state_beside_it(landing, capsys, site):
+    """UNKNOWN is not CONVERGED: a state directory that could not be read says so here too."""
+    ln = _landing_at(
+        landing,
+        Fakes(plane=_PLANE, self_applied=True, self_applied_command=_COMMAND),
+    )
+    ln.tools.read_state = lambda root, name: None
+    with pytest.raises(Outcome) as exc:
+        site(ln)
+    assert exc.value.verdict == "needs-manual-apply"
+    assert "could not be read" in capsys.readouterr().out
+
+
+@pytest.mark.parametrize("site", [health_verdict.health, deploy.no_tag_outcome])
+def test_a_plane_only_pr_reports_no_tick_state(landing, capsys, site):
+    """The reject half of the gate: a held deployer is somebody else's, not this PR's half."""
+    ln = _landing_at(
+        landing,
+        Fakes(plane=_PLANE, self_applied=False, state={"hold_sha": "deadbeef"}),
+    )
+    with pytest.raises(Outcome):
+        site(ln)
+    out = capsys.readouterr().out
+    assert "k3s-bringup.yml" in out
+    assert "deadbeef" not in out
