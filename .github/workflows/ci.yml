@@ -249,9 +249,23 @@ jobs:
           # behaviour and matches no hook's `files` but check-toml's. The `ansible_lint` job
           # keeps its own list. ENFORCED by test_hook_config_changes_run_the_hook.py, which
           # reads this list, so an entry cannot be dropped without a test naming it.
+          #
+          # A hook's config is not always one file, and Vale's is three. Its vocabulary decides
+          # which words Vale.Spelling accepts across the whole corpus, so a term added or
+          # removed changes the verdict on docs the PR never touched. This workflow carries the
+          # binary pin (the curl above), and CI's own Vale version is what turned master red on
+          # 15 untouched lines in 10 docs when Renovate bumped 3.21.0 -> 3.22.0 (#2536, #2543);
+          # the PR's run checks out the merge ref, so the sweep runs the NEW binary. Listing
+          # ci.yml means every workflow edit runs the full sweep, which is the cost of catching
+          # that bump on its own PR. The host's Vale pin in
+          # ansible/roles/setup/initial_setup/tasks/host-basics.yml is deliberately NOT here:
+          # it is not the binary CI runs, and test_vale_matches_the_ci_pin.py already forces a
+          # bump to move both in one commit.
           FULL_SWEEP_PATHS: |
             prek.toml
             .vale.ini
+            styles/config/vocabularies/Homelab/accept.txt
+            .github/workflows/ci.yml
             .shellcheckrc
             .gitleaks.toml
         run: |
