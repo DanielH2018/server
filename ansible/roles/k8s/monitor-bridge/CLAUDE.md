@@ -46,9 +46,8 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
 - **B2 Reachable** (`b2_authorize_account`): gates `B2_DEPENDENT` (`b2_storage`). One probe
   per `B2_PROBE_INTERVAL_S` (1800 s) with a BILLED outcome cached, because the fault it
   detects is a transaction cap; a failure that never reached B2 (DNS, connect, timeout) takes
-  the short `B2_TRANSPORT_RETRY_S` TTL so a transient cannot pin the tile DOWN for 30 minutes.
-  A real cap denial arrives as `HTTPError`, never `RuntimeError` — a test faking it the other
-  way proves the opposite of what it claims.
+  the short `B2_TRANSPORT_RETRY_S` TTL. A real cap denial arrives as `HTTPError`, never
+  `RuntimeError` — a test faking it the other way proves the opposite of what it claims.
 - **Cluster Prometheus Reachable**: gates `CLUSTER_DEPENDENT` (`k8s_workloads`,
   `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both Prometheus URLs render to the same cluster Service,
   so `run_once` reuses the first gate's verdict here; the split survives so a second
@@ -72,98 +71,84 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
 
 One bullet per registry entry, in registry order: source, rule, gate or streak, and the
 switch that disables it. An empty credential or URL disables a check (it stays `up`); an
-unreachable source pages through `_evaluate` unless a streak is named.
+unreachable source pages through `_evaluate` unless a streak is named. **What set each number
+is not here** — `docs/monitor-bridge-checks.md`'s *Live checks* carries one entry per check, in
+this order, with the measurement behind every threshold, the incident that added each arm, and
+the alternatives rejected. Read this file for the rule, that one before you change a number.
 
 - **Root Disk** (`disk`): `node_filesystem_*` for `/`, `/boot` and `/boot/efi` on the two
   nodes, over `DISK_MAX_PCT` (the Pi is excluded by `HOST_METRIC_ORIGIN_EXCLUDE`; Pi Pressure
-  owns it). Carries the **host coverage floor**: fewer than `HOST_ORIGINS_MIN` (2) origins
-  means a lost host, not a healthy estate, and pages after `HOST_ORIGINS_CONSECUTIVE`. At 1
-  the floor is inert — lower it for a planned single-node window and put it back.
+  owns it). Carries the **host coverage floor**: fewer than `HOST_ORIGINS_MIN` (2) origins is
+  `down` after `HOST_ORIGINS_CONSECUTIVE`. At 1 the floor is inert.
 - **TLS Cert Expiry** (`cert`): `traefik_tls_certs_not_after` under `CERT_MIN_DAYS`.
 - **Memory** (`memory`): host `node_memory_*` over `MEM_MAX_PCT`, with the same coverage
   floor as Root Disk, plus the **Claude Code cgroups** arm (`with_claude_cgroups`): any
   increase in a `CLAUDE_CGROUP_EVENTS` counter (`max|oom|oom_kill|oom_group_kill`) pages at
   once, PSI `full` stall over `CLAUDE_CGROUP_STALL_MAX_PCT` pages, and a cgroup named in
-  `CLAUDE_CGROUPS` that reports nothing pages. `high` is not alerted on — MemoryHigh
-  throttling is the cap working. Empty `CLAUDE_CGROUPS` disables the arm.
+  `CLAUDE_CGROUPS` that reports nothing pages. `high` is deliberately not alerted on. Empty
+  `CLAUDE_CGROUPS` disables the arm.
 - **Container Restarts** (`restarts`): `changes(container_start_time_seconds[RESTART_WINDOW])
   > RESTART_MAX`, by name.
 - **Container OOM** (`oom`): `increase(container_oom_events_total[OOM_WINDOW])` by name.
 - **CPU Throttling** (`cpu`): throttled/total CFS periods over `CPU_THROTTLE_PCT` AND
   throttled seconds/s over `CPU_MIN_THROTTLED_CORES`, by name, on the `CPU_CONSECUTIVE` (3)
-  streak. The cores floor is load-bearing: the ratio alone runs 30–90% for tiny sidecars.
+  streak. Both gates are load-bearing; neither is a second opinion on the other.
 - **Scrape Targets** (`targets`): `up == 0` with `origin="daniel-server"`, naming the job.
 - **Traefik 5xx** (`traefik5xx`): 5xx ratio over 5m per service, over `TRAEFIK_5XX_PCT`,
   behind the per-service `TRAEFIK_MIN_RPS` volume floor.
 - **Traefik Latency** (`traefik_latency`): share of requests past the histogram bucket
   `TRAEFIK_SLOW_BUCKET` (5.0 s) over `TRAEFIK_SLOW_PCT`, per service, behind the same floor
-  AND `TRAEFIK_SLOW_MIN_REQUESTS` (3) absolute slow requests. Never `histogram_quantile`:
-  Traefik's buckets are 0.1/0.3/1.2/5.0/+Inf and a quantile between two is interpolated
-  across an empty gap. Keep the bucket on a boundary Traefik emits — an `le=` matching no
-  series is reported as a config fault. `TRAEFIK_STREAM_SERVICES` exempts long-lived
-  connection services (headlamp, home-assistant, uptime-kuma) by service-label PREFIX, since
-  the hash in `homelab-<name>-<hash>@kubernetescrd` moves on rename; the exempt count is
-  named in the green message. bazarr and prowlarr are deliberately not exempt.
+  AND `TRAEFIK_SLOW_MIN_REQUESTS` (3) absolute slow requests. Never `histogram_quantile`, and
+  keep the bucket on a boundary Traefik emits. `TRAEFIK_STREAM_SERVICES` exempts long-lived
+  connection services (headlamp, home-assistant, uptime-kuma) by service-label PREFIX; bazarr
+  and prowlarr are deliberately not exempt.
 - **Traefik 404 Flood** (`traefik_404`): 404 share of ENTRYPOINT traffic over 5m past
-  `TRAEFIK_404_PCT` (90), behind `TRAEFIK_MIN_RPS`. The entrypoint counter increments before
-  routing, so it survives an edge that has lost every router — which emits no
-  `traefik_service_*` series and reads clean to the per-service checks above.
+  `TRAEFIK_404_PCT` (90), behind `TRAEFIK_MIN_RPS`. Entrypoint-level, so it survives an edge
+  that has lost every router.
 - **n8n Prod Workflows** (`n8n`): per-active-workflow consecutive-failure streak from n8n's
-  public API, accumulated across cycles because n8n saves no successful executions. `down` at
-  `N8N_CONSECUTIVE_MAX` (3) for one workflow, or `N8N_SYSTEMIC_MAX` (2) workflows each at
-  `N8N_SYSTEMIC_STREAK` (2). Streak state resets on a bridge restart. `N8N_API_KEY` empty
-  disables.
+  public API, accumulated across cycles. `down` at `N8N_CONSECUTIVE_MAX` (3) for one workflow,
+  or `N8N_SYSTEMIC_MAX` (2) workflows each at `N8N_SYSTEMIC_STREAK` (2). Streak state resets
+  on a bridge restart. `N8N_API_KEY` empty disables.
 - **Arr Queue Warnings** (`arr_queue`): sonarr's and radarr's `/api/v3/queue` — `down` on
   any item with `trackedDownloadStatus == "warning"`, `importBlocked`, or `importPending`
   carrying `statusMessages`, naming the release. Each API key is independent; both empty
-  disables. The FETCH rides `ARR_FETCH_CONSECUTIVE` (3) because a rolling *arr refuses
-  connections; a queue item pages on the cycle it is seen.
+  disables. The FETCH rides `ARR_FETCH_CONSECUTIVE` (3); a queue item pages on the cycle it
+  is seen.
 - **Bazarr Health** (`bazarr`): `/api/system/status` + `/api/system/health` — `down` when a
-  peer version field (`sonarr_version`/`radarr_version`) is present but empty (a rejected key
-  seen from outside) or bazarr self-reports a health issue. An ABSENT field is ignored. Header
-  is `X-API-KEY`. Bazarr holds its own copies of the *arr keys on its PVC, so a key rotation
-  reaches it only by hand — this check is what notices.
+  peer version field (`sonarr_version`/`radarr_version`) is present but empty, or bazarr
+  self-reports a health issue. An ABSENT field is ignored. Header is `X-API-KEY`.
 - **Prowlarr Indexers** (`prowlarr_indexers`): `down` only when an indexer's own
-  `initialFailure` is older than `PROWLARR_INDEXER_MIN_DOWN_MIN` (1 week); age-based so it
-  survives a bridge redeploy. `PROWLARR_INDEXER_IGNORE` drops chronically flaky public
-  trackers. Pairs with Prowlarr's `includeHealthWarnings=false`.
+  `initialFailure` is older than `PROWLARR_INDEXER_MIN_DOWN_MIN` (1 week).
+  `PROWLARR_INDEXER_IGNORE` drops chronically flaky public trackers.
 - **GitOps Deploy — Alive** (`gitops_alive`): `/gitops-state/last_run` older than
   `GITOPS_MAX_AGE_MIN` is `down`. The deployer pushes nothing to Kuma itself.
 - **GitOps Deploy — Status** (`gitops_status`): six arms over the deployer's markers,
   reported in urgency order — a non-empty `hold_sha`; a `diverged_sha`; `contention_since`
   older than `GITOPS_CONTENTION_MAX_MIN` (30); `behind_since` older than
   `GITOPS_BEHIND_MAX_MIN` (360) — then `manual_plane` and `k8s_deferred` LAST, each once its
-  oldest line is older than the same six hours, because neither blocks anybody where a
-  stopped deployer blocks every landing. `k8s_deferred` holds the promoted image bumps a
-  broad tick fast-forwarded and then deferred for lack of budget (#2449); the page names the
-  `./scripts/deploy.sh` that applies them and the `gitops_state.py clear-k8s-deferred` that
-  follows it. Age-gated, not presence-gated: a routine push is behind for one tick.
-  Parsers come from `gitops_markers.py`, a generated copy of the deployer's module
-  (`scripts/dev/gen_gitops_markers.py`). An unparseable marker reads as not-behind.
+  oldest line passes the same six hours. Age-gated, not presence-gated. Each page names the
+  command that clears its marker. Parsers come from `gitops_markers.py`, a generated copy of
+  the deployer's module (`scripts/dev/gen_gitops_markers.py`); an unparseable marker reads as
+  not-behind.
 - **etcd Restore Drill** (`etcd_restore_drill`): the weekly drill's stamp, read fail-closed —
-  a stale or failing stamp is `down`, since etcd holds the Longhorn CRs needed to find every
-  volume backup.
+  a stale or failing stamp is `down`.
 - **SMART Data / Health** (`scrutiny`): every non-archived device needs a `collector_date`
   within 26 h AND `device_status == 0`; no devices at all is `down`. `SCRUTINY_TEMP_MAX` (0 =
   off) adds a temperature ceiling; the wear arm pages on NVMe `percentage_used` over
-  `SCRUTINY_WEAR_MAX` (80), read per device after freshness passes, and a device with no wear
-  field is named as unwatched, never as healthy or as a fault. This is the only drive-failure
-  alert path — Scrutiny's own notifier is unconfigured.
+  `SCRUTINY_WEAR_MAX` (80), and a device with no wear field is named as unwatched. This is
+  the only drive-failure alert path — Scrutiny's own notifier is unconfigured.
 - **Host Temperature** (`host_temp`): `node_hwmon_temp_celsius`, drives excluded
   (`HWMON_TEMP_EXCLUDE_CHIP` — SMART owns them). Every sensor gets a limit from one of two
   exhaustive arms: `HWMON_TEMP_RATIO` (0.90) of a plausible declared max (preferred) or crit,
   else `HWMON_TEMP_FALLBACK_C` (85); an implausible declared value is treated as undeclared
   (the `DECIDED:` in `verdicts/host.py:hwmon_temp_limits`), and `HWMON_TEMP_RATED_MAX_C`
-  seeds daniel-box's k10temp/Tctl with AMD's published 100 °C. An EMPTY vector is `down`.
-  `HWMON_TEMP_CONSECUTIVE` (12) is one streak for the whole check, derived at the
-  `DECIDED: 12 cycles` marker in `files/bridge/config_host.py`; `HWMON_TEMP_RATIO` is
-  estate-wide, not the knob for one sensor's duty cycle. Fewer than
-  `HWMON_TEMP_ORIGINS_MIN` (3, a literal — raise it when a node joins) reporting hosts pages
+  seeds daniel-box's k10temp/Tctl. An EMPTY vector is `down`. `HWMON_TEMP_CONSECUTIVE` (12)
+  is one streak for the whole check, derived at the `DECIDED: 12 cycles` marker in
+  `files/bridge/config_host.py`. Fewer than `HWMON_TEMP_ORIGINS_MIN` (3) reporting hosts pages
   after `HWMON_TEMP_ORIGINS_CONSECUTIVE` (5). Two more arms, own streaks: **Undervoltage**
-  (`node_hwmon_in_lcrit_alarm_volts`, judged first, no grace, gated on `up{job="node-pi"}` so
-  a Pi off the network defers rather than reads green) and **CPU thermal throttling**
-  (`node_cooling_device_cur_state{type="Processor"}`, 3 cycles, origins floor 2 because the Pi
-  publishes none). `verdicts/host_power.thermal_monitor_verdict` composes the four arms.
+  (`node_hwmon_in_lcrit_alarm_volts`, judged first, no grace, gated on `up{job="node-pi"}`)
+  and **CPU thermal throttling** (`node_cooling_device_cur_state{type="Processor"}`, 3 cycles,
+  origins floor 2). `verdicts/host_power.thermal_monitor_verdict` composes the four arms.
 - **UPS Battery Health** (`ups`): nut-exporter primary, HA's re-export as the in-query
   fallback (`max(A) or max(B)`). Mains loss (`ups.status{flag="OB"}`) is judged first and
   returns alone; otherwise charge under `UPS_CHARGE_MIN_PCT` (50), runtime under
@@ -174,22 +159,20 @@ unreachable source pages through `_evaluate` unless a streak is named.
 - **Pi Pressure** (`pi_pressure`): the Pi's node-exporter series (`origin=PI_ORIGIN`) —
   `node_load5` per core over `PI_LOAD_MAX`, `MemAvailable` under `PI_MEM_MIN_MB`, any block
   device over `PI_DISK_MAX_PCT` (keyed by device, tmpfs excluded); an absent series while
-  Prometheus answers pages. It owns Pi disk and memory — `check_mem` on the Pi would be a
-  strictly weaker duplicate. **Published-port arm** (`with_pi_ports`): TCP-connects to every
-  `PI_PUBLISHED_PORTS` entry (rendered from the Pi's `containers_list`) on
-  `PI_PORTS_CONSECUTIVE` (2), naming each dead port with the recreate hint — a container back
-  from a reboot with no network still reads `Up (healthy)`. It adds a named port, not coverage.
+  Prometheus answers pages. It owns Pi disk and memory, so the Pi has no `disk`/`memory` arm.
+  **Published-port arm** (`with_pi_ports`): TCP-connects to every `PI_PUBLISHED_PORTS` entry
+  (rendered from the Pi's `containers_list`) on `PI_PORTS_CONSECUTIVE` (2), naming each dead
+  port with the recreate hint.
 - **Home Assistant Automations** (`ha_heartbeat`): `input_datetime.ha_heartbeat` stamped by
   a `/1min` automation, `down` past `HA_HEARTBEAT_MAX_AGE` (300 s) on `HA_CONSECUTIVE` (2);
-  an unreachable API rides the same streak, since both are the deploy. **ip_ban arm**
-  (`with_ha_ban`): a `Banned IP` line in Loki over `HA_BAN_WINDOW` (1h) pages, skipping the
-  streak. It watches the ban EVENT, not the state — the page self-clears while the entry is
-  still in `/config/ip_bans.yaml`, so read that file by hand when the Discord notification
-  fires. The token is HA's Long-Lived Access Token, file-mounted (`HA_TOKEN_FILE`).
+  an unreachable API rides the same streak. **ip_ban arm** (`with_ha_ban`): a `Banned IP` line
+  in Loki over `HA_BAN_WINDOW` (1h) pages, skipping the streak. It watches the ban EVENT, so
+  the page self-clears while the entry is still in `/config/ip_bans.yaml`. The token is HA's
+  Long-Lived Access Token, file-mounted (`HA_TOKEN_FILE`).
 - **k3s Speedtest** (`speedtest`): newest `/api/v1/results` row — status, then age
-  (`SPEEDTEST_MAX_AGE_H`, 8 h against a 6 h schedule, the arm that notices a dead scheduler),
-  then download under `SPEEDTEST_DOWNLOAD_MIN_MBPS` (100, because results are bimodal by Ookla
-  server). Hysteresis on the fetch only (`SPEEDTEST_CONSECUTIVE`), never on the verdict.
+  (`SPEEDTEST_MAX_AGE_H`, 8 h against a 6 h schedule), then download under
+  `SPEEDTEST_DOWNLOAD_MIN_MBPS` (100). Hysteresis on the fetch only
+  (`SPEEDTEST_CONSECUTIVE`), never on the verdict.
 - **Loki Log Ingestion** (`loki_ingestion`): three freshness arms, `down` if ANY is silent —
   the file-tail union `LOKI_STREAM` over `LOKI_FILETAIL_WINDOW` (deployed selector is
   `authlog|syslog`; traefik is NOT covered), the docker stream `LOKI_DOCKER_STREAM` over
@@ -197,30 +180,27 @@ unreachable source pages through `_evaluate` unless a streak is named.
 - **Log Shipper Dropped Entries** (`shipper_dropped`): the larger of the client-side
   `loki_write_dropped_entries_total` and Loki's own `loki_discarded_samples_total` over
   `SHIPPER_DROPPED_WINDOW`, past `SHIPPER_DROPPED_MAX` (3000, derivation at the `DECIDED:` in
-  `bridge/config_io.py`), naming the server-side reason. `too_far_behind` after a shipper
-  restart is a benign re-tail: correlate `process_start_time_seconds{job=~"alloy.*"}` before
-  reading it as loss, and land a shipper change more than an hour before pointing this at it.
-  Both counters are matched by `__name__` regex so a rename cannot read as 0 forever.
+  `bridge/config_io.py`), naming the server-side reason. Both counters are matched by
+  `__name__` regex so a rename cannot read as 0 forever.
 - **Swallowed Push Verdicts** (`swallowed_verdicts`): a host cron's `status=down` line whose
   push `kuma-push-lib.sh` then lost, read from Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h)
   through `bridge.net.loki_lines` (plus `SWALLOWED_VERDICTS_POD_LOGQL` for pi-peer-backup's
-  pod). Pages only when some OTHER tag landed a push in the window; nothing landing is
-  fleet-wide and named to the edge/host tiles instead. A swallowed `up` is not counted.
+  pod). Pages only when some OTHER tag landed a push in the window. A swallowed `up` is not
+  counted.
 - **Kuma Notification Delivery** (`kuma_notify_failures`): Kuma's `Cannot send notification
   to <name>` lines over `KUMA_NOTIFY_FAILURES_WINDOW_S` (3h), the reason from the next line
-  reduced to its HTTP status (the axios message can carry the webhook secret). The window is
-  the whole hysteresis. Its tile notifies EMAIL as well as Discord.
-- **Discord Delivery** (`discord`): GET-verifies all five Discord webhooks (Kuma's, CrowdSec's,
-  gitops-deploy's, the *arrs', healthchecks') and names any invalid one; a GET posts nothing.
-  Plus `email_backstop`: a throttled Gmail SMTP login with Kuma's own creds, cached on success
-  for `EMAIL_PROBE_INTERVAL_S` (6h). `DISCORD_CONSECUTIVE` (2). It proves deliverability, not
-  that Kuma still has the notification attached — AutoKuma re-applies that on every deploy.
+  reduced to its HTTP status. The window is the whole hysteresis. Its tile notifies EMAIL as
+  well as Discord.
+- **Discord Delivery** (`discord`): GET-verifies all five Discord webhooks and names any
+  invalid one; a GET posts nothing. Plus `email_backstop`: a throttled Gmail SMTP login with
+  Kuma's own creds, cached on success for `EMAIL_PROBE_INTERVAL_S` (6h).
+  `DISCORD_CONSECUTIVE` (2). It proves deliverability, not that Kuma still has the
+  notification attached.
 - **R2 Free Tier Headroom** (`r2_usage`): one GraphQL POST for month-to-date storage, Class A
   and Class B ops against the free tier, `down` past `R2_USAGE_MAX_PCT` (80) on any arm or
   past `R2_UPLOADS_MAX` (25) incomplete multipart uploads. An unlisted actionType counts as
-  Class A and is named. Successes cached for `R2_PROBE_INTERVAL_S`, failures not — the inverse
-  of B2, because analytics calls are free. A 200 carrying `errors` is raised. The query filters
-  by `bucketName`; with a second bucket drop the filter rather than raise the thresholds.
+  Class A and is named. Successes cached for `R2_PROBE_INTERVAL_S`, failures not. A 200
+  carrying `errors` is raised. The query filters by `bucketName`.
 - **Cloudflare IP Drift** (`cloudflare_ips_drift`): the two published range pages against
   `CLOUDFLARE_IPS_EXPECTED`; a success is cached for a day, drift or a short page is `down`
   and re-probed every cycle, so the tile clears one cycle after `cloudflare_ips` is fixed.
@@ -233,43 +213,42 @@ unreachable source pages through `_evaluate` unless a streak is named.
   (`updated < spec`) on `K8S_ROLLOUT_STALL_CONSECUTIVE` (3); zero available replicas on
   `K8S_ZERO_AVAILABLE_CONSECUTIVE` (2); crash-looping restarts (`increase()` over
   `K8S_RESTART_WINDOW` past `K8S_RESTART_MAX` AND a restart inside
-  `K8S_RESTART_RECENT_WINDOW`, so a recovered pod leaves the arm); and every
-  `K8S_EXTENDED_RESOURCES` name still allocatable on some node, through `ksm_resource_label()`
-  (INERT and named without the `nodes` collector). `svc(0/1)` messages take the desired count
-  from a second query, because a PromQL `<` returns the left side alone.
-- **Cluster Scrape Targets** (`cluster_targets`): `up{origin!="daniel-server"}`, the complement
-  of Scrape Targets, `CLUSTER_TARGETS_MIN` (3) floor, `CLUSTER_TARGETS_CONSECUTIVE` (3).
+  `K8S_RESTART_RECENT_WINDOW`); and every `K8S_EXTENDED_RESOURCES` name still allocatable on
+  some node, through `ksm_resource_label()` (INERT without the `nodes` collector).
+- **Cluster Scrape Targets** (`cluster_targets`): `up{origin!="daniel-server"}`, the
+  complement of Scrape Targets, `CLUSTER_TARGETS_MIN` (3) floor,
+  `CLUSTER_TARGETS_CONSECUTIVE` (3).
 - **Longhorn Volume Redundancy** (`longhorn_volumes`): `longhorn_volume_robustness` —
   `degraded` or `faulted`, named by PVC, on `LONGHORN_CONSECUTIVE`; the absent-metric branch
   pages, which is why it is prom-dependent.
 - **k3s PVC Fullness** (`pvc_fullness`): `kubelet_volume_stats_available_bytes /
-  _capacity_bytes`, `max by (namespace, persistentvolumeclaim)` because daniel-box's claims
-  are scraped under two jobs, past `PVC_MAX_PCT` (85 — a full PVC needs an expand, not a
-  delete) with no grace; a named `PVC_MIN_FREE` (`<pvc>=<bytes>`) floor pages below the
-  claim's own declared transient whatever the percentage. `PVC_EXCLUDE` drops `media-data`
-  (a local PV that IS `/`). The census floor `PVC_MIN_CLAIMS` (32) is DERIVED: the apiserver
-  job alone answers 27, so any lower floor reads a dead kubelet job as healthy; it rides
+  _capacity_bytes`, `max by (namespace, persistentvolumeclaim)`, past `PVC_MAX_PCT` (85) with
+  no grace; a named `PVC_MIN_FREE` (`<pvc>=<bytes>`) floor pages below the claim's own
+  declared transient whatever the percentage. `PVC_EXCLUDE` drops `media-data`. The census
+  floor `PVC_MIN_CLAIMS` (32) is DERIVED from what the apiserver job answers alone; it rides
   `PVC_CLAIMS_CONSECUTIVE`.
 - **Longhorn Snapshot Headroom** (`snapshot_headroom`): `longhorn_snapshot_actual_size_bytes`
   summed per volume (deduped by snapshot) against the caps DECLARED in `SNAPSHOT_CAPS`
-  (`<pvc>=<bytes>`), on `SNAPSHOT_CAP_CONSECUTIVE`. Nothing exports the cap, so
-  `tests/test_check_snapshot_headroom.py` derives the capped set from the tree and fails on an
-  undeclared one; `"0"` is uncapped and dropped; a declared cap with no series is a breach.
+  (`<pvc>=<bytes>`), on `SNAPSHOT_CAP_CONSECUTIVE`. `tests/test_check_snapshot_headroom.py`
+  derives the capped set from the tree and fails on an undeclared one; `"0"` is uncapped and
+  dropped; a declared cap with no series is a breach.
 - **Kubelet CSI Mount Read-Only** (`kubelet_plugin_readonly`):
   `node_filesystem_readonly{mountpoint=~"/var/lib/kubelet/plugins/.*"} == 1`, no grace, over
-  `host_metric_sel` so both nodes are covered. An absent series is healthy — a dead exporter
-  is Scrape Targets' page — and `ansible/tests/k8s/test_node_exporter_filesystem_exclusion.py`
-  guards the exclusion regex that would otherwise hide the fault again.
-- **etcd DB Size** (`etcd_db_size`): `max(apiserver_storage_size_bytes)` against `ETCD_DB_QUOTA_BYTES` (2 GiB, etcd's own default — `k3s_server_args` sets no `--etcd-arg=quota-backend-bytes`, so the two move together), down at `ETCD_DB_MAX_PCT`, no grace. It reads the apiserver's proxy because etcd's own series are empty while `k3s_etcd_expose_metrics` is off — the `DECIDED:` marker at that switch in `group_vars/all.yml` records why it stays off. `max(...)` over the bare series, no `job` selector: k3s serves the apiserver and the kubelet from one process, so the series is scraped under both jobs with the same value. An absent series is healthy — one series carried by two jobs has no partial-coverage case, so empty means the apiserver is not scraped at all, which is Scrape Targets' page (#2403).
-
+  `host_metric_sel` so both nodes are covered. An absent series is healthy —
+  `ansible/tests/k8s/test_node_exporter_filesystem_exclusion.py` guards the exclusion regex.
+- **etcd DB Size** (`etcd_db_size`): `max(apiserver_storage_size_bytes)` against
+  `ETCD_DB_QUOTA_BYTES` (2 GiB, etcd's own default — `k3s_server_args` sets no
+  `--etcd-arg=quota-backend-bytes`, so the two move together), down at `ETCD_DB_MAX_PCT`, no
+  grace. It reads the apiserver's proxy because etcd's own series are empty while
+  `k3s_etcd_expose_metrics` is off. `max(...)` over the bare series, no `job` selector: one
+  process serves the apiserver and the kubelet, so both jobs carry the same value. An absent
+  series is healthy — that is Scrape Targets' page.
 ## Push-monitor mechanics
 
 - **Every push monitor has `max_retries=0`** so the bridge's own `down` push flips the state
-  and the descriptive message reaches Discord; with retries Kuma parks the push in PENDING
-  and the watchdog's "No heartbeat" replaces it. Post-boot flapping is fixed by widening the
+  and the descriptive message reaches Discord. Post-boot flapping is fixed by widening the
   heartbeat window, never by adding retries (`test_push_monitors_never_retry` is the guard).
-- **The heartbeat window is `kuma_bridge_push_interval` = 1200 s** (4 × the loop): three missed
-  pushes are absorbed and a dead bridge still pages, 20 min in.
+- **The heartbeat window is `kuma_bridge_push_interval` = 1200 s**, 4 × the loop.
 - **Liveness probe:** `cli.py` touches `/tmp/heartbeat` after every cycle and the probe in
   `templates/deployment.yaml.j2` fails past ~3×INTERVAL, so the kubelet restarts a hung loop.
 - **Push tokens:** `templates/env-secret.yaml.j2`'s `KUMA_PUSH_*` keys are the list, one
@@ -279,8 +258,7 @@ unreachable source pages through `_evaluate` unless a streak is named.
   than trusting a number written here.
 - **Folding an arm into an existing monitor is the default** over a new tile, which costs a
   new push token in SOPS and a monitor created by hand. Fold when the arm answers the tile's
-  existing question (cgroups into Memory, ports into Pi Pressure, ip_ban into HA); the arm
-  wins the message and keeps the host tile's text after it.
+  existing question (cgroups into Memory, ports into Pi Pressure, ip_ban into HA).
 - **A new arm ships with its selector run against the live source over a window holding a
   KNOWN event.** Unit tests mock the payload and prove the verdict, never the selector; a
   fail-open arm goes green on a typo and a fail-closed one pages on it (*Traps*).
@@ -382,19 +360,18 @@ config MUST NOT raise: `_int`/`_num` record a malformed value in
 
 ## Traps
 
-Each rule here came from an incident; `docs/monitor-bridge-checks.md` holds the evidence.
+Each rule here came from an incident; `docs/monitor-bridge-checks.md`'s *Traps* section holds
+the evidence for each.
 
 - **kube-state-metrics sanitizes resource names into labels:** `devic.es/dri` is emitted as
-  `resource="devic_es_dri"`. A fail-closed check cannot tell "deregistered" from "wrong
-  question" — both are an empty vector — so sanitize at query time (`ksm_resource_label`),
-  keep the operator-facing name the one `kubectl` prints, and name both forms in the message.
+  `resource="devic_es_dri"`. Sanitize at query time (`ksm_resource_label`), keep the
+  operator-facing name the one `kubectl` prints, and name both forms in the message — a
+  fail-closed check cannot tell "deregistered" from "wrong question".
 - **Promtail's k8s streams have no `app` label** — they carry `container` / `pod` / `job` /
   `namespace` / `service_name`. A selector written from the `-l app=` habit matches nothing,
   and a fail-open arm reads that as a clean bill of health. `LOKI_STREAM_LABELS` and
-  `test_loki_selectors_use_real_stream_labels` pin the vocabulary; a green first cycle is not
-  evidence.
+  `test_loki_selectors_use_real_stream_labels` pin the vocabulary.
 - **The runtime stamps the log lines; `bridge.common.log` does not.** Pass `--timestamps` to
   `kubectl logs` and read the prefix as UTC. A line archived before 2026-08-16 carries a
-  bracketed America/Chicago stamp — any container with `TZ=America/Chicago` that stamps its
-  own lines has the same trap, so cross-check one line against `date -u` before anchoring a
-  timeline on it.
+  bracketed America/Chicago stamp, so cross-check one line against `date -u` before anchoring
+  a timeline on it.
