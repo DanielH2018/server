@@ -20,7 +20,7 @@ def test_an_empty_environment_is_a_usable_default_config():
     cfg = deploy_io.load_config({})
     cfg.validate()
     assert cfg.repo == "" and cfg.branch == "master"
-    assert cfg.health_timeout_s == 300 and cfg.k8s_deploy_timeout_s == 900
+    assert cfg.health_timeout_s == 300 and cfg.k8s_deploy_timeout_s == 1440
 
 
 def test_the_config_is_frozen():

@@ -86,7 +86,7 @@ class Config:
     k8s_autodeploy_denylist: frozenset[str] = frozenset()
     k8s_autodeploy_max_per_tick: int = 3
     k8s_autodeploy_max_claim_services_per_tick: int = 1
-    k8s_deploy_timeout_s: int = 900
+    k8s_deploy_timeout_s: int = 1440
     k8s_rollback_timeout_s: int = 1320
     broad_deploy_timeout_s: int = 1800
     staging_gate: bool = False
@@ -192,7 +192,7 @@ def load_config(env: Mapping[str, str]) -> Config:
         k8s_autodeploy_max_claim_services_per_tick=_int(
             "K8S_AUTODEPLOY_MAX_CLAIM_SERVICES_PER_TICK", 1
         ),
-        k8s_deploy_timeout_s=_int("K8S_DEPLOY_TIMEOUT_S", 900),
+        k8s_deploy_timeout_s=_int("K8S_DEPLOY_TIMEOUT_S", 1440),
         k8s_rollback_timeout_s=_int("K8S_ROLLBACK_TIMEOUT_S", 1320),
         broad_deploy_timeout_s=_int("BROAD_DEPLOY_TIMEOUT_S", 1800),
         staging_gate=_bool("STAGING_GATE"),
