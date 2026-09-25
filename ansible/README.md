@@ -119,8 +119,7 @@ touching SOPS:
      the repo-root `CLAUDE.md` → "Adding a New Container Service").
    - Any hardware capability flags a role you plan to deploy expects — e.g. `has_igpu: true`
      only if the host has an Intel iGPU (gates `/dev/dri` passthrough for jellyfin/tdarr;
-     defaults to `false` in `group_vars/all.yml`), or `scrutiny_nvme_device` if you deploy
-     scrutiny and its NVMe enumerates as something other than `/dev/nvme0`.
+     defaults to `false` in `group_vars/all.yml`).
    - `has_gitops: false` **until the host's first successful manual deploy**. It defaults to
      `true`, and the `gitops_deploy` role's "Run gitops-deploy once" handler shells a full
      `uv run ansible-playbook deploy.yml` at the end of §8's `initial_setup.yml` — failing the

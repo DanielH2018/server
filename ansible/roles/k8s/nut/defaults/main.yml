@@ -26,8 +26,9 @@ nut_k8s_mem_request: 16Mi
 # Seconds on battery before the primary raises FSD and every ARMED secondary shuts down. Made
 # explicit 2026-08-24: it was referenced ONLY as `{{ nut_onbatt_shutdown_delay | default(120) }}`
 # in templates/config-secret.yaml.j2 and defined nowhere in the live tree, so the real value was
-# invisible unless you read the Jinja default. The one remaining definition was in
-# roles/containers/archive/peanut, a retired role.
+# invisible unless you read the Jinja default. The one remaining definition was in the retired
+# peanut role, which #2385 deleted — `git show
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/peanut/` reads it.
 #
 # RAISED 120 -> 300 on 2026-08-28, as the prerequisite for arming daniel-box. This timer fires
 # that many seconds into ANY mains interruption, not at battery end, so at 120 a three-minute

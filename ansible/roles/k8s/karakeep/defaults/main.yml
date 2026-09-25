@@ -1,8 +1,9 @@
 ---
 # These were kept identical to the Docker role's images, digests included, so that during
 # coexistence a difference in behaviour between the two was never the image. Coexistence ended with
-# the migration (2026-08-14) and roles/containers/archive/karakeep is now a frozen historical copy,
-# so this file is the only live source — it is free to move ahead of the archived compose template
+# the migration (2026-08-14) and the Docker role was deleted by #2385 — `git show
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/karakeep/` reads it.
+# This file is the only live source — it is free to move ahead of that compose template
 # and has (see the tagger's 3.14 bump below). The karakeep app and the uv base keep their
 # repo:tag@sha256 form so Renovate's docker manager still tracks them; see the compose template for
 # why the tag must be kept alongside the digest.

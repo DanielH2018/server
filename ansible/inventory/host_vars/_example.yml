@@ -53,9 +53,6 @@ has_repo_checkout: true
 # Default: false.
 # has_code_server: true
 
-# Only if you deploy scrutiny and its NVMe enumerates as something other than /dev/nvme0.
-# scrutiny_nvme_device: /dev/nvme0
-
 # Physical location for the homepage weather widget — only the host running homepage needs it.
 # lat: 38.89
 # long: -77.08

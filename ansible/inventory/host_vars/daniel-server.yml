@@ -5,9 +5,6 @@ ssh_config_path: /etc/ssh/sshd_config
 has_igpu: true
 # Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
 has_code_server: false
-# scrutiny-collector's SMART source device (see scrutiny role CLAUDE.md) — override per host
-# if the NVMe enumerates differently, or drop the scrutiny role entirely if the host has none.
-scrutiny_nvme_device: /dev/nvme0
 # Empty since Docker was uninstalled here on 2026-08-14. This host now runs the k3s agent,
 # the nut pod's hardware, and the nut_host shutdown chain — nothing else. Every service
 # that used to be listed here moved to roles/k8s/ or retired; the retired roles and the

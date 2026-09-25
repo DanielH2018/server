@@ -1,10 +1,11 @@
 ---
-# Crons written by now-archived Compose roles, which those roles can no longer reap.
+# Crons written by Compose roles that #2385 deleted, so those roles can no longer reap them.
 # ansible.builtin.cron matches on the exact `#Ansible: <name>` marker, so these are the
-# literal `name:` values from the roles that created them:
-#   Redeploy ical-proxy               roles/containers/common/tasks/redeploy_cron.yml
-#   Clean stale tdarr transcode cache roles/containers/archive/tdarr/tasks/main.yml
-# Add an entry here when a Compose role that owned a cron is archived.
+# literal `name:` values from the roles that created them. Both source files are history —
+# read them under `git show 2460d0675fd748e70fcbcde87185371ffd62402b:<path>`:
+#   Redeploy ical-proxy               ansible/roles/containers/common/tasks/redeploy_cron.yml
+#   Clean stale tdarr transcode cache ansible/roles/containers/archive/tdarr/tasks/main.yml
+# Add an entry here when a Compose role that owned a cron is retired.
 docker_install_stale_crons:
   - Redeploy ical-proxy
   - Clean stale tdarr transcode cache
