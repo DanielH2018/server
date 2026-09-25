@@ -42,6 +42,19 @@ The narrowing skips `manifests`, the role whose tasks render every service's byt
 docstrings in `releases.py` name it as the one path that must never read clean (#947), the
 argument here would hold there too, and `7fd4189cb` did not touch it -- so applying it there
 buys zero unstuck services for one more thing a reviewer of #947 has to re-check.
+
+WHY THIS RULE AND THE OTHER FOUR NARROWINGS ARE NOT REPLACED BY A DIGEST COMPARISON (#2505).
+The five are #1636 and #1672 in `releases.py`, #2416 and #2436 here, and #2504 in
+`releases_consumers.py`. A release record already carries `manifests_digest` for the bytes the apply
+wrote, so comparing it against a fresh render would answer all five questions at once. Nothing
+that reads records can produce that fresh render. Measured on 2026-09-25 against the 57 live
+records: the repo's offline render harness, `scripts/validate/k8s_manifests.py`, reproduces
+every recorded file checksum for 9 services and mismatches at least one file for 48, because it
+stubs SOPS values and renders the group_vars placeholder domain. A comparison fed by it reports
+84% of the fleet permanently stale, which is worse than the false GREEN these rules guard
+against. `ansible/roles/k8s/manifests/CLAUDE.md`, under `## Release records`, carries the
+measurement and the two routes to a faithful render. Do not delete a narrowing for a digest
+comparison until one of them has landed.
 """
 
 import re

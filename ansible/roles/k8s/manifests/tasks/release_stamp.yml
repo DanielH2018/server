@@ -230,6 +230,16 @@
       # One identifier for the whole release, so a staging run and a prod run can be compared
       # without walking the per-file map. `dictsort` before `to_json` because dict ordering is
       # not guaranteed and an order-dependent digest would differ for identical bytes.
+      #
+      # DECIDED: this digest names the bytes an apply wrote, and nothing outside a play
+      # reproduces it. Issue #2505 proposed deciding staleness by rendering the tree at read
+      # time and comparing digests, which would retire the five path narrowings in `probe.py
+      # releases --stale-only`. Measured on 2026-09-25 against the 57 live records: the repo's
+      # offline render harness reproduces every recorded checksum for 9 services and mismatches
+      # at least one file for 48, because it stubs SOPS values and renders the group_vars
+      # placeholder domain. A digest comparison fed by that render reports 84% of the fleet
+      # stale forever. The narrowings stay until a render is faithful. Full reasoning in this
+      # role's CLAUDE.md, under `## Release records`.
       manifests_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
       # Names only — see the header. The count is what makes a dropped secret manifest visible.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
