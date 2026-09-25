@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-24 06:17 UTC
-generated_sha: f8e7cb7ea
+generated_at: 2026-09-25 06:17 UTC
+generated_sha: e5c8c55d8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,20 +16,28 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2348](https://github.com/DanielH2018/server/issues/2348) | high | gap | cicd | A mixed-range tick fast-forwards k8s image bumps past their own deploy and never re-derives them | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2349](https://github.com/DanielH2018/server/issues/2349) | medium | gap | cicd | clear-manual-plane clears a whole role after a narrowed apply, dropping a second pending change | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2351](https://github.com/DanielH2018/server/issues/2351) | medium | gap | cicd | The check-mode skip guard misses consumers that read stdout_lines, stderr_lines or delta | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2353](https://github.com/DanielH2018/server/issues/2353) | medium | gap | cicd | The check-mode skip guard skips when-gated producers, so a consumer repeating the when still errors under --check | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2360](https://github.com/DanielH2018/server/issues/2360) | medium | gap | cicd | The skipped-register guard never judges a task that registers, so a producer reading a sibling's skip result is invisible | 2026-09-24 | 0 | - | ✓ |
+| [#2483](https://github.com/DanielH2018/server/issues/2483) | high | gap | cicd | findings.py and prune_worktrees.py are broken on deployed hosts: claude_worktree ships no forge_says_merged | 2026-09-24 | 0 | - | ✓ |
+| [#2473](https://github.com/DanielH2018/server/issues/2473) | medium | gap | backup-observability | uv-launched jobs on daniel-box failed with Permission denied (os error 13) for 20 minutes after a GitOps tick | 2026-09-24 | 0 | - | ✓ |
+| [#2543](https://github.com/DanielH2018/server/issues/2543) | medium | gap | cicd | A Vale binary, config or vocabulary change skips the Vale hook in its own PR's CI | 2026-09-25 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
-| [#2320](https://github.com/DanielH2018/server/issues/2320) | low | gap | cicd | Roll back the sidecar tags a contended tick recorded for an already-pending role | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2344](https://github.com/DanielH2018/server/issues/2344) | low | gap | cicd | narrow_setup.readers_of skips the defaults path once a task names the file, so a narrowing can miss a reader | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2345](https://github.com/DanielH2018/server/issues/2345) | low | gap | cicd | SessionStart banner prints the k3s apply command with no control-plane warning | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2347](https://github.com/DanielH2018/server/issues/2347) | low | gap | cicd | narrow_setup lacks tests for template includes, files/, vars/, block tags and parse failures | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2350](https://github.com/DanielH2018/server/issues/2350) | low | gap | cicd | narrow_setup's latent gaps: special and shared tags, a server.yml-only warning test, weak red-proofs | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | - |
-| [#2352](https://github.com/DanielH2018/server/issues/2352) | low | gap | cicd | The check-mode skip guard flags a block wrapper for its children's own failed_when | 2026-09-24 | 0 | worktree-fanout-orch-2026-09-23b | ✓ |
-| [#2363](https://github.com/DanielH2018/server/issues/2363) | low | improvement | cicd | Several #2324 tests go red on a changed signature rather than on the defect they name | 2026-09-24 | 0 | - | ✓ |
+| [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 0 | - | - |
+| [#2368](https://github.com/DanielH2018/server/issues/2368) | low | gap | cicd | Renovate #2335 (freshrss nginx digest) is conflicting and inside its 3-day soak | 2026-09-24 | 0 | - | - |
+| [#2417](https://github.com/DanielH2018/server/issues/2417) | low | improvement | backup-observability | Retire drop_migrated_backup_chain once no volume is left to migrate | 2026-09-24 | 0 | - | - |
+| [#2454](https://github.com/DanielH2018/server/issues/2454) | low | gap | cicd | tq test-wrapper rewrite blocks an isolated agent's diff and log reads | 2026-09-24 | 0 | - | - |
+| [#2456](https://github.com/DanielH2018/server/issues/2456) | low | gap | cicd | Stop a become run from a worktree leaving root-owned bytecode in its venv | 2026-09-24 | 0 | - | - |
+| [#2471](https://github.com/DanielH2018/server/issues/2471) | low | improvement | cicd | Decide per class whether a staging-demoted or denylisted k8s deferral also needs a durable marker | 2026-09-24 | 0 | - | ✓ |
+| [#2476](https://github.com/DanielH2018/server/issues/2476) | low | improvement | cicd | Delete the five pre-dispatcher Bash hook shims kept for running sessions | 2026-09-24 | 0 | - | ✓ |
+| [#2505](https://github.com/DanielH2018/server/issues/2505) | low | improvement | cicd | Record the rendered-manifest digest in the release stamp so staleness stops needing path narrowings | 2026-09-24 | 0 | - | ✓ |
+| [#2511](https://github.com/DanielH2018/server/issues/2511) | low | improvement | backup-observability | A retried Kuma or Healthchecks push mails curl's stderr from a healthy cron run | 2026-09-24 | 0 | - | ✓ |
+| [#2516](https://github.com/DanielH2018/server/issues/2516) | low | gap | backup-observability | The artifacts peer sync still has no monitor, only cron mail | 2026-09-24 | 0 | - | ✓ |
+| [#2517](https://github.com/DanielH2018/server/issues/2517) | low | gap | docs | pr-authoring skill does not name the not-fixed closing-keyword hazard | 2026-09-24 | 0 | - | ✓ |
+| [#2521](https://github.com/DanielH2018/server/issues/2521) | low | gap | cicd | Lock-wait tests fail under load on a busy host | 2026-09-25 | 0 | - | ✓ |
+| [#2539](https://github.com/DanielH2018/server/issues/2539) | low | improvement | - | monitor-bridge CLAUDE.md sits at exactly its 400-line ceiling, leaving the next check no room | 2026-09-25 | 0 | - | ✓ |
+| [#2540](https://github.com/DanielH2018/server/issues/2540) | low | gap | - | Drop the last two archive/ diff classifiers once the deployer is past the deleting merge | 2026-09-25 | 0 | - | ✓ |
+| [#2541](https://github.com/DanielH2018/server/issues/2541) | low | improvement | - | Decide whether deploy_tags' two path-mapper sites join the shared reading | 2026-09-25 | 0 | - | ✓ |
+| [#2545](https://github.com/DanielH2018/server/issues/2545) | low | gap | backup-observability | Check 10's b2-deletions arm proves the cron fired, not that it completed | 2026-09-25 | 0 | - | ✓ |
+| [#2552](https://github.com/DanielH2018/server/issues/2552) | low | gap | cicd | A uv.lock-only PR that moves ruff skips the ruff hooks in its own CI | 2026-09-25 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -88,6 +96,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#1928](https://github.com/DanielH2018/server/issues/1928) | refuted | Validate: crowdsec-lapi .local route is reachable by SNI from any client that reaches the WAN 443 forward | Operator confirmed 2026-09-17: the router's WAN 80/443 forward to daniel-box admits Cloudflare's IP ranges only, so no internet client reaches the edge by SNI for a .local route. |
 | [#1930](https://github.com/DanielH2018/server/issues/1930) | accepted | Validate: Authelia network-scoped bypasses and the loki push ClientIP grant may admit masqueraded WireGuard clients | Verified live (wg-easy MASQUERADEs 10.8.0.0/24 out eth0, so WireGuard clients arrive as the Pi's LAN IP). Operator policy 2026-09-17: WireGuard clients are keyed devices and are trusted as LAN devices; the network-scoped bypasses apply to them by design. |
 | [#1933](https://github.com/DanielH2018/server/issues/1933) | refuted | Validate: speedtest monitoring route admits the whole pod CIDR to /api/ for a caller that sends no credential | Upstream routes/api.php at v1.14.7: only /api/healthcheck and the deprecated public /api/speedtest/latest are unauthenticated; every other /api/ route sits behind auth:sanctum, so a caller with no credential cannot create, start or delete a result. |
+| [#2446](https://github.com/DanielH2018/server/issues/2446) | refuted | Traefik access log ClientHost uses the client-sent X-Forwarded-For for Cloudflare requests | Traefik logs ClientHost as the whole X-Forwarded-For chain; the live crowdsecurity/traefik-logs 1.5 parser takes the rightmost entry, which through Cloudflare is the address Cloudflare appends. Live evidence: a scanner's XFF 127.0.0.1 chain was banned by its real address 195.178.110.72. The issue's harness skipped Cloudflare's append. Evidence on the issue; mechanism recorded in the traefik CLAUDE.md by PR #2464. |
 
 ### security
 
