@@ -250,8 +250,9 @@ dirty_tree_status() { if [ -e "$COMMIT_FAILED_STAMP" ]; then printf down; else p
 
 cd "$REPO" || { alert "docs-refresh: $REPO missing"; exit 1; }
 
-# fd 9 held for the script's life. -w 3000 matches secret-rotate and deploy.sh: longer than a
-# full gitops deploy plus rollback, so a legitimately busy tree waits rather than skipping.
+# fd 9 held for the script's life. -w 3300 matches secret-rotate, eval-run and deploy.sh's
+# `LOCK_WAIT` (scripts/deploy_tools/deploy_under_locks.py): longer than a full gitops deploy
+# plus rollback, so a legitimately busy tree waits rather than skipping.
 #
 # This said "-w 2700 matches secret-rotate" while secret-rotate was 3000, and 2700 was 240s
 # SHORT of the deployer's 2940s worst-case hold. PR #585 resized the staging gate and raised
