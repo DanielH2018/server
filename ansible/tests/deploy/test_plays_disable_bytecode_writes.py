@@ -75,18 +75,47 @@ def _plays() -> list[tuple[Path, int, dict]]:
     return found
 
 
-def test_every_play_disables_bytecode_writes() -> None:
-    missing = [
+def _plays_missing_the_key(plays: list[tuple[Path, int, dict]]) -> list[str]:
+    """The plays whose `environment:` does not set the key, named for the failure message."""
+    return [
         f"{path.relative_to(_REPO)} play {i} ({play.get('name', '<unnamed>')})"
-        for path, i, play in _plays()
+        for path, i, play in plays
         if (play.get("environment") or {}).get(_ENV_KEY) != "1"
     ]
+
+
+def test_every_play_disables_bytecode_writes() -> None:
+    missing = _plays_missing_the_key(_plays())
     assert not missing, (
         f"these plays do not set {_ENV_KEY} in their `environment:`: {missing}. "
         "A `become` task in them writes root-owned bytecode into the worktree's .venv, "
         "and the worktree can then only be removed under sudo. Add "
         f'`environment:` / `{_ENV_KEY}: "1"` to the play.'
     )
+
+
+def test_a_play_without_the_key_is_flagged() -> None:
+    """Reject half. A play with no `environment:` at all, and one that sets other keys."""
+    bare = (_REPO / "ansible/made-up.yml", 0, {"name": "Bare", "hosts": "localhost"})
+    other = (
+        _REPO / "ansible/made-up.yml",
+        1,
+        {"name": "Other keys", "hosts": "localhost", "environment": {"B2_KEY_ID": "x"}},
+    )
+    assert _plays_missing_the_key([bare, other]) == [
+        "ansible/made-up.yml play 0 (Bare)",
+        "ansible/made-up.yml play 1 (Other keys)",
+    ]
+
+
+def test_a_play_with_the_key_is_clean() -> None:
+    """Accept half, against the same synthetic shape the reject half uses."""
+    play = (
+        _REPO / "ansible/made-up.yml",
+        0,
+        {"hosts": "localhost", "environment": {_ENV_KEY: "1", "B2_KEY_ID": "x"}},
+    )
+    assert _plays_missing_the_key([play]) == []
 
 
 def test_the_guard_still_matches_the_known_playbooks() -> None:
