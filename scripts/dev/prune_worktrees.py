@@ -50,7 +50,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from foreign_owned import foreign_owned_advice
+from dev.foreign_owned import foreign_owned_advice
 from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
