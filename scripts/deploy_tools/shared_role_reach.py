@@ -45,7 +45,7 @@ from pathlib import Path
 
 from deploy_tools import land_tags
 from lib.git import git
-from narrow_setup_index import CannotNarrow
+from lib.narrow_git import CannotNarrow
 from narrow_setup import changed_keys
 
 # The trees a template can live in. `ansible/templates/` is the shared macro directory; under
