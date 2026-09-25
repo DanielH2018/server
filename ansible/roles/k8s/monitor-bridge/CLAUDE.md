@@ -59,9 +59,9 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   exists to page on that partial outage. A new node-exporter scrape job fails
   `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped.
 - **`STARTUP_GRACE`** (`n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `r2_usage`,
-  `speedtest`, `healthchecks_drift`) holds a reach-out check with no gate and no streak of its own `up` for the
-  first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday reboot's first cycle
-  does not page. The set is disjoint from every skip set, and a test holds both invariants.
+  `speedtest`, `healthchecks_drift`) holds a reach-out check with no gate and no streak of
+  its own `up` for the first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday
+  reboot's first cycle does not page. The set is disjoint from every skip set, and a test holds both invariants.
 - **Consecutive-cycle streaks** (`bridge/streaks.py`, every `*_CONSECUTIVE` in cycles of
   `INTERVAL`) are the per-check hysteresis. A held cycle pushes `up` with a `down streak n/N`
   note, because a monitor that is up while a fault accumulates has to say so. A streak delays
