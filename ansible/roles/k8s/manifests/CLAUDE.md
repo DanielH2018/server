@@ -208,6 +208,31 @@ to the loop its private restart iterates, and holds each private restart to the
 from decrypted SOPS values, and hashing adds a new read path over that output — a task result,
 a fact, and anything that later prints either.
 
+**`manifests_digest` identifies the applied bytes, and no reader outside a play reproduces it.**
+That matters because `probe.py releases --stale-only` decides staleness from paths and diffs,
+and each of its five narrowings exists because a path moved while the rendered bytes did not.
+Comparing the recorded digest against a fresh render would answer all five at once, which is
+what issue #2505 asks for. The render is the blocker. Measured on 2026-09-25 against the 57
+live records: the repo's offline render harness, `scripts/validate/k8s_manifests.py`,
+reproduces every recorded file checksum for 9 services and mismatches at least one file for 48.
+Two causes, both structural rather than incidental: the harness stubs SOPS values, which reach
+49 of the 300 rendered manifests as the literal `STUB`, and it supplies its own placeholder
+`domain` (`example.com`, from `scripts/lib/render_guard.py`), which every `ingressroute.yaml`
+embeds in its `Host()` rule. Its role
+defaults also outrank the inventory, the reverse of Ansible's own precedence — a deliberate
+inversion its own `DECIDED` marker explains, and one more reason its bytes are not a deploy's
+bytes. So a digest comparison fed by that harness reports 84% of the fleet stale forever, which
+is a worse failure than the false GREEN the narrowings guard against.
+
+Fidelity is not a property to chase per service either. The 9 that reproduce do so because
+nothing they render reads a secret, and one added secret-derived environment variable flips a
+service to permanent stale. Making the comparison real needs a render that decrypts SOPS at
+read time, in a cron that runs every 30 minutes — which is the read path over `no_log` output
+the paragraph above refuses — or a dry-run render on the deploy host, which is a pipeline
+rather than a reader. Until one of those lands, the narrowings are the mechanism, and
+`ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
+carries the same conclusion at the line that writes the digest.
+
 ## Guards
 
 `ansible/tests/` holds the checks that keep callers honest: `test_manifests_apply_guarded.py`,
