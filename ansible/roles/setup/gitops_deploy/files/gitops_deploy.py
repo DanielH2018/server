@@ -315,6 +315,12 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # Same shape, one plane over: a promoted image bump a broad tick deferred for lack of
     # budget is merged, so no later tick's range carries it either (#2449).
     deploy_defer.log_k8s_deferred(STATE)
+    # The non-paging half of the same plane (#2570): a hand-edited or denylisted k8s role this
+    # deployer merged and will never apply. Discharged FIRST, so the journal line below never
+    # names a change somebody's own `deploy.sh` has since applied — that deploy is invisible to
+    # every other part of this tick.
+    deploy_defer.discharge_k8s_unapplied(tools, STATE, config)
+    deploy_defer.log_k8s_unapplied(STATE)
 
     target = deploy_phases.assess(tools, STATE, config)
     if target.action == "dirty":

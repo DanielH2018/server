@@ -47,6 +47,7 @@ EXPECTED_MARKERS = frozenset(
         ("manual_plane_tags", "manual_plane_tags"),
         ("contention", "contention_since"),
         ("k8s_deferred", "k8s_deferred"),
+        ("k8s_unapplied", "k8s_unapplied"),
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),

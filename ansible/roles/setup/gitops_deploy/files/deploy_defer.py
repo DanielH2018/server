@@ -321,8 +321,13 @@ def record_demoted(
     # merged by the person landing it, whose `land.sh` is watching; a denylisted role's
     # ordinary change is routine, and forty of the fifty-four k8s roles are denylisted, so
     # recording those would hold GitOps Deploy — Status red as normal operation — the failure
-    # the age gate on `manual_plane` was sized to avoid. The denylisted class keeps `Release
-    # Staleness Drift` as its durable signal; #2570 carries whether that is enough.
+    # the age gate on `manual_plane` was sized to avoid.
+    #
+    # #2570 SETTLED THE OTHER HALF, and it did not overturn this: that argument rules out a
+    # signal that PAGES, not a durable record. The hand-edited and denylisted classes get
+    # `k8s_unapplied`, a marker `gitops_status` never reads, written in
+    # `deploy_alerts.alert_deferred` and discharged off the release record by
+    # `discharge_k8s_unapplied`. `k8s_deferred` stays what it is: the marker that pages.
     #
     # Called at the ff-merge, for the reason `record` is: that is the moment the bump becomes
     # merged-and-unapplied, and a broad apply that FAILS returns from its except arm, where a
@@ -412,6 +417,98 @@ def log_k8s_deferred(state: DeployerState) -> None:
     log(
         f"k8s_deferred pending: {', '.join(services)} — merged, not applied. Deploy: "
         f"{k8s_deferred_deploy_cmd(services)}, then {k8s_deferred_clear_cmd()}"
+    )
+
+
+def alert_and_record_deferred(
+    tools: DeployTools,
+    state: DeployerState,
+    config: Config,
+    origin: str,
+    deployed: set[str],
+    cs,
+    declared_k8s: set[str] | None = None,
+) -> None:
+    """`deploy_alerts.alert_deferred`, plus the durable record of what it paged about (#2570).
+
+    The k8s defer-and-alert post fires once per SHA and the ff-merge clears `behind_since`, so
+    a hand-edited or denylisted role sits merged-and-unapplied with nothing naming it — and
+    `Release Staleness Drift`, its other signal, is DOWN for any stale record anywhere in the
+    fleet, so a NEW deferral adds nothing a reader can see there. `k8s_unapplied` names it, on
+    the SessionStart banner and in the journal, and nothing pages on it.
+
+    Every caller of this is an exit that leaves the range MERGED — the contention arm resets
+    the tree and returns before reaching any of them — so `unrecord` owns no reverse for the
+    line this writes. The wrapper lives here rather than inside `alert_deferred` because
+    `deploy_alerts.py` is at its length ceiling.
+
+    A SERVICE ALREADY IN `k8s_deferred` IS SKIPPED. `deploy_broad_k8s` folds a budget-deferred
+    or staging-demoted bump back into `cs.k8s` after recording it there, so without this the
+    same service would hold a line in both markers and the SessionStart banner would name it
+    twice — once as a deferred bump, once as an unapplied role. The paging marker wins: it
+    already carries the service, and its line is the one with a threshold behind it.
+    """
+    state.record_k8s_unapplied(
+        origin, cs.k8s - pending_k8s_deferred(state), time.time()
+    )
+    deploy_alerts.alert_deferred(
+        tools, state, config, origin, deployed, cs, declared_k8s
+    )
+
+
+def discharge_k8s_unapplied(
+    tools: DeployTools, state: DeployerState, config: Config
+) -> list[str]:
+    """Drop each `k8s_unapplied` line a real deploy has since covered. Returns those dropped.
+
+    THE RECORD DISCHARGES ITSELF, and that is what makes this marker affordable. A denylisted
+    role is by definition one this deployer never applies, so a marker cleared only by a tick
+    or by a hand would grow one permanent line per routine landing — forty of the fifty-four
+    k8s roles are denylisted, and a banner printing forty lines is the always-red tile #2570
+    objects to, moved to another surface.
+
+    The question asked per line is "has ANY deploy of this service happened at or after the
+    SHA we recorded", answered from the service's release record
+    (`roles/k8s/manifests/tasks/release_stamp.yml`) and one `git merge-base --is-ancestor`.
+    That is deliberately NOT the question `probe.py releases --stale-only` asks: this one
+    needs no role paths, no shared-role consumers and no deploy-plane narrowing, so the two
+    cannot drift into disagreeing. It discharges an operator's own `deploy.sh`, which the
+    deployer has no other way to see — the gap `clear-manual-plane` fills by hand one plane
+    over.
+
+    A record that is absent, unreadable or names a commit this checkout cannot resolve KEEPS
+    the line. `is_ancestor` already reads a git error as False, and that is the direction this
+    wants: a kept line is a banner entry an operator can clear in one command, where a dropped
+    one loses the only record that the change was never applied.
+    """
+    discharged = []
+    for entry in state.k8s_unapplied_pending():
+        applied = tools.release_commit(entry.service)
+        if applied and tools.is_ancestor(config.repo, entry.origin, applied):
+            discharged.append(entry.service)
+    if discharged:
+        state.clear_k8s_unapplied(discharged)
+        log(
+            f"k8s_unapplied discharged for {', '.join(sorted(discharged))}: the release "
+            f"record names a commit that carries the change"
+        )
+    return sorted(discharged)
+
+
+def log_k8s_unapplied(state: DeployerState) -> None:
+    """Name every k8s role change the `k8s_unapplied` marker still holds, in the journal.
+
+    Called from `main()` beside `log_k8s_deferred`, and for the reason that call gives: the
+    tick that recorded the change fast-forwarded, so no later tick's range carries it and a
+    line written only where the marker is written would appear once. Nothing pages on this,
+    so the journal and the SessionStart banner are the whole of its reach.
+    """
+    services = sorted({e.service for e in state.k8s_unapplied_pending()})
+    if not services:
+        return
+    log(
+        f"k8s_unapplied pending: {', '.join(services)} — merged, not applied, and this "
+        f"deployer never applies them. Deploy: {k8s_deferred_deploy_cmd(services)}"
     )
 
 

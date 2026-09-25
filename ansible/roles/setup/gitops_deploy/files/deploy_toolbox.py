@@ -38,6 +38,7 @@ from functools import partial
 
 import deploy_io
 import deploy_narrow
+import deploy_release
 from deploy_config import Config, log
 from deploy_git import ci_verdict, github_get, github_token
 from host_lib import discord_post
@@ -135,6 +136,10 @@ class DeployTools:
     git_fetch: Callable[[str, str], subprocess.CompletedProcess] = deploy_io.git_fetch
     git_status: Callable[[str], subprocess.CompletedProcess] = deploy_io.git_status
     is_ancestor: Callable[[str, str, str], bool] = deploy_io.is_ancestor
+    # The applied commit from a service's k8s release record, for the `k8s_unapplied`
+    # discharge. A field because the record is written by a DIFFERENT process — an operator's
+    # `deploy.sh` — so the suite has to script it rather than stage a file.
+    release_commit: Callable[[str], str | None] = deploy_release.release_commit
     fetch_ci_verdict: Callable[[str], str] = _ci_unconfigured
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated

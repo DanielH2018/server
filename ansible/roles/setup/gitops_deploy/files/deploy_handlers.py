@@ -230,7 +230,7 @@ def handle_broad(
             # dedupe marker then suppressed the page the re-merging tick owes. Sending it
             # from each exit that leaves the range merged keeps #2383's property — every one
             # of them is reached with `local == origin`, where no later tick re-evaluates.
-            deploy_alerts.alert_deferred(
+            deploy_defer.alert_and_record_deferred(
                 tools, state, config, origin, set(), cs, plan.k8s_services
             )
             deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
@@ -341,7 +341,7 @@ def handle_k8s(
     # A promoted k8s service is image-bump-only, so it is never the consumer of a secret that
     # rode along in the same tick. Without this the rotated value is ff-merged and forgotten.
     deploy_alerts.alert_secrets_deferred(tools, state, config, origin, cs)
-    deploy_alerts.alert_deferred(
+    deploy_defer.alert_and_record_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )
     return 0
@@ -427,7 +427,7 @@ def handle_no_services(
     # tasks/ and meta/deps.yml changes aren't auto-deployed but DO change what a deploy does, so
     # they must not sit silently ff-merged. Nothing was deployed this tick (deployed=set()), so
     # the full sets are flagged. Same helper runs on the deploy path for a combined push.
-    deploy_alerts.alert_deferred(
+    deploy_defer.alert_and_record_deferred(
         tools, state, config, origin, set(), cs, plan.k8s_services
     )
     return 0
@@ -515,7 +515,7 @@ def handle_docker(
         # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
         # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
         # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
-        deploy_alerts.alert_deferred(
+        deploy_defer.alert_and_record_deferred(
             tools, state, config, origin, cs.services, cs, plan.k8s_services
         )
         return 0

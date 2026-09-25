@@ -31,6 +31,11 @@ too leaves ``behind_since`` empty. monitor-bridge reported it from the day it ex
 the banner did not, so a session opening on daniel-box — the reader who can clear it with one
 deploy — was the one surface not told (#2470).
 
+``k8s_unapplied`` is that same shape again for the k8s changes this deployer never applies at
+all: a hand-edited role, or one of the forty denylisted ones. Nothing pages on it, by
+construction — that is what lets the class have a durable record at all (#2570) — so this
+banner and the deployer's journal are its only readers.
+
 The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
 generated copy of the deployer's own module (its header says how it is kept fresh), so this
 module and monitor-bridge read exactly the lines the deployer wrote. What stays here is the
@@ -60,6 +65,7 @@ from lib.gitops_markers import (
     STATE_DIR,
     k8s_deferred_clear_cmd,
     k8s_deferred_deploy_cmd,
+    k8s_unapplied_clear_cmd,
     parse_contention,
     manual_plane_clear_cmd,
     maximal_apply_warning,
@@ -277,6 +283,41 @@ def k8s_deferred_lines(marker, now):
             f"`{k8s_deferred_clear_cmd(entry.service)}`"
         )
     return lines
+
+
+def k8s_unapplied_lines(marker, now):
+    """One banner line per k8s role change the deployer merged and will never apply, or [].
+
+    The other half of the k8s defer-and-alert channel (#2570). A hand-edited or denylisted
+    role is fast-forwarded and dropped: the Discord post fires once per SHA, no later tick's
+    range carries the change, and `Release Staleness Drift` is already DOWN for any stale
+    record anywhere in the fleet, so a new deferral adds nothing a reader can see on that
+    tile. This banner is where the change gets named.
+
+    # DECIDED: no age gate here, and no monitor behind it either — unlike `k8s_deferred_lines`
+    # above, which is ungated on the banner while monitor-bridge pages on the same marker at
+    # 7h. Forty of the fifty-four k8s roles are denylisted, so a page on this class would be
+    # red as normal operation, which is the measured ground #2471 ruled the marker out on. A
+    # banner line costs a reader one glance and the marker discharges itself off the release
+    # record, so the set stays the changes nobody has deployed.
+    """
+    lines = []
+    for entry in sorted(parse_k8s_deferred(marker), key=lambda e: e.at):
+        lines.append(
+            f"  ✗ the GitOps deployer merged a k8s change for `{entry.service}` "
+            f"{_age_phrase(now - entry.at)} ago and never applies this role — "
+            f"`{k8s_deferred_deploy_cmd([entry.service])}`, or "
+            f"`{k8s_unapplied_clear_cmd(entry.service)}` if it was reverted"
+        )
+    return lines
+
+
+def read_k8s_unapplied_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's `k8s_unapplied` marker text, or None when it cannot be read.
+
+    Absent and unreadable collapse to the same answer, for the reason the readers above give.
+    """
+    return _read(state_dir, MARKERS["k8s_unapplied"])
 
 
 def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

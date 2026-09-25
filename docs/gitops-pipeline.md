@@ -612,8 +612,17 @@ stay).
       has the same two properties — the tick chose it rather than a person, and nothing reports
       it again. A hand-edited or denylisted k8s role is not: it is merged by a person who is
       landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
-      hold GitOps Deploy — Status red as normal operation. The denylisted class keeps `Release
-      Staleness Drift` as its durable signal, and issue #2570 carries whether that is enough.
+      hold GitOps Deploy — Status red as normal operation. It was not enough on its own
+      (#2570), and the resolution keeps that argument intact: what it rules out is a signal
+      that PAGES, not a durable record. So the hand-edited and denylisted classes are written
+      to **`k8s_unapplied`**, a second marker in the same line format that `gitops_status`
+      never opens. The SessionStart banner and the deployer's journal read it, and every tick
+      DISCHARGES a line whose service has since been deployed — asked of the service's release
+      record and one `git merge-base --is-ancestor`, which is what makes an operator's own
+      `deploy.sh` drop the line without anybody running a command. `deploy.sh` is otherwise
+      invisible to the deployer, and without that discharge the marker would hold one
+      permanent line per routine landing. `gitops_state.py clear-k8s-unapplied <svc>` is the
+      hand clear, for a change that was REVERTED rather than applied — nothing else needs it.
       A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
       `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm
       after it resets the tree, so a marker written there would describe a range that is no

@@ -458,3 +458,33 @@ def test_clearing_the_last_deferred_bump_removes_the_marker(tmp_path, run):
     (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n")
     assert run(tmp_path, "clear-k8s-deferred", "sonarr") == 0
     assert not (tmp_path / "k8s_deferred").exists()
+
+
+# ── clear-k8s-unapplied: the marker nothing pages on (#2570) ───────────────────────────────
+
+AUTHELIA = SONARR.replace("sonarr", "authelia")
+
+
+def test_clearing_an_unapplied_role_rewrites_its_own_marker_only(
+    tmp_path, run, capsys, journal
+):
+    """The two markers share a line format and this command, and NOT a file: a clear aimed at
+    one must not touch the other."""
+    (tmp_path / "k8s_unapplied").write_text(f"{AUTHELIA}\n")
+    (tmp_path / "k8s_deferred").write_text(f"{SONARR}\n")
+    assert run(tmp_path, "clear-k8s-unapplied", "authelia") == 0
+    assert not (tmp_path / "k8s_unapplied").exists()
+    assert (tmp_path / "k8s_deferred").read_text().splitlines() == [SONARR]
+    assert "authelia" in capsys.readouterr().out
+
+
+def test_clearing_an_unapplied_role_that_is_not_pending_exits_zero_and_says_so(
+    tmp_path, run, capsys, journal
+):
+    """The rejecting half, and the reason it matters here: the ordinary way out of this
+    marker is the tick's own discharge, so a hand clear usually finds nothing."""
+    (tmp_path / "k8s_unapplied").write_text(f"{AUTHELIA}\n")
+    assert run(tmp_path, "clear-k8s-unapplied", "jellyfin") == 0
+    assert (tmp_path / "k8s_unapplied").read_text().splitlines() == [AUTHELIA]
+    assert "not pending" in capsys.readouterr().out
+    assert journal[0][1] is None, "nothing was dropped, so the line says so"
