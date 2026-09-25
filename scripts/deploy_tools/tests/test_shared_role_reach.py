@@ -104,6 +104,50 @@ def test_a_default_a_template_mentions_still_needs_a_hand(tree: Tree):
     assert not _only(tree, "ansible/roles/k8s/manifests/defaults/main.yml")
 
 
+def test_a_comment_only_task_change_is_deploy_time_only(tree: Tree):
+    """CLEAN half: PR #2575 added a `# DECIDED:` comment and was sent to deploy.yml (#2581)."""
+    tree.write(
+        "ansible/roles/k8s/manifests/tasks/main.yml",
+        "# DECIDED: the timeout is a deploy-time read.\n" + TASKS,
+    )
+    assert _only(tree, "ansible/roles/k8s/manifests/tasks/main.yml")
+
+
+def test_the_note_drops_a_comment_only_shared_role(tree: Tree):
+    """The wiring #2581 asks for: the landing reads no shared-role note at all."""
+    files = [
+        "ansible/roles/k8s/manifests/tasks/main.yml",
+        "ansible/roles/k8s/manifests/CLAUDE.md",
+    ]
+    assert "manifests" in land_tags.plane_note(files, DECLARED)
+    tree.write(
+        "ansible/roles/k8s/manifests/tasks/main.yml",
+        "# DECIDED: the timeout is a deploy-time read.\n" + TASKS,
+    )
+    old, new = _refs(tree)
+    kept = shared_role_reach.paths_a_hand_must_apply(
+        files, f"{old}..{new}", tree.root, DECLARED
+    )
+    assert "manifests" not in land_tags.plane_note(kept, DECLARED)
+
+
+def test_a_hash_line_inside_a_block_scalar_still_needs_a_hand(tree: Tree):
+    """FLAGGED half: inside a `shell: |` a `#` line is script content, not a comment."""
+    script = """\
+- name: Stamp the release
+  ansible.builtin.shell: |
+    # stamp
+    echo old > /var/lib/homelab/stamp
+"""
+    tree.write("ansible/roles/k8s/manifests/tasks/main.yml", script)
+    tree.commit("a task carrying a script")
+    tree.write(
+        "ansible/roles/k8s/manifests/tasks/main.yml",
+        script.replace("# stamp", "# stamp the release record"),
+    )
+    assert not _only(tree, "ansible/roles/k8s/manifests/tasks/main.yml")
+
+
 def test_a_shared_role_template_change_always_needs_a_hand(tree: Tree):
     """FLAGGED half: those bytes are applied, whatever any key scan says."""
     tree.write("ansible/roles/k8s/manifests/templates/pvc.yaml.j2", "kind: PVC\n")

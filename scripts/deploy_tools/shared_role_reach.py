@@ -18,6 +18,10 @@ deploy-time only:
   - `tasks/`, `handlers/`, `meta/`: only when every line the diff changed mentions one of
     those quiet keys. A task edit that reads the changed default is that default's own
     consumer; a task edit that does anything else can move the bytes it renders.
+  - any `.yml` in one of those four directories whose two revisions differ in comments and
+    blank lines only, whatever keys it names. PR #2575 added a `# DECIDED:` comment to
+    `manifests/tasks/release_stamp.yml` and its landing asked for a 20-minute
+    `ansible/deploy.yml` that would have applied nothing (#2581).
 
 DECIDED: per KEY, not per role and not per subdirectory. `releases._supplies_manifest_bytes`
 names `manifests` as byte-supplying outright and `releases._DEPLOY_TIME_SUBDIRS` leaves
@@ -46,7 +50,12 @@ from pathlib import Path
 from deploy_tools import land_tags
 from lib.git import git
 from lib.narrow_git import CannotNarrow
+from lib.repo_paths import GITOPS_DEPLOY_FILES
 from narrow_setup import changed_keys
+
+# `deploy_logic` lives under the gitops_deploy role, for the reason `deploy_tags.py` records
+# beside its own copy of this insert. The import itself is function-local, in `_comment_only`.
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # The trees a template can live in. `ansible/templates/` is the shared macro directory; under
 # a role, only `templates/` renders. `files/` is shipped verbatim, so a key cannot reach it by
@@ -57,6 +66,11 @@ _TEMPLATE_TREES = ("ansible/roles", "ansible/templates")
 # too: they are handled by the key scan, which is the whole point of this module.
 _DEPLOY_TIME_SUBDIRS = frozenset({"tasks", "handlers", "meta"})
 _VARS_SUBDIRS = frozenset({"defaults", "vars"})
+# The comment-only read is a YAML reader, so it answers for a `.yml` and for nothing else: a
+# `#` line in a `.j2` is usually rendered content. `templates/` and `files/` are outside it
+# anyway — those bytes are applied or shipped, and the path rules below refuse them.
+_COMMENT_ONLY_SUBDIRS = _DEPLOY_TIME_SUBDIRS | _VARS_SUBDIRS
+_YAML_SUFFIXES = (".yml", ".yaml")
 
 
 def _role_prefixes(role: str) -> tuple[str, ...]:
@@ -123,6 +137,28 @@ def _changed_lines(path: str, old: str, new: str, repo: Path) -> list[str]:
     return out
 
 
+def _comment_only(path: str, old: str, new: str, repo: Path) -> bool:
+    """Whether `path`'s two revisions differ in comments and blank lines only.
+
+    `_content_lines` is the deployer's own YAML reader, the one `comment_only_broad_changes`
+    decides its broad paths with — reached rather than reimplemented so the two cannot
+    disagree about one commit. It knows block scalars, where a `#` line inside a `shell: |`
+    is script content and not a comment. A side this cannot read raises, which keeps the role
+    loud.
+    """
+    from deploy_logic import _content_lines
+
+    if not path.endswith(_YAML_SUFFIXES):
+        return False
+    texts = []
+    for ref in (old, new):
+        r = git("show", f"{ref}:{path}", cwd=repo, check=False)
+        if r.returncode != 0:
+            raise CannotNarrow(f"`git show {ref}:{path}` failed: {r.stderr.strip()}")
+        texts.append(r.stdout)
+    return _content_lines(texts[0]) == _content_lines(texts[1])
+
+
 def _tasks_read_only_these_keys(
     path: str, keys: set[str], old: str, new: str, repo: Path
 ) -> bool:
@@ -158,9 +194,10 @@ def deploy_time_only(role: str, files, pr_range: str, repo) -> bool:
         repo: the checkout holding both ends of the range.
 
     Returns:
-        True only when every changed path under the role is a vars file whose changed keys no
-        template mentions, or a `tasks`/`handlers`/`meta` file whose diff changed nothing but
-        lines reading one of those keys. False for every other path, and for every failure.
+        True only when every changed path under the role is a `.yml` whose two revisions
+        differ in comments alone, a vars file whose changed keys no template mentions, or a
+        `tasks`/`handlers`/`meta` file whose diff changed nothing but lines reading one of
+        those keys. False for every other path, and for every failure.
     """
     if ".." not in pr_range:
         return False
@@ -169,6 +206,23 @@ def deploy_time_only(role: str, files, pr_range: str, repo) -> bool:
     paths = [p for p in files if _subdir(p, role)]
     if not paths:
         return False
+    # Read first, because a comment-only edit answers the question on its own: it moves no
+    # bytes whatever keys the file around it names, and the key scan below refuses it (a
+    # `tasks/` diff with no changed key is loud by construction).
+    try:
+        quiet = {
+            p
+            for p in paths
+            if _subdir(p, role) in _COMMENT_ONLY_SUBDIRS
+            and _comment_only(p, old, new, repo)
+        }
+    except CannotNarrow:
+        return False
+    except OSError:
+        return False
+    paths = [p for p in paths if p not in quiet]
+    if not paths:
+        return True
     vars_paths = [p for p in paths if _subdir(p, role) in _VARS_SUBDIRS]
     other = [p for p in paths if p not in set(vars_paths)]
     if any(_subdir(p, role) not in _DEPLOY_TIME_SUBDIRS for p in other):

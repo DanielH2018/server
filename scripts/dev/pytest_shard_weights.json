@@ -624,6 +624,7 @@
  "scripts/deploy_tools/tests/test_land_outcome.py": 0.0,
  "scripts/deploy_tools/tests/test_land_pipeline.py": 0.1,
  "scripts/deploy_tools/tests/test_land_plane_keeps_the_remaining_hosts_line.py": 0.0,
+ "scripts/deploy_tools/tests/test_land_plane_keeps_the_tick_half_line.py": 0.0,
  "scripts/deploy_tools/tests/test_land_quotes_the_deployers_narrowing.py": 0.07,
  "scripts/deploy_tools/tests/test_land_reach.py": 0.18,
  "scripts/deploy_tools/tests/test_land_reach_block_gate.py": 0.11,

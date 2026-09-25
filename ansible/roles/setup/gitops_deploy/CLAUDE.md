@@ -270,9 +270,11 @@ Each arm below is a rule and the function that holds it. The record page has the
     ones — the `DECIDED:` in `deploy_k8s.py` beside that cap. The surplus defer-and-alerts and
     is NOT retried: the ff-merge runs first, so `local == origin` afterwards.
   - **The deferral page is a one-shot, not a durable signal** (#947; the `# DECIDED:` at the
-    `cs.k8s` branch of `deploy_alerts.alert_deferred`). The durable signal is the
-    `release-staleness` cron in `roles/setup/k3s/`, running `probe.py releases --stale-only`
-    as `sys_user` against each service's release record (`releases.py`'s
+    `cs.k8s` branch of `deploy_alerts.alert_deferred`). Two durable signals carry it. The
+    `k8s_unapplied` marker records the hand-edited and denylisted classes, written by
+    `deploy_defer.alert_and_record_deferred` and read by the SessionStart banner (#2570). The
+    `release-staleness` cron in `roles/setup/k3s/` runs `probe.py releases --stale-only` as
+    `sys_user` against each service's release record (`releases.py`'s
     `manifest_affecting_shared_roles()` names the shared roles it charges; the deploy plane is
     charged through `narrow_broad.broad_path_tags`).
   - **Accepted trade-offs, each marked `# DECIDED:` at the line that makes it:** the

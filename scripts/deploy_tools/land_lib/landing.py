@@ -22,7 +22,12 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.ledger import Ledger
 from deploy_tools.land_lib.options import Options
-from deploy_tools.land_lib.outcome import Outcome, say
+from deploy_tools.land_lib.outcome import (
+    ABANDONED_WATCH_NOTE,
+    Outcome,
+    say,
+    unrecorded_apply_note,
+)
 from deploy_tools.land_lib.tools import Classifier, Tools
 
 BRANCH = "master"
@@ -252,6 +257,37 @@ class Landing:
             return False
         applied = marker.split()[0]
         return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
+
+    def tick_half_unrecorded(self) -> bool:
+        """Is this PR's self-applied half converged-but-unapplied — the #1537 shape?
+
+        True only for that one state: the PR carries something the TICK applies, the tick
+        answers CONVERGED, and it recorded no broad apply covering the merge commit. HELD,
+        BEHIND and UNKNOWN are all false here, because each has a verdict of its own at the
+        foot of `health_verdict.health` and `deploy.no_tag_outcome`; this predicate exists so
+        a landing that ENDS at its plane arm can still print the remediation those arms own
+        (#2579).
+        """
+        return (
+            bool(self.self_applied)
+            and self.tick_state() == TickState.CONVERGED
+            and not self.broad_applied_covers(self.merge_sha)
+        )
+
+    def tick_half_remediation(self) -> list[str]:
+        """What to do about a tick's own half that recorded no apply of this PR.
+
+        The abandoned watch first: the markers were read mid-apply, so the apply command
+        would send an operator after work that may be running. Otherwise the note and, where
+        the classifier derived one, the command itself. One builder, called from all four
+        sites that reach this state, so the plane arms and the verdict arms cannot drift.
+        """
+        if self.tick_watch_abandoned:
+            return [ABANDONED_WATCH_NOTE]
+        lines = [unrecorded_apply_note(self.state("behind_since"))]
+        if self.self_applied_command:
+            lines.append(f"  Apply it: {self.self_applied_command}")
+        return lines
 
     def tick_already_deployed(self, sha: str, tags: list[str]) -> bool:
         """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?
