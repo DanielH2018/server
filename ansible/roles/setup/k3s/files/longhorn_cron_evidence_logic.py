@@ -122,6 +122,23 @@ def check_cron_evidence(
 # days and the guard below would have to compare against its own period instead.
 _CRON_PERIOD_S = 86400
 
+# `b2-deletions: charged 3, skipped 0, unpriced 0` and `b2-deletions: declined: ...` —
+# `deletions_summary_line` and `deletions_declined_line` in
+# `scripts/diagnostics/probe_lib/b2_ledger.py`, matched as written the way the trim's summary
+# is. A completed run prints exactly one of them.
+_DELETIONS_SUMMARY_RE = re.compile(
+    r"b2-deletions: charged \d+, skipped \d+, unpriced \d+"
+)
+_DELETIONS_DECLINED_RE = re.compile(r"b2-deletions: declined: ")
+# The two unconditional shapes that run printed BEFORE it gained a summary line. They are
+# accepted so the first window after the change — which still holds runs from before it — does
+# not read as a stopped cron and page for a day.
+# TODO: https://github.com/DanielH2018/server/issues/2565 - drop these once one full evidence
+# window has passed with the summary line in it.
+_DELETIONS_LEGACY_RE = re.compile(
+    r"no new B2 backup deletions in the last |charged \d+ deletion\(s\) over "
+)
+
 
 class CronState(NamedTuple):
     """What the host knows about one of check 9's crons, apart from what it logged.
@@ -145,6 +162,24 @@ class CronState(NamedTuple):
     installed_at: float | None
     unreadable: bool
     expected: bool
+
+
+def deletions_have_spoken(lines: list[str]) -> bool:
+    """Whether the window holds a line a COMPLETED `b2-deletions` run writes.
+
+    `probe.py b2-deletions` ends every run that completes with one of two fixed shapes —
+    `deletions_summary_line` for a run that classified, `deletions_declined_line` for a
+    disarmed backup target (`scripts/diagnostics/probe_lib/b2_ledger.py`). Judging on those
+    rather than on any line at all is #2545: the cron pipes both streams through `logger`, so a
+    run that logged a traceback and exited non-zero used to read as alive here, and check 9
+    stayed quiet too because a traceback carries no `UNPRICED`.
+    """
+    return any(
+        _DELETIONS_SUMMARY_RE.search(line)
+        or _DELETIONS_DECLINED_RE.search(line)
+        or _DELETIONS_LEGACY_RE.search(line)
+        for line in lines
+    )
 
 
 def trim_has_spoken(lines: list[str]) -> bool:
@@ -223,11 +258,11 @@ def check_cron_liveness(
     - A cron installed less than one window ago: a freshly provisioned host, or one Ansible has
       just rewritten. The window is already one period plus slack, so it is the grace too.
 
-    The two arms prove different things, and the asymmetry is in the evidence, not the code.
-    The trim's silence is judged on a RECOGNISED verdict line, so this arm proves the trim
-    COMPLETED; `b2-deletions` is judged on any line at all, so that half proves only that it
-    FIRED. A b2-deletions run that fires and dies before its summary logs something and reads
-    as alive here.
+    Both arms judge silence on a RECOGNISED line, so each proves its cron COMPLETED rather
+    than merely fired. The b2 half judged on any line at all until #2545 gave
+    `probe.py b2-deletions` a summary line of its own: the cron pipes both streams through
+    `logger`, so a traceback was evidence of life, and check 9 stayed quiet alongside it
+    because a traceback carries no `UNPRICED`.
 
     Rank 4 throughout, matching check 9: a cron that stopped is real and not urgent, and it
     must not displace a stale backup from the push slot.
@@ -237,7 +272,11 @@ def check_cron_liveness(
     problems = []
     for cron, lines, spoke in (
         (trim, trim_lines, bool(trim_lines) and trim_has_spoken(trim_lines)),
-        (deletion, deletion_lines, bool(deletion_lines)),
+        (
+            deletion,
+            deletion_lines,
+            bool(deletion_lines) and deletions_have_spoken(deletion_lines),
+        ),
     ):
         problem = _liveness_problem(cron, lines, spoke, window_hours, now_s)
         if problem:

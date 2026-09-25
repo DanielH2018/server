@@ -177,3 +177,41 @@ def test_cron_liveness_reads_trim_chatter_as_silence():
     problems = _liveness(["some unrelated line under the tag"], [_PRICED])
     assert len(problems) == 1
     assert "longhorn-trim has logged nothing" in problems[0][1]
+
+
+def test_cron_liveness_reads_b2_deletions_chatter_as_silence():
+    """The #2545 gap: a run that logged a traceback and died used to read as alive.
+
+    The cron pipes both streams through `logger`, so a traceback IS journal lines under the
+    tag. Check 9 stays quiet on it too — a traceback carries no `UNPRICED` — so this arm is
+    the only reader that can claim the run never finished.
+    """
+    traceback_lines = [
+        "Traceback (most recent call last):",
+        '  File "scripts/diagnostics/probe.py", line 1, in <module>',
+        "ConnectionError: loki refused the connection",
+    ]
+    problems = _liveness([_TRIM_CLEAN], traceback_lines)
+    assert len(problems) == 1
+    assert problems[0][0] == 4
+    assert "b2-deletions has logged nothing in the last 26h" in problems[0][1]
+
+
+def test_cron_liveness_accepts_a_declined_b2_deletions_run():
+    """A disarmed BackupTarget is a legitimate no-op, not a stopped cron."""
+    declined = ["b2-deletions: declined: the B2 BackupTarget has no URL"]
+    assert _liveness([_TRIM_CLEAN], declined) == []
+
+
+def test_cron_liveness_accepts_the_summary_line_the_probe_writes():
+    """The coupling test: the literal `probe.py b2-deletions` prints is what this matches.
+
+    The shape lives in two trees with no shared import — the probe emits it, this check
+    matches it — so nothing but a test holds the two together.
+    """
+    from diagnostics.probe_lib import b2_ledger
+
+    assert _liveness([_TRIM_CLEAN], [b2_ledger.deletions_summary_line(3, 1, 0)]) == []
+    assert (
+        _liveness([_TRIM_CLEAN], [b2_ledger.deletions_declined_line("disarmed")]) == []
+    )

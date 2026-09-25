@@ -121,14 +121,23 @@ kuma_push() {
   # line) keeps this safe under a future `set -e` caller — every current caller runs
   # `set -uo pipefail`, not `-e`, but the function has no way to know what a caller five years
   # from now will set.
+  #
+  # `-s` without `-S`, and stderr to /dev/null on top of it (#2511): a transport failure on an
+  # attempt that a later one recovers would otherwise print `curl: (NN) ...` to the script's
+  # stderr, which cron mails as if the whole run had failed. Whether `-s` alone silences every
+  # curl version's transport message is not worth depending on, so the redirect is the
+  # guarantee. Nothing is lost: the `logger` calls below report each failed attempt with its
+  # HTTP code and curl's own exit status, which names the transport class. The redirect must
+  # not be `2>&1` — stdout here is parsed as `%{http_code} %{content_type}`, and a merged error
+  # message would corrupt that reading.
   for attempt in 1 2 3; do
     reply=$(
       printf 'url = "%s"\n' "$push_url" |
-        curl -sS --max-time 10 -G -K - \
+        curl -s --max-time 10 -G -K - \
           --resolve "${kuma_host}:443:${resolve_ip}" \
           --data-urlencode "status=${status}" \
           --data-urlencode "msg=${msg}" \
-          -o /dev/null -w '%{http_code} %{content_type}'
+          -o /dev/null -w '%{http_code} %{content_type}' 2>/dev/null
     ) && curl_rc=0 || curl_rc=$?
     # A curl that dies before any response still prints `000 ` through -w; a stub or an older
     # curl may print the code alone, so the split tolerates a missing second field.

@@ -72,7 +72,8 @@ push_healthchecks() {
     # Bare slug, never ?create=1 — a typo would silently create an unwatched, permanently-green check.
     local url="https://hc-ping.com/${HC_PING_KEY}/etcd-snapshot-offbox"
     [[ "$status" == "up" ]] || url="${url}/fail"
-    curl -fsS --max-time 10 --retry 3 "$url" >/dev/null \
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
+    curl -fs --max-time 10 --retry 3 "$url" >/dev/null 2>&1 \
       || logger -t etcd-snapshot-offbox "healthchecks ping failed (status=${status})"
   fi
 }

@@ -19,8 +19,9 @@ both directions: an entry whose cron is gone, or whose job is now routed, is sta
 The judge splits a job at top-level `;`, `&&` and `||`, so an unbraced chain is judged stage
 by stage rather than by its last pipe. It does not judge the stderr of a pipeline's earlier
 stages, which prints only on failure. It cannot see inside a script, so an allowlist reason is
-a claim about the script that a person checked. The Kuma and Healthchecks crons print on a
-push that fails once and then succeeds on retry (#2511).
+a claim about the script that a person checked. The Kuma and Healthchecks crons used to print
+on a push that failed once and then succeeded on retry; #2511 routed curl's stderr away at
+both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds the ping half.
 
 Run: uv run pytest ansible/tests/setup/test_cron_output_goes_to_the_journal.py
 """

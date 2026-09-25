@@ -172,6 +172,12 @@ figure. It still gets a ledger line, at zero Class C with UNPRICED in the note, 
 records that the deletion happened rather than omitting it entirely. Both crons pipe their output
 through `logger`, so each run’s summary is searchable in Loki; cron discards the exit code.
 
+A completed `b2-deletions` run ends with one line of a fixed shape —
+`b2-deletions: charged N, skipped N, unpriced N`, or `b2-deletions: declined: <reason>` when the
+BackupTarget carries no URL. Check 10 of `longhorn-backup-health.sh` reads that line to tell a
+run that finished from one that died part-way, so a reword changes the check's regexes in the
+same edit (`ansible/roles/setup/k3s/CLAUDE.md`, *Required evidence*).
+
 Deletions against the `r2` BackupTarget are skipped. R2's caps are monthly and vast, and charging
 one against B2's 2,500/day Class C cap would inflate the ledger against a cap that does not
 govern it. The target name is read from the BackupTarget CRs rather than inferred from the region
