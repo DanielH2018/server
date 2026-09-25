@@ -166,3 +166,20 @@ def unrecorded_apply_note(behind_since: str | None) -> str:
         "  Something OTHER than the tick fast-forwarded the checkout, so the tick will "
         "never see this range again."
     )
+
+
+def remaining_hosts_note(remaining: str) -> str:
+    """The remaining-hosts remediation, printed BESIDE a plane the same PR owes a hand.
+
+    Both `needs-manual-apply` sites end at their plane arm before reaching the branch that
+    owns the remaining-hosts verdict, so a PR carrying both halves printed only the plane's
+    command. PR #2568 landed that way on 2026-09-25: the k3s line was printed, the
+    `initial_setup` library was not, and daniel-server and daniel-pi kept the old
+    `kuma-push-lib.sh` (issue #2569, the #1009 failure through a second door).
+
+    It claims nothing about the tick, unlike the wording the remaining-hosts verdict itself
+    prints: the plane arm ends the landing before the tick's own state is read, so whether
+    the tick applied the role on this host is unknown here. The hosts below are owed the
+    role either way. One string, printed by both verdict sites, so the two cannot drift.
+    """
+    return f"  STILL UNAPPLIED on the hosts this tick never touched: {remaining}"

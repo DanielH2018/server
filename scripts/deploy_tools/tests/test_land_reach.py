@@ -18,6 +18,7 @@ import yaml
 from lib import yaml_fast
 
 import land_reach
+import land_tags
 
 
 @pytest.fixture
@@ -165,6 +166,24 @@ def test_remaining_setup_hosts_note_flags_pr_1002():
     assert "daniel-server" in note
     assert "daniel-pi" in note
     assert "initial_setup" in note
+
+
+def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
+    """PR #2568's real shape: the library, plus `setup/k3s`, which `initial_setup.yml` does
+    not include and a hand applies through `k3s-bringup.yml`. The k3s half must not suppress
+    the library's — that pairing is how the #1009 failure reached two hosts again (#2569).
+    """
+    files = [
+        "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
+        "ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2",
+    ]
+    note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
+    assert "daniel-server" in note
+    assert "daniel-pi" in note
+    assert "initial_setup" in note
+    # The pairing itself, not two independent facts: the k3s half really is a plane a hand
+    # applies, which is what makes it the arm that used to end the landing first.
+    assert "k3s" in land_tags.plane_note(files)
 
 
 def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
