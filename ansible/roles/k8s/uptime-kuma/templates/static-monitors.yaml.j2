@@ -558,9 +558,10 @@ stringData:
    must read as red, never as a fleet with nothing to compare, so the timer pushes up only when
    every renderable service's record was refreshed at the chosen commit. The interval is
    render_records_push_interval_s in group_vars/all.yml, derived there from the same hourly
-   cadence the timer runs on. Gated on the token like its siblings: an ungated tile sits red
-   from creation until the secret exists. #}
-{% if render_records_push_token | default('') %}
+   cadence the timer runs on. Gated on the token like its siblings, and on
+   render_records_enabled, because a disarmed producer pushes nothing and would leave the tile
+   red for as long as it stays disarmed. #}
+{% if render_records_push_token | default('') and render_records_enabled | default(false) | bool %}
   render-records.json: |
     {"type": "push", "name": "k8s Render Records", "description": "The hourly kuma-check-render-records timer on daniel-box dry-runs every renderable k8s service at the newest green origin/master commit and writes /var/lib/homelab/k8s-renders.d, which probe.py releases --stale-only reads. DOWN names the services whose record was not refreshed; a missing beat means the producer stopped or keeps deferring on a pending CI walk. journalctl -u kuma-check-render-records on daniel-box.", "interval": {{ render_records_push_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ render_records_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
