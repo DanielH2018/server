@@ -20,15 +20,15 @@ cannot rot. `wc -l` lines, to match the issue's verify-by, not non-blank ones.
 The warning band (issue #2557): a ceiling that only fails OVER the ceiling tells
 nobody anything until the ceiling is already breached, so the first author to
 learn about it is the one whose bullet does not fit. #2539 reports what that
-costs: monitor-bridge's `etcd DB Size` bullet went in as one unwrapped physical
-line to stay under the count, and it was rewrapped only afterwards. A doc
+costs, and `git log --follow` on monitor-bridge's doc confirms it: the `etcd DB
+Size` bullet went in as one 805-character physical line (d939da86a) and was
+rewrapped four commits later (a42afdbc0). A doc
 between `WARN_LINES` and `MAX_LINES` is reported through a `RoleDocNearCeiling`
 warning, which `pyproject.toml`'s `filterwarnings` shows rather than errors, so
 the signal arrives with room left to write the bullet and the guard still fails
 only over the ceiling.
 """
 
-import tomllib
 import warnings
 from pathlib import Path
 
@@ -304,14 +304,21 @@ def test_fixture_role_justified_over_the_ceiling_is_not_reported(tmp_path):
     assert _band_notice(role, over_ceiling={"widget": "a reason"}) is None
 
 
-def test_the_band_warning_is_shown_rather_than_raised():
-    """The `always::` filter entry is what keeps the band a report instead of a failure.
+def test_a_band_notice_is_shown_rather_than_raised():
+    """Raise one under the session's OWN filters: `filterwarnings = ["error"]` would raise here.
 
-    Without it `filterwarnings = ["error"]` turns every notice into the failure the band exists
-    to arrive before, and the census test above would go red the day a doc reached WARN_LINES.
-    Nothing else in the suite would notice, because no fixture can observe the session's own
-    warning filters.
+    The `always::_doc_size.RoleDocNearCeiling` entry in `pyproject.toml` is what keeps the band a
+    report instead of a failure, and dropping it turns the census above red the day a doc reaches
+    WARN_LINES — years after the edit that dropped it. This test fails the same day the entry
+    goes, because pytest applies the config filters around every test item.
+
+    A broken entry needs no test: pytest raises `PytestConfigWarning: Failed to import filter
+    module` when it cannot resolve the category, and the blanket `error` turns that into a failure
+    of every test in the run (measured 2026-09-25 by pointing the entry at a module that does not
+    exist). Only a MISSING entry is silent, and that is what this covers.
     """
-    config = tomllib.loads((REPO / "pyproject.toml").read_text())
-    filters = config["tool"]["pytest"]["ini_options"]["filterwarnings"]
-    assert "always::_doc_size.RoleDocNearCeiling" in filters, filters
+    warnings.warn(
+        "band reporting self-check, not a real role doc",
+        RoleDocNearCeiling,
+        stacklevel=2,
+    )
