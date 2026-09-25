@@ -8,6 +8,15 @@
 # nobody runs. `probe.py releases` is that reader.
 manifests_release_dir: /var/lib/homelab/k8s-releases.d
 
+# Render-only mode (#2574). Under `k8s_dry_run`, render_record.yml digests the throwaway
+# render the same way release_stamp.yml digests an applied one and writes it here, so
+# `probe.py releases --stale-only` can compare what is applied against what the tree would
+# render. Off by default: a hand-run `--dry-run` is normally a branch, and a render record
+# names a tree the staleness reader must be able to trust. The render cron passes it with -e.
+# A separate directory, never k8s-releases.d, because a render is not a release.
+manifests_render_record: false
+manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
+
 # Opt-in live prune (#1076). `kubectl apply -f <dir>/` only adds/updates, so a manifest
 # dropped from manifests_files leaves its live object running — the "Prune staged manifests
 # dropped from the file lists" task above only deletes the STAGED FILE, never the live object.
