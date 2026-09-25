@@ -1,7 +1,7 @@
 ---
 # THE monitor-bridge since the Docker uninstall (2026-08-14) — the Phase F twin that
 # outlived its remnant. check.py lives in this role's files/ and every check runs here.
-monitor_bridge_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+monitor_bridge_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
 
 # The Python files that make up the running bridge. This is the SHIP LIST: a module missing
 # here never reaches the ConfigMap, and the pod dies at import with ModuleNotFoundError the
