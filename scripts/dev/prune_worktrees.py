@@ -50,6 +50,7 @@ from pathlib import Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
+from foreign_owned import foreign_owned_advice
 from lib.git import git, git_dirty, git_stdout, repair_object_store
 from lib.repo_paths import REPO
 
@@ -393,13 +394,18 @@ def survey(repo: str) -> list[tuple[str, Worktree, str]]:
     return out
 
 
-def prune_all(repo: str, trees: list[Worktree]) -> None:
+def prune_all(
+    repo: str,
+    trees: list[Worktree],
+    advise: Callable[[str], list[str]] = foreign_owned_advice,
+) -> None:
     """Remove each tree, printing one line per outcome.
 
     Shared by both report shapes so that `--prune` cannot mean one thing with `--brief` and
     another without it. It used to live inline in main(), below an early `return brief()`,
     so `--prune --brief` printed the removable list and removed nothing while exiting 0 —
-    a silent no-op that read as a successful prune (#1190).
+    a silent no-op that read as a successful prune (#1190). A failed removal is followed by
+    `advise`'s lines, which name any path git could not delete because another uid owns it.
     """
     for tree in trees:
         ok, error = remove(repo, tree)
@@ -407,6 +413,8 @@ def prune_all(repo: str, trees: list[Worktree]) -> None:
             print(f"removed {tree.path}")
         else:
             print(f"could not remove {tree.path}: {error}")
+            for line in advise(tree.path):
+                print(line)
     for line in repair_object_store(repo):
         print(line)
 
@@ -523,6 +531,10 @@ def main(argv: list[str] | None = None) -> int:
         print(
             f"[{ORPHAN:9}] {path}\n            git does not track this — remove by hand"
         )
+        # A removal that failed on a foreign-owned path leaves exactly this: git unregisters
+        # the tree after the delete fails, so the remnant surfaces here on the next run.
+        for line in foreign_owned_advice(path):
+            print(line)
 
     # The long report names each branch, so it pays the deep containment check whether or not
     # it is about to delete anything — a report that disagreed with what `--prune` then removed

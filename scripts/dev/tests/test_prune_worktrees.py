@@ -318,8 +318,9 @@ def test_prune_all_reports_a_removal_git_refused(capsys, monkeypatch, tmp_path):
         )
 
     monkeypatch.setattr("prune_worktrees.git", fake_git)
-    prune_all(str(tmp_path), [_tree()])
-    assert "could not remove /w: is dirty" in capsys.readouterr().out
+    prune_all(str(tmp_path), [_tree()], advise=lambda root: [f"  blocked under {root}"])
+    out = capsys.readouterr().out
+    assert "could not remove /w: is dirty\n  blocked under /w\n" in out
 
 
 def test_worktree_facts_ok_is_false_when_the_git_call_fails(monkeypatch):
