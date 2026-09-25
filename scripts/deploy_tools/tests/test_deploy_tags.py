@@ -142,8 +142,8 @@ def test_describe_groups_by_host_and_flags_dry_run_unsupported(capsys):
     assert deploy_tags.main(["describe"]) == 0
     out = capsys.readouterr().out
     assert "daniel-box (k8s):" in out
-    # crowdsec is dry-run-unsupported in the real group_vars/all.yml.
-    assert "crowdsec  [dry-run: unsupported]" in out
+    # n8n-images is dry-run-unsupported in the real group_vars/all.yml.
+    assert "n8n-images  [dry-run: unsupported]" in out
     assert "block tags: config, cron, deploy" in out
 
 

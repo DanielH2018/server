@@ -70,13 +70,18 @@ manifest bug reaches production.
 | `--dry-run` | The **live API server**, via `kubectl apply --dry-run=server` | Everything prek catches, plus CRD schemas, CRD ordering and admission rejections |
 
 `--dry-run` renders to a temp directory, applies with `--dry-run=server`, and discards it.
-Nothing is staged, applied, patched or rolled.
+Nothing in the cluster is applied, patched or rolled. A role's own `config` tasks still write
+their staging files on the node, such as the bridge scripts under `/etc/rancher/k3s/<role>/`.
 
 ### What a green dry run does not prove
 
-**It refuses some roles outright.** The ones in `k8s_dry_run_unsupported` mutate outside the
-shared manifests path — sidecar ConfigMaps built with `kubectl create`, probe Jobs, `exec -i`
-into a live pod — so they would half-apply. The playbook fails fast and names them.
+**It skips each role's own cluster writes.** Probe Jobs, script ConfigMaps, `exec` into a live
+pod and inline restarts all sit outside the shared manifests path. Each is guarded on
+`k8s_no_mutate`, so a dry run proves the manifests and not the probes.
+
+**It refuses the roles in `k8s_dry_run_unsupported` outright.** Those apply their objects some
+other way than the shared manifests path, so a dry run would half-apply them. The playbook fails
+fast and names them.
 
 **A brand-new service is only half-checked.** `volume-claim` is skipped because it is a
 dependency of many roles and mutates, and nothing at admission verifies that a referenced PVC

@@ -43,7 +43,11 @@
 
 - name: Copy the media tree from {{ media_volume_source_host }}
   ansible.builtin.include_tasks: sync.yml
-  when: media_volume_sync | bool
+  # Not on a dry run: the rsync is a real --delete mirror into the host path, and k8s_dry_run
+  # promises the run changed nothing. --check still reads through it, as sync.yml expects.
+  when:
+    - media_volume_sync | bool
+    - not (k8s_dry_run | bool)
 
 # ── hardlink probe ──────────────────────────────────────────────────────────────────────────
 # Rendered into its OWN directory, not media-volume/. `kubectl apply -f <dir>` is
@@ -71,6 +75,7 @@
   become: true
 
 - name: Clear the previous hardlink probe run
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -80,6 +85,7 @@
   changed_when: true
 
 - name: Run the hardlink probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -89,6 +95,7 @@
   changed_when: true
 
 - name: Wait for the hardlink probe
+  when: not k8s_no_mutate
   tags: [deploy]
   # This is also what proves the PVC binds at all: with WaitForFirstConsumer the claim stays
   # Pending until this pod is scheduled, so a Pending timeout here means the PV/nodeAffinity
@@ -103,6 +110,7 @@
   failed_when: media_volume_probe.rc != 0
 
 - name: Report the hardlink probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/media-volume-hardlink-probe"
@@ -113,6 +121,6 @@
 - name: Show the hardlink probe result
   tags: [deploy]
   # --check runs no probe, so there is no log to show (#2323).
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ media_volume_probe_log.stdout }}"

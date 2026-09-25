@@ -93,6 +93,9 @@
       k3s kubectl apply --server-side --force-conflicts
       -f /etc/rancher/k3s/monitor-bridge/configmap.yaml
   become: true
+  # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
+  # guard a dry run would really write this ConfigMap (#2588).
+  when: not k8s_no_mutate
   register: monitor_bridge_cm_apply
   changed_when: monitor_bridge_script is changed
 

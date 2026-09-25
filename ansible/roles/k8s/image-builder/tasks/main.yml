@@ -445,7 +445,10 @@
 # ansible/tests/deploy/test_built_image_drift_gate.py fails if that guard reappears.
 - name: Record the registry digest for the drift gate of {{ image_builder_name }}
   tags: [deploy]
-  when: not k8s_no_mutate
+  # No `k8s_no_mutate` guard: this is recorded on a dry run and under --check too. n8n stamps
+  # this digest into its pod template, so skipping it there rendered `unstaged` and a dry run's
+  # render digest never matched a deploy's (#2588). The drift gate, the other reader, skips
+  # itself on both modes (post_tasks/k8s_image_drift_gate.yml).
   ansible.builtin.set_fact:
     # noqa var-naming[no-role-prefix] — deliberately play-scoped, read by post_tasks/.
     k8s_built_images: >-

@@ -3,6 +3,7 @@
 # and MetalLB. They are a large, versioned, third-party set — not ours to hand-maintain. Only
 # the ClusterRoleBinding is authored locally (see templates/rbac.yaml.j2 for why).
 - name: Install the Traefik CRDs
+  when: not k8s_no_mutate
   tags: [config]
   ansible.builtin.command:
     cmd: >-
@@ -43,6 +44,7 @@
   become: true
 
 - name: Apply the Traefik RBAC
+  when: not k8s_no_mutate
   tags: [config]
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/traefik-clusterrole.yaml

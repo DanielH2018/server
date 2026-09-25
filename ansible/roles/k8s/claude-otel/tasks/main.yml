@@ -80,6 +80,9 @@
   become: true
   changed_when: true
   when:
+    # A dry-run render is always `changed` and its apply rolled nothing, so without this every
+    # dry run would restart all six live workloads (#2588).
+    - not k8s_no_mutate
     - manifests_render is changed or manifests_secret_render is changed
     # `| default('')`: if the apply's stdout cannot be read, fall through to "not created" and
     # restart. Read the two failure directions before changing it — they are not symmetric. A
@@ -148,7 +151,7 @@
   changed_when: false
   when:
     - manifests_render is changed or manifests_secret_render is changed
-    - not ansible_check_mode
+    - not k8s_no_mutate
 
 - name: Fail if a telemetry pod selector matched no pods
   tags: [deploy]
@@ -173,7 +176,7 @@
   loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
 
 - name: Hand the telemetry workloads to the end-of-play stabilisation gate
   tags: [deploy]
@@ -198,7 +201,7 @@
   loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
 
 # GF_SECURITY_ADMIN_PASSWORD (the grafana-admin Secret) is only consulted when Grafana
 # initialises its database, so on an existing install a rotated grafana_admin_password
@@ -228,11 +231,11 @@
       k3s kubectl -n {{ k8s_observability_namespace }} exec deploy/grafana --
       grafana cli admin reset-admin-password {{ grafana_admin_password }}
   become: true
-  # NOT under --check, unlike the read-only probe below: this resets a live credential. It is
-  # also latently broken there — check mode skips the command, so `rc` is undefined, the
-  # `until` below can never match, and the run would die after 5 retries. That only stays
-  # hidden while the secret happens not to differ, which is the condition guarding it.
-  when: manifests_secret_render is changed and not ansible_check_mode
+  # NOT under --check or a dry run, unlike the read-only probe below: this resets a live
+  # credential. It is also latently broken there — check mode skips the command, so `rc` is
+  # undefined, the `until` below can never match, and the run would die after 5 retries. That
+  # only stays hidden while the secret happens not to differ, which is the condition guarding it.
+  when: manifests_secret_render is changed and not k8s_no_mutate
   register: claude_otel_admin_password_sync
   until: (claude_otel_admin_password_sync.rc | default(1)) == 0
   retries: 5

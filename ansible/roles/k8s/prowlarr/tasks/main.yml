@@ -58,6 +58,7 @@
 # live object, so it is deleted here. --ignore-not-found makes this idempotent, which is what
 # lets it stay in the role rather than being a one-shot play someone has to remember to run.
 - name: Retire the flaresolverr config PVC
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -95,6 +96,7 @@
   become: true
 
 - name: Clear the previous flaresolverr probe run
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -104,6 +106,7 @@
   changed_when: true
 
 - name: Run the flaresolverr isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -113,6 +116,7 @@
   changed_when: true
 
 - name: Wait for the flaresolverr isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   # 300s, up from 120s: the probe's control now retries for up to 150s to ride out prowlarr's
   # own restart, and the Job's activeDeadlineSeconds is 240s. This wait must outlive that
@@ -132,6 +136,7 @@
   failed_when: prowlarr_k8s_netpol_probe.rc != 0
 
 - name: Report the flaresolverr isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/flaresolverr-netpol-probe"
@@ -144,6 +149,6 @@
   # The whole probe chain above is `command` tasks, so `--check` creates no Job and reads no
   # logs. This debug is the only task left running, onto a skip result with no
   # `stdout_lines` (#2351).
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ prowlarr_k8s_netpol_log.stdout_lines }}"

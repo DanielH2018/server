@@ -239,12 +239,13 @@ manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a s
 left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
 which held for 25 of 58 on that date (#2586).
 
-Two gaps keep the narrowings in place:
+One gap keeps the narrowings in place: **nothing produces render records on a schedule**
+(#2587).
 
-- **Nothing produces render records on a schedule** (#2587).
-- **13 stamped services cannot be dry-run** because their own tasks mutate the cluster
-  unguarded (`k8s_dry_run_unsupported`), and n8n's image-checksum annotation renders
-  `unstaged` under a dry run (#2588).
+Every stamped service can be dry-run since #2588. Each role that includes this one guards its
+own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` holds only `n8n-images`,
+which renders no manifests. n8n's image-checksum annotation reads the registry digest a deploy
+would stamp, where it used to render `unstaged` under a dry run.
 
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
 carries the same conclusion at the line that writes the digest.

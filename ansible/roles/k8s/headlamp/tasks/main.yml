@@ -46,6 +46,7 @@
   become: true
 
 - name: Clear the previous headlamp probe run
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -55,6 +56,7 @@
   changed_when: true
 
 - name: Run the headlamp isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -64,6 +66,7 @@
   changed_when: true
 
 - name: Wait for the headlamp isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -75,6 +78,7 @@
   failed_when: headlamp_k8s_netpol_probe.rc != 0
 
 - name: Report the headlamp isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: "k3s kubectl -n {{ k8s_namespace }} logs job/headlamp-netpol-probe"
@@ -87,6 +91,6 @@
   # The whole probe chain above is `command` tasks, so `--check` creates no Job and reads no
   # logs. This debug is the only task left running, onto a skip result with no
   # `stdout_lines` (#2351).
-  when: not ansible_check_mode
+  when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ headlamp_k8s_netpol_log.stdout_lines }}"
