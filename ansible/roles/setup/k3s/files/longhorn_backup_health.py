@@ -24,6 +24,7 @@ import time
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 import longhorn_backup_health_logic as logic
+import longhorn_cron_evidence_logic as cron_evidence
 
 
 def _require_env(name: str) -> str:
@@ -111,6 +112,20 @@ DRILL_COVERAGE_SLACK_DAYS = _require_int_env(
     "LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS"
 )
 CRON_EVIDENCE_WINDOW_HOURS = _require_int_env("LONGHORN_CRON_EVIDENCE_WINDOW_HOURS")
+# Check 10's two crons. Both the path and the expected flag are shim-exported for the reason
+# the transport settings are: a value only the shim knows must not sit here as a default a
+# wrong export would shadow. The flag differs per cron — the B2-accounting task is gated on
+# `has_repo_checkout`, the trim task is not.
+TRIM_CRON = cron_evidence.cron_state(
+    "longhorn-trim",
+    _require_env("LONGHORN_TRIM_CRON_FILE"),
+    _require_bool_env("LONGHORN_TRIM_CRON_EXPECTED"),
+)
+B2_DELETIONS_CRON = cron_evidence.cron_state(
+    "b2-deletions",
+    _require_env("LONGHORN_B2_DELETIONS_CRON_FILE"),
+    _require_bool_env("LONGHORN_B2_DELETIONS_CRON_EXPECTED"),
+)
 
 # Check 9's transport. Its own deadline rather than TIMEOUT: journalctl answers from a local
 # file in milliseconds, and the shim sizes the reader's worst-case run against its 600s cron
@@ -547,12 +562,10 @@ def main(now: float | None = None) -> int:
     if coverage_problem:
         problems.append(coverage_problem)
 
-    # ── check 9: trim + B2-accounting cron evidence ───────────────────────────────────────
+    # ── checks 9 and 10: what the trim and B2-accounting crons said, and whether they ran ──
     problems.extend(
-        logic.check_cron_evidence(
-            journal("longhorn-trim"),
-            journal("b2-deletions"),
-            CRON_EVIDENCE_WINDOW_HOURS,
+        cron_evidence.check(
+            journal, CRON_EVIDENCE_WINDOW_HOURS, TRIM_CRON, B2_DELETIONS_CRON, now_s
         )
     )
 

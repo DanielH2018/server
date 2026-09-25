@@ -139,6 +139,15 @@ export LONGHORN_RESTORE_DRILL_COVERAGE_SLACK_DAYS="{{ k3s_longhorn_restore_drill
 export LONGHORN_JOURNALCTL="/usr/bin/journalctl"
 export LONGHORN_JOURNAL_TIMEOUT_S="10"
 export LONGHORN_CRON_EVIDENCE_WINDOW_HOURS="{{ k3s_longhorn_cron_evidence_window_hours }}"
+# Check 10's two crons. The paths are `/etc/cron.d/<cron_file>` for the `cron_file:` each
+# health-crons.yml task names — exported here rather than hardcoded in the reader for the
+# reason the transport settings above are. The `_EXPECTED` flags mirror those tasks' own
+# `when:`: the B2-accounting cron is installed only where the host holds a repo checkout, so a
+# host without one must not be paged for a cron it was never given. The trim cron has no gate.
+export LONGHORN_TRIM_CRON_FILE="/etc/cron.d/longhorn-trim"
+export LONGHORN_TRIM_CRON_EXPECTED="true"
+export LONGHORN_B2_DELETIONS_CRON_FILE="/etc/cron.d/b2-deletion-accounting"
+export LONGHORN_B2_DELETIONS_CRON_EXPECTED="{{ has_repo_checkout | bool }}"
 
 # The reader prints `up<TAB>msg` or `down<TAB>msg` on its LAST stdout line and always exits 0,
 # having already logged the full (unranked) verdict to syslog itself. A nonzero exit or empty

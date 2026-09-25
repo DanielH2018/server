@@ -168,10 +168,16 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
   anywhere in `ansible/roles/setup/k3s/defaults/main.yml:k3s_longhorn_cron_evidence_window_hours`.
   Before that the trim's own comment claimed "a cron mail or a Kuma push notices" a failure: no
   such push existed, and the cron mail lands in `/var/mail/ubuntu`, which held 5,678 unread
-  messages on 2026-09-24. Check 9 deliberately does NOT alarm on the crons having stopped
-  running — that is #2443, not this. Both matched lines are matched AS WRITTEN, so rewording one
-  in its script means changing `_TRIM_SUMMARY_RE` / `_TRIM_ABORT_RE` in
-  `ansible/roles/setup/k3s/files/longhorn_backup_health_logic.py` in the same edit. ENFORCED:
+  messages on 2026-09-24. **Check 10 is the second reader, for the crons' LIVENESS** (#2443):
+  check 9 reads what they said, and an empty window reads as green to it. Check 10 pushes DOWN
+  when the window holds no line from a cron at all — its `/etc/cron.d` entry removed, its script
+  un-rendered, the crontab lost — which is the shape check 7 closes for the restore drill. It
+  stays quiet in the three cases that produce silence legitimately: a window shorter than the
+  24h cron period, a cron this host does not install (`b2-deletion-accounting` is gated on
+  `has_repo_checkout`), and a cron installed less than one window ago. ENFORCED:
+  `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_liveness_is_flagged_when_the_cron_entry_is_gone`.
+  Both matched lines are matched AS WRITTEN, so rewording one in its script means changing `_TRIM_SUMMARY_RE` / `_TRIM_ABORT_RE` in
+  `ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py` in the same edit. ENFORCED:
   `ansible/roles/setup/k3s/tests/test_longhorn_backup_health_cron_evidence.py::test_cron_evidence_is_flagged_on_a_failed_trim`.
   The drill also stamps
   `ATTEMPT_DIR` on every run and `SUCCESS_DIR` only after the assertions pass; check 7 of

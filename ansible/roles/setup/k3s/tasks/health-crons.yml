@@ -201,6 +201,7 @@
   loop:
     - longhorn_backup_health.py
     - longhorn_backup_health_logic.py
+    - longhorn_cron_evidence_logic.py
   become: true
 
 - name: Deploy the backup-health scripts as a versioned release
@@ -226,6 +227,8 @@
         src: ansible/roles/setup/k3s/files/longhorn_backup_health.py
       - live: /opt/longhorn-backup-health/longhorn_backup_health_logic.py
         src: ansible/roles/setup/k3s/files/longhorn_backup_health_logic.py
+      - live: /opt/longhorn-backup-health/longhorn_cron_evidence_logic.py
+        src: ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py
       - live: /opt/longhorn-backup-health/host_lib.py
         src: ansible/roles/setup/common/files/host_lib.py
 

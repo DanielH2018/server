@@ -217,6 +217,38 @@ def test_reader_green_path_pins_the_transport(tmp_path):
     assert "1 B2 backup(s)/24h (budget 16)" in proc.stdout
 
 
+def test_reader_pages_when_the_trim_cron_file_is_gone(tmp_path):
+    """Check 10 through the real wiring: the shim's cron paths reach the verdict (#2443).
+
+    The green path above proves the logic stays quiet; this proves the reader actually stats
+    what the shim exports, rather than the arm being unreachable in production.
+    """
+    now = NOW
+    snapshot_ts = _rfc3339(now - 60)
+    drill_dir = tmp_path / "drill"
+    drill_dir.mkdir()
+    (drill_dir / "last-success").write_text(str(int(now - 3600)))
+
+    stub = _green_path_stub_kubectl(tmp_path, snapshot_ts)
+    env = _reader_env(
+        tmp_path,
+        LONGHORN_BACKUP_KUBECTL=str(stub),
+        LONGHORN_RESTORE_DRILL_STAMP_DIR=str(drill_dir),
+        LONGHORN_TRIM_CRON_FILE=str(tmp_path / "cron.d" / "no-such-cron"),
+    )
+
+    proc = subprocess.run(
+        reader_argv(now=NOW),
+        capture_output=True,
+        text=True,
+        env=env,
+        timeout=30,
+    )
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "the longhorn-trim cron is not installed" in proc.stdout
+
+
 def test_reader_argv_hands_now_to_main(tmp_path):
     """The red half of the green path: the same fixture, judged from 40 days later, is stale.
 
