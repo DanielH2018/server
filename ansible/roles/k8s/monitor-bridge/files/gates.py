@@ -157,7 +157,15 @@ B2_DEPENDENT = frozenset({"b2_storage"})
 # blindness PVC_MIN_CLAIMS is sized to page on, and a job-keyed suppression would turn that page
 # green. Same mistake as the `node`-only entry that suppressed two hosts of three for host_temp,
 # not a fix for it.
-CLUSTER_DEPENDENT = frozenset({"k8s_workloads", "cluster_targets", "pvc_fullness"})
+#
+# etcd_db_size joined 2026-09-25: it reads apiserver_storage_size_bytes through
+# CLUSTER_PROM_URL, so an unreachable cluster Prometheus raises in its fetch and _evaluate
+# turns that into a down. It needs no job-keyed EXPORTER_DEPENDENT entry either — its one
+# series is carried by both the apiserver and the kubelet job, so there is no partial-coverage
+# case to keep visible, and its own fail-open arm covers total scrape loss.
+CLUSTER_DEPENDENT = frozenset(
+    {"k8s_workloads", "cluster_targets", "pvc_fullness", "etcd_db_size"}
+)
 
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the
 # Cloudflare GraphQL API) with NO reachability gate above them and NO per-check

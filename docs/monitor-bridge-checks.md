@@ -954,6 +954,31 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   raises on an unreachable Prometheus, which `_evaluate` turns into a `down` — without the
   gate, a Prometheus restart pages this monitor a second time for the one root cause the
   Prometheus monitor already reports.)
+- **etcd DB Size** (`max(apiserver_storage_size_bytes)` against `ETCD_DB_QUOTA_BYTES`, down at
+  `ETCD_DB_MAX_PCT` = 80% — `files/checks/cluster_etcd.py`, #2403. etcd goes READ-ONLY at its
+  backend quota and the control plane stops accepting writes, which is the failure the restore
+  runbook exists for, and until 2026-09-25 nothing watched it. **Why the proxy and not etcd's
+  own series:** `k3s_etcd_expose_metrics` is off, so `etcd_mvcc_db_total_size_in_bytes`,
+  `etcd_server_leader_changes_seen_total` and `etcd_disk_wal_fsync_duration_seconds_*` return
+  no data. The
+  `DECIDED:` marker at that switch in `group_vars/all.yml` records why it stays off — arming it
+  restarts k3s and re-encrypts every Secret (#2294) from a manual-plane playbook, and opens an
+  unauthenticated `:2381`. `apiserver_storage_size_bytes` is scraped unconditionally and matches
+  the etcd snapshot to the byte: 56,389,632 on 2026-09-25, 2.6% of the quota and flat for five
+  weeks before that. **`max(...)` over the bare series, no `by` and no `job` selector:** k3s
+  serves the apiserver and the kubelet from one process, so the series is scraped TWICE with the
+  same value — under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"` — and two
+  identical series would make `prom_scalar`'s `result[0]` an arbitrary pick, while selecting on
+  `job` would tie the check to a scrape-job name rather than to the metric. **2 GiB is etcd's
+  OWN default** and is what is in force: `k3s_server_args` carries no
+  `--etcd-arg=quota-backend-bytes`, so adding one there moves `ETCD_DB_QUOTA_BYTES` with it or
+  the check measures against a quota the cluster does not have. **No grace**, for the reason CSI
+  Read-only Mounts has none: a DB near its quota does not shrink on its own, so a streak delays
+  a real page without absorbing a blip. An absent series reads as healthy and points at Scrape
+  Targets — unlike PVC Fullness, whose fail-closed arm exists because 27 of 43 claims survive a
+  dead kubelet job; one series carried by two jobs has no partial-coverage case, so empty means
+  total scrape loss, which `targets`/`cluster_targets` already page on. **In
+  `CLUSTER_DEPENDENT`**, because it reads `CLUSTER_PROM_URL`.)
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
   its in-cluster Service, `down`
   if ANY arm is silent — a silently dead Alloy→Loki pipeline (docker-proxy break,

@@ -50,7 +50,7 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   A real cap denial arrives as `HTTPError`, never `RuntimeError` — a test faking it the other
   way proves the opposite of what it claims.
 - **Cluster Prometheus Reachable**: gates `CLUSTER_DEPENDENT` (`k8s_workloads`,
-  `cluster_targets`, `pvc_fullness`). Both Prometheus URLs render to the same cluster Service,
+  `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both Prometheus URLs render to the same cluster Service,
   so `run_once` reuses the first gate's verdict here; the split survives so a second
   Prometheus can be reintroduced, with membership following the URL a check reads. Do not
   read the pair as independent coverage.
@@ -260,6 +260,7 @@ unreachable source pages through `_evaluate` unless a streak is named.
   `host_metric_sel` so both nodes are covered. An absent series is healthy — a dead exporter
   is Scrape Targets' page — and `ansible/tests/k8s/test_node_exporter_filesystem_exclusion.py`
   guards the exclusion regex that would otherwise hide the fault again.
+- **etcd DB Size** (`etcd_db_size`): `max(apiserver_storage_size_bytes)` against `ETCD_DB_QUOTA_BYTES` (2 GiB, etcd's own default — `k3s_server_args` sets no `--etcd-arg=quota-backend-bytes`, so the two move together), down at `ETCD_DB_MAX_PCT`, no grace. It reads the apiserver's proxy because etcd's own series are empty while `k3s_etcd_expose_metrics` is off — the `DECIDED:` marker at that switch in `group_vars/all.yml` records why it stays off. `max(...)` over the bare series, no `job` selector: k3s serves the apiserver and the kubelet from one process, so the series is scraped under both jobs with the same value. An absent series is healthy — one series carried by two jobs has no partial-coverage case, so empty means the apiserver is not scraped at all, which is Scrape Targets' page (#2403).
 
 ## Push-monitor mechanics
 
