@@ -115,11 +115,12 @@ def _is_blocked_on(inode: int) -> bool:
 
     /proc/locks prints a blocked waiter with a `->` marker before its type, and names the
     file as `<major>:<minor>:<inode>`. The inode alone identifies a lock file under
-    `tmp_path`, which no other process on this host opens.
+    `tmp_path`, which no other process on this host opens. The marker is its own token and
+    shifts every field after it, so match the field by shape rather than by index.
     """
     for line in Path("/proc/locks").read_text().splitlines():
         fields = line.split()
-        if len(fields) > 5 and fields[1] == "->" and fields[5].endswith(f":{inode}"):
+        if "->" in fields and any(f.endswith(f":{inode}") for f in fields):
             return True
     return False
 
@@ -133,15 +134,23 @@ def _held(path: Path, release_after_contention: float | None = None):
     on the reported seconds stop depending on how long this host takes to start a deploy: a
     fixed hold expires during `stub_bin`, `make_snapshot_repo` and deploy.sh's own startup on
     a loaded box, and the run then takes the lock uncontended and reports nothing (#2521).
+
+    Yields the event that says the waiter was SEEN. A release on the fallback deadline would
+    hold for a minute and still pass every assertion here, so the two tests that ask for one
+    assert the event: a /proc/locks format this stops matching fails loudly, not slowly.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     fd = os.open(path, os.O_WRONLY | os.O_CREAT)
     released = threading.Event()
+    saw_waiter = threading.Event()
 
     def release_once_contended(grace: float) -> None:
         inode = os.fstat(fd).st_ino
         deadline = time.monotonic() + 60
-        while time.monotonic() < deadline and not _is_blocked_on(inode):
+        while time.monotonic() < deadline:
+            if _is_blocked_on(inode):
+                saw_waiter.set()
+                break
             if released.wait(0.02):
                 return
         time.sleep(grace)
@@ -159,7 +168,7 @@ def _held(path: Path, release_after_contention: float | None = None):
             )
             waiter.start()
         try:
-            yield
+            yield saw_waiter
         finally:
             released.set()
             if waiter is not None:
@@ -172,8 +181,9 @@ def test_a_contended_acquire_is_reported_with_its_seconds_and_its_holder(tmp_pat
     """FLAGGED half: the wait deploy.sh rides out on the tree lock must reach the log."""
     with _held(
         tmp_path / "locks" / "server-git-tree.lock", release_after_contention=1.5
-    ):
+    ) as saw_waiter:
         result = _run_deploy(tmp_path)
+    assert saw_waiter.is_set(), "the deploy never showed up in /proc/locks as a waiter"
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "lock acquired" in x), "")
     assert line, result.stderr
@@ -209,8 +219,9 @@ def test_a_contended_service_lock_reports_its_tag_and_its_seconds(tmp_path):
     with _held(
         tmp_path / "locks" / "server-deploy-uptime-kuma.lock",
         release_after_contention=1.5,
-    ):
+    ) as saw_waiter:
         result = _run_deploy(tmp_path)
+    assert saw_waiter.is_set(), "the deploy never showed up in /proc/locks as a waiter"
     assert result.returncode == 0, result.stderr
     line = next((x for x in result.stderr.splitlines() if "service lock" in x), "")
     assert line, result.stderr
