@@ -18,6 +18,7 @@ from deploy_tools.land_lib.outcome import (
     ABANDONED_WATCH_NOTE,
     Cause,
     Verdict,
+    remaining_hosts_note,
     say,
     unrecorded_apply_note,
 )
@@ -67,13 +68,18 @@ def health(ln: Landing) -> NoReturn:
     tick.rearm_tick(ln)
     if ln.plane:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
+        # Both remediations, because this arm ends the landing and the one at the foot of
+        # this function never runs (#2569).
+        if ln.remaining_setup:
+            print(remaining_hosts_note(ln.remaining_setup))
     if not settled:
         ln.finish(Verdict.UNHEALTHY, 1, f"PR #{pr}, {sha}, tags: {tags}")
     if ln.plane:
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
-            f"PR #{pr}, {sha} — services deployed, the plane above not",
+            f"PR #{pr}, {sha} — services deployed, the plane above not"
+            + (", nor the hosts beside it" if ln.remaining_setup else ""),
         )
     # Only when the tick applies part of this PR itself does its state speak to THIS
     # landing; for an ordinary service PR, behind_since is somebody else's merge.

@@ -31,6 +31,7 @@ from deploy_tools.land_lib.outcome import (
     Cause,
     Verdict,
     cause_for_deploy_exit,
+    remaining_hosts_note,
     say,
     unrecorded_apply_note,
 )
@@ -117,6 +118,10 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
     pr, sha = ln.opts.pr, ln.merge_sha
     if ln.plane:
         print(f"  it needs applying by hand: {ln.plane}")
+        # Both remediations, because this arm ends the landing and the one at the foot of
+        # this function never runs (#2569).
+        if ln.remaining_setup:
+            print(remaining_hosts_note(ln.remaining_setup))
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,

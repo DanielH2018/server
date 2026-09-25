@@ -297,7 +297,12 @@ to contain the PR's own merge commit. When it does not, the verdict is `needs-ma
 the line names the `initial_setup.yml --tags <role>` (or `deploy.yml`) run that applies it.
 
 `needs-manual-apply` means the PR reaches something neither a deploy tag nor the tick covers,
-and the line names the command that does apply it. Four things are in that position. A
+and the line names the command that does apply it. **Read every remediation line, not the first
+one.** One PR can reach two of these at once — a plane a hand applies, and a self-applied setup
+role the tick installed on its own host alone — and the verdict then prints one line per half.
+PR #2568 carried exactly that pairing, and until #2569 the plane's line suppressed the other:
+daniel-server and daniel-pi kept the old `kuma-push-lib.sh` behind a printed remediation that
+named neither. Four things are in that position. A
 **setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`, `common` in
 no playbook) or a bring-up playbook, because the tick applies every other setup role itself
 and `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
