@@ -188,10 +188,11 @@ Each arm below is a rule and the function that holds it. The record page has the
       the budget case has, in that the tick chose it and nothing reports it again. A hand-edited
       or denylisted k8s role on that channel is not recorded — it is merged by a person who is
       landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
-      hold Status red as normal operation. The demotion is recorded in `apply_broad_k8s`, not in
-      the `gate_broad_k8s` that decided it: the gate runs before the ff-merge, and the
-      contention arms between them reset the tree, so a marker written there would describe a
-      range no longer merged. The `DECIDED:` marker at the record carries the rest. Any tick that
+      hold Status red as normal operation. The demotion is recorded at the ff-merge
+      (`deploy_defer.record_demoted`), not in the `gate_broad_k8s` that decided it: the gate
+      runs before that merge, and a contention arm after it resets the tree. A contention arm
+      takes the line back with the `manual_plane` lines beside it; a failed broad apply keeps
+      it, because that arm leaves the range merged. Any tick that
       deploys the service clears the line (`deploy_defer.clear_applied_k8s_deferred`, called from both
       k8s deploy paths and from the plane-covered set); an operator's own `deploy.sh` is
       invisible to the deployer, so it clears with `gitops_state.py clear-k8s-deferred <svc>`.

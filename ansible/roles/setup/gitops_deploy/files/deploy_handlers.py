@@ -159,8 +159,8 @@ def handle_broad(
     # the gate's window must leave `local` behind origin so the next tick re-evaluates. After
     # `plans`, because a bump the deploy plane applies is not gated. It returns the ChangeSet
     # the rest of this tick acts on, with the rejected bumps demoted into the deferred set, and
-    # that set itself — `apply_broad_k8s` records it in `k8s_deferred`, past the contention arms
-    # below that would reset the tree out from under a marker written here (#2471).
+    # that set itself — `record_demoted` below writes it to `k8s_deferred` at the ff-merge,
+    # where a marker written here would be reset out from under by a contention arm (#2471).
     cs, demoted = deploy_broad_k8s.gate_broad_k8s(
         tools, state, config, target, cs, plans
     )
@@ -177,6 +177,10 @@ def handle_broad(
         if pending
         else deploy_defer.nothing_recorded(state)
     )
+    # Same moment, same reason: a bump the staging gate demoted is merged-and-unapplied from
+    # here, and the failure arm below returns without re-deriving it. The `DECIDED:` in
+    # `record_demoted` carries which classes on this channel get a marker and which do not.
+    recorded = deploy_defer.record_demoted(state, origin, recorded, demoted)
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
     # a rollback re-run now fits, so the budget is no longer the reason — but a rollback
@@ -263,7 +267,7 @@ def handle_broad(
     # prevent. It shares the same `deadline`, for the reason the plans share it, and it sends
     # the deferred-change pages on every path but contention.
     return deploy_broad_k8s.apply_broad_k8s(
-        tools, state, config, target, plan, cs, plans, recorded, deadline, demoted
+        tools, state, config, target, plan, cs, plans, recorded, deadline
     )
 
 

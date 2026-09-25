@@ -315,3 +315,19 @@ def test_a_demotion_a_busy_lock_reset_is_not_recorded(
     assert gitops_deploy.main(tick.tools, config) == 0
     assert tick.head == ORIGIN, "the retry merged"
     assert marker(state_dir, "k8s_deferred").split()[1] == "sonarr"
+
+
+def test_a_failed_broad_apply_still_records_the_demotion(
+    gitops_deploy, tick, settings, state_dir
+):
+    """Why the record sits at the ff-merge and not at the tail of the k8s arm.
+
+    The failure arm returns before that tail, leaving the range merged and the demoted bump
+    unapplied. It holds the plane that FAILED, so the operator's fix-forward clears the hold
+    and Status goes green over a bump nothing else names.
+    """
+    config = blocking(settings, tick, APPLYABLE_ROLE)
+    tick.playbook_outcomes = [RuntimeError("the setup plane blew up")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.head == ORIGIN, "the range merged before the apply failed"
+    assert marker(state_dir, "k8s_deferred").split()[1] == "sonarr"
