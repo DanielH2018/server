@@ -8,7 +8,8 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
-- **Applied by:** `initial_setup.yml --tags "render_records"`
+- **Applied by:** `initial_setup.yml --tags "render_records"` when `inventory_hostname ==
+  render_records_host`
 - **Timer:** `kuma-check-render-records.timer` (`OnCalendar=*-*-* *:{{ '%02d' |
   format(render_records_minute | int) }}:00`)
 <!-- /generated_from -->
@@ -43,11 +44,13 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 - **Scope / exclusions:** a `--dry-run` render only. It applies nothing to the cluster
   (`--dry-run=server`), writes no release record, and takes no deploy lock. Its writes are the
   render records, its own worktree, and the throwaway render directories the dry run makes.
-- **Mode (explicit + reversible):** `render_records_host` in `group_vars/all.yml`. Every
-  other host runs the role's absent arm, which stops the timer and removes the units, the
-  worktree and the role's directories. Setting the var to a host that does not exist retires
-  the producer everywhere. The records it already wrote stay; the reader refuses them once
-  their `commit` falls behind origin/master.
+- **Mode (explicit + reversible):** `render_records_enabled` in `group_vars/all.yml`. False
+  runs the role's absent arm on `render_records_host`, which stops the timer and removes the
+  units, the worktree and the role's directories; true and a re-run restores them. To move the
+  producer, apply false on the old host before changing `render_records_host`: the playbook
+  entry is gated on that var, so a host that stops matching it is never visited again. The
+  records already written stay; the reader refuses them once their `commit` falls behind
+  origin/master.
 - **Authoritative sources:** the records themselves. The tile goes green only when every
   listed service has a record whose `commit` is the chosen SHA, `tree_dirty` is false, `host`
   is this host and `rendered_at` falls inside this run. Ansible's exit code is reported in the

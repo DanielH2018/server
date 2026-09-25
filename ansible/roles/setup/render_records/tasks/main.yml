@@ -2,9 +2,9 @@
 # The render-record producer: an hourly dry-run render of every renderable k8s service at the
 # newest green origin/master commit (#2587). CLAUDE.md beside this file has the contract.
 #
-# Both directions live here. initial_setup.yml applies this role on every host and passes
-# `render_records_state`, `present` on render_records_host and `absent` elsewhere, so a host
-# that leaves the role keeps neither the timer nor the worktree.
+# Both directions live here. initial_setup.yml applies this role on render_records_host only,
+# and `render_records_enabled: false` (group_vars/all.yml) selects the absent arm, which leaves
+# neither the timer nor the worktree behind.
 
 - name: Create the render-records directories
   when: render_records_state == 'present'

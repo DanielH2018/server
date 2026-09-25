@@ -299,6 +299,20 @@ def main() -> int:
     # --skip-staleness-check: the chosen commit may sit below the tip, and the record names
     # its own commit, which is what the reader compares. The gate protects a live apply from
     # a stale tree; a dry run into a record keyed by commit has nothing for it to protect.
+    state = settings.checkout.parent
+    log_path = state / "ansible.log"
+    # Truncated per run: ansible.cfg's `log_path = ./ansible.log` would append to the worktree
+    # forever, and the last run's log is the one that says why a service went unrefreshed.
+    log_path.write_text("")
+    env = {
+        **os.environ,
+        "ANSIBLE_LOG_PATH": str(log_path),
+        # A private fact cache. The shared one is keyed by host and pins the interpreter of
+        # whichever checkout gathered facts first, and fact_cache_guard.py clears only
+        # interpreters under `.claude/worktrees/`. This worktree is outside it, so an entry it
+        # pinned would outlive a removal of the worktree and break every other deploy.
+        "ANSIBLE_CACHE_PLUGIN_CONNECTION": str(state / "facts"),
+    }
     rc = subprocess.run(
         [
             "./scripts/deploy.sh",
@@ -310,6 +324,7 @@ def main() -> int:
             "manifests_render_record=true",
         ],
         cwd=settings.checkout,
+        env=env,
         stdin=subprocess.DEVNULL,
         check=False,
     ).returncode

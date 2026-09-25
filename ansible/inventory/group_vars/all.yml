@@ -600,14 +600,18 @@ fake_remux_host: daniel-box
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
 render_records_host: daniel-box
+# The way out: false runs the role's absent arm on render_records_host, which stops the timer
+# and removes the units, the worktree and the role's directories. To move the producer, apply
+# false on the old host first, then change render_records_host.
+render_records_enabled: true
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.
 render_records_minute: 17
-# The render-records push monitor's interval. One hourly period, plus the ~6-minute render
-# (5m38s for 45 services on 2026-09-25), plus one 20-minute restart of a run that deferred on a
+# The render-records push monitor's interval. One hourly period, plus the ~8-minute render
+# (8m16s for 58 services on 2026-09-25), plus one 40-minute restart of a run that deferred on a
 # pending CI walk, rounded up. A shorter one flaps on an ordinary deferral; a longer one leaves
 # a stopped producer unread for longer than the records it last wrote stay useful.
-render_records_push_interval_s: 5400
+render_records_push_interval_s: 7200
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
 # every full host redeploys its own containers_list independently on a git push (see
 # gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and

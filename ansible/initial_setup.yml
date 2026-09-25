@@ -50,13 +50,10 @@
     # The role installs on renovate_agent_host regardless of renovate_agent_enabled; that var
     # decides only whether the timer is armed, so the rollback is a var flip and a re-run.
     - { role: renovate_agent, tags: ["renovate_agent"], when: inventory_hostname == renovate_agent_host }
-    # Every host, so the absent arm reaps the timer and worktree from a host that stops being
-    # render_records_host. After gitops_deploy, whose /opt modules and config.env the producer
-    # reads, and after github_cli, whose login its CI walk authenticates with.
-    - role: render_records
-      tags: ["render_records"]
-      vars:
-        render_records_state: "{{ 'present' if inventory_hostname == render_records_host else 'absent' }}"
+    # After gitops_deploy, whose /opt modules and config.env the producer reads, and after
+    # github_cli, whose login its CI walk authenticates with. render_records_enabled: false
+    # is the way out; it runs the role's absent arm on this host.
+    - { role: render_records, tags: ["render_records"], when: inventory_hostname == render_records_host }
     # Host half of the UPS stack (udev rule + secondary upsmon that performs the real
     # poweroff); the primary is the k8s/nut pod pinned to ups_host.
     #

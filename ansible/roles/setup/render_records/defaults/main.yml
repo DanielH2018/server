@@ -13,8 +13,13 @@ render_records_checkout_dir: /var/lib/render-records/checkout
 # ansible/tests/setup/test_render_records_role.py holds the two equal.
 render_records_record_dir: /var/lib/homelab/k8s-renders.d
 
-# How long a run that ended red, or deferred on a pending CI walk, waits before it reruns.
-render_records_restart_sec: 20min
+# present on render_records_host unless render_records_enabled is false.
+render_records_state: "{{ 'present' if render_records_enabled | bool else 'absent' }}"
+
+# How long a run that ended red, or deferred on a pending CI walk, waits before it reruns. A red
+# render reruns the whole ~8-minute play, so 40 minutes keeps a persistent failure to about 17%
+# of the hour; 20 minutes would have kept a play running 29% of it.
+render_records_restart_sec: 40min
 
 # A Persistent=true catch-up run lands seconds after boot, before the API server answers a
 # server-side dry run. Inside this window the producer exits 1 with no push and the restart
