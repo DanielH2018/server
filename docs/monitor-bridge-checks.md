@@ -472,7 +472,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   duty cycle. The derivation and the pages-per-week table are at the `DECIDED: 12 cycles` marker
   in `files/bridge/config_host.py`.
   `crits` is still read for every OTHER sensor,
-  because a driver that skips `max` but declares `crit` (none in this estate as of 2026-09-03; added
+  because a driver that skips `max` but declares `crit` (none in this estate on 2026-09-03; added
   defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`
   wins when a sensor declares a plausible value for both**, not `crit`: hwmon's own convention
   has `crit` as the LATER shutdown point, not an earlier warning — measured live 2026-09-03,
@@ -568,7 +568,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   workload the UPS most obviously protects and with HA primary the alert path went down with it).
   Each arm's fallback is `max(A) or max(B)` inside the query string, not a branch in the check:
   both sides reduce to one unlabelled series, so `or` drops the right whenever the left has a
-  sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, NUT's
+  sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT
   `ups.status{flag="OB"}` — one-hot over `flag`, so the exporter forces a 0 when the UPS is not
   asserting it and the series is a real 0/1 alert input; judged FIRST and returning alone,
   because charge and runtime read the RUNWAY and hold green through most of an outage; its own
@@ -1116,8 +1116,8 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   only over the same webhook is the failure it reports. In `LOKI_DEPENDENT`; a fetch that
   hits the 500-line cap says so in the message.)
 - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
-  `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
-  `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
+  `monitor_discord_webhook_url` — the one Kuma sends every alert to — CrowdSec's
+  `crowdsec_discord_webhook_url`, which CrowdSec sends ban alerts to *directly* (not via Kuma),
   the `gitops_deploy_discord_webhook`, which delivers the `gitops-deploy` rollback alert AND every
   `renovate_notify` digest (its Renovate Notifier — Alive marker greens even when the POST fails —
   no Kuma backstop), and `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr POST their own
@@ -1232,7 +1232,7 @@ no successor.
   hand-maintained "29" that was wrong by five when it was replaced:
   `grep -c '^\s*KUMA_PUSH_[A-Z0-9_]*:' ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`.
   (The names went stale the same way: they once carried eight tokens retired at the 2026-08-14
-  host flips and were missing six added since.) As of 2026-09-01:
+  host flips and were missing six added after them.) The names on 2026-09-01:
   `monitor_bridge_{arr_queue,b2_reachable,b2_storage,bazarr,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,etcd_drill,gitops_alive,gitops_status,ha,host_temp,k8s_workloads,loki,loki_reachable,longhorn_volumes,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,pvc,r2_usage,restarts,scrutiny,speedtest,targets,traefik,traefik_latency,ups}_push_token`
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.
