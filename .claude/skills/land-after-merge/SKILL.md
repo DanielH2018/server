@@ -390,7 +390,9 @@ That fallback derivation refuses a range wholesale as soon as one path is broad,
 #2520 it then asks `deploy_tags.py narrow` the same range: `narrow` maps a broad path to the
 services whose render it reaches, and a list it returns is deployed rather than the whole
 range being reported as broad. Only where `narrow` refuses too does the landing fall back to
-grading from the deployer's own markers. Pass `--tags` to override the scope entirely.
+grading from the deployer's own markers — and it refuses on a tag list covering more than half
+the fleet, so a `group_vars` key many roles read still ends up graded from the markers rather
+than deployed. Pass `--tags` to override the scope entirely.
 
 **Verify the change, not just the workload.** The `VERDICT:` line gates the rollout and the
 180s restart window. It cannot see whether *your change* took effect: an Authelia 302 fires

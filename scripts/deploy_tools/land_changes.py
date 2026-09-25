@@ -30,19 +30,24 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import _BROAD_MANUAL_PREFIXES, services_from_changed_paths
+from deploy_logic import (
+    ChangeSet,
+    _BROAD_MANUAL_PREFIXES,
+    services_from_changed_paths,
+)
 
 
 class LoudChanges(NamedTuple):
     """What a landing's file list reaches once the quiet paths are dropped.
 
     Attributes:
-      changes: the deployer's own `ChangeSet` over the loud paths.
+      changes: the deployer's own `ChangeSet` over the loud paths — `.setup_roles`,
+        `.broad_deploy` and `.k8s` are what the callers read off it.
       manual: the loud paths under `_BROAD_MANUAL_PREFIXES` — the bring-up playbooks, which
         run by hand by construction and park the tick outright.
     """
 
-    changes: object
+    changes: ChangeSet
     manual: list[str]
 
 
