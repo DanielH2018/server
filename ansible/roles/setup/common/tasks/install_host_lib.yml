@@ -8,17 +8,19 @@
 # finding this file closes: the source path, the `host_lib.py` basename and the 0755 mode were
 # written out eight times, so a change to any of them had eight places to miss.
 #
-# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Five of the eight
+# WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Six of the eight
 # sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (gitops_deploy,
-# renovate_notify, renovate_agent, and k3s twice); the other three (configarr, janitorr,
-# fake_remux) do not, and emitting a fragment here would change host state at those. Worse, a
-# fragment is named per GROUP and holds the whole group's pairs, so a second fragment written
-# from here under the caller's own name would overwrite the pairs the caller declared. The
+# renovate_notify, renovate_agent, fake_remux, and k3s twice); the other two (configarr,
+# janitorr) declare no `stamp_deployed` group at all, so there is nothing for a pair to join.
+# Emitting a fragment here would change host state at those. Worse, a fragment is named per
+# GROUP and holds the whole group's pairs, so a second fragment written from here under the
+# caller's own name would overwrite the pairs the caller declared. The
 # copy↔pair invariant is therefore held by a test rather than by this file:
 # ENFORCED by ansible/tests/setup/test_host_lib_sibling_copies.py, which asserts that every
 # role whose files/ scripts `import host_lib` includes this task file, that the pair a role
-# does declare names the directory it passes here, and that a `host_lib_notify` handler name
-# exists in the caller's own handlers/.
+# does declare names the directory it passes here, that a role which stamps its other code
+# stamps this copy too (#2564), and that a `host_lib_notify` handler name exists in the
+# caller's own handlers/.
 #
 # `src` is absolute off `{{ playbook_dir }}` rather than a bare basename. A task file imported
 # from another role resolves `copy:` src against the role that OWNS the file, so a bare
