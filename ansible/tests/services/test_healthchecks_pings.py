@@ -52,26 +52,40 @@ def _read_raw(path: Path) -> str:
 
 
 def _ping_files() -> list[Path]:
-    """Every file that builds or sends a Healthchecks.io ping."""
+    """Every file that builds or sends a Healthchecks.io ping.
+
+    `HC_PING_URL` counts as well as the host name: pi-peer-backup's script reads its whole URL
+    out of a Secret, so the host appears only in its comments — which `_read` drops — and a
+    census keyed on the host alone misses the one ping that runs as a pod.
+    """
     found = [
         path
         for path in sorted(ANSIBLE.rglob("*"))
         if path.is_file()
         and path.suffix in SOURCE_SUFFIXES
-        and path != Path(__file__).resolve()
         and "collections" not in path.parts
-        and PING_HOST in _read(path)
+        # A test's own fixtures are not ping wiring: one holding a `create=1` string would
+        # fail `test_no_auto_provisioning` for a URL nothing ever sends.
+        and "tests" not in path.parts
+        and (PING_HOST in _read(path) or "HC_PING_URL" in _read(path))
     ]
     assert found, f"no {PING_HOST} references found — did the ping wiring move?"
     return found
 
 
 def _sending_files() -> list[Path]:
-    """The subset that actually curls the ping, rather than only templating the URL."""
+    """The subset that actually curls the ping, rather than only templating the URL.
+
+    Backslash continuations are folded first, so a curl whose URL sits on the next line —
+    manifest-prune-check.sh.j2 — is still read as a sender.
+    """
     return [
         path
         for path in _ping_files()
-        if re.search(r"curl\b[^\n]*(HC_URL|HC_PING_URL|\$url)", _read(path))
+        if re.search(
+            r"curl\b[^\n]*(HC_URL|HC_ALIVE_URL|HC_PING_URL|\$url)",
+            _read(path).replace("\\\n", " "),
+        )
     ]
 
 
@@ -91,6 +105,58 @@ def test_failure_is_reported(path: Path) -> None:
         f"{path} pings Healthchecks.io but never appends /fail. Silence covers a dead host; "
         f"only /fail covers a host that is alive and reporting a problem."
     )
+
+
+# Every hc-ping curl invocation, with backslash continuations folded first so a call split over
+# two lines is read whole. `HC_ALIVE_URL` is named because `_sending_files`' own regex does not
+# match it — longhorn-backup-health.sh.j2 reaches this census through its OTHER ping.
+_PING_CURL_RE = re.compile(
+    r"curl\b[^\n]*?\$\{?(?:HC_URL|HC_ALIVE_URL|HC_PING_URL|url)\b[^\n]*"
+)
+
+# The ping sites this guard must find. Named rather than counted: a census that globs reads
+# empty the day a file moves, and a parametrized check over nothing passes.
+PING_SENDERS = frozenset(
+    {
+        "disk-health.sh.j2",
+        "etcd-snapshot-offbox.sh.j2",
+        "longhorn-backup-health.sh.j2",
+        "manifest-prune-check.sh.j2",
+        "pull-pi-peers.sh",
+        "registry-gc.sh.j2",
+    }
+)
+
+
+def _ping_curls(path: Path) -> list[str]:
+    return _PING_CURL_RE.findall(_read(path).replace("\\\n", " "))
+
+
+def test_the_ping_census_still_finds_every_sender() -> None:
+    """Non-vacuity: the two checks below are parametrized over what this census returns."""
+    assert PING_SENDERS <= {path.name for path in _sending_files()}
+
+
+@pytest.mark.parametrize("path", _sending_files(), ids=lambda p: p.name)
+def test_a_retried_ping_stays_off_stderr(path: Path) -> None:
+    """A ping that retries must not mail its retry chatter from a healthy run (#2511).
+
+    `--retry` writes `Warning: ... Will retry` to stderr for every attempt a later one
+    recovers. cron mails whatever a job writes, so under `-S` a run that succeeded on the
+    second attempt arrives looking like a failed run. Each site reports a genuine failure
+    through its own `|| logger` (or `|| echo ... >&2`, in the pod), which is unaffected.
+    """
+    invocations = _ping_curls(path)
+    assert invocations, (
+        f"{path} is in the sending census but no ping curl was found in it"
+    )
+    for curl in invocations:
+        assert not re.match(r"curl\s+-\w*S", curl), (
+            f"{path} pings with -S, so curl's own retry chatter reaches stderr: {curl}"
+        )
+        assert "2>&1" in curl or "2>/dev/null" in curl, (
+            f"{path} leaves the ping's stderr unrouted: {curl}"
+        )
 
 
 @pytest.mark.parametrize("path", _sending_files(), ids=lambda p: p.name)

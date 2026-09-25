@@ -223,7 +223,12 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # new check that nobody is watching and that reads green forever.
   HC_URL="https://hc-ping.com/${HC_PING_KEY}/longhorn-backup-health"
   [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-  curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null \
+  # `-fs` without `-S`, and stderr discarded on top of it (#2511): `--retry` writes
+  # `Warning: ... Will retry` to stderr for an attempt a later one recovers, and cron mails
+  # that from a run that succeeded. Whether `-s` alone silences it varies by curl version, so
+  # the redirect is the guarantee. Nothing is lost — the `|| logger` below is the report, and
+  # it fires on the failure this hides the chatter of.
+  curl -fs --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null 2>&1 \
     || logger -t longhorn-backup-health "healthchecks ping failed (status=${STATUS})"
 
   # A SECOND slug, reporting on Kuma itself rather than on backups. The ping above goes out
@@ -247,6 +252,7 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # even ran and silencing the off-site deadman rather than reddening it.
   HC_ALIVE_URL="https://hc-ping.com/${HC_PING_KEY}/uptime-kuma-alive"
   (( ${KUMA_PUSH_OK:-1} )) || HC_ALIVE_URL="${HC_ALIVE_URL}/fail"
-  curl -fsS --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null \
+  # No `-S`, stderr discarded, for the reason the backup ping above gives (#2511).
+  curl -fs --max-time 10 --retry 3 "$HC_ALIVE_URL" >/dev/null 2>&1 \
     || logger -t longhorn-backup-health "healthchecks kuma-alive ping failed (push_ok=${KUMA_PUSH_OK:-1})"
 fi

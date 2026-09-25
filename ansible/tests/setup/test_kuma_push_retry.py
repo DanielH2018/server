@@ -39,6 +39,13 @@ from _helpers import ANSIBLE
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 
+# What real curl writes to stderr when the transport fails and `-S` is in effect. The stub
+# reproduces it so that `test_a_recovered_transport_failure_writes_nothing_to_stderr` is not
+# vacuous: an assertion on empty stderr passes trivially against a stub that never writes any
+# (#2511). `test_the_stub_curl_writes_the_transport_error_to_stderr` is the control that holds
+# this line real.
+_CURL_STUB_STDERR = '[[ "${RCS[$idx]}" == 0 ]] || echo "curl: (${RCS[$idx]}) stub transport failure" >&2'
+
 
 def _run_push(tmp_path, responses, extra_prelude=""):
     """Run kuma_push with `curl` stubbed to return `responses` in sequence, one per call.
@@ -68,6 +75,7 @@ def _run_push(tmp_path, responses, extra_prelude=""):
       idx=$(wc -l < "{calls_file}")
       echo x >> "{calls_file}"
       printf '%s' "${{CODES[$idx]}}"
+      {_CURL_STUB_STDERR}
       exit "${{RCS[$idx]}}"
     }}
     sleep() {{ echo "$1" >> "{sleeps_file}"; }}
@@ -102,6 +110,38 @@ def test_connection_failure_then_success_delivers_the_beat(tmp_path):
     # The push URL carries the token (repo-root CLAUDE.md: never print a line that could hold
     # it). Assert the retry log line doesn't carry the URL string at all.
     assert not any("push.example" in line for line in logs)
+
+
+def test_a_recovered_transport_failure_writes_nothing_to_stderr(tmp_path):
+    # ACCEPT #2511: cron mails whatever a job writes, so curl's `curl: (7) ...` on an attempt
+    # that attempt two recovers turns a healthy run into a mail. The library reports each failed
+    # attempt through `logger` instead, which is the surface that has a reader.
+    result, calls, _, logs = _run_push(tmp_path, [("000", 7), ("200", 0)])
+    assert "rc=0 ok=1" in result.stdout
+    assert calls == 2
+    assert result.stderr == ""
+    assert any("rc=7" in line for line in logs)
+
+
+def test_a_push_that_never_succeeds_writes_nothing_to_stderr_either(tmp_path):
+    # Three failed attempts, and still nothing mailed: the final verdict goes to `logger` too,
+    # so the fix must not be "only the retries are quiet."
+    result, calls, _, logs = _run_push(tmp_path, [("000", 7), ("000", 7), ("000", 7)])
+    assert calls == 3
+    assert result.stderr == ""
+    assert any("push failed" in line for line in logs)
+
+
+def test_the_stub_curl_writes_the_transport_error_to_stderr(tmp_path):
+    # REJECT: the control for the two above. Run the same stub line outside the library's
+    # redirect — if it writes nothing here, those tests prove nothing about the library.
+    script = f"""
+    RCS=(7)
+    idx=0
+    {_CURL_STUB_STDERR}
+    """
+    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    assert "curl: (7)" in result.stderr
 
 
 def test_503_then_success_delivers_the_beat(tmp_path):

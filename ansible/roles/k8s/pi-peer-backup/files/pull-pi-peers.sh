@@ -83,7 +83,10 @@ push() { # status msg
     # Deliberately not "$2": an rsync failure echoes PI_SRC, which carries the Pi's LAN IP and
     # ssh user, and Healthchecks.io stores ping bodies. The status is what has to escape the
     # house; the detail stays in Kuma, which is on the LAN.
-    curl -fsS -m 10 --retry 3 --data-raw "peer pull reported $1; detail in Kuma" "$url" >/dev/null \
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511). This one runs as a
+    # pod rather than a cron, so the chatter lands in the pod log rather than in mail; the rule
+    # is uniform across every hc-ping site so that none of them has to be exempted.
+    curl -fs -m 10 --retry 3 --data-raw "peer pull reported $1; detail in Kuma" "$url" >/dev/null 2>&1 \
       || echo "healthchecks ping failed ($1: $2)" >&2
   fi
 }

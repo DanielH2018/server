@@ -84,7 +84,8 @@ finish() {
   if [[ -n "$HC_PING_KEY" ]]; then
     local HC_URL="https://hc-ping.com/${HC_PING_KEY}/registry-gc"
     [[ "$STATUS" == "up" ]] || HC_URL="${HC_URL}/fail"
-    curl -fsS --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null \
+    # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
+    curl -fs --max-time 10 --retry 3 --data-raw "$MSG" "$HC_URL" >/dev/null 2>&1 \
       || logger -t registry-gc "healthchecks ping failed (status=${STATUS})"
   fi
 }

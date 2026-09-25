@@ -315,8 +315,9 @@ if [[ -n "$HC_PING_KEY" ]]; then
   # Deliberately NOT $MSG. That names live IngressRoute/Middleware objects — internal service
   # and hostname fragments — and Healthchecks.io stores ping bodies (first 100 kB). The status
   # is what has to escape the house; the detail stays in Kuma, which is on the LAN.
-  curl -fsS --max-time 10 --retry 3 --data-raw "drift detected; object names withheld, see Kuma" \
-    "$HC_URL" >/dev/null \
+  # No `-S`, stderr discarded — see longhorn-backup-health.sh.j2 (#2511).
+  curl -fs --max-time 10 --retry 3 --data-raw "drift detected; object names withheld, see Kuma" \
+    "$HC_URL" >/dev/null 2>&1 \
     || logger -t manifest-prune-check "healthchecks ping failed (status=${STATUS})"
 fi
 
