@@ -171,9 +171,10 @@
       # would retire the five path narrowings in `probe.py releases --stale-only`. The offline
       # harness cannot feed that: it stubs SOPS values and a placeholder `domain`, and matched 9
       # of 57 records on 2026-09-25. A render-mode dry run matched all 45 services it can reach
-      # (#2574). The narrowings stay until three gaps close: a match is blind to secret
-      # manifests (#2586), nothing renders on a schedule (#2587), and 13 services cannot be
-      # dry-run (#2588). Full reasoning in this role's CLAUDE.md, under `## Release records`.
+      # (#2574). A match is blind to secret manifests, so the reader lets a trusted match clear
+      # path hits only where neither record names one (#2586). The narrowings stay until two
+      # gaps close: nothing renders on a schedule (#2587), and 13 services cannot be dry-run
+      # (#2588). Full reasoning in this role's CLAUDE.md, under `## Release records`.
       manifests_digest: "{{ manifests_release_digest }}"
       # Names only — see the header. The count is what makes a dropped secret manifest visible.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
