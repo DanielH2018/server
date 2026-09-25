@@ -161,7 +161,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         **vars(host_config(_env, _int, _num, _env_file, problems)),
         **vars(service_config(_env, _int, _num, _env_file)),
         **vars(cluster_config(_env, _int, _num, PROM_URL)),
-        **vars(io_config(_env, _int, _num, _env_file, INTERVAL)),
+        **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
         INTERVAL=INTERVAL,
         # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once).
         # The bridge's first cycle after a host reboot runs before the heavy apps it polls (n8n,

@@ -11,6 +11,7 @@ successes. Composed into `Config` by `bridge/config.py`; imports nothing from it
 
 from collections.abc import Callable
 from dataclasses import dataclass, field
+import json
 
 
 @dataclass(frozen=True)
@@ -38,6 +39,10 @@ class IoConfig:
     R2_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
+    HEALTHCHECKS_API_URL: str
+    HEALTHCHECKS_API_KEY: str = field(repr=False)
+    HEALTHCHECKS_EXPECTED: tuple[dict, ...]
+    HEALTHCHECKS_PROBE_INTERVAL_S: float
     LOKI_STREAM: str
     LOKI_DOCKER_STREAM: str
     LOKI_PI_STREAM: str
@@ -73,8 +78,31 @@ def io_config(
     _num: Callable[[str, str], float],
     _env_file: Callable[..., str],
     interval: int,
+    problems: list[str],
 ) -> IoConfig:
     """The storage, log and alerting fields, read through `load_config`'s parsers."""
+
+    def _expected_checks(raw: str) -> tuple[dict, ...]:
+        """HEALTHCHECKS_EXPECTED's JSON list. Malformed is a config problem, never a raise."""
+        if not raw.strip():
+            return ()
+        try:
+            parsed = json.loads(raw)
+            if not isinstance(parsed, list) or not all(
+                isinstance(c, dict)
+                and c.get("slug")
+                and c.get("kind") in ("simple", "cron")
+                for c in parsed
+            ):
+                raise ValueError("not a list of {slug, kind: simple|cron, ...} objects")
+        except ValueError as e:
+            problems.append(
+                "HEALTHCHECKS_EXPECTED is malformed (%s); the console drift check is off"
+                % e
+            )
+            return ()
+        return tuple(parsed)
+
     return IoConfig(
         # B2 REACHABILITY — the gap the 2026-08-02 transaction-cap incident exposed
         # (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from
@@ -197,6 +225,17 @@ def io_config(
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num(
             "CLOUDFLARE_IPS_PROBE_INTERVAL_S", "86400"
         ),
+        # The Healthchecks.io console against docs/healthchecks-io-deadman.md (#2566). The key
+        # is the project's READ-ONLY API key, file-mounted like CF_ANALYTICS_TOKEN; the expected
+        # list is monitor_bridge_healthchecks_expected rendered as JSON. Either empty disables
+        # the check. Successes cached a day, failures re-probed every cycle
+        # (checks/healthchecks.py).
+        HEALTHCHECKS_API_URL=_env(
+            "HEALTHCHECKS_API_URL", "https://healthchecks.io/api/v3/checks/"
+        ),
+        HEALTHCHECKS_API_KEY=_env_file("HEALTHCHECKS_API_KEY"),
+        HEALTHCHECKS_EXPECTED=_expected_checks(_env("HEALTHCHECKS_EXPECTED", "")),
+        HEALTHCHECKS_PROBE_INTERVAL_S=_num("HEALTHCHECKS_PROBE_INTERVAL_S", "86400"),
         # Loki log-ingestion freshness: Loki's Kuma /ready probe stays green even when promtail
         # stops SHIPPING (DOCKER_HOST/docker-proxy break, positions-file corruption, relabel
         # regression) — a silently-dead log pipeline that quietly blinds the log dashboards and

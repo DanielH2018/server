@@ -107,6 +107,8 @@ spec:
                 path: cf_analytics_token
               - key: speedtest_api_token # gitleaks:allow — a Secret item NAME, not a value
                 path: speedtest_api_token
+              - key: healthchecks_api_read_only_key # gitleaks:allow — a Secret item NAME, not a value
+                path: healthchecks_api_read_only_key
         - name: monitor-bridge-tmp
           emptyDir: {}
         # daniel-box's own gitops-deploy state — this pod is pinned to that node (the

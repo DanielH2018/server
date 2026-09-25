@@ -206,8 +206,14 @@ def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int])
     return "\n".join(lines) + "\n"
 
 
-def render_deadman_cadences(k3s: dict, pi_peer: dict, registry: dict) -> str:
-    """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
+def deadman_crons(
+    k3s: dict, pi_peer: dict, registry: dict
+) -> list[tuple[str, str, str]]:
+    """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
+
+    Shared with ansible/tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
+    monitor-bridge's console expectations to these same crons.
+    """
     every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
     rows = [
         (
@@ -247,6 +253,12 @@ def render_deadman_cadences(k3s: dict, pi_peer: dict, registry: dict) -> str:
             "the `longhorn-backup-health` cron; the same script pings both",
         ),
     ]
+    return rows
+
+
+def render_deadman_cadences(k3s: dict, pi_peer: dict, registry: dict) -> str:
+    """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
+    rows = deadman_crons(k3s, pi_peer, registry)
     lines = ["| Check slug | Cron (daniel-box, UTC) | Set by |", "|---|---|---|"]
     lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]
     return "\n".join(lines) + "\n"

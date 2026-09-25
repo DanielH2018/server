@@ -59,9 +59,9 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   exists to page on that partial outage. A new node-exporter scrape job fails
   `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped.
 - **`STARTUP_GRACE`** (`n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `r2_usage`,
-  `speedtest`) holds a reach-out check with no gate and no streak of its own `up` for the
-  first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday reboot's first cycle
-  does not page. The set is disjoint from every skip set, and a test holds both invariants.
+  `speedtest`, `healthchecks_drift`) holds a reach-out check with no gate and no streak of
+  its own `up` for the first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday
+  reboot's first cycle does not page. The set is disjoint from every skip set, and a test holds both invariants.
 - **Consecutive-cycle streaks** (`bridge/streaks.py`, every `*_CONSECUTIVE` in cycles of
   `INTERVAL`) are the per-check hysteresis. A held cycle pushes `up` with a `down streak n/N`
   note, because a monitor that is up while a fault accumulates has to say so. A streak delays
@@ -204,6 +204,12 @@ the alternatives rejected. Read this file for the rule, that one before you chan
 - **Cloudflare IP Drift** (`cloudflare_ips_drift`): the two published range pages against
   `CLOUDFLARE_IPS_EXPECTED`; a success is cached for a day, drift or a short page is `down`
   and re-probed every cycle, so the tile clears one cycle after `cloudflare_ips` is fixed.
+- **Healthchecks.io Console Drift** (`healthchecks_drift`): the Healthchecks.io console read
+  with the read-only API key (file-mounted), each documented slug's schedule type, period or
+  cron, tz and grace against `HEALTHCHECKS_EXPECTED` (`monitor_bridge_healthchecks_expected`,
+  held to the crons and the deadman doc by a test). A missing slug or any differing field is
+  `down`; an undocumented console check is named but stays `up`. Same cache as Cloudflare IP
+  Drift. Empty key or list disables.
 - **B2 Storage Usage** (`b2_storage`): B2 queried live behind the B2 gate, so a cap incident
   pages once.
 - **k3s Workload Health** (`k8s_workloads`): kube-state-metrics through the cluster
@@ -311,7 +317,7 @@ pytest cannot see it because it imports from `files/`.
 | `registry.py` | `build_checks(env)`, every `Check` with its `KUMA_PUSH_*` name read from the environment it is handed |
 | `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_rollout`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py`, the generated copy of the deployer's module. `host_edge`'s entry points take the prober as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_rollout`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py`, the generated copy of the deployer's module. `host_edge`'s entry points take the prober as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in `config.py` because a repo test greps for them by text |
 | `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` with `cap_push_msg` (`PUSH_MSG_MAX`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |

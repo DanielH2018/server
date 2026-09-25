@@ -536,6 +536,12 @@ stringData:
   # interval is therefore the bridge's, not the daily cron's 90000s.
   cloudflare-ip-drift.json: |
     {"type": "push", "name": "Cloudflare IP Drift", "description": "monitor-bridge fetches the Cloudflare published IPv4 and IPv6 ranges and compares them to cloudflare_ips in group_vars/all.yml, which sets traefik trustedIPs and the netpol allow-list. A match is re-checked daily; a failure every cycle. DOWN means the list drifted or the fetch failed. Update cloudflare_ips and redeploy traefik, netpol-baseline and monitor-bridge.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_cloudflare_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # #2566: monitor-bridge's checks/healthchecks.py reads the Healthchecks.io console with the
+  # read-only key and compares each dead-man check's schedule and grace against
+  # docs/healthchecks-io-deadman.md. Same cache shape as Cloudflare IP Drift above, so the
+  # interval is the bridge's. The `-drift-check` suffix places it in Automation & Drift.
+  healthchecks-io-drift-check.json: |
+    {"type": "push", "name": "Healthchecks.io Console Drift", "description": "monitor-bridge reads the Healthchecks.io console (read-only API key) and compares every off-site dead-man check's schedule type, period or cron, timezone and grace against docs/healthchecks-io-deadman.md. A match is re-checked daily; a failure every cycle. DOWN names each slug and field that differs, or a check missing from the console. Fix the console, or change the doc and monitor_bridge_healthchecks_expected together and redeploy monitor-bridge.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_healthchecks_drift_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 90000s (25h) for the same reason as Cloudflare IP Drift directly above: fed by a DAILY cron
   # (setup/gitops_deploy's github-ruleset-drift.sh), so the interval gives one missed run of
   # slack. Watches the merge gate the deployer's CI verdict rests on — a required context

@@ -137,6 +137,7 @@ _SECRET_ENV = {
     "B2_PROBE_KEY_ID": "sentinel-b2-key-id",
     "B2_PROBE_APPLICATION_KEY": "sentinel-b2-app-key",
     "CF_ANALYTICS_TOKEN": "sentinel-cf-token",
+    "HEALTHCHECKS_API_KEY": "sentinel-hc-api-key",
     "SMTP_PASSWORD": "sentinel-smtp-password",
     "DISCORD_WEBHOOK_URL": "https://discord.example/sentinel-kuma",
     "DISCORD_CROWDSEC_WEBHOOK_URL": "https://discord.example/sentinel-crowdsec",
