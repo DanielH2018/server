@@ -25,6 +25,12 @@ The second marker is ``manual_plane``, one line per setup role the tick fast-for
 cannot apply itself. A recorded role leaves ``behind_since`` empty, so the park half above says
 nothing while the change sits merged and unapplied — only the banner names it.
 
+``k8s_deferred`` is the same shape for the k8s plane: one line per promoted image bump a BROAD
+tick merged and then could not apply, because the broad arm returns before the k8s arm runs. It
+too leaves ``behind_since`` empty. monitor-bridge reported it from the day it existed (#2449) and
+the banner did not, so a session opening on daniel-box — the reader who can clear it with one
+deploy — was the one surface not told (#2470).
+
 The directory, the basenames and the line parsers come from ``lib.gitops_markers``, a
 generated copy of the deployer's own module (its header says how it is kept fresh), so this
 module and monitor-bridge read exactly the lines the deployer wrote. What stays here is the
@@ -52,9 +58,12 @@ from lib.gitops_markers import (
     CONTENTION_PAGE_SECONDS,
     MARKERS,
     STATE_DIR,
+    k8s_deferred_clear_cmd,
+    k8s_deferred_deploy_cmd,
     parse_contention,
     manual_plane_clear_cmd,
     maximal_apply_warning,
+    parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
 )
@@ -238,6 +247,46 @@ def contention_lines(marker, now):
         f"/var/lock/server-deploy-{lock}.lock has outlived any legitimate deploy; find it "
         f"(fuser), end it, then `{CONTENTION_CLEAR_CMD}`"
     ]
+
+
+def k8s_deferred_lines(marker, now):
+    """One banner line per promoted image bump the deployer merged but did not apply, or [].
+
+    The BROAD arm returns before the k8s arm, so a tick that fast-forwards a broad change
+    alongside a promoted image bump merges the bump and never deploys it. Nothing chose that
+    deferral and nothing reports it again: the defer-and-alert post fires once, and no later
+    tick's range carries the bump a second time. `k8s_deferred` is the durable record, and the
+    way out is one `deploy.sh` of the named service.
+
+    # DECIDED: not age-gated, for the reason `manual_plane_lines` is not. monitor-bridge DOES
+    # gate this marker (`checks/gitops.py`, 7h), and the asymmetry is deliberate rather than
+    # drift: the bridge PAGES, so it needs a threshold that a tick which applies the bump on
+    # its next pass clears. A banner line is a passive notice to a reader who is already
+    # reading, and a bump merged ten minutes ago is exactly the one this session can still
+    # clear cheaply.
+
+    Ungated also means this says nothing about the tick that is about to apply the bump itself.
+    That is the same trade `manual_plane_lines` takes and the cost is one line on one banner.
+    """
+    lines = []
+    for entry in sorted(parse_k8s_deferred(marker), key=lambda e: e.at):
+        lines.append(
+            f"  ✗ the GitOps deployer merged an image bump for `{entry.service}` "
+            f"{_age_phrase(now - entry.at)} ago and deferred the deploy — "
+            f"`{k8s_deferred_deploy_cmd([entry.service])}`, then "
+            f"`{k8s_deferred_clear_cmd(entry.service)}`"
+        )
+    return lines
+
+
+def read_k8s_deferred_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:
+    """The host's `k8s_deferred` marker text, or None when it cannot be read.
+
+    Absent and unreadable collapse to the same answer for the reason the readers above give:
+    every caller here only asks "is a bump merged and unapplied?", and for a marker nobody can
+    read the answer is no. `gitops_markers.parse_k8s_deferred` turns the text into entries.
+    """
+    return _read(state_dir, MARKERS["k8s_deferred"])
 
 
 def read_contention_marker(state_dir: str = GITOPS_STATE_DIR) -> str | None:

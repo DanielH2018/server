@@ -1,14 +1,24 @@
 #!/usr/bin/env python3
-"""Two `deploy.sh` runs overlap when they name different services, and not when they don't.
+"""What survives a `deploy.sh` run forking: its snapshot, its lock and its cleanup.
 
-This is the property ADR-0017 exists for, and the only one that cannot be read off the script:
-it is about two processes, so a single-process test would pass whatever the locks did. Every
-lock is real, and all three paths -- the tree lock, the service locks and the snapshot root --
-are redirected into a tmp_path, so these runs neither queue behind a live gitops tick nor make
-one queue behind them.
+Every lock is real, and all three paths -- the tree lock, the service locks and the snapshot
+root -- are redirected into a tmp_path, so these runs neither queue behind a live gitops tick
+nor make one queue behind them. `ansible-playbook` is a stub that sleeps, which is what gives
+a `--detach` parent something to return in front of.
 
-`ansible-playbook` is a stub that sleeps. Elapsed wall clock is therefore the whole signal:
-two runs that overlap finish in about one sleep, two that serialize take two.
+THE SERIALIZE/OVERLAP PROPERTY IS NOT MEASURED HERE ANY MORE (#2415). Three wall-clock cases
+proved "same service waits, different service does not, a full run excludes a scoped one" by
+starting two real deploys and timing them, at about 10s a run. Each half is now pinned
+cheaply somewhere that reads the same code:
+
+- A busy service lock really blocking `deploy.sh`, cross-process, with a real external `flock`
+  holder: `test_wrapper_lock_wait_lines.py` (the wait line it prints, and exit 75 when the
+  budget ends).
+- The lock list and its order, driven through `take_service_locks` and read back off
+  /proc/self/fd, plus the `all` lock's shared/exclusive modes:
+  `ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py`.
+- The lock semantics themselves, on real fcntl locks:
+  `ansible/roles/setup/gitops_deploy/tests/test_deploy_service_locks.py`.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_service_lock_concurrency.py
 """
@@ -32,15 +42,10 @@ from _process_waits import wait_for_exit
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
-# The playbook stub's sleep. The FLAGGED halves below discriminate only while the fixed cost
-# of a pair of runs (two git worktree adds, two bash startups) stays under one sleep: two
-# runs that overlap take one sleep plus that cost, two that serialize take two sleeps plus it,
-# and once the cost reaches a sleep the two are indistinguishable and a wrapper that took no
-# lock at all would pass `..._serialize`. `test_the_fixed_cost_stays_under_half_a_sleep`
-# measures the cost on the machine running the suite and fails before the halves can go
-# vacuous. 2s, down from 4 (#2226): the cost measured 0.1s here and the runner is ~4x slower
-# per test, so 2s keeps a 2x margin over the guard's own bound and halves a module that was
-# the second pole of the sharded suite.
+# The playbook stub's sleep, and the bound the `--detach` case checks its parent returned
+# inside. It only has to outlast a `git worktree add` and a bash startup -- 0.1s measured here
+# on 2026-09-11, and the CI runner is ~4x slower per test. 2s, down from 4 (#2226), and the
+# three wall-clock serialize cases it also sized are gone (#2415).
 _SLEEP_S = 2
 
 _UV_STUB = """#!/bin/bash
@@ -74,85 +79,6 @@ def _harness(
     (bin_dir / "uv").chmod(0o755)
     repo = make_snapshot_repo(tmp_path / "repo")
     return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(sleep_s))
-
-
-def _run_both(
-    tmp_path: Path, first: list[str], second: list[str], sleep_s: float = _SLEEP_S
-) -> float:
-    """Start two deploy.sh runs at once; seconds until both have finished."""
-    repo, env = _harness(tmp_path, sleep_s=sleep_s)
-    base = [str(_DEPLOY_SH), "--skip-tag-check", "--skip-staleness-check"]
-    started = time.monotonic()
-    procs = [
-        subprocess.Popen(
-            base + extra,
-            cwd=repo,
-            env=env,
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-        )
-        for extra in (first, second)
-    ]
-    for proc in procs:
-        out, err = proc.communicate(timeout=300)
-        assert proc.returncode == 0, f"{out}\n{err}"
-    return time.monotonic() - started
-
-
-def test_the_fixed_cost_stays_under_half_a_sleep(tmp_path):
-    """Non-vacuity for the three wall-clock cases below, measured rather than assumed.
-
-    With the stub's sleep at 0 the elapsed time of a pair is the fixed cost alone. Under half
-    a sleep, the overlap case has a full sleep of headroom under its bound and the serialize
-    cases cannot be satisfied by two runs that merely overlapped. A machine slow enough to
-    fail this is one where the cases below would pass for the wrong reason, and this message
-    is the one that says so.
-    """
-    cost = _run_both(tmp_path, ["--tags", "alpha"], ["--tags", "beta"], sleep_s=0)
-    assert cost < _SLEEP_S / 2, (
-        f"two zero-sleep deploys took {cost:.1f}s of fixed cost, at least half of the "
-        f"{_SLEEP_S}s stub sleep, so the overlap and serialize cases below no longer "
-        "discriminate -- raise _SLEEP_S"
-    )
-
-
-def test_two_deploys_of_different_services_overlap(tmp_path):
-    """CLEAN half, and the whole point of the change.
-
-    Before ADR-0017 both runs held the tree lock across the playbook, so this took two sleeps.
-    """
-    elapsed = _run_both(tmp_path, ["--tags", "alpha"], ["--tags", "beta"])
-    assert elapsed < 2 * _SLEEP_S, (
-        f"two deploys of DIFFERENT services took {elapsed:.1f}s, which is at least two "
-        f"{_SLEEP_S}s playbooks -- they serialized"
-    )
-
-
-def test_two_deploys_of_the_same_service_serialize(tmp_path):
-    """FLAGGED half: without it the test above passes for a wrapper that takes no lock at all.
-
-    Two deploys of one service race on the same manifests and the same rollout, which is what
-    the per-service lock exists to prevent.
-    """
-    elapsed = _run_both(tmp_path, ["--tags", "alpha"], ["--tags", "alpha"])
-    assert elapsed >= 2 * _SLEEP_S, (
-        f"two deploys of the SAME service took {elapsed:.1f}s, under two {_SLEEP_S}s "
-        "playbooks -- they overlapped"
-    )
-
-
-def test_a_full_run_and_a_scoped_run_serialize(tmp_path):
-    """FLAGGED half for the `all` lock: a full run deploys the scoped run's service too.
-
-    The scoped run takes `server-deploy-all.lock` shared and the full run takes it exclusive,
-    so the two exclude each other while two scoped runs do not.
-    """
-    elapsed = _run_both(tmp_path, [], ["--tags", "alpha"])
-    assert elapsed >= 2 * _SLEEP_S, (
-        f"a full run and a scoped run took {elapsed:.1f}s, under two {_SLEEP_S}s playbooks "
-        "-- they overlapped"
-    )
 
 
 def _deploy(repo: Path, env: dict[str, str], *args: str) -> None:

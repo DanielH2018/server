@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 # gen-hooks: library
 #   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
-"""PreToolUse(Bash) guard: five commands that fail silently on this machine.
+"""PreToolUse(Bash) guard: six commands that fail silently on this machine.
 
 Each has a deterministic signature, a recorded cost, and a one-line fix — which is what makes
-them worth a hook rather than a paragraph. What they share is that none of them ERRORS: seven
-produce a plausible-looking result that is wrong, and the last two succeed outright while
-bypassing a gate the repo requires, so nothing downstream notices either way.
+them worth a hook rather than a paragraph. What they share is that none of them ERRORS: each
+either produces a plausible-looking result that is wrong or succeeds outright while bypassing
+a gate the repo requires, so nothing downstream notices either way.
 
   1. `kubectl rollout restart`. Plain kubectl authenticates as the read-only ServiceAccount,
      which is Forbidden on this verb — and a Forbidden restart still prints "successfully
@@ -37,6 +37,13 @@ bypassing a gate the repo requires, so nothing downstream notices either way.
      INSIDE `scripts/deploy_tools/staging_gate_remote.sh`, whose tree is pinned behind master
      by construction: that flag is in the script's own text, never in a Bash tool command, so
      the script's invocation needs no exemption here.
+
+  6. `gh workflow run ci.yml` with no `--ref`. gh resolves an empty ref to the default branch,
+     so the dispatch sweeps master's HEAD — and `deploy_git.ci_verdict` applies worst-wins over
+     every required check-run on a SHA with no event filter, while GitHub's `filter=latest`
+     does not merge same-named runs across check suites. So one red dispatch run sits beside
+     the green push run and pins that master SHA's verdict to fail, which stops the GitOps
+     deployer's walk at it. The dispatch itself reports nothing wrong (#2402).
 
 Four more rules lived here until dotfiles #628 moved them into `claude_guard.footguns`, which
 every repo's PreToolUse hook runs: ugrep's `-Z`/`-z`, a bare `git stash pop`, a self-matching
@@ -206,12 +213,74 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
     )
 
 
+# The CI workflow, by every name `gh workflow run` accepts for it: the file, either extension,
+# and the `name:` in it. NOT the numeric workflow id — gh accepts that too, and a literal here
+# would drift the first time the workflow is recreated. Stated as a limit in the rule's
+# docstring rather than papered over.
+_CI_WORKFLOW_NAMES = frozenset({"ci.yml", "ci.yaml", "CI"})
+# The refs that mean "master". An absent `--ref` means the same thing: gh resolves an empty ref
+# to the repository's default branch (`pkg/cmd/workflow/run/run.go`).
+_MASTER_REFS = frozenset({"master", "refs/heads/master"})
+
+
+def _ref_arg(words: list[str]) -> str | None:
+    """The `--ref` value in `words`, or None when the command names none.
+
+    Both spellings of both forms, because gh takes all four: `--ref X`, `--ref=X`, `-r X`,
+    `-r=X`. A flag with nothing after it reads as absent, which denies — the same answer as
+    the bare form, and the one that fails safe.
+    """
+    for i, word in enumerate(words):
+        if word in ("--ref", "-r"):
+            return words[i + 1] if i + 1 < len(words) else None
+        for prefix in ("--ref=", "-r="):
+            if word.startswith(prefix):
+                return word[len(prefix) :]
+    return None
+
+
+def ci_dispatch_on_master_problem(stage: list[str]) -> str | None:
+    """`gh workflow run ci.yml` aimed at master, which pins that SHA's CI verdict to red.
+
+    The dispatch run lands as a second check suite on the same SHA. `ci_verdict` takes the
+    worst conclusion over every required-name check-run and filters on no event, and GitHub's
+    default `filter=latest` does not merge same-named runs across suites — so a red dispatch
+    beside a green push run reads as fail, and the deployer's walk stops at that SHA.
+
+    Denies the ABSENT ref as well as the explicit one: an empty `--ref` resolves to the default
+    branch, which is master here. A dispatch of a real branch stays clean, because a branch SHA
+    is not one the deployer walks.
+
+    Out of scope, deliberately: the workflow's numeric id (a literal here would drift), the
+    Actions UI button, and a raw `gh api .../dispatches` call. The issue that filed this
+    conceded all three; the alternative that covers them needs an `actions/runs?head_sha=`
+    join on every verdict read and doubles the anonymous-quota requests (#2402).
+    """
+    words = strip_shell_keywords(stage)
+    if not invokes(words, ("gh", "workflow", "run")):
+        return None
+    if not any(word in _CI_WORKFLOW_NAMES for word in words[1:]):
+        return None
+    ref = _ref_arg(words)
+    if ref is not None and ref not in _MASTER_REFS:
+        return None
+    return (
+        "A `gh workflow run ci.yml` with no --ref sweeps master's HEAD, and gh resolves an "
+        "empty ref to the default branch. The dispatch run lands as a second check suite on "
+        "that SHA, deploy_git.ci_verdict takes the worst conclusion over every required "
+        "check-run with no event filter, and one red dispatch beside the green push run pins "
+        "the SHA to fail — which stops the GitOps deployer's walk there. Dispatch the BRANCH: "
+        "`gh workflow run ci.yml --ref <your-branch>`."
+    )
+
+
 _RULES = (
     rollout_restart_problem,
     remote_git_problem,
     burst_public_hostname_problem,
     issue_create_by_hand_problem,
     skip_staleness_problem,
+    ci_dispatch_on_master_problem,
 )
 
 

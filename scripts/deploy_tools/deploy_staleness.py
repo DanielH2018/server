@@ -388,6 +388,14 @@ def main(argv: list[str] | None = None) -> int:
         # this to a session as it OPENS; a session running for an hour that hits exit 4
         # mid-landing never saw it (issue #1429). Additive and best-effort — the refusal above
         # prints either way, so a host with no state directory changes nothing.
+        #
+        # DECIDED: the `k8s_deferred` marker is NOT printed here, unlike on the SessionStart
+        # banner (#2470). This addendum exists to correct one wrong repair — exit 4 points at a
+        # rebase of this tree when the primary checkout is what has to converge. A deferred
+        # image bump is not a park: the tree converged, and the reader's own `--tags` are
+        # unaffected by a bump to some other service. Printing it here would attach an unrelated
+        # to-do to a refusal, which is how an addendum stops being read.
+
         note = park_note(read_behind_marker(args.state_dir))
         if note:
             print(note, file=sys.stderr)

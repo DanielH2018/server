@@ -310,7 +310,7 @@
   # image group instead (renovate.json's matchFileNames). The two copies agreeing is ENFORCED by
   # ansible/tests/repo/test_vale_matches_the_ci_pin.py.
   ansible.builtin.set_fact:
-    initial_setup_vale_version: "3.21.0"
+    initial_setup_vale_version: "3.22.0"
   when: inventory_hostname in dev_tooling_hosts
 
 - name: Read the Vale version this host already has

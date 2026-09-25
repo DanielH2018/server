@@ -2,7 +2,7 @@
 # The cluster home of autofix-bridge's containerized *arr remediation loop (Phase F
 # drain). The host plane (the disk-prune cron) stays on daniel-server with the Docker
 # daemon it prunes — see the containers role.
-autofix_bridge_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+autofix_bridge_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
 
 # The Python files that make up the running bridge, mirroring monitor-bridge's ship list
 # (defaults/main.yml there) and the same risk: a module missing here never reaches the
