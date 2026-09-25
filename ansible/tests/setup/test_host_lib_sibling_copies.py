@@ -15,11 +15,14 @@ list someone maintains, so a new consumer is in scope the moment it imports the 
 
 WHY THE SHARED FILE DOES NOT WRITE THE STAMP PAIR, and this test asserts it instead. A
 `stamp_deployed` fragment is named per group and holds that group's whole pair list, so a
-second fragment written from inside the shared file would overwrite the caller's. Five of the
-eight sites (gitops_deploy, renovate_notify, renovate_agent, and k3s twice) record a host_lib
-pair and the other three (configarr, janitorr, fake_remux) do not; emitting one for those three
-would change host state. The copy and the pair are therefore joined here rather than in the
-task file: `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into`.
+second fragment written from inside the shared file would overwrite the caller's. Six of the
+eight sites (gitops_deploy, renovate_notify, renovate_agent, fake_remux, and k3s twice) record a
+host_lib pair and the other two (configarr, janitorr) declare no group for one to join; emitting
+one for those two would change host state. The copy and the pair are therefore joined here rather
+than in the task file, in both directions:
+`test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` catches a pair naming the
+wrong directory, and `test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean`
+catches a pair that is missing (#2564).
 
 Run: uv run pytest ansible/tests/setup/test_host_lib_sibling_copies.py
 """
@@ -53,6 +56,16 @@ EXPECTED_CONSUMERS = frozenset(
 # roles/setup/common OWNS host_lib.py; it does not import it as a sibling. Excluded by name
 # rather than by a path heuristic so the exemption is visible.
 OWNER_ROLE = "common"
+
+# The two consumers that declare no `stamp_deployed` group at all, so there is no group for a
+# host_lib pair to join. Both are k8s-plane roles whose health readers are `copy:`-deployed host
+# code watched by nothing — a wider gap than one missing host_lib line, and a change to
+# daniel-box state for two roles, so it is filed (#2590) rather than closed here.
+#
+# Named, not derived from "does this role declare a group". That condition is self-maintaining
+# and passes the next role that copies host_lib and stamps nothing — the vacuity failure
+# .claude/rules/python-layout.md is about. An entry here has to be argued for.
+CONSUMERS_WITH_NO_STAMP_GROUP = frozenset({"configarr", "janitorr"})
 
 
 def _imports_host_lib(source: str) -> bool:
@@ -132,6 +145,27 @@ def stamp_pairs_of(role: Path) -> list[dict]:
             if isinstance(pairs, list):
                 out.extend(p for p in pairs if isinstance(p, dict))
     return out
+
+
+def unstamped_host_lib_installs(role: Path) -> list[str]:
+    """host_lib destinations this role installs into but does not record a stamp pair for.
+
+    Compares the templated strings as written, not resolved paths: `includes_of` and
+    `stamp_pairs_of` both read raw task vars, so a role passing `{{ fake_remux_opt_dir }}` has to
+    spell the pair the same way. That is the same comparison
+    `test_a_declared_stamp_pair_names_a_directory_the_include_installs_into` makes in reverse.
+    """
+    installed = {
+        f"{v['host_lib_dir']}/host_lib.py"
+        for v in includes_of(role)
+        if v.get("host_lib_dir")
+    }
+    stamped = {
+        pair["live"]
+        for pair in stamp_pairs_of(role)
+        if pair.get("src") == HOST_LIB_SRC and pair.get("live")
+    }
+    return sorted(installed - stamped)
 
 
 def hand_copies(roles_root: Path) -> list[str]:
@@ -256,6 +290,81 @@ def test_a_declared_stamp_pair_names_a_directory_the_include_installs_into():
                 assert pair["live"] in installed, (
                     f"{name} stamps {pair['live']} but installs host_lib into {sorted(installed)}"
                 )
+
+
+def test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean():
+    """The forward half of the copy↔stamp invariant: a stamped role stamps host_lib too.
+
+    The test above catches a pair that names the WRONG directory. It cannot catch a pair that is
+    simply absent, and that is the live failure (#2564): fake_remux recorded its seven scripts and
+    omitted the host_lib copy beside them, so on 2026-09-25 the drift check named
+    /opt/renovate-notify/host_lib.py as stale and stayed silent about
+    /opt/autofix-fake-remux/host_lib.py, which was stale by the same commit.
+
+    An unstamped copy is invisible to setup-drift-lib.sh's arm 2, and host_lib is the one file
+    every consumer shares — one repo-side change strands a copy in every role at once.
+    """
+    offenders = {
+        name: unstamped
+        for name in sorted(EXPECTED_CONSUMERS - CONSUMERS_WITH_NO_STAMP_GROUP)
+        if (unstamped := unstamped_host_lib_installs(_role(name)))
+    }
+    assert not offenders, (
+        f"{offenders} install host_lib and record no stamp_deployed pair for it, so a stale copy "
+        f"there runs behind a drift check reporting 'deployed code matches the repo'. Add "
+        f"`- live: <dir>/host_lib.py` / `src: {HOST_LIB_SRC}` to the role's stamp_deployed_pairs."
+    )
+
+
+def test_a_consumer_that_stamps_its_scripts_but_not_host_lib_is_flagged(tmp_path):
+    """The rejecting half, on a synthetic role: stamping SOMETHING is not stamping host_lib.
+
+    Built in tmp_path for the same reason as the census's red proof — a real role directory
+    would be picked up by ansible-lint and by test_no_role_ships_a_test_file.py.
+    """
+    role = tmp_path / "setup" / "halfstamped" / "tasks"
+    role.mkdir(parents=True)
+    (role / "main.yml").write_text(
+        "---\n"
+        "- name: Install the shared host_lib helper\n"
+        '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"\n'
+        "  vars:\n"
+        "    host_lib_dir: /opt/halfstamped\n"
+        "- name: Record the deployed code\n"
+        '  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"\n'
+        "  vars:\n"
+        "    stamp_deployed_name: halfstamped\n"
+        "    stamp_deployed_pairs:\n"
+        "      - live: /opt/halfstamped/reader.py\n"
+        "        src: ansible/roles/setup/halfstamped/files/reader.py\n"
+    )
+    assert unstamped_host_lib_installs(role.parent) == ["/opt/halfstamped/host_lib.py"]
+
+    # And the accepting half on the same role, so a detector that flagged every install fails
+    # here rather than reading as strictness.
+    (role / "main.yml").write_text(
+        (role / "main.yml").read_text()
+        + "      - live: /opt/halfstamped/host_lib.py\n"
+        + f"        src: {HOST_LIB_SRC}\n"
+    )
+    assert unstamped_host_lib_installs(role.parent) == []
+
+
+def test_the_exempt_consumers_still_declare_no_stamp_group():
+    """The exemption is for a role with NO group, and must not outlive that.
+
+    A role that starts recording its deployed code and keeps the exemption would be listed as
+    'nothing to join' while it has a group to join, which is the finding wearing the exemption as
+    cover. Closing #2590 deletes entries from CONSUMERS_WITH_NO_STAMP_GROUP and this test is how
+    a half-closure is noticed.
+    """
+    assert CONSUMERS_WITH_NO_STAMP_GROUP <= EXPECTED_CONSUMERS
+    for name in sorted(CONSUMERS_WITH_NO_STAMP_GROUP):
+        assert not stamp_pairs_of(_role(name)), (
+            f"{name} now declares stamp_deployed pairs, so it is no longer exempt from "
+            f"test_every_consumer_that_stamps_its_code_also_stamps_host_lib_is_clean — add its "
+            f"host_lib pair and drop it from CONSUMERS_WITH_NO_STAMP_GROUP."
+        )
 
 
 def test_a_notified_handler_exists_in_the_calling_role():

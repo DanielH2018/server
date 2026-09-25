@@ -229,6 +229,12 @@
   vars:
     stamp_deployed_name: fake-remux
     stamp_deployed_pairs:
+      # The sibling host_lib copy, listed with the scripts that import it (#2564). It was the one
+      # artifact of this role's eight that the drift check could not see, and it is the one every
+      # consumer shares — so a single repo-side change to host_lib.py strands a stale copy in
+      # every role at once, which is exactly what happened on 2026-09-24.
+      - live: "{{ fake_remux_opt_dir }}/host_lib.py"
+        src: ansible/roles/setup/common/files/host_lib.py
       - live: "{{ fake_remux_opt_dir }}/state_push.py"
         src: ansible/roles/setup/fake_remux/files/state_push.py
       - live: "{{ fake_remux_opt_dir }}/fake_remux_scan.py"
