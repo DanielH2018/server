@@ -198,6 +198,38 @@ def test_format_backup_deletions_exits_non_zero_only_when_something_is_unpriced(
     assert "UNPRICED" in flagged
 
 
+def test_every_completed_run_ends_with_one_summary_line():
+    """Check 10 judges this cron's liveness on that line, so it cannot be conditional.
+
+    The counts are the ones the report above them shows; the shape is what
+    `deletions_have_spoken` matches (#2545).
+    """
+    charged, _ = ledger.format_backup_deletions(
+        [{"backup": "backup-a", "volume": VOL_A, "class_c": 337}],
+        [{"backup": "backup-b", "volume": VOL_B}],
+        2,
+        "26h",
+        "2026-09-03T12:19:32Z",
+    )
+    assert charged.splitlines()[-1] == "b2-deletions: charged 1, skipped 2, unpriced 1"
+    idle, _ = ledger.format_backup_deletions([], [], 0, "26h", "")
+    assert idle.splitlines()[-1] == "b2-deletions: charged 0, skipped 0, unpriced 0"
+
+
+def test_a_disarmed_backup_target_still_reports_that_the_run_finished():
+    """REJECT the false page: a legitimate no-op must not read as a stopped cron.
+
+    `run_b2_deletions` returns this before `format_backup_deletions` when it cannot tell B2
+    from R2, so that path needs a recognised line of its own (#2545).
+    """
+    text = ledger.format_declined_deletions()
+    assert "the B2 BackupTarget has no URL" in text
+    assert (
+        text.splitlines()[-1]
+        == "b2-deletions: declined: the B2 BackupTarget has no URL"
+    )
+
+
 def test_prune_snapshot_round_trips(tmp_path, monkeypatch):
     monkeypatch.setattr(ledger, "B2_LEDGER_DIR", str(tmp_path))
     ledger.write_prune_snapshot({VOL_A: {"prune": 337, "blocks": 260}, VOL_B: {}})

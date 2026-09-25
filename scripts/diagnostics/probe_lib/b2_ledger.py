@@ -380,8 +380,55 @@ def price_deletions(deletions, prices):
     return priced, unpriced
 
 
+def deletions_summary_line(charged, skipped, unpriced):
+    """The one line a completed `b2-deletions` run always prints, of a fixed shape.
+
+    Check 10 of the Longhorn backup heartbeat reads it to decide whether this cron is still
+    alive (`ansible/roles/setup/k3s/files/longhorn_cron_evidence_logic.py`), the way it reads
+    `trimmed N volume(s), N skipped, N failed` for the trim. The shape is the interface, so a
+    reword here blinds that check and its tests match this text as written. Before #2545 the
+    check judged the b2 half on ANY journal line, so a run that logged a traceback and exited
+    non-zero read as healthy.
+    """
+    return "b2-deletions: charged %d, skipped %d, unpriced %d" % (
+        charged,
+        skipped,
+        unpriced,
+    )
+
+
+def deletions_declined_line(reason):
+    """The same slot, for a run that completed without classifying anything.
+
+    A disarmed or absent BackupTarget is a legitimate no-op, not a dead cron, and it never
+    reaches `format_backup_deletions`. Without its own recognised line it would read as silence
+    and page every day.
+    """
+    return "b2-deletions: declined: %s" % reason
+
+
+def format_declined_deletions():
+    """What a run prints when it cannot tell the B2 store from the R2 one.
+
+    Disarmed or absent: declining beats matching everything, because the R2 deletions in the
+    same log stream would be charged to B2's cap. It ends with the same recognised slot a
+    charging run ends with, so check 10 reads a legitimate no-op as a completed run rather
+    than as a cron that has stopped.
+    """
+    return "\n".join(
+        [
+            "the B2 BackupTarget has no URL — disarmed, or the CR is gone. Nothing "
+            "classified; pass --target-url to charge deletions against a store this cannot "
+            "read.",
+            deletions_declined_line("the B2 BackupTarget has no URL"),
+        ]
+    )
+
+
 def format_backup_deletions(priced, unpriced, skipped, window, measured_at, names=None):
     """Render what was charged, what could not be, and how old the price is.
+
+    Ends with `deletions_summary_line`, unconditionally, whatever the three counts are.
 
     Exit 1 when a deletion went unpriced. That is the one state an operator has to act on — the
     transactions were spent, the tree that would have priced them is gone, and no later run can
@@ -433,6 +480,7 @@ def format_backup_deletions(priced, unpriced, skipped, window, measured_at, name
             "happened and that its cost is unrecoverable. Run `probe.py b2-budget` to write a "
             "snapshot; every later deletion of these volumes is then chargeable."
         )
+    rows.append(deletions_summary_line(len(priced), skipped, len(unpriced)))
     return "\n".join(rows), (1 if unpriced else 0)
 
 
@@ -467,10 +515,7 @@ def run_b2_deletions(ns):
     if not target:
         # Disarmed or absent. Declining beats matching everything: the R2 deletions in the same
         # log stream would be charged to B2's cap.
-        print(
-            "the B2 BackupTarget has no URL — disarmed, or the CR is gone. Nothing classified; "
-            "pass --target-url to charge deletions against a store this cannot read."
-        )
+        print(format_declined_deletions())
         return 0
 
     rows = _rows_from_loki(core.fetch_parsed(url, resolve=pin))
