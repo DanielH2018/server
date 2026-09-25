@@ -19,6 +19,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 import time
 from dataclasses import replace
 
+import deploy_alert_text
 import deploy_alerts
 import deploy_defer
 import deploy_io
@@ -105,7 +106,7 @@ def gate_broad_k8s(
         deploy_alerts.discord(
             tools,
             config,
-            deploy_alerts.staging_override_alert(
+            deploy_alert_text.staging_override_alert(
                 config.hostname, origin, state.path("staging_override")
             ),
         )
@@ -242,7 +243,7 @@ def apply_broad_k8s(
             posted = deploy_alerts.discord(
                 tools,
                 config,
-                deploy_alerts.broad_k8s_failure_alert(
+                deploy_alert_text.broad_k8s_failure_alert(
                     config.hostname,
                     origin,
                     bumps,

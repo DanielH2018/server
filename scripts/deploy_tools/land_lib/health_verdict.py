@@ -72,14 +72,10 @@ def health(ln: Landing) -> NoReturn:
         if ln.remaining_setup:
             print(remaining_hosts_note(ln.remaining_setup))
         # The tick's own half too: a PR carrying BOTH ends here without ever reading the
-        # deployer's state, so the converged-but-unapplied case went unreported (#2579).
-        if ln.tick_half_unrecorded():
-            print(
-                "  The tick also converged without recording an apply of this PR "
-                f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
-            )
-            for line in ln.tick_half_remediation():
-                print(line)
+        # deployer's state, so every tick state went unreported (#2579, #2601). Reported,
+        # not re-verdicted — `Landing.tick_half_open_lines` carries why.
+        for line in ln.tick_half_open_lines():
+            print(line)
     if not settled:
         ln.finish(Verdict.UNHEALTHY, 1, f"PR #{pr}, {sha}, tags: {tags}")
     if ln.plane:

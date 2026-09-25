@@ -31,6 +31,7 @@ Reach `deploy_alerts` qualified, never by from-import.
 import time
 from typing import NamedTuple
 
+import deploy_alert_text
 import deploy_alerts
 import deploy_narrow
 from deploy_changes import setup_role_playbook, setup_role_tag
@@ -146,7 +147,7 @@ def park(
         "broad_alerted",
         "broad",
         origin,
-        deploy_alerts.broad_deferred_alert(origin, remediation),
+        deploy_alert_text.broad_deferred_alert(origin, remediation),
     )
 
 
@@ -289,7 +290,7 @@ def record(
         "broad_alerted",
         "broad",
         origin,
-        deploy_alerts.manual_plane_alert(
+        deploy_alert_text.manual_plane_alert(
             origin,
             manual_plane_remediation(set(roles), narrow),
             state.path("manual_plane"),
@@ -439,8 +440,10 @@ def alert_and_record_deferred(
 
     Every caller of this is an exit that leaves the range MERGED — the contention arm resets
     the tree and returns before reaching any of them — so `unrecord` owns no reverse for the
-    line this writes. The wrapper lives here rather than inside `alert_deferred` because
-    `deploy_alerts.py` is at its length ceiling.
+    line this writes. The wrapper lives here rather than inside `alert_deferred` because it
+    writes a marker where `alert_deferred` only pages, so it belongs beside the broad arm's
+    other deferral shapes. Until #2600 it also cited `deploy_alerts.py`'s length ceiling,
+    which the split into `deploy_alert_text.py` removed.
 
     A SERVICE ALREADY IN `k8s_deferred` IS SKIPPED. `deploy_broad_k8s` folds a budget-deferred
     or staging-demoted bump back into `cs.k8s` after recording it there, so without this the

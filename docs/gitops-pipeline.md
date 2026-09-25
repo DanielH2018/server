@@ -638,7 +638,7 @@ stay).
       tags, so the fix-forward deploy of the same service is the way out, and
       `clear_broad_hold` clears it on a `deploy.yml` run covering them. The deferred-change
       pages go out before the failure post.
-      `deploy_alerts.broad_k8s_failure_alert` is a separate body from `k8s_failure_alert`: it
+      `deploy_alert_text.broad_k8s_failure_alert` is a separate body from `k8s_failure_alert`: it
       must not say "rolled back locally" or send the operator after a
       volume revert that never ran. The pre-apply Longhorn snapshot IS taken — `k8s/manifests`
       takes it on every apply of a claim-declaring service — so a hand revert stays available.

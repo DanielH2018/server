@@ -37,6 +37,7 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+import deploy_alert_text
 import deploy_alerts
 import deploy_defer
 import deploy_handlers
@@ -416,14 +417,14 @@ def entrypoint(tools: DeployTools | None = None) -> int:
         # key name in it, before any of the alerting below existed in the process.
         log(f"gitops-deploy: {e}")
         posted = deploy_alerts.discord(
-            tools, config, deploy_alerts.bad_config_alert(HOSTNAME, CONFIG_PATH, e)
+            tools, config, deploy_alert_text.bad_config_alert(HOSTNAME, CONFIG_PATH, e)
         )
         # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page,
         # same convention as the other `0 if posted else 1` branches; exit 1 only if the
         # detailed post itself failed, leaving OnFailure the backstop.
         return 0 if posted else 1
     except Exception as e:
-        deploy_alerts.discord(tools, config, deploy_alerts.crash_alert(e))
+        deploy_alerts.discord(tools, config, deploy_alert_text.crash_alert(e))
         raise
     # Whether this host ENDED the tick behind origin, read after everything the tick did rather
     # than before it: a tick that deployed successfully converged and must clear the marker

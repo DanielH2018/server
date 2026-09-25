@@ -22,6 +22,7 @@ Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 
 import time
 
+import deploy_alert_text
 import deploy_alerts
 import deploy_broad_k8s
 import deploy_defer
@@ -80,7 +81,7 @@ def handle_dirty(
     ):
         # Mark as alerted only on confirmed delivery, else retry next tick (see discord()).
         if deploy_alerts.discord(
-            tools, config, deploy_alerts.dirty_tree_alert(config.hostname)
+            tools, config, deploy_alert_text.dirty_tree_alert(config.hostname)
         ):
             state.write(
                 "dirty_alerted",
@@ -112,7 +113,7 @@ def alert_red_tip(
     both (`target.tip` is empty only on a hand-built target, where origin IS the tip).
     """
     red = target.tip or target.origin
-    body = deploy_alerts.ci_failed_alert(config.hostname, target.local, red)
+    body = deploy_alert_text.ci_failed_alert(config.hostname, target.local, red)
     deploy_alerts.alert_once(tools, state, config, "ci_alerted", "ci", red, body)
 
 
@@ -237,7 +238,7 @@ def handle_broad(
             posted = deploy_alerts.discord(
                 tools,
                 config,
-                deploy_alerts.broad_failure_alert(
+                deploy_alert_text.broad_failure_alert(
                     config.hostname,
                     playbook,
                     tags,
@@ -294,7 +295,7 @@ def handle_k8s(
             deploy_alerts.discord(
                 tools,
                 config,
-                deploy_alerts.staging_override_alert(
+                deploy_alert_text.staging_override_alert(
                     config.hostname, origin, state.path("staging_override")
                 ),
             )
@@ -308,7 +309,7 @@ def handle_k8s(
             posted = deploy_alerts.discord(
                 tools,
                 config,
-                deploy_alerts.staging_rejected_alert(
+                deploy_alert_text.staging_rejected_alert(
                     config.hostname,
                     local,
                     origin,
@@ -402,7 +403,7 @@ def _rollback_k8s(
     posted = deploy_alerts.discord(
         tools,
         config,
-        deploy_alerts.k8s_failure_alert(
+        deploy_alert_text.k8s_failure_alert(
             config.hostname, local, origin, cs.k8s_deploy, exc, revert_note
         ),
     )
@@ -474,7 +475,7 @@ def handle_docker(
         posted = deploy_alerts.discord(
             tools,
             config,
-            deploy_alerts.deploy_failure_alert(
+            deploy_alert_text.deploy_failure_alert(
                 config.hostname, local, origin, cs.services, exc
             ),
         )
@@ -540,7 +541,7 @@ def handle_docker(
     posted = deploy_alerts.discord(
         tools,
         config,
-        deploy_alerts.rollback_alert(config.hostname, local, origin, failed),
+        deploy_alert_text.rollback_alert(config.hostname, local, origin, failed),
     )
     # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page (see the
     # exec-failure path above); exit 1 only if the detailed post failed, leaving OnFailure the backstop.
