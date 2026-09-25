@@ -216,8 +216,9 @@ what issue #2505 asks for. The render is the blocker. Measured on 2026-09-25 aga
 live records: the repo's offline render harness, `scripts/validate/k8s_manifests.py`,
 reproduces every recorded file checksum for 9 services and mismatches at least one file for 48.
 Two causes, both structural rather than incidental: the harness stubs SOPS values, which reach
-49 of the 300 rendered manifests as the literal `STUB`, and it renders the group_vars
-placeholder domain, which every `ingressroute.yaml` embeds in its `Host()` rule. Its role
+49 of the 300 rendered manifests as the literal `STUB`, and it supplies its own placeholder
+`domain` (`example.com`, from `scripts/lib/render_guard.py`), which every `ingressroute.yaml`
+embeds in its `Host()` rule. Its role
 defaults also outrank the inventory, the reverse of Ansible's own precedence — a deliberate
 inversion its own `DECIDED` marker explains, and one more reason its bytes are not a deploy's
 bytes. So a digest comparison fed by that harness reports 84% of the fleet stale forever, which

@@ -50,7 +50,7 @@ wrote, so comparing it against a fresh render would answer all five questions at
 that reads records can produce that fresh render. Measured on 2026-09-25 against the 57 live
 records: the repo's offline render harness, `scripts/validate/k8s_manifests.py`, reproduces
 every recorded file checksum for 9 services and mismatches at least one file for 48, because it
-stubs SOPS values and renders the group_vars placeholder domain. A comparison fed by it reports
+stubs SOPS values and supplies its own placeholder `domain`. A comparison fed by it reports
 84% of the fleet permanently stale, which is worse than the false GREEN these rules guard
 against. `ansible/roles/k8s/manifests/CLAUDE.md`, under `## Release records`, carries the
 measurement and the two routes to a faithful render. Do not delete a narrowing for a digest

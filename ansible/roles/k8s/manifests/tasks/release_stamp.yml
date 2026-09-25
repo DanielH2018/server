@@ -236,8 +236,8 @@
       # time and comparing digests, which would retire the five path narrowings in `probe.py
       # releases --stale-only`. Measured on 2026-09-25 against the 57 live records: the repo's
       # offline render harness reproduces every recorded checksum for 9 services and mismatches
-      # at least one file for 48, because it stubs SOPS values and renders the group_vars
-      # placeholder domain. A digest comparison fed by that render reports 84% of the fleet
+      # at least one file for 48, because it stubs SOPS values and supplies its own placeholder
+      # `domain`. A digest comparison fed by that render reports 84% of the fleet
       # stale forever. The narrowings stay until a render is faithful. Full reasoning in this
       # role's CLAUDE.md, under `## Release records`.
       manifests_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
