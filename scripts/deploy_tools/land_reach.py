@@ -28,11 +28,9 @@ from lib.repo_paths import ALL_VARS, ANSIBLE, GITOPS_DEPLOY_FILES, HOST_VARS
 
 sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-from deploy_logic import (
-    services_from_changed_paths,
-    setup_role_playbook,
-    setup_role_tag,
-)
+from deploy_logic import setup_role_playbook, setup_role_tag
+
+from land_changes import changes_for
 
 # The hosts land.sh's setup-role remediation ever names. daniel-stage is excluded on
 # purpose -- it is not land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py is
@@ -415,8 +413,7 @@ def remaining_setup_hosts_note(
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
     unowed to a hand, exactly as `plane_note` already keeps it.
     """
-    quiet = set(quiet)
-    cs = services_from_changed_paths([p for p in files if p not in quiet])
+    cs = changes_for(files, quiet).changes
     remaining: dict[str, frozenset[str]] = {}
     role_files = {
         r: [p for p in files if p.startswith(f"ansible/roles/setup/{r}/")]
