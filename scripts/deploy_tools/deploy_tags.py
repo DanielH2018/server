@@ -334,7 +334,12 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     session's gitops_deploy.py change; the deployer's own role left the manual set on
     2026-09-01 and applies itself now, so the same range no longer blocks.)
     """
-    services_from_changed_paths, broad_remediation, _, _ = _load_deploy_logic()
+    # Lazy for the reason `_load_deploy_logic` is: `land_changes` imports `deploy_logic` at
+    # module scope, so a top-level import here would charge `validate`/`list`/`describe` for
+    # the cross-directory import they are kept clear of.
+    from land_changes import changes_for
+
+    _, broad_remediation, _, _ = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -357,23 +362,22 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
             "tick crosses it.",
             file=sys.stderr,
         )
-        paths = [p for p in paths if p not in quiet]
-    cs = services_from_changed_paths(paths)
-    if not cs.broad_manual:
+    loud = changes_for(paths, quiet)
+    cs = loud.changes
+    if not loud.manual:
         print(
-            f"deploy blockers: {len(paths)} incoming file(s) from {args.ref}, none needing a "
-            "hand — the tick can fast-forward.",
+            f"deploy blockers: {len(loud.loud)} incoming file(s) from {args.ref}, none "
+            "needing a hand — the tick can fast-forward.",
             file=sys.stderr,
         )
         return 0
 
-    culprits = [p for p in paths if _is_broad_manual(p)]
     print(
         f"deploy blockers: {args.ref} carries a change the deployer will never apply itself, "
         "so the tick cannot fast-forward past it and any deploy after it is refused as stale:",
         file=sys.stderr,
     )
-    for path in culprits:
+    for path in loud.manual:
         print(f"  {path}", file=sys.stderr)
     print(
         "  Applying it means applying whoever wrote it — if it is another session's, say so "
@@ -389,12 +393,6 @@ def _cmd_narrow(args: argparse.Namespace) -> int:
     from narrow_broad import narrow_cmd
 
     return narrow_cmd(args.old, args.new)
-
-
-def _is_broad_manual(path: str) -> bool:
-    from deploy_logic import _BROAD_MANUAL_PREFIXES
-
-    return any(path.startswith(prefix) for prefix in _BROAD_MANUAL_PREFIXES)
 
 
 def comment_only_paths(paths: list[str], old_ref: str, new_ref: str) -> set[str]:
@@ -428,6 +426,9 @@ def changed(ref: str, cwd: Path = REPO) -> int:
         expand_build_couplings,
         k8s_remediation,
     ) = _load_deploy_logic()
+    # Calls the mapper directly, NOT through the `land_changes.changes_for` the other five
+    # sites share (#2419, #2541): that helper drops a quiet set and names the bring-up paths,
+    # and this command has neither question. Its module docstring carries the decision.
     try:
         paths = _git_diff_paths(ref, cwd)
     except subprocess.CalledProcessError as exc:

@@ -1,4 +1,4 @@
-"""The two questions `changes_for` answers for all four of its callers.
+"""The three questions `changes_for` answers for all five of its callers.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_changes.py
 """
@@ -19,3 +19,9 @@ def test_a_quiet_path_is_dropped_before_the_mapper_reads_it():
 def test_a_loud_bring_up_playbook_is_reported_as_manual():
     """The rejecting half: the bring-up playbooks run by hand and park the tick outright."""
     assert changes_for([_SERVICE, _BRINGUP]).manual == [_BRINGUP]
+
+
+def test_the_filtered_list_itself_is_returned():
+    """`deploy_tags._cmd_blockers` counts it; re-deriving it would be a fifth copy of the
+    filter this module exists to remove."""
+    assert changes_for([_SERVICE, _BRINGUP], quiet=[_BRINGUP]).loud == [_SERVICE]
