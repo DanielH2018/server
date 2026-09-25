@@ -544,7 +544,10 @@ files = "^(docs/adr/.*\\.md|docs/[^/]+\\.md)$"
 #
 # `files` is deliberately wide — anything the build reads. A fragment lives under
 # docs/assets/generated/, which no other docs hook touches, and mkdocs.yml itself changes the
-# nav. pass_filenames = false because mkdocs takes a config, not a file list.
+# nav. uv.lock is in it because `--frozen` makes the lock decide which mkdocs and which plugins
+# build the site, so a lock bump that moves one is a build change (#2556). The build takes ~4s,
+# so running it on every lock bump costs less than finding the break on master.
+# pass_filenames = false because mkdocs takes a config, not a file list.
 #
 # The site directory is left in the checkout on purpose and MUST stay ignored. `.gitignore:2`
 # denies every root path (`/*`), so `.mkdocs-strict-check/` is covered without an entry of its
@@ -558,4 +561,4 @@ name = "Build the docs site (mkdocs --strict)"
 entry = "uv run --frozen mkdocs build --strict --site-dir .mkdocs-strict-check"
 language = "system"
 pass_filenames = false
-files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py)$"
+files = "^(docs/.*|mkdocs\\.yml|scripts/docs/.*\\.py|uv\\.lock)$"

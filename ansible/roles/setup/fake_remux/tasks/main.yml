@@ -25,24 +25,6 @@
     state: present
   become: true
 
-- name: Remove the pre-rename fake-remux directories
-  tags: [fake_remux]
-  # This role's opt and config dirs were /opt/fake-remux and /etc/fake-remux until the Docker
-  # uninstall (2026-08-14) renamed both to the autofix-* names the task below creates. The rename
-  # created the new paths and left the old ones in place, so daniel-box carried a frozen 2026-08-08
-  # copy of the scripts, and of the rendered config that embeds this role's credentials (#2591).
-  # Nothing reads either path: every cron here interpolates {{ fake_remux_opt_dir }}, and both
-  # scripts default to {{ fake_remux_config_dir }}/config.env. There is no stale state dir —
-  # /var/lib/fake-remux never existed on daniel-box.
-  #
-  # Delete this task once daniel-box has run it. It reaps a one-time artifact of the rename, not
-  # a leftover that recurs.
-  ansible.builtin.file:
-    path: "/{{ item }}/fake-remux"
-    state: absent
-  loop: [opt, etc]
-  become: true
-
 - name: Create fake-remux directories
   tags: [fake_remux]
   ansible.builtin.file:

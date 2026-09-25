@@ -70,7 +70,7 @@ CONFIG_OWNERS: dict[str, tuple[tuple[str, ...], str]] = {
     "ruff": (("pyproject.toml", "uv.lock"), "hooks"),
     "ruff-format": (("pyproject.toml", "uv.lock"), "hooks"),
     "ty": (("pyproject.toml", "uv.lock"), "hooks"),
-    "mkdocs-strict": (("mkdocs.yml",), "hooks"),
+    "mkdocs-strict": (("mkdocs.yml", "uv.lock"), "hooks"),
     "vale": (
         (
             ".vale.ini",
