@@ -412,10 +412,16 @@ files = "^(\\.claude/hooks/[^/]+\\.(sh|py)|\\.claude/settings\\.json|scripts/dev
 # collections excluded there). ruff is pinned in uv.lock (dev group) so the gate is
 # reproducible and lockFileMaintenance refreshes it weekly. Runs once when any .py is staged.
 #
-# `files` names pyproject.toml as well as the code, the way the `ty` hook below does: a commit
-# that only enables a rule in [tool.ruff.lint] changes what every .py must satisfy, and with
-# `\.py$` alone the PR ran no ruff at all — master's --all-files sweep found the 3 errors after
-# the merge, twice, on 2026-09-02 (runs 33632377189 and 33632621818). ENFORCED by
+# `files` names pyproject.toml and uv.lock as well as the code, the way the `ty` hook below
+# does: a commit that only enables a rule in [tool.ruff.lint] changes what every .py must
+# satisfy, and with `\.py$` alone the PR ran no ruff at all — master's --all-files sweep found
+# the 3 errors after the merge, twice, on 2026-09-02 (runs 33632377189 and 33632621818).
+#
+# uv.lock is here for the same reason one step further out: `uv run --frozen` runs the ruff
+# pinned in the lock, so a lock-file maintenance PR decides which ruff version gates every
+# .py in the tree and used to run none of it. Renovate #2548 moved ruff 0.16.8 -> 0.16.9 that
+# way (#2552); a release that tightens a rule would have passed the PR and turned master red
+# on its first full sweep, which is what the Vale binary did in #2536. ENFORCED by
 # ansible/tests/repo/test_hook_config_changes_run_the_hook.py, which also covers the hooks
 # that take filenames and so cannot widen `files` this way (see the `FULL_SWEEP_PATHS` lists
 # in ci.yml).
@@ -425,19 +431,20 @@ name = "Lint first-party Python (ruff)"
 entry = "uv run --frozen ruff check"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|^pyproject\\.toml$)"
+files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # Enforce `ruff format` on first-party Python (config in pyproject.toml [tool.ruff], same
 # extend-exclude as the linter so vendored collections are untouched). --check fails the commit
 # on an unformatted file instead of rewriting it, so a stray editor save can't sneak past CI.
-# `files` covers pyproject.toml for the reason given on `ruff` above.
+# `files` covers pyproject.toml and uv.lock for the reasons given on `ruff` above — the
+# formatter's output moves with the pinned version just as the linter's ruleset does.
 [[repos.hooks]]
 id = "ruff-format"
 name = "Format first-party Python (ruff format)"
 entry = "uv run --frozen ruff format --check"
 language = "system"
 pass_filenames = false
-files = "(\\.py$|^pyproject\\.toml$)"
+files = "(\\.py$|^(pyproject\\.toml|uv\\.lock)$)"
 
 # Type-check first-party Python, for the bugs ruff cannot see: it reads one file at a time, so a
 # value that crosses a function boundary as the wrong type is invisible to it.
