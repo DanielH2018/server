@@ -40,28 +40,32 @@ check with a 10-minute period, and every other slug is a Cron check carrying tha
 in the timezone its cron runs in. That is UTC for every host cron, and `America/Chicago` for
 `pi-peer-backup` alone: it is a k8s CronJob whose manifest sets `timeZone: {{ tz }}`
 (`roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2`), so its console check carries
-`0 23 * * *` in `America/Chicago` (`30 23` until 2026-09-21, when the CronJob moved off the
-weekly Longhorn shard's slot). The timezone field is load-bearing: a UTC expression matches
-the CronJob for one DST offset only, and drifts an hour — the whole grace — at the next
-change. The 2026-09-17 read (#1949) reported this check already in `America/Chicago`; on
-2026-09-21 the operator found it in UTC and set the timezone by hand together with the new
-expression. The graces above are the values the console was reconciled to.
+`0 23 * * *` in `America/Chicago`. The timezone field is load-bearing: a UTC expression
+matches the CronJob for one DST offset only, and drifts an hour at the next change. The
+CronJob moved from `30 23` to `0 23` on 2026-09-21, off the weekly Longhorn shard's slot. The
+console kept `30 23` until 2026-09-25 (#2563). Each ping then landed 30 minutes before its
+slot, so the check went DOWN at 06:30 UTC every day. The console was reconciled to the table
+below on 2026-09-25.
 
 | Check slug | Schedule type | Grace |
 |---|---|---|
 | `longhorn-backup-health` | Simple | 20 minutes |
-| `daniel-box-disk-health` | Simple | 20 minutes |
+| `daniel-box-disk-health` | Simple | 25 minutes |
 | `uptime-kuma-alive` | Simple | 20 minutes |
-| `manifest-prune-check` | Cron | 1 hour |
+| `manifest-prune-check` | Cron | 2 hours |
 | `etcd-snapshot-offbox` | Cron | 1 hour |
-| `pi-peer-backup` | Cron | 1 hour |
+| `pi-peer-backup` | Cron | 2 hours |
 | `registry-gc` | Cron | 1 hour |
 
-**The 20-minute grace on the three 10-minute checks is derived, not chosen.** Their crons skip
+**The 20-minute grace on the 10-minute checks is derived, not chosen.** Their crons skip
 their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by
 `k3s_health_cron_boot_grace_s` — so the widest legitimate gap between two pings is *two* periods,
-20 minutes, not one. The grace has to cover that gap and nothing wider: at 30 minutes a genuinely
-dead cron would sit undetected through three slots.
+20 minutes, not one. The grace has to cover that gap, so 20 minutes is the floor. At 30 minutes
+a genuinely dead cron would sit undetected through three slots.
+
+`daniel-box-disk-health` runs 25 minutes, above the floor. The extra 5 minutes delay detection
+of a silent host by the same amount; the 2026-09-09 record below shows the cost. The operator
+kept it at the 2026-09-25 reconciliation.
 
 That bound is what keeps the boot grace itself under 600 seconds. A boot grace longer than the
 cron interval could skip two consecutive slots, widening the legitimate gap to 30 minutes and
@@ -108,12 +112,12 @@ cannot read the clock must not silence the dead-man indefinitely.
 
 It covers the `*/10` crons and, since 2026-09-19, `manifest-prune-check`. For a daily cron a
 skipped slot is a skipped day, which is a worse trade than the rare boot landing inside its
-one-minute window — and their 1-hour graces already tolerate a late run. `manifest-prune-check`
+one-minute window — and their graces of an hour or more already tolerate a late run. `manifest-prune-check`
 is the exception because it is no longer a cron: it runs from a `kuma-check-manifest-prune`
 systemd timer with `Persistent=true`, so a slot missed inside an outage runs at boot, exactly
 when the cluster is least ready to be judged. Its boot-grace arm exits 1 without a ping, and
 the service's `Restart=on-failure` reruns it 30 minutes later with the real verdict. The
-1-hour grace covers that 30-minute delay; `ansible/tests/setup/test_health_cron_boot_grace.py`
+2-hour grace covers that 30-minute delay; `ansible/tests/setup/test_health_cron_boot_grace.py`
 lists it under `DAILY_TIMER_SCRIPTS` and keeps the arm in place. The rerun on a red verdict
 sends `/fail` again each time, which healthchecks.io collapses into one alert, and the first
 `/success` after the fix clears it within 30 minutes rather than at the next day's slot.
@@ -243,22 +247,25 @@ readable only in the console or in the Discord channel itself. **The flip is the
 a control-plane host with no link is detected off-site within one grace, and the question
 the incident left open — "did anything external notice" — is answered yes, within 24 minutes.
 
-### The console has drifted from the table above
+The 25-minute grace on the other two cost five minutes of detection.
 
-The same read shows the live settings disagree with *Period and grace* in three places, and
-the doc's own derivation rules two of them out:
+### The console drifts, and nothing checks it
 
-| Check slug | Documented | Live |
-|---|---|---|
-| `daniel-box-disk-health`, `longhorn-backup-health` | grace 20 min | grace 25 min |
-| `manifest-prune-check` | grace 1 hour | grace 2 hours |
-| `pi-peer-backup` | grace 1 hour, cron in UTC | grace 2 hours, cron `30 23 * * *` in `America/Chicago` |
+A read on 2026-09-25 found two console settings that broke their checks (#2563):
 
-The 25-minute grace cost five minutes of detection on 2026-09-09. The Chicago timezone
-matches the UTC cron during daylight time and drifts an hour behind it in winter; an early
-ping is harmless, so it is a wording drift rather than a false alarm. Nothing in the repo can
-set these, and nothing checks them — the read-only key that can read them has no other
-consumer. That guard is filed rather than built here: #1949.
+- `pi-peer-backup` still carried `30 23 * * *` after the CronJob moved to `0 23`. The check
+  went DOWN at 06:30 UTC every day from 2026-09-22, although every run succeeded.
+- `longhorn-backup-health` carried `0 23 * * *` in `America/Chicago` as a Cron check. Its
+  `*/10` pings kept it green. However, a silent script would have gone undetected until the
+  next day's slot. That is probably where the 2026-09-21 edit meant for `pi-peer-backup`
+  landed.
+
+The operator corrected both the same day. The graces that differed from this doc were
+recorded as the documented values instead, and the table above now matches the console.
+
+Nothing in the repo can set these values, and nothing checks them. The read-only key that
+can read them has no other consumer. #1949 named that gap and closed with doc changes only,
+so the guard is filed again as #2566.
 
 ## Verifying
 
