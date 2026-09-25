@@ -14,6 +14,11 @@
 # as an AGENT in slice 7 (2026-08-14) — that is the opt-in join play further down, not this one.
 - name: Bring up the k3s cluster
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   # Facts are gathered explicitly after the SOPS sudo password is set — same reason as
   # initial_setup.yml: with gather_facts: true the play escalates before secrets load, so
   # a passworded-sudo host would need --ask-become-pass.
@@ -60,6 +65,11 @@
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server --tags k3s_agent
 - name: Read the join credentials on the server node
   hosts: "{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: false
   pre_tasks:
     - name: Load encrypted secrets and set the become password (shared preamble)
@@ -83,6 +93,11 @@
 
 - name: Join an agent node to the cluster
   hosts: "{{ join_agent | default([]) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: false
   vars:
     ansible_connection: ssh
@@ -113,6 +128,11 @@
 
 - name: Verify the joined node from the server side
   hosts: "{{ join_agent | default([]) is truthy | ternary('daniel-box', []) }}"
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
   gather_facts: false
   # ansible_become_password still set from the first play's preamble (same host, same run).
   tasks:
