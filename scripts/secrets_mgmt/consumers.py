@@ -180,6 +180,10 @@ def consumer_tags(name: str) -> tuple[str, ...]:
         # Same shape as registry_gc: the crowdsec role renders the daniel-box cron that pushes,
         # the tile is a static entity in k8s/uptime-kuma (#2123).
         pusher = "crowdsec"
+    elif name == "artifacts_sync_push_token":
+        # Same shape as registry_gc: the artifacts role renders the daniel-box peer sync cron
+        # that pushes, the tile is a static entity in k8s/uptime-kuma (#2516).
+        pusher = "artifacts"
     else:
         # anything else unrecognised -> manual
         return ()

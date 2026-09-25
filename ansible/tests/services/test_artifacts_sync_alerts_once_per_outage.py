@@ -1,4 +1,4 @@
-"""The artifacts peer sync mails once per outage, not once per failed run (#2467).
+"""The artifacts peer sync mails once per outage (#2467) and pushes a Kuma verdict every run (#2516).
 
 `sync-artifacts.sh` runs every 5 minutes on daniel-box and pulls daniel-server's artifact tree.
 cron mails whatever the job writes, and the old script wrote a line on every failure: 145
@@ -12,6 +12,10 @@ The script is run for real here, with `rsync` and `logger` stubbed as exported b
 bash resolves a function name before it searches PATH. What the runs prove is the streak: every
 failure reaches the journal, and only the run that REACHES the threshold writes to stderr, so a
 peer that stays down mails once rather than every 5 minutes.
+
+Every run also sources a stub Kuma library that records the verdict instead of pushing it.
+Pointing the script at the stub is not optional: daniel-box has the real library, and a sourced
+function would override an exported stub.
 """
 
 import os
@@ -45,6 +49,12 @@ def _runner(tmp_path: Path):
     stub = tmp_path / "outcome"
     journal = tmp_path / "journal"
     journal.touch()
+    pushes = tmp_path / "pushes"
+    pushes.touch()
+    kuma_lib = tmp_path / "kuma-push-lib.sh"
+    kuma_lib.write_text(
+        'kuma_push() { printf "%s|%s\\n" "$1" "$2" >>"$SYNC_ARTIFACTS_PUSHES"; }\n'
+    )
 
     def run(outcome: str) -> subprocess.CompletedProcess:
         stub.write_text(outcome)
@@ -55,6 +65,8 @@ def _runner(tmp_path: Path):
                 "SYNC_ARTIFACTS_STATE_DIR": str(tmp_path),
                 "SYNC_ARTIFACTS_STUB": str(stub),
                 "SYNC_ARTIFACTS_JOURNAL": str(journal),
+                "SYNC_ARTIFACTS_KUMA_LIB": str(kuma_lib),
+                "SYNC_ARTIFACTS_PUSHES": str(pushes),
                 "BASH_FUNC_rsync%%": f"() {{ {RSYNC_STUB}; }}",
                 "BASH_FUNC_logger%%": f"() {{ {LOGGER_STUB}; }}",
             },
@@ -63,6 +75,10 @@ def _runner(tmp_path: Path):
         )
 
     run.journal = journal
+    run.verdicts = lambda: [
+        line.split("|")[0] for line in pushes.read_text().splitlines()
+    ]
+    run.last_push = lambda: pushes.read_text().splitlines()[-1]
     return run
 
 
@@ -101,6 +117,37 @@ def test_a_successful_run_is_silent_on_both_streams(tmp_path):
     assert proc.returncode == 0
     assert not proc.stdout and not proc.stderr, proc
     assert run.journal.read_text() == ""
+
+
+def test_a_healthy_run_pushes_up(tmp_path):
+    run = _runner(tmp_path)
+    run("ok")
+    assert run.last_push() == f"up|{PEER} synced"
+
+
+def test_the_tile_stays_up_below_the_threshold_and_names_the_streak(tmp_path):
+    run = _runner(tmp_path)
+    for _ in range(THRESHOLD - 1):
+        run("fail")
+    assert run.verdicts() == ["up"] * (THRESHOLD - 1)
+    assert f"{PEER} failed {THRESHOLD - 1} consecutive run(s)" in run.last_push()
+
+
+def test_the_tile_goes_down_at_the_threshold_and_stays_down_past_it(tmp_path):
+    """Past the threshold matters: the mail's `-eq` test would turn the tile green again."""
+    run = _runner(tmp_path)
+    for _ in range(THRESHOLD + 3):
+        run("fail")
+    assert run.verdicts() == ["up"] * (THRESHOLD - 1) + ["down"] * 4
+    assert run.last_push() == f"down|{PEER} failed {THRESHOLD + 3} consecutive runs"
+
+
+def test_a_recovery_pushes_up_again(tmp_path):
+    run = _runner(tmp_path)
+    for _ in range(THRESHOLD):
+        run("fail")
+    run("ok")
+    assert run.verdicts()[-2:] == ["down", "up"]
 
 
 def test_the_ssh_transport_drops_inherited_local_forwards():
