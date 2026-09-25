@@ -57,13 +57,17 @@ def gate_broad_k8s(
     target: TickTarget,
     cs: ChangeSet,
     plans,
-) -> ChangeSet:
+) -> tuple[ChangeSet, set[str]]:
     """Ask staging about the promoted bumps in a broad range, and demote them if it blocks.
 
     Returns:
-        The ChangeSet the rest of the tick acts on. Unchanged when nothing was gated or the
-        verdict does not block; otherwise one whose gated bumps have been folded back into
-        `k8s`, which is the defer-and-alert channel every unpromotable change takes.
+        The ChangeSet the rest of the tick acts on, and the bumps this gate demoted. The
+        ChangeSet is unchanged and the set empty when nothing was gated or the verdict does
+        not block; otherwise the gated bumps have been folded back into `k8s`, which is the
+        defer-and-alert channel every unpromotable change takes. `handle_broad` records the
+        demoted set in `k8s_deferred` at the ff-merge (`deploy_defer.record_demoted`) — it
+        cannot be recorded here, because this runs BEFORE that merge and a contention arm
+        below it resets the tree.
 
     The gate is ARMED AND BLOCKING on daniel-box, the only host running this deployer
     (`gitops_deploy_staging_gate` and `_blocking`, both true in its host_vars since
@@ -92,11 +96,11 @@ def gate_broad_k8s(
         )
     gated = cs.k8s_deploy - covered
     if not gated:
-        return cs
+        return cs, set()
     origin = target.origin
     verdict = consult_staging(tools, state, config, gated, origin)
     if not staging_blocks(verdict, blocking=config.staging_gate_blocking):
-        return cs
+        return cs, set()
     if consume_staging_override(state):
         deploy_alerts.discord(
             tools,
@@ -106,12 +110,12 @@ def gate_broad_k8s(
             ),
         )
         log(f"staging rejected {origin[:8]}; override armed, deploying prod anyway")
-        return cs
+        return cs, set()
     log(
         f"staging rejected {origin[:8]}; the broad range still merges and applies, and "
         f"{sorted(gated)} defer-and-alert rather than deploying"
     )
-    return replace(cs, k8s=cs.k8s | gated, k8s_deploy=cs.k8s_deploy - gated)
+    return replace(cs, k8s=cs.k8s | gated, k8s_deploy=cs.k8s_deploy - gated), gated
 
 
 def apply_broad_k8s(

@@ -607,10 +607,19 @@ stay).
       can see on a tile that is already red (the state PR #2381's second review found it in).
       So the deferral is also written to **`k8s_deferred`**, one line per service, and
       `gitops_status` pages on the oldest line's age at the six hours `manual_plane` uses
-      (#2449). Scoped to the BUDGET deferral: a hand-edited or denylisted k8s role on the same
-      channel is merged by a person who is landing it, and forty of the fifty-four k8s roles
-      are denylisted, so recording those would hold GitOps Deploy — Status red as normal
-      operation. Any tick that deploys the service clears the line; an operator's own
+      (#2449). Two of the three classes on that channel are recorded, decided per class rather
+      than per channel (#2471): the BUDGET deferral, and a bump the STAGING gate demoted, which
+      has the same two properties — the tick chose it rather than a person, and nothing reports
+      it again. A hand-edited or denylisted k8s role is not: it is merged by a person who is
+      landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
+      hold GitOps Deploy — Status red as normal operation. The denylisted class keeps `Release
+      Staleness Drift` as its durable signal, and issue #2570 carries whether that is enough.
+      A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
+      `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm
+      after it resets the tree, so a marker written there would describe a range that is no
+      longer merged. A contention arm takes the line back with the `manual_plane` lines beside
+      it; a failed broad apply keeps it, because that arm leaves the range merged. Any tick that
+      deploys the service clears the line; an operator's own
       `./scripts/deploy.sh` is invisible to the deployer, so it clears with
       `gitops_state.py clear-k8s-deferred <svc>`, the same shape `clear-manual-plane` has.
     - **A failure writes `hold_sha` and adds `ansible/deploy.yml <bumps>` to `hold_plane`**,

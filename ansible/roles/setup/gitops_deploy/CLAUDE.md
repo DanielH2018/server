@@ -183,10 +183,16 @@ Each arm below is a rule and the function that holds it. The record page has the
       so no later tick's `local..origin` carries the bump — `Release Staleness Drift` reads
       the unapplied pin, but that monitor is DOWN for any stale record in the fleet, so a new
       deferral adds nothing to an already-red tile. `gitops_status` pages on the marker's own
-      age at the six hours `manual_plane` uses. It is scoped to the budget deferral and to
-      nothing else on the defer-and-alert channel: a hand-edited or denylisted k8s role is
-      merged by a person who is landing it, and forty of the fifty-four k8s roles are
-      denylisted, so recording those would hold Status red as normal operation. Any tick that
+      age at the six hours `manual_plane` uses. **So is a bump the STAGING gate demoted**,
+      decided per class rather than per channel (#2471): a demotion has the same two properties
+      the budget case has, in that the tick chose it and nothing reports it again. A hand-edited
+      or denylisted k8s role on that channel is not recorded — it is merged by a person who is
+      landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
+      hold Status red as normal operation. The demotion is recorded at the ff-merge
+      (`deploy_defer.record_demoted`), not in the `gate_broad_k8s` that decided it: the gate
+      runs before that merge, and a contention arm after it resets the tree. A contention arm
+      takes the line back with the `manual_plane` lines beside it; a failed broad apply keeps
+      it, because that arm leaves the range merged. Any tick that
       deploys the service clears the line (`deploy_defer.clear_applied_k8s_deferred`, called from both
       k8s deploy paths and from the plane-covered set); an operator's own `deploy.sh` is
       invisible to the deployer, so it clears with `gitops_state.py clear-k8s-deferred <svc>`.

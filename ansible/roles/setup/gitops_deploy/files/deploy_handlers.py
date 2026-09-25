@@ -158,8 +158,12 @@ def handle_broad(
     # BEFORE the ff-merge, for the reason `handle_k8s`'s DECIDED gives: a process death inside
     # the gate's window must leave `local` behind origin so the next tick re-evaluates. After
     # `plans`, because a bump the deploy plane applies is not gated. It returns the ChangeSet
-    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set.
-    cs = deploy_broad_k8s.gate_broad_k8s(tools, state, config, target, cs, plans)
+    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set, and
+    # that set itself — `record_demoted` below writes it to `k8s_deferred` at the ff-merge,
+    # where a marker written here would be reset out from under by a contention arm (#2471).
+    cs, demoted = deploy_broad_k8s.gate_broad_k8s(
+        tools, state, config, target, cs, plans
+    )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
@@ -173,6 +177,10 @@ def handle_broad(
         if pending
         else deploy_defer.nothing_recorded(state)
     )
+    # Same moment, same reason: a bump the staging gate demoted is merged-and-unapplied from
+    # here, and the failure arm below returns without re-deriving it. The `DECIDED:` in
+    # `record_demoted` carries which classes on this channel get a marker and which do not.
+    recorded = deploy_defer.record_demoted(state, origin, recorded, demoted)
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
     # a rollback re-run now fits, so the budget is no longer the reason — but a rollback

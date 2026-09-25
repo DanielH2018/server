@@ -109,13 +109,6 @@ def test_the_shared_common_role_is_not_a_tag():
     assert tags == []
 
 
-def test_an_archived_role_is_not_a_tag():
-    tags, _ = land_tags.derive(
-        ["ansible/roles/containers/archive/kopia/tasks/main.yml"], changed_files=1
-    )
-    assert tags == []
-
-
 def test_tag_for_rejects_a_path_outside_the_role_trees():
     assert land_tags.tag_for("ansible/inventory/host_vars/daniel-box.yml") is None
 

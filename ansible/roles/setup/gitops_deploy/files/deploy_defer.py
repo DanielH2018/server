@@ -205,11 +205,15 @@ class Recorded(NamedTuple):
         broad_applied_before: the `broad_applied` marker as it stood before the tick's plan
             loop, or None where there was none. Snapshotted whether or not the tick records a
             role, because the loop writes that marker on a range with nothing pending too.
+        k8s_deferred: the services whose `k8s_deferred` LINE this tick appended for a staging
+            demotion. A service a previous tick recorded keeps its first-seen stamp and is not
+            in here, exactly as `roles` leaves an already-pending role out.
     """
 
     roles: list[str]
     tags_before: dict[str, frozenset[str] | None]
     broad_applied_before: str | None
+    k8s_deferred: list[str]
 
 
 def nothing_recorded(state: DeployerState) -> Recorded:
@@ -220,7 +224,7 @@ def nothing_recorded(state: DeployerState) -> Recorded:
     busy lock in a later plan — is exactly the one with nothing pending. A shared empty
     snapshot there would leave the stale marker standing.
     """
-    return Recorded([], {}, state.broad_applied)
+    return Recorded([], {}, state.broad_applied, [])
 
 
 def record(
@@ -291,7 +295,46 @@ def record(
             state.path("manual_plane"),
         ),
     )
-    return Recorded(recorded, tags_before, broad_applied_before)
+    return Recorded(recorded, tags_before, broad_applied_before, [])
+
+
+def record_demoted(
+    state: DeployerState, origin: str, recorded: Recorded, demoted: set[str]
+) -> Recorded:
+    """Record the bumps the staging gate demoted, and fold them into `recorded`.
+
+    Returns:
+        `recorded` carrying the lines this tick appended, so `unrecord` can take exactly
+        those back.
+
+    Args:
+        state: the marker files.
+        origin: the SHA this tick merged. The bump is live in the tree at that commit.
+        recorded: what `record` or `nothing_recorded` returned for this tick.
+        demoted: the bumps `gate_broad_k8s` folded back into the defer-and-alert channel.
+    """
+    # DECIDED: of the three classes on the defer-and-alert channel, the STAGING-DEMOTED bump
+    # gets the `k8s_deferred` marker and the other two do not (#2471). #2449 scoped the marker
+    # to the budget deferral, and a demotion has the same two properties that case has: the
+    # tick chose it rather than a person, and nothing reports it a second time, because the
+    # range is merged and no later `local..origin` carries the bump. A hand-edited k8s role is
+    # merged by the person landing it, whose `land.sh` is watching; a denylisted role's
+    # ordinary change is routine, and forty of the fifty-four k8s roles are denylisted, so
+    # recording those would hold GitOps Deploy — Status red as normal operation — the failure
+    # the age gate on `manual_plane` was sized to avoid. The denylisted class keeps `Release
+    # Staleness Drift` as its durable signal; #2570 carries whether that is enough.
+    #
+    # Called at the ff-merge, for the reason `record` is: that is the moment the bump becomes
+    # merged-and-unapplied, and a broad apply that FAILS returns from its except arm, where a
+    # record placed after it never runs. `gate_broad_k8s` decided the demotion but cannot
+    # write it — it runs BEFORE the merge, and a contention arm below resets the tree.
+    added = state.record_k8s_deferred(origin, demoted, time.time())
+    if added:
+        log(
+            f"k8s_deferred recorded: {', '.join(added)} — staging rejected the bump, and the "
+            f"range merged without it"
+        )
+    return recorded._replace(k8s_deferred=added)
 
 
 def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
@@ -332,6 +375,10 @@ def unrecord(state: DeployerState, origin: str, recorded: Recorded) -> None:
     # SHA on every contended tick.
     if recorded.roles and state.read("broad_alerted") == origin:
         state.write("broad_alerted", None)
+    # Only the `k8s_deferred` lines this tick appended: a service an earlier range left
+    # pending is still merged-and-unapplied after the reset, and dropping its line would
+    # lose the only durable record of it.
+    state.clear_k8s_deferred(recorded.k8s_deferred)
 
 
 def pending_k8s_deferred(state: DeployerState) -> set[str]:
