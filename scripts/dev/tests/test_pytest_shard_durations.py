@@ -4,6 +4,13 @@
 durations report its own test step produced. The static half is the ratchet in
 `ansible/tests/repo/test_pytest_shards_partition_the_suite.py`.
 
+It has two arms over that one report. `heavy_unweighted` asks whether a costly file is MISSING
+from the table (#2238); `stale_overweight` asks whether a recorded number is still roughly what
+the file costs (#2514). Both are exercised through `durations_problems` with an explicit
+weights dict rather than through the CLI: a synthetic path reads as unweighted against the
+committed table, which is what lets the CLI tests below skip a monkeypatch, but no synthetic
+path can be OVER-recorded in it.
+
 `test_the_parser_reads_a_report_pytest_just_wrote` drives a real pytest subprocess on purpose:
 every other test here feeds the parser a frozen string, so a change to pytest's report format
 would leave them all green over a parser that had stopped matching anything.
@@ -14,6 +21,7 @@ Run: uv run pytest scripts/dev/tests/test_pytest_shard_durations.py
 import subprocess
 import sys
 
+import pytest
 import pytest_shard
 
 # A report in the shape pytest prints: seconds, phase, nodeid. `setup` and `teardown` count
@@ -69,6 +77,54 @@ def test_a_light_unweighted_module_is_clean():
 def test_the_threshold_decides():
     assert pytest_shard.durations_problems(REPORT, RECORDED, threshold=30.0) == []
     assert pytest_shard.durations_problems(REPORT, RECORDED, threshold=0.5) != []
+
+
+def test_a_recorded_weight_far_above_what_it_measured_is_flagged():
+    """The #2514 case: the census module recorded at 17.31s, measuring 0.09s here — a stale
+    entry the three missing-from-the-table arms cannot see."""
+    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
+    problems = pytest_shard.durations_problems(report, RECORDED | {NEW_MODULE: 26.4})
+    assert len(problems) == 1
+    assert "17.31s" in problems[0] and "0.09s" in problems[0]
+    assert "--record-files" in problems[0]
+
+
+def test_a_recorded_weight_inside_the_runner_noise_is_clean():
+    """The accept half, at the bound that decides it. Controls measured 1.10x to 1.46x their
+    recorded values on 2026-09-24, so 17.31s recorded against 14.00s measured is the scale
+    difference between the runner and the recording workstation, not a stale entry."""
+    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "14.00s call     " + stale.split()[-1])
+    assert pytest_shard.durations_problems(report, RECORDED | {NEW_MODULE: 26.4}) == []
+
+
+def test_the_floor_keeps_a_cheap_entry_out_of_it():
+    """A file recorded at 0.05s measuring 0.01s is a 5x ratio and no shard notices. Only
+    entries big enough to move the pole are compared."""
+    report = (
+        "0.01s call     scripts/dev/tests/test_run_as_cron.py::test_a_shell_builtin\n"
+    )
+    assert pytest_shard.stale_overweight(report, RECORDED) == []
+
+
+def test_both_arms_report_together():
+    """One report can carry a heavy unweighted module AND a stale entry, and a gate that
+    short-circuited on the first would hide the second until the next run."""
+    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
+    problems = pytest_shard.durations_problems(report, RECORDED)
+    assert len(problems) == 2
+    assert NEW_MODULE in problems[0]
+    assert "test_secret_consumer_census.py" in problems[1]
+
+
+def test_the_stale_ratio_decides():
+    stale = "17.31s call     ansible/tests/k8s/test_secret_consumer_census.py"
+    report = REPORT.replace(stale, "0.09s call     " + stale.split()[-1])
+    weights = RECORDED | {NEW_MODULE: 26.4}
+    assert pytest_shard.durations_problems(report, weights, ratio=1000.0) == []
+    assert pytest_shard.durations_problems(report, weights, ratio=2.0) != []
 
 
 def test_a_report_with_no_durations_is_itself_a_complaint():
@@ -135,3 +191,11 @@ def test_the_cli_exits_zero_when_every_heavy_module_is_recorded(tmp_path, capsys
     )
     assert _run_cli(tmp_path, recorded_only + "\n") == 0
     assert "no unweighted module" in capsys.readouterr().out
+
+
+def test_the_stale_repair_refuses_a_path_no_shard_runs():
+    """`--record-files` measures whatever it is handed, so a typo or an unstaged file would
+    otherwise write a table row no census ever reads back."""
+    with pytest.raises(SystemExit) as caught:
+        pytest_shard.record_named_weights(["nope/test_not_a_file.py"])
+    assert "nope/test_not_a_file.py" in str(caught.value)
