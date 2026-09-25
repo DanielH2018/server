@@ -265,6 +265,7 @@ kuma_status_page_groups:
       - "^release-staleness-check$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
+      - "^artifacts-sync$"
   - name: Other
     match:
       - ".*"

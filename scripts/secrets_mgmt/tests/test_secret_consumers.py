@@ -75,6 +75,12 @@ def test_consumer_tags_registry_gc_token():
     assert consumer_tags("registry_gc_push_token") == ("registry", "uptime-kuma")
 
 
+def test_consumer_tags_artifacts_sync_token():
+    # Same shape again: k8s/artifacts renders the sync cron that pushes, the tile is static in
+    # uptime-kuma, and both deploy from daniel-box in one run (#2516).
+    assert consumer_tags("artifacts_sync_push_token") == ("artifacts", "uptime-kuma")
+
+
 def test_every_auto_tier_token_resolves_a_consumer_or_is_known_manual():
     # Registry-driven guard: a new single-host `auto` push token must resolve a consumer_tag
     # (so the unattended weekly `rotate --commit --deploy` cron actually rotates it) or sit in

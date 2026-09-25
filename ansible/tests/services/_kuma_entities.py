@@ -53,6 +53,7 @@ STUBS = {
     "daniel_box_disk_push_token": "t" * 32,
     "registry_gc_push_token": "t" * 32,
     "claude_otel_push_token": "t" * 32,
+    "artifacts_sync_push_token": "t" * 32,
     "monitor_bridge_configarr_push_token": "t" * 32,
     "monitor_bridge_janitorr_push_token": "t" * 32,
     "monitor_bridge_fake_remux_push_token": "t" * 32,

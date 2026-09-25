@@ -51,9 +51,17 @@ Consequences worth knowing before debugging a missing artifact:
   connection, so a `LocalForward` on the peer's host entry applies to this one too, and a bind
   collision on its local port fails the whole connection. rsync needs no forward, so the sync
   declines all of them.
-- **There is still no heartbeat and no staleness check.** A peer whose artifacts quietly stop
-  arriving looks identical to a peer that wrote none. Treat a suspiciously old peer artifact as
-  "check the cron on daniel-box" rather than "the peer wrote nothing".
+- **The `Artifacts Peer Sync` Kuma tile is the monitor (#2516).** Every run pushes one verdict
+  for all peers, after the loop. A peer at `artifacts_sync_alert_after_failures` consecutive
+  failures or more turns it DOWN, and it stays DOWN on every later run until the peer recovers.
+  A shorter streak pushes UP and names the streak in the message. Ten minutes of silence means
+  the cron itself stopped. The token is `artifacts_sync_push_token`, so the installed script is
+  `0700` owned by `sys_user` — don't `cat` it on the host.
+- **There is deliberately no file-age staleness check.** rsync copies the peer's own mtimes, so
+  the newest file's age measures how often sessions on the peer write artifacts, not whether
+  the sync works. A successful `rsync --delete` leaves the mirror equal to the peer, so a green
+  tile means an old peer artifact really is the newest one the peer has. The script's `DECIDED:`
+  comment carries the reasoning.
 
 ## A new Python module goes in `artifacts_modules`, and nowhere else
 The pod runs `python3 /app/artifact_server.py` against the whole ConfigMap mounted at `/app`,

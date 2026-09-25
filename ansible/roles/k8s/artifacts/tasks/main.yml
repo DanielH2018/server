@@ -31,10 +31,14 @@
   ansible.builtin.template:
     src: sync-artifacts.sh.j2
     dest: /usr/local/bin/sync-artifacts.sh
-    owner: root
-    group: root
-    mode: "0755"
+    # 0700 owned by sys_user, the same DECIDED as roles/k8s/claude-otel/tasks/main.yml: the
+    # script embeds a live Kuma push token (#2516), and the cron below runs as sys_user, so
+    # root:root 0700 would lock out its own caller.
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0700"
   become: true
+  no_log: true  # renders the Kuma push token
   when: not k8s_dry_run | bool
 
 # Pull, not push: `daniel-box` does not resolve from daniel-server, and a push would need an

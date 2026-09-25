@@ -23,6 +23,11 @@ exec 9>"${state_dir}/sync-artifacts.lock"
 flock -n 9 || exit 0
 
 status=0
+# The Kuma verdict, pushed once after every peer has run (#2516). The tile goes DOWN only when a
+# peer's streak has reached the same threshold that mails, so a peer that is briefly off stays UP
+# with its streak named in the message.
+verdict=up
+report=""
 {% for peer in artifacts_peer_sources %}
 # --delete, so an artifact pruned on {{ peer.name }} stops being served here too; the index
 # would otherwise keep offering links to documents that no longer exist anywhere.
@@ -42,13 +47,14 @@ if rsync -a --delete --timeout=60 \
 $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails") failed run(s)"
     rm -f "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
   fi
+  report="${report:+$report; }{{ peer.name }} synced"
 else
   # DECIDED: a failure goes to the journal, and only the run that REACHES the threshold writes
   # to stderr, which is what cron mails. The old script mailed every failure: 145 messages
   # reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, nobody reads that spool, and a
   # peer that is simply powered off is the common case. Alerting once per outage keeps the mail
-  # as an alert without making it a log. A push monitor would be better and is filed separately;
-  # it needs a Kuma token in SOPS, which this script cannot add for itself.
+  # as an alert without making it a log. The Kuma push after the loop is the monitor (#2516); the
+  # mail stays as the one alert that does not depend on Kuma being up.
   fails=$(( $(cat "${state_dir}/sync-artifacts-{{ peer.name }}.fails" 2>/dev/null || echo 0) + 1 ))
   echo "$fails" > "${state_dir}/sync-artifacts-{{ peer.name }}.fails"
   logger -t sync-artifacts "{{ peer.name }} failed (consecutive run $fails)"
@@ -58,8 +64,41 @@ else
   if [ "$fails" -eq {{ artifacts_sync_alert_after_failures }} ]; then
     echo "sync-artifacts: {{ peer.name }} has failed $fails consecutive runs" >&2
   fi
+  # -ge, not the -eq the mail uses: the mail fires once per outage, but the tile must stay DOWN
+  # on every run past the threshold, or it would go green again in the middle of the outage.
+  if [ "$fails" -ge {{ artifacts_sync_alert_after_failures }} ]; then
+    verdict=down
+    report="${report:+$report; }{{ peer.name }} failed $fails consecutive runs"
+  else
+    report="${report:+$report; }{{ peer.name }} failed $fails consecutive run(s), DOWN at \
+{{ artifacts_sync_alert_after_failures }}"
+  fi
   status=1
 fi
 {% endfor %}
+
+# DECIDED: no file-age staleness check. rsync -a copies the peer's own mtimes and the peer prunes
+# at 7 days, so the newest file's age measures how often sessions on the peer write artifacts,
+# not whether this sync runs — a quiet week on daniel-server would page. A successful rsync
+# --delete leaves the mirror equal to the peer by construction, so the failure streak covers a
+# broken transport and the push deadline covers a cron that stopped running at all.
+#
+# A missing library skips the push rather than exiting: the sync is the job and the push only
+# reports on it. Silence then turns the tile DOWN at its deadline. The override exists for the
+# tests, which must not push to the live Kuma from a host that has the real library.
+#
+# set +e first: every other caller of the library runs without -e, and the sync's own outcome is
+# already in $status, so nothing in the push may end the script before `exit "$status"`.
+set +e
+kuma_lib="${SYNC_ARTIFACTS_KUMA_LIB:-/usr/local/lib/kuma-push-lib.sh}"
+if [ -r "$kuma_lib" ]; then
+  # shellcheck source=/dev/null
+  source "$kuma_lib"
+  kuma_push "$verdict" "${report:-no peers configured}" \
+    "https://uptime-kuma.local.{{ domain }}/api/push/{{ artifacts_sync_push_token }}" \
+    "uptime-kuma.local.{{ domain }}" "{{ k3s_metallb_ingress_vip }}" sync-artifacts
+else
+  logger -t sync-artifacts "$kuma_lib missing, no Kuma verdict pushed; run initial_setup on this host"
+fi
 
 exit "$status"
