@@ -69,6 +69,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/setup/gitops_deploy/tests",   # deploy_* decision tests + gitops_deploy.py guards
   "ansible/roles/setup/deploy_ui/tests",      # deploy-ui parsers, guards and routing
   "ansible/roles/setup/renovate_notify/tests", # notifier decision tests
+  "ansible/roles/setup/render_records/tests",  # render-record producer: green commit, record verdict
   "ansible/roles/setup/renovate_agent/tests",  # unattended-agent gate + digest tests
   "ansible/roles/setup/common/tests",          # shared host_lib helper tests
   "ansible/roles/setup/initial_setup/tests",   # Loki read-route witness verdict logic
@@ -345,6 +346,7 @@ extra-paths = [
   "ansible/roles/k8s/healthchecks/files",
   "ansible/roles/k8s/arr-notification/files",
   "ansible/roles/setup/fake_remux/files",
+  "ansible/roles/setup/render_records/files",
   "ansible/roles/k8s/terraria-stats/files",
   "ansible/roles/k8s/valheim-stats/files",
   "ansible/roles/k8s/ical-proxy/files",

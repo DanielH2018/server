@@ -47,6 +47,7 @@ KNOWN_CHECKS = frozenset(
         "secret-rotation-audit",
         "github-ruleset-drift",
         "github-interaction-limit",
+        "render-records",
     }
 )
 

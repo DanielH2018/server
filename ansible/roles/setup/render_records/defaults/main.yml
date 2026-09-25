@@ -1,0 +1,22 @@
+---
+# The render-record producer (#2587). The host that runs it (`render_records_host`) and the
+# schedule the Kuma monitor's interval is derived from live in group_vars/all.yml, because
+# initial_setup.yml's `when:` and the uptime-kuma role read them outside this role.
+
+# The producer's own detached worktree of the primary checkout. Outside the primary checkout,
+# where an untracked directory parks the GitOps deployer, and outside `.claude/worktrees/`,
+# which session tooling reads as a Claude session.
+render_records_checkout_dir: /var/lib/render-records/checkout
+
+# Where render_record.yml writes. Mirrors `manifests_render_record_dir` in
+# roles/k8s/manifests/defaults/main.yml, which is not in scope here;
+# ansible/tests/setup/test_render_records_role.py holds the two equal.
+render_records_record_dir: /var/lib/homelab/k8s-renders.d
+
+# How long a run that ended red, or deferred on a pending CI walk, waits before it reruns.
+render_records_restart_sec: 20min
+
+# A Persistent=true catch-up run lands seconds after boot, before the API server answers a
+# server-side dry run. Inside this window the producer exits 1 with no push and the restart
+# carries the real verdict. The same 420s as k3s_health_cron_boot_grace_s.
+render_records_boot_grace_s: 420

@@ -596,6 +596,18 @@ renovate_agent_host: daniel-box
 # role entry is evaluated before that role's defaults are in scope, the same reason
 # renovate_notify_host is.
 fake_remux_host: daniel-box
+# The one host that writes k8s render records (roles/setup/render_records, #2587). It must be
+# the host the release records name, because the staleness reader refuses a render record
+# whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
+render_records_host: daniel-box
+# The producer runs hourly at this minute. Here rather than in the role's defaults because the
+# uptime-kuma role derives the monitor's interval from the same cadence below.
+render_records_minute: 17
+# The render-records push monitor's interval. One hourly period, plus the ~6-minute render
+# (5m38s for 45 services on 2026-09-25), plus one 20-minute restart of a run that deferred on a
+# pending CI walk, rounded up. A shorter one flaps on an ordinary deferral; a longer one leaves
+# a stopped producer unread for longer than the records it last wrote stay useful.
+render_records_push_interval_s: 5400
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
 # every full host redeploys its own containers_list independently on a git push (see
 # gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and

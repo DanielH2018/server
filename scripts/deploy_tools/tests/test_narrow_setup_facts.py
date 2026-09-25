@@ -19,6 +19,7 @@ import pytest
 import narrow_setup
 import narrow_setup_index
 from lib import yaml_fast
+from lib.git import git_stdout
 from lib.repo_paths import REPO
 
 from _setup_role_fixtures import ALPHA, BETA, DEFAULTS, ROLE, Tree, build, narrow
@@ -203,9 +204,13 @@ def test_the_fact_edge_widens_no_real_setup_role_today():
     """
     measured: set[str] = set()
     widened: dict[str, list[str]] = {}
-    for role_dir in sorted(
-        p for p in (REPO / "ansible/roles/setup").iterdir() if p.is_dir()
-    ):
+    # The roles AT HEAD, the tree the index reads. Listing the directories on disk instead
+    # made a role that is new in the commit being made fail the pre-commit run of this test:
+    # it exists on disk and has no task file at HEAD yet.
+    for role in git_stdout(
+        "ls-tree", "--name-only", "HEAD", "ansible/roles/setup/", cwd=REPO
+    ).split():
+        role_dir = REPO / role
         if role_dir.name in ROLES_WITHOUT_AN_ENTRY_POINT:
             continue
         index = narrow_setup_index.RoleIndex(role_dir.name, "HEAD", str(REPO))

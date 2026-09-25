@@ -554,6 +554,16 @@ stringData:
   # the re-arm happened. A missed beat here means the lapse window is open again.
   github-interaction-limit.json: |
     {"type": "push", "name": "GitHub Interaction Limit", "description": "The daily 06:50 kuma-check-github-interaction-limit timer on daniel-box re-PUTs the repo collaborators_only interaction limit, which GitHub only offers as a six-month expiring setting; it reruns every 30 min while red. DOWN means gh is not logged in, the PUT failed, or the readback did not match the declared limit. Run gh auth status as the deploy user, then check the limit in repo settings; systemctl status kuma-check-github-interaction-limit on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{# The hourly render-record producer (setup/render_records, #2587). A producer that stopped
+   must read as red, never as a fleet with nothing to compare, so the timer pushes up only when
+   every renderable service's record was refreshed at the chosen commit. The interval is
+   render_records_push_interval_s in group_vars/all.yml, derived there from the same hourly
+   cadence the timer runs on. Gated on the token like its siblings: an ungated tile sits red
+   from creation until the secret exists. #}
+{% if render_records_push_token | default('') %}
+  render-records.json: |
+    {"type": "push", "name": "k8s Render Records", "description": "The hourly kuma-check-render-records timer on daniel-box dry-runs every renderable k8s service at the newest green origin/master commit and writes /var/lib/homelab/k8s-renders.d, which probe.py releases --stale-only reads. DOWN names the services whose record was not refreshed; a missing beat means the producer stopped or keeps deferring on a pending CI walk. journalctl -u kuma-check-render-records on daniel-box.", "interval": {{ render_records_push_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ render_records_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # 1800s, NOT the bridge fleet's 600s: this monitor's feeder is k8s/crowdsec's `*/15`
   # cron, not the 300s monitor-bridge loop. A 600s interval expired mid-cycle, so the tile
   # alternated up/down every ~7.5 min (measured 2026-08-21: 24 transitions in 3h, up 2/3

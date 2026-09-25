@@ -1,0 +1,95 @@
+---
+# The render-record producer: an hourly dry-run render of every renderable k8s service at the
+# newest green origin/master commit (#2587). CLAUDE.md beside this file has the contract.
+#
+# Both directions live here. initial_setup.yml applies this role on every host and passes
+# `render_records_state`, `present` on render_records_host and `absent` elsewhere, so a host
+# that leaves the role keeps neither the timer nor the worktree.
+
+- name: Create the render-records directories
+  when: render_records_state == 'present'
+  ansible.builtin.file:
+    path: "{{ item.path }}"
+    state: directory
+    owner: "{{ item.owner }}"
+    group: "{{ sys_user }}"
+    mode: "{{ item.mode }}"
+  loop:
+    - { path: /opt/render-records, owner: "{{ sys_user }}", mode: "0755" }
+    # The worktree's parent. The producer creates the worktree itself, as {{ sys_user }},
+    # so a root-run task never leaves root-owned objects in the shared object store.
+    - { path: "{{ render_records_checkout_dir | dirname }}", owner: "{{ sys_user }}", mode: "0755" }
+    - { path: /etc/render-records, owner: root, mode: "0750" }
+  become: true
+
+- name: Install the render-records producer
+  when: render_records_state == 'present'
+  ansible.builtin.copy:
+    src: render_records.py
+    dest: /opt/render-records/render_records.py
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Write the render-records Kuma credentials
+  when: render_records_state == 'present'
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/render-records/config.env
+    owner: root
+    group: "{{ sys_user }}"
+    mode: "0640"
+  become: true
+  no_log: true  # renders render_records_push_token
+
+- name: Schedule the render-records producer
+  # Runs as {{ sys_user }}: that user owns the primary checkout whose object store the worktree
+  # shares, reads the deployer's 0600 config.env for the CI gate settings, holds the gh login
+  # the CI walk authenticates with and the age key the render decrypts SOPS with, and has the
+  # passwordless sudo the render's `become` tasks need.
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
+  vars:
+    kuma_check_state: "{{ render_records_state }}"
+    kuma_check_name: render-records
+    kuma_check_description: k8s render-record producer (Kuma push)
+    kuma_check_exec: >-
+      /usr/local/bin/uv run --no-project --no-python-downloads
+      --python {{ host_python_version }} /opt/render-records/render_records.py
+    kuma_check_user: "{{ sys_user }}"
+    kuma_check_env_file: /etc/render-records/config.env
+    kuma_check_environment:
+      - "CHECKOUT_DIR={{ render_records_checkout_dir }}"
+      - "RECORD_DIR={{ render_records_record_dir }}"
+      - "RENDER_HOST={{ inventory_hostname }}"
+      - "BOOT_GRACE_S={{ render_records_boot_grace_s }}"
+    kuma_check_on_calendar: "*-*-* *:{{ '%02d' | format(render_records_minute | int) }}:00"
+    kuma_check_restart_sec: "{{ render_records_restart_sec }}"
+
+- name: Look for the render-records worktree before removing it
+  when: render_records_state == 'absent'
+  ansible.builtin.stat:
+    path: "{{ render_records_checkout_dir }}/.git"
+  register: render_records_worktree
+
+- name: Remove the render-records worktree
+  # `--force` twice removes a locked worktree, which this one always is. Run from inside the
+  # worktree, so it needs no path to the primary checkout on a host that may not have one.
+  when: render_records_state == 'absent' and render_records_worktree.stat.exists
+  ansible.builtin.command:
+    argv: [git, worktree, remove, --force, --force, "{{ render_records_checkout_dir }}"]
+    chdir: "{{ render_records_checkout_dir }}"
+  become: true
+  become_user: "{{ sys_user }}"
+  changed_when: true
+
+- name: Remove the render-records directories
+  when: render_records_state == 'absent'
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - /opt/render-records
+    - /etc/render-records
+    - "{{ render_records_checkout_dir | dirname }}"
+  become: true

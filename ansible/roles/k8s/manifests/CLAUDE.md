@@ -239,8 +239,12 @@ manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a s
 left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
 which held for 25 of 58 on that date (#2586).
 
-One gap keeps the narrowings in place: **nothing produces render records on a schedule**
-(#2587).
+**`ansible/roles/setup/render_records/` produces the records hourly** (#2587). It renders
+every service `scripts/deploy_tools/render_targets.py` lists, at the newest origin/master
+commit whose CI is green, from its own detached worktree, and pushes a Kuma tile that goes red
+when a run leaves any record unrefreshed or the producer stops. A record matches origin/master
+only until the next merge, so between a merge and the next hourly run the reader falls back
+to the path logic.
 
 Every stamped service can be dry-run since #2588. Each role that includes this one guards its
 own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` holds only `n8n-images`,
