@@ -66,6 +66,7 @@
   become: true
 
 - name: Remove the retired vendored Claude Code dashboard ConfigMap
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -213,6 +214,7 @@
   register: claude_otel_dashboard_manifests
 
 - name: Apply the dashboard ConfigMaps
+  when: not k8s_no_mutate
   tags: [deploy]
   # --force-conflicts because the four folders small enough to succeed on the first (client-side)
   # attempt are already owned by that field manager; server-side apply refuses to take fields from
@@ -283,5 +285,7 @@
     index_var: idx
     label: "{{ item }}: {{ stale_keys | join(', ') | default('nothing stale', true) }}"
   become: true
-  when: stale_keys | length > 0
+  when:
+    - not k8s_no_mutate
+    - stale_keys | length > 0
   changed_when: true

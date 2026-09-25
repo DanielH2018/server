@@ -136,6 +136,30 @@ def test_the_builder_records_every_image_not_only_changed_ones():
         )
 
 
+def test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it():
+    """n8n's `checksum/image` annotation reads this fact, so a dry run must record it too (#2588).
+
+    Guarded on `k8s_no_mutate`, the record was skipped on every dry run, n8n rendered `unstaged`,
+    and its dry-run render digest could never match a deploy's. Dropping the guard is safe only
+    because every gate task that reads the fact skips itself on a dry run and under --check.
+    """
+    for task in _tasks(_BUILDER):
+        if "k8s_built_images" in str(task.get("ansible.builtin.set_fact", "")):
+            assert not re.search(
+                r"k8s_no_mutate|k8s_dry_run|ansible_check_mode",
+                str(task.get("when", "")),
+            ), (
+                "the k8s_built_images record is skipped on a dry run, so n8n renders `unstaged`"
+            )
+    readers = [t for t in _tasks(_GATE) if "k8s_built_images" in str(t)]
+    assert readers
+    for task in readers:
+        when = str(task.get("when", ""))
+        assert "not k8s_dry_run" in when and "not ansible_check_mode" in when, (
+            f"drift-gate task {task.get('name')!r} runs on a dry run, where no pod was rolled"
+        )
+
+
 def test_the_post_build_digest_read_is_not_gated_on_the_build_running():
     """The asymmetry the gate rests on. See this module's docstring.
 

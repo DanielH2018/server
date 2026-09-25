@@ -54,7 +54,12 @@
   # to the included role. The fourth fact the shared role gates on, `manifests_rolled_by_apply`,
   # is read inside roll_one.yml on the restart task alone: the include still runs so the
   # sibling check and the rollout wait follow a roll the apply started.
-  when: manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+  #
+  # Never on a dry run or --check: a dry-run render is always `changed` and the apply rolled
+  # nothing, so this would restart both live Pi-holes on every dry run (#2588).
+  when:
+    - not k8s_no_mutate
+    - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
   loop:
     - pihole
     - pihole-2
@@ -73,6 +78,7 @@
 # unmatched selector wait rather than fail on the spot with "no matching resources found".
 # Two `--for` flags print the name once per condition under `-o`, so the read is separate.
 - name: Wait for a Ready pod behind each Pi-hole instance
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -89,6 +95,7 @@
 # "array index out of bounds" rather than an empty string, and the wait above already proved a
 # match exists. failed_when keeps the loud failure if the read still comes back empty.
 - name: Find the pod backing each Pi-hole instance
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -104,6 +111,7 @@
     - pihole-2
 
 - name: Map each Pi-hole instance name to its pod name
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.set_fact:
     pihole_pod_by_instance: "{{ dict(pihole_pods.results | map(attribute='item') | zip(pihole_pods.results | map(attribute='stdout') | map('regex_replace', '\\s.*$', ''))) }}"
@@ -118,6 +126,7 @@
 # every deploy and prints the error text in place of the instance name. Ansible already appends
 # `=> (item=pihole)` per iteration, which is the per-instance label this was reaching for.
 - name: Reconcile the declared adlists and regex denies into gravity.db
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -157,7 +166,9 @@
 # Name omits `{{ item }}` for the same reason as the reconcile task above.
 - name: Rebuild gravity after a blocklist change # noqa no-handler
   tags: [deploy]
-  when: pihole_k8s_gravity_sql is changed
+  when:
+    - not k8s_no_mutate
+    - pihole_k8s_gravity_sql is changed
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec {{ pihole_pod_by_instance[item] }} -c pihole -- pihole -g

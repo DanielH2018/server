@@ -7,8 +7,8 @@ value templates as an empty string or the literal `AnsibleUndefined`, and the Se
 The workload then fails later, for a reason several steps removed from the missing variable.
 
 Nothing else catches it. `validate.k8s_manifests` renders under daniel-box's variables, so it
-never sees staging's overrides at all. `--dry-run` refuses `traefik` (`k8s_dry_run_unsupported`)
-and would not check variable resolution anyway. The pre-deploy census this replaces was run by
+never sees staging's overrides at all. `--dry-run` renders under the
+host it runs on, and does not check variable resolution anyway. The pre-deploy census this replaces was run by
 hand on 2026-08-28 and is exactly the kind of check that stops being run.
 
 The mechanism is a sentinel. Every name the templates could read that is NOT supplied by

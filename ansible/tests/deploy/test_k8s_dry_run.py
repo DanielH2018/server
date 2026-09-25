@@ -236,8 +236,7 @@ _MUTATES = re.compile(
 # touch/mkdir/ln/mv/cp/tee/chmod/chown/dd write to a mounted volume (tdarr's write probe,
 # janitorr's leaving-soon symlink); a bare `rm` does too, but needs a word boundary so it can't
 # match inside `warm`/`germ`-shaped tokens; `cscli … create|delete|add|remove` and `pihole -g`
-# write to the tool's own state (crowdsec/pihole, both already dry-run-unsupported for other
-# reasons — this just gives their real exec writes a matching rule too).
+# write to the tool's own state (crowdsec's allowlists, pihole's gravity rebuild).
 _EXEC_WRITE = re.compile(
     r"\b(touch|mkdir|ln -s\w*|rm|mv|cp|tee|chmod|chown|dd)\b"
     r"|cscli \S+ (create|delete|add|remove)\b"
@@ -417,17 +416,17 @@ def test_unsupported_list_matches_the_roles_that_actually_mutate() -> None:
     }
     declared = set(_all_vars()["k8s_dry_run_unsupported"])
 
+    # A role that includes k8s/manifests guards its writes: a listed one gets no render record.
+    roles = derived | declared
+    unguarded = [n for n in sorted(roles) if not _bypasses_manifests(_K8S_ROLES / n)]
+    assert not unguarded, f"guard {unguarded} on k8s_no_mutate, never list them (#2588)"
     missing = sorted(derived - declared)
     stale = sorted(declared - derived)
     assert not missing, (
-        f"these roles mutate the cluster outside roles/k8s/manifests but are not in "
-        f"k8s_dry_run_unsupported: {missing}. A dry run naming one of them half-applies. "
-        "Either add them to the list, or guard their kubectl calls on k8s_dry_run."
+        f"these roles apply their objects outside roles/k8s/manifests but are not in "
+        f"k8s_dry_run_unsupported: {missing}. A dry run naming one of them half-applies."
     )
-    assert not stale, (
-        f"these roles are listed as dry-run-unsupported but no longer mutate outside "
-        f"roles/k8s/manifests: {stale}. Drop them from the list so dry-run covers them."
-    )
+    assert not stale, f"{stale} no longer mutate unguarded; drop them from the list"
 
 
 def _roles_included_by_other_roles() -> set[str]:

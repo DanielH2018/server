@@ -73,6 +73,7 @@
   become: true
 
 - name: Remove any previous broker-isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -94,6 +95,7 @@
 # pod satisfies Available for the whole rolling update and the wait returns before the new pod is
 # even scheduled. Same reasoning, and the same measurement, as rollout-drain/tasks/main.yml:32.
 - name: Wait for n8n to finish rolling before probing it
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -103,6 +105,7 @@
   changed_when: false
 
 - name: Run the broker-isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/n8n-netpol/netpol-probe-job.yaml"
@@ -110,6 +113,7 @@
   changed_when: true
 
 - name: Wait for the broker-isolation probe to finish
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -124,6 +128,7 @@
   failed_when: n8n_netpol_probe.rc != 0
 
 - name: Report the broker-isolation result
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-

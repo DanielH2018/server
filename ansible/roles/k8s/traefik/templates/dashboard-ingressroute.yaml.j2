@@ -12,8 +12,8 @@
   NO port. Give it the default kind and Traefik looks for a Service called `api@internal`
   in this namespace, finds nothing, and the route 404s exactly as if it were absent.
   Neither pre-deploy gate can catch that mistake: IngressRoute is a CRD so prek only proves
-  the YAML parses, and `traefik` is in k8s_dry_run_unsupported so --dry-run refuses the role
-  outright. It is verified live or not at all.
+  the YAML parses, and --dry-run validates the object against the CRD schema, which accepts
+  either kind. It is verified live or not at all.
 #}
 apiVersion: traefik.io/v1alpha1
 kind: IngressRoute

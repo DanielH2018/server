@@ -40,6 +40,7 @@
 # does while it collects. This gate does not cover that case, and does not need to: GC is
 # scheduled precisely so it never shares a window with a deploy (see the GC section below).
 - name: Wait for the registry rollout before proving anything against it
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -103,6 +104,7 @@
 # Deleted first because a Job's pod template is immutable: re-applying a completed Job is either
 # a no-op or an error, and in both cases it proves nothing about today.
 - name: Clear the previous registry self-test run
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -113,6 +115,7 @@
   changed_when: true
 
 - name: Prove a pod can PUSH to the registry over its Service
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -122,6 +125,7 @@
   changed_when: true
 
 - name: Wait for the push self-test
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -135,6 +139,7 @@
 # Ordered after the push on purpose: it pulls what the push just wrote, so running them
 # concurrently would race and a first-ever run would fail on a tag that does not exist yet.
 - name: Prove containerd can PULL from the registry through registries.yaml
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -144,6 +149,7 @@
   changed_when: true
 
 - name: Wait for the pull self-tests
+  when: not k8s_no_mutate
   tags: [deploy]
   # The list shrinks with the manifest. selftest-pull-job.yaml.j2 renders the agent half only
   # on a cluster that has an agent node, and `kubectl wait` on a Job that was never applied
@@ -163,6 +169,7 @@
   failed_when: registry_pull_probe.rc != 0
 
 - name: Report the proven registry loop
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-
@@ -185,6 +192,7 @@
   become: true
 
 - name: Remove any previous registry netpol-isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -194,6 +202,7 @@
   changed_when: true
 
 - name: Run the registry netpol-isolation probe
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: "k3s kubectl apply -f /etc/rancher/k3s/manifests/registry-jobs/netpol-probe-job.yaml"
@@ -201,6 +210,7 @@
   changed_when: true
 
 - name: Wait for the registry netpol-isolation probe to finish
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -214,6 +224,7 @@
   failed_when: registry_netpol_probe.rc != 0
 
 - name: Report the registry netpol-isolation result
+  when: not k8s_no_mutate
   tags: [deploy]
   ansible.builtin.debug:
     msg: >-
