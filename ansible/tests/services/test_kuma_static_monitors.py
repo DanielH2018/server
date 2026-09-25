@@ -187,6 +187,11 @@ EMAIL_TIER = {
     # On the tier for the transport as well: it pages when Kuma dropped a Discord send, and a
     # page for that carried only by the Discord webhook is the failure it reports (#1891).
     "Kuma Notification Delivery",
+    # The single existential risk on a one-server control plane: at its backend quota etcd
+    # rejects every write and the cluster stops accepting changes. The fix is an operator
+    # compacting and defragmenting, or raising the quota, so it cannot wait for someone to
+    # notice a muted channel (#2403).
+    "etcd DB Size",
 }
 
 

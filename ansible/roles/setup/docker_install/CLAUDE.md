@@ -103,7 +103,11 @@ Merging that PR moves nothing on the Pi: `install.yml` reads the installed
 docker-ce version first and installs only where there is none (an explicit
 `apt-get install pkg=ver` moves a held package, so `state: present` alone would not have
 protected a running engine from a pin bump); on an installed host it reports the gap and
-leaves it. The command above is what closes it.
+leaves it. That report covers **every** key of `docker_install_package_versions`, one
+dpkg-query per package, so a bump to containerd.io, the compose plugin or the buildx plugin
+alone prints as loudly as a docker-ce bump — it compared docker-ce alone until 2026-09-25,
+which left the other four visible only to `engine-upgrade.yml`'s apt probe (#2407). The
+command above is what closes it.
 
 **Cost accepted:** a Docker security fix waits for that command, and now for the Renovate
 PR that names it.

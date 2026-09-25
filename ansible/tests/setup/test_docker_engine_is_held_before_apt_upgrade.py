@@ -25,6 +25,9 @@ an upstream version and Docker publishes several revisions of one -- `containerd
 and `2.3.4-2` both sit in the noble/arm64 index -- so a literal revision names a package apt
 may not be able to resolve, and neither the install nor the deliberate upgrade can then run.
 
+The behind-pin report and the per-package read under it moved to
+`test_docker_pin_report_covers_every_package.py` when this file crossed the module-length cap.
+
 Run: uv run pytest ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
 """
 
@@ -184,33 +187,6 @@ def test_the_apt_spec_globs_the_debian_revision():
     )
     assert not apt_resolves("2.3.4-1~ubuntu.22.04~jammy", spec_version), (
         f"{spec_version} reaches another Ubuntu release's package; only the revision is a glob"
-    )
-
-
-def test_the_behind_pin_report_reads_the_upstream_version_not_the_glob():
-    """A `!=` against the globbed suffix is true on every host, pinned correctly or not.
-
-    The report would fire on every run, and an operator reading "Nothing moved" would take a
-    correctly-pinned host for one carrying a standing gap (#2357).
-    """
-    reports = [
-        t
-        for t in load_tasks(INSTALL)
-        if isinstance(t.get("ansible.builtin.debug"), dict)
-        and "docker_install_installed_engine" in str(t.get("when", ""))
-    ]
-    assert reports, (
-        "install.yml no longer reports an installed engine behind its pin, so the gap is "
-        "invisible behind a green run again"
-    )
-    when = " ".join(str(condition) for condition in reports[0]["when"])
-    assert SUFFIX_VAR not in when, (
-        f"the behind-pin report compares the installed version against {SUFFIX_VAR}, which "
-        "globs the revision -- no dpkg version equals it, so the report always fires"
-    )
-    assert VERSIONS_VAR in when, (
-        f"the behind-pin report no longer compares against {VERSIONS_VAR}, so it reports on "
-        "something other than the pin"
     )
 
 

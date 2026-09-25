@@ -381,6 +381,16 @@ k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 #
 # Arming it needs a k3s-bringup.yml run: the installer rewrites the unit and RESTARTS k3s. The
 # API server is briefly unavailable; running workloads keep running.
+#
+# DECIDED: off, and the DB-size risk is covered by a proxy instead. The restart above also
+# re-encrypts every Secret (#2294), k3s-bringup.yml is manual-plane by construction, and the
+# flag opens an unauthenticated :2381 — more cost than the gap is worth on a single voter,
+# where leader changes and WAL fsync latency carry little signal anyway. The one series that
+# does matter, the DB size against its 2 GiB quota, is readable WITHOUT the flag:
+# `apiserver_storage_size_bytes` is scraped unconditionally, and #2403 reports it matching the
+# etcd snapshot's size. monitor-bridge's `etcd_db_size` check reads it (files/checks/cluster_etcd.py,
+# #2403). Reopen this with evidence that fsync latency or leader churn is what broke, not
+# with the observation that the etcd series are empty — that is this decision, not a finding.
 k3s_etcd_expose_metrics: false
 # How long the play holds after every `rollout status` returns before declaring the deploy
 # healthy (post_tasks/k8s_stabilise_gate.yml). `rollout status` returns on Available, which

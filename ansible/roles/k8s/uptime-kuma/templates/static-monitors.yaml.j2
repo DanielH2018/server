@@ -500,6 +500,14 @@ stringData:
   # cron); this interval is only the heartbeat that says the bridge is still evaluating it.
   etcd-restore-drill.json: |
     {"type": "push", "name": "etcd Restore Drill", "description": "monitor-bridge reads the last-success-list-only stamp written by the weekly (Monday 10:20) etcd restore drill cron on daniel-box. DOWN means no list-only drill has ever passed, the stamp is older than 8 days, or the pod cannot read it. Run journalctl on daniel-box for etcd-restore-drill and check the stamp mode.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_etcd_drill_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # The drill above proves a restore works; this tile watches the failure a restore follows
+  # (#2403). etcd goes READ-ONLY at its backend quota and the whole control plane stops
+  # accepting writes, so this is the email tier for the same reason as the Longhorn trio: the
+  # fix is an operator compacting and defragmenting, or raising the quota, not a retry.
+  # `monitor_bridge_etcd_db_size_push_token` is in SOPS, so this is declared unguarded — a
+  # missing token fails the render instead of silently removing the monitor (#1632).
+  etcd-db-size.json: |
+    {"type": "push", "name": "etcd DB Size", "description": "monitor-bridge reads apiserver_storage_size_bytes against etcd's 2 GiB backend quota, because etcd's own db-size series is empty while k3s_etcd_expose_metrics is off. DOWN means the DB is over ETCD_DB_MAX_PCT of the quota; at the quota etcd rejects every write and the control plane stops. Compact and defragment, or raise --etcd-arg=quota-backend-bytes.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_etcd_db_size_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   # Board and CPU temperature across all three hosts, pushed every bridge cycle. The hysteresis
   # that keeps a boost excursion off this tile is HWMON_TEMP_CONSECUTIVE (12 cycles = 60 min)
   # in the monitor-bridge role's files/bridge/config_host.py, not

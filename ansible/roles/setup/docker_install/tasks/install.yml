@@ -130,7 +130,7 @@
   register: docker_install_installed_engine
   changed_when: false
   failed_when: false
-  # Read-only, so it runs under --check too; skipped, the two consumers below would read an
+  # Read-only, so it runs under --check too; skipped, `Install Docker` below would read an
   # undefined stdout and fail several tasks later with an error naming neither.
   check_mode: false
 
@@ -150,26 +150,54 @@
   become: true
   when: docker_install_installed_engine.stdout | length == 0
 
-- name: Report an installed engine that is behind its pin
+- name: Read the installed version of every pinned Docker package
+  tags: [docker-engine]
+  # A SECOND read, overlapping the docker-ce one above rather than replacing it. That task
+  # registers a scalar `.stdout` and `Install Docker` gates its fresh-host `when` on it, so
+  # looping it would move the value to `.results` and silently stop that gate gating (#2407).
+  # One extra dpkg-query per package is cheaper than that failure mode.
+  # The three read-only flags are load-bearing for the reasons the docker-ce read gives:
+  # dpkg-query exits 1 with empty stdout where a package is not installed, and skipping this
+  # under --check leaves the report below reading an undefined `.results`.
+  ansible.builtin.command:
+    cmd: dpkg-query -W -f '${Version}' {{ item.key }}
+  loop: "{{ docker_install_package_versions | dict2items }}"
+  loop_control:
+    label: "{{ item.key }}"
+  register: docker_install_installed_pins
+  changed_when: false
+  failed_when: false
+  check_mode: false
+
+- name: Report an installed Docker package that is behind its pin
   tags: [docker-engine]
   # Not a failure: the pin moved (a merged Renovate bump) and this host has not had the
   # deliberate upgrade yet. That upgrade is the operator's call, because it stops every
   # Compose project; this task only stops the gap being invisible behind a green run.
+  # It reports per PACKAGE, over every key of docker_install_package_versions. Four Renovate
+  # managers track containerd.io, docker-compose-plugin and docker-buildx-plugin independently
+  # of docker-ce, and while this compared docker-ce alone a merged bump to any of the other
+  # four printed nothing on an installed host -- only engine-upgrade.yml's apt probe saw it,
+  # and only when someone ran that play (#2407).
   # The comparison reads the UPSTREAM version alone -- everything left of the first `-` in
   # `5:29.8.1-1~ubuntu.24.04~noble` -- because that is what the pin names and apt chooses the
   # Debian revision (docker_install_apt_suffix globs it, #2357). Comparing the whole installed
   # string against the suffix would report every correctly-pinned host as behind, a glob being
-  # nothing a dpkg version equals literally. It assumes the pin carries the `5:` epoch exactly
-  # as dpkg reports it; drop the epoch from docker_install_package_versions and this report
-  # fires on every run instead.
+  # nothing a dpkg version equals literally. It assumes a pin carries its `5:` epoch exactly as
+  # dpkg reports it -- docker-ce and docker-ce-cli do, the other three have no epoch -- so
+  # dropping an epoch from docker_install_package_versions fires that package's report on
+  # every run instead.
   ansible.builtin.debug:
     msg: >-
-      docker-ce is {{ docker_install_installed_engine.stdout }} and the pin is
-      {{ docker_install_package_versions['docker-ce'] }} at any Debian revision.
+      {{ item.item.key }} is {{ item.stdout }} and the pin is {{ item.item.value }}
+      at any Debian revision.
       Nothing moved. To apply the pin, run the docker-engine-upgrade play (comment below).
+  loop: "{{ docker_install_installed_pins.results }}"
+  loop_control:
+    label: "{{ item.item.key }}"
   when:
-    - docker_install_installed_engine.stdout | length > 0
-    - (docker_install_installed_engine.stdout | split('-') | first) != docker_install_package_versions['docker-ce']
+    - item.stdout | length > 0
+    - (item.stdout | split('-') | first) != item.item.value
 
 - name: Hold the Docker engine packages
   tags: [docker-engine]

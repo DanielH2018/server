@@ -472,7 +472,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   duty cycle. The derivation and the pages-per-week table are at the `DECIDED: 12 cycles` marker
   in `files/bridge/config_host.py`.
   `crits` is still read for every OTHER sensor,
-  because a driver that skips `max` but declares `crit` (none in this estate as of 2026-09-03; added
+  because a driver that skips `max` but declares `crit` (none in this estate on 2026-09-03; added
   defensively) would otherwise take the flat fallback despite declaring a real limit. **`max`
   wins when a sensor declares a plausible value for both**, not `crit`: hwmon's own convention
   has `crit` as the LATER shutdown point, not an earlier warning — measured live 2026-09-03,
@@ -568,7 +568,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   workload the UPS most obviously protects and with HA primary the alert path went down with it).
   Each arm's fallback is `max(A) or max(B)` inside the query string, not a branch in the check:
   both sides reduce to one unlabelled series, so `or` drops the right whenever the left has a
-  sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, NUT's
+  sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT
   `ups.status{flag="OB"}` — one-hot over `flag`, so the exporter forces a 0 when the UPS is not
   asserting it and the series is a real 0/1 alert input; judged FIRST and returning alone,
   because charge and runtime read the RUNWAY and hold green through most of an outage; its own
@@ -954,6 +954,32 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   raises on an unreachable Prometheus, which `_evaluate` turns into a `down` — without the
   gate, a Prometheus restart pages this monitor a second time for the one root cause the
   Prometheus monitor already reports.)
+- **etcd DB Size** (`max(apiserver_storage_size_bytes)` against `ETCD_DB_QUOTA_BYTES`, down at
+  `ETCD_DB_MAX_PCT` = 80% — `files/checks/cluster_etcd.py`, #2403. etcd goes READ-ONLY at its
+  backend quota and the control plane stops accepting writes, which is the failure the restore
+  runbook exists for, and until 2026-09-25 nothing watched it. **Why the proxy and not etcd's
+  own series:** `k3s_etcd_expose_metrics` is off, so `etcd_mvcc_db_total_size_in_bytes`,
+  `etcd_server_leader_changes_seen_total` and `etcd_disk_wal_fsync_duration_seconds_*` return
+  no data. The
+  `DECIDED:` marker at that switch in `group_vars/all.yml` records why it stays off — arming it
+  restarts k3s and re-encrypts every Secret (#2294) from a manual-plane playbook, and opens an
+  unauthenticated `:2381`. `apiserver_storage_size_bytes` is scraped unconditionally, and #2403
+  reports it matching the etcd snapshot's size — 53,768,192 there on 2026-09-24, 56,389,632 read
+  the next day, 2.6% of the quota. **`max(...)` over the bare series, no `by` and no `job`
+  selector:** k3s
+  serves the apiserver and the kubelet from one process, so the series is scraped TWICE with the
+  same value — under `job="kubernetes-apiserver"` and `job="kubernetes-kubelet"` — and two
+  identical series would make `prom_scalar`'s `result[0]` an arbitrary pick, while selecting on
+  `job` would tie the check to a scrape-job name rather than to the metric. **2 GiB is etcd's
+  OWN default** and is what is in force: `k3s_server_args` carries no
+  `--etcd-arg=quota-backend-bytes`, so adding one there moves `ETCD_DB_QUOTA_BYTES` with it or
+  the check measures against a quota the cluster does not have. **No grace**, for the reason CSI
+  Read-only Mounts has none: a DB near its quota does not shrink on its own, so a streak delays
+  a real page without absorbing a blip. An absent series reads as healthy and points at Scrape
+  Targets — unlike PVC Fullness, whose fail-closed arm exists because 27 of 43 claims survive a
+  dead kubelet job; one series carried by two jobs has no partial-coverage case, so empty means
+  total scrape loss, which `targets`/`cluster_targets` already page on. **In
+  `CLUSTER_DEPENDENT`**, because it reads `CLUSTER_PROM_URL`.)
 - **Loki Log Ingestion** (three-arm LogQL freshness against the cluster `loki-homelab` via
   its in-cluster Service, `down`
   if ANY arm is silent — a silently dead Alloy→Loki pipeline (docker-proxy break,
@@ -1090,8 +1116,8 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   only over the same webhook is the failure it reports. In `LOKI_DEPENDENT`; a fetch that
   hits the 500-line cap says so in the message.)
 - **Discord Delivery** (GET-verifies **all five** Discord notification webhooks: Kuma's own
-  `monitor_discord_webhook_url` — the one Kuma POSTs every alert to — CrowdSec's
-  `crowdsec_discord_webhook_url`, which CrowdSec POSTs ban alerts to *directly* (not via Kuma),
+  `monitor_discord_webhook_url` — the one Kuma sends every alert to — CrowdSec's
+  `crowdsec_discord_webhook_url`, which CrowdSec sends ban alerts to *directly* (not via Kuma),
   the `gitops_deploy_discord_webhook`, which delivers the `gitops-deploy` rollback alert AND every
   `renovate_notify` digest (its Renovate Notifier — Alive marker greens even when the POST fails —
   no Kuma backstop), and `arr_discord_webhook_url`, which Sonarr/Radarr/Prowlarr POST their own
@@ -1206,7 +1232,7 @@ no successor.
   hand-maintained "29" that was wrong by five when it was replaced:
   `grep -c '^\s*KUMA_PUSH_[A-Z0-9_]*:' ansible/roles/k8s/monitor-bridge/templates/env-secret.yaml.j2`.
   (The names went stale the same way: they once carried eight tokens retired at the 2026-08-14
-  host flips and were missing six added since.) As of 2026-09-01:
+  host flips and were missing six added after them.) The names on 2026-09-01:
   `monitor_bridge_{arr_queue,b2_reachable,b2_storage,bazarr,cert,cluster_prometheus,cluster_targets,cpu,discord,disk,etcd_drill,gitops_alive,gitops_status,ha,host_temp,k8s_workloads,loki,loki_reachable,longhorn_volumes,mem,n8n,oom,pi,prometheus,promtail_dropped,prowlarr_indexers,pvc,r2_usage,restarts,scrutiny,speedtest,targets,traefik,traefik_latency,ups}_push_token`
   live in `secrets.yml`; we set them and Kuma honors client-supplied tokens. They're passed
   both as env (what the script pushes to) and as `push_token=` in the AutoKuma label.

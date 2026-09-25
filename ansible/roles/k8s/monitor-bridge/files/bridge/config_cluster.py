@@ -48,6 +48,8 @@ class ClusterConfig:
     K8S_RESTART_WINDOW: str
     K8S_RESTART_MAX: int
     K8S_RESTART_RECENT_WINDOW: str
+    ETCD_DB_QUOTA_BYTES: int
+    ETCD_DB_MAX_PCT: float
 
 
 def cluster_config(
@@ -273,4 +275,14 @@ def cluster_config(
         # six bridge cycles. The spacing could not be re-measured — cluster Prometheus retains
         # 7d and the incident is older — so this is the conservative floor.
         K8S_RESTART_RECENT_WINDOW=_env("K8S_RESTART_RECENT_WINDOW", "30m"),
+        # etcd's backend quota, and how full check_etcd_db_size lets the DB get before it
+        # pages. 2 GiB is etcd's OWN default and it is what is in force: `k3s_server_args`
+        # (setup/k3s defaults) carries no `--etcd-arg=quota-backend-bytes`. Add one there and
+        # this number moves with it, or the check measures against a quota the cluster does not
+        # have. Deployed value in monitor-bridge's env-secret.yaml.j2.
+        ETCD_DB_QUOTA_BYTES=_int("ETCD_DB_QUOTA_BYTES", "2147483648"),
+        # 80%, in the PVC_MAX_PCT percent form rather than SNAPSHOT_CAP_WARN_RATIO's ratio.
+        # The DB read 2.6% of the quota on 2026-09-25, so a breach is pathological growth rather
+        # than a slow fill and the exact figure is not load-bearing.
+        ETCD_DB_MAX_PCT=_num("ETCD_DB_MAX_PCT", "80"),
     )

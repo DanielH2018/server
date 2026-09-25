@@ -39,6 +39,7 @@ from checks.cluster import (
     check_traefik_5xx,
     check_traefik_latency,
 )
+from checks.cluster_etcd import check_etcd_db_size
 from checks.host import check_cert, check_disk, check_mem
 from checks.host_thermal import check_host_temp, check_scrutiny, check_ups
 from checks.host_edge import check_pi_pressure, check_speedtest
@@ -124,6 +125,14 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             "etcd_restore_drill",
             tok("KUMA_PUSH_ETCD_DRILL"),
             check_etcd_restore_drill,
+        ),
+        # The drill above proves a restore works; this one watches the failure a restore
+        # follows. etcd's own db-size series is empty while k3s_etcd_expose_metrics is off, so
+        # it reads the apiserver's unconditional proxy for the same number (#2403).
+        Check(
+            "etcd_db_size",
+            tok("KUMA_PUSH_ETCD_DB_SIZE"),
+            check_etcd_db_size,
         ),
         Check("scrutiny", tok("KUMA_PUSH_SCRUTINY"), check_scrutiny),
         Check("host_temp", tok("KUMA_PUSH_HOST_TEMP"), check_host_temp),
