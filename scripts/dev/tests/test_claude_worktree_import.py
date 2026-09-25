@@ -154,3 +154,27 @@ def test_the_stand_in_carries_every_name_the_pruner_imports():
         n for n in names if not re.search(rf"^(def|class) {n}\b", stand_in_source, re.M)
     }
     assert not missing, f"stand-in lacks {sorted(missing)}"
+
+
+def test_the_pruner_imports_as_a_library_with_only_scripts_on_the_path(tmp_path):
+    """`backlog.py` and `findings_lib` load the pruner as `dev.prune_worktrees`.
+
+    That puts `scripts/` on `sys.path` but not `scripts/dev/`, so a bare sibling import that
+    works when the pruner runs directly raises here instead. PR #2578's
+    `from foreign_owned import` did exactly that, and the docs-refresh cron's `backlog.py`
+    generator failed on every run until it was spelled `dev.foreign_owned` (2026-09-25).
+    """
+    env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
+    env["CLAUDE_WORKTREE_HOME"] = str(STAND_IN.parent)
+    code = (
+        f"import sys; sys.path.insert(0, {str(SCRIPTS_DEV.parent)!r}); "
+        "import dev.prune_worktrees"
+    )
+    run = subprocess.run(
+        [sys.executable, "-c", code],
+        cwd=tmp_path,
+        env=env,
+        capture_output=True,
+        text=True,
+    )
+    assert run.returncode == 0, run.stderr
