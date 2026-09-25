@@ -53,6 +53,7 @@ def _problems(worktrees=_WORKTREES, porcelain="", marker=None, now=0.0):
         read_manual_tags=lambda: None,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
+        read_k8s_unapplied=lambda: None,
     )
 
 
@@ -161,6 +162,7 @@ def test_a_failed_read_degrades_to_silence_rather_than_raising():
         read_manual_tags=lambda: None,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
+        read_k8s_unapplied=lambda: None,
     )
     assert lines == []
 
@@ -178,6 +180,7 @@ def test_a_dirty_line_survives_a_failing_marker_read():
         read_manual_tags=lambda: None,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
+        read_k8s_unapplied=lambda: None,
     )
     assert len(lines) == 1
     assert "is dirty" in lines[0]

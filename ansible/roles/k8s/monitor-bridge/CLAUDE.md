@@ -269,7 +269,8 @@ the alternatives rejected. Read this file for the rule, that one before you chan
   KNOWN event.** Unit tests mock the payload and prove the verdict, never the selector; a
   fail-open arm goes green on a typo and a fail-closed one pages on it (*Traps*).
 - **File-mounted credentials** (`HA_TOKEN_FILE`, `B2_PROBE_APPLICATION_KEY_FILE` reusing
-  `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`) are rendered 0600 and read through
+  `longhorn_b2_application_key`, `CF_ANALYTICS_TOKEN_FILE`, `SPEEDTEST_TOKEN_FILE`,
+  `HEALTHCHECKS_API_KEY_FILE`) are rendered 0600 and read through
   `bridge.config._env_file`; an empty file disables the check. Ids stay inline.
 - **The gitops checks read `/var/lib/gitops-deploy` over a `:ro` hostPath** the
   `gitops_deploy` role creates: deploy that role before this one on a fresh host.
@@ -290,7 +291,10 @@ the alternatives rejected. Read this file for the rule, that one before you chan
    hand (`wrangler r2 bucket lifecycle add`); the uploads arm notices it missing.
 5. `monitor_bridge_ha_token`: an HA Long-Lived Access Token (Profile → Security), tier
    `assisted`.
-6. Notifications attach automatically through the `kuma()` macro's `notification_name_list`.
+6. `healthchecks_api_read_only_key`: the Healthchecks.io project's **read-only** API key
+   (project Settings → API Access), tier `assisted`. The `healthchecks_drift` check only
+   reads the console, so it must never hold the full key, which can edit and delete checks.
+7. Notifications attach automatically through the `kuma()` macro's `notification_name_list`.
 
 ## Module layout — and the one rule that governs it
 

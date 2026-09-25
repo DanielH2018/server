@@ -46,6 +46,7 @@ def _problems(manual=None, marker=None, now=1000.0, manual_tags=None):
         read_manual_tags=lambda: manual_tags,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
+        read_k8s_unapplied=lambda: None,
     )
 
 
@@ -119,6 +120,7 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
         read_manual_tags=lambda: None,
         read_contention=lambda: None,
         read_k8s_deferred=lambda: None,
+        read_k8s_unapplied=lambda: None,
     )
     assert len(lines) == 1 and "primary checkout" in lines[0]
 
