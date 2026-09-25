@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-24 13:53 UTC
-generated_sha: 2460d0675
+generated_at: 2026-09-25 06:17 UTC
+generated_sha: e5c8c55d8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -48,7 +48,7 @@ generated_sha: 2460d0675
 | Weekly git object-store repair | `20 4 * * 0` | daniel-box | `{{ sys_user }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `{{ sys_user }}` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Weekly system restart | `30 7 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | configarr sync health | `{{ configarr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `{{ k3s_disk_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{ k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
