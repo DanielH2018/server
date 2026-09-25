@@ -1,11 +1,6 @@
 ---
 - name: Initial Server Setup
   hosts: "{{ target | default(lookup('pipe', 'hostname')) }}"
-  # An escalated task imports from this tree's .venv as root, and the root-owned
-  # __pycache__ that leaves behind blocks the worktree's removal. See
-  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
-  environment:
-    PYTHONDONTWRITEBYTECODE: "1"
   become: true
   # Facts are gathered EXPLICITLY below, after the SOPS-stored sudo password is set.
   # With gather_facts: true the play escalated at fact-gathering — before secrets

@@ -55,6 +55,12 @@ _KNOWN = frozenset(
     }
 )
 
+# The bring-up playbooks are in the deployer's _BROAD_MANUAL_PREFIXES: a content change to any
+# of them parks the GitOps tick for every session until the primary checkout is fast-forwarded
+# by hand, and a new `environment:` key is content. They get the key in a follow-up PR the
+# operator lands at a quiet moment, which also deletes this set (#2456).
+_DEFERRED = frozenset({"bootstrap.yml", "initial_setup.yml", "k3s-bringup.yml"})
+
 
 def _plays() -> list[tuple[Path, int, dict]]:
     """(path, zero-based index within the file, play) for every play under ansible/.
@@ -85,7 +91,9 @@ def _plays_missing_the_key(plays: list[tuple[Path, int, dict]]) -> list[str]:
 
 
 def test_every_play_disables_bytecode_writes() -> None:
-    missing = _plays_missing_the_key(_plays())
+    missing = _plays_missing_the_key(
+        [p for p in _plays() if p[0].name not in _DEFERRED]
+    )
     assert not missing, (
         f"these plays do not set {_ENV_KEY} in their `environment:`: {missing}. "
         "A `become` task in them writes root-owned bytecode into the worktree's .venv, "
