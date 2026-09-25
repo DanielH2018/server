@@ -128,7 +128,15 @@ addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
 # subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
 # bump surfaces here too, on the PR that bumps it rather than on the day the API goes away.
-filterwarnings = ["error"]
+filterwarnings = [
+  "error",
+  # The one exception, and it is a signal rather than a tolerated wart: the role-doc size band
+  # (issue #2557) has to REPORT a doc approaching the line ceiling while the author still has
+  # room to write the bullet, and a blanket `error` would turn that report into the failure the
+  # band exists to arrive before. `always` shows every occurrence in pytest's warnings summary.
+  # Raised only by ansible/tests/k8s/test_k8s_roles_have_claude_md.py.
+  "always::_doc_size.RoleDocNearCeiling",
+]
 # `ui` is registered here so it stays a marker rather than becoming a typo nobody notices,
 # and so `--markers` documents it. The deselection lives in addopts above: these tests drive
 # a real browser against live LAN routes and read SOPS, none of which a GitHub runner has.
