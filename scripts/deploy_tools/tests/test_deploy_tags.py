@@ -377,9 +377,13 @@ def test_hosts_never_prints_the_staging_guest(capsys):
 
 
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
-    """Each of the three deploy_logic importers used to `sys.path.insert` the role dir on
-    every call and never remove it (#1046). The entry is put there once at module scope
-    now; calling all three twice must leave the count exactly where it was."""
+    """The deploy_logic importers must not grow sys.path.
+
+    They used to `sys.path.insert` the role dir on every call and never remove it (#1046).
+    The entry is put there once at module scope now; calling them twice must leave the count
+    exactly where it was. There were three until #2541 folded `_is_broad_manual` into
+    `land_changes.changes_for`.
+    """
     import sys
 
     entry = str(deploy_tags.DEPLOY_LOGIC_DIR)
@@ -387,7 +391,6 @@ def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
     assert before >= 1, "module import no longer puts DEPLOY_LOGIC_DIR on sys.path"
     for _ in range(2):
         deploy_tags._load_deploy_logic()
-        deploy_tags._is_broad_manual("ansible/bootstrap.yml")
         deploy_tags.comment_only_paths([], "HEAD", "HEAD")
     assert sys.path.count(entry) == before
 
