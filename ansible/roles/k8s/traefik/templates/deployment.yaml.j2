@@ -433,7 +433,8 @@ spec:
         # below). CrowdSec's acquis.yaml (crowdsec-secret.yaml.j2) names the exact file
         # /var/log/traefik/access.log, not a glob, so the rotated .1/.2 generations are never
         # re-ingested and old requests never get re-banned. This isn't a new mechanism for this
-        # file: the retired Docker-era edge (ansible/roles/containers/archive/traefik) ran
+        # file: the retired Docker-era edge (deleted by #2385; `git show
+        # 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/traefik/`) ran
         # copytruncate against this exact access.log, with crowdsec tailing it the same way, for
         # months with no reported loss (see git history: b93d9a4c added
         # roles/containers/traefik/files/traefik-logrotate with `copytruncate`, `rotate 7`).

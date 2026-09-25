@@ -3,8 +3,10 @@
 {#
   csp-karakeep rides on the main route only. The bypass documents the macro renders from
   bridge_bypass_prefixes carry rate-limit alone, and that is fine: they serve JSON, and a CSP on
-  JSON does nothing — the archived compose template says as much where it excludes the bypass
-  router.
+  JSON does nothing — the Docker-era compose template said as much where it excluded the bypass
+  router (`git show
+  2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/karakeep/templates/docker-compose.yml.j2`,
+  deleted by #2385).
 #}
 {{ ingressroute(
     container_item.name,

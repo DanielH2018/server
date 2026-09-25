@@ -72,7 +72,9 @@ artifacts_platform_services:
   - cert-manager
 
 # Derived once (2026-08-19) as the roles under containers/archive/ that no host's
-# containers_list still names — `ls roles/containers/archive` minus the two inventories.
+# containers_list still named — `ls roles/containers/archive` minus the two inventories.
+# #2385 deleted that tree; re-derive against `git show --name-only
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/`.
 # prometheus, tempo and otel-collector are live in the observability namespace rather than
 # retired, but they are absent from containers_list for the same reason, so they belong here.
 artifacts_retired_services:

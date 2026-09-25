@@ -50,8 +50,10 @@ def _k8s_authelia_config() -> dict:
 
 
 def test_k8s_session_cookie_name_is_set():
-    """The Docker Authelia this once guarded against retired at E7 (2026-08-13, archived to
-    roles/containers/archive/authelia) — the k8s portal is the only one now, so the
+    """The Docker Authelia this once guarded against retired at E7 (2026-08-13; its role was
+    deleted by #2385 and reads as `git show
+    2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/authelia/`)
+    — the k8s portal is the only one now, so the
     cookie-collision risk this test used to check is moot. What's left worth pinning: the
     session cookie name actually comes from the intended var, and every cookie variant
     (the `.local.` LAN one and the public one) is named off it."""

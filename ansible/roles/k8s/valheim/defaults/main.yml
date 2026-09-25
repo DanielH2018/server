@@ -1,8 +1,10 @@
 ---
 # Reactivated 2026-08-13 straight onto k3s, NOT back onto Docker: the Docker edge retired at
-# E7 and Phase F is draining daniel-server, so the archived compose role
-# (roles/containers/archive/valheim) and the archive/CLAUDE.md reactivation recipe both
-# describe a topology that no longer exists. terraria is the sibling this role copies.
+# E7 and Phase F is draining daniel-server, so the archived compose role and the
+# archive/CLAUDE.md reactivation recipe both described a topology that no longer exists.
+# #2385 deleted both; they are `git show
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/valheim/` and
+# `…:ansible/roles/containers/archive/CLAUDE.md`. terraria is the sibling this role copies.
 
 # The upstream repo moved: lloesche/valheim-server-docker is now community-valheim-tools,
 # and only the new package publishes semver tags (the old ghcr.io/lloesche/valheim-server

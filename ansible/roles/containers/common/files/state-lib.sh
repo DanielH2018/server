@@ -12,7 +12,9 @@
 # directly. The traefik role lib (traefik-lib.sh) keeps its own role-local copy of this idiom for
 # now — folding it in would only reduce duplication cosmetically at the cost of redeploying the edge
 # router, so it's a deliberate deferral. (kopia-lib.sh was the other such copy; the role retired
-# 2026-08-13 and now sits at roles/containers/archive/kopia/. BYTES is carried here as a superset,
+# 2026-08-13 and #2385 deleted it — `git show
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/` reads it.
+# BYTES is carried here as a superset,
 # originally so those libs COULD delegate without a signature change.)
 
 # state_write STATE TAG OK MSG [BYTES]

@@ -6,7 +6,8 @@
 #
 # The tree was Kopia's snapshot source when this was written. Kopia retired 2026-08-13 and the
 # pull itself is now the `roles/k8s/pi-peer-backup` CronJob onto a Longhorn PVC -- see that role
-# and wg-easy's own CLAUDE.md. The retired role is kept at `roles/containers/archive/kopia/`.
+# and wg-easy's own CLAUDE.md. #2385 deleted the retired role; read it with `git show
+# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/`.
 #
 # sudo rsync on the Pi (it has NOPASSWD sudo) is REQUIRED: the files are root:root 0600/0640,
 # unreadable to the ubuntu SSH user. BatchMode=yes so a broken key/host-key fails fast rather than
