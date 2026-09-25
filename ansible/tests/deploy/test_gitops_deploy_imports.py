@@ -30,9 +30,9 @@ from _helpers import REPO
 
 FILES = REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "files"
 ENTRY = "gitops_deploy"
-# The two modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)`, never
+# The three modules every caller reaches QUALIFIED — `deploy_io.deploy_k8s(...)`, never
 # `from deploy_io import deploy_k8s`. The role's CLAUDE.md states the rule; this is its guard.
-QUALIFIED = {"deploy_io", "deploy_alerts"}
+QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 
 # Every module in files/, and which siblings each may import. `None` means no restriction, and
 # only the entry module gets it. Checked with `==` against what is on disk, not `<=`: a new
@@ -65,6 +65,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # The broad arm's two deferral shapes — park, or record in `manual_plane`. It reaches the
     # alert transport, so it sits with `deploy_handlers` rather than among the pure modules.
     "deploy_defer": {
+        "deploy_alert_text",
         "deploy_alerts",
         "deploy_changes",
         "deploy_config",
@@ -78,6 +79,7 @@ ALLOWED: dict[str, set[str] | None] = {
     "deploy_tick_types": {"deploy_changes"},
     # The staging gate's I/O shell: it runs the scripts deploy_staging only decides about.
     "deploy_staging_io": {
+        "deploy_alert_text",
         "deploy_alerts",
         "deploy_config",
         "deploy_io",
@@ -87,6 +89,7 @@ ALLOWED: dict[str, set[str] | None] = {
     },
     # The k8s half of a broad range: the gate's verdict on it, and applying it (#2348).
     "deploy_broad_k8s": {
+        "deploy_alert_text",
         "deploy_alerts",
         "deploy_changes",
         "deploy_config",
@@ -121,10 +124,17 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_narrow",
         "deploy_release",
     },
+    # Every message body, and nothing that sends one: the ChangeSet its signatures take, the
+    # error-text slicers and the k8s remediation it appends. No transport, no state (#2600).
+    "deploy_alert_text": {
+        "deploy_changes",
+        "deploy_failtext",
+        "deploy_remediation",
+    },
     "deploy_alerts": {
+        "deploy_alert_text",
         "deploy_changes",
         "deploy_config",
-        "deploy_failtext",
         "deploy_health",
         "deploy_io",
         "deploy_remediation",
@@ -137,6 +147,7 @@ ALLOWED: dict[str, set[str] | None] = {
     # test_deploy_logic_imports_without_the_common_files_path is the executable half.
     "deploy_staging": set(),
     "deploy_phases": {
+        "deploy_alert_text",
         "deploy_alerts",
         "deploy_changes",
         "deploy_config",
@@ -149,6 +160,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_toolbox",
     },
     "deploy_handlers": {
+        "deploy_alert_text",
         "deploy_alerts",
         "deploy_broad_k8s",
         "deploy_defer",

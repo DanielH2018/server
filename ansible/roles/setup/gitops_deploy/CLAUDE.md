@@ -324,7 +324,8 @@ Three layers, and which one a function belongs in is decided by what it touches.
 |---|---|---|
 | decisions (pure) | `deploy_changes` (which services and planes a path list reaches), `deploy_git` (what a tick does given the two HEADs, the hold and the CI verdict), `deploy_health` (the Docker gate and the delivery queue), `deploy_inventory` (what this host declares), `deploy_k8s` (auto-deploy eligibility, the denylist, the revert note), `deploy_remediation` (the text a deferred alert prescribes), `deploy_staging` (the staging subset, its verdict, whether it blocks) | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
-| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, every message body, and the alert queue's own I/O |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, when an alert is sent, and the alert queue's own I/O |
+| the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS, split from `deploy_alerts` at the seam its docstring named (#2600) |
 | transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
@@ -338,7 +339,8 @@ Three layers, and which one a function belongs in is decided by what it touches.
   `DeployTools` through every phase; a test builds one from `tests/_deploy_fakes.py`.
   `deploy_io.deploy`, `deploy_k8s` and `deploy_broad` stay outside it because the suite
   asserts on the argv they build, so `tests/conftest.py` keeps ONE patch, `deploy_io.run`.
-- **`deploy_io` and `deploy_alerts` are reached QUALIFIED** — never `from deploy_io import`.
+- **`deploy_io`, `deploy_alerts` and `deploy_alert_text` are reached QUALIFIED** — never
+  `from deploy_io import`.
   ENFORCED in `ansible/tests/deploy/test_gitops_deploy_imports.py`, which also holds every
   module's sibling imports to an explicit `ALLOWED` map, keeps `deploy_logic.py` defining
   nothing (it re-exports every decision name, so a `deploy_logic.<name>` citation stays true),

@@ -16,6 +16,7 @@ Each takes the tick's `tools`, `state` and `config` — the `deploy_config.Confi
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
+import deploy_alert_text
 import deploy_alerts
 import deploy_io
 from deploy_changes import (
@@ -444,7 +445,7 @@ def _promote_k8s_auto_deploys(
                 "stale_denylist_alerted",
                 "stale_denylist",
                 target.origin,
-                deploy_alerts.stale_denylist_alert(target.origin, detail, fix),
+                deploy_alert_text.stale_denylist_alert(target.origin, detail, fix),
             )
     # Everything not promoted stays in cs.k8s and defer-and-alerts exactly as before, so this is
     # inert until a service passes BOTH the diff-shape test and the denylist.

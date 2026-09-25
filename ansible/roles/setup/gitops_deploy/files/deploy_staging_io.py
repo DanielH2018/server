@@ -13,6 +13,7 @@ for one subsystem is the piece a handlers module is least about.
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
+import deploy_alert_text
 import deploy_alerts
 import deploy_io
 from deploy_config import CHICAGO, Config, log
@@ -122,7 +123,7 @@ def consult_staging(
             "staging_alerted",
             "staging",
             origin,
-            deploy_alerts.staging_verdict_alert(
+            deploy_alert_text.staging_verdict_alert(
                 origin, summary, config.staging_gate_blocking
             ),
         )

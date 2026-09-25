@@ -30,6 +30,7 @@
     - gitops_markers.py
     - deploy_failtext.py
     - deploy_alerts.py
+    - deploy_alert_text.py
     - deploy_changes.py
     - deploy_defer.py
     - deploy_release.py
@@ -254,6 +255,8 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_failtext.py
       - live: /opt/gitops-deploy/deploy_alerts.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_alerts.py
+      - live: /opt/gitops-deploy/deploy_alert_text.py
+        src: ansible/roles/setup/gitops_deploy/files/deploy_alert_text.py
       - live: /opt/gitops-deploy/deploy_changes.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_changes.py
       - live: /opt/gitops-deploy/deploy_remediation.py

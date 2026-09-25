@@ -9,7 +9,7 @@ import pathlib
 
 import pytest
 
-import deploy_alerts
+import deploy_alert_text
 import deploy_io
 
 FATAL = 'fatal: [daniel-box]: FAILED! => {"msg": "the task that broke"}'
@@ -199,7 +199,7 @@ def test_the_alert_excerpt_keeps_the_argv_line_and_the_tail(gitops_deploy) -> No
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 5000 + f"\n{FATAL}"
     )
-    excerpt = deploy_alerts.alert_excerpt(exc)
+    excerpt = deploy_alert_text.alert_excerpt(exc)
     assert excerpt.startswith("uv run ansible-playbook ansible/deploy.yml -> 2")
     assert FATAL in excerpt
 
@@ -227,7 +227,7 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 50000
     )
-    message = deploy_alerts.broad_failure_alert(
+    message = deploy_alert_text.broad_failure_alert(
         "daniel-box",
         "ansible/deploy.yml",
         [],
@@ -245,7 +245,7 @@ def test_the_broad_alert_fits_discords_head_slice_with_the_action_line_intact(
 
 def test_the_broad_alert_carries_the_failure_detail(gitops_deploy) -> None:
     exc = RuntimeError(f"uv run ansible-playbook ansible/deploy.yml -> 2\n{FATAL}")
-    message = deploy_alerts.broad_failure_alert(
+    message = deploy_alert_text.broad_failure_alert(
         "daniel-box",
         "ansible/initial_setup.yml",
         ["k3s"],
@@ -276,7 +276,7 @@ def test_the_broad_k8s_alert_fits_the_head_slice_and_names_the_services_once(
     exc = RuntimeError(
         "uv run ansible-playbook ansible/deploy.yml -> 2\n" + "z" * 50000
     )
-    message = deploy_alerts.broad_k8s_failure_alert(
+    message = deploy_alert_text.broad_k8s_failure_alert(
         "daniel-box",
         "2d25ced3" * 5,
         NINE_BUMPS,
@@ -320,10 +320,11 @@ def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
     path.write_text("cat out.txt; cat err.txt >&2; exit 2")
     with pytest.raises(RuntimeError) as excinfo:
         deploy_io.run(["sh", str(path)], cwd=str(tmp_path))
-    excerpt = deploy_alerts.alert_excerpt(excinfo.value)
+    excerpt = deploy_alert_text.alert_excerpt(excinfo.value)
     assert excerpt.startswith("sh ")
     assert TASK_HEADER in excerpt
     assert FATAL in excerpt
     assert (
-        len(excerpt) <= deploy_alerts.ALERT_EXCERPT_CHARS + len(deploy_io.TRUNCATED) + 1
+        len(excerpt)
+        <= deploy_alert_text.ALERT_EXCERPT_CHARS + len(deploy_io.TRUNCATED) + 1
     )
