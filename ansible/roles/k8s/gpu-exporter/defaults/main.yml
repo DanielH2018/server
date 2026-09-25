@@ -2,7 +2,7 @@
 # The stdlib is the whole dependency — the exporter reads sysfs and serves http.server — so the
 # image is the same digest-pinned python:3.14-alpine monitor-bridge runs, rather than a second
 # base image to track. Renovate's k8s-defaults manager bumps it by digest.
-gpu_exporter_k8s_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+gpu_exporter_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # TRUE, for pihole-exporter's reason: this pod is read-only, holds no path any workload
