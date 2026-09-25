@@ -1479,7 +1479,7 @@ what stood between it and partial state.** When a wait does exhaust, the play st
 changes whether a SLOW SUCCESS gets cut short.
 
 **The forward attempt and the rollback run sequentially, not concurrently, inside one systemd
-unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (900s)
+unit activation.** A failed forward deploy can spend its full `K8S_DEPLOY_TIMEOUT_S` (1440s)
 before `gitops_deploy.py` gives up on it; the rollback that follows can then spend its full
 `K8S_ROLLBACK_TIMEOUT_S` (1620s, re-sized above). `gitops-deploy.service.j2`'s `TimeoutStartSec`
 was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait + 900 + 1320 =
@@ -1487,34 +1487,37 @@ was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait +
 k8s-path budgets it now covers.
 
 **With the staging gate armed, two more budgets join that same sequence, which is why the
-ceiling is 60min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
+ceiling is 70min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
 `deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
-additive to the pair above rather than alternative to them: 180 + 600 + 120 + 900 + 1620 = 3420s
-against 3600s. Both are sized from a measured staging deploy — a full six-service run of the
-whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
+additive to the pair above rather than alternative to them: 180 + 600 + 120 + 1440 + 1620 = 3960s
+against 4200s. The two staging budgets are sized from a measured staging deploy. A full
+six-service run of the whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
 case — and `defaults/main.yml` carries the measurement. Under-sizing them does not fail safe: a
 staging consultation that times out reports NO VERDICT, indistinguishable from a staging that is
 down, and slice 4's entry condition is a measured false-failure rate.
+
+The ceiling was 60min until 2026-09-25. #2397 raised the forward cap from 900s to 1440s, sized
+from the worst promoted role's own waits, and the ceiling moved to 70min with it.
 
 **Consequence for the lock: this unit's own hold exceeds the 30-minute timer interval, where
 at a 900s rollback budget it landed exactly at the edge (900 + 900 = 1800s = 30min flat) without
 crossing it.** `ExecStart` wraps the whole run in `flock -w 180
 /var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
 secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
-stalled rollback), this unit can hold that lock for up to 3240s (600 + 120 + 900 + 1620 with the
-staging gate armed, 2520s without it, excluding its own flock wait) — past the 30-minute (1800s)
+stalled rollback), this unit can hold that lock for up to 3780s (600 + 120 + 1440 + 1620 with the
+staging gate armed, 3060s without it, excluding its own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
-during that window waits `LOCK_WAIT=3300` — **not** the unit's
-own `-w 180`, which governs only the deployer — so it **outlasts the 3240s hold and then
+during that window waits `LOCK_WAIT=3840` — **not** the unit's
+own `-w 180`, which governs only the deployer — so it **outlasts the 3780s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
-the full 3300s. The secret-rotate cron waits on the same lock rather than failing outright,
-which is true only because its `flock -w` is likewise 3300s and so clears that 3240s hold. The
+the full 3840s. The secret-rotate cron waits on the same lock rather than failing outright,
+which is true only because its `flock -w` is likewise 3840s and so clears that 3780s hold. The
 cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
 matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
 next weekly tick.
 
 **All FOUR waiters on this lock are pinned as a census, not one test each.** `deploy.sh`,
-secret-rotate, docs-refresh and eval-run each wait 3300s, derived from the same four timeouts
+secret-rotate, docs-refresh and eval-run each wait 3840s, derived from the same four timeouts
 via `_LOCK_WAITERS` and `_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`.
 Only the first two were pinned until 2026-09-05, and the two that were not had drifted: both sat
 at 2700, *inside* the 2940s hold, and docs-refresh's own comment claimed it matched

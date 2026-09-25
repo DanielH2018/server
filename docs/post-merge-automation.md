@@ -263,8 +263,8 @@ A 96-second margin is 3.5%. A run four percent slower than measured is SIGTERMed
 which is precisely the failure the hold-before-reset comments throughout `gitops_deploy.py` exist
 to prevent.
 
-The unit sets `TimeoutStartSec=60min`, raised on 2026-08-29 to fund the staging gate, and
-the same numbers fit under it. The arm stays forward-only regardless: funding a broad rollback
+The unit sets `TimeoutStartSec=70min`. It was raised to 60min on 2026-08-29 to fund the staging
+gate and to 70min on 2026-09-25 for the forward cap (#2397), and the same numbers fit under it. The arm stays forward-only regardless: funding a broad rollback
 needs a fresh measurement, not a ceiling raised for an unrelated feature. The `# DECIDED:` marker
 on `broad_budget_ok` in `deploy_remediation.py` carries that ruling, and
 `test_docs_quote_current_values.py` pins the value quoted here to the unit template.

@@ -11,36 +11,37 @@ Type=oneshot
 # intervention.
 #
 # Two independent worst cases must fit inside this ceiling, and task 6b's k8s one is why it is
-# 45min rather than 25min (the staging gate below is why it is now 60min):
+# 45min rather than 25min (the staging gate below took it to 60min, and #2397's forward cap to
+# 70min):
 #   - Docker path: 180s max flock wait + RUN_BUDGET_S (1020s, the health-gate phase) +
 #     HEALTH_TIMEOUT_S (300s, the rollback redeploy) = 1500s = 25min exactly, still true and
 #     now with slack under the larger ceiling. See config.env.j2.
-#   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (900s) before
-#     gitops_deploy.py catches the timeout, THEN the rollback redeploy can spend its whole
-#     K8S_ROLLBACK_TIMEOUT_S (1320s, re-sized against the real per-service ceiling — see
-#     defaults/main.yml) — the two run SEQUENTIALLY in one unit activation, not concurrently,
-#     and neither shares the Docker path's RUN_BUDGET_S. That pair alone is 180 (max flock
-#     wait) + 900 + 1320 = 2400s, which needs more than 25min (1500s) — see
+#   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (1440s, derived
+#     from the worst promoted role — see defaults/main.yml) before gitops_deploy.py catches the
+#     timeout, THEN the rollback redeploy can spend its whole K8S_ROLLBACK_TIMEOUT_S (1620s,
+#     re-sized against the real per-service ceiling) — the two run SEQUENTIALLY in one unit
+#     activation, not concurrently, and neither shares the Docker path's RUN_BUDGET_S. That pair
+#     alone is 180 (max flock wait) + 1440 + 1620 = 3240s, which needs more than 25min (1500s) — see
 #     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
 #     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
 #   - k8s path WITH the staging gate armed (STAGING_GATE, off by default), which is why this is
-#     60min rather than 45min. consult_staging runs INSIDE the same k8s handler,
+#     70min rather than 60min. consult_staging runs INSIDE the same k8s handler,
 #     before deploy_k8s, so its two budgets are additive to the pair above rather than
 #     alternative to them: 180 + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120)
-#     + 900 + 1320 = 3120s. The BROAD arm returns before the k8s block, so the true ceiling is
+#     + 1440 + 1620 = 3960s. The BROAD arm returns before the k8s block, so the true ceiling is
 #     max(broad, k8s), not a sum of the two.
 #   - broad path, since #2348: that arm consults the staging gate for the promoted image bumps
 #     riding on its range and then deploys them, so its own worst case is 180 (max flock wait)
 #     + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) + BROAD_DEPLOY_TIMEOUT_S
-#     (1800) = 2700s, still under the k8s path's 3120s. Two things keep it there. The bumps
+#     (1800) = 2700s, still under the k8s path's 3960s. Two things keep it there. The bumps
 #     share the plans' BROAD_DEPLOY_TIMEOUT_S rather than taking a K8S_DEPLOY_TIMEOUT_S of
 #     their own, so the whole apply phase is still one term. And the arm is FORWARD-ONLY — for
 #     a correctness reason rather than this one (a reset would undo the ff-merge under a setup
-#     plane it already applied), but K8S_ROLLBACK_TIMEOUT_S on top would reach 4020s and past
+#     plane it already applied), but K8S_ROLLBACK_TIMEOUT_S on top would reach 4320s and past
 #     this ceiling.
 #
 # Sized against a MEASURED staging deploy (defaults/main.yml carries the number), and the
-# 480s of remaining slack is deliberate: shrinking the staging budget to avoid raising this
+# 240s of remaining slack is deliberate: shrinking the staging budget to avoid raising this
 # ceiling would turn a slow staging into NO VERDICT, which is the one failure the gate exists
 # to measure.
 #
@@ -72,7 +73,7 @@ Type=oneshot
 # them comes out of the SAME budget as the playbook it is waiting to run
 # (deploy_locks.locked_budget). That is what keeps the four terms below a true ceiling: give the
 # wait a budget of its own and each of them doubles, past this TimeoutStartSec.
-TimeoutStartSec=60min
+TimeoutStartSec=70min
 User={{ sys_user }}
 WorkingDirectory=/home/{{ sys_user }}/server
 # Need ~/.local/bin on PATH for `uv` (the deployer runs `uv run ansible-playbook`,
@@ -100,7 +101,7 @@ SyslogLevel=notice
 # exit-1 ticks in the seven days to 2026-08-23, each logging nothing at all because flock died
 # before the deployer started. Raising -w cannot fix it — this unit's own worst case is
 # STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S + K8S_DEPLOY_TIMEOUT_S +
-# K8S_ROLLBACK_TIMEOUT_S = 3240s against TimeoutStartSec 3600s, so the largest legal -w is 360s,
+# K8S_ROLLBACK_TIMEOUT_S = 3780s against TimeoutStartSec 4200s, so the largest legal -w is 420s,
 # still short of a routine 20-minute deploy; test_gitops_discord_contract.py::test_k8s_deploy_
 # timeout_budget_survives_max_flock_contention asserts that bound and goes red if you try. So
 # -E 75 + SuccessExitStatus=75

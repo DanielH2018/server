@@ -49,7 +49,7 @@ def broad_budget_ok(
 
     # DECIDED: the ceiling has since moved and the arm stays forward-only anyway.
     TimeoutStartSec went to 60min on 2026-08-29 to fund the staging gate, at which the same
-    numbers FIT (2904 against 3600). This predicate has no production caller, so nothing changed
+    numbers FIT (2904 against 3600), and to 70min on 2026-09-25 for the forward cap (#2397). This predicate has no production caller, so nothing changed
     behaviour; the arm is forward-only in gitops_deploy.py's code. Arming a broad rollback needs
     its own evidence — a re-measured deploy.yml on today's tree — not a ceiling raised for an
     unrelated feature. Pinned by

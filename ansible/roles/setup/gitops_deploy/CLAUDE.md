@@ -416,18 +416,19 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
   `gitops-deploy.service.j2` is `max(broad, staging + k8s + rollback)` plus the flock wait,
   and the template's own comment carries the arithmetic. Under-sizing the staging pair does
   not fail safe: a timed-out consultation is NO VERDICT.
-- **The FORWARD cap does not cover the worst promoted role, and that gap is open** (#2397).
-  `gitops_deploy_k8s_timeout_s` is 900 s; prowlarr needs 1260 s of it (one claim's snapshot,
-  300 s of in-role waiting, a 780 s rollout, the 60 s soak). A cap kill is a killpg MID-DRAIN
-  routed to `_rollback_k8s`. Raising the cap alone is unsafe — it takes the four waiters below
-  under the deployer's hold, and `TimeoutStartSec` with them — so the fix is either #2369's
-  pre-pull or one change raising all three together.
-  `test_the_forward_cap_shortfall_does_not_widen` ratchets the gap at 360 s meanwhile, and the
-  rollout term counts only for a role that queues one: netpol-baseline waits the longest of any
-  role in its own `tasks/` and passes `manifests_rollout: ""`, so it pays 710 s, not 1310 s.
+- **The FORWARD cap is derived from the worst promoted role** (#2397).
+  `gitops_deploy_k8s_timeout_s` is 1440 s. prowlarr needs 1260 s of it: one claim's snapshot,
+  300 s of in-role waiting, a 780 s rollout and the 60 s soak. The tick adds a 90 s service-lock
+  allowance and 60 s of playbook overhead on top. Under that sum a cap kill lands as a killpg
+  MID-DRAIN routed to `_rollback_k8s`.
+  `test_the_forward_cap_covers_the_worst_promoted_role` derives the sum from role sources and
+  fails when it outgrows the cap. The rollout term counts only for a role that queues one:
+  netpol-baseline waits the longest of any role in its own `tasks/` and passes
+  `manifests_rollout: ""`, so it pays 710 s, not 1310 s. The cap cannot be raised alone. It
+  moves the four waiters below and `TimeoutStartSec` with it, in the same change.
 - **All four tree-lock waiters are pinned as a census** (`_LOCK_WAITERS`,
   `_worst_lock_hold()` in the same test file): `deploy.sh`, secret-rotate, docs-refresh and
-  eval-run each wait 3300 s, derived from the four timeouts.
+  eval-run each wait 3840 s, derived from the four timeouts.
 - **A busy service lock is contention, not a failed deploy** (`ServiceLockBusy`, caught ahead
   of each handler's failure arm; `deploy_defer.for_contention` resets to `local`, returns 0,
   writes no hold). The streak IS recorded in `contention_since` (#1847): monitor-bridge pages

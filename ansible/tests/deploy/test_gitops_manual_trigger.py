@@ -202,12 +202,12 @@ def test_unit_pages_on_failure():
 
 def test_unit_timeout_covers_the_measured_k8s_worst_case():
     # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
-    # K8S_DEPLOY_TIMEOUT_S (900) + K8S_ROLLBACK_TIMEOUT_S (1320) = 3120s, which is why the unit's
-    # own arithmetic comment sizes TimeoutStartSec to 60min rather than the 45min it carried
-    # before the gate. The docstring at the top of this file defers to this pin for the value.
+    # K8S_DEPLOY_TIMEOUT_S (1440) + K8S_ROLLBACK_TIMEOUT_S (1620) = 3960s, which is why the unit's
+    # own arithmetic comment sizes TimeoutStartSec to 70min. It was 60min until #2397 derived
+    # the forward cap from the worst promoted role. The docstring at the top of this file defers to this pin for the value.
     unit = _UNIT_TEMPLATE.read_text()
-    assert re.search(r"^TimeoutStartSec=60min$", unit, re.MULTILINE), (
-        f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 60min. If this is a deliberate "
+    assert re.search(r"^TimeoutStartSec=70min$", unit, re.MULTILINE), (
+        f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 70min. If this is a deliberate "
         "re-size, re-derive it against the budget arithmetic in the unit's own comment and "
         "gitops_deploy/defaults/main.yml before changing this pin."
     )
