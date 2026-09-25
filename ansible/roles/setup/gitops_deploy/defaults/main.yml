@@ -159,6 +159,24 @@ gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylis
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds — the FORWARD
 # deploy only; the rollback redeploy has its own budget below. RUN_BUDGET_S does NOT cover this
 # path — it bounds only the Docker health gate (gate_services), which is inert on an all-k8s host.
+#
+# 900 DOES NOT COVER THE WORST PROMOTED ROLE, and that gap is open rather than accepted (#2397).
+# The same terms the rollback budget below sums, minus the revert ones, run inside this one
+# budget: claims x volume_snapshot_timeout (the pre-apply snapshot) + the role's OWN in-role
+# waits + manifests_rollout_timeout + k8s_rollout_stabilise_seconds. The service-lock wait is
+# spent out of this budget too (`deploy_locks.locked_budget`), so it is overhead on top.
+# netpol-baseline is the worst at 0 + 650 + 600 + 60 = 1310s (five probe Jobs at
+# `--timeout=130s`), and prowlarr next at 120 + 300 + 780 + 60 = 1260s. A cap kill is a killpg
+# MID-DRAIN that routes to _rollback_k8s, as a rollout timeout does.
+#
+# It is not raised here because raising it alone is unsafe: `_worst_lock_hold` is 3240s against
+# the 3300s every tree-lock waiter allows, so 900 -> 1310 would silently take the four waiters
+# (secret-rotate, docs-refresh, eval-run, deploy.sh's LOCK_WAIT) under the deployer's hold and
+# make each of them skip a run and page for ordinary contention. Closing it means either #2369's
+# pre-pull — which takes the cold image pull out of the rollout wait, growing no budget — or one
+# change that raises the cap, all four waiters and the unit's TimeoutStartSec together.
+# `test_the_forward_cap_shortfall_does_not_widen` ratchets the gap at today's 410s meanwhile, so
+# a new in-role wait or a rollout bump on a promoted role fails there rather than in production.
 gitops_deploy_k8s_timeout_s: 900
 
 # Wall-clock cap for the ROLLBACK redeploy specifically — the run that also reverts each claimed

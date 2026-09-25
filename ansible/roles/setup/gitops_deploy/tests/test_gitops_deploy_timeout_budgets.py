@@ -8,6 +8,9 @@ K8S_ROLLBACK_TIMEOUT_S must cover one full revert cycle for the worst promoted s
 value is read from its source rather than pinned, so a bump to any one of them fails here
 instead of silently reopening the gap.
 
+The forward cap is the one sum that does NOT fit today. `test_the_forward_cap_shortfall_does_not_widen`
+ratchets the gap at the 410s it stands at rather than asserting a fit that would be red (#2397).
+
 The lock waiters are checked as a CENSUS (`_LOCK_WAITERS`) rather than one test each. Two of
 the four were pinned individually and the other two were not, so docs-refresh and eval-run sat
 at 2700 against a 2940s hold with every check green — and docs-refresh's comment claimed it
@@ -337,4 +340,100 @@ def test_k8s_rollback_budget_covers_the_worst_single_promoted_service():
         f"gitops_deploy_k8s_rollback_timeout_s ({rollback_timeout}s) — its rollback can be "
         f"SIGTERMed mid-revert. Raise that default (and TimeoutStartSec, and re-check this "
         f"test's own comment on the batch-summation gap it does not cover)."
+    )
+
+
+# The FORWARD deploy's own ceiling, derived the same way as the rollback's above and from the
+# same role sources — minus the revert terms, which only the rollback run pays. One tick runs
+# `ansible-playbook --tags <promoted services>` under `locked_budget(services,
+# K8S_DEPLOY_TIMEOUT_S)`, and inside that one budget a promoted role pays, in sequence: the
+# pre-apply snapshot wait per declared claim, its OWN in-role waits, the drain's rollout wait,
+# and the stabilisation soak. The service-lock wait comes out of the same budget
+# (`deploy_locks.locked_budget`), so it is overhead on top of all four.
+#
+# EVERY promoted role is counted, not just the claim-declaring ones the rollback derivation
+# narrows to. A claim-free role still pays the other three terms, and the worst forward case in
+# the repo is exactly such a role: netpol-baseline waits 5 x --timeout=130s for its probe Jobs
+# on top of a 600s rollout. #2397 measured prowlarr (1260s) as the worst by looking only at the
+# claim-declaring set.
+#
+# THIS TEST IS A RATCHET, NOT A PROOF THE BUDGET FITS. The gap is real and open: raising the cap
+# to cover it would push `_worst_lock_hold` past the 3300s every tree-lock waiter above allows,
+# so the fix is #2369's pre-pull (which takes the cold image pull out of the rollout wait) or a
+# coordinated raise of the cap, all four waiters and the unit's TimeoutStartSec. Until one of
+# those lands, what must not happen silently is the gap GROWING — a new in-role wait or a rollout
+# bump on a promoted role. That is what this catches.
+_KNOWN_FORWARD_SHORTFALL_S = 410
+
+
+def _forward_ceiling(
+    role: str, role_defaults: dict, snapshot_timeout: int, stabilise: int
+) -> int:
+    """One promoted role's worst case inside K8S_DEPLOY_TIMEOUT_S, excluding the lock wait."""
+    claims = role_defaults.get("k8s_autodeploy_snapshot_pvcs") or []
+    return (
+        len(claims) * snapshot_timeout
+        + in_role_wait_s(role)
+        + _rollout_timeout_s(role)
+        + stabilise
+    )
+
+
+def _worst_forward_case(snapshot_timeout: int, stabilise: int) -> tuple[str, int]:
+    """The promoted role with the longest forward ceiling, and that ceiling."""
+    worst_role, worst = "", 0
+    for role_defaults_path in sorted(_K8S_ROLES_DIR.glob("*/defaults/main.yml")):
+        role = role_defaults_path.parent.parent.name
+        role_defaults = yaml.safe_load(role_defaults_path.read_text()) or {}
+        if not role_defaults.get("k8s_autodeploy"):
+            continue
+        ceiling = _forward_ceiling(role, role_defaults, snapshot_timeout, stabilise)
+        if ceiling > worst:
+            worst_role, worst = role, ceiling
+    return worst_role, worst
+
+
+def _forward_terms() -> tuple[int, int, int]:
+    """(snapshot timeout, stabilise soak, forward cap), each read from its own source."""
+    snapshot_defaults = yaml.safe_load(
+        (_K8S_ROLES_DIR / "volume-snapshot" / "defaults" / "main.yml").read_text()
+    )
+    all_vars = yaml.safe_load(_ALL_VARS.read_text())
+    defaults = yaml.safe_load(_DEFAULTS.read_text())
+    return (
+        int(snapshot_defaults["volume_snapshot_timeout"]),
+        int(all_vars["k8s_rollout_stabilise_seconds"]),
+        int(defaults["gitops_deploy_k8s_timeout_s"]),
+    )
+
+
+def test_the_forward_cap_shortfall_does_not_widen():
+    snapshot_timeout, stabilise, cap = _forward_terms()
+    worst_role, worst = _worst_forward_case(snapshot_timeout, stabilise)
+    assert worst_role, (
+        "no promoted (k8s_autodeploy: true) k8s role found — the sizing model this test "
+        "encodes no longer matches the repo; update it rather than deleting it"
+    )
+    assert worst - cap <= _KNOWN_FORWARD_SHORTFALL_S, (
+        f"{worst_role} needs {worst} s inside gitops_deploy_k8s_timeout_s ({cap}s) "
+        f"({len(yaml.safe_load((_K8S_ROLES_DIR / worst_role / 'defaults' / 'main.yml').read_text()).get('k8s_autodeploy_snapshot_pvcs') or [])} "
+        f"claim(s) x {snapshot_timeout}s snapshot, {in_role_wait_s(worst_role)}s of in-role "
+        f"waits, {_rollout_timeout_s(worst_role)}s rollout, {stabilise}s soak), which is "
+        f"{worst - cap}s over it — past the {_KNOWN_FORWARD_SHORTFALL_S}s shortfall #2397 "
+        f"recorded. A cap kill is a killpg MID-DRAIN that routes to _rollback_k8s. Close the "
+        f"gap (#2369's pre-pull) or raise the cap WITH all four tree-lock waiters and the "
+        f"unit's TimeoutStartSec; do not widen this constant to make the run green."
+    )
+
+
+def test_a_widened_forward_shortfall_is_caught():
+    # Red proof for the ratchet above, which can only ever be observed passing: the same
+    # verdict, driven on a role that grew an in-role wait past the recorded shortfall.
+    snapshot_timeout, stabilise, cap = _forward_terms()
+    _, worst = _worst_forward_case(snapshot_timeout, stabilise)
+    assert worst - cap == _KNOWN_FORWARD_SHORTFALL_S, (
+        f"the recorded shortfall is stale: the worst promoted role now needs {worst - cap}s "
+        f"more than the {cap}s cap, not {_KNOWN_FORWARD_SHORTFALL_S}s. If the gap CLOSED, "
+        f"drop the constant to 0 and this test with it — the ratchet becomes the real budget "
+        f"check #2397 asked for. If it grew, the test above already says so."
     )
