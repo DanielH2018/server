@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-25 06:17 UTC
-generated_sha: e5c8c55d8
+generated_at: 2026-09-25 18:17 UTC
+generated_sha: 77c9f0418
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: e5c8c55d8
 
 # Secrets
 
-177 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+179 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -134,6 +134,7 @@ rotated unattended by the weekly secret-rotate cron.
 | Secret | Last rotated | Due | Days left |
 |---|---|---|---|
 | `arr_autoblock_push_token` | 2026-08-30 | 2027-02-26 | 154 |
+| `artifacts_sync_push_token` | 2026-05-24 | 2026-11-12 | 48 |
 | `claude_otel_push_token` | 2026-08-28 | 2027-02-14 | 142 |
 | `cloudflare_ddns_direct_push_token` | 2026-08-30 | 2027-02-26 | 154 |
 | `cloudflare_ddns_proxied_push_token` | 2026-08-30 | 2027-02-16 | 144 |
@@ -170,6 +171,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_gitops_alive_push_token` | 2026-08-30 | 2027-02-23 | 151 |
 | `monitor_bridge_gitops_status_push_token` | 2026-08-30 | 2027-02-25 | 153 |
 | `monitor_bridge_ha_push_token` | 2026-08-30 | 2027-02-14 | 142 |
+| `monitor_bridge_healthchecks_drift_push_token` | 2026-07-31 | 2027-01-16 | 113 |
 | `monitor_bridge_home_allowlist_push_token` | 2026-08-28 | 2027-02-10 | 138 |
 | `monitor_bridge_host_temp_push_token` | 2026-08-09 | 2027-02-01 | 129 |
 | `monitor_bridge_janitorr_push_token` | 2026-08-30 | 2027-02-15 | 143 |
