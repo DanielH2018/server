@@ -231,12 +231,16 @@ only. On 2026-09-25 a fleet render on daniel-box reproduced the recorded digest 
 services a dry run can reach, in 5m38s. A rendered one-line change to one template moved the
 digest, so the comparison can go red.
 
-Three gaps keep the narrowings in place:
+`probe.py releases --stale-only` reads those records
+(`scripts/diagnostics/probe_lib/releases_render.py:render_proves_current`). A matching digest
+clears a service's path hits only when the render record's `commit` is origin/master, its tree
+was clean, and its `host` is the release record's. A digest match says nothing about secret
+manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest,
+left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
+which held for 25 of 58 on that date (#2586).
 
-- **A digest match says nothing about secret manifests.** A rendered line added to
-  uptime-kuma's `static-monitors.yaml.j2`, a secret manifest, left its digest unchanged. A
-  reader may let a match clear path hits only where `secret_manifests` is empty on both
-  records — 25 of 58 on that date (#2586).
+Two gaps keep the narrowings in place:
+
 - **Nothing produces render records on a schedule** (#2587).
 - **13 stamped services cannot be dry-run** because their own tasks mutate the cluster
   unguarded (`k8s_dry_run_unsupported`), and n8n's image-checksum annotation renders

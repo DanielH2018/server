@@ -21,7 +21,8 @@ deployer's tick asks -- #1993). `stale` is what makes a deferred k8s change visi
 gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
 every other monitored marker then reads clean while the cluster still runs the old manifests
 (issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
-are reported rather than judged.
+are reported rather than judged. A path hit is cleared when a render record proves the applied
+bytes are what origin/master renders (`releases_render`, #2586).
 
 Exit codes: 0 when every record is clean, 1 when any service is dirty, unmerged or stale, 2 when
 no records exist at all (nothing has been deployed since the stamp shipped). `--stale-only`
@@ -71,6 +72,9 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
     role_paths_for,
 )
 
+# A render record that proves the applied bytes current clears a path hit (#2586).
+from diagnostics.probe_lib.releases_render import apply_renders  # noqa: E402
+
 
 def _git(*args, cwd, **kwargs):
     """Run git against `cwd` and nothing else, through the shared runner.
@@ -79,16 +83,8 @@ def _git(*args, cwd, **kwargs):
     running this reader from inside another git operation -- prek's own `pytest` hook runs
     under `git commit`, with exactly these set to that commit's in-progress index -- would
     otherwise point every git call in this module at the WRONG repository, and a real commit in
-    `repo_root` reads as "commit unknown to this checkout". `repo_root` is the explicit
-    parameter every function below already takes to be scoped and testable; honoring it means
-    the ambient environment can't override it.
-
-    This module carried its own `_git_env()` building that stripped environment inline. It was
-    the same dict comprehension as `lib.git`, re-derived from the same hazard `lib.git`'s own
-    docstring records -- two copies of one safety fix, free to drift the moment either side
-    changes the strip rule. `lib.git.git` already strips every `GIT_*` variable and already
-    passes `capture_output=True, text=True`, so this is a thin wrapper for the default
-    arguments, the way `scripts/dev/prune_worktrees.py` wraps the same function.
+    `repo_root` reads as "commit unknown to this checkout". `lib.git.git` strips every `GIT_*`
+    variable, so this module keeps no copy of that fix to drift.
     """
     return _lib_git(*args, cwd=cwd, **kwargs)
 
@@ -577,6 +573,7 @@ def run_releases(ns):
         grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
         pending = {}
         stale = compute_stale(records, grace_seconds=grace_seconds, pending=pending)
+        apply_renders(stale, records, pending=pending)
         missing = missing_services(records)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
         text, code = render(
@@ -593,6 +590,7 @@ def run_releases(ns):
         if not service and not getattr(ns, "previous", False)
         else {}
     )
+    apply_renders(stale, records)
     text, code = format_records(
         records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
     )
