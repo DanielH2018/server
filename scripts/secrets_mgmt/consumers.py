@@ -88,6 +88,10 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # daniel-server's (ups_host) own leg of the same watchdog, added in issue #952 so the
         # two hosts stop sharing ups_secondary_push_token above — same shape and same reason.
         "ups_secondary_daniel_server_push_token",
+        # daniel-box timer (setup/render_records, renders /etc/render-records/config.env) +
+        # k8s/uptime-kuma static tile. Same shape as mkv_attachment_repair_push_token: the
+        # pushing role runs only from initial_setup.yml and has no deploy tag.
+        "render_records_push_token",
     }
 )
 

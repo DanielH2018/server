@@ -263,6 +263,7 @@ kuma_status_page_groups:
       - "^docs-refresh$"
       - "^manifest-prune-check$"
       - "^release-staleness-check$"
+      - "^render-records$"
       - "^homelab-eval-sweep$"
       - "^status-page-sync$"
       - "^artifacts-sync$"
