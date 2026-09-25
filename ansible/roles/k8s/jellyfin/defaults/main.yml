@@ -266,7 +266,7 @@ jellyfin_k8s_mediacleaner_sha256: "473e9382d12ccada1a63c240588c7410ce68fa57c9020
 # there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather
 # than written into the template because Renovate's k8s-defaults manager only scans
 # defaults/main.yml.
-jellyfin_k8s_plugin_init_image: python:3.14-alpine@sha256:c6ead215bfd31f1e433d968853b7a769989117115b728874824e6c0a27cb96fc
+jellyfin_k8s_plugin_init_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
 
 jellyfin_k8s_cpu_limit: "4"
 jellyfin_k8s_mem_limit: 4096Mi
