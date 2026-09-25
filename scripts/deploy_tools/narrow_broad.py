@@ -52,7 +52,7 @@ from typing import Callable, NamedTuple
 
 import yaml
 
-from deploy_tools import narrow_containers
+from deploy_tools import narrow_containers, narrow_paths
 from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 from lib import yaml_fast
 from lib.git import git, git_stdout
@@ -407,6 +407,8 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     record stale, which is the set that full run would have re-stamped. The two agree by
     construction, so a refusal never leaves a service the tick applied reading stale.
     """
+    if narrow_paths.is_prose(path):  # a doc no playbook applies (#2448)
+        return set()
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
     after = _show(ctx.ref, path, ctx.cwd)

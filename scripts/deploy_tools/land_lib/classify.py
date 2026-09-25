@@ -113,6 +113,7 @@ def classify(ln: Landing) -> None:
         t.hostname(),
         quiet=quiet,
     )
+    ln.plane_paths = paths
     if ln.resolved_tags:
         # `--tags` named the services, so nothing below runs: the operator's list wins over a
         # derivation, and `plane` is what a HAND applies rather than an input to any wait this
@@ -136,8 +137,28 @@ def classify(ln: Landing) -> None:
             f"could not read containers_list at {ln.merge_sha[:8]} — "
             "classifying against this checkout instead"
         )
+    # A shared role whose change reaches no rendered manifest is live for the next deploy of
+    # any caller, so no hand applies it: `manifests_rollout_timeout_default` is read as a
+    # `--timeout` while a deploy runs, and PR #2460's landing asked for a 20-minute
+    # `ansible/deploy.yml` that would have changed nothing (#2462). Its paths come out of the
+    # list the note is built from; every failure inside returns the list unchanged.
+    ln.plane_paths = _classified(
+        ln,
+        "deploy-time-only shared-role classification",
+        t.paths_a_hand_must_apply,
+        paths,
+        ln.pr_range,
+        ln.opts.primary,
+        declared,
+    )
+    if len(ln.plane_paths) != len(paths):
+        say(
+            "no rendered manifest reads what this PR changed under "
+            f"{','.join(sorted(set(paths) - set(ln.plane_paths)))}, so it takes effect on "
+            "the next deploy rather than needing one"
+        )
     ln.plane = _classified(
-        ln, "plane classification", c.plane_note, paths, declared, quiet=quiet
+        ln, "plane classification", c.plane_note, ln.plane_paths, declared, quiet=quiet
     )
     # -1 rather than 0: `gh` omitting the field must not read as agreement with an empty
     # file list, which would silently license a zero-tag deploy.
@@ -185,7 +206,7 @@ def narrow_plane(ln: Landing) -> None:
         )
         if narrow:
             ln.plane = ln.classifier.plane_note(
-                ln.pr_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
+                ln.plane_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
             )
     except Exception as exc:
         say(f"narrowing not read ({type(exc).__name__}) — keeping the role tag")

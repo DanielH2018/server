@@ -6,6 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
+from deploy_tools.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
@@ -240,7 +241,7 @@ def test_the_diff_fallback_drops_an_empty_tag_element(landing):
 
 
 def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
-    ln, _ = _ready(landing, Fakes(changed_rc=3), since="abc")
+    ln, _ = _ready(landing, Fakes(changed_rc=DEPLOY_BROAD), since="abc")
     ln.needs_diff = True
     with pytest.raises(Outcome) as exc:
         deploy.deploy_phase(ln)

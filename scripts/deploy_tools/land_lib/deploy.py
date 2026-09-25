@@ -46,7 +46,27 @@ def derive_from_diff(ln: Landing) -> None:
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
     if r.returncode == DEPLOY_BROAD:
-        ln.die("the change is broad and maps to no service list — deploy it by hand", 1)
+        # The tick is the apply for this range, so the deployer's own markers answer this
+        # landing and `no_tag_outcome` is where they are read. This used to exit 1 with NO
+        # `VERDICT:` line at all: PR #2437's landing said "deploy it by hand" while the tick
+        # was applying the whole play at that very merge commit, and `broad_applied` read that
+        # commit once the apply returned (issue #2448).
+        #
+        # Gated on `self_applied or plane`, because `--since` bounds a range WIDER than this
+        # PR: another session's broad merge inside it can refuse the derivation for a PR that
+        # touched nothing broad itself, and `no_tag_outcome` would grade that as
+        # `nothing-to-deploy` over undeployed services.
+        if ln.self_applied or ln.plane:
+            say(
+                "no tag list scopes this diff; grading the landing from the deployer's own "
+                "markers instead of asking for a hand"
+            )
+            no_tag_outcome(ln, scope="no tag list scoping its diff")
+        ln.die(
+            "the change is broad and maps to no service list — deploy it by hand",
+            1,
+            Verdict.NEEDS_MANUAL_APPLY,
+        )
     if r.returncode != DEPLOY_OK:
         ln.die(f"deploy_tags.py changed failed (exit {r.returncode})", 1)
     # An empty element (a doubled or trailing comma) is dropped here rather than handed to
@@ -55,15 +75,21 @@ def derive_from_diff(ln: Landing) -> None:
     ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
 
 
-def no_tag_outcome(ln: Landing) -> NoReturn:
-    """No service tag: owed to a hand, nothing at all, or the tick's own state decides."""
+def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
+    """No service tag: owed to a hand, nothing at all, or the tick's own state decides.
+
+    `scope` is why this landing has no tags to deploy, printed on the verdict line. The
+    default is the ordinary case — the PR's own files derived none. `derive_from_diff` passes
+    its own wording, because a refused broad derivation is not the same fact and an operator
+    reading `reaches no service tag` about a 330-file PR goes looking for a different bug.
+    """
     pr, sha = ln.opts.pr, ln.merge_sha
     if ln.plane:
         print(f"  it needs applying by hand: {ln.plane}")
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
-            f"PR #{pr} reaches no service tag, but is not done",
+            f"PR #{pr} reaches {scope}, but is not done",
         )
     if not ln.self_applied:
         ln.finish(Verdict.NOTHING_TO_DEPLOY, 0, f"PR #{pr} touched no service")
@@ -111,6 +137,19 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
             "  the tick crossed this PR but recorded no broad apply covering it "
             f"(broad_applied: {ln.state('broad_applied') or 'absent'})"
         )
+        # `broad_applied` is written by `handle_broad` only after the apply RETURNS, so a run
+        # still applying reads exactly like a tick that converged without applying — and a
+        # tick that already ff-merged this PR answers CONVERGED, never BEHIND, so the arm
+        # above cannot catch it. Issue #2448 is that landing: PR #2437 was told to deploy by
+        # hand while the apply that covered it was still running.
+        if ln.tick_watch_abandoned:
+            print(ABANDONED_WATCH_NOTE)
+            ln.finish(
+                Verdict.DEFERRED,
+                75,
+                f"PR #{pr}, {sha} — this run stopped watching a tick still applying, so "
+                "whether it recorded an apply of this PR is not yet known",
+            )
         print(unrecorded_apply_note(ln.state("behind_since")))
         if ln.self_applied_command:
             print(f"  Apply it: {ln.self_applied_command}")
@@ -130,7 +169,7 @@ def no_tag_outcome(ln: Landing) -> NoReturn:
     ln.finish(
         Verdict.SETTLED,
         0,
-        f"PR #{pr}, {sha} — no service tag; the tick applied it and converged with origin",
+        f"PR #{pr}, {sha} — {scope}; the tick applied it and converged with origin",
     )
 
 

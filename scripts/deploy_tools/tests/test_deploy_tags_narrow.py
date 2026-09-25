@@ -307,6 +307,25 @@ def test_a_non_utf8_broad_path_is_flagged_rather_than_raised(tree: Tree):
         tree.narrow(*_refs(tree))
 
 
+# ── prose under a play prefix reaches nothing ───────────────────────────────────────────
+
+
+def test_a_doc_under_a_play_prefix_narrows_to_nothing(tree: Tree):
+    """CLEAN half: `roles/containers/common/CLAUDE.md` widened the tick to a full
+    `ansible/deploy.yml` — 14 minutes for prose (#2448)."""
+    tree.write(
+        "ansible/roles/containers/common/CLAUDE.md", "# how the deploy path works\n"
+    )
+    assert tree.narrow(*_refs(tree)) == set()
+
+
+def test_a_doc_under_a_play_prefix_templates_dir_is_still_flagged(tree: Tree):
+    """FLAGGED half: a `.md` under `templates/` is rendered onto a host, not prose."""
+    tree.write("ansible/roles/containers/common/templates/motd.md", "hello\n")
+    with pytest.raises(narrow_broad.CannotNarrow, match="read by every deploy"):
+        tree.narrow(*_refs(tree))
+
+
 # ── the non-broad half is the mapper `changed` already uses ─────────────────────────────
 
 

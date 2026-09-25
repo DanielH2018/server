@@ -305,8 +305,8 @@ def plane_note(
 
     A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing,
     so no derived tag can ever apply it and only a full deploy will. Reusing this note rather
-    than minting a verdict keeps one meaning for "landed, not live". Unless this landing
-    deployed every caller that runs it -- `covered_roles`, issue #1397.
+    than minting a verdict keeps one meaning for "landed, not live". Unless this landing ran
+    every caller (`covered_roles`, #1397), or `shared_role_reach` dropped its paths (#2462).
 
     A rotated secret is the third shape, and the one with no path to match at all. A secret's
     value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however

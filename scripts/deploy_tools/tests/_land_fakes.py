@@ -98,6 +98,9 @@ class Fakes:
     state: dict[str, str] = field(default_factory=dict)
     # What `tools.confirm_narrowing` answers: role tag -> the deployer's row it confirmed.
     narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
+    # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
+    # rendered manifest (#2462). None leaves the list as the PR's own.
+    plane_paths_dropped: frozenset[str] = frozenset()
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
 
@@ -259,6 +262,9 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         landing_hosts_at=landing_hosts_at,
         read_state=lambda root, name: f.state.get(name, ""),
         confirm_narrowing=confirm_narrowing,
+        paths_a_hand_must_apply=lambda paths, pr_range, primary, declared: [
+            p for p in paths if p not in f.plane_paths_dropped
+        ],
         lock_holder=_seq(f.lock_holder, calls, "lock_holder"),
         hostname=lambda: f.hostname,
         logger=lambda line: calls.append(("logger", (line,), {})),

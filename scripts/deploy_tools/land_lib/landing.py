@@ -60,6 +60,10 @@ class Landing:
         self.pr_paths: list[str] = []
         self.pr_range = ""
         self.declared: set[str] | None = None
+        # `pr_paths` minus what a shared role changed that moves no rendered manifest
+        # (#2462). Both `plane_note` calls read it -- step 1's and `narrow_plane`'s re-render
+        # -- which must not disagree about what is owed to a hand.
+        self.plane_paths: list[str] = []
         self.quiet: set[str] = set()
         self.self_applied = False
         self.self_applied_command = ""
