@@ -57,13 +57,16 @@ def gate_broad_k8s(
     target: TickTarget,
     cs: ChangeSet,
     plans,
-) -> ChangeSet:
+) -> tuple[ChangeSet, set[str]]:
     """Ask staging about the promoted bumps in a broad range, and demote them if it blocks.
 
     Returns:
-        The ChangeSet the rest of the tick acts on. Unchanged when nothing was gated or the
-        verdict does not block; otherwise one whose gated bumps have been folded back into
-        `k8s`, which is the defer-and-alert channel every unpromotable change takes.
+        The ChangeSet the rest of the tick acts on, and the bumps this gate demoted. The
+        ChangeSet is unchanged and the set empty when nothing was gated or the verdict does
+        not block; otherwise the gated bumps have been folded back into `k8s`, which is the
+        defer-and-alert channel every unpromotable change takes. `apply_broad_k8s` records
+        the demoted set in `k8s_deferred` — it cannot be recorded here, because this runs
+        before the ff-merge and a contention arm below it resets the tree.
 
     The gate is ARMED AND BLOCKING on daniel-box, the only host running this deployer
     (`gitops_deploy_staging_gate` and `_blocking`, both true in its host_vars since
@@ -92,11 +95,11 @@ def gate_broad_k8s(
         )
     gated = cs.k8s_deploy - covered
     if not gated:
-        return cs
+        return cs, set()
     origin = target.origin
     verdict = consult_staging(tools, state, config, gated, origin)
     if not staging_blocks(verdict, blocking=config.staging_gate_blocking):
-        return cs
+        return cs, set()
     if consume_staging_override(state):
         deploy_alerts.discord(
             tools,
@@ -106,12 +109,12 @@ def gate_broad_k8s(
             ),
         )
         log(f"staging rejected {origin[:8]}; override armed, deploying prod anyway")
-        return cs
+        return cs, set()
     log(
         f"staging rejected {origin[:8]}; the broad range still merges and applies, and "
         f"{sorted(gated)} defer-and-alert rather than deploying"
     )
-    return replace(cs, k8s=cs.k8s | gated, k8s_deploy=cs.k8s_deploy - gated)
+    return replace(cs, k8s=cs.k8s | gated, k8s_deploy=cs.k8s_deploy - gated), gated
 
 
 def apply_broad_k8s(
@@ -124,6 +127,7 @@ def apply_broad_k8s(
     plans,
     recorded: deploy_defer.Recorded,
     deadline: float,
+    demoted: set[str],
 ) -> int:
     """Deploy the promoted bumps the planes did not, then fire the deferred-change pages.
 
@@ -254,6 +258,26 @@ def apply_broad_k8s(
         tools.emit_deploy_annotation(applied, origin)
     if bumps:
         tools.emit_deploy_annotation(bumps, origin)
+    # DECIDED: of the three classes on the defer-and-alert channel, the STAGING-DEMOTED bump
+    # gets the `k8s_deferred` marker and the other two do not (#2471). #2449 scoped the marker
+    # to the budget deferral, and a demotion has the same two properties the budget case has:
+    # the tick chose it rather than a person, and nothing reports it a second time, because the
+    # range is merged and no later `local..origin` carries the bump. A hand-edited k8s role is
+    # merged by the person landing it, whose `land.sh` is watching; a denylisted role's ordinary
+    # change is routine, and forty of the fifty-four k8s roles are denylisted, so recording
+    # those would hold GitOps Deploy — Status red as normal operation — the failure the age gate
+    # on `manual_plane` was sized to avoid. The denylisted class keeps `Release Staleness Drift`
+    # as its durable signal; #2570 carries whether that is enough.
+    #
+    # HERE rather than in `gate_broad_k8s`, which decided the demotion: that runs before the
+    # ff-merge, and both contention arms between it and this line reset the tree to `local`. A
+    # marker written there would describe a range that is no longer merged, and the next tick
+    # re-crosses the range and re-gates it anyway. Every path reaching this line has the range
+    # merged with no reset ahead of it. The failure arms above return without recording, and
+    # that is not a gap: each writes `hold_sha`, which turns Status red until an operator
+    # clears it.
+    if demoted:
+        state.record_k8s_deferred(origin, demoted, time.time())
     deploy_alerts.alert_deferred(
         tools, state, config, origin, cs.k8s_deploy, cs, plan.k8s_services
     )

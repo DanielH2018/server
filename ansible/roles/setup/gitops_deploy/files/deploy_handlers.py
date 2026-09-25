@@ -158,8 +158,12 @@ def handle_broad(
     # BEFORE the ff-merge, for the reason `handle_k8s`'s DECIDED gives: a process death inside
     # the gate's window must leave `local` behind origin so the next tick re-evaluates. After
     # `plans`, because a bump the deploy plane applies is not gated. It returns the ChangeSet
-    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set.
-    cs = deploy_broad_k8s.gate_broad_k8s(tools, state, config, target, cs, plans)
+    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set, and
+    # that set itself — `apply_broad_k8s` records it in `k8s_deferred`, past the contention arms
+    # below that would reset the tree out from under a marker written here (#2471).
+    cs, demoted = deploy_broad_k8s.gate_broad_k8s(
+        tools, state, config, target, cs, plans
+    )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
@@ -259,7 +263,7 @@ def handle_broad(
     # prevent. It shares the same `deadline`, for the reason the plans share it, and it sends
     # the deferred-change pages on every path but contention.
     return deploy_broad_k8s.apply_broad_k8s(
-        tools, state, config, target, plan, cs, plans, recorded, deadline
+        tools, state, config, target, plan, cs, plans, recorded, deadline, demoted
     )
 
 

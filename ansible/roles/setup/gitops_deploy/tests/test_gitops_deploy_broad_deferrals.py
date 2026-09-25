@@ -17,6 +17,7 @@ import dataclasses
 
 import deploy_locks
 from _broad_k8s_range import (
+    blocking,
     APPLYABLE_ROLE,
     DECLARES_SONARR,
     DEPLOY_PLANE,
@@ -248,3 +249,69 @@ def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
     assert gitops_deploy.main(tick.tools, plane_applies_radarr(settings, tick)) == 0
     assert tick.playbooks[0] == [*DEPLOY_SONARR[:-1], "radarr"], "the plane ran"
     assert marker(state_dir, "k8s_deferred") is None
+
+
+# ── the marker's second class: a bump the staging gate demoted (#2471) ─────────────────────
+
+
+def test_a_staging_demoted_bump_is_recorded_in_the_k8s_deferred_marker(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The class #2471 decided the marker covers beside the budget deferral.
+
+    A demotion has the two properties the budget case has: the tick chose it rather than a
+    person, and the range is merged, so no later `local..origin` carries the bump and nothing
+    reports it a second time.
+    """
+    config = blocking(settings, tick, APPLYABLE_ROLE)
+    assert gitops_deploy.main(tick.tools, config) == 0
+    origin, service, stamp = marker(state_dir, "k8s_deferred").split()
+    assert (origin, service) == (ORIGIN, "sonarr")
+    assert float(stamp) > 0, "the first-seen stamp is what monitor-bridge pages on"
+
+
+def test_a_bump_the_staging_override_let_through_is_not_recorded(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The rejecting half for the demotion arm: the override deploys, so nothing is owed."""
+    config = blocking(settings, tick, APPLYABLE_ROLE)
+    tick.staging_override = True
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.playbooks[-1] == DEPLOY_SONARR, "the override deployed the bump"
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_a_hand_edited_k8s_role_is_not_recorded(
+    gitops_deploy, tick, settings, state_dir
+):
+    """The class #2471 decided the marker does NOT cover.
+
+    A hand-edited role is merged by the person landing it, whose `land.sh` is watching — and
+    recording every such change (forty of the fifty-four k8s roles are denylisted) would hold
+    GitOps Deploy — Status red as normal operation.
+    """
+    config = mixed(settings, tick, APPLYABLE_ROLE, HAND_EDITED_K8S)
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert marker(state_dir, "k8s_alerted_sha") == ORIGIN, (
+        "it took the defer-and-alert path"
+    )
+    assert marker(state_dir, "k8s_deferred") is None
+
+
+def test_a_demotion_a_busy_lock_reset_is_not_recorded(
+    gitops_deploy, tick, settings, state_dir
+):
+    """Why the record sits in `apply_broad_k8s` and not in the gate that decided the demotion.
+
+    The gate runs before the ff-merge. A busy lock under it resets the tree to `local`, so a
+    marker written there would describe a range that is no longer merged — and the retry
+    re-crosses the range and re-gates it, which is where the record belongs.
+    """
+    config = blocking(settings, tick, APPLYABLE_ROLE)
+    tick.playbook_outcomes = [deploy_locks.ServiceLockBusy("service lock busy")]
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.head == LOCAL, "the ff-merge was undone"
+    assert marker(state_dir, "k8s_deferred") is None
+    assert gitops_deploy.main(tick.tools, config) == 0
+    assert tick.head == ORIGIN, "the retry merged"
+    assert marker(state_dir, "k8s_deferred").split()[1] == "sonarr"
