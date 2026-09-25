@@ -176,7 +176,11 @@ apply, keeping exactly one step of history in `<service>.previous.json`. Read it
 It records the **rendered bytes**, not the repo sources — a twelve-factor release is build plus
 config, and on this plane the config is the per-host Ansible variables that only exist after
 rendering. Two commits can render identical manifests; one commit can render differently on two
-hosts. `tree_dirty` marks a render no commit reproduces.
+hosts. `tree_dirty` marks a render no commit reproduces, and `host` names the inventory host
+whose `host_vars` layered into the render (#2532) — the record is only self-describing on
+another node, or against a fresh render, if it says which host produced the bytes. Records
+written before that field exist carry no `host`; a reader must treat its absence as unknown,
+since each service gains the field on its next deploy.
 
 `rollouts` names each workload the shared restart tasks would target — the primary
 `manifests_rollout` and every `manifests_extra_rollouts` entry — with `restart: true` where this

@@ -217,6 +217,14 @@
       # still gets a starting point, and knows not to read it as exact.
       tree_dirty: "{{ manifests_release_dirty }}"
       applied_at: "{{ now(utc=true, fmt='%Y-%m-%dT%H:%M:%SZ') }}"
+      # The inventory host whose host_vars layered into this render (#2532). The header's own
+      # justification for hashing rendered bytes is that one commit can render differently on
+      # two hosts, so without this the record states a fact it cannot be traced back to. It is
+      # implicit only while a record is read on the node that wrote it; a reader comparing a
+      # record against a fresh render needs to know which vars layered in. A record written
+      # before this field carries no host, and a reader must read that absence as "unknown"
+      # rather than as a mismatch — each service gains the field on its next deploy.
+      host: "{{ inventory_hostname }}"
       render_dir: "{{ manifests_dest_dir }}"
       manifests: "{{ manifests_release_files }}"
       # One identifier for the whole release, so a staging run and a prod run can be compared
