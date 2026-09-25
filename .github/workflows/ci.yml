@@ -22,7 +22,10 @@ on:
   # run therefore pins "prek (lint + validate + tests + secrets)" red on a master SHA that the
   # deployer's gate and `await_ci.py` both read, and that SHA's own green push run does not
   # outvote it. The concurrency arm below keeps a dispatch out of a push's group; it does nothing
-  # about this.
+  # about this. Since #2402 the rule is enforced rather than asked for:
+  # `.claude/hooks/block-footguns.py:ci_dispatch_on_master_problem` denies a `gh workflow run`
+  # naming this workflow with no `--ref` or with `--ref master`. It cannot see the Actions UI
+  # button or a raw `gh api .../dispatches`, so this paragraph is still the rule for those.
   #
   # The REF you dispatch must carry this trigger, because GitHub runs the workflow file from that
   # ref. A branch cut before this landed therefore rebases onto master before it can be swept,

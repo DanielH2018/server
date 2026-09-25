@@ -20,11 +20,17 @@ Three things are measured, each driven rather than read off the source:
   nothing, leaves the wrapper refusing with exit 79 and no lock touched. Measured in process
   on `deploy_under_locks.take_service_locks`, handed a `plan`; `--detach` takes its locks
   through the same call, which a structural check pins.
+- The MODE the wrapper takes `all` in, which decides whether a full run and a scoped run
+  exclude each other. Taken over from the wall-clock pair in
+  `scripts/deploy_tools/tests/test_deploy_service_lock_concurrency.py` (#2415): the property
+  is about a lock mode, and a held lock in this process contends with a second descriptor on
+  the same file exactly as another process would.
 
 Run: uv run pytest ansible/tests/deploy/test_deploy_sh_takes_the_locks_deploy_locks_plans.py
 """
 
 import ast
+import fcntl
 import os
 import subprocess
 import sys
@@ -33,7 +39,11 @@ import deploy_locks
 import deploy_under_locks
 import pytest
 from _helpers import REPO
-from deploy_tools.exit_codes import DEPLOY_LOCK_PLAN_FAILED, DEPLOY_SH_NO_VERDICT
+from deploy_tools.exit_codes import (
+    DEPLOY_LOCK_BUSY,
+    DEPLOY_LOCK_PLAN_FAILED,
+    DEPLOY_SH_NO_VERDICT,
+)
 
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py"
@@ -231,6 +241,56 @@ def test_the_foreground_takes_the_real_plan_all_first_then_the_tags(
         ]
     finally:
         run.close()
+
+
+def _hold(path, mode: int) -> int:
+    """Flock `path` as another deploy would; the open descriptor to close afterwards.
+
+    flock(2) locks belong to the open file description, so a second `open` in this process
+    contends with this one — which is what lets the two cases below drive a real contention
+    without a second process. `test_deploy_service_locks.py` holds its locks the same way.
+    """
+    fd = os.open(path, os.O_WRONLY | os.O_CREAT, 0o666)
+    fcntl.flock(fd, mode | fcntl.LOCK_NB)
+    return fd
+
+
+def test_a_scoped_run_takes_the_all_lock_shared(tmp_path, monkeypatch):
+    """CLEAN half: two scoped deploys of different services must not exclude each other.
+
+    Another run already holds `all` shared. This one has to take it shared too, or every
+    scoped deploy would queue behind every other — which is the whole of ADR-0017 undone. An
+    exclusive take here would block and refuse with DEPLOY_LOCK_BUSY.
+    """
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(tmp_path))
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_WAIT", "1")
+    held = _hold(tmp_path / "server-deploy-all.lock", fcntl.LOCK_SH)
+    run = _locked_run(["alpha"])
+    try:
+        deploy_under_locks.take_service_locks(run, [])
+        assert _taken(run) == ["server-deploy-all.lock", "server-deploy-alpha.lock"]
+    finally:
+        run.close()
+        os.close(held)
+
+
+def test_a_run_naming_no_service_waits_for_a_scoped_run(tmp_path, monkeypatch):
+    """FLAGGED half for the same mode split: a full run applies the scoped run's service too.
+
+    It wants `all` exclusively, so a scoped run's shared hold has to block it. Without the
+    split this returns at once and a whole-playbook apply lands on a running service deploy.
+    """
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_DIR", str(tmp_path))
+    monkeypatch.setenv("HOMELAB_DEPLOY_LOCK_WAIT", "1")
+    held = _hold(tmp_path / "server-deploy-all.lock", fcntl.LOCK_SH)
+    run = _locked_run([])
+    try:
+        with pytest.raises(deploy_under_locks.Refused) as refusal:
+            deploy_under_locks.take_service_locks(run, ["alpha"])
+        assert refusal.value.code == DEPLOY_LOCK_BUSY
+    finally:
+        run.close()
+        os.close(held)
 
 
 def _plan_raises(tags, exclusive_all=False):

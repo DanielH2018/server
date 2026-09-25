@@ -361,3 +361,51 @@ def test_a_keyword_in_argument_position_is_not_stripped():
     `command` stays an argument. Stripping one mid-stage would shift every later position."""
     assert _mod.problem("grep -rn time .") is None
     assert _mod.problem("kubectl get pods command") is None
+
+
+# --- 6. gh workflow run ci.yml aimed at master ---------------------------------------------------
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh workflow run ci.yml",
+        "gh workflow run CI",
+        "gh workflow run ci.yaml",
+        "gh workflow run ci.yml --ref master",
+        "gh workflow run ci.yml --ref=master",
+        "gh workflow run ci.yml -r master",
+        "gh workflow run ci.yml -r=refs/heads/master",
+        "gh --repo DanielH2018/server workflow run ci.yml",
+        "gh workflow run ci.yml --ref",
+    ],
+)
+def test_a_ci_dispatch_aimed_at_master_is_denied(command):
+    """FLAGGED half, one entry per form gh accepts — including the flag with no value, which
+    resolves to the default branch exactly as the bare form does."""
+    assert "pins the SHA to fail" in (_mod.problem(command) or "")
+
+
+@pytest.mark.parametrize(
+    "command",
+    [
+        "gh workflow run ci.yml --ref worktree-fanout-2402",
+        "gh workflow run ci.yml --ref=my-branch",
+        "gh workflow run ci.yml -r my-branch",
+        "gh workflow run docs-refresh.yml",
+        "gh workflow list",
+        "gh run list --workflow ci.yml",
+        "gh run view --log-failed",
+        "grep -rn 'gh workflow run ci.yml' docs",
+    ],
+)
+def test_a_branch_dispatch_and_the_near_misses_stay_clean(command):
+    """CLEAN half: dispatching a branch is the sanctioned form, a branch SHA is not one the
+    deployer walks, and nothing that merely NAMES the command may be denied."""
+    assert _mod.problem(command) is None
+
+
+def test_the_gate_opens_for_a_ci_dispatch():
+    """`gh` was already in `_RULE_BINARIES` for the issue-create rule; this pins that the new
+    rule is reachable, so a later narrowing of the gate cannot disarm it silently."""
+    assert _mod.could_fire("gh workflow run ci.yml")

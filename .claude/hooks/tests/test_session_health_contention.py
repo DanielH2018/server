@@ -40,6 +40,8 @@ def _problems(contention=None, now=1000.0):
         now=now,
         read_manual=lambda: None,
         read_contention=lambda: contention,
+        read_manual_tags=lambda: None,
+        read_k8s_deferred=lambda: None,
     )
 
 
@@ -73,5 +75,7 @@ def test_a_raising_contention_read_keeps_the_lines_gathered_before_it():
         now=1.0,
         read_manual=lambda: None,
         read_contention=boom,
+        read_manual_tags=lambda: None,
+        read_k8s_deferred=lambda: None,
     )
     assert any("CLAUDE.md" in line for line in lines)
