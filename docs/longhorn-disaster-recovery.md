@@ -246,6 +246,13 @@ volume the cap keeps out, and the heartbeat pages naming each one. The page clea
 drill run after the cap is raised, the volume's snapshots are pruned and trimmed, or the volume
 moves to `no-backup`.
 
+The drill also restores into a PVC in the source volume's namespace, so it skips a backed-up
+volume whose `status.kubernetesStatus.pvcName` is empty, such as a released PVC whose volume is
+still in a backup group. It writes each one to `/var/lib/longhorn-restore-drill/excluded_nopvc`,
+one volume name per line, and the heartbeat pages naming it. A volume that is both over the cap
+and unbound is listed only in `excluded_oversize`. The page clears on the next drill run after a
+PVC is bound to the volume again, the volume is deleted, or it moves to `no-backup`.
+
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 "every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed — at 16 MiB blocks
 (set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until

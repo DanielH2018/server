@@ -512,6 +512,11 @@ def main(now: float | None = None) -> int:
     )
     if oversize_problem:
         problems.append(oversize_problem)
+    nopvc_problem = logic.check_restore_drill_nopvc(
+        drill_stamps.read_excluded_nopvc(DRILL_STAMP_DIR)
+    )
+    if nopvc_problem:
+        problems.append(nopvc_problem)
 
     # ── checks 9 and 10: what the trim and B2-accounting crons said, and whether they ran ──
     problems.extend(

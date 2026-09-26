@@ -3,7 +3,7 @@
 
 The drill (longhorn-restore-drill.sh) writes these under its stamp directory for checks 7 and 8
 to read: `last-success`, the `candidates` list with its per-volume `seen/` and `success/` stamps,
-and `excluded_oversize`. Split out of longhorn_backup_health.py when that reader reached its
+and the `excluded_oversize` and `excluded_nopvc` lists. Split out of longhorn_backup_health.py when that reader reached its
 line cap; every function here takes the stamp directory rather than reading the environment.
 """
 
@@ -62,6 +62,18 @@ def read_excluded_oversize(stamp_dir: str) -> list[tuple[str, int]]:
         name, _, size = line.partition("\t")
         excluded.append((name, int(size) if size.isdigit() else 0))
     return excluded
+
+
+def read_excluded_nopvc(stamp_dir: str) -> list[str]:
+    """The drill's `excluded_nopvc` file: backed-up volume names with no bound PVC.
+
+    A missing file reads as empty, for the same reason as `read_excluded_oversize`.
+    """
+    try:
+        with open(os.path.join(stamp_dir, "excluded_nopvc")) as fh:
+            return [line for line in fh.read().splitlines() if line.strip()]
+    except OSError:
+        return []
 
 
 def read_seen(stamp_dir: str, candidates: list[str]) -> dict[str, float]:

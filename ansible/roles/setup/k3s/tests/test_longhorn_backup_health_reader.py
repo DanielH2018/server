@@ -389,3 +389,28 @@ def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout.startswith("down\t"), proc.stdout
     assert "jellyfin-config (5.00 GiB)" in proc.stdout, proc.stdout
+
+
+def test_reader_is_up_with_an_empty_excluded_nopvc_file(tmp_path):
+    """Control for the pair below: the drill writes an empty file when every volume has a PVC."""
+    (tmp_path / "drill").mkdir()
+    (tmp_path / "drill" / "excluded_nopvc").write_text("")
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_drill_excluded_for_no_pvc(tmp_path):
+    """The reader reads the drill's `excluded_nopvc` file, which no logic test can see (#2706)."""
+    (tmp_path / "drill").mkdir()
+    (tmp_path / "drill" / "excluded_nopvc").write_text("pvc-released\n")
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "no bound PVC" in proc.stdout and "pvc-released" in proc.stdout, proc.stdout

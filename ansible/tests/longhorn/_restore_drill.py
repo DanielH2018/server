@@ -39,7 +39,8 @@ esac
 """
 
 
-def volume(pvc: str, actual_size: int = 1024) -> dict:
+def volume(pvc: str, actual_size: int = 1024, bound: bool = True) -> dict:
+    """A tiered Volume CR named `pvc-<pvc>`; `bound=False` blanks its pvcName, as for a released PVC."""
     return {
         "metadata": {
             "name": f"pvc-{pvc}",
@@ -48,7 +49,10 @@ def volume(pvc: str, actual_size: int = 1024) -> dict:
         "spec": {"size": "16777216", "backupBlockSize": "16777216"},
         "status": {
             "actualSize": actual_size,
-            "kubernetesStatus": {"pvcName": pvc, "namespace": "homelab"},
+            "kubernetesStatus": {
+                "pvcName": pvc if bound else "",
+                "namespace": "homelab",
+            },
         },
     }
 
@@ -76,17 +80,26 @@ def harness(
     pvcs: list[str],
     backed: list[str] | None = None,
     actual_sizes: dict[str, int] | None = None,
+    no_pvc: set[str] | None = None,
 ):
     """A rendered drill plus a runner: `run(argv, env=..., restore=...)` -> CompletedProcess.
 
     `actual_sizes` overrides a volume's `status.actualSize`, which the empty-content waiver reads
-    to decide whether a declared-empty volume is still empty.
+    to decide whether a declared-empty volume is still empty. `no_pvc` names the volumes whose
+    `kubernetesStatus.pvcName` is empty.
     """
     fixtures = tmp_path / "fixtures"
     fixtures.mkdir()
     sizes = actual_sizes or {}
     (fixtures / "volumes.json").write_text(
-        json.dumps({"items": [volume(p, sizes.get(p, 1024)) for p in pvcs]})
+        json.dumps(
+            {
+                "items": [
+                    volume(p, sizes.get(p, 1024), p not in (no_pvc or set()))
+                    for p in pvcs
+                ]
+            }
+        )
     )
     (fixtures / "backups.json").write_text(
         json.dumps({"items": [backup(p) for p in (pvcs if backed is None else backed)]})
