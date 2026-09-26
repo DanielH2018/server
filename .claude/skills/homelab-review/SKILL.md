@@ -333,9 +333,10 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   Use `null` for any count the ledger prose does not state as a number — never a guess.
 - **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
-  Open and recurring items belong in `findings.py`'s register, not there. Per the
-  repo's corroborate-before-promote rule, promote a trade-off or refutation only on a **second**
-  independent occurrence or against real evidence.
+  Open and recurring items belong in `findings.py`'s register, not there. Promote a trade-off or
+  refutation only on a **second** independent occurrence or against real evidence (a diff, a log,
+  a passing test, live `probe.py` state). One run's say-so is a candidate: written into memory, it
+  is injected every session and reinforces itself even when it is wrong.
 - **Every row you write into `Deliberate trade-offs` opens with a provenance token** — `[operator]`
   if the operator ruled, `[enforced]` if a named test, hook or `# DECIDED:` marker makes the
   alternative fail. Step 2's table says what each licenses, and the two differ in cost: an
