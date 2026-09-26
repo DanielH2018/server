@@ -528,6 +528,12 @@ def rewrite_k8s_lines(
     wanted = set(services)
     readable = {entry.service for entry in parse_k8s_deferred(marker)}
     kept = []
+    # DECIDED: a repaired line is rewritten to exactly three fields, so a FOURTH field on a
+    # line naming one of `services` is discarded rather than carried. Before this, both the
+    # record and the clear carried such a line verbatim. Three fields is the format every
+    # reader parses, for the reason the `manual_plane_tags` comment above gives — a fourth
+    # would read as no pending bump in an un-redeployed monitor-bridge — so nothing may write
+    # one, and a line carrying one came from a bug or a hand edit, not from a newer writer.
     for line in (marker or "").splitlines():
         service = k8s_line_service(line)
         if service is None or service not in wanted:

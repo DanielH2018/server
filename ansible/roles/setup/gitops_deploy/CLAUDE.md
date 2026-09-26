@@ -197,8 +197,10 @@ Each arm below is a rule and the function that holds it. The record page has the
       second still unapplied. **A TORN LINE NAMING A SERVICE IS REPAIRED IN PLACE, on both
       markers** (#2657): the parser skips a line it cannot read, so a writer trusting only the
       parsed entries appends a second line beside the torn one, and every clear and every
-      discharge leaves that one standing forever. A line naming nobody is still carried
-      untouched — nothing can say what it recorded.
+      discharge leaves that one standing forever. The repair happens at the next record OR
+      clear NAMING THAT SERVICE, so a torn line for a service nothing touches again stands
+      until `gitops_state.py clear-k8s-unapplied <svc>`. A line naming nobody is carried
+      untouched whatever happens — nothing can say what it recorded.
       `k8s_deferred` keeps its oldest origin, because a tick clears
       that marker by deploying the service and `unrecord` can reset the tree under it.
       `deploy_alerts.alert_deferred` writes it,
