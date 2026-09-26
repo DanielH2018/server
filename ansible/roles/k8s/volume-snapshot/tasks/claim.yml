@@ -671,8 +671,9 @@
 # MEANT to get a real snapshot through the attach above rather than reaching this warning. Neither
 # has been observed doing so: the scale-to-zero case takes its snapshot on the ordinary path
 # instead (Longhorn snapshots a detached volume with healthy replicas), and the first-deploy case
-# is untested. CLAUDE.md's "The maintenance-mode attach has never been reached by a deploy" has
-# the measurement and what #2681 leaves open.
+# is untested. docs/volume-snapshot-drills.md's "The maintenance-mode attach has never been
+# reached by a deploy" has the measurement, and #2698 is the drill that would settle the
+# first-deploy case.
 #
 # The gap this leaves is real and must stay visible rather than glossed: the apply below may
 # set replicas back above zero, the pod starts, and it can migrate the on-disk format with no

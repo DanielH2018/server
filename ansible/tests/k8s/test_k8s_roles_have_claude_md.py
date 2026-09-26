@@ -55,15 +55,11 @@ WARN_LINES = int(MAX_LINES * WARN_FRACTION)
 # Roles whose CLAUDE.md is allowed over MAX_LINES, each with the reason. A new
 # entry is a justification, not a waiver: say what in the doc is an operating
 # rule that cannot move to docs/, or split the file instead.
-OVER_CEILING: dict[str, str] = {
-    "volume-snapshot": (
-        "513 lines on 2026-09-26, up from 443: #2686's answer (why the prune cannot delete 13 "
-        "over-long CRs, and what can) and #2681's (which of the two reasons the maintenance-mode "
-        "attach stays unreached for still holds) are both operating rules a deploy reads, and no "
-        "docs/ page holds them yet. The split this doc has needed since 2026-09-21 is #2699 — do "
-        "that before adding to it again."
-    ),
-}
+# Empty since 2026-09-26 (#2699): volume-snapshot's drill record and measurement log moved to
+# docs/volume-snapshot-drills.md, and its role doc came back under the ceiling. The dict stays
+# because the next doc to outgrow 400 lines needs somewhere to say why, and an entry here for a
+# role that has since shrunk fails, so a stale waiver cannot survive the trim that earned it.
+OVER_CEILING: dict[str, str] = {}
 
 
 def _role_dirs() -> list[Path]:

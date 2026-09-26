@@ -214,6 +214,9 @@ nav:
       # The per-check record behind monitor-bridge's role CLAUDE.md: measurements, incidents
       # and retirements, kept off the file a session loads on every touch of the role (#2126).
       - monitor-bridge check history: monitor-bridge-checks.md
+      # Same split as the line above, for k8s/volume-snapshot (#2699): the drill records and the
+      # measured traps, kept off the role CLAUDE.md a session loads on every touch of the role.
+      - volume-snapshot drill record: volume-snapshot-drills.md
       # Label omits the word this document's title carries before "drain". With it,
       # gitleaks' generic-api-key rule reads the label plus the high-entropy filename
       # after the colon as a credential and fails the commit.
