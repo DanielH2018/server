@@ -13,6 +13,12 @@ installed origin/master's host plane every hour (#2611, #2614).
 The guard is `k8s_dry_run`, not `k8s_no_mutate`. `template`, `copy`, `file` and `cron` skip
 their own writes under `--check` and report what would change, and the wider fact would turn
 that diff into a skip.
+
+What the census cannot see: a `command`/`shell` that writes the host through neither a file
+module nor a redirect. claude-otel's `inject_dashboard_annotations.py --dest
+/etc/rancher/k3s/dashboards-annotated` is that shape — guarded today through the include, and
+unguarding it would not fail anything here. Recognising it needs a per-script rule, which is
+worth writing the day a second one exists.
 """
 
 import re
@@ -48,8 +54,8 @@ _HOST_WRITE_MODULES = (
 _HOST_REDIRECT = re.compile(r">>?\s*/(?:etc|opt|usr|var|srv)/")
 
 # Roles whose host writes are the dry-run MECHANISM rather than a side effect of it.
-# roles/k8s/manifests renders into a throwaway directory under the flag (the tests above pin
-# that), and both issues scope themselves to writes "outside roles/k8s/manifests".
+# roles/k8s/manifests renders into a throwaway directory under the flag (test_k8s_dry_run.py
+# pins that), and both issues scope themselves to writes "outside roles/k8s/manifests".
 _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 
 # Non-vacuity. This census globs for its subjects, so a rename or a directory move would empty
@@ -58,6 +64,7 @@ _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 # rather than the role getting clean — check before editing the list.
 _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
+        "artifacts",
         "autofix-bridge",
         "claude-otel",
         "configarr",
