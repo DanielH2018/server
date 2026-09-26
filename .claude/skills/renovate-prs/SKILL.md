@@ -173,6 +173,11 @@ gh workflow run ci.yml --ref "$(gh pr view <n> --json headRefName -q .headRefNam
 gh run list --workflow ci.yml --event workflow_dispatch --limit 1
 ```
 
+A CI-toolchain pin inherits `minimumReleaseAge` from the catch-all rule (`renovate.json`, the
+`{{depName}}` rule's own description says so), so the first line exits 3 while the PR soaks.
+Stop there: the dispatch needs the refreshed branch, and dispatching the unrefreshed one
+sweeps the old image.
+
 The dispatched run takes the full-sweep path in every job, because each one reads a dispatch as a
 push. Dispatch the branch and never master: a red dispatch run pins the required context red on
 that master SHA, and the deployer's gate reads the worst outcome of every run sharing the name
@@ -202,8 +207,9 @@ the PR body:
 uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
-It is idempotent (a ticked box exits 0 and writes nothing) and exits 1 on a body with no
-`<!-- rebase-check -->` box, which is a PR Renovate did not author. Renovate refreshes the
+It is idempotent (a ticked box exits 0 and writes nothing), exits 1 on a body with no
+`<!-- rebase-check -->` box, which is a PR Renovate did not author, and exits 3 on a PR still
+inside its soak, naming `renovate/stability-days` and writing nothing. Renovate refreshes the
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
@@ -215,6 +221,12 @@ Renovate rebases the branch once its update has met those checks. #2335 sat CONF
 and an agent read the stall as a broken rebase. Wait for the soak rather than ticking again.
 Only the branch's `unpend-branch` checkbox on issue #3 forces it earlier, and that bypasses
 the soak.
+
+`renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
+reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
+exits 3 without ticking (#2630). It refuses even where the box is unticked, because a tick
+Renovate skips stays ticked — the box is then spent, and no run after the soak can request the
+rebase.
 
 ## 6. Land them one at a time
 
