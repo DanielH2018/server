@@ -24,6 +24,11 @@ from verdicts.host import (
     speedtest_verdict,
 )
 
+# The SD card's root and its firmware partition. Anchored by PromQL, so `/var/hdd.log` (the
+# root's second mount) and log2ram's tmpfs are out. Both read 0 across 27 days of retention
+# measured 2026-09-26, and fstab mounts both `defaults`, so the arm starts green.
+PI_READONLY_MOUNTS = "/|/boot/firmware"
+
 
 def _tcp_open(host: str, port: int, timeout: float) -> bool:
     """True when something accepts a TCP connection on host:port."""
@@ -104,6 +109,9 @@ def check_pi_pressure(
     Filesystems are keyed by block device rather than mountpoint — the SD card is mounted
     twice (`/` and `/var/hdd.log`) and one full device is one problem. tmpfs is excluded:
     log2ram's 128 MiB `/var/log` fills and flushes by design.
+
+    The read-only arm is keyed by mountpoint instead, over PI_READONLY_MOUNTS, and reads the
+    value unfiltered so the healthy message can name the mounts it saw rw.
     """
     if not cfg.PI_ORIGIN:
         return True, "pi monitoring disabled (no PI_ORIGIN)"
@@ -119,11 +127,16 @@ def check_pi_pressure(
         "max by (device) (100 * (1 - node_filesystem_avail_bytes{%s}"
         " / node_filesystem_size_bytes{%s}))" % (fs_sel, fs_sel),
     )
+    readonly = bridge.net.prom_vector(
+        cfg,
+        'node_filesystem_readonly{%s,mountpoint=~"%s"}' % (sel, PI_READONLY_MOUNTS),
+    )
     per_core = load5 / cores if load5 is not None and cores else None
     ok, msg = pi_pressure(
         per_core,
         avail,
         {labels.get("device", "?"): pct for labels, pct in disk},
+        {labels.get("mountpoint", "?"): ro for labels, ro in readonly},
         cfg.PI_LOAD_MAX,
         cfg.PI_MEM_MIN_MB,
         cfg.PI_DISK_MAX_PCT,

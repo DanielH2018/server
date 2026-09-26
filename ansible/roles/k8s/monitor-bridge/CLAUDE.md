@@ -158,8 +158,9 @@ the alternatives rejected. Read this file for the rule, that one before you chan
   four queries empty disables.
 - **Pi Pressure** (`pi_pressure`): the Pi's node-exporter series (`origin=PI_ORIGIN`) —
   `node_load5` per core over `PI_LOAD_MAX`, `MemAvailable` under `PI_MEM_MIN_MB`, any block
-  device over `PI_DISK_MAX_PCT` (keyed by device, tmpfs excluded); an absent series while
-  Prometheus answers pages. It owns Pi disk and memory, so the Pi has no `disk`/`memory` arm.
+  device over `PI_DISK_MAX_PCT` (keyed by device, tmpfs excluded), or `/` or `/boot/firmware`
+  reading `node_filesystem_readonly` 1 (no grace; it leads the message); an absent series
+  while Prometheus answers pages. It owns Pi disk and memory, so the Pi has no `disk`/`memory` arm.
   **Published-port arm** (`with_pi_ports`): TCP-connects to every `PI_PUBLISHED_PORTS` entry
   (rendered from the Pi's `containers_list`) on `PI_PORTS_CONSECUTIVE` (2), naming each dead
   port with the recreate hint.
