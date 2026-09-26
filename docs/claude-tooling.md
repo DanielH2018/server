@@ -494,6 +494,19 @@ same log grades it. A doc over 7,500 chars arrives as its heading outline plus a
 the harness persists a longer `additionalContext` to disk and hands the model a preview stub
 instead.
 
+A subagent gets each doc once more. Its payload carries the parent's `session_id`, so the hook
+keys its once-only state on the `agent_id` as well. It also tags that subagent's log rows
+`agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
+longer fits the budget left by earlier docs in the same command waits for the next command.
+The hook does not outline it.
+
+Re-measured 2026-09-26 (#2192) over the five days after the hook landed, with the same
+cross-tab on both sides. The Bash-only no-doc share fell from 85% to 14% in main sessions and
+from 82% to 56% in subagents; the subagent gap is what the `agent_id` key closes. Sessions
+read the full doc after 61 of 262 outline injections (23%). A path named only inside quoted
+text or a here-document accounted for 30 of 374 role-doc injections. Some of those were real reads
+(`bash -c '…'`, `ssh host '…'`), so the hook does not filter quoted text.
+
 ### `nudge-land-sh` (a `bash-pretool` arm)
 
 It *denies* a command that blocks on CI (`gh run watch`, `gh pr checks --watch`) and the third or

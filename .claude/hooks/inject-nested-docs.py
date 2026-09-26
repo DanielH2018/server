@@ -15,9 +15,14 @@ guarantees every role has a doc; nothing guaranteed a session loads it. Issue #2
 WHAT. Every token in the command that names a path on disk inside a git checkout selects
 the docs the harness would have loaded for it: a `CLAUDE.md` in any ancestor directory below
 the checkout root, and every `.claude/rules/*.md` whose `paths:` frontmatter matches. Each
-doc is returned as PreToolUse `additionalContext` ONCE per session, and every injection is
-logged to `instructions.log` with reason `bash_path_match`, so the same log that measured
-the gap grades the fix. The root `CLAUDE.md` is never injected: it loads at session start.
+doc is returned as PreToolUse `additionalContext` ONCE per session, and once more per
+subagent (its payload's `agent_id`), whose context starts empty. Every injection is logged
+to `instructions.log` with reason `bash_path_match`, so the same log that measured the gap
+grades the fix. The root `CLAUDE.md` is never injected: it loads at session start.
+
+RE-MEASURED 2026-09-26 (#2192) over the 5 days after the merge, same cross-tab both sides:
+the no-doc share of Bash-only session×role pairs fell from 85% to 14% in main sessions,
+but only from 82% to 56% in subagents, which the session-only key caused.
 
 ONLY DOCS THIS HOOK CHOSE ARE EVER READ. A path lifted from the command selects a directory;
 the files opened are `CLAUDE.md` at an ancestor of that directory and the rule files under
@@ -52,6 +57,9 @@ INLINE_MAX_CHARS = 7500
 INLINE_MAX_LINES = 190
 
 REASON = "bash_path_match"
+
+# Tags a log row written for a subagent; `loaded_by_harness` reads it back.
+AGENT_FIELD = "agent="
 
 # A session's set of injected docs is worthless once the session ends, and /tmp is shared
 # between parallel sessions, so the file is keyed by session id (the nudge-land-sh shape).
@@ -200,6 +208,17 @@ def docs_for(root, rel):
 # ── once per session ─────────────────────────────────────────────────────────────────
 
 
+def context_key(session_id, agent_id=None):
+    """The id that "once" is counted against: the session, or one subagent inside it.
+
+    A subagent's payload carries its parent's `session_id` plus its own `agent_id`, and its
+    context window starts empty. Keyed on the session alone, a doc the parent (or a sibling
+    subagent) already received was never given to the subagent: 95 of the 122 no-doc
+    session×role pairs measured over 2026-09-21..26 were subagents (#2192).
+    """
+    return f"{session_id}-agent-{agent_id}" if agent_id else session_id
+
+
 def _state_path(session_id):
     safe = re.sub(r"[^A-Za-z0-9_-]", "", session_id) or "unknown"
     return os.path.join(tempfile.gettempdir(), f"claude-nested-docs-{safe}")
@@ -228,15 +247,20 @@ def remember(session_id, docs, now=None):
         pass
 
 
-def loaded_by_harness(session_id, doc, log_path=None):
+def loaded_by_harness(session_id, doc, log_path=None, agent_id=None):
     """True if `instructions.log` already holds a row for this session naming `doc`.
 
     The harness loads a doc itself when Read/Edit/Write touched the role earlier in the
     session; re-injecting it then is pure waste. The log and its one rotated backup are
     bounded at 256 KB each, and this runs at most once per doc per session.
+
+    A row carries only the 8-char session prefix, so the parent and every subagent share
+    it. A row tagged `agent=` belongs to a subagent and never counts for the parent. A
+    subagent skips the log entirely, because an untagged row may be its parent's; the
+    cost is a repeat load when the subagent itself used Read on the role first.
     """
     sid = (session_id or "")[:8]
-    if not sid:
+    if not sid or agent_id:
         return False
     marker = f"[{sid:8}]"
     log = log_path or _logger.LOG
@@ -244,7 +268,12 @@ def loaded_by_harness(session_id, doc, log_path=None):
         try:
             with open(path, encoding="utf-8", errors="replace") as fh:
                 for line in fh:
-                    if marker in line and doc in line.split():
+                    fields = line.split()
+                    if (
+                        marker in line
+                        and doc in fields
+                        and not any(f.startswith(AGENT_FIELD) for f in fields)
+                    ):
                         return True
         except OSError:
             continue
@@ -259,12 +288,21 @@ def _outline(text):
 
 
 def render(root, doc, trigger, budget_chars):
-    """One doc's block: inline when it fits the budget, an outline plus a read pointer otherwise."""
+    """One doc's block, or None when the doc should wait for a later command.
+
+    A doc that fits the hook budget on its own is inlined, or returns None when earlier
+    docs in this command have used up the budget. The caller leaves it unrecorded, so the
+    next command naming the path inlines it. Outlining it instead would be final: 47 of
+    262 outline injections over 2026-09-21..26 were docs that fit alone (#2192). A doc
+    over the budget on its own is injected as its outline plus a read pointer.
+    """
     with open(os.path.join(root, doc), encoding="utf-8", errors="replace") as fh:
         text = fh.read()
     lines = text.count("\n") + 1
     header = f"===== {doc} (applies to `{trigger}`) ====="
-    if len(text) <= budget_chars and lines <= INLINE_MAX_LINES:
+    if len(text) <= INLINE_MAX_CHARS and lines <= INLINE_MAX_LINES:
+        if len(text) > budget_chars:
+            return None
         return f"{header}\n{text.rstrip()}\n"
     outline = "\n".join(f"  {h}" for h in _outline(text)[:40])
     return (
@@ -275,34 +313,37 @@ def render(root, doc, trigger, budget_chars):
     )
 
 
-def build_context(command, cwd, session_id, log_path=None):
+def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     """(context_text, [(doc, trigger)]) for this command, or ("", []) when nothing is new."""
-    already = injected_this_session(session_id)
+    key = context_key(session_id, agent_id)
+    already = injected_this_session(key)
     blocks, chosen = [], []
     remaining = INLINE_MAX_CHARS
     for root, rel in named_paths(command, cwd):
         for doc in docs_for(root, rel):
             if doc in already or any(doc == d for d, _ in chosen):
                 continue
-            if loaded_by_harness(session_id, doc, log_path):
+            if loaded_by_harness(session_id, doc, log_path, agent_id):
                 already.add(doc)
                 continue
             try:
                 block = render(root, doc, rel, remaining)
             except OSError:
                 continue
+            if block is None:
+                continue
             remaining = max(0, remaining - len(block))
             blocks.append(block)
             chosen.append((doc, rel))
     if not chosen:
         if already:
-            remember(session_id, already)
+            remember(key, already)
         return "", []
-    remember(session_id, already | {d for d, _ in chosen})
+    remember(key, already | {d for d, _ in chosen})
     preamble = (
         "[inject-nested-docs] Project instructions for paths this command names. Claude Code "
         "loads them for Read/Edit/Write but not for a Bash read, so this hook supplies each "
-        "once per session.\n\n"
+        "once per session or subagent.\n\n"
     )
     return preamble + "\n".join(blocks), chosen
 
@@ -321,11 +362,15 @@ def context(payload):
         return None
     cwd = payload.get("cwd") or os.getcwd()
     session_id = payload.get("session_id") or ""
-    text, chosen = build_context(command, cwd, session_id)
+    agent_id = payload.get("agent_id") or None
+    text, chosen = build_context(command, cwd, session_id, agent_id=agent_id)
     if not chosen:
         return None
+    tag = f" {AGENT_FIELD}{agent_id}" if agent_id else ""
     for doc, trigger in chosen:
-        _logger.append_row(REASON, "Project", doc, session_id, " trigger=" + trigger)
+        _logger.append_row(
+            REASON, "Project", doc, session_id, " trigger=" + trigger + tag
+        )
     return text
 
 
