@@ -189,8 +189,12 @@ def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
         capture_output=True,
         text=True,
         timeout=SHARED_CALLERS_TIMEOUT_S,
-        check=True,
+        check=False,
     )
+    for line in r.stderr.splitlines():
+        if line.strip():
+            log(line.strip())
+    r.check_returncode()
     return {role: set(tags) for role, tags in json.loads(r.stdout).items()}
 
 
