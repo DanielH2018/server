@@ -12,6 +12,7 @@ code it covers.
 Run: uv run pytest scripts/lib/tests/test_k8s_schema.py
 """
 
+import json
 import re
 
 from typing import Any
@@ -25,7 +26,7 @@ from lib.k8s_schema import (
     normalise_octal,
     schema_error,
 )
-from lib.repo_paths import ANSIBLE
+from lib.repo_paths import ANSIBLE, REPO
 
 
 # ── schema validation ────────────────────────────────────────────────────────────────────
@@ -143,6 +144,37 @@ def test_schema_version_matches_the_cluster():
         f"K8S_SCHEMA_VERSION is {K8S_SCHEMA_VERSION} but the cluster runs "
         f"{match.group(1)} — bump the pin and the kubernetes-validate dependency together."
     )
+
+
+def _renovate_k3s_cap() -> str | None:
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
+    for rule in rules:
+        if (
+            rule.get("matchPackageNames") == ["k3s-io/k3s"]
+            and "allowedVersions" in rule
+        ):
+            return rule["allowedVersions"]
+    return None
+
+
+def _cap_for(schema_version: str) -> str:
+    major, minor = schema_version.split(".")
+    return f"<{major}.{int(minor) + 1}"
+
+
+def test_renovate_k3s_cap_follows_the_schema():
+    # Renovate may only offer k3s releases inside the minor kubernetes-validate has a schema
+    # for (#2367). A cap left behind after an upgrade blocks every later k3s PR, and one
+    # raised ahead of the schema brings back the PR that cannot pass CI.
+    assert _renovate_k3s_cap() == _cap_for(K8S_SCHEMA_VERSION), (
+        f"renovate.json caps k3s-io/k3s at {_renovate_k3s_cap()!r}; with K8S_SCHEMA_VERSION "
+        f"{K8S_SCHEMA_VERSION} it must be {_cap_for(K8S_SCHEMA_VERSION)!r}."
+    )
+
+
+def test_a_cap_one_minor_behind_the_schema_is_rejected():
+    assert _cap_for("1.36") == "<1.37"
+    assert _cap_for("1.37") != "<1.37"
 
 
 # ── CRD schema validation ───────────────────────────────────────────────────────────────────

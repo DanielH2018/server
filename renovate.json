@@ -765,6 +765,30 @@
       "automerge": false
     },
     {
+      "description": "k3s stays on the minor that kubernetes-validate has a schema for. scripts/lib/tests/test_k8s_schema.py::test_schema_version_matches_the_cluster holds K8S_SCHEMA_VERSION equal to the pinned k3s minor, and upstream publishes each schema 26-51 days after the Kubernetes release (1.34, 1.35, 1.36). A k3s minor PR raised before its schema cannot pass CI, and upgrading the cluster ahead of the repo pin sets up a cross-minor downgrade on the next k3s_server run (#2367). Renovate still offers patch releases inside the cap. The kubernetes-validate rule below is the signal for the next minor: its PR raises this cap as part of the upgrade. test_renovate_k3s_cap_follows_the_schema asserts the cap is one minor above K8S_SCHEMA_VERSION.",
+      "matchDatasources": [
+        "github-releases"
+      ],
+      "matchPackageNames": [
+        "k3s-io/k3s"
+      ],
+      "allowedVersions": "<1.37"
+    },
+    {
+      "description": "kubernetes-validate (pyproject.toml, via the built-in pep621 manager) supplies the Kubernetes OpenAPI schema the manifest guard validates against. A new release means a schema for the next k3s minor exists, so this PR is where the k3s minor upgrade happens: the k3s cap above holds Renovate's k3s PR back until then. The PR cannot pass CI alone, because test_schema_version_matches_the_cluster needs K8S_SCHEMA_VERSION and k3s_version to move with it. NO automerge: finishing it is the control-plane upgrade in docs/k3s-upgrade.md.",
+      "matchManagers": [
+        "pep621"
+      ],
+      "matchPackageNames": [
+        "kubernetes-validate"
+      ],
+      "groupName": "kubernetes-validate (manual \u2014 the next k3s minor: move K8S_SCHEMA_VERSION, k3s_version, its installer sha256 and the k3s cap together)",
+      "prBodyNotes": [
+        "This schema release unblocks the next k3s minor. In this PR: set `K8S_SCHEMA_VERSION` in `scripts/lib/k8s_schema.py`; set `k3s_version` and `k3s_install_script_sha256` in `ansible/roles/setup/k3s/defaults/main.yml`; raise the `k3s-io/k3s` `allowedVersions` cap in `renovate.json` by one minor. Then follow `docs/k3s-upgrade.md` (gates, fresh etcd snapshot, `k3s-bringup.yml` by hand) before merging."
+      ],
+      "automerge": false
+    },
+    {
       "description": "CoreDNS host forwarder (coredns/coredns) \u2014 daniel-box's own resolver, and the process /etc/resolv.conf names instead of an upstream. Its paired k3s_host_coredns_sha256 needs a manual bump from the release's .sha256 sidecar, so NO automerge (same manual-finish class as the SOPS binary). Own group, so it overrides the custom.regex non-major automerge rule above. A bad bump here costs the node all DNS at once, which is loud rather than silent \u2014 but it is still not something CI can prove.",
       "matchDatasources": [
         "github-releases"
