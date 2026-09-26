@@ -490,9 +490,19 @@ auto mode instructs — loads neither, and 74 of 113 Bash-only session×role pai
 role doc (measured 2026-09-19, #2125). `.claude/hooks/inject-nested-docs.py` reads the paths a
 command names, returns each ancestor `CLAUDE.md` and matching rule as `additionalContext` once
 per session, and logs the row to `.claude/logs/instructions.log` as `bash_path_match` so the
-same log grades it. A doc over 7,500 chars arrives as its heading outline plus a read pointer:
-the harness persists a longer `additionalContext` to disk and hands the model a preview stub
-instead.
+same log grades it. A doc over 7,500 chars arrives as its HEAD up to the budget, then the
+headings of the sections the head cut off, then a read pointer: the harness persists a longer
+`additionalContext` to disk and hands the model a preview stub instead.
+
+That over-budget form was the heading outline alone until #2650. Sessions read the full doc
+after 61 of 262 outline injections (23%), against 69 of 425 Bash-only pairs (16%) before the
+hook existed, so the headings bought almost nothing over no injection at all — and the budget
+cannot grow, because the remote-control wire path truncates at 8,000 chars / 200 lines. The
+head spends the same budget on text a session acts on without a second read: a role doc opens
+with its generated `## At a glance` block and its operative rules. It cuts at a heading rather
+than mid-section, and the trailer names up to 40 headings it did not reach. Both budgets are
+the payload's, not one doc's, so a head that fills the payload defers the next doc to the
+next command.
 
 A subagent gets each doc once more. Its payload carries the parent's `session_id`, so the hook
 keys its once-only state on the `agent_id` as well. It also tags that subagent's log rows
@@ -500,10 +510,17 @@ keys its once-only state on the `agent_id` as well. It also tags that subagent's
 longer fits the budget left by earlier docs in the same command waits for the next command.
 The hook does not outline it.
 
+A path inside a git object resolves too. `git show origin/master:ansible/roles/k8s/foo/
+tasks/main.yml` names a path only after its `<ref>:` prefix is stripped, which the hook missed
+until #2651 — a common read form in review sessions and subagents. `path_tokens` emits both
+the whole token and the part after its last `:`, and the existence check keeps whichever is
+real. A `file:line` token is unaffected: what follows its last `:` is a line number carrying
+no `/`.
+
 Re-measured 2026-09-26 (#2192) over the five days after the hook landed, with the same
 cross-tab on both sides. The Bash-only no-doc share fell from 85% to 14% in main sessions and
-from 82% to 56% in subagents; the subagent gap is what the `agent_id` key closes. Sessions
-read the full doc after 61 of 262 outline injections (23%). A path named only inside quoted
+from 82% to 56% in subagents; the subagent gap is what the `agent_id` key closes. The 23%
+read-after rate on the outline form is what #2650 replaced. A path named only inside quoted
 text or a here-document accounted for 30 of 374 role-doc injections. Some of those were real reads
 (`bash -c '…'`, `ssh host '…'`), so the hook does not filter quoted text.
 
