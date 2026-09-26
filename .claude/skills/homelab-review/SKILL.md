@@ -187,6 +187,11 @@ rules are in `evals/review_coverage/README.md`; `REVIEW_DOMAINS` in
 uv run python scripts/dev/review_metrics.py --check-coverage evals/review_coverage/<date>.json
 ```
 
+**Enter the worktree that will hold this file before step 3's dispatch, not here.** Once the
+session isolates, the isolation guard refuses every Bash call from agents still running from the
+shared checkout. On 2026-09-26 that happened to three skeptics mid-verdict, and two of them lost
+their `gh` and `kubectl` checks.
+
 A `hole` row needs a reason and a `clean` row needs the paths it cleared, so "nobody looked"
 and "looked and found nothing" are two different rows in the file rather than the same
 silence in the report. `evals/review_outcomes.jsonl` (step 7) counts what the run found; this
@@ -239,7 +244,8 @@ announced it had read the real template rather than trust the prompt, then retur
 "39 lines, an httpGet livenessProbe on the qbittorrent container at lines 24-30". The file is
 **183 lines**; its only `livenessProbe` is at `:91`, inside the **wireguard** container, while the
 qbittorrent container at `:116` has a `readinessProbe` at `:160` and no liveness check. The finding
-was live and the refutation was fabricated, and one `grep` settled it. "The decisive check wasn't
+was live and the refutation was fabricated, and one `grep` settled it. (Those line numbers
+describe the file as it stood then; `6cc352588` added the missing probe on 2026-09-17.) "The decisive check wasn't
 run" is a reason to run it, not a verdict — and when reading a past ledger, treat its refuted list
 as the least-reviewed part of it.
 
