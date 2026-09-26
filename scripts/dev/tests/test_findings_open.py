@@ -217,6 +217,74 @@ def test_open_cli_prints_the_created_number(tmp_path, capsys, make_tools):
     assert "#42 created" in capsys.readouterr().out
 
 
+# --- --repo: filing into another repo's register (#2685) ----------------------------------------
+
+_OTHER = "DanielH2018/dotfiles"
+
+
+def _commands(calls):
+    """The `gh <noun> <verb>` pair of every recorded call, reads and writes alike."""
+    return {" ".join(c[:2]) for c in calls.gh + calls.gh_json}
+
+
+def test_open_cli_with_repo_aims_every_read_and_write_there(tmp_path, make_tools):
+    """A dedup read against this repo while the create went elsewhere would re-file the
+    finding on every run, so the reads carry the flag as well as the writes."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"kind/gap"}))
+    assert findings.main([*_open_argv(body), "--repo", _OTHER], tools) == 0
+    assert {"label list", "issue list", "label create", "issue create"} <= _commands(
+        calls
+    )
+    assert all(c[-2:] == ["--repo", _OTHER] for c in calls.gh + calls.gh_json)
+
+
+def test_open_cli_with_repo_aims_the_reopen_and_release_there(
+    tmp_path, issue, make_tools
+):
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    fp = fingerprint("T", "a.py:1")
+    closed = issue(
+        3,
+        state="CLOSED",
+        labels=("claimed",),
+        fp=fp,
+        comments=[claim_comment(_HOLDER, None, "t")],
+    )
+    tools, calls = make_tools(Fakes(issues=[closed]))
+    argv = [*_open_argv(body), "--file", "a.py:1", "--repo", _OTHER]
+    assert findings.main(argv, tools) == 0
+    assert ["issue", "reopen", "3", "--repo", _OTHER] in calls.gh
+    assert ["issue", "edit", "3", "--remove-label", "claimed", "--repo", _OTHER] in (
+        calls.gh
+    )
+    assert all(c[-2:] == ["--repo", _OTHER] for c in calls.gh + calls.gh_json)
+
+
+def test_open_cli_without_repo_passes_no_repo_flag(tmp_path, make_tools):
+    """The rejecting half: the default files here, and no call names any repo."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools(Fakes(labels=set(LABELS) - {"kind/gap"}))
+    assert findings.main(_open_argv(body), tools) == 0
+    assert "issue create" in _commands(calls)
+    assert not any("--repo" in c for c in calls.gh + calls.gh_json)
+
+
+def test_open_cli_dry_run_with_repo_prints_the_repo(tmp_path, capsys, make_tools):
+    """`run` prints the plan without reaching `tools`, so the flag has to be in the plan."""
+    body = tmp_path / "b.md"
+    body.write_text("B")
+    tools, calls = make_tools()
+    argv = [*_open_argv(body), "--repo", _OTHER, "--dry-run"]
+    assert findings.main(argv, tools) == 0
+    out = capsys.readouterr().out
+    assert out.startswith("gh issue create") and f"--repo {_OTHER}\n" in out
+    assert not calls.gh
+
+
 # --- the Project board is best-effort ---------------------------------------------------------
 
 

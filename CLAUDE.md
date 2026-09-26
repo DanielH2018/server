@@ -50,7 +50,7 @@ review — routes through the skill listing rather than this table.
 | A config edit won't recreate the container (Docker) | `ansible/roles/containers/common/CLAUDE.md` (config-change wiring) |
 | Starting Claude Code sessions from a phone | `ansible/roles/setup/claude_code/CLAUDE.md` — `claude-rc.service` hosts them. `/remote-control` inside a session and `claude rc` from a shell are different features; only the second creates sessions on demand. |
 | Adding / changing a cron that changes state | that role's `CLAUDE.md` *Autonomous-role contract*. Every setup role whose cron or timer changes state carries one, and every setup role has a `CLAUDE.md` — `ansible/tests/setup/test_setup_roles_have_claude_md.py` derives the cron-installing set from `tasks/` and names the heartbeat-only exemptions |
-| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
+| Recording a finding, fix or improvement you will not do this session | `findings.py open` (flags: `docs/reference/scripts.md`) — files a GitHub Issue labelled `claude`, deduped by title/file. `--repo OWNER/NAME` files into another repo's register, such as the dotfiles repo. `findings.py list` is the open register; `docs/reference/backlog.md` renders it. Never `gh issue create` by hand — `.claude/hooks/block-footguns.py:issue_create_by_hand_problem` denies it and names the wrapper. |
 
 ## Adding a New Service
 
