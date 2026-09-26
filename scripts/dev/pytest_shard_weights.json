@@ -821,6 +821,7 @@
  "scripts/validate/tests/test_validate_compose_templates.py": 0.07,
  "scripts/validate/tests/test_validate_config_templates.py": 0.0,
  "scripts/validate/tests/test_validate_grafana_dashboards.py": 0.08,
+ "scripts/validate/tests/test_validate_jinja_bash_collisions.py": 0.06,
  "scripts/validate/tests/test_validate_k8s_manifests.py": 15.46,
  "scripts/validate/tests/test_validate_setup_templates.py": 0.31,
  "scripts/validate/tests/test_validate_shell_templates.py": 2.74,
