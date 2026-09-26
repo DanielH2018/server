@@ -54,10 +54,12 @@ __all__ = [
     "SHARED_TPL",
     "StubUndefined",
     "containers_entries",
+    "containers_entries_at",
     "containers_entries_in",
     "dump_numbered",
     "entry_platform",
     "entry_tags",
+    "entry_tags_at",
     "host_files",
     "hosts_for_tags",
     "load_yaml",
@@ -255,7 +257,22 @@ def service_records_at(ref: str, cwd: Path) -> list[tuple[str, str, str]]:
     disagree is exactly the defect this answer is meant to fix. Raises ``CalledProcessError``
     on an unreadable ref.
     """
-    records: list[tuple[str, str, str]] = []
+    return [
+        (host, entry_platform(entry), tag)
+        for host, entry in containers_entries_at(ref, cwd)
+        for tag in entry_tags(entry)
+    ]
+
+
+def containers_entries_at(ref: str, cwd: Path) -> list[tuple[str, dict]]:
+    """``(host, entry)`` for every named ``containers_list`` entry AT ``ref``, read with git.
+
+    The read ``service_records_at`` above is expressed on, kept separate because that one
+    flattens an entry to its tags and a caller asking which tags ONE entry declares cannot
+    recover the grouping from the flattened form. Raises ``CalledProcessError`` on an
+    unreadable ref, as its caller's docstring says.
+    """
+    entries: list[tuple[str, dict]] = []
     for name in git_stdout(
         "ls-tree", "--name-only", f"{ref}:{HOST_VARS_IN_TREE}", cwd=cwd
     ).splitlines():
@@ -266,9 +283,22 @@ def service_records_at(ref: str, cwd: Path) -> list[tuple[str, str, str]]:
         )
         host = name.removesuffix(".yml")
         for entry in containers_entries_in(loaded if isinstance(loaded, dict) else {}):
-            for tag in entry_tags(entry):
-                records.append((host, entry_platform(entry), tag))
-    return records
+            entries.append((host, entry))
+    return entries
+
+
+def entry_tags_at(ref: str, cwd: Path) -> dict[str, set[str]]:
+    """Entry name -> the tags that entry declares, for every host's list AT ``ref``.
+
+    The answer ``ctx.declared`` cannot give: ``service_tags_at`` returns a flat set of tag
+    strings, so nothing in it says that the ``n8n-images`` entry also declares ``n8n``. Two
+    hosts declaring the same name is not a shape this inventory has; the tags are unioned
+    rather than raising, because a union only ever makes a caller's answer more cautious.
+    """
+    tags: dict[str, set[str]] = {}
+    for _host, entry in containers_entries_at(ref, cwd):
+        tags.setdefault(entry["name"], set()).update(entry_tags(entry))
+    return tags
 
 
 def service_records_at_or_none(
