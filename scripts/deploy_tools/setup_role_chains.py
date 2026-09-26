@@ -221,16 +221,21 @@ def _notified_names(task: dict) -> set[str]:
     so the importing task -- which `_gates_in` offers as a leaf, because a cross-role
     import is not followed -- is where that notify's gate lives. Counting it is the wider
     answer, and wider is the safe direction here.
+
+    A `vars:` value counts only when it is a LIST, the shape every such handoff in this
+    tree uses. A bare string var that happened to hold a handler's name would otherwise
+    supply a false notifier, and a false notifier NARROWS -- the one direction this module
+    must not get wrong.
     """
     names: set[str] = set()
-    values = [task.get("notify")]
+    notify = task.get("notify")
+    if isinstance(notify, str):
+        names.add(notify)
+    elif isinstance(notify, list):
+        names.update(item for item in notify if isinstance(item, str))
     holder = task.get("vars")
-    if isinstance(holder, dict):
-        values.extend(holder.values())
-    for value in values:
-        if isinstance(value, str):
-            names.add(value)
-        elif isinstance(value, list):
+    for value in holder.values() if isinstance(holder, dict) else ():
+        if isinstance(value, list):
             names.update(item for item in value if isinstance(item, str))
     return names
 
