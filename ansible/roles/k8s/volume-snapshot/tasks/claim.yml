@@ -667,8 +667,12 @@
 # realistic ways the attach itself fails, and failing the deploy over either would block a
 # legitimate action: no longhorn-manager pod on this node, or the attach/wait/retake sequence
 # timing out. An operator's own workload scaled to zero, and a brand-new service's first deploy
-# (k8s/volume-claim leaves the volume detached, no Deployment has ever attached it), both now GET
-# a real snapshot through the attach above rather than reaching this warning — see CLAUDE.md.
+# (k8s/volume-claim leaves the volume detached, no Deployment has ever attached it), are both
+# MEANT to get a real snapshot through the attach above rather than reaching this warning. Neither
+# has been observed doing so: the scale-to-zero case takes its snapshot on the ordinary path
+# instead (Longhorn snapshots a detached volume with healthy replicas), and the first-deploy case
+# is untested. CLAUDE.md's "The maintenance-mode attach has never been reached by a deploy" has
+# the measurement and what #2681 leaves open.
 #
 # The gap this leaves is real and must stay visible rather than glossed: the apply below may
 # set replicas back above zero, the pod starts, and it can migrate the on-disk format with no
@@ -699,9 +703,10 @@
       DEPLOY IS UNPROTECTED for {{ volume_snapshot_claim }}: if the apply scales
       {{ volume_snapshot_service }} back up and the new pod migrates its on-disk format, there is
       no recovery point to revert to. A first deploy and a deliberate scale-to-zero both take a
-      real snapshot through the maintenance-mode attach now — reaching this warning means that
-      attach itself failed (no longhorn-manager reachable on this node, or it never reached
-      attached state in time); investigate before trusting a revert of
+      real snapshot through the maintenance-mode attach by design, though no deploy has been
+      observed reaching that attach — so treat this as an untested path as well as a failed one
+      (no longhorn-manager reachable on this node, or it never reached attached state in time);
+      investigate before trusting a revert of
       {{ volume_snapshot_claim }}.
 
 - name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
@@ -878,9 +883,10 @@
     - volume_snapshot_prune.rc != 0
     - "'must be no more than 63 bytes' not in (volume_snapshot_prune.stderr | default(''))"
 
-# A tolerated rejection is not a non-event: the snapshot stays forever, keeps being selected for
-# pruning, and costs space the retention window was meant to bound. Named here so it appears in
-# the deploy output instead of only in a register nobody reads.
+# A tolerated rejection is not a non-event: the snapshot stays, is selected for pruning again on
+# the next deploy, and is denied again. Whether it also costs space is an inference this role has
+# not measured — see CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
+# Named here so it appears in the deploy output instead of only in a register nobody reads.
 - name: Report snapshots Longhorn refuses to delete for {{ volume_snapshot_claim }}
   tags: [deploy]
   when: volume_snapshot_prune.results | default([]) | selectattr('rc', 'defined')
@@ -888,6 +894,10 @@
   ansible.builtin.debug:
     msg: >-
       {{ volume_snapshot_prune.results | selectattr('rc', 'defined') | selectattr('rc', 'ne', 0)
-         | map(attribute='item') | list }} exceed Longhorn's 63-byte delete limit and will
-      persist until removed out of band. New snapshots are no longer named this way; these
-      predate the fix.
+         | map(attribute='item') | list }} exceed Longhorn's 63-byte delete limit and cannot be
+      deleted through the Kubernetes API at all — the prune retries them on every deploy and
+      Longhorn's webhook denies each one. New snapshots are no
+      longer named this way; these predate 0c0317a77. Removing them means the Longhorn manager
+      API, which does not run that webhook: the UI's per-volume snapshot delete, or POST
+      ?action=snapshotDelete then ?action=snapshotPurge against the manager on this node. See
+      this role's CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
