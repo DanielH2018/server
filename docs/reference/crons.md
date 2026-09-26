@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-25 06:17 UTC
-generated_sha: e5c8c55d8
+generated_at: 2026-09-26 06:17 UTC
+generated_sha: b4d4d224d
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,12 +21,12 @@ generated_sha: e5c8c55d8
 |---|---|---|---|---|---|
 | B2 backup budget listing | `{{ k3s_b2_budget_cron_minute }} {{ k3s_b2_budget_cron_hour }} * * *` | conditional (has_repo_checkout) | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | B2 deletion accounting | `{{ k3s_b2_deletion_accounting_cron_minute }} {{ k3s_b2_deletion_accounting_cron_hour }} * * *` | conditional (has_repo_checkout) | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
+| Claude Code telemetry health | `{{ claude_otel_health_cron_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| CrowdSec AppSec verify | `*/15 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| CrowdSec home allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
-| CrowdSec remote allowlist | `*/5 * * * *` | every host in the play | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
+| CrowdSec AppSec verify | `*/15 * * * *` | conditional (not k8s_dry_run | bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
+| CrowdSec home allowlist | `*/5 * * * *` | conditional (not k8s_dry_run | bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
+| CrowdSec remote allowlist | `*/5 * * * *` | conditional (not k8s_dry_run | bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |
 | Full etcd restore drill in a throwaway guest | `{{ etcd_drill_full_cron.split()[0] }} {{ etcd_drill_full_cron.split()[1] }} {{ etcd_drill_full_cron.split()[2] }} * *` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/hypervisor/tasks/etcd_drill.yml` |
 | Homelab eval sweep | `0 2 * * 0` | daniel-box | `{{ sys_user }}` | read the script | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Longhorn backup health | `{{ k3s_longhorn_backup_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
@@ -49,15 +49,15 @@ generated_sha: e5c8c55d8
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `{{ sys_user }}` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| configarr sync health | `{{ configarr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
+| configarr sync health | `{{ configarr_k8s_health_cron_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `{{ k3s_disk_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `{{ k3s_etcd_restore_drill_cron.split()[0] }} {{ k3s_etcd_restore_drill_cron.split()[1] }} * * {{ k3s_etcd_restore_drill_cron.split()[4] }}` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | fake-remux health | `{{ fake_remux_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux reconcile | `{{ fake_remux_replace_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
 | fake-remux scan | `{{ fake_remux_scan_cron_minute }} {{ fake_remux_scan_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
-| janitorr error health | `{{ janitorr_k8s_health_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/janitorr/tasks/main.yml` |
+| janitorr error health | `{{ janitorr_k8s_health_cron_minute }} * * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/janitorr/tasks/main.yml` |
 | mkv attachment repair | `{{ fake_remux_mkv_attachment_cron_minute }} * * * *` | every host in the play | `{{ sys_user }}` | no (read-only by its command) | `ansible/roles/setup/fake_remux/tasks/main.yml` |
-| qbittorrent prefs drift check | `{{ qbittorrent_k8s_prefs_check_cron_minute }} {{ qbittorrent_k8s_prefs_check_cron_hour }} * * *` | every host in the play | `{{ sys_user }}` | read the script | `ansible/roles/k8s/qbittorrent/tasks/main.yml` |
+| qbittorrent prefs drift check | `{{ qbittorrent_k8s_prefs_check_cron_minute }} {{ qbittorrent_k8s_prefs_check_cron_hour }} * * *` | conditional (not k8s_dry_run | bool) | `{{ sys_user }}` | read the script | `ansible/roles/k8s/qbittorrent/tasks/main.yml` |
 
 ## Schedule format
 
