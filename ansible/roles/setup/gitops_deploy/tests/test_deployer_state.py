@@ -363,12 +363,17 @@ def test_an_operators_clear_removes_the_marker(state):
 
 
 # ── the k8s_deferred marker (issue #2449) ─────────────────────────────────────────────────
-def test_a_deferred_bump_keeps_its_first_seen_stamp(state):
-    """The age monitor-bridge pages on, so a second deferral must not reset it."""
+def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
+    """The age monitor-bridge pages on, so a second deferral must not reset it.
+
+    THE ORIGIN IS KEPT TOO, where `k8s_unapplied` advances it (#2644). This marker is cleared
+    by a tick deploying the service, never off the origin, and `deploy_defer.unrecord` resets
+    the tree — so an advanced SHA here would name a commit the host no longer carries.
+    """
     assert state.record_k8s_deferred(SHA, {"sonarr"}, 1000.0) == ["sonarr"]
     assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
-    assert [(e.service, e.at) for e in state.k8s_deferred_pending()] == [
-        ("sonarr", 1000.0)
+    assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
+        (SHA, "sonarr", 1000.0)
     ]
 
 

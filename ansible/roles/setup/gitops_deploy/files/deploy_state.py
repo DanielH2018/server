@@ -1,7 +1,7 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_state.py
 """The deployer's state directory: the marker files under /var/lib/gitops-deploy.
 
-file that records what this host believes. `gitops_markers.MARKERS` is the one table of those
+Each marker is a file recording what this host believes. `gitops_markers.MARKERS` is that
 files — the directory literal, every basename and the line parsers live there, copied into
 every other tree that reads them; this module holds the reading and the writing.
 This is a leaf: `gitops_markers`, `deploy_config` for `log`, `deploy_git` for the two pure
@@ -50,20 +50,13 @@ class DeployerState:
     The files record what this host believes — the held SHA, the plane that failed, how long
     it has been behind origin, the setup roles no tick can apply, one dedupe marker per alert
     channel, the undelivered-alert queue, the staging tick ledger and the operator's staging
-    override — and they were reached through one module constant each plus a pair of bare
-    `_read_marker`/`_write_marker` helpers, so nothing described the state as a whole. This
-    is that description. The paths, the file contents and the empty-vs-missing semantics are
-    unchanged, and `tests/test_deployer_state.py` pins every marker by name against `MARKERS`.
+    override. `tests/test_deployer_state.py` pins every marker by name against `MARKERS`.
 
     Attributes:
         directory: where the markers live. `/var/lib/gitops-deploy` on a host; a tmp_path
             under test.
     """
 
-    # Attribute name -> basename on disk. THE table of what lives in the state directory: the
-    # deployer reads and writes every marker through it, the `state_dir` fixture repoints the
-    # whole set by replacing one instance, and `tests/test_deployer_state.py` pins every pair
-    # by name. What each file records, and why it exists, is beside its entry.
     # Marker name -> basename on disk. `gitops_markers.MARKERS` is the table; it stays
     # reachable here as `DeployerState.MARKERS` because that is the name the suite and the
     # census in `tests/test_deployer_state.py` read.
@@ -361,31 +354,39 @@ class DeployerState:
     # ── the promoted bumps a broad tick deferred for lack of budget ───────────────────────
 
     def _k8s_line_pending(self, marker: str) -> list[K8sDeferredEntry]:
-        """Every line `marker` still holds, oldest first.
-
-        `k8s_deferred` and `k8s_unapplied` share this format and these three helpers; what
-        differs is who reads them, which is the marker table's business.
-        """
+        """Every line `marker` still holds, oldest first."""
         return parse_k8s_deferred(self.read(marker))
 
     def _record_k8s_line(
-        self, marker: str, origin: str, services, now: float
+        self, marker: str, origin: str, services, now: float, advance: bool = False
     ) -> list[str]:
-        """Append a line per service `marker` does not list yet. Returns the ones added."""
-        lines: list[str] = (self.read(marker) or "").splitlines()
+        """Append a line per service `marker` does not list yet. Returns the ones added.
+
+        `advance` also moves an ALREADY-LISTED service's line to `origin`, keeping its
+        first-seen stamp (#2644). It stays OUT of the return value, which
+        `deploy_defer.unrecord` clears: a line predating the tick survives the reset.
+        """
+        wanted = set(services)
         listed = {e.service for e in self._k8s_line_pending(marker)}
-        added = sorted(set(services) - listed)
-        lines.extend(f"{origin} {service} {now:.0f}" for service in added)
-        if added:
-            self.write(marker, "\n".join(lines))
+        added = sorted(wanted - listed)
+        moved = wanted & listed if advance else set()
+        kept = []
+        # Raw lines, as in `_clear_k8s_lines`: the parser skips a torn one, stamp verbatim.
+        for line in (self.read(marker) or "").splitlines():
+            parts = line.split()
+            if len(parts) == 3 and parts[1] in moved:
+                line = f"{origin} {parts[1]} {parts[2]}"
+            kept.append(line)
+        kept.extend(f"{origin} {service} {now:.0f}" for service in added)
+        if added or moved:
+            self.write(marker, "\n".join(kept))
         return added
 
     def _clear_k8s_lines(self, marker: str, services) -> list[str]:
         """Drop `marker`'s lines naming any of `services`. Returns the names cleared.
 
-        A line this cannot parse is carried through untouched, the way `clear_manual_plane`
-        carries one: a torn line is skipped by every reader, and dropping it here would lose
-        the only record that something was deferred.
+        A line this cannot parse is carried through untouched: dropping it loses the only
+        record that something was deferred.
         """
         wanted = set(services)
         kept, cleared = [], []
@@ -406,16 +407,9 @@ class DeployerState:
     def record_k8s_deferred(self, origin: str, services, now: float) -> list[str]:
         """Record the bumps this tick merged and could not deploy. Returns the ones added.
 
-        A service already listed keeps its first-seen stamp, which is the age monitor-bridge
-        pages on, exactly as `record_manual_plane` keeps a role's. That stamp is what makes
-        the marker safe to page on: a bump deferred ten minutes ago is a tick that ran out of
-        wall clock, not a fault.
-
-        Args:
-            origin: the origin SHA the tick merged. The bump is live in the tree at that
-                commit, so an operator's deploy applies exactly it.
-            services: the deferred service tags.
-            now: the first-seen stamp, in `time.time()` terms.
+        A service already listed keeps its first-seen stamp, the age monitor-bridge pages on.
+        IT KEEPS ITS ORIGIN TOO, where `record_k8s_unapplied` advances it (#2644): nothing
+        compares this marker's SHA, and `deploy_defer.unrecord` can reset the merge.
         """
         return self._record_k8s_line("k8s_deferred", origin, services, now)
 
@@ -424,17 +418,23 @@ class DeployerState:
         return self._clear_k8s_lines("k8s_deferred", services)
 
     # ── the k8s changes a tick merged and will never apply (#2570) ────────────────────────
-    # The non-paging half of the defer-and-alert channel: the SessionStart banner and the
-    # deployer's journal read `k8s_unapplied` and nothing else does. `origin` is the SHA the
-    # tick merged, which `deploy_defer.discharge_k8s_unapplied` compares a release record to.
+    # The non-paging half: the SessionStart banner and the journal read it, nothing else.
 
     def k8s_unapplied_pending(self) -> list[K8sDeferredEntry]:
         """Every k8s role change the `k8s_unapplied` marker still holds, oldest line first."""
         return self._k8s_line_pending("k8s_unapplied")
 
     def record_k8s_unapplied(self, origin: str, services, now: float) -> list[str]:
-        """Record the k8s role changes this tick merged and will never apply. Returns the added."""
-        return self._record_k8s_line("k8s_unapplied", origin, services, now)
+        """Record the k8s role changes this tick merged and will never apply. Returns the added.
+
+        A SERVICE ALREADY LISTED HAS ITS LINE MOVED TO `origin` (#2644):
+        `deploy_defer.discharge_k8s_unapplied` drops a line once a release record descends
+        from the SHA it names, so one left at the OLDEST origin discharges over every later
+        change to the same service. The first-seen stamp stays: it dates the oldest change.
+        """
+        return self._record_k8s_line(
+            "k8s_unapplied", origin, services, now, advance=True
+        )
 
     def clear_k8s_unapplied(self, services) -> list[str]:
         """Drop the `k8s_unapplied` lines naming any of `services`. Returns the names cleared."""

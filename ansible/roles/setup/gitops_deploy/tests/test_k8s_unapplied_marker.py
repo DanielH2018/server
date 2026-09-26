@@ -28,6 +28,7 @@ from deploy_toolbox import DeployTools
 
 ORIGIN = "a" * 40
 APPLIED = "b" * 40
+LATER = "c" * 40
 
 
 def _tools(**kwargs) -> DeployTools:
@@ -68,23 +69,59 @@ def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, sett
     assert not (state_dir / "k8s_unapplied").exists()
 
 
-def test_a_second_deferral_of_the_same_role_keeps_the_first_seen_stamp(
+def test_a_second_deferral_of_the_same_role_moves_the_origin_and_keeps_the_stamp(
     gitops_deploy, state_dir, settings
 ):
-    """The age the banner prints, so a later range touching the role must not reset it."""
+    """The line has to name the NEWEST unapplied change, or it discharges past it (#2644).
+
+    The stamp is the age the banner prints, and it dates the oldest unapplied change, so a
+    later range touching the role must not reset it.
+    """
     state = gitops_deploy.STATE
     state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
     deploy_defer.alert_and_record_deferred(
         _tools(),
         state,
         settings,
-        "c" * 40,
+        LATER,
         set(),
         ChangeSet(k8s={"authelia"}),
         declared_k8s={"authelia"},
     )
     assert [(e.origin, e.at) for e in state.k8s_unapplied_pending()] == [
-        (ORIGIN, 1000.0)
+        (LATER, 1000.0)
+    ]
+
+
+def test_a_first_deferral_of_a_role_appends_its_line(
+    gitops_deploy, state_dir, settings
+):
+    """The other half of the advance: a service the marker does not list gets a NEW line,
+    stamped now, and is what `record_k8s_unapplied` returns — `deploy_defer.unrecord` clears
+    exactly that, so an advanced line must stay out of it."""
+    state = gitops_deploy.STATE
+    state.record_k8s_unapplied(ORIGIN, {"authelia"}, 1000.0)
+    assert state.record_k8s_unapplied(LATER, {"authelia", "sonarr"}, 2000.0) == [
+        "sonarr"
+    ]
+    assert sorted(
+        (e.origin, e.service, e.at) for e in state.k8s_unapplied_pending()
+    ) == [
+        (LATER, "authelia", 1000.0),
+        (LATER, "sonarr", 2000.0),
+    ]
+
+
+def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settings):
+    """A line no parser can read is carried through untouched, the way `_clear_k8s_lines`
+    carries one: the rewrite walks the RAW lines, which the parsed entries are not aligned
+    with once one of them is skipped."""
+    state = gitops_deploy.STATE
+    state.write("k8s_unapplied", f"garbled\n{ORIGIN} authelia 1000")
+    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert state.read("k8s_unapplied").splitlines() == [
+        "garbled",
+        f"{LATER} authelia 1000",
     ]
 
 
@@ -122,6 +159,29 @@ def test_a_release_record_predating_the_change_keeps_the_line(pending, settings)
     """CLEAN half: the service was deployed, but not at a commit carrying this change."""
     assert _discharge(pending, settings, lambda _svc: APPLIED, lambda *_a: False) == []
     assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
+
+
+def test_a_deploy_between_two_changes_does_not_discharge_the_second(pending, settings):
+    """The defect #2644 names: a line stuck at the OLDEST origin discharges past a change
+    merged after it.
+
+    Change A merged at ORIGIN, change B at LATER, and a deploy in between stamped APPLIED,
+    which descends from ORIGIN and not from LATER. With the line advanced to LATER that
+    deploy proves nothing about B, and the line stays.
+    """
+    pending.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert (
+        _discharge(
+            pending,
+            settings,
+            lambda _svc: APPLIED,
+            lambda _repo, origin, _commit: origin == ORIGIN,
+        )
+        == []
+    )
+    assert [(e.origin, e.service) for e in pending.k8s_unapplied_pending()] == [
+        (LATER, "authelia")
+    ]
 
 
 def test_a_missing_release_record_keeps_the_line(pending, settings):
