@@ -394,7 +394,7 @@ what exit 6 would refuse without spending an agent.
 The dispatcher (`scripts/dev/fanout_place.py`) bounds a fan-out's width by reading live memory
 headroom rather than a fixed count — see *Placement across hosts* above for how it places a
 batch. The caps behind that read: `user.slice`'s fleet `MemoryHigh`
-is 12G on daniel-box with an 8G per-plane sub-bound, and 10G on daniel-server, where the 8G
+is 14G on daniel-box with a 10G per-plane sub-bound, and 13G on daniel-server, where the 11G
 login-plane cap is the effective bound because `claude-rc.service` does not run on that host.
 `MemoryHigh` throttles rather than caps — the 2026-09-05 reclaim stall (issue #1264) happened
 with it in force, leaving remote control unreachable for ~30 minutes while the unit read

@@ -88,11 +88,11 @@ claude_code_fleet_caps_enabled: true
 # role's CLAUDE.md carries the full answer to "can user-<uid>.slice be reparented".
 claude_code_fleet_slice: user.slice
 
-# DECIDED: 12G on the shared parent, with the per-plane caps below left at 8G as sub-bounds.
-# Lowering both planes to 6G would also make the sum 12G, and is the worse shape: a plane
+# DECIDED: 14G on the shared parent, with the per-plane caps below at 10G as sub-bounds.
+# Lowering both planes to 7G would also make the sum 14G, and is the worse shape: a plane
 # would throttle at half the box's fleet budget while the other plane sat idle. A parent
-# ceiling shares elastically — either plane may take up to its own 8G, and the two together
-# are held to 12G by the parent.
+# ceiling shares elastically — either plane may take up to its own 10G, and the two together
+# are held to 14G by the parent.
 #
 # Derivation, measured on daniel-box 2026-09-06. Re-derive all of it if you change this:
 #   RAM: MemTotal 29,576,480 kB = 28.2 GiB.
@@ -101,18 +101,24 @@ claude_code_fleet_slice: user.slice
 #     kubepods.slice 5.7 GiB + system.slice minus claude-rc.service 1.4 GiB = 7.1 GiB.
 #     Budgeted at 10 GiB so k3s and Longhorn can grow ~40% without racing the fleet.
 #   Kernel: SUnreclaim 0.55 GiB. Page cache left free for Longhorn and etcd I/O: ~3 GiB.
-#   28.2 - 10 - 0.55 - 3 = 14.6 GiB available to the fleet. 12G leaves ~2.6 GiB of that
-#     unspent, because the throttle stalls whichever cgroup loses the race for reclaim and
-#     the homelab plane is the one that must not.
-# Checked against measurement, not only the arithmetic: the 24h peak memory.current was
-# 4.0 GiB for claude-rc.service and 7.2 GiB for user-1000.slice, a fleet peak of 11.2 GiB.
-# So 12G sits just above what the fleet actually reaches, which is where a throttle belongs.
+#   28.2 - 10 - 0.55 - 3 = 14.6 GiB available to the fleet. The cap was 12G until
+#     2026-09-26, leaving ~2.6 GiB of that unspent. It was raised to 14G at user request to
+#     fit one more fan-out batch, which leaves ~0.6 GiB unspent. Do not raise it past the
+#     14.6 GiB: the excess comes out of the page cache Longhorn and etcd need, and the
+#     throttle stalls whichever cgroup loses the race for reclaim, which must not be the
+#     homelab plane.
+# Re-measured 2026-09-26 before the raise: the homelab plane's anon was kubepods.slice
+# 6.61 GiB + system.slice 1.70 GiB = 8.3 GiB, inside its 10 GiB budget. That budget is the
+# number to re-check first if k3s grows, because the fleet now spends nearly all that is
+# left after it.
+# Fleet peak at the old 12G cap, measured 2026-09-06: 4.0 GiB for claude-rc.service and
+# 7.2 GiB for user-1000.slice, 11.2 GiB together.
 #
 # memory.high counts PAGE CACHE as well as anon, so an ordinary multi-agent pytest fan-out
 # will touch this bound and reclaim cache. That is the cheap half of reclaim and it is
 # intended; the anon budget above is what the number is derived from, not what it throttles
 # on.
-claude_code_fleet_memory_high: 12G
+claude_code_fleet_memory_high: 14G
 
 # The fleet's swap ceiling. 2G is a quarter of this host's 8 GiB /swap.img, so the homelab
 # plane keeps three quarters — which is what the per-plane 2G was already documented as
@@ -126,11 +132,14 @@ claude_code_fleet_swap_max: 2G
 # parent's is a number that can never be reached. ENFORCED by
 # ansible/tests/setup/test_claude_fleet_slice_cap.py.
 #
-# 8G, unchanged from 2026-09-05 (raised 6G -> 8G at user request alongside the fan-out cap
-# above). Deliberately more than half of 12G: a plane doing real work while the other is
-# idle should be able to use most of the fleet's budget, and the parent is what stops the
-# two of them together. See the unit template on why this is MemoryHigh and not MemoryMax.
-claude_code_rc_memory_high: 8G
+# 10G since 2026-09-26. It was raised 6G -> 8G on 2026-09-05 and 8G -> 10G on 2026-09-26,
+# each time at user request alongside the fleet cap above. Every fan-out agent on this host
+# runs in the login plane, so this is the cap the fan-out dispatcher runs out of first, and
+# raising the fleet cap alone adds no fan-out width. Deliberately more than half of 14G: a
+# plane doing real work while the other is idle should be able to use most of the fleet's
+# budget, and the parent is what stops the two of them together. See the unit template on
+# why this is MemoryHigh and not MemoryMax.
+claude_code_rc_memory_high: 10G
 
 # One plane's swap ceiling, written to memory.swap.max. Without it a plane swaps without
 # limit: on 2026-09-05 claude-rc.service's cgroup held all 8 GiB of this box's swap plus
