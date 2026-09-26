@@ -204,9 +204,27 @@ itself cannot work, because the record is written before that task runs.
 to the loop its private restart iterates, and holds each private restart to the
 `manifests_rolled_by_apply` skip.
 
-**Secret manifests are recorded by name and never hashed.** They are rendered under `no_log`
-from decrypted SOPS values, and hashing adds a new read path over that output — a task result,
-a fact, and anything that later prints either.
+**Secret manifests are digested under a host-local key, never plain-hashed.** They are
+rendered under `no_log` from decrypted SOPS values. Until 2026-09-26 they were recorded by name
+only, because hashing them adds a read path over that output: a task result, a fact, and
+anything that later prints either. That left a digest match unable to clear 33 of 58 services,
+so the operator approved a digest built to leave no read path (#2574):
+
+- `secret_digest` is a separate field beside `secret_manifests`, in both records.
+  `manifests_digest` is unchanged.
+- It is HMAC-SHA256 under `manifests_secret_digest_key`, a root-owned 0600 key that
+  `ansible/roles/k8s/manifests/files/secret_hmac.py` creates on first use. The key never
+  leaves the host and never appears in a record or a log. A plain sha256 of a manifest from a
+  known template would let anyone who reads a 0644 record test guesses at a low-entropy secret.
+- `secret_hmac.py` receives two paths and prints one hex digest, one `no_log` task per file.
+  No task slurps, looks up or `set_fact`s a secret manifest's content, and the key is never on
+  an argv, which is why it is not `openssl dgst -hmac`.
+  `ansible/tests/k8s/test_secret_digest_reads_no_content.py` holds all of that.
+- An unreadable key writes `secret_digest: ''`, which the reader treats as absent.
+
+`ansible/roles/k8s/manifests/tasks/release_digest.yml:DECIDED: HMAC-SHA256 under a host-local key`
+carries the decision at the task that computes it. Deleting the key re-keys every future
+digest: each service with secret manifests then reads stale until its next deploy.
 
 **`manifests_digest` identifies the applied bytes, and a render-mode dry run reproduces it.**
 That matters because `probe.py releases --stale-only` decides staleness from paths and diffs,
@@ -225,9 +243,9 @@ explains.
 A dry run on the deploy host can (#2574). With `-e manifests_render_record=true`,
 `ansible/roles/k8s/manifests/tasks/render_record.yml` digests the throwaway render and writes
 `/var/lib/homelab/k8s-renders.d/<service>.json`. It reads the same vars and decrypted secrets
-a deploy reads, and it adds no read path over `no_log` output: both records take their digest
-from `ansible/roles/k8s/manifests/tasks/release_digest.yml`, which stats `manifests_files`
-only. On 2026-09-25 a fleet render on daniel-box reproduced the recorded digest for all 45
+a deploy reads. Both records take both digests from
+`ansible/roles/k8s/manifests/tasks/release_digest.yml`, so the two are computed by one code
+path. On 2026-09-25 a fleet render on daniel-box reproduced the recorded digest for all 45
 services a dry run can reach, in 5m38s. A rendered one-line change to one template moved the
 digest, so the comparison can go red.
 
@@ -237,7 +255,9 @@ clears a service's path hits only when the render record's `commit` is origin/ma
 was clean, and its `host` is the release record's. A digest match says nothing about secret
 manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest,
 left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
-which held for 25 of 58 on that date (#2586).
+which held for 25 of 58 on that date (#2586), or the same names on both and a matching
+`secret_digest` (#2574). A record without `secret_digest` keeps the path verdict, so services
+with secret manifests stop reading stale one redeploy at a time.
 
 **`ansible/roles/setup/render_records/` is the hourly producer** (#2587). It renders every
 service `scripts/deploy_tools/render_targets.py` lists, at the newest origin/master commit

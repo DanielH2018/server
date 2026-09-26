@@ -11,7 +11,8 @@
 #
 # This runs inside the dry-run render, so it reads the same vars, the same decrypted secrets
 # and the same host_vars a deploy reads. It adds no read path over `no_log` output: the digest
-# comes from release_digest.yml, which stats `manifests_files` and never the secret files.
+# comes from release_digest.yml, which stats `manifests_files` and keys the secret files' digest
+# through a helper that prints only an HMAC, never their content.
 #
 # Included from main.yml after the renders, only under `k8s_dry_run` with
 # `manifests_render_record`. A render record is not a release, so it lives in its own
@@ -55,8 +56,9 @@
       host: "{{ inventory_hostname }}"
       manifests: "{{ manifests_release_files }}"
       manifests_digest: "{{ manifests_release_digest }}"
-      # Names only, as in the release record. A matching digest says nothing about these
-      # files: a line added to uptime-kuma's `static-monitors.yaml.j2`, which is one, left the
-      # digest identical on 2026-09-25. A reader may treat a match as "not stale" only where
-      # this list is empty on both sides.
+      # A matching `manifests_digest` says nothing about these files: a line added to
+      # uptime-kuma's `static-monitors.yaml.j2`, which is one, left it identical on
+      # 2026-09-25. `secret_digest` is what moves for them, so a reader may treat a match as
+      # "not stale" only where this list is empty on both sides or both `secret_digest`s match.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
+      secret_digest: "{{ manifests_release_secret_digest }}"

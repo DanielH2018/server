@@ -25,13 +25,20 @@
 # manifests and one commit can render differently on two hosts; only the rendered bytes
 # distinguish those cases.
 #
-# SECRET MANIFESTS ARE RECORDED BY NAME, NEVER HASHED. A sha256 leaks nothing, but the files in
-# manifests_secret_files are rendered under `no_log: true` from decrypted SOPS values, and
-# hashing them adds a new read path over that output — a task result, a fact, and anything that
-# later prints either. `grep-on-a-script-prints-the-secret-it-embeds` has three occurrences in
-# this homelab's memory and every one ended in a rotation. The release identity is complete
-# without them: a secret manifest changes only when a secret changes, which the rotation
-# registry already tracks.
+# SECRET MANIFESTS ARE DIGESTED UNDER A HOST-LOCAL KEY, NEVER PLAIN-HASHED (#2574). The files in
+# manifests_secret_files are rendered under `no_log: true` from decrypted SOPS values. Until
+# 2026-09-26 they were recorded by name only, because hashing them opened a new read path over
+# that output -- a task result, a fact, and anything that later prints either.
+# `grep-on-a-script-prints-the-secret-it-embeds` has three occurrences in this homelab's memory
+# and every one ended in a rotation. The cost was that a digest match could clear only the
+# services with no secret manifest, 25 of 58, so the operator approved digesting them too.
+#
+# The concern still binds, so the digest is built to leave no read path. `secret_digest` is
+# HMAC-SHA256 under a root-only 0600 key that never leaves the host (`manifests_secret_digest_key`),
+# so a record reader cannot test guesses at a low-entropy secret against it. files/secret_hmac.py
+# computes it from paths alone, one `no_log` task per file, and prints only the hex digest: no
+# task slurps, looks up or set_facts a secret manifest's content. `manifests_digest` is unchanged
+# and still covers the ordinary manifests only.
 #
 # Included from main.yml after the apply and the secret-key reconcile. Never under k8s_dry_run:
 # that mode persists nothing, so a record would name a release that does not exist.
@@ -171,12 +178,16 @@
       # would retire the five path narrowings in `probe.py releases --stale-only`. The offline
       # harness cannot feed that: it stubs SOPS values and a placeholder `domain`, and matched 9
       # of 57 records on 2026-09-25. A render-mode dry run matched all 45 services it can reach
-      # (#2574). A match is blind to secret manifests, so the reader lets a trusted match clear
-      # path hits only where neither record names one (#2586). The narrowings stay until two
-      # gaps close: nothing renders on a schedule (#2587), and 13 services cannot be dry-run
-      # (#2588). Full reasoning in this role's CLAUDE.md, under `## Release records`.
+      # (#2574). This digest is blind to secret manifests; `secret_digest` below covers them,
+      # and the reader clears a service that has any only when both records' `secret_digest`
+      # match too (#2586, #2574). Full reasoning in this role's CLAUDE.md, under
+      # `## Release records`.
       manifests_digest: "{{ manifests_release_digest }}"
-      # Names only — see the header. The count is what makes a dropped secret manifest visible.
+      # The count is what makes a dropped secret manifest visible.
       secret_manifests: "{{ manifests_secret_files | default([]) | sort }}"
+      # HMAC-SHA256 under the host key, over the sorted secret files -- see the header and the
+      # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which a
+      # reader treats as absent. A record written before this field has none at all.
+      secret_digest: "{{ manifests_release_secret_digest }}"
       # [{name, kind, restart}] -- see the task that builds it above.
       rollouts: "{{ manifests_release_rollouts }}"

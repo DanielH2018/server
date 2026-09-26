@@ -7,10 +7,12 @@ writes `k8s-renders.d/<service>.json`, whose `manifests_digest` comes from the s
 `release_digest.yml` as the release record's. When the two digests match, the bytes the apply
 wrote are the bytes the ref renders, and a path hit is a false positive.
 
-A MATCH IS NOT PROOF ON ITS OWN. The digest excludes secret manifests by design, and
+A MATCH IS NOT PROOF ON ITS OWN. `manifests_digest` excludes secret manifests by design, and
 uptime-kuma's `static-monitors.yaml` is one: a monitor added there left the digest identical
-while the path check correctly read it stale (2026-09-25). So a match clears a service only
-where `secret_manifests` is empty on both records. A render record is evidence only when its
+while the path check correctly read it stale (2026-09-25). So a service with secret manifests
+also needs the same names on both records and a matching `secret_digest`, an HMAC under a
+host-local key that the operator approved on 2026-09-26 (#2574). A record without that field
+keeps the path verdict, so the fleet converges one redeploy at a time. A render record is evidence only when its
 `commit` IS the ref, its tree was clean, and its `host` is the release record's host, because
 a digest from another commit, a dirty tree or another host's vars names different bytes.
 Every refusal keeps the path verdict; nothing here can make a service stale.
@@ -70,6 +72,22 @@ def resolve_ref(ref, repo_root=REPO_ROOT):
     return sha if result.returncode == 0 and len(sha) == 40 else None
 
 
+def _secrets_match(release, render):
+    """Whether the two records agree on the secret manifests, which `manifests_digest` excludes.
+
+    Both lists empty agrees trivially. Otherwise the names must be identical and both records
+    must carry the same non-empty `secret_digest` (#2574). A record written before that field,
+    or one whose host key was unreadable ('' by design), falls back to the path verdict.
+    """
+    names = release.get("secret_manifests")
+    if names is None or names != render.get("secret_manifests"):
+        return False
+    if names == []:
+        return True
+    digest = release.get("secret_digest")
+    return bool(digest) and digest == render.get("secret_digest")
+
+
 def render_proves_current(release, render, ref_sha):
     """Whether `render` shows `release`'s applied bytes are what `ref_sha` renders."""
     if not release or not render or not ref_sha:
@@ -79,7 +97,7 @@ def render_proves_current(release, render, ref_sha):
     # A release record written before #2532 carries no host. That is "unknown", never a match.
     if not release.get("host") or release.get("host") != render.get("host"):
         return False
-    if release.get("secret_manifests") != [] or render.get("secret_manifests") != []:
+    if not _secrets_match(release, render):
         return False
     digest = release.get("manifests_digest")
     return bool(digest) and digest == render.get("manifests_digest")

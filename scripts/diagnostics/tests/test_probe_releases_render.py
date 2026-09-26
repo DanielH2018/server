@@ -29,17 +29,25 @@ def test_render_dir_matches_the_ansible_default():
     assert m.group(1) == str(rr.RENDER_DIR)
 
 
-def _release(service, commit, secrets=(), host="daniel-box"):
+def _release(service, commit, secrets=(), host="daniel-box", secret_digest=None):
     rec = _record(service, commit=commit)
     rec["host"] = host
     rec["secret_manifests"] = list(secrets)
+    if secret_digest is not None:
+        rec["secret_digest"] = secret_digest
     return rec
 
 
 def _render(
-    service, commit, secrets=(), digest="deadbeef", dirty=False, host="daniel-box"
+    service,
+    commit,
+    secrets=(),
+    digest="deadbeef",
+    dirty=False,
+    host="daniel-box",
+    secret_digest=None,
 ):
-    return {
+    rec = {
         "service": service,
         "commit": commit,
         "tree_dirty": dirty,
@@ -47,6 +55,9 @@ def _render(
         "manifests_digest": digest,
         "secret_manifests": list(secrets),
     }
+    if secret_digest is not None:
+        rec["secret_digest"] = secret_digest
+    return rec
 
 
 def _write_renders(render_dir, *renders):
@@ -102,14 +113,46 @@ def test_a_matching_digest_with_no_secret_manifests_is_clean(repo, tmp_path):
     assert cleared == ["littlelink"]
 
 
-def test_a_matching_digest_with_a_secret_manifest_is_flagged(repo, tmp_path):
-    """uptime-kuma's static-monitors change left the digest identical on 2026-09-25."""
+def test_a_secret_manifest_without_a_secret_digest_falls_back_to_the_path_rule(
+    repo, tmp_path
+):
+    """uptime-kuma's static-monitors change left the digest identical on 2026-09-25.
+
+    Records written before #2574 carry no `secret_digest`, so they keep the path verdict.
+    """
     repo, base, tip = repo
     secrets = ["static-monitors.yaml"]
     stale, cleared = _stale_after_renders(
         repo,
         [_release("uptime-kuma", base, secrets=secrets)],
         [_render("uptime-kuma", tip, secrets=secrets)],
+        tmp_path,
+    )
+    assert "static-monitors.yaml.j2" in stale["uptime-kuma"]
+    assert cleared == []
+
+
+def test_a_matching_secret_digest_clears_a_secret_manifest(repo, tmp_path):
+    repo, base, tip = repo
+    secrets = ["static-monitors.yaml"]
+    stale, cleared = _stale_after_renders(
+        repo,
+        [_release("uptime-kuma", base, secrets=secrets, secret_digest="c0ffee")],
+        [_render("uptime-kuma", tip, secrets=secrets, secret_digest="c0ffee")],
+        tmp_path,
+    )
+    assert stale == {}
+    assert cleared == ["uptime-kuma"]
+
+
+def test_a_moved_secret_digest_is_flagged(repo, tmp_path):
+    """A monitor added to static-monitors.yaml moves `secret_digest`, not `manifests_digest`."""
+    repo, base, tip = repo
+    secrets = ["static-monitors.yaml"]
+    stale, cleared = _stale_after_renders(
+        repo,
+        [_release("uptime-kuma", base, secrets=secrets, secret_digest="c0ffee")],
+        [_render("uptime-kuma", tip, secrets=secrets, secret_digest="decade")],
         tmp_path,
     )
     assert "static-monitors.yaml.j2" in stale["uptime-kuma"]
@@ -156,6 +199,17 @@ def test_a_trusted_render_proves_current_is_clean():
     assert rr.render_proves_current(_release("x", "a" * 40), _render("x", TIP), TIP)
 
 
+SECRET = ["s.yaml"]
+
+
+def test_a_trusted_render_with_matching_secret_digests_is_clean():
+    assert rr.render_proves_current(
+        _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
+        _render("x", TIP, secrets=SECRET, secret_digest="d1"),
+        TIP,
+    )
+
+
 @pytest.mark.parametrize(
     ("release", "render"),
     [
@@ -187,6 +241,31 @@ def test_a_trusted_render_proves_current_is_clean():
             id="release-secret",
         ),
         pytest.param(_release("x", "a" * 40), None, id="no-render"),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
+            _render("x", TIP, secrets=SECRET, secret_digest="d2"),
+            id="secret-digest-differs",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET),
+            _render("x", TIP, secrets=SECRET, secret_digest="d1"),
+            id="release-predates-secret-digest",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
+            _render("x", TIP, secrets=SECRET),
+            id="render-predates-secret-digest",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET, secret_digest=""),
+            _render("x", TIP, secrets=SECRET, secret_digest=""),
+            id="both-keyless",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
+            _render("x", TIP, secrets=["t.yaml"], secret_digest="d1"),
+            id="secret-names-differ",
+        ),
     ],
 )
 def test_an_untrusted_render_is_flagged(release, render):

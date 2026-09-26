@@ -1,6 +1,6 @@
 ---
 # The release identity of one service's render: the commit it came from, whether the tree was
-# dirty, and the sha256 digest of the rendered bytes.
+# dirty, the sha256 digest of the ordinary rendered bytes, and a keyed digest of the secret ones.
 #
 # Shared by release_stamp.yml, which records what an apply wrote, and render_record.yml, which
 # records what a render-only pass over origin/master would write (#2574). They share this file
@@ -9,8 +9,8 @@
 # drifts one edit at a time, and every drift reads as a stale service.
 #
 # Reads `manifests_dest_dir`, so it runs against whichever directory the caller rendered into.
-# Publishes `manifests_release_sha`, `manifests_release_dirty`, `manifests_release_files` and
-# `manifests_release_digest`.
+# Publishes `manifests_release_sha`, `manifests_release_dirty`, `manifests_release_files`,
+# `manifests_release_digest` and `manifests_release_secret_digest`.
 
 - name: Resolve the release commit for the k8s plane
   tags: [deploy]
@@ -94,7 +94,92 @@
   # without walking the per-file map. `dictsort` before `to_json` because dict ordering is
   # not guaranteed and an order-dependent digest would differ for identical bytes.
   #
-  # Secret manifests never reach it: the stat above loops `manifests_files` only. See the
-  # release_stamp.yml header for why they are recorded by name and never hashed.
+  # Secret manifests never reach it: the stat above loops `manifests_files` only. They get their
+  # own keyed digest below, in a separate field, so this one is unchanged by that (#2574).
   ansible.builtin.set_fact:
     manifests_release_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
+
+# The keyed digest of the secret manifests (#2574, operator decision 2026-09-26). A separate
+# field from `manifests_digest`, which stays exactly as it was, so records written before this
+# still compare on the ordinary bytes. Publishes `manifests_release_secret_digest`: the digest,
+# or '' when the host key is unavailable, which the reader treats as "no secret digest".
+#
+# Nothing below reads a secret manifest into Ansible. secret_hmac.py receives two paths and
+# prints one hex digest, so the register holds a digest and the argv holds paths. No task here
+# may `slurp`, `lookup('file')` or `set_fact` a secret file's content;
+# ansible/tests/k8s/test_secret_digest_reads_no_content.py holds that.
+
+- name: Ensure the secret-digest key exists on this host
+  tags: [deploy]
+  # Created by the first run that needs it, under the same O_EXCL test-and-set whichever
+  # concurrent deploy gets there first. `check_mode: false` because the render-mode dry run and
+  # the release stamp must both digest under the same key, and a `--check` run that skipped
+  # this would leave the loop below with nothing to key it.
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/uv
+      - run
+      - --no-project
+      - --no-python-downloads
+      - --python
+      - "{{ host_python_version }}"
+      - "{{ role_path }}/files/secret_hmac.py"
+      - --ensure-key
+      - "{{ manifests_secret_digest_key }}"
+  register: manifests_secret_digest_key_state
+  changed_when: manifests_secret_digest_key_state.stdout == 'created'
+  failed_when: false
+  check_mode: false
+  # become resets HOME to /root, where uv keeps no managed Python; same export and reason as
+  # setup/common/tasks/release_bin.yml's prune (#2490).
+  environment:
+    UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
+  become: true
+  when: manifests_secret_files | default([]) | length > 0
+
+- name: Digest the rendered secret manifests for {{ manifests_service }}
+  tags: [deploy]
+  # DECIDED: HMAC-SHA256 under a host-local key, never a plain hash. A plain sha256 of a
+  # manifest rendered from a known template lets anyone who reads a 0644 record test guesses
+  # at a low-entropy secret; a keyed digest leaks nothing without the root-only key. One task
+  # per file, `no_log`, registering only the digest the helper prints. The key never reaches
+  # an argv: `openssl dgst -hmac` would put it in /proc and in this register. Full reasoning
+  # in this role's CLAUDE.md, under `## Release records`.
+  no_log: true
+  ansible.builtin.command:
+    argv:
+      - /usr/local/bin/uv
+      - run
+      - --no-project
+      - --no-python-downloads
+      - --python
+      - "{{ host_python_version }}"
+      - "{{ role_path }}/files/secret_hmac.py"
+      - "{{ manifests_secret_digest_key }}"
+      - "{{ manifests_dest_dir }}/{{ item }}"
+  loop: "{{ manifests_secret_files | default([]) }}"
+  register: manifests_release_secret_hmac
+  changed_when: false
+  failed_when: false
+  check_mode: false
+  # become resets HOME to /root, where uv keeps no managed Python; same export and reason as
+  # setup/common/tasks/release_bin.yml's prune (#2490).
+  environment:
+    UV_PYTHON_INSTALL_DIR: "/home/{{ sys_user }}/.local/share/uv/python"
+  become: true
+
+- name: Publish the secret digest for {{ manifests_service }}
+  tags: [deploy]
+  # rc 1 is an unreadable secret file, recorded as ABSENT for the reason the ordinary digest
+  # records one. rc 2 is an unreadable key: the digest would name nothing comparable, so it is
+  # omitted and the reader falls back to the path rule. The sorted name->digest map is hashed
+  # the same way as `manifests_digest`, so a service with no secret manifests digests an empty map.
+  ansible.builtin.set_fact:
+    manifests_release_secret_digest: >-
+      {%- set ns = namespace(files={}, keyless=false) -%}
+      {%- for r in manifests_release_secret_hmac.results | default([]) -%}
+      {%- set rc = r.rc | default(1) -%}
+      {%- set ns.keyless = ns.keyless or rc == 2 -%}
+      {%- set ns.files = ns.files | combine({r.item: (rc == 0) | ternary(r.stdout | default(''), 'ABSENT')}) -%}
+      {%- endfor -%}
+      {{ '' if ns.keyless else (ns.files | dictsort | to_json | hash('sha256')) }}
