@@ -130,14 +130,6 @@ _DELETIONS_SUMMARY_RE = re.compile(
     r"b2-deletions: charged \d+, skipped \d+, unpriced \d+"
 )
 _DELETIONS_DECLINED_RE = re.compile(r"b2-deletions: declined: ")
-# The two unconditional shapes that run printed BEFORE it gained a summary line. They are
-# accepted so the first window after the change — which still holds runs from before it — does
-# not read as a stopped cron and page for a day.
-# TODO: https://github.com/DanielH2018/server/issues/2565 - drop these once one full evidence
-# window has passed with the summary line in it.
-_DELETIONS_LEGACY_RE = re.compile(
-    r"no new B2 backup deletions in the last |charged \d+ deletion\(s\) over "
-)
 
 
 class CronState(NamedTuple):
@@ -175,9 +167,7 @@ def deletions_have_spoken(lines: list[str]) -> bool:
     stayed quiet too because a traceback carries no `UNPRICED`.
     """
     return any(
-        _DELETIONS_SUMMARY_RE.search(line)
-        or _DELETIONS_DECLINED_RE.search(line)
-        or _DELETIONS_LEGACY_RE.search(line)
+        _DELETIONS_SUMMARY_RE.search(line) or _DELETIONS_DECLINED_RE.search(line)
         for line in lines
     )
 
