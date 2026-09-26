@@ -51,6 +51,23 @@ See repo-root `CLAUDE.md` for conventions.
    hot page cache — the server runs 10 for the opposite reason) and `vm.page-cluster=0`
    (no readahead on random-access zram; ~8× lower swap-in latency).
 4. **Log2Ram** — adds the Azlux repo + installs `log2ram` to spare the SD card from log writes.
+   **Then patches `--sparse` out of both of Log2Ram's `rsync` command lines**, because
+   `--sparse` with `--inplace` corrupts any file whose content ends in NUL bytes. rsync seeks
+   over the source's NUL run rather than writing it, and `--inplace` writes into the live
+   destination, so the previous file's bytes survive at those offsets. That clobbered the
+   trailing NULs of the gzip ISIZE field in 6 of 9 rotated
+   `/var/log/apt/history.log.*.gz` on daniel-pi (`gzip -t` → "invalid compressed data--length
+   error", #2694). **The log content was never lost** — the CRC32 matched in every case, so
+   `zcat` recovers every byte, and only `gzip -t` and `zgrep`'s exit status disagree. Which
+   files survive is a coin flip on what the previous file left at those offsets, so a clean
+   `gzip -t` proves nothing about the sync.
+   **Do not "simplify" this to `USE_RSYNC=false`.** That conf knob takes Log2Ram's
+   `cp -rfup --sparse=always` fallback, which is byte-correct but has no `--delete`: files
+   deleted from the tmpfs would linger on the SD card and `sync_from_disk` would restore them
+   into the 128 MB `/var/log` at boot. The task carries a `# DECIDED:` marker with the byte
+   evidence and the rsync version it was reproduced under.
+   **The patch is forward-only.** Repairing the six already-corrupt files needs a privileged
+   write on the Pi; they are readable as they stand and age out as they rotate.
 5. **Hardware watchdog** — `dtparam=watchdog=on` + `watchdog` daemon, auto-reboot if 1-min
    load > 24.
 6. **Debloat** — purges Open vSwitch (was installed but had no bridges/netplan config,

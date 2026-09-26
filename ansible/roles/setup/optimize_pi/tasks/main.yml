@@ -158,6 +158,45 @@
   notify: Reboot Pi
   become: true
 
+- name: Drop --sparse from Log2Ram's rsync syncs so they stop clobbering trailing NUL bytes
+  tags: [log2ram]
+  # DECIDED: strip `--sparse`, never `--inplace` and never USE_RSYNC=false. Log2Ram ships
+  # both syncs as `rsync -aXv --sparse --inplace --no-whole-file --delete-after`, and that
+  # pair silently corrupts files whose content ends in NUL bytes: `--sparse` makes rsync SEEK
+  # over a run of NULs in the source instead of writing it, and `--inplace` makes the
+  # destination the live file, so whatever the PREVIOUS file left at those offsets survives.
+  # Measured on daniel-pi 2026-09-26 (#2694): 6 of 9 rotated
+  # /var/log/apt/history.log.*.gz failed `gzip -t` with "invalid compressed data--length
+  # error", and in every case the CRC32 matched byte for byte while only the trailing NUL
+  # bytes of the gzip ISIZE field carried stale data — history.log.1.gz stored
+  # `78 12 18 7a` where `78 12 00 00` belongs. Reproduced under rsync 3.2.7, the Pi's
+  # version; dropping `--sparse` alone made the transfer byte-identical. Both alternatives
+  # are worse. Dropping `--inplace` makes each sync write a full temp copy of /var/log.
+  # USE_RSYNC=false takes the `cp -rfup --sparse=always` fallback, which is byte-correct
+  # because cp truncates the destination, but carries no `--delete` — files deleted from the
+  # tmpfs would linger on the SD card and sync_from_disk would restore them into the 128 MB
+  # /var/log at boot, a RAM-budget regression on a 512 MB board. The fix is forward-only:
+  # already-corrupt trailers stay corrupt until they rotate out, and their content is intact
+  # (`zcat` recovers every byte). No handler — the script is re-read on every invocation, and
+  # restarting log2ram unmounts /var/log.
+  ansible.builtin.replace:
+    path: /usr/local/bin/log2ram
+    regexp: '^(\s*rsync -aXv) --sparse( --inplace)'
+    replace: '\1\2'
+  become: true
+
+- name: Verify both Log2Ram rsync invocations lost --sparse
+  tags: [log2ram]
+  # `replace` reports ok when its regexp matches nothing, so an upstream reword of that
+  # command line would restore the corruption silently. This is the half that can go red: it
+  # fails when fewer than two patched invocations are present — `sync_to_disk` (ram -> SD)
+  # and `sync_from_disk` (SD -> ram), which has the same bug in the other direction.
+  ansible.builtin.command:
+    cmd: grep -c '^[[:space:]]*rsync -aXv --inplace --no-whole-file --delete-after' /usr/local/bin/log2ram
+  register: optimize_pi_log2ram_patched_rsync_lines
+  changed_when: false
+  failed_when: optimize_pi_log2ram_patched_rsync_lines.stdout | trim | int != 2
+
 # 5. HARDWARE WATCHDOG (Auto-Reboot on Freeze)
 - name: Enable watchdog kernel module in {{ optimize_pi_rpi_config_path }}
   tags: [watchdog]
