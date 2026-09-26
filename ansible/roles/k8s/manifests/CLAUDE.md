@@ -239,15 +239,13 @@ manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a s
 left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
 which held for 25 of 58 on that date (#2586).
 
-**`ansible/roles/setup/render_records/` is the hourly producer, and it ships disarmed**
-(#2587). It renders every service `scripts/deploy_tools/render_targets.py` lists, at the
-newest origin/master commit whose CI is green, from its own detached worktree, and pushes a
-Kuma tile that goes red when a run leaves any record unrefreshed or the producer stops.
-The blocker is cleared: #2614 guarded every host write in a role that includes this one (host
-scripts, crons, node-staged modules) on `not k8s_dry_run | bool`, so an hourly dry run no
-longer ships origin/master's host half. `render_records_enabled` stays false all the same —
-arming the producer is #2587's own change, and until it lands nothing produces render records
-on a schedule.
+**`ansible/roles/setup/render_records/` is the hourly producer** (#2587). It renders every
+service `scripts/deploy_tools/render_targets.py` lists, at the newest origin/master commit
+whose CI is green, from its own detached worktree, and pushes a Kuma tile that goes red when
+a run leaves any record unrefreshed or the producer stops. It shipped disarmed until #2614
+guarded every host write in a role that includes this one (host scripts, crons, node-staged
+modules) on `not k8s_dry_run | bool`. Without that guard, an hourly dry run would ship
+origin/master's host half ahead of its landing. `render_records_enabled` switches it off.
 
 Every stamped service can be dry-run since #2588. Each role that includes this one guards its
 own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` holds only `n8n-images`,

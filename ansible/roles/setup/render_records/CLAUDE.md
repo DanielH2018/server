@@ -46,8 +46,7 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   file in the roles it renders either, since #2614 guarded every one of those on
   `not k8s_dry_run | bool` — before that a dry run installed host scripts, crons and
   node-staged modules across about twenty roles, measured on 2026-09-25. Its own writes are the
-  render records, its own worktree, and the throwaway render directories the dry run makes. The
-  producer still ships disarmed (`render_records_enabled: false`): arming it is #2587's change.
+  render records, its own worktree, and the throwaway render directories the dry run makes.
 - **Mode (explicit + reversible):** `render_records_enabled` in `group_vars/all.yml`. False
   runs the role's absent arm on `render_records_host`, which stops the timer and removes the
   units, the worktree and the role's directories; true and a re-run restores them. To move the
