@@ -362,3 +362,30 @@ def test_a_failed_coverage_fetch_does_not_cascade_into_the_tier_loop(
     assert "backup coverage fetch failed" in logged, logged
     assert "tier volumes fetch failed" not in logged, logged
     assert "stale or missing" not in logged, logged
+
+
+def test_reader_is_up_with_an_empty_excluded_oversize_file(tmp_path):
+    """Control for the pair below: the drill writes an empty file when the cap excludes nothing."""
+    (tmp_path / "drill").mkdir()
+    (tmp_path / "drill" / "excluded_oversize").write_text("")
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("up\t"), proc.stdout
+
+
+def test_reader_pages_naming_a_volume_the_drill_excluded_as_oversize(tmp_path):
+    """The reader reads the drill's `excluded_oversize` file, which no logic test can see (#2667)."""
+    (tmp_path / "drill").mkdir()
+    (tmp_path / "drill" / "excluded_oversize").write_text(
+        f"jellyfin-config\t{5 * 2**30}\n"
+    )
+    stub = _green_path_stub_kubectl(tmp_path, _rfc3339(NOW - 60))
+
+    proc = _run_reader_against(stub, tmp_path)
+
+    assert proc.returncode == 0, proc.stderr
+    assert proc.stdout.startswith("down\t"), proc.stdout
+    assert "jellyfin-config (5.00 GiB)" in proc.stdout, proc.stdout

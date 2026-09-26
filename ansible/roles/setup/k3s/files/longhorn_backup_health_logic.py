@@ -435,6 +435,25 @@ def check_restore_coverage(
     )
 
 
+def check_restore_drill_oversize(
+    excluded: list[tuple[str, int]],
+) -> tuple[int, str] | None:
+    """Names each backed-up volume the drill's actualSize cap keeps out of the rotation.
+
+    Check 8 iterates only the drill's candidates, and the drill writes those AFTER the cap, so a
+    volume that grows past it leaves the rotation and check 8 together (#2667). `excluded` is the
+    drill's `excluded_oversize` file as (name, actualSize bytes) pairs. Same severity as check 8:
+    both mean "a backed-up volume is not being restore-proven".
+    """
+    if not excluded:
+        return None
+    return (
+        3,
+        "volume(s) over the restore-drill actualSize cap, never drilled: "
+        + ", ".join(f"{name} ({size / 2**30:.2f} GiB)" for name, size in excluded),
+    )
+
+
 # ── final verdict assembly ───────────────────────────────────────────────────────────────────
 
 

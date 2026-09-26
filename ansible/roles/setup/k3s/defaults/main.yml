@@ -413,7 +413,8 @@ k3s_longhorn_restore_drill_pvc: ""
 # namespace off each volume, because candidates are no longer all in one place.
 k3s_longhorn_restore_drill_namespace: homelab
 # Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
-# slow restore cannot read as a failed one. A volume excluded here is silently undrilled, so raise
+# slow restore cannot read as a failed one. A backed-up volume excluded here is undrilled, and the
+# drill publishes it to `excluded_oversize` so the backup heartbeat pages naming it (#2667). Raise
 # this and the timeout below together.
 # DECIDED: 4 GiB, raised from 2 GiB on 2026-08-24. The old value's rationale said it "excludes
 # NOTHING today — the largest candidate is valheim-config at ~1.3 GB", and both halves had gone

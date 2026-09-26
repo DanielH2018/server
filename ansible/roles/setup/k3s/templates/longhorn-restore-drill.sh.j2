@@ -50,6 +50,10 @@ RETRY_DIR="${STAMP_DIR}/retries"
 # The eligible set, refreshed every run for the heartbeat's coverage check to read. Check 8 has
 # no cluster credential worth the name, so the drill — which already computes this — publishes it.
 CANDIDATES="${STAMP_DIR}/candidates"
+# The backed-up volumes the actualSize cap keeps OUT of that set, one `<pvc>\t<actualSize>` per
+# line. Check 8 iterates only the candidates, so without this file a volume that grows past the
+# cap leaves the rotation and the coverage check together and nothing reports it (#2667).
+EXCLUDED_OVERSIZE="${STAMP_DIR}/excluded_oversize"
 MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX.yaml)
 DRILL=""
 
@@ -91,16 +95,21 @@ BACKED=$($KUBECTL -n longhorn-system get backups.longhorn.io -o json 2>/dev/null
 [[ -n "$BACKED" ]] || fail "cannot list backups — is the backup target reachable?"
 
 # actualSize, not spec.size: spec is the declared ceiling and says nothing about what a restore
-# has to pull down. The cap bounds one run's egress and wall-clock, and excludes nothing today
-# (the largest candidate is valheim-config at ~1.3 GB) — it is a guard against a volume growing
-# into a restore that cannot finish inside the timeout, which would read as a restore failure.
-ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
-  | jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
-      [.items[]
-       | select([.metadata.labels // {} | keys[]
+# has to pull down. The cap bounds one run's egress and wall-clock: it is a guard against a volume
+# growing into a restore that cannot finish inside the timeout, which would read as a restore
+# failure. It has excluded a real volume before (valheim-config, at the old 2 GiB cap), which is
+# why what it excludes is published to EXCLUDED_OVERSIZE rather than dropped.
+VOLUMES=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null)
+[[ -n "$VOLUMES" ]] || fail "cannot list Longhorn volumes"
+# The backup-group selector, shared by the eligible set and the oversize set below so the two
+# cannot disagree about which volumes are tiered.
+IN_BACKUP_GROUP='[.metadata.labels // {} | keys[]
                  | select(startswith("recurring-job-group.longhorn.io/"))
                  | sub("recurring-job-group.longhorn.io/"; "")
-                 | select(. != "no-backup")] | length > 0)
+                 | select(. != "no-backup")] | length > 0'
+ELIGIBLE=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
+      [.items[]
+       | select('"$IN_BACKUP_GROUP"')
        # .metadata.name, NOT .status.volumeName: a Volume CR has no status.volumeName — that
        # field belongs to Backup CRs, and comparing the null it yields here matched nothing at
        # all, leaving the drill with an empty candidate set every night.
@@ -118,11 +127,30 @@ ELIGIBLE=$($KUBECTL -n longhorn-system get volume -o json 2>/dev/null \
           asize: (((.status.actualSize // 0) | tonumber) | tostring)}
        | select(.pvc != "")]
       | sort_by(.pvc)[]
-      | [.pvc, .ns, .vol, .size, .bs, .target, .asize] | @tsv')
-[[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
+      | [.pvc, .ns, .vol, .size, .bs, .target, .asize] | @tsv' <<<"$VOLUMES")
+# The same selection with the cap inverted: tiered, backed up, and too big to drill. Named by PVC
+# where there is one, as the candidates are, and by volume name where there is not.
+OVERSIZE=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
+      [.items[]
+       | select('"$IN_BACKUP_GROUP"')
+       | select(.metadata.name as $v | $backed | index($v))
+       | select(((.status.actualSize // 0) | tonumber) > $max)
+       | {name: ((.status.kubernetesStatus.pvcName // "") as $p
+                 | if $p != "" then $p else .metadata.name end),
+          asize: (((.status.actualSize // 0) | tonumber) | tostring)}]
+      | sort_by(.name)[]
+      | [.name, .asize] | @tsv' <<<"$VOLUMES")
 
 mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
 chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
+# Published before the empty-eligible failure below, so a cap that excludes EVERY volume still
+# names them, and before the pin, for the same reason as the candidates file: it describes the
+# rotation, not tonight's run. Rewritten every run, so it empties once the volume shrinks back
+# under the cap, the cap is raised, or the volume moves to no-backup.
+if [[ -n "$OVERSIZE" ]]; then printf '%s\n' "$OVERSIZE"; fi >"$EXCLUDED_OVERSIZE"
+chmod 0644 "$EXCLUDED_OVERSIZE"
+[[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
+
 # DECIDED: the candidate list is published from the FULL eligible set, and the pin is applied
 # only after it. Filtering in the jq above — the shape until 2026-09-21 — wrote a one-line
 # candidates file on a pinned run, and check 8 sizes its coverage window from that count and
@@ -132,7 +160,7 @@ printf '%s\n' "$ELIGIBLE" | cut -f1 >"$CANDIDATES"
 chmod 0644 "$CANDIDATES"
 if [[ -n "$PIN" ]]; then
   ELIGIBLE=$(awk -F'\t' -v pin="$PIN" '$1 == pin' <<<"$ELIGIBLE")
-  [[ -n "$ELIGIBLE" ]] || fail "pinned volume ${PIN} is not eligible: no Completed backup, or not in a backup group"
+  [[ -n "$ELIGIBLE" ]] || fail "pinned volume ${PIN} is not eligible: no Completed backup, not in a backup group, or over the actualSize cap"
 fi
 
 # When each candidate JOINED the rotation, written once and never refreshed. Check 8 needs it to

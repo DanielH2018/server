@@ -25,6 +25,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import host_lib
 import longhorn_backup_health_logic as logic
 import longhorn_cron_evidence_logic as cron_evidence
+import longhorn_restore_drill_stamps as drill_stamps
+from longhorn_restore_drill_stamps import read_stamp as _read_stamp
 
 
 def _require_env(name: str) -> str:
@@ -138,29 +140,6 @@ journal = host_lib.journal_reader(
 
 MAX_AGE_S = MAX_AGE_HOURS * 3600
 WEEKLY_MAX_AGE_S = WEEKLY_MAX_AGE_HOURS * 3600
-
-
-def _read_stamp(path: str) -> tuple[str | None, bool]:
-    """(content, unreadable) — content's trailing newlines stripped, matching bash `$(cat ...)`.
-
-    `unreadable` is True only when the file EXISTS but couldn't be opened (permissions, a
-    directory in its place, ...) — distinct from FileNotFoundError, which is the ordinary
-    "never written" case and returns `(None, False)`. Bash's own `[[ -r ]]` did NOT make this
-    distinction — it folded both into one boolean, and that fold is what caused the 2026-08-19
-    incident: the stamp directory's mode made a FRESH, successful drill's stamp unreadable by
-    this script's user, and `[[ -r ]]` reported the same "false" it would have for a stamp that
-    never existed at all — "no restore drill has ever succeeded", permanently, while a drill had
-    just in fact succeeded. This function is what fixes that: it distinguishes the two cases
-    bash could not. See check_restore_drill()'s docstring in the logic module for how this is
-    consumed.
-    """
-    try:
-        with open(path) as fh:
-            return fh.read().rstrip("\n"), False
-    except FileNotFoundError:
-        return None, False
-    except OSError:
-        return None, True
 
 
 def _parse_volume_rows(raw: str) -> list[tuple[str, str, str, str]]:
@@ -297,39 +276,6 @@ def _fetch_r2_volumes(problems: list[tuple[int, str]]) -> set[str] | None:
     if out is None:
         return None
     return set(out.split())
-
-
-def _fetch_drill_candidates() -> list[str]:
-    path = os.path.join(DRILL_STAMP_DIR, "candidates")
-    try:
-        with open(path) as fh:
-            return [line for line in fh.read().splitlines() if line.strip()]
-    except OSError:
-        return []
-
-
-def _fetch_drill_seen(candidates: list[str]) -> dict[str, float]:
-    seen = {}
-    for cand in candidates:
-        try:
-            seen[cand] = os.stat(os.path.join(DRILL_STAMP_DIR, "seen", cand)).st_mtime
-        except OSError:
-            continue
-    return seen
-
-
-def _fetch_drill_success(candidates: list[str]) -> dict[str, str]:
-    # check 8 only needs "did this candidate ever succeed" per volume, not why one didn't — the
-    # missing-vs-unreadable distinction (check 7's fix, above) doesn't carry an extra message
-    # here, so the second element is discarded.
-    success = {}
-    for cand in candidates:
-        content, _unreadable = _read_stamp(
-            os.path.join(DRILL_STAMP_DIR, "success", cand)
-        )
-        if content is not None:
-            success[cand] = content
-    return success
 
 
 def _syslog(message: str) -> None:
@@ -553,14 +499,19 @@ def main(now: float | None = None) -> int:
         problems.append(drill_problem)
 
     # ── check 8: restore-drill rotation coverage ──────────────────────────────────────────
-    candidates = _fetch_drill_candidates()
-    seen = _fetch_drill_seen(candidates)
-    success = _fetch_drill_success(candidates)
+    candidates = drill_stamps.read_candidates(DRILL_STAMP_DIR)
+    seen = drill_stamps.read_seen(DRILL_STAMP_DIR, candidates)
+    success = drill_stamps.read_success(DRILL_STAMP_DIR, candidates)
     coverage_problem = logic.check_restore_coverage(
         candidates, seen, success, now_s, DRILL_COVERAGE_SLACK_DAYS
     )
     if coverage_problem:
         problems.append(coverage_problem)
+    oversize_problem = logic.check_restore_drill_oversize(
+        drill_stamps.read_excluded_oversize(DRILL_STAMP_DIR)
+    )
+    if oversize_problem:
+        problems.append(oversize_problem)
 
     # ── checks 9 and 10: what the trim and B2-accounting crons said, and whether they ran ──
     problems.extend(
