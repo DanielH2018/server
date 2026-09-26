@@ -342,7 +342,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS, split from `deploy_alerts` at the seam its docstring named (#2600) |
-| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families as a mixin `DeployerState` inherits, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
@@ -377,7 +377,10 @@ Three layers, and which one a function belongs in is decided by what it touches.
 - **State is one object.** `deploy_state.DeployerState` wraps the marker files and the hold
   writes; a caller names a marker (`state.path("hold")`), never a path. `read()` returns None
   for a missing AND an empty marker, and PROPAGATES any other `OSError` — an unreadable state
-  directory must not read as "no hold" (`tests/test_deployer_state.py`).
+  directory must not read as "no hold" (`tests/test_deployer_state.py`). The `k8s_deferred`
+  and `k8s_unapplied` families live in `deploy_state_k8s.py` as a mixin that class inherits,
+  split off at the 600-line module cap (#2663); every caller still reaches them as
+  `state.record_k8s_unapplied(...)`, which is why it is a mixin and not a second object.
 
 Tests: one `tests/test_deploy_<module>.py` per decision module (a second file where a module
 answers two questions), and the `tests/test_gitops_deploy_*.py` family for the entry module,
