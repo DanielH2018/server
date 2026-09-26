@@ -287,9 +287,12 @@ def branch_slug_tell(marker: str) -> str:
     """The marker as it survives in a branch name: Renovate slugifies its groupName.
 
     A group holding ONE dependency is titled `Update <dep> …` and drops the group name, so the
-    branch is the only place the marker reaches for most denied roles' pins — #2620 was
+    branch can be the only place the marker reaches — #2620 was
     `Update klutchell/unbound Docker tag to v1.26.1` on
     `renovate/k8s-image-klutchellunbound-(manual-k8s_autodeploy-false-…)` (issue #2641).
+    The denylist and base-image rules carry `groupSingleUpdates: true` since #2646, which puts
+    the marker in their titles too; a per-package rule's PR and every PR raised before that
+    flag landed still title bare, so both tells stay load-bearing.
     Derived rather than typed, for the reason `denylist_marker` is read out of renovate.json:
     a rename of the rule's marker must fail this guard rather than leave the prompt behind.
     """

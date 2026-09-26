@@ -20,6 +20,14 @@ for the rebase. #2335 sat CONFLICTING for 38 hours in exactly that state and an 
 the stall as a broken rebase (#2368, #2630). Leaving the box unticked keeps the post-soak
 request working.
 
+The soak status lags the soak itself, so "still PENDING" is not "still soaking". Renovate
+writes `renovate/stability-days` when it processes the branch and never between runs, and
+`renovate.json`'s `schedule` holds it to one run a day: #2335's status still read PENDING from
+2026-09-24T01:31 on 2026-09-26T14:00, hours after its digest cleared its 3-day age at
+2026-09-26T01:53, because that day's run fired 00:09-01:04 UTC — before the expiry. A refusal
+here therefore lasts until Renovate's next run, and a branch that reads conflicted in that
+window is waiting for Renovate rather than failing to rebase.
+
 Usage:
     uv run python scripts/dev/renovate_rebase.py <pr-number>
 

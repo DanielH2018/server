@@ -95,14 +95,16 @@ the caps or the schedule cannot quietly widen it.
   bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n through the
   n8n-images build coupling, #1963), because
   those rules override the denylist rule's groupName.
-  **The title carries the marker only for a group holding more than one dependency** (#2641).
-  Renovate titles a single-dependency group `Update <dep> …` and drops the group name, so for
-  most denied roles' pins the marker survives only in the branch, slugified as
-  `k8s_autodeploy-false` — #2620 was `Update klutchell/unbound Docker tag to v1.26.1` against
-  pihole's defaults. The prompt therefore reads `headRefName` beside the title, and
-  `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells. Making the marker reach
-  the title as well (a `commitMessageTopic` or `prTitle` on the rule) is filed as #2646:
-  unverifiable from a session, and the field that shapes a title can also shape the branch. `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
+  **Read the branch as well as the title** (#2641). Renovate titles a single-dependency group
+  `Update <dep> …` and drops the group name, so the marker can survive in the branch alone,
+  slugified as `k8s_autodeploy-false` — #2620 was `Update klutchell/unbound Docker tag to
+  v1.26.1` against pihole's defaults. The prompt therefore reads `headRefName` beside the
+  title, and `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells.
+  The denylist rule and the base-image rule now set `groupSingleUpdates: true`, which applies
+  the group's `commitMessageTopic` to a one-dependency branch too and so puts the marker in
+  their titles (#2646). Two classes still arrive bare-titled: a PR raised before that flag
+  landed, and a per-package manual rule on a denied role, which does not carry the flag.
+  `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
   asserts the marker sits on exactly the per-package rules whose pin a denied role owns.
   A third rule carries it for a denied role's base image — the `FROM` in
   `templates/Dockerfile*.j2`, which Renovate's built-in dockerfile manager finds and the
