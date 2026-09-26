@@ -51,6 +51,9 @@ from diagnostics.probe_lib.longhorn_cluster import (
     # (b2_ledger.py:474), and nothing in this module calls it.
     backup_target_url,  # noqa: F401
     pvc_names,
+    # Re-exported only: b2_ledger reaches it as `longhorn.volume_backup_targets()`, and nothing
+    # in this module calls it. Same noqa reason as `backup_target_url` above.
+    volume_backup_targets,  # noqa: F401
     volume_owned_backup_counts,
     volume_shard_labels,
 )

@@ -34,7 +34,10 @@ has its own test under `scripts/diagnostics/tests/`.
 - **`b2-spend [--since 24h]`** sums the Class B spend per volume out of Longhorn's own "changed
   blocks" log lines, because B2 has no usage API (`probe_lib/b2_ledger.py`). It reads Loki
   only and spends nothing on B2. The model covers backups only, so it is a lower bound on the
-  console's figure.
+  console's figure. It joins each volume to its `spec.backupTargetName` and charges only the
+  B2-target volumes to the "Class B measured" figure; the R2-target ones print as their own
+  excluded subtotal, because R2's caps are monthly and vast. A volume whose target does not
+  resolve counts against B2 — a failed join must not read as a quiet day during a cap incident.
 - **`longhorn-blocks`** censuses the live Volume CRs by backup tier and block size, and exits 1
   when a `weekly-backup-*` volume is not on 16 MiB blocks (`probe_lib/longhorn.py`).
 - **`vip-placement`** reads the Services, EndpointSlices, L2Advertisements and Nodes, and exits
