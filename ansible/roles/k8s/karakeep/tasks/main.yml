@@ -1,4 +1,17 @@
 ---
+# The time-tagger's image, a one-layer chown over the pinned uv base so the tagger can run as
+# uid 1000 (#2672). Built under the name `karakeep`, not `karakeep-time-tagger`: k8s/manifests
+# keys `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes an image whose
+# rebuild rolls no pod — the recorded `n8n-runners` failure. The rollout it needs is the tagger's,
+# which `manifests_extra_rollouts` below already queues on every manifest change, and a rebuild
+# changes the manifest because the pin below names the content tag.
+- name: Build the karakeep time-tagger image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: karakeep
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/karakeep/templates/Dockerfile.j2"
+
 # Create the data volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
 - name: Create the karakeep data volume claim
   tags: [deploy]

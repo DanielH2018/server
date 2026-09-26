@@ -32,9 +32,8 @@ when both paths share one mount.
   a library rescan, not automatic.
 - **The rollout waits 660s, above the shared default.** A first boot installing DOCKER_MODS takes up to 10
   minutes. `radarr_k8s_rollout_timeout` is the one place that budget is written; both
-  `manifests_rollout_timeout` and the template's `progressDeadlineSeconds` read it. The
-  deadline has to move with the budget, or `rollout status` fails at the 600s Kubernetes
-  default whatever `--timeout` says (#2370).
+  `manifests_rollout_timeout` and the template's `progressDeadlineSeconds` read it — see
+  `ansible/roles/k8s/sonarr/CLAUDE.md` for why the deadline has to move with the budget (#2370).
 - **Log churn, not log size, drives PVC growth** — `radarr_k8s_log_level`/`_log_rotate` cap
   upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the shared
   rationale across all three *arr roles.

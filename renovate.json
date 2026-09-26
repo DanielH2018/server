@@ -596,6 +596,7 @@
       ],
       "matchFileNames": [
         "ansible/roles/k8s/code-server/templates/Dockerfile*.j2",
+        "ansible/roles/k8s/karakeep/templates/Dockerfile*.j2",
         "ansible/roles/k8s/nut/templates/Dockerfile*.j2",
         "ansible/roles/k8s/terraria/templates/Dockerfile*.j2",
         "ansible/roles/k8s/valheim/templates/Dockerfile*.j2"

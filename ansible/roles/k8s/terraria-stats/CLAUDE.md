@@ -28,10 +28,7 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
 - The `checksum/stats-script` pod annotation restarts the Deployment when either staged
   module changes, since a ConfigMap edit alone doesn't roll a pod (hashes `stats.py` +
   `stats_lib.py` together — see tasks/main.yml).
-- The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
-  in `k8s/game-stats-lib`'s `stats_lib.py`, shared with valheim-stats — see that role's
-  CLAUDE.md for how it ships (its include stages the copy beside this script and hands this
-  role the `--from-file` entry as `game_stats_lib_from_file`). `parse_line` and `StatsState`
-  stay here; so does `Store`'s schema half — it subclasses `stats_lib.SqliteStore` for the
-  connection lifecycle and the shared `cursor`/`events` tables, and keeps the `players`
-  schema, `load_state` and `save`.
+- **What stays in this role** is `parse_line`, `StatsState`, and `Store`'s schema half — the
+  `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass. Everything
+  else — the Loki fetch, cursor handling, metric rendering, the HTTP handler, the run loop —
+  lives in `ansible/roles/k8s/game-stats-lib/`, and that role's `CLAUDE.md` owns how it ships.

@@ -4,7 +4,7 @@
 # the migration (2026-08-14) and the Docker role was deleted by #2385 — `git show
 # 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/karakeep/` reads it.
 # This file is the only live source — it is free to move ahead of that compose template
-# and has (see the tagger's 3.14 bump below). The karakeep app and the uv base keep their
+# and has (see the tagger's move to an in-cluster build below). The pins that stay here keep their
 # repo:tag@sha256 form so Renovate's docker manager still tracks them; see the compose template for
 # why the tag must be kept alongside the digest.
 karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06ea06d16989c6861c30a1ff208568be44ed5fb5d422cd3e950c
@@ -21,13 +21,16 @@ karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:5
 # switched to the Docker Hub mirror, verified to carry the same :124 tag before the swap. No digest
 # pin: a registry mirror doesn't guarantee an identical index digest to the gcr.io original.
 karakeep_k8s_meili_image: getmeili/meilisearch:v1.53.2
-# 3.12 -> 3.14 (2026-08-16): the last interpreter in the repo still off the 3.14 the workflows,
-# .python-version and every other python image pin. The digest moves WITH the tag — a runtime
-# resolves repo:tag@sha256 by digest, so bumping only the tag would read 3.14 here and still run
-# 3.12 in the pod. Index digest for python3.14-bookworm-slim, and all five pinned pip deps below
-# resolve wheel-only under 3.14 (bookworm-slim has no compiler, so an sdist fallback would
-# crashloop the boot-time `uv pip install`).
-karakeep_k8s_tagger_image: ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1
+# Built in-cluster since #2672, so the pin this pair used to hold — the uv
+# `python3.14-bookworm-slim` digest, and the 3.12 -> 3.14 reasoning behind it — moved to
+# `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. The one
+# fact to carry forward: all five pinned pip deps below must resolve wheel-only under the base's
+# interpreter, because bookworm-slim ships no compiler and an sdist fallback crashloops the
+# boot-time `uv pip install`.
+#
+# `k8s_built_image_tags` is a play-scoped fact k8s/image-builder publishes, so the `.get` fallback
+# is what a deploy that skipped the build renders — see that role's CLAUDE.md.
+karakeep_k8s_tagger_image: "{{ k8s_registry_pull_host }}/karakeep:{{ k8s_built_image_tags.get('karakeep', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Three independent reasons, not one: (1) stateful — a meilisearch bump migrates the index in

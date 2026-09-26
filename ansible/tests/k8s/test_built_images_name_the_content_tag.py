@@ -44,6 +44,7 @@ KNOWN_BUILT_IMAGES = frozenset(
         "code-server",
         "homelab-mcp",
         "ical-proxy",
+        "karakeep",
         "n8n",
         "n8n-runners",
         "nut",

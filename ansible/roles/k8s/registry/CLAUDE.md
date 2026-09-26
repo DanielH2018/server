@@ -1,7 +1,8 @@
 # registry — in-cluster Docker image cache
 
 A local `registry:3.1.1` that stores images `k8s/image-builder` builds in-cluster, so
-n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria and valheim pull
+n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria, valheim and
+karakeep pull
 without a public
 registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 
@@ -13,10 +14,10 @@ registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 - **Route:** none (no `templates/ingressroute.yaml.j2`)
 - **Claim:** `registry-data` (no backup (StorageClass longhorn-nobackup))
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — dependency edges — image-supply path
-  for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server; no intra-tick ordering. ALSO
-  Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future
-  promotion: a revert drops recently-pushed digests from the blob store while nodes that
-  already pulled them keep running until their next pull 404s
+  for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no
+  intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons.
+  COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob
+  store while nodes that already pulled them keep running until their next pull 404s
 <!-- /generated_from -->
 
 - **No `REGISTRY_AUTH`.** Network reachability to `k8s_registry_port` IS the access
