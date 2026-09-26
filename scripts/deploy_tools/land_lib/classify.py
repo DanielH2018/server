@@ -15,7 +15,7 @@ from typing import Any
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_tags import DeriveSource
+from deploy_tools.land_tags import DeriveSource, expand_build_couplings
 
 
 def _classified(
@@ -166,6 +166,26 @@ def classify(ln: Landing) -> None:
         ln, "tag derivation", c.derive, paths, view.get("changedFiles", -1), declared
     )
     ln.resolved_tags = list(tags)
+    if source == DeriveSource.PR:
+        # A shared role deploys through every role that runs it, so `plane_note` no longer
+        # names one (#2704). Read over `plane_paths`, the list that note read, so a change
+        # `shared_role_reach` found deploy-time only fans out to nothing.
+        reached = _classified(
+            ln,
+            "shared-role caller expansion",
+            c.shared_caller_tags,
+            ln.plane_paths,
+            declared,
+        )
+        for role, role_tags in sorted(reached.items()):
+            if role_tags:
+                say(
+                    f"`{role}` has no deploy tag of its own; deploying the "
+                    f"{len(role_tags)} service(s) that run it"
+                )
+        extra = set().union(*reached.values()) - set(tags)
+        if extra:
+            ln.resolved_tags = sorted(expand_build_couplings(set(tags) | extra))
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(

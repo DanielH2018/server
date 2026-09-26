@@ -284,18 +284,15 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
     assert {"sonarr", "jellyfin", "traefik", "n8n"} <= set(tags)
 
 
-def test_pr_617_reports_the_shared_roles_as_owed_work():
-    """Dropping them from the tags is only half the fix.
+def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plane():
+    """Dropped from the tags, the shared roles deploy through their callers instead (#2704).
 
-    Dropping them from the REPORT too is the setup-plane silence again: landed, unapplied, and
-    nothing says so.
+    Dropped from the report with no callers to deploy would be the setup-plane silence again.
     """
+    reached = land_tags.shared_caller_tags(_PR_617_FILES)
+    assert {"sonarr", "jellyfin"} <= reached["manifests"] & reached["volume-claim"]
     note = land_tags.plane_note(_PR_617_FILES)
-    assert "manifests" in note
-    assert "volume-claim" in note
-    assert "ansible/deploy.yml" in note, (
-        "a full deploy is the only thing that applies them"
-    )
+    assert "manifests" not in note and "ansible/deploy.yml" not in note
     # `k3s-bringup.yml`, NOT `initial_setup.yml`, which this asserted until 2026-09-01. The
     # k3s role appears only in the bring-up playbook, so the old expectation was pinning a
     # command that exits 0 having matched no task — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`.
@@ -304,11 +301,11 @@ def test_pr_617_reports_the_shared_roles_as_owed_work():
     )
 
 
-def test_a_shared_role_alone_derives_no_tag_and_still_reports():
+def test_a_shared_role_alone_derives_no_tag_of_its_own_and_reaches_its_callers():
     files = ["ansible/roles/k8s/manifests/tasks/main.yml"]
     tags, source = land_tags.derive(files, changed_files=1)
     assert (tags, source) == ([], "pr")
-    assert land_tags.plane_note(files) != ""
+    assert "sonarr" in land_tags.shared_caller_tags(files)["manifests"]
 
 
 def test_an_ordinary_service_role_is_neither_dropped_nor_reported():

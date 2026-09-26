@@ -114,12 +114,12 @@ def test_a_comment_only_task_change_is_deploy_time_only(tree: Tree):
 
 
 def test_the_note_drops_a_comment_only_shared_role(tree: Tree):
-    """The wiring #2581 asks for: the landing reads no shared-role note at all."""
+    """The wiring #2581 asks for: no shared-role note, and no fan-out to its callers (#2704)."""
     files = [
         "ansible/roles/k8s/manifests/tasks/main.yml",
         "ansible/roles/k8s/manifests/CLAUDE.md",
     ]
-    assert "manifests" in land_tags.plane_note(files, DECLARED)
+    assert land_tags.shared_caller_tags(files, DECLARED) == {"manifests": {"sonarr"}}
     tree.write(
         "ansible/roles/k8s/manifests/tasks/main.yml",
         "# DECIDED: the timeout is a deploy-time read.\n" + TASKS,
@@ -129,6 +129,7 @@ def test_the_note_drops_a_comment_only_shared_role(tree: Tree):
         files, f"{old}..{new}", tree.root, DECLARED
     )
     assert "manifests" not in land_tags.plane_note(kept, DECLARED)
+    assert land_tags.shared_caller_tags(kept, DECLARED) == {}, "fanned out a comment"
 
 
 def test_a_hash_line_inside_a_block_scalar_still_needs_a_hand(tree: Tree):
@@ -167,12 +168,12 @@ def test_an_unreadable_range_keeps_the_role_loud(tree: Tree):
 
 
 def test_the_note_drops_a_deploy_time_only_shared_role(tree: Tree):
-    """The wiring: `plane_note` stops asking for a full deploy.yml for such a role."""
+    """The wiring: such a role is neither owed to a hand nor fanned out to its callers."""
     files = [
         "ansible/roles/k8s/manifests/defaults/main.yml",
         "ansible/roles/k8s/manifests/tasks/main.yml",
     ]
-    assert "manifests" in land_tags.plane_note(files, DECLARED)
+    assert land_tags.shared_caller_tags(files, DECLARED) == {"manifests": {"sonarr"}}
     tree.write(
         "ansible/roles/k8s/manifests/defaults/main.yml",
         DEFAULTS.replace("600s", "900s"),
@@ -190,3 +191,4 @@ def test_the_note_drops_a_deploy_time_only_shared_role(tree: Tree):
     )
     assert kept == []
     assert land_tags.plane_note(kept, DECLARED) == ""
+    assert land_tags.shared_caller_tags(kept, DECLARED) == {}

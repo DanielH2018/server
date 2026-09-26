@@ -6,6 +6,11 @@ the pieces several setup roles need byte-identical. A caller reaches it with
 `ansible.builtin.import_tasks: "{{ role_path }}/../setup/common/tasks/<file>.yml"` (one more
 `../` from `roles/k8s/`) and passes the variables the file's header names.
 
+**A change here is applied by applying its consumers.** An `import_tasks` is static, so each
+imported task runs under the consumer's own tag. No tag of `common`'s own exists or is needed
+(#2704). `land.sh` names each consumer's playbook and tag, then the
+`gitops_state.py clear-manual-plane common` that clears the deployer's marker.
+
 | File | What it gives a caller |
 |---|---|
 | `tasks/release_bin.yml` | Deploys a group of host scripts as a versioned release under `/opt/homelab/releases/<group>/<sha>/`, with `/usr/local/bin/<name>` a symlink through `current/`. Provenance is readable and rollback is one symlink. |

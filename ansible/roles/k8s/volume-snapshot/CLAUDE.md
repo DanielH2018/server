@@ -19,7 +19,9 @@ records, the traps the `kubectl` calls are written around, and what stays unveri
 (#2699); read that page before editing `tasks/claim.yml`.
 
 **No standalone deploy tag.** `roles/k8s/manifests` includes `k8s/volume-snapshot`
-automatically for an opted-in caller — there is no `--tags volume-snapshot` to run by itself.
+automatically for an opted-in caller, so the role only ever runs with a caller's claims.
+`deploy.sh --tags volume-snapshot` therefore deploys every service that includes `manifests`,
+which is most of the fleet (#2704).
 
 ## How a role opts in
 

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""A changed helper role is covered by the tags that already ran it -- `covered_roles`.
+"""A changed helper role deploys through every role that runs it -- `shared_caller_tags`.
 
 `test_land_tags.py` owns the split between a deployable role and a shared one; this owns the
 question that comes after it. A role under ansible/roles/k8s/ with no `containers_list` entry
@@ -57,18 +57,29 @@ def test_a_helper_role_landed_with_all_its_callers_is_not_reported():
     assert land_tags.plane_note(_PR_1393_FILES, set(_DECLARED)) == ""
 
 
-def test_a_helper_role_landed_without_its_callers_is_still_reported():
-    """The reject half by caller coverage: one caller deployed is not the helper applied.
+def test_a_helper_role_landed_without_its_callers_reaches_every_caller():
+    """One caller deployed is not the helper applied, so the landing deploys all of them.
 
-    Deploying sonarr re-runs arr-notification's tasks for sonarr alone. radarr keeps the old
-    behaviour, so the change is half-applied and a hand still owes the rest.
+    Deploying sonarr re-runs arr-notification's tasks for sonarr alone, and radarr would keep
+    the old behaviour. Until #2704 that was reported to a hand; now radarr is deployed too.
     """
     files = [
         "ansible/roles/k8s/arr-notification/tasks/main.yml",
         "ansible/roles/k8s/sonarr/tasks/main.yml",
     ]
     assert land_tags.derive(files, 2, set(_DECLARED)).tags == ["sonarr"]
-    assert "arr-notification" in land_tags.plane_note(files, set(_DECLARED))
+    assert land_tags.shared_caller_tags(files, set(_DECLARED)) == {
+        "arr-notification": {"radarr", "sonarr"}
+    }
+    assert land_tags.plane_note(files, set(_DECLARED)) == ""
+
+
+def test_a_helper_called_only_by_helpers_reaches_their_callers():
+    """Transitive: `longhorn-api` is called by `volume-snapshot`, which `manifests` calls."""
+    files = ["ansible/roles/k8s/longhorn-api/tasks/main.yml"]
+    assert land_tags.shared_caller_tags(files, set(_DECLARED))["longhorn-api"] == set(
+        _DECLARED
+    )
 
 
 def test_a_changed_role_with_neither_an_entry_nor_a_caller_is_still_reported():

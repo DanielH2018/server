@@ -178,6 +178,61 @@ def clear_fact_cache(plan: Plan) -> None:
         traceback.print_exc()
 
 
+def expand_shared_roles(plan: Plan) -> None:
+    """Replace each shared k8s role in `--tags` with the tags of every role that runs it.
+
+    A shared role — `volume-snapshot`, `manifests`, `image-builder` — has no `containers_list`
+    entry, so Ansible selects nothing for `--tags volume-snapshot` and exits 0. It runs under
+    its callers' tags with their variables, so deploying every caller is what applies it.
+    PR #2701 changed only `volume-snapshot/tasks/claim.yml` and was left for the next full
+    deploy for want of this (#2704).
+
+    Runs before the staleness gate, so the gate, the tag validation and the per-service locks
+    all see the services that actually deploy. A name no declared role runs is left as typed,
+    and the validation refuses it by name. Fails open for the reason `clear_fact_cache` does:
+    a crash here leaves the typed tags, which the validation then refuses.
+    """
+    if not plan.tags:
+        return
+    try:
+        from deploy_tools import deploy_tags
+        from deploy_tools.shared_role_callers import expand_shared_tags
+        from lib.k8s_roles import role_callers
+
+        declared = deploy_tags.known_tags(plan.repo_root / HOST_VARS_REL, plan.at_sha)
+        if set(plan.tags) <= declared:
+            return
+        tags, replaced = expand_shared_tags(
+            plan.tags, declared, role_callers(plan.repo_root)
+        )
+    # Broad on purpose: the expansion fails open, per the docstring.
+    except Exception:
+        traceback.print_exc()
+        return
+    for role, reached in replaced.items():
+        say(
+            f"deploy: `{role}` is a shared role with no containers_list entry; deploying the "
+            f"{len(reached)} service(s) that run it: {', '.join(reached)}"
+        )
+    if replaced:
+        plan.tags = tags
+        plan.args = [*_without_tags(plan.args), f"--tags={plan.tags_csv}"]
+
+
+def _without_tags(args: list[str]) -> list[str]:
+    """`args` minus every `--tags`/`-t` flag and its value."""
+    out: list[str] = []
+    skip_next = False
+    for arg in args:
+        if skip_next:
+            skip_next = False
+        elif arg in ("--tags", "-t"):
+            skip_next = True
+        elif not arg.startswith("--tags="):
+            out.append(arg)
+    return out
+
+
 def run_locked(plan: Plan) -> int:
     """The locked half, in process; the wrapper's exit status."""
     from deploy_tools import deploy_detach, deploy_under_locks
@@ -463,6 +518,7 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
                 ["uv", "run", "python", "scripts/deploy_tools/deploy_tags.py", "list"]
             )
         check_mode_conflicts(plan)
+        expand_shared_roles(plan)
         # The fact cache is shared by host across every worktree on this machine and pins
         # the interpreter of whichever session gathered facts first. A cache naming a gone
         # worktree fails EVERY deploy at Gathering Facts for the full TTL, AFTER the lock

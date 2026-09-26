@@ -67,6 +67,7 @@ import narrow_setup
 from land_changes import changes_for
 from land_reach import remaining_setup_hosts_note
 from lib.k8s_roles import role_callers
+from shared_role_callers import caller_tags
 
 _K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 _DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
@@ -222,26 +223,20 @@ def derived_tags(files, declared: set[str] | None = None) -> set[str]:
     return expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
 
 
-def covered_roles(shared: list[str], deployed: set[str]) -> set[str]:
-    """The shared roles in `shared` that `deployed` already applied, through their callers.
+def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set[str]]:
+    """For each shared role `files` changes, the tags of EVERY role that runs it (#2704).
 
     A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
-    whose tasks `include_role` (or `import_tasks`) it — so deploying ALL of its callers applies
-    it. PR #1393 changed `arr-notification` together with both callers, sonarr and radarr, land
-    deployed both, and land.sh still reported `needs-manual-apply` and asked for a full
-    `deploy.yml` for work already applied (issue #1397).
+    whose tasks include it, so deploying all of its callers applies it (#1397). All of them,
+    not one: PR #617 deployed 22 of `manifests`' callers, which re-applied it for those 22
+    alone. Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
 
-    EVERY caller must be in `deployed`, not merely one. `manifests` has 54 callers and PR #617
-    deployed 22 of them: one caller's tag re-applies the helper for that caller alone, which is
-    not the same as applying the change. Requiring all of them keeps #617 reported while #1393
-    goes quiet, and errs toward reporting when it is wrong.
-
-    Not transitive. `longhorn-api`'s callers are themselves helpers (volume-revert,
-    volume-snapshot), so it can never be covered here — the safe direction, and following the
-    chain would only reach `manifests`, whose 54 callers no landing deploys whole.
+    The landing deploys these tags, and `plane_note` drops every role this gives a non-empty
+    set. An empty set is a role nothing deploys, which stays in the note.
     """
+    declared = declared_tags() if declared is None else declared
     callers = role_callers()
-    return {r for r in shared if (c := callers.get(r)) and c <= deployed}
+    return {r: caller_tags(r, declared, callers) for r in shared_roles(files, declared)}
 
 
 def confirmed_narrow_tags(
@@ -304,10 +299,10 @@ def plane_note(
     where the deploy genuinely succeeds and half the change is still unapplied -- the harder
     version of the same silence, because the verdict reads `settled`.
 
-    A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing,
-    so no derived tag can ever apply it and only a full deploy will. Reusing this note rather
-    than minting a verdict keeps one meaning for "landed, not live". Unless this landing ran
-    every caller (`covered_roles`, #1397), or `shared_role_reach` dropped its paths (#2462).
+    A shared k8s role is the same shape, one plane over: `--tags manifests` matches nothing.
+    The landing deploys its callers instead (`shared_caller_tags`, #2704), so only a shared
+    role that no declared role runs is still named here. `shared_role_reach` drops the paths
+    of one whose change reaches no rendered manifest before either reads them (#2462).
 
     A rotated secret is the third shape, and the one with no path to match at all. A secret's
     value lives in no role's template, so `ansible/vars/secrets.yml` derives zero tags however
@@ -326,19 +321,16 @@ def plane_note(
     quiet = set(quiet)
     declared = declared_tags() if declared is None else declared
     notes = []
-    shared = shared_roles(files, declared)
-    # A helper role every one of whose callers this landing deployed is already applied --
-    # dropped from the note, never from the tags, which it can never have one of.
-    covered = covered_roles(shared, derived_tags(files, declared))
-    shared = [r for r in shared if r not in covered]
+    # DECIDED: fan a shared role out to its callers, reversing the "report, do not fan out"
+    # this held until #2704. The operator asked for every piece of the deploy to be
+    # selectable, and a report left PR #2701 for the next full deploy. A change to
+    # `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy,
+    # unmeasured as a tag list. A change reaching no rendered manifest never gets here:
+    # `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the
+    # report, because an unattended tick parking a range is a different cost.
+    expanded = shared_caller_tags(files, declared)
+    shared = [r for r in shared_roles(files, declared) if not expanded[r]]
     if shared:
-        # DECIDED: report the shared plane, do not fan it out to its dependents. 53 roles
-        # include k8s/manifests, so a fan-out is a full deploy wearing a tag list — 20
-        # minutes of run time, and every rollout gate and stabilisation window with it — for
-        # what is usually a two-line change. Reporting it keeps the operator's choice of
-        # when. deploy_logic.k8s_remediation reached the same conclusion for the deployer's
-        # alert path and carries the longer argument, including why routing it to `cs.broad`
-        # is worse than either.
         # Passing ONLY the shared half. k8s_remediation appends a scoped `--tags` line for
         # any deployable role it is given, and land.sh has already deployed those itself.
         notes.append(k8s_remediation(set(shared), declared))
@@ -591,6 +583,10 @@ def main(
         # empty file list, which would silently license a zero-tag deploy.
         payload.get("changedFiles", -1),
     )
+    # The callers of what `--plane` stopped naming, as `classify` adds them.
+    if source == DeriveSource.PR:
+        reached = shared_caller_tags(paths).values()
+        tags = sorted(expand_build_couplings(set(tags).union(*reached)))
     print(f"{source} {','.join(tags)}")
     return 0
 

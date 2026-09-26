@@ -15,7 +15,7 @@ tasks apply live state per caller, so one caller deployed is not the change appl
 #1729 cites as precedent, names `volume-claim/templates/pvc.yaml.j2` as a byte supplier, which
 puts that role's own example in the REPORTED set.
 
-THE VERDICT IS ASSERTED, not just `plane_note`, for the reason
+THE VERDICT IS ASSERTED for the tests-only half, not just `plane_note`, for the reason
 `test_land_doc_change_reaches_a_verdict.py` asserts it: `no_tag_outcome` reads `plane_note`
 together with `self_applied`, and only their combination decides between `nothing-to-deploy`
 (exit 0) and `needs-manual-apply` (exit 1).
@@ -59,19 +59,23 @@ def test_a_role_test_file_is_clean():
     assert land_tags.is_role_test_path(_ROLE_TESTS) is True
     assert land_tags.shared_roles([_ROLE_TESTS]) == []
     assert land_tags.plane_note([_ROLE_TESTS]) == ""
+    assert land_tags.shared_caller_tags([_ROLE_TESTS]) == {}
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half, and the half of #1729 that is refuted: tasks/ still owes a hand."""
+    """The reject half, and the half of #1729 that is refuted: tasks/ still owes a deploy,
+    which since #2704 is a deploy of both callers rather than a hand."""
     assert land_tags.is_role_test_path(_ROLE_TASKS) is False
     assert land_tags.shared_roles([_ROLE_TASKS]) == ["arr-notification"]
-    assert "arr-notification" in land_tags.plane_note([_ROLE_TASKS])
+    assert land_tags.shared_caller_tags([_ROLE_TASKS]) == {
+        "arr-notification": {"radarr", "sonarr"}
+    }
 
 
 def test_a_shared_storage_role_task_file_is_flagged():
     """#1729's own example. volume-claim ships templates/, so it supplies applied bytes."""
     assert land_tags.shared_roles([_CLAIM_TASKS]) == ["volume-claim"]
-    assert "volume-claim" in land_tags.plane_note([_CLAIM_TASKS])
+    assert "sonarr" in land_tags.shared_caller_tags([_CLAIM_TASKS])["volume-claim"]
 
 
 def test_a_role_shipped_file_is_flagged():
@@ -81,7 +85,8 @@ def test_a_role_shipped_file_is_flagged():
 
 def test_a_test_file_beside_a_real_change_does_not_excuse_it():
     """One quiet tests/ edit must not take the code change it covers with it."""
-    assert "arr-notification" in land_tags.plane_note([_ROLE_TESTS, _ROLE_FILES])
+    reached = land_tags.shared_caller_tags([_ROLE_TESTS, _ROLE_FILES])
+    assert reached == {"arr-notification": {"radarr", "sonarr"}}
 
 
 def _verdict(landing, files: list[str]) -> Outcome:
@@ -103,9 +108,9 @@ def test_a_role_test_change_ends_nothing_to_deploy(landing):
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
 
 
-def test_a_role_task_change_still_ends_needs_manual_apply(landing):
-    outcome = _verdict(landing, [_ROLE_TASKS])
-    assert (outcome.verdict, outcome.rc) == ("needs-manual-apply", 1)
+def test_a_role_task_change_owes_no_hand_because_its_callers_deploy():
+    """The tag path decides it now: the landing deploys sonarr and radarr (#2704)."""
+    assert land_tags.plane_note([_ROLE_TASKS]) == ""
 
 
 # The declared-role half (issue #1735). #1734 dropped a role's tests/ from `shared_roles`

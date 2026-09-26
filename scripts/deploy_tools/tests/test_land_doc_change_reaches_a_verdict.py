@@ -11,7 +11,7 @@ TWO PLACES A `.md` USED TO REACH A VERDICT, and both are covered here. `role_for
 `shared_roles`, which is the k8s half; the broad prefixes are the setup half, which a `.md`
 under `roles/setup/` still matches by path and only `quiet_paths` can drop.
 
-THE VERDICT IS ASSERTED, not just `plane_note`. `plane_note` returning "" is not the
+THE VERDICT IS ASSERTED for the doc-only half, not just `plane_note`. A `tasks/` change deploys the role's callers since #2704, so its half asserts those tags instead. `plane_note` returning "" is not the
 outcome -- `no_tag_outcome` reads it together with `self_applied`, and only their combination
 decides between `nothing-to-deploy` (exit 0) and `needs-manual-apply` (exit 1). That
 combination is the issue's own Verify-by.
@@ -38,19 +38,22 @@ def test_a_role_document_is_clean():
     assert land_tags.role_for(_DOC) is None
     assert land_tags.shared_roles([_DOC]) == []
     assert land_tags.plane_note([_DOC]) == ""
+    assert land_tags.shared_caller_tags([_DOC]) == {}, (
+        "prose fanned out to every caller"
+    )
     assert land_tags.self_applied([_DOC]) is False
 
 
 def test_a_role_task_file_is_flagged():
-    """The reject half: the same role's tasks/ is code, and only a full deploy applies it."""
+    """The reject half: the same role's tasks/ is code, deployed through its callers (#2704)."""
     assert land_tags.role_for(_TASKS) == "manifests"
     assert land_tags.shared_roles([_TASKS]) == ["manifests"]
-    assert "manifests" in land_tags.plane_note([_TASKS])
+    assert "sonarr" in land_tags.shared_caller_tags([_TASKS])["manifests"]
 
 
 def test_a_document_beside_a_real_change_does_not_excuse_it():
     """One quiet document must not take the role change it documents with it."""
-    assert "manifests" in land_tags.plane_note([_DOC, _TASKS])
+    assert "sonarr" in land_tags.shared_caller_tags([_DOC, _TASKS])["manifests"]
 
 
 def test_a_setup_role_document_is_clean_whatever_the_range():
@@ -92,6 +95,7 @@ def test_a_doc_only_change_to_a_tagless_role_ends_nothing_to_deploy(landing):
     assert (outcome.verdict, outcome.rc) == ("nothing-to-deploy", 0)
 
 
-def test_a_task_change_to_the_same_role_still_ends_needs_manual_apply(landing):
-    outcome = _verdict(landing, [_TASKS])
-    assert (outcome.verdict, outcome.rc) == ("needs-manual-apply", 1)
+def test_a_task_change_to_the_same_role_owes_no_hand_because_its_callers_deploy():
+    """Its verdict is the tag path's, not `no_tag_outcome`'s: the landing deploys the callers
+    `test_a_role_task_file_is_flagged` names, so nothing is left for a hand (#2704)."""
+    assert land_tags.plane_note([_TASKS]) == ""

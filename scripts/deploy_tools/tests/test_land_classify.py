@@ -64,6 +64,23 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
     )
 
 
+def test_classify_deploys_the_callers_of_a_shared_role(landing):
+    """PR #2701's shape: only a shared role changed, so the landing deploys its callers."""
+    ln, _ = landing(
+        Fakes(derived=([], "pr"), shared_callers={"helper": {"sonarr", "radarr"}})
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.tags_csv == "radarr,sonarr"
+
+
+def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
+    ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr"), shared_callers={}))
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.tags_csv == "sonarr,radarr"
+
+
 # ── a role this PR registers is not a role somebody forgot to register (issue #1544) ──
 
 _NEW_ROLE_PR = {

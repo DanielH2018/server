@@ -95,3 +95,17 @@ def test_the_deployers_argv_is_one_main_accepts(capsys):
         "game-stats-lib": ["terraria-stats", "valheim-stats"],
         "n8n-images": ["n8n"],
     }
+
+
+# ── which tags deploy a shared role at all, record or no record (#2704) ──
+def test_caller_tags_follows_a_shared_caller_and_skips_a_dead_end():
+    callers = {"longhorn-api": {"volume-snapshot", "dead"}, "volume-snapshot": {"web"}}
+    assert shared_role_callers.caller_tags("longhorn-api", {"web"}, callers) == {"web"}
+
+
+def test_expand_shared_tags_keeps_order_and_leaves_an_unknown_name_as_typed():
+    tags, replaced = shared_role_callers.expand_shared_tags(
+        ["web", "helper", "typo"], {"web", "api"}, {"helper": {"api", "web"}}
+    )
+    assert tags == ["web", "api", "typo"]
+    assert replaced == {"helper": ["api", "web"]}
