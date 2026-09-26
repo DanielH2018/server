@@ -152,3 +152,18 @@ def test_pending_services_are_named_on_an_up_and_do_not_move_the_exit_code():
     )
     assert kuma_code == 0
     assert "code-server (12 min ago)" in kuma_text
+
+
+def test_names_out_writes_the_counted_set_sorted(tmp_path):
+    """release-staleness-check re-alerts when this set changes (#2378)."""
+    out = tmp_path / "names"
+    pr.write_counted_names(
+        out, {"sonarr": "changed since applied: roles/k8s/sonarr/"}, ["authelia"]
+    )
+    assert out.read_text() == "authelia\nsonarr\n"
+
+
+def test_names_out_is_empty_for_a_clean_fleet(tmp_path):
+    out = tmp_path / "names"
+    pr.write_counted_names(out, {}, [])
+    assert out.read_text() == ""

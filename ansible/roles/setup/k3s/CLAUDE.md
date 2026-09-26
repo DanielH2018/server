@@ -246,6 +246,13 @@ so a check already down is not paged again.
   truncates, so Discord rejected the DOWN with HTTP 400 on 2026-09-17 and 2026-09-18 and the
   page reached nobody. `kuma_push` (kuma-push-lib.sh) and the bridge's `net.push` both cap
   the msg at 900 chars as the class fix; the reasons are `probe.py releases --stale-only`.
+  **A changed stale set re-alerts while the tile stays DOWN** (#2378). Kuma notifies on a
+  status transition only, so a DOWN whose set grew or shrank reached nobody. The cron keeps
+  the set the last DOWN pushed in `/var/lib/homelab/release-staleness/stale-set` (written by
+  `probe.py releases --names-out`). When the set differs, the cron pushes an `up` that opens
+  `Not a recovery.`, then the `down` with the added and cleared names prefixed. A DOWN that
+  is not a verdict (the fetch failing, or the probe exiting above 1) keeps the recorded set, or
+  records an empty one so the first verdict after it still notifies. An `up` clears it.
 - **Cron's PATH omits `/usr/local/bin`, where k3s lives.** Every script here sets its own
   PATH; a new one that does not dies on `command -v k3s` and, if it pushes its heartbeat
   before the check, reads permanently green.

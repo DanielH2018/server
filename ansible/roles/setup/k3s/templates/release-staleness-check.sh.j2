@@ -58,12 +58,28 @@ if [[ -z "$PUSH_TOKEN" ]]; then
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
+# The stale set the last DOWN pushed, for the re-alert below (#2378).
+STATE_DIR=/var/lib/homelab/release-staleness
+PREV_SET="${STATE_DIR}/stale-set"
+NEW_SET="${STATE_DIR}/stale-set.new"
+TRACK_SET=""
+[[ -d "$STATE_DIR" && -w "$STATE_DIR" ]] && TRACK_SET=1
+
+# A DOWN that is not a staleness verdict (the fetch or the probe itself failing) records an
+# empty set when none is recorded yet. Without it, the first real verdict after one finds no
+# previous set, pushes a plain DOWN onto a tile that is already DOWN, and Kuma sends nothing.
+seed_empty_set() {
+  [[ -n "$TRACK_SET" && ! -f "$PREV_SET" ]] && : > "$PREV_SET"
+  return 0
+}
+
 REPO_DIR=/home/{{ sys_user }}/server
 if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   STATUS=down
   MSG="git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
   kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
+  seed_empty_set
   exit 0
 fi
 
@@ -78,7 +94,15 @@ UV=/home/{{ sys_user }}/.local/bin/uv
 # `logger` cuts a line at 1 KiB, so the full list is one `--stale-only` run away.
 # --grace-minutes: a merge younger than this is named but not counted, so a landing still
 # deploying its own merge does not page (k3s_release_staleness_grace_minutes in defaults).
-OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only --kuma --grace-minutes {{ k3s_release_staleness_grace_minutes }} 2>&1)"
+# --names-out: the counted set, one name per line, for the re-alert below. Passed only when the
+# state directory is writable, so a host whose k3s role has not created it yet still gets a
+# verdict rather than a traceback that reads as the check breaking.
+NAMES_ARGS=()
+if [[ -n "$TRACK_SET" ]]; then
+  rm -f "$NEW_SET"
+  NAMES_ARGS=(--names-out "$NEW_SET")
+fi
+OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only --kuma --grace-minutes {{ k3s_release_staleness_grace_minutes }} "${NAMES_ARGS[@]}" 2>&1)"
 RC=$?
 
 if [[ $RC -eq 0 ]]; then
@@ -93,5 +117,58 @@ else
 fi
 MSG="$OUTPUT"
 
+# RE-ALERT ON A CHANGED SET (#2378). Kuma notifies on a status TRANSITION only, plus the
+# resendInterval count, and its push route accepts only `up` or `down`. So while the tile sat
+# DOWN, a stale set that grew or shrank (one service redeployed, another merge landing) changed
+# the tile's message and never reached Discord. When this run's counted set differs from the
+# one the last DOWN pushed, the script pushes an `up` that says it is not a recovery, then the
+# `down`: Kuma sends both notifications, and the second carries the current list.
+# Considered and rejected: posting to Discord directly. That needs a webhook secret on this
+# host and bypasses the Discord template every Kuma monitor shares (uptime-kuma CLAUDE.md).
+# Grace-window services are not in the set: they do not move the verdict, so they do not
+# re-alert either. The first DOWN has no previous set, and its own transition is the alert.
+# No bash length or array-count expansions below: their brace-hash reads to Jinja as the start
+# of a comment, so counts come from `wc` instead.
+REALERT=""
+if [[ $RC -eq 1 && -f "$PREV_SET" && -f "$NEW_SET" ]] && ! cmp -s "$PREV_SET" "$NEW_SET"; then
+  ADDED_NAMES="$(LC_ALL=C comm -13 "$PREV_SET" "$NEW_SET" | paste -sd, -)"
+  CLEARED_NAMES="$(LC_ALL=C comm -23 "$PREV_SET" "$NEW_SET" | paste -sd, -)"
+  ADDED_N="$(LC_ALL=C comm -13 "$PREV_SET" "$NEW_SET" | wc -l)"
+  CLEARED_N="$(LC_ALL=C comm -23 "$PREV_SET" "$NEW_SET" | wc -l)"
+  # Names while they are short, counts alone past that, so a fleet-wide change cannot crowd the
+  # current list out of the capped DOWN message.
+  if [[ "$(printf '%s%s' "$ADDED_NAMES" "$CLEARED_NAMES" | wc -c)" -gt 300 ]]; then
+    ADDED_NAMES=""
+    CLEARED_NAMES=""
+  fi
+  PARTS=()
+  [[ $ADDED_N -gt 0 ]] && PARTS+=("${ADDED_N} newly stale${ADDED_NAMES:+ (${ADDED_NAMES})}")
+  [[ $CLEARED_N -gt 0 ]] && PARTS+=("${CLEARED_N} cleared${CLEARED_NAMES:+ (${CLEARED_NAMES})}")
+  REALERT="Stale set changed: ${PARTS[0]}${PARTS[1]:+; ${PARTS[1]}}"
+fi
+
+if [[ -n "$REALERT" ]]; then
+  UP_MSG="Not a recovery. ${REALERT}. The DOWN that follows carries the current list."
+  logger -t release-staleness-check "status=up ${UP_MSG}"
+  kuma_push up "$UP_MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
+  MSG="${REALERT}. ${OUTPUT}"
+fi
+
 logger -t release-staleness-check "status=${STATUS} ${MSG}"
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
+
+# The set is recorded whatever the push outcome. A lost DOWN push is paged by monitor-bridge's
+# swallowed-verdicts check, which reads kuma_push's failure line out of Loki. Reading the push
+# result here would move this script into that check's HC_ROUTED_TAGS (verdicts/logs.py), the
+# scripts it skips because they page their own lost push. A broken check (rc > 1) keeps the
+# last good set, or seeds an empty one.
+if [[ -n "$TRACK_SET" ]]; then
+  if [[ $RC -eq 0 ]]; then
+    rm -f "$PREV_SET"
+  elif [[ $RC -eq 1 && -f "$NEW_SET" ]]; then
+    mv -f "$NEW_SET" "$PREV_SET"
+  else
+    seed_empty_set
+  fi
+fi
+rm -f "$NEW_SET"

@@ -149,3 +149,18 @@ def format_stale_kuma(stale, missing, pending=None, grace_seconds=0):
         ),
         1,
     )
+
+
+def write_counted_names(path, stale, missing):
+    """Write the services the verdict COUNTS, sorted, one per line, to `path`.
+
+    release-staleness-check.sh compares this set against its previous DOWN run to re-alert
+    when the set changes while the tile stays DOWN (#2378). The `--kuma` line cannot stand in
+    for it: it is grouped and capped at 900 chars. Services inside the grace window are left
+    out, because they do not move the verdict either. An empty set writes an empty file, and
+    a `path` of None (no `--names-out`) writes nothing.
+    """
+    if path is None:
+        return
+    names = sorted(set(stale) | set(missing))
+    _Path(path).write_text("".join(f"{n}\n" for n in names))

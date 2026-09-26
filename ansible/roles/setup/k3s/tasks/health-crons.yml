@@ -442,6 +442,19 @@
       {{ (k3s_render_stamp_groups | selectattr('name', 'eq', 'k3s-release-staleness')
           | first).templates }}
 
+- name: Create the release-staleness check's state directory
+  tags: [release-staleness]
+  # Holds the stale set the last DOWN pushed, so the check can re-alert when that set changes
+  # while the tile stays DOWN (#2378). Owned by the cron's own user, and outside the primary
+  # checkout: an untracked file there would park the GitOps deployer.
+  ansible.builtin.file:
+    path: /var/lib/homelab/release-staleness
+    state: directory
+    mode: "0755"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+  become: true
+
 - name: Schedule the release-staleness drift check
   tags: [release-staleness]
   ansible.builtin.cron:

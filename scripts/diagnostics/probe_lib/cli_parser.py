@@ -386,4 +386,12 @@ def _build_parser():
             "landing's deploy window before the monitor pages (default 0: no grace)"
         ),
     )
+    rel.add_argument(
+        "--names-out",
+        metavar="PATH",
+        help=(
+            "with --stale-only: also write the services the verdict counts, sorted, one per "
+            "line, to PATH; release-staleness-check.sh re-alerts when that set changes (#2378)"
+        ),
+    )
     return p

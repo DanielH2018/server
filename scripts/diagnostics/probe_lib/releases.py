@@ -59,6 +59,7 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
     format_records,
     format_stale_kuma,
     format_stale_only,
+    write_counted_names,
 )
 
 # The one rule that has to read a diff rather than a path lives in its own module, for the
@@ -575,6 +576,7 @@ def run_releases(ns):
         stale = compute_stale(records, grace_seconds=grace_seconds, pending=pending)
         apply_renders(stale, records, pending=pending)
         missing = missing_services(records)
+        write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
         text, code = render(
             stale, missing, pending=pending, grace_seconds=grace_seconds
