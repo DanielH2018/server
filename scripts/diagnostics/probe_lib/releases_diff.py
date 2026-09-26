@@ -51,8 +51,9 @@ repo's offline render harness cannot produce that render: it stubs SOPS values a
 own placeholder `domain`, and on 2026-09-25 it reproduced 9 of 57 records. A dry run with
 `-e manifests_render_record=true` can: it writes a render record whose digest comes from the
 same task file as the release record's, and it reproduced all 45 services a dry run can reach
-(#2574). `releases_render` lets a match clear path hits only where no secret manifest exists
-on either side, because the digest excludes them (#2586). Two gaps remain before a narrowing
+(#2574). `releases_render` lets a match clear path hits for a service with secret manifests
+only when both records also carry a matching keyed `secret_digest`, because
+`manifests_digest` excludes them (#2586, #2574). Two gaps remain before a narrowing
 can go. Nothing produces render records on a schedule (#2587). 13 stamped services cannot be
 dry-run at all (#2588). `ansible/roles/k8s/manifests/CLAUDE.md`,
 under `## Release records`, carries the measurement. Do not delete a narrowing for a digest

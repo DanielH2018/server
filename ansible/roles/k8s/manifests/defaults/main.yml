@@ -8,6 +8,12 @@
 # nobody runs. `probe.py releases` is that reader.
 manifests_release_dir: /var/lib/homelab/k8s-releases.d
 
+# The host-local HMAC key both records' `secret_digest` is keyed with (#2574). root, 0600,
+# created on first use by files/secret_hmac.py and never copied, printed or committed. Outside
+# k8s-releases.d, whose records are 0644. Deleting it re-keys every future digest, so each
+# service with secret manifests reads stale until its next deploy writes a fresh release record.
+manifests_secret_digest_key: /var/lib/homelab/k8s-secret-digest.key
+
 # Render-only mode (#2574). Under `k8s_dry_run`, render_record.yml digests the throwaway
 # render the same way release_stamp.yml digests an applied one and writes it here, so
 # `probe.py releases --stale-only` can compare what is applied against what the tree would

@@ -51,6 +51,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/qbittorrent/tests",           # throughput-preference diff logic
   "ansible/roles/k8s/healthchecks/tests",          # Discord Channel seed + the local_settings.py strip
   "ansible/roles/k8s/arr-notification/tests",      # *arr Discord Connect seed: match key + upsert decision
+  "ansible/roles/k8s/manifests/tests",             # the keyed secret-manifest digest (secret_hmac.py)
   "ansible/roles/setup/fake_remux/tests",          # generic {ts,ok,msg} state-file pusher
   "ansible/roles/k8s/terraria-stats/tests",       # player-stats aggregator logic (moved at the Phase F drain)
   "ansible/roles/k8s/valheim-stats/tests",        # the Valheim sibling: adds deaths + a steamid<->name map
@@ -345,6 +346,7 @@ extra-paths = [
   "ansible/roles/k8s/qbittorrent/files",
   "ansible/roles/k8s/healthchecks/files",
   "ansible/roles/k8s/arr-notification/files",
+  "ansible/roles/k8s/manifests/files",
   "ansible/roles/setup/fake_remux/files",
   "ansible/roles/setup/render_records/files",
   "ansible/roles/k8s/terraria-stats/files",
