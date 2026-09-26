@@ -1,8 +1,8 @@
 [
   {"date": "2026-09-26", "domain": "security", "agent": "security-review (opus, effort medium)", "status": "covered",
-   "reviewed": ["ansible/roles/k8s/traefik/templates", "ansible/roles/k8s/traefik/files/cloudflare-realip", "ansible/roles/k8s/authelia/templates", "ansible/templates/ingressroute.yml.j2", "ansible/roles/k8s/home-assistant/files/configuration.yaml", "ansible/roles/k8s/n8n/templates", "ansible/roles/k8s/wg-easy/templates", "ansible/roles/k8s/headlamp/templates/rbac.yaml.j2", "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2", "ansible/roles/k8s/{peanut,speedtest,freshrss,karakeep,ical-proxy,crowdsec}/templates", "ansible/roles/containers/docker-proxy/templates"],
+   "reviewed": ["ansible/roles/k8s/traefik/templates", "ansible/roles/k8s/traefik/files/cloudflare-realip", "ansible/roles/k8s/authelia/templates", "ansible/templates/ingressroute.yml.j2", "ansible/roles/k8s/wg-easy/templates", "ansible/roles/k8s/headlamp/templates/rbac.yaml.j2", "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2", "ansible/roles/k8s/*/templates (ingressroute and proxy-trust config)", "ansible/roles/containers/docker-proxy/templates"],
    "findings": ["sec-held-1", "sec-held-2", "sec-held-3"],
-   "leads": ["sec-v1-ha-resolved-remote", "sec-v2-peanut-speedtest-api-auth"],
+   "leads": ["sec-held-lead-1", "sec-held-lead-2"],
    "notes": "No Bash. Verified the 2026-09-24 edge fixes (#2441, #2442, #2447) are in place in the templates. #2124 not re-observed (no live access)."},
   {"date": "2026-09-26", "domain": "network", "agent": "homelab-network-diagnostician (sonnet)", "status": "clean",
    "reviewed": ["ansible/inventory/group_vars/all.yml", "ansible/roles/k8s/traefik", "ansible/roles/k8s/crowdsec", "ansible/roles/k8s/pihole", "ansible/roles/k8s/wg-easy", "ansible/roles/k8s/monitor-bridge/files/registry.py", "ansible/roles/k8s/*/templates/*ingressroute*.yaml.j2", "live: probe.py vip-placement/targets/monitors/kuma-drift, kubectl nodes/networkpolicy/daemonset"],
