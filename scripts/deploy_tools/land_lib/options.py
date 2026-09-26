@@ -18,15 +18,23 @@ from lib.gitops_markers import STATE_DIR
 PRIMARY_CHECKOUT = Path("/home/ubuntu/server")
 MERGE_POLL_S = 30
 
+PRIMARY_ENV = "LAND_PRIMARY"
+MERGE_POLL_ENV = "LAND_MERGE_POLL"
+REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
+# Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
+# exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
+# landing it was written for (issue #2640).
+ENV_KNOBS = (PRIMARY_ENV, MERGE_POLL_ENV, REQUIRE_AUTHOR_ENV)
+
 
 def _primary_from_env() -> Path:
     """`LAND_PRIMARY`, or the primary checkout when it is unset or empty."""
-    return Path(os.environ.get("LAND_PRIMARY") or PRIMARY_CHECKOUT)
+    return Path(os.environ.get(PRIMARY_ENV) or PRIMARY_CHECKOUT)
 
 
 def _merge_poll_from_env() -> int:
     """`LAND_MERGE_POLL` in seconds, or the default when it is unset or empty."""
-    return int(os.environ.get("LAND_MERGE_POLL") or MERGE_POLL_S)
+    return int(os.environ.get(MERGE_POLL_ENV) or MERGE_POLL_S)
 
 
 def _require_author_from_env() -> str:
@@ -37,7 +45,7 @@ def _require_author_from_env() -> str:
     An interactive session leaves it unset, so a person's own PR arms as before; the agent's
     session inherits it from the unit and cannot arm a human's PR without `--any-author`.
     """
-    return os.environ.get("LAND_REQUIRE_AUTHOR") or ""
+    return os.environ.get(REQUIRE_AUTHOR_ENV) or ""
 
 
 @dataclass(frozen=True)
