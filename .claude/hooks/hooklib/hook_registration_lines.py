@@ -47,8 +47,10 @@ def session_checkout(env=None, cwd=None):
 
     `$CLAUDE_PROJECT_DIR` is the direct answer and is preferred. No hook in this repo read it
     before, so its presence here is unverified rather than assumed: the fallback walks up from
-    the session's cwd to the first directory holding a `.claude/settings.json`, which is the
-    worktree root for a worktree session and the primary checkout for a session in it.
+    `cwd` to the first directory holding a `.claude/settings.json`, which is the worktree root
+    for a worktree session and the primary checkout for a session in it. `cwd` is the
+    SessionStart payload's own field where the caller has it — `block-protected-bash.py` and
+    `inject-nested-docs.py` read the same field — and this process's cwd otherwise.
 
     A session in the primary checkout resolves to the primary checkout, where the comparison is
     the self-agreeing one above and prints nothing. That is the correct answer for it — there is
@@ -139,11 +141,14 @@ def _fix_command(path):
     return f"git -C {root} merge --ff-only origin/master"
 
 
-def missing_hook_script_lines(checkout=None, read_settings=None, exists=None):
+def missing_hook_script_lines(checkout=None, read_settings=None, exists=None, cwd=None):
     """One banner line for the hook scripts this session registers and cannot run, or [].
 
     Args:
-        checkout: the session's checkout. Defaults to `session_checkout()`.
+        checkout: the session's checkout. Defaults to `session_checkout(cwd=cwd)`.
+        cwd: the session's directory, for the walk `session_checkout` falls back to. The
+            SessionStart payload's `cwd` where the caller has it, since the hook's own process
+            cwd is whatever Claude Code happened to launch it with.
         read_settings: returns the parsed `.claude/settings.json` of `checkout`. Defaults to
             reading and parsing it.
         exists: path predicate. Defaults to `os.path.exists`.
@@ -156,7 +161,7 @@ def missing_hook_script_lines(checkout=None, read_settings=None, exists=None):
     returns [], because a SessionStart hook must never block a session from starting, and a
     settings file Claude Code itself could not parse registered no hooks to be missing.
     """
-    checkout = session_checkout() if checkout is None else checkout
+    checkout = session_checkout(cwd=cwd) if checkout is None else checkout
     if not checkout:
         return []
     if read_settings is None:

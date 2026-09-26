@@ -167,6 +167,32 @@ def test_session_checkout_answers_none_outside_any_checkout(tmp_path):
     assert arm.session_checkout(env={}, cwd=str(tmp_path)) is None
 
 
+def test_the_cwd_the_caller_passes_decides_which_checkout_is_read(
+    monkeypatch, tmp_path
+):
+    """The seam that makes or breaks the arm: a wrong cwd reads the wrong settings.json.
+
+    `session-health.py` passes the SessionStart payload's `cwd`, because the hook's own process
+    cwd is whatever Claude Code launched it with. If that resolved to the primary checkout
+    instead, the arm would compare that checkout's settings against its own files, agree with
+    itself, and return [] — indistinguishable from health for the case this exists to catch.
+    """
+    monkeypatch.delenv("CLAUDE_PROJECT_DIR", raising=False)
+    root = tmp_path / "wt"
+    (root / ".claude").mkdir(parents=True)
+    (root / ".claude" / "settings.json").write_text(
+        json.dumps(
+            {
+                "hooks": {
+                    "SessionStart": [{"hooks": [{"command": f"{_HOOKS}/absent.sh"}]}]
+                }
+            }
+        )
+    )
+    (line,) = arm.missing_hook_script_lines(cwd=str(root / "ansible"))
+    assert f"{_HOOKS}/absent.sh" in line
+
+
 def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
     """Non-vacuity: an empty walk is indistinguishable from a healthy checkout.
 
