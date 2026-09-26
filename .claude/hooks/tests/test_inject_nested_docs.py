@@ -167,7 +167,75 @@ def test_another_sessions_log_row_does_not_suppress(repo, tmp_path):
     assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
 
 
+# ── subagents: same session id, empty context (#2192) ────────────────────────────────
+
+
+def test_a_subagent_is_flagged_for_a_doc_its_parent_already_got(repo):
+    _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    _, chosen = _mod.build_context(
+        "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+        str(repo),
+        "sess-a",
+        agent_id="a1b2c3",
+    )
+    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+
+
+def test_a_second_command_in_the_same_subagent_is_clean(repo):
+    command = "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    _mod.build_context(command, str(repo), "sess-a", agent_id="a1b2c3")
+    assert _mod.build_context(command, str(repo), "sess-a", agent_id="a1b2c3") == (
+        "",
+        [],
+    )
+
+
+def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkeypatch):
+    """The subagent's injection and its harness load are both tagged, so the parent still gets it."""
+    payload = {
+        "tool_name": "Bash",
+        "session_id": "sess-a",
+        "agent_id": "a1b2c3",
+        "cwd": str(repo),
+        "tool_input": {
+            "command": "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        },
+    }
+    assert _mod.context(payload)
+    loaded = {
+        "hook_event_name": "InstructionsLoaded",
+        "session_id": "sess-a",
+        "agent_id": "a1b2c3",
+        "cwd": str(repo),
+        "file_path": str(repo / "ansible/roles/k8s/foo/CLAUDE.md"),
+        "load_reason": "nested_traversal",
+        "memory_type": "Project",
+    }
+    monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(loaded)))
+    _mod._logger.main()
+    rows = (tmp_path / "instructions.log").read_text().splitlines()
+    assert len(rows) == 3 and all("agent=a1b2c3" in r for r in rows), rows
+    _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+
+
 # ── the payload budget ───────────────────────────────────────────────────────────────
+
+
+def test_a_doc_that_fits_alone_but_not_the_remaining_budget_is_deferred(repo):
+    """Outlining it would be final; deferring it lets the next command inline it."""
+    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(
+        "role doc line with some words\n" * 150
+    )
+    (repo / ".claude" / "rules" / "ansible.md").write_text(
+        RULE + "rule line of text here\n" * 150
+    )
+    command = "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    _, first = _build(repo, command)
+    assert [d for d, _ in first] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+    context, second = _build(repo, command)
+    assert [d for d, _ in second] == [".claude/rules/ansible.md"]
+    assert "rule line" in context and "only its outline" not in context
 
 
 def test_the_budget_sits_under_both_harness_caps():

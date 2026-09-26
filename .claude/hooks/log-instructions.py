@@ -66,6 +66,9 @@ def main():
         extra += " globs=" + ",".join(d["globs"])
     if d.get("parent_file_path"):
         extra += " parent=" + rel(d["parent_file_path"], cwd)
+    # A subagent shares its parent's session id; inject-nested-docs tells the two apart by this.
+    if d.get("agent_id"):
+        extra += " agent=" + d["agent_id"]
     append_row(reason, mtype, fp, sid, extra)
 
 
