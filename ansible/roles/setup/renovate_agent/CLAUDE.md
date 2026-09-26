@@ -100,10 +100,10 @@ the caps or the schedule cannot quietly widen it.
   slugified as `k8s_autodeploy-false` — #2620 was `Update klutchell/unbound Docker tag to
   v1.26.1` against pihole's defaults. The prompt therefore reads `headRefName` beside the
   title, and `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells.
-  The denylist rule and the base-image rule now set `groupSingleUpdates: true`, which applies
-  the group's `commitMessageTopic` to a one-dependency branch too and so puts the marker in
-  their titles (#2646). Two classes still arrive bare-titled: a PR raised before that flag
-  landed, and a per-package manual rule on a denied role, which does not carry the flag.
+  Every rule carrying the marker sets `groupSingleUpdates: true`, which applies the group's
+  `commitMessageTopic` to a one-dependency branch too and so puts the marker in their titles:
+  the denylist and base-image rules since #2646, the per-package manual rules since #2654. A
+  PR raised before that flag landed still arrives bare-titled.
   `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
   asserts the marker sits on exactly the per-package rules whose pin a denied role owns.
   A third rule carries it for a denied role's base image — the `FROM` in

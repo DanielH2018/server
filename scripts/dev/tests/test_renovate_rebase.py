@@ -15,6 +15,7 @@ from renovate_rebase import (
     TICKED,
     UNTICKED,
     main,
+    soak_cleared,
     soaking,
     tick_rebase_box,
 )
@@ -103,7 +104,17 @@ def test_a_failed_edit_is_reported_with_gh_stderr():
     assert "HTTP 403" in out.getvalue()
 
 
-@pytest.mark.parametrize("argv", [[], ["abc"], ["1", "2"]])
+@pytest.mark.parametrize(
+    "argv",
+    [
+        [],
+        ["abc"],
+        ["1", "2"],
+        ["--retick"],
+        ["--force", "1"],
+        ["--retick", "--retick", "1"],
+    ],
+)
 def test_a_bad_argument_is_a_usage_error(argv):
     def gh(*args, **kwargs):
         raise AssertionError(f"gh must not run on a usage error: {args}")
@@ -166,3 +177,63 @@ def test_a_soaking_pr_with_no_box_is_still_a_no_box_error():
     gh, calls = _gh("hand-written PR body", rollup=[SOAK_PENDING])
     assert main(["123"], gh=gh, out=io.StringIO()) == 1
     assert calls == []
+
+
+def test_a_success_soak_status_is_cleared():
+    assert soak_cleared([CI_RUN, SOAK_DONE]) is True
+
+
+def test_a_pending_or_absent_soak_status_is_not_cleared():
+    """Absent is not cleared: a renamed context reads as absent, and must not open a retick."""
+    assert soak_cleared([CI_RUN, SOAK_PENDING]) is False
+    assert soak_cleared([CI_RUN]) is False
+
+
+def test_retick_unticks_then_reticks_a_spent_box_after_the_soak():
+    """#2655: two separate edits, because one write of an unchanged body changes nothing."""
+    ticked = BODY.replace(UNTICKED, TICKED)
+    gh, calls = _gh(ticked, rollup=[SOAK_DONE])
+    out = io.StringIO()
+    assert main(["--retick", "123"], gh=gh, out=out) == 0
+    assert calls == [("123", BODY), ("123", ticked)]
+    assert "unticked and ticked again" in out.getvalue()
+
+
+def test_retick_refuses_a_pr_still_soaking():
+    gh, calls = _gh(BODY.replace(UNTICKED, TICKED), rollup=[SOAK_PENDING])
+    assert main(["123", "--retick"], gh=gh, out=io.StringIO()) == 3
+    assert calls == []
+
+
+def test_retick_refuses_a_pr_with_no_soak_status():
+    gh, calls = _gh(BODY.replace(UNTICKED, TICKED))
+    out = io.StringIO()
+    assert main(["--retick", "123"], gh=gh, out=out) == 3
+    assert calls == []
+    assert "does not read SUCCESS" in out.getvalue()
+
+
+def test_retick_on_an_unticked_box_ticks_it_once():
+    gh, calls = _gh(BODY, rollup=[SOAK_DONE])
+    assert main(["--retick", "123"], gh=gh, out=io.StringIO()) == 0
+    assert calls == [("123", BODY.replace(UNTICKED, TICKED))]
+
+
+def test_retick_names_the_unticked_box_when_the_second_edit_fails():
+    ticked = BODY.replace(UNTICKED, TICKED)
+    edits: list[str] = []
+
+    def gh(*args, **kwargs):
+        if args[:2] == ("pr", "view"):
+            payload = json.dumps({"body": ticked, "statusCheckRollup": [SOAK_DONE]})
+            return subprocess.CompletedProcess(args, 0, payload, "")
+        edits.append(Path(args[4]).read_text())
+        if len(edits) == 2:
+            raise subprocess.CalledProcessError(1, args, "", "HTTP 502")
+        return subprocess.CompletedProcess(args, 0, "", "")
+
+    out = io.StringIO()
+    assert main(["--retick", "123"], gh=gh, out=out) == 2
+    assert edits == [BODY, ticked]
+    assert "UNTICKED" in out.getvalue()
+    assert "HTTP 502" in out.getvalue()

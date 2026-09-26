@@ -94,7 +94,7 @@ For each PR read the file list and the diff — `gh pr diff <n> --name-only`, th
 |---|---|---|
 | `uv.lock` | lock file maintenance | merge; nothing to deploy |
 | `ansible/roles/k8s/*/defaults/main.yml` | k8s image pin | merge, land with the role's tag |
-| same, **title or branch** carries `(manual — k8s_autodeploy: false, …)` — the branch slugifies it to `k8s_autodeploy-false`, and for a single-dependency group that can be the only place it lands (#2641). `groupSingleUpdates: true` puts the marker in the title of a denylist-rule or base-image-rule PR raised since #2646; a per-package rule on a denied role, and any PR raised before that, still title bare | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`, `n8n`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
+| same, **title or branch** carries `(manual — k8s_autodeploy: false, …)` — the branch slugifies it to `k8s_autodeploy-false`, and for a single-dependency group that can be the only place it lands (#2641). `groupSingleUpdates: true` on every rule carrying the marker puts it in the title of a PR raised since #2646 (the denylist and base-image rules) or #2654 (the per-package rules); a PR raised before that still titles bare | k8s image pin the tick cannot apply | nothing to finish; merge through `land.sh`, which deploys it from the merge commit — a bare merge leaves it to the drift monitor (#1886). **An interactive session's job only**: the unattended `renovate_agent` leaves this class open and names the `land.sh` command in its digest, because the denial reason is that a failed deploy here (authelia, traefik, crowdsec) is one `probe.py health` cannot see, so a person is the review (#1939). A title whose parenthetical ENDS with `; k8s_autodeploy: false` after its own work order (`crowdsec bouncer plugin`, `meilisearch`, `karakeep time-tagger pip deps`, `n8n`) is a per-package rule on a denied role (#1963): the work order in front of the marker decides the handling — *When to stop and say so* below — and the marker only says who may land it |
 | `ansible/inventory/group_vars/all.yml`, same title | a cross-role image pin (`crowdsec_k8s_image`, read by crowdsec, traefik and authelia) | same as the row above, with one difference in who applies it: an inventory change is the deployer's broad plane, so after the merge the TICK narrows the changed key to every role reading it and applies them — `land.sh` waits on that tick rather than running `deploy.sh` itself (#1936) |
 | `ansible/roles/setup/*/defaults/main.yml` | host plane | often `manual —`; check the rule |
 | `ansible/roles/k8s/*/templates/Dockerfile*.j2` | in-cluster-built image | merge, land, then verify the pod took the rebuild |
@@ -229,9 +229,20 @@ the soak.
 
 `renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
 reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
-exits 3 without ticking (#2630). It refuses even where the box is unticked, because a tick
-Renovate skips stays ticked — the box is then spent, and no run after the soak can request the
-rebase.
+exits 3 without ticking (#2630). It refuses even where the box is unticked, so that exit 0
+never reads as "the rebase is coming" while the soak holds it.
+
+A box Renovate left ticked through the soak should still be honoured. Renovate rereads the box
+on every run, and its comment promises the rebase once the soak clears. If a run after the soak
+leaves the box ticked and the branch unrebased, re-request it:
+
+```bash
+uv run python scripts/dev/renovate_rebase.py --retick <n>
+```
+
+`--retick` writes the box unticked, then ticked, as two separate edits (#2655). It refuses with
+exit 3 unless `renovate/stability-days` reads SUCCESS, so it cannot spend a tick during the
+soak. If the second edit fails, the box is left unticked; a plain run ticks it.
 
 ## 6. Land them one at a time
 
