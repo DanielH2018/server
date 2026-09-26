@@ -22,9 +22,18 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
   window can't fully reconstruct it.
 
 ## Notable
-- Stock `python:3.14-alpine`, not an `image-builder` build: `stats.py` has no
-  dependencies, so the pod schedules on any node — the in-cluster `registry` is
-  loopback-only and can't serve a cross-node pull.
+- Stock `python:3.14-alpine`, not an `image-builder` build: `stats.py` and the
+  `ansible/roles/k8s/game-stats-lib/` module it imports are pure stdlib, so a build would
+  add a layer and change nothing that runs.
+  **Not because a built image could not be pulled here.** The in-cluster `registry` does
+  serve a cross-node pull. `ansible/inventory/group_vars/all.yml:k8s_registry_pull_host` is
+  one mirror KEY every node's `registries.yaml` carries, so one image reference is
+  node-portable; what differs per node is the ENDPOINT behind it — daniel-box resolves it to
+  the registry's loopback hostPort, an agent to
+  `ansible/inventory/group_vars/all.yml:k8s_registry_cluster_ip` over flannel.
+  `ansible/roles/k8s/ical-proxy/` is the live proof: it runs an `image-builder` build while
+  preferring daniel-server. An earlier version of this bullet claimed the opposite and would
+  have talked a sibling role out of a build it could have (#2703).
 - The `checksum/stats-script` pod annotation restarts the Deployment when either staged
   module changes, since a ConfigMap edit alone doesn't roll a pod (hashes `stats.py` +
   `stats_lib.py` together — see tasks/main.yml).
