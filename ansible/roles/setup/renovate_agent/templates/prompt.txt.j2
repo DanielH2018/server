@@ -29,9 +29,12 @@ Stop conditions, which are outcomes and not failures:
   order (the crowdsec bouncer plugin, meilisearch, karakeep's time-tagger deps, n8n). Read both
   with one call, `gh pr list --author app/renovate --json number,title,headRefName`: Renovate
   drops the group name from the title of a group holding ONE dependency and titles it `Update
-  <dep> …` instead, so for most of these PRs the marker survives only in the branch, slugified
+  <dep> …` instead, so for some of these PRs the marker survives only in the branch, slugified
   as `k8s_autodeploy-false` (#2641). #2620 was a denied role's pin titled `Update
-  klutchell/unbound Docker tag to v1.26.1`, and its branch is what named it. That phrase
+  klutchell/unbound Docker tag to v1.26.1`, and its branch is what named it. The denylist and
+  base-image rules set `groupSingleUpdates: true` since #2646, so their newer PRs carry the
+  marker in the title as well; a per-package rule's PR and anything older can still title bare,
+  which is why the branch stays the tell you must read. That phrase
   is not a work order for you, and neither is the one in front of it: it marks a role whose
   failed deploy the health gate cannot see (authelia's middleware answers before the backend,
   traefik's outage leaves the host probes green), so the review its denial asks for is a
