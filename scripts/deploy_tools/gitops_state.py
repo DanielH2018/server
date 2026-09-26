@@ -32,8 +32,10 @@ cannot see. The apply comes first here too, and the clear writes the same journa
 `clear-k8s-unapplied <service>` rewrites `k8s_unapplied`, which carries the same line format
 for the k8s changes this deployer never applies — a hand-edited role, or one of the forty
 denylisted ones (#2570). NOTHING PAGES ON THAT MARKER, and every tick discharges a line whose
-service has since been deployed, so this command is only needed for a change that was reverted
-rather than applied. Same journal line, under `event=clear-k8s-unapplied`.
+service has since been deployed, so this command is needed for two cases only: a change that
+was reverted rather than applied, and a shared role no recording caller reaches
+(`scripts/deploy_tools/shared_role_callers.py`, whose `recorded_callers` answers the empty
+list for one). Same journal line, under `event=clear-k8s-unapplied`.
 
 This is not a path the deployer takes. Its own reverse is
 `DeployerState.clear_manual_plane_applied`, which fires when a tick applies the role's real

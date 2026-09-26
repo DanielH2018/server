@@ -624,7 +624,8 @@ stay).
       carries the change (`scripts/deploy_tools/shared_role_callers.py`, #2643). `deploy.sh` is otherwise
       invisible to the deployer, and without that discharge the marker would hold one
       permanent line per routine landing. `gitops_state.py clear-k8s-unapplied <svc>` is the
-      hand clear, for a change that was REVERTED rather than applied — nothing else needs it.
+      hand clear, for a change that was REVERTED rather than applied, or for a shared role
+      `recorded_callers` reaches no recording caller for.
       A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
       `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm
       after it resets the tree, so a marker written there would describe a range that is no
@@ -1170,7 +1171,10 @@ what it recorded.
   plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears
   with `gitops_state.py clear-k8s-deferred <svc>`.
 - `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
-  only for a change that was reverted rather than applied.
+  for a change that was reverted rather than applied, or for a shared role whose
+  `recorded_callers` answer is empty. A role that only LOOKED like the second case —
+  `n8n-images`, whose entry declares `tags: [n8n-images, n8n]` — discharges itself since
+  #2666, because the derivation reads the entry's other tag.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
