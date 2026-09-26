@@ -207,6 +207,15 @@ It is idempotent (a ticked box exits 0 and writes nothing) and exits 1 on a body
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
+**A PR still inside its `minimumReleaseAge` is not rebased, whatever the box says.** Its
+`renovate/stability-days` check reads pending, and Renovate skips updating that branch until
+the soak ends. A rebase request is not consent to bypass the soak. Renovate answers the tick
+with a "Rebase not applied" comment on the PR and leaves the box ticked. The comment says
+Renovate rebases the branch once its update has met those checks. #2335 sat CONFLICTING for 38 hours this way (issue #2368),
+and an agent read the stall as a broken rebase. Wait for the soak rather than ticking again.
+Only the branch's `unpend-branch` checkbox on issue #3 forces it earlier, and that bypasses
+the soak.
+
 ## 6. Land them one at a time
 
 Follow the `land-after-merge` skill per PR — one backgrounded
