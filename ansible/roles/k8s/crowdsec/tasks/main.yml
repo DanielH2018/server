@@ -105,6 +105,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Deploy the home-allowlist updater
   tags: [cron]
@@ -116,6 +117,7 @@
     group: root
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the home-allowlist updater
   tags: [cron]
@@ -132,6 +134,7 @@
     job: "/usr/local/bin/crowdsec-update-home-allowlist.sh 2>&1 | logger -t crowdsec-home-allowlist"
     cron_file: crowdsec-home-allowlist
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Create the remote-ips allowlist on the LAPI
   when: not k8s_no_mutate
@@ -157,6 +160,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Install the remote-allowlist decision module
   tags: [cron]
@@ -167,6 +171,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Deploy the remote-allowlist updater
   tags: [cron]
@@ -178,6 +183,7 @@
     group: root
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the remote-allowlist updater
   tags: [cron]
@@ -189,6 +195,7 @@
     job: "/usr/local/bin/crowdsec-update-remote-allowlist.sh"
     cron_file: crowdsec-remote-allowlist
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Deploy the AppSec verifier
   tags: [cron]
@@ -202,6 +209,7 @@
     group: root
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the AppSec verifier
   tags: [cron]
@@ -214,6 +222,7 @@
     job: "/usr/local/bin/crowdsec-appsec-verify.sh"
     cron_file: crowdsec-appsec-verify
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Enforcement gate (opt-in via --tags b1-gate)
   # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real

@@ -21,6 +21,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Stage the stats script on the node
   tags: [config]
@@ -32,6 +33,7 @@
     group: root
   become: true
   register: terraria_stats_script
+  when: not k8s_dry_run | bool
 
 # stats.py does `import stats_lib` for the skeleton it shares with valheim-stats (Loki
 # fetch, cursor handling, metric rendering, the HTTP handler, the run loop). Staged before
@@ -47,11 +49,16 @@
 # role only restarts on manifest changes, and neither script is one. An edit confined to
 # stats_lib.py would deploy, read green, and change nothing live otherwise. Sorted before
 # hashing so the trigger is a function of the pair, not of which is written first.
+#
+# Hashed off the SOURCE files, not off the two stage registers: both stages are skipped on a dry
+# run (#2614), and `.checksum` on a skipped result is Undefined, which would raise here rather
+# than fall back. `rstrip=False` makes these the bytes `copy` hashed, so the value is unchanged.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
     terraria_stats_script_checksum: >-
-      {{ [terraria_stats_script.checksum, game_stats_lib_stage.checksum] | sort | join(',') | hash('sha1') }}
+      {{ [lookup('ansible.builtin.file', role_path ~ '/files/stats.py', rstrip=False) | hash('sha1'),
+          game_stats_lib_checksum] | sort | join(',') | hash('sha1') }}
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so
 # it becomes a ConfigMap via kubectl --from-file, never via a template — the same
@@ -68,6 +75,7 @@
     executable: /bin/bash
   become: true
   changed_when: terraria_stats_script is changed or game_stats_lib_stage is changed
+  when: not k8s_dry_run | bool
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
 # annotation capped at 262144 bytes, which the bridge crossed on 2026-09-01. This script is far

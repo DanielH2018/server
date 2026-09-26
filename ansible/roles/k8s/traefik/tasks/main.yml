@@ -42,6 +42,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Apply the Traefik RBAC
   when: not k8s_no_mutate
@@ -123,6 +124,7 @@
     cron_file: cloudflare-ip-drift
     state: absent
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Remove the Cloudflare IP drift script
   tags: [cron]
@@ -130,3 +132,4 @@
     path: /usr/local/bin/cloudflare-ip-drift.sh
     state: absent
   become: true
+  when: not k8s_dry_run | bool

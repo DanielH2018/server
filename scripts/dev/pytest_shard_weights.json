@@ -213,6 +213,7 @@
  "ansible/tests/deploy/test_k8s_autodeploy_guard.py": 0.41,
  "ansible/tests/deploy/test_k8s_autodeploy_rollout_gates.py": 0.11,
  "ansible/tests/deploy/test_k8s_dry_run.py": 0.06,
+ "ansible/tests/deploy/test_k8s_dry_run_host_writes.py": 0.13,
  "ansible/tests/deploy/test_k8s_rollout_gate.py": 0.06,
  "ansible/tests/deploy/test_k8s_toposort.py": 0.0,
  "ansible/tests/deploy/test_land_skill_names_every_verdict.py": 0.0,

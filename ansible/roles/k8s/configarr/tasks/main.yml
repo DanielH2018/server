@@ -60,6 +60,7 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Install the shared host_lib helper beside the configarr health reader
   tags: [config]
@@ -88,6 +89,7 @@
     # quietly stop agreeing about what a failed sync looks like.
     - "{{ role_path }}/files/configarr_status.py"
   become: true
+  when: not k8s_dry_run | bool
 
 # The reader scripts and their host_lib sibling were `copy:`-deployed and watched by nothing
 # (#2590): setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so a
@@ -124,6 +126,7 @@
     group: "{{ sys_user }}"
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the configarr sync heartbeat
   tags: [cron]
@@ -134,6 +137,7 @@
     job: "/usr/local/bin/configarr-health.sh"
     cron_file: configarr-health
   become: true
+  when: not k8s_dry_run | bool
 
 # Reported, not enforced. A failed guide sync is the monitor's job to page — failing the deploy
 # over a transient *arr outage is exactly what the retired wrapper avoided by always exiting 0.

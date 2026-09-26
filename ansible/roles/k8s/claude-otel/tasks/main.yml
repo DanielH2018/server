@@ -3,6 +3,11 @@
 # Authelia (slice 2), Tempo + the traces pipeline (slice 3).
 
 - name: Build the ported Grafana dashboard ConfigMaps
+  # Guarded at the include rather than task by task: every task in dashboards.yml either writes
+  # the node (three staging trees, the annotated copies, the ConfigMap manifests) or reads one
+  # of those trees back, and the guard propagates to all of them. Nothing in this role's
+  # rendered manifests reads a fact the file sets, so skipping it moves no digest (#2614).
+  when: not k8s_dry_run | bool
   ansible.builtin.include_tasks: dashboards.yml
 
 - name: Render and apply the Claude Code telemetry manifests
@@ -286,6 +291,7 @@
     group: "{{ sys_user }}"
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the telemetry-stack heartbeat
   tags: [cron]
@@ -296,3 +302,4 @@
     job: "/usr/local/bin/claude-otel-health.sh"
     cron_file: claude-otel-health
   become: true
+  when: not k8s_dry_run | bool

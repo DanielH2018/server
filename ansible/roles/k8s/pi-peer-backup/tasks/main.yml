@@ -18,6 +18,7 @@
     owner: root
     group: root
     mode: "0755"
+  when: not k8s_dry_run | bool
 
 # `restrict` drops pty, port/agent/X11 forwarding and user-rc; `command=` replaces whatever the
 # client asked for with the wrapper, which re-derives one `sudo rsync --server --sender` from

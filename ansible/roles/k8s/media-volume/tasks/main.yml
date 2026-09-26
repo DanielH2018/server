@@ -28,6 +28,7 @@
     - "{{ media_volume_host_path }}/media"
     - "{{ media_volume_host_path }}/torrents"
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Declare the media volume to the cluster
   ansible.builtin.include_role:
@@ -63,6 +64,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the hardlink probe job
   tags: [config]
@@ -73,6 +75,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Clear the previous hardlink probe run
   when: not k8s_no_mutate

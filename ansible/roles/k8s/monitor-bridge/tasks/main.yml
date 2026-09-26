@@ -13,6 +13,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 # `ansible.builtin.copy` does not create a parent directory, and the modules are packages
 # under files/ (`bridge/`, `checks/`, `verdicts/`), so the staging tree needs them first.
@@ -26,6 +27,7 @@
     group: root
   become: true
   loop: "{{ monitor_bridge_modules | map('dirname') | reject('equalto', '') | unique | list }}"
+  when: not k8s_dry_run | bool
 
 - name: Stage the bridge modules on the node
   tags: [config]
@@ -38,6 +40,7 @@
   become: true
   loop: "{{ monitor_bridge_modules }}"
   register: monitor_bridge_script
+  when: not k8s_dry_run | bool
 
 # The pod-roll trigger must cover EVERY module, not just check.py. The ConfigMap updating is
 # not enough on its own: a mounted ConfigMap change does not restart a Deployment, so without
@@ -45,12 +48,24 @@
 # edit confined to a split-out module would deploy, read green, and change nothing live.
 # Sorted before hashing so the trigger is a function of the module SET, not the list order
 # in defaults — a reorder there is not an edit worth a pod roll (#2157).
+#
+# Hashed off the SOURCE files, not off the `monitor_bridge_script` register, because the stage
+# above is skipped on a dry run (#2614) and a skipped loop leaves `.results` undefined —
+# `default([]) | join(',') | hash('sha1')` is the sha1 of the empty string, a real digest that
+# silently moves the annotation rather than falling back to the macro's `unstaged`. `rstrip=False`
+# is what makes these bytes the ones `copy` hashed, so the value is unchanged either way; the
+# reasoning is in ansible/templates/checksum-annotation.yml.j2.
 - name: Combine the staged module checksums into one pod-roll trigger
   tags: [config]
   ansible.builtin.set_fact:
     monitor_bridge_script_checksum: >-
-      {{ monitor_bridge_script.results | default([]) | map(attribute='checksum', default='')
-         | sort | join(',') | hash('sha1') }}
+      {%- set ns = namespace(hashes=[]) -%}
+      {%- for module in monitor_bridge_modules -%}
+      {%- set _ = ns.hashes.append(lookup('ansible.builtin.file',
+          playbook_dir ~ '/roles/k8s/monitor-bridge/files/' ~ module, rstrip=False)
+          | hash('sha1')) -%}
+      {%- endfor -%}
+      {{ ns.hashes | sort | join(',') | hash('sha1') }}
 
 # check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
 # ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.
@@ -72,6 +87,7 @@
     executable: /bin/bash
   become: true
   changed_when: monitor_bridge_script is changed
+  when: not k8s_dry_run | bool
 
 # Server-side apply, because the client-side form stores the WHOLE object again in the
 # `last-applied-configuration` annotation, and annotations are capped at 262144 bytes. Every

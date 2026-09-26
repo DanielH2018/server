@@ -42,12 +42,12 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
 ## Autonomous-role contract (it runs a playbook hourly with no human in the loop)
 
 - **Scope / exclusions:** a `--dry-run` render. It applies nothing to the cluster
-  (`--dry-run=server`), writes no release record, and takes no deploy lock. It is **not**
-  read-only on the host: a dry run still executes every unguarded host write in the roles it
-  renders (host scripts, crons, modules staged on the node), measured on 2026-09-25 across
-  about twenty roles. So the producer ships disarmed (`render_records_enabled: false`) until
-  #2614 guards those writes on `k8s_dry_run`. Beyond them, its writes are the render records,
-  its own worktree, and the throwaway render directories the dry run makes.
+  (`--dry-run=server`), writes no release record, and takes no deploy lock. It writes no host
+  file in the roles it renders either, since #2614 guarded every one of those on
+  `not k8s_dry_run | bool` — before that a dry run installed host scripts, crons and
+  node-staged modules across about twenty roles, measured on 2026-09-25. Its own writes are the
+  render records, its own worktree, and the throwaway render directories the dry run makes. The
+  producer still ships disarmed (`render_records_enabled: false`): arming it is #2587's change.
 - **Mode (explicit + reversible):** `render_records_enabled` in `group_vars/all.yml`. False
   runs the role's absent arm on `render_records_host`, which stops the timer and removes the
   units, the worktree and the role's directories; true and a re-run restores them. To move the
