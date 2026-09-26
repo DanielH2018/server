@@ -36,10 +36,12 @@ from gitops_markers import (  # noqa: F401 — NO_PLAYBOOK and the entries are r
     K8sDeferredEntry,
     ManualPlaneEntry,
     format_manual_plane_tags,
+    k8s_line_service,
     parse_contention,
     parse_k8s_deferred,
     parse_manual_plane,
     parse_manual_plane_tags,
+    rewrite_k8s_lines,
 )
 from host_lib import atomic_write
 
@@ -365,35 +367,32 @@ class DeployerState:
         `advance` also moves an ALREADY-LISTED service's line to `origin`, keeping its
         first-seen stamp (#2644). It stays OUT of the return value, which
         `deploy_defer.unrecord` clears: a line predating the tick survives the reset.
+
+        `rewrite_k8s_lines` owns both the advance and the repair of a TORN line naming one of
+        `services` (#2657): a repaired service reads as listed, so this updates its line rather
+        than appending a second one beside it.
         """
         wanted = set(services)
-        listed = {e.service for e in self._k8s_line_pending(marker)}
-        added = sorted(wanted - listed)
-        moved = wanted & listed if advance else set()
-        kept = []
-        # Raw lines, as in `_clear_k8s_lines`: the parser skips a torn one, stamp verbatim.
-        for line in (self.read(marker) or "").splitlines():
-            parts = line.split()
-            if len(parts) == 3 and parts[1] in moved:
-                line = f"{origin} {parts[1]} {parts[2]}"
-            kept.append(line)
-        kept.extend(f"{origin} {service} {now:.0f}" for service in added)
-        if added or moved:
-            self.write(marker, "\n".join(kept))
+        text = rewrite_k8s_lines(self.read(marker), wanted, origin, now, advance)
+        added = sorted(wanted - {e.service for e in parse_k8s_deferred(text)})
+        lines = text.splitlines() + [f"{origin} {s} {now:.0f}" for s in added]
+        if added or text != (self.read(marker) or ""):
+            self.write(marker, "\n".join(lines))
         return added
 
     def _clear_k8s_lines(self, marker: str, services) -> list[str]:
         """Drop `marker`'s lines naming any of `services`. Returns the names cleared.
 
-        A line this cannot parse is carried through untouched: dropping it loses the only
-        record that something was deferred.
+        A TORN LINE NAMING ONE OF `services` GOES TOO (#2657), where a line naming nobody is
+        carried through untouched: dropping that one loses the only record that something was
+        deferred, and a clear of every service would still leave it standing forever.
         """
         wanted = set(services)
         kept, cleared = [], []
         for line in (self.read(marker) or "").splitlines():
-            parts = line.split()
-            if len(parts) == 3 and parts[1] in wanted:
-                cleared.append(parts[1])
+            service = k8s_line_service(line)
+            if service in wanted:
+                cleared.append(service)
                 continue
             kept.append(line)
         if cleared:

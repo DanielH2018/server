@@ -194,7 +194,14 @@ Each arm below is a rule and the function that holds it. The record page has the
       listed there MOVES its line to the newer SHA**, keeping the first-seen stamp (#2644):
       the line is discharged by comparing its origin to a release record, so one left at the
       oldest origin drops as soon as any deploy descends from the FIRST change, with the
-      second still unapplied. `k8s_deferred` keeps its oldest origin, because a tick clears
+      second still unapplied. **A TORN LINE NAMING A SERVICE IS REPAIRED IN PLACE, on both
+      markers** (#2657): the parser skips a line it cannot read, so a writer trusting only the
+      parsed entries appends a second line beside the torn one, and every clear and every
+      discharge leaves that one standing forever. The repair happens at the next record OR
+      clear NAMING THAT SERVICE, so a torn line for a service nothing touches again stands
+      until `gitops_state.py clear-k8s-unapplied <svc>`. A line naming nobody is carried
+      untouched whatever happens — nothing can say what it recorded.
+      `k8s_deferred` keeps its oldest origin, because a tick clears
       that marker by deploying the service and `unrecord` can reset the tree under it.
       `deploy_alerts.alert_deferred` writes it,
       which covers every exit that leaves the range merged — the contention arm resets and
@@ -335,7 +342,7 @@ Three layers, and which one a function belongs in is decided by what it touches.
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, docker, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS, split from `deploy_alerts` at the seam its docstring named (#2600) |
-| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table and parsers, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
 | the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |

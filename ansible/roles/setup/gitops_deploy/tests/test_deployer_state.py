@@ -386,7 +386,31 @@ def test_clearing_one_deferred_bump_leaves_the_others(state):
 
 
 def test_a_garbled_k8s_deferred_line_is_carried_through_a_clear(state):
-    """Skipped by every reader, never dropped: it is the only record of a deferral."""
+    """Skipped by every reader, never dropped: it is the only record of a deferral.
+
+    The REJECTING half of the #2657 repair, and the line the split turns on: this one names
+    nobody, so no clear and no record can act on it without guessing.
+    """
     state.write("k8s_deferred", f"garbage\n{SHA} sonarr 1000.0")
     assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
     assert state.read("k8s_deferred") == "garbage"
+
+
+def test_a_torn_k8s_deferred_line_is_repaired_at_its_own_origin(state):
+    """This marker keeps the recorded origin where `k8s_unapplied` advances it, repair included.
+
+    A tick clears `k8s_deferred` by deploying the service and `deploy_defer.unrecord` can reset
+    the tree, so an advanced SHA here would name a commit the host no longer carries.
+    """
+    state.write("k8s_deferred", f"{SHA} sonarr")
+    assert state.record_k8s_deferred("f" * 40, {"sonarr"}, 9000.0) == []
+    assert [(e.origin, e.service, e.at) for e in state.k8s_deferred_pending()] == [
+        (SHA, "sonarr", 9000.0)
+    ]
+
+
+def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
+    """Nothing else ever drops it: the clear is the only reverse this marker has."""
+    state.write("k8s_deferred", f"{SHA} sonarr")
+    assert state.clear_k8s_deferred({"sonarr"}) == ["sonarr"]
+    assert state.read("k8s_deferred") is None

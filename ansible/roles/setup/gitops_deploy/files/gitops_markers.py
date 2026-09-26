@@ -472,6 +472,78 @@ def parse_k8s_deferred(marker: str | None) -> list[K8sDeferredEntry]:
     return entries
 
 
+def k8s_line_service(line: str) -> str | None:
+    """The service a RAW `k8s_deferred` / `k8s_unapplied` line names, or None for none at all.
+
+    A torn line is still ATTRIBUTABLE where its second field is there: `"<sha> authelia"` and
+    `"<sha> authelia not-a-stamp"` both name authelia, and the writer repairs one rather than
+    appending a second line beside it (#2657). A one-word line names nobody, so every caller
+    carries it untouched — dropping it loses the only record that something was deferred, and
+    nothing can say what.
+    """
+    parts = line.split()
+    return parts[1] if len(parts) >= 2 else None
+
+
+def k8s_line_stamp(line: str, now: float) -> str:
+    """The first-seen stamp a repaired line keeps: its own where it reads as one, else `now`."""
+    parts = line.split()
+    try:
+        return f"{float(parts[2] if len(parts) >= 3 else ''):.0f}"
+    except ValueError:
+        return f"{now:.0f}"
+
+
+def rewrite_k8s_lines(
+    marker: str | None, services, origin: str, now: float, advance: bool = False
+) -> str:
+    """`marker`'s text with every line naming one of `services` brought up to date.
+
+    Two rewrites, and both keep the line's first-seen stamp, which is the age a reader dates
+    the change from. A TORN LINE IS MADE READABLE (#2657), taking its own stamp where that
+    field reads as one and `now` where it does not. Under `advance`, a READABLE line moves to
+    `origin` (#2644), which `k8s_unapplied` wants and `k8s_deferred` does not.
+
+    The repair is what stops a writer duplicating a torn line. `parse_k8s_deferred` skips one,
+    so a writer reading only its entries sees no line for the service, appends a second, and
+    every clear and every discharge — matching on the same three fields — then leaves the torn
+    one standing forever. A torn line BESIDE a readable one for the same service is dropped
+    instead, since repairing it would duplicate what that line already says.
+
+    Args:
+        marker: the raw marker text, or None for an absent marker.
+        services: the services the caller is writing about. A line naming anything else is
+            carried untouched, as is a line naming nobody — dropping that one loses the only
+            record that something was deferred, and nothing can say what.
+        origin: the SHA the caller is recording.
+        now: the stamp a repaired line takes when its own field reads as nothing.
+        advance: move a readable line's SHA to `origin`.
+
+    Returns:
+        The text, rewritten. Compare it with the original to see whether anything changed.
+    """
+    wanted = set(services)
+    readable = {entry.service for entry in parse_k8s_deferred(marker)}
+    kept = []
+    # DECIDED: a repaired line is rewritten to exactly three fields, so a FOURTH field on a
+    # line naming one of `services` is discarded rather than carried. Before this, both the
+    # record and the clear carried such a line verbatim. Three fields is the format every
+    # reader parses, for the reason the `manual_plane_tags` comment above gives — a fourth
+    # would read as no pending bump in an un-redeployed monitor-bridge — so nothing may write
+    # one, and a line carrying one came from a bug or a hand edit, not from a newer writer.
+    for line in (marker or "").splitlines():
+        service = k8s_line_service(line)
+        if service is None or service not in wanted:
+            kept.append(line)
+        elif parse_k8s_deferred(line):
+            kept.append(f"{origin} {service} {line.split()[2]}" if advance else line)
+        elif service not in readable:
+            readable.add(service)
+            first = origin if advance else line.split()[0]
+            kept.append(f"{first} {service} {k8s_line_stamp(line, now)}")
+    return "\n".join(kept)
+
+
 def parse_contention(marker: str | None) -> ContentionEntry | None:
     """The streak the `contention_since` marker records, or None when absent or garbled."""
     parts = (marker or "").split()

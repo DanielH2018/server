@@ -125,6 +125,53 @@ def test_a_torn_line_survives_an_origin_advance(gitops_deploy, state_dir, settin
     ]
 
 
+@pytest.mark.parametrize(
+    "torn",
+    [f"{ORIGIN} authelia", f"{ORIGIN} authelia not-a-stamp"],
+    ids=["no-stamp-at-all", "a-stamp-no-parser-reads"],
+)
+def test_a_torn_line_naming_a_service_is_repaired_rather_than_duplicated(
+    torn, gitops_deploy, state_dir, settings
+):
+    """The issue #2657 half: a torn line the record CAN attribute is rewritten in place.
+
+    The service is absent from `parse_k8s_deferred`'s entries, so a writer reading only those
+    appends a second line beside the torn one — and `_clear_k8s_lines` and the discharge, both
+    matching on the same three fields, then carry the torn one forever. One line, readable, is
+    the only end state that clears.
+    """
+    state = gitops_deploy.STATE
+    state.write("k8s_unapplied", torn)
+    assert state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0) == [], (
+        "a line predating the tick must stay out of what `unrecord` clears"
+    )
+    assert [(e.origin, e.service) for e in state.k8s_unapplied_pending()] == [
+        (LATER, "authelia")
+    ]
+    assert state.clear_k8s_unapplied({"authelia"}) == ["authelia"]
+    assert state.read("k8s_unapplied") is None
+
+
+def test_a_repaired_line_keeps_a_stamp_that_reads_as_one(
+    gitops_deploy, state_dir, settings
+):
+    """A torn line's stamp is the age a reader dates the change from, so the repair keeps it."""
+    state = gitops_deploy.STATE
+    state.write("k8s_unapplied", f"{ORIGIN} authelia 1000 extra-field")
+    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert [e.at for e in state.k8s_unapplied_pending()] == [1000.0]
+
+
+def test_a_torn_line_beside_a_readable_one_is_dropped(
+    gitops_deploy, state_dir, settings
+):
+    """Repairing here would duplicate what the readable line already says."""
+    state = gitops_deploy.STATE
+    state.write("k8s_unapplied", f"{ORIGIN} authelia\n{ORIGIN} authelia 1000")
+    state.record_k8s_unapplied(LATER, {"authelia"}, 2000.0)
+    assert state.read("k8s_unapplied").splitlines() == [f"{LATER} authelia 1000"]
+
+
 def test_the_two_k8s_markers_are_separate_files(gitops_deploy, state_dir, settings):
     """A class tag on a `k8s_deferred` line would read as NO pending bump in an un-redeployed
     monitor-bridge, which is why this is a second basename rather than a fourth field."""
