@@ -153,3 +153,12 @@ def test_a_broken_check_keeps_the_recorded_set(tmp_path):
     pushes = _run(tmp_path, "Traceback", 2, names=[], prev=["authelia"])
     assert [s for s, _ in pushes] == ["down"]
     assert _recorded(tmp_path) == ["authelia"]
+
+
+def test_the_first_verdict_after_a_broken_check_is_flagged_as_a_change(tmp_path):
+    # The tile is already DOWN from the broken run, so a plain DOWN would notify nobody.
+    _run(tmp_path, "Traceback", 2, names=[])
+    assert _recorded(tmp_path) == []
+    pushes = _run(tmp_path, GROUPED, 1, names=["authelia"])
+    assert [s for s, _ in pushes] == ["up", "down"]
+    assert pushes[1][1] == f"Stale set changed: 1 newly stale (authelia). {GROUPED}"

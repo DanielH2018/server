@@ -58,12 +58,28 @@ if [[ -z "$PUSH_TOKEN" ]]; then
 fi
 PUSH_URL="https://${KUMA_HOST}/api/push/${PUSH_TOKEN}"
 
+# The stale set the last DOWN pushed, for the re-alert below (#2378).
+STATE_DIR=/var/lib/homelab/release-staleness
+PREV_SET="${STATE_DIR}/stale-set"
+NEW_SET="${STATE_DIR}/stale-set.new"
+TRACK_SET=""
+[[ -d "$STATE_DIR" && -w "$STATE_DIR" ]] && TRACK_SET=1
+
+# A DOWN that is not a staleness verdict (the fetch or the probe itself failing) records an
+# empty set when none is recorded yet. Without it, the first real verdict after one finds no
+# previous set, pushes a plain DOWN onto a tile that is already DOWN, and Kuma sends nothing.
+seed_empty_set() {
+  [[ -n "$TRACK_SET" && ! -f "$PREV_SET" ]] && : > "$PREV_SET"
+  return 0
+}
+
 REPO_DIR=/home/{{ sys_user }}/server
 if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
   STATUS=down
   MSG="git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
   kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
+  seed_empty_set
   exit 0
 fi
 
@@ -81,15 +97,10 @@ UV=/home/{{ sys_user }}/.local/bin/uv
 # --names-out: the counted set, one name per line, for the re-alert below. Passed only when the
 # state directory is writable, so a host whose k3s role has not created it yet still gets a
 # verdict rather than a traceback that reads as the check breaking.
-STATE_DIR=/var/lib/homelab/release-staleness
-PREV_SET="${STATE_DIR}/stale-set"
-NEW_SET="${STATE_DIR}/stale-set.new"
 NAMES_ARGS=()
-TRACK_SET=""
-if [[ -d "$STATE_DIR" && -w "$STATE_DIR" ]]; then
+if [[ -n "$TRACK_SET" ]]; then
   rm -f "$NEW_SET"
   NAMES_ARGS=(--names-out "$NEW_SET")
-  TRACK_SET=1
 fi
 OUTPUT="$(cd "$REPO_DIR" && "$UV" run --quiet --frozen python scripts/diagnostics/probe.py releases --stale-only --kuma --grace-minutes {{ k3s_release_staleness_grace_minutes }} "${NAMES_ARGS[@]}" 2>&1)"
 RC=$?
@@ -150,12 +161,14 @@ kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-s
 # swallowed-verdicts check, which reads kuma_push's failure line out of Loki. Reading the push
 # result here would move this script into that check's HC_ROUTED_TAGS (verdicts/logs.py), the
 # scripts it skips because they page their own lost push. A broken check (rc > 1) keeps the
-# last good set.
+# last good set, or seeds an empty one.
 if [[ -n "$TRACK_SET" ]]; then
   if [[ $RC -eq 0 ]]; then
     rm -f "$PREV_SET"
   elif [[ $RC -eq 1 && -f "$NEW_SET" ]]; then
     mv -f "$NEW_SET" "$PREV_SET"
+  else
+    seed_empty_set
   fi
 fi
 rm -f "$NEW_SET"
