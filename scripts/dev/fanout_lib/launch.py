@@ -11,11 +11,14 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from fanout_lib.brief import LANDS
 from fanout_lib.manifest import Batch
 from fanout_lib.transport import REPO, Tools
 
 LAUNCH_TIMEOUT_S = 120.0
+# The host whose GitOps tick pulls the primary checkout itself. Not imported from
+# `brief.LANDS`, which is the host that LANDS a PR: the same host today, a different fact, and
+# `brief` is already imported by `transport`, which `launch` imports.
+TICK_HOST = "daniel-box"
 CLAUDE_ARGS = "claude -p --model opus --permission-mode auto --output-format json"
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv.
 PATH = "/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
@@ -76,7 +79,7 @@ def fast_forward_primary_command(host: str) -> str:
     calls ran that way on daniel-server across two windows in September 2026, each window
     opened by a commit adding a hook script and closed when that checkout next pulled.
 
-    DECIDED: nothing on `LANDS`, where the GitOps tick pulls every 10 minutes. The window
+    DECIDED: nothing on `TICK_HOST`, where the GitOps tick pulls every 10 minutes. The window
     there is bounded by the tick, and the tick takes `/var/lock/server-git-tree.lock` for its
     own `--ff-only` merge (`deploy_locks.TREE_LOCK`) because moving HEAD under an in-flight
     deploy ships a different SHA than the one the health gate cleared. A launch cannot hold
@@ -90,7 +93,7 @@ def fast_forward_primary_command(host: str) -> str:
     the launch, which is the right answer rather than a fallback: the host's hook state is
     then unknown, and that is exactly when a batch must not be placed on it.
     """
-    if host == LANDS:
+    if host == TICK_HOST:
         return ""
     return _step(
         f"git -C {REPO} symbolic-ref --quiet --short HEAD | grep -qx master && "
