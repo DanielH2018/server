@@ -31,7 +31,8 @@
 #
 # The seed is labelled as the owning recurring job's own, so that job's retain prunes the backup
 # and the snapshot on its normal cadence. Seeds made before 2026-09-03 carry no such label: their
-# backups are drop_seed_backups.yml's, and their snapshots have to be deleted by hand.
+# backups are prune_backups.yml's (`-e prune_mode=seeds`), and their snapshots have to be
+# deleted by hand.
 - name: Give a Longhorn volume its first backup now
   hosts: daniel-box
   # An escalated task imports from this tree's .venv as root, and the root-owned
@@ -190,7 +191,7 @@
     # `RecurringJob: <job>` on BOTH CRs is what makes the seed prunable. Longhorn's retain counts
     # only backups carrying its own job's label, and auto-cleanup-recurring-job-backup-snapshot
     # deletes only snapshots carrying it. A seed without the label is unowned: its backup sat in
-    # B2 until drop_seed_backups.yml, and its snapshot pinned every block beneath it against trim
+    # B2 until prune_backups.yml's seeds mode, and its snapshot pinned every block beneath it against trim
     # — valheim-config carried 3.5 GB of deleted files into every weekly backup that way
     # (issue #942). `seeded-by` stays so a seed remains recognisable as one.
     - name: Create the snapshot to back up

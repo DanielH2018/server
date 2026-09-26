@@ -1,0 +1,92 @@
+---
+# prune_mode=seeds: retire the seed backups seed_volume_backup.yml created, once the rotation
+# covers them. WHY, COST and the safety condition are in the header of ansible/prune_backups.yml.
+- name: List every backup and the volume it belongs to
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io, -o, json]
+  become: true
+  register: prune_seed_backups
+  changed_when: false
+
+- name: List the volumes that still exist
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+           -o, "custom-columns=NAME:.metadata.name", --no-headers]
+  become: true
+  register: prune_seed_live_volumes
+  changed_when: false
+
+# A seed on a volume that no longer exists is the migration's old chain, which the
+# migrated-chain mode owns. A seed here must belong to a live volume, and the list must be
+# non-empty: an empty list reads as "no volume is live", which would make every seed look
+# orphaned rather than superseded, and this mode must not decide that.
+- name: Refuse to run against an unusable volume list
+  ansible.builtin.assert:
+    that: >-
+      prune_seed_live_volumes.stdout_lines | map('trim') | reject('equalto', '')
+      | list | length > 0
+    fail_msg: the live-volume list is empty. Nothing has been deleted.
+
+- name: Collect the Completed backups
+  ansible.builtin.set_fact:
+    prune_seed_completed: >-
+      {{ (prune_seed_backups.stdout | from_json)["items"]
+         | selectattr('status.volumeName', 'defined')
+         | selectattr('status.state', 'equalto', 'Completed')
+         | list }}
+
+# A seed is a backup seed_volume_backup.yml made: named seed-<volume>, and carrying no
+# RecurringJob label. Both are required — the name alone would match a hand-made object,
+# and the missing label alone would match a backup-probe-* trigger.
+- name: Narrow to seeds on volumes that still exist
+  ansible.builtin.set_fact:
+    prune_seed_candidates: >-
+      {{ prune_seed_completed
+         | selectattr('metadata.name', 'match', '^seed-')
+         | rejectattr('status.labels.RecurringJob', 'defined')
+         | selectattr('status.volumeName', 'in',
+                      prune_seed_live_volumes.stdout_lines | map('trim') | list)
+         | list }}
+
+- name: Keep only the requested claim's seed
+  ansible.builtin.set_fact:
+    prune_seed_candidates: >-
+      {{ prune_seed_candidates
+         | selectattr('status.labels.KubernetesStatus', 'defined')
+         | selectattr('status.labels.KubernetesStatus', 'search',
+                      '"pvcName":"' ~ prune_claim ~ '"')
+         | list }}
+  when: (prune_claim | default('')) | length > 0
+
+# The floor: the volume's own rotation must hold at least `prune_seed_floor` Completed
+# backups carrying a RecurringJob label. A seed on a volume below that is still its coverage.
+- name: Split the seeds into superseded and still-covering
+  ansible.builtin.set_fact:
+    prune_seed_superseded: >-
+      {{ prune_seed_superseded | default([]) + [item.metadata.name] }}
+  loop: "{{ prune_seed_candidates }}"
+  loop_control:
+    label: "{{ item.metadata.name }}"
+  when: >-
+    prune_seed_completed
+    | selectattr('status.volumeName', 'equalto', item.status.volumeName)
+    | selectattr('status.labels.RecurringJob', 'defined')
+    | list | length >= prune_seed_floor | int
+
+- name: Report the plan
+  ansible.builtin.debug:
+    msg: >-
+      {{ prune_seed_candidates | length }} seed(s) on live volumes;
+      {{ prune_seed_superseded | default([]) | length }} superseded by at least
+      {{ prune_seed_floor }} rotation backup(s): {{ prune_seed_superseded | default([]) }}.
+      {{ 'Deleting.' if prune_apply | bool
+         else 'Dry run — pass -e prune_apply=true to delete.' }}
+
+- name: Delete the superseded seeds
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, delete,
+           "backups.longhorn.io/{{ item }}", --ignore-not-found]
+  become: true
+  loop: "{{ prune_seed_superseded | default([]) }}"
+  changed_when: true
+  when: prune_apply | bool

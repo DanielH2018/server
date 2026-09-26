@@ -20,7 +20,7 @@ Ansible renders that key into the module command string, and
 `ActionBase._low_level_execute_command` passes THAT string to `build_become_command`, so the
 variable sits inside the shell command sudo runs rather than in sudo's own environment —
 which `env_reset` would have discarded. A task-level `environment:` merges with the play's
-rather than replacing it, so `drain_backup_prefix.yml`'s B2 keys still reach their task.
+rather than replacing it, so `prune_backups.yml`'s B2 keys still reach their task.
 
 The alternative the issue offered — pointing `ansible_python_interpreter` outside the tree —
 is not available here. The repo's venv is load-bearing for module execution: `community.docker`
@@ -43,14 +43,12 @@ _KNOWN = frozenset(
     {
         "bootstrap.yml",
         "deploy.yml",
-        "drain_backup_prefix.yml",
-        "drop_migrated_backup_chain.yml",
-        "drop_seed_backups.yml",
         "initial_setup.yml",
         "k3s-bringup.yml",
         "k3s-storage-smoke.yml",
         "migrate_volume_block_size.yml",
         "preflight.yml",
+        "prune_backups.yml",
         "seed_volume_backup.yml",
     }
 )

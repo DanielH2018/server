@@ -16,8 +16,8 @@ volume's backup depends on.
 WHAT STOPS IT DELETING SOMETHING LIVE. Three things, in order:
   - The caller passes the live Longhorn volume list. An empty or unreadable list refuses
     everything rather than classifying everything as strandable — the same fail-closed shape as
-    drop_migrated_backup_chain.yml, which learned it from a padded-column bug that made every
-    backup look like an orphan.
+    the migrated-chain mode of ansible/prune_backups.yml, which learned it from a padded-column
+    bug that made every backup look like an orphan.
   - Any requested volume that still exists in that list is refused by name.
   - Nothing is deleted without --apply. Discovery proposes; the operator disposes.
 
@@ -27,7 +27,8 @@ under-report what has to go, and — as this repo found on 2026-08-19 — readin
 "upload"` as "still live" makes a finished deletion look like a no-op. Current state is the
 FIRST version returned for a name; the rest are retained history.
 
-Usage (credentials come from the environment, see ansible/drain_backup_prefix.yml):
+Usage (credentials come from the environment; ansible/prune_backups.yml -e prune_mode=b2-drain
+supplies them):
     B2_KEY_ID=... B2_APP_KEY=... uv run python scripts/backup/b2_drain.py \
         --live-volumes-file /tmp/live.txt --volumes pvc-aaa,pvc-bbb [--apply]
 """

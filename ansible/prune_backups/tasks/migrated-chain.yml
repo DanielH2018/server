@@ -1,0 +1,103 @@
+---
+# prune_mode=migrated-chain: delete one claim's backup chain stranded by a volume migration.
+# WHY, COST and the safety condition are in the header of ansible/prune_backups.yml.
+- name: Require a claim
+  ansible.builtin.assert:
+    that: (prune_claim | default('')) | length > 0
+    fail_msg: "the migrated-chain mode needs -e prune_claim=<pvc>"
+
+- name: Resolve the volume currently backing the claim
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, "{{ prune_namespace }}", get, pvc, "{{ prune_claim }}",
+           -o, "jsonpath={.spec.volumeName}"]
+  become: true
+  register: prune_chain_current_pv
+  changed_when: false
+
+- name: List every backup and the volume it belongs to
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, get, backups.longhorn.io, -o, json]
+  become: true
+  register: prune_chain_backups
+  changed_when: false
+
+- name: List the volumes that still exist
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+           -o, "custom-columns=NAME:.metadata.name", --no-headers]
+  become: true
+  register: prune_chain_live_volumes
+  changed_when: false
+
+# A backup whose volume still exists is somebody's live chain, not debris. Restricting to
+# Completed matters too: Longhorn's retain never prunes an Error backup, so those are removed
+# by the reaper's own path, not here.
+# The orphan test is "the volume is not in this list", so an empty or malformed list makes
+# every backup an orphan and deletes a live chain. The claim's own volume must be in it:
+# that proves the list was read, parsed and trimmed correctly, in one check.
+- name: Refuse to classify orphans against an unusable volume list
+  ansible.builtin.assert:
+    that: prune_chain_current_pv.stdout in (prune_chain_live_volumes.stdout_lines | map('trim') | list)
+    fail_msg: >-
+      the live-volume list does not contain {{ prune_claim }}'s own volume
+      ({{ prune_chain_current_pv.stdout }}). Every backup would be treated as stranded. Nothing
+      has been deleted.
+
+# custom-columns pads every name to the column width, and a padded name matches nothing —
+# which would classify every backup as an orphan. Trim before comparing.
+- name: Narrow to Completed backups whose volume no longer exists
+  ansible.builtin.set_fact:
+    prune_chain_orphans: >-
+      {{ (prune_chain_backups.stdout | from_json)["items"]
+         | selectattr('status.volumeName', 'defined')
+         | selectattr('status.state', 'equalto', 'Completed')
+         | rejectattr('status.volumeName', 'in',
+                      prune_chain_live_volumes.stdout_lines | map('trim') | list)
+         | list }}
+
+# Backup objects do not name their PVC directly; Longhorn stores it inside the
+# KubernetesStatus label, which is a JSON string. Matching the quoted key/value pair rather
+# than the bare name keeps `n8n-data` from also selecting `n8n-data-something`.
+- name: Keep only the ones belonging to this claim
+  ansible.builtin.set_fact:
+    prune_chain_stranded: >-
+      {{ prune_chain_orphans
+         | selectattr('status.labels.KubernetesStatus', 'defined')
+         | selectattr('status.labels.KubernetesStatus', 'search',
+                      '"pvcName":"' ~ prune_claim ~ '"')
+         | map(attribute='metadata.name') | list }}
+    prune_chain_current_backups: >-
+      {{ (prune_chain_backups.stdout | from_json)["items"]
+         | selectattr('status.volumeName', 'defined')
+         | selectattr('status.volumeName', 'equalto', prune_chain_current_pv.stdout)
+         | selectattr('status.state', 'equalto', 'Completed')
+         | map(attribute='metadata.name') | list }}
+
+# The floor refuses in a dry run too, so the dry run says whether an apply would be allowed.
+- name: Refuse to drop the old chain until the replacement has one of its own
+  ansible.builtin.assert:
+    that: prune_chain_current_backups | length > 0
+    fail_msg: >-
+      {{ prune_claim }} (now {{ prune_chain_current_pv.stdout }}) has no Completed backup.
+      Deleting the stranded chain would leave it with no recovery point at all. Trigger its
+      weekday shard first and wait for the backup to complete.
+    success_msg: >-
+      {{ prune_claim }} has {{ prune_chain_current_backups | length }} Completed backup(s) on
+      its current volume.
+
+- name: Report the plan
+  ansible.builtin.debug:
+    msg: >-
+      {{ prune_chain_stranded | length }} stranded backup(s) of {{ prune_claim }}:
+      {{ prune_chain_stranded }}.
+      {{ 'Deleting.' if prune_apply | bool
+         else 'Dry run — pass -e prune_apply=true to delete.' }}
+
+- name: Delete the stranded backups
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, delete,
+           "backups.longhorn.io/{{ item }}", --ignore-not-found]
+  become: true
+  loop: "{{ prune_chain_stranded }}"
+  changed_when: true
+  when: prune_apply | bool

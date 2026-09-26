@@ -128,9 +128,9 @@ Two consequences that are easy to get backwards:
   `seed_volume_backup.yml` made a backup carrying no `RecurringJob` label at all, so no job's
   `retain` ever counted or pruned it, and the reaper reads an unlabelled backup as the current
   tier's own — on 2026-09-02 it listed zero reapable against eleven live seeds.
-  `drop_seed_backups.yml` is their owner. It retires a seed once its volume holds
-  `drop_seed_floor` (default 2, the shards' retain) Completed backups that do carry a job label,
-  dry-runs by default, and takes `drop_seed_claim` to pace the Class C spend one volume at a
+  `prune_backups.yml -e prune_mode=seeds` is their owner. It retires a seed once its volume
+  holds `prune_seed_floor` (default 2, the shards' retain) Completed backups that do carry a job
+  label, dry-runs by default, and takes `prune_claim` to pace the Class C spend one volume at a
   time. The seed's *snapshot* was unowned the same way and outlived the backup: dropping the
   backup left a `seed-*` snapshot pinning every block beneath it against trim, which is how
   valheim-config carried 3.5 GB of deleted files into each weekly backup (issue #942). Since

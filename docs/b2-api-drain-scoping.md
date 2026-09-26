@@ -117,7 +117,7 @@ A host-side script plus a thin Ansible play to supply the SOPS credentials.
 1. **Enumerate** `longhorn/backupstore/volumes/` once, group keys by volume.
 2. **Classify** a prefix as drainable only when its volume name is absent from
    `kubectl get volumes.longhorn.io`, using the same fail-closed guard as
-   `drop_migrated_backup_chain.yml`: if the live-volume list is empty or unreadable, refuse
+   the migrated-chain mode of `prune_backups.yml`: if the live-volume list is empty or unreadable, refuse
    everything rather than classify everything as an orphan.
 3. **Require an explicit allow-list** of volume names on the command line. Discovery proposes;
    the operator disposes. Dry run is the default.
@@ -153,7 +153,7 @@ The one change either way: `b2_list_versions` needs a `prefix` parameter.
 - **The sync's own cost.** A sync must walk every volume directory, so estimate tens of Class C
   per drain run — small, but not zero, and not measured.
 - **What deletes `volume.cfg`.** Each drained prefix keeps one. The likely answer is deleting
-  the `BackupVolume` CR, which `drop_migrated_backup_chain.yml` never does — all seven stale CRs
+  the `BackupVolume` CR, which `prune_backups.yml` never does — all seven stale CRs
   are still standing. One object per volume, so this is tidiness, not cost.
 - **B2's Class C billing granularity for large pages.** B2 bills listing per 1,000 names
   returned, so the 5-call figure is 5 billed units either way.
