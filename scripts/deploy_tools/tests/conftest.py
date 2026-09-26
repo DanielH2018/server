@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
+from deploy_tools.land_lib import options, tools
 
 # The stub records one line per call so a test can assert it intercepted something. Without
 # that record the fixture would be indistinguishable from one that silently stopped being on
@@ -22,6 +23,30 @@ from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_land
 _LOGGER_STUB = """#!/bin/sh
 printf '%s\\n' "$*" >> "$LAND_TEST_LOGGER_CALLS"
 """
+
+
+# Read off the modules that consume them rather than retyped, so a knob added there is cleared
+# here without anyone remembering to. `LAND_TEST_LOGGER_CALLS` is not one: the fixtures set it.
+LAND_ENV_KNOBS = (*options.ENV_KNOBS, tools.GATE_TMP_ROOT_ENV)
+
+
+@pytest.fixture(autouse=True)
+def _no_inherited_land_env(monkeypatch):
+    """Clear the `LAND_*` knobs a caller's environment would otherwise decide a test with.
+
+    The unattended renovate agent runs with `LAND_REQUIRE_AUTHOR=app/renovate`
+    (`renovate-agent.service.j2`), and every `git commit` it makes runs the prek `pytest`
+    hook under that environment. The stubbed `gh` reports the author as `<unknown>`, so
+    `land.sh` refused before making any git call and two tests in
+    test_land_arm_merge_through_the_shim.py failed on the agent's own commit (issue #2640).
+
+    Directory-wide and autouse for the reason `_no_syslog` gives: the modules that run the
+    real `land.sh` against stubs are not a closed set, and each builds its subprocess
+    environment from `os.environ`. A test that wants a knob set still sets it — a
+    function-scoped fixture is torn down after the test body, not before it.
+    """
+    for name in LAND_ENV_KNOBS:
+        monkeypatch.delenv(name, raising=False)
 
 
 @pytest.fixture(autouse=True)

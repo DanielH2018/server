@@ -283,6 +283,19 @@ def denylist_marker(rules: list[dict]) -> str:
     return tells.pop()
 
 
+def branch_slug_tell(marker: str) -> str:
+    """The marker as it survives in a branch name: Renovate slugifies its groupName.
+
+    A group holding ONE dependency is titled `Update <dep> …` and drops the group name, so the
+    branch is the only place the marker reaches for most denied roles' pins — #2620 was
+    `Update klutchell/unbound Docker tag to v1.26.1` on
+    `renovate/k8s-image-klutchellunbound-(manual-k8s_autodeploy-false-…)` (issue #2641).
+    Derived rather than typed, for the reason `denylist_marker` is read out of renovate.json:
+    a rename of the rule's marker must fail this guard rather than leave the prompt behind.
+    """
+    return re.sub(r"[^a-z0-9_.]+", "-", marker.lower())
+
+
 def prompt_exclusion_problems(prompt: str, marker: str) -> list[str]:
     """Every way the prompt can fail to hand a denylisted PR to a person. Empty means it does."""
     problems: list[str] = []
@@ -290,6 +303,17 @@ def prompt_exclusion_problems(prompt: str, marker: str) -> list[str]:
         problems.append(
             f"the prompt never names {marker!r}, so the agent works a denylisted PR like any "
             "other manual work order and lands it unattended"
+        )
+    slug = branch_slug_tell(marker)
+    if slug not in prompt:
+        problems.append(
+            f"the prompt never names {slug!r}, the only place the marker reaches on a "
+            "single-dependency group's PR, so a denied role's pin reads as a plain image pin"
+        )
+    if "headRefName" not in prompt:
+        problems.append(
+            "the prompt does not tell the agent to read the branch name, so it can only ever "
+            "see the marker on the PRs whose title happens to keep it"
         )
     if "land.sh --pr" not in prompt:
         problems.append(
@@ -305,23 +329,39 @@ def test_the_prompt_leaves_a_denylisted_pr_to_a_person() -> None:
     assert not problems, "\n".join(problems)
 
 
-def test_a_prompt_naming_the_marker_and_the_command_is_clean() -> None:
-    prompt = "- leave a PR titled `k8s_autodeploy: false`; report `land.sh --pr <n>`"
+_TITLE_TELL = "titled `k8s_autodeploy: false`"
+_SLUG_TELL = "branched `k8s_autodeploy-false`"
+_BRANCH_READ = "read `gh pr list --json number,title,headRefName`"
+_LAND = "report `land.sh --pr <n>`"
+
+
+def test_a_prompt_naming_both_tells_and_the_command_is_clean() -> None:
+    prompt = f"- leave a PR {_TITLE_TELL} or {_SLUG_TELL}; {_BRANCH_READ}; {_LAND}"
     assert prompt_exclusion_problems(prompt, "k8s_autodeploy: false") == []
 
 
 @pytest.mark.parametrize(
-    ("prompt", "fragment"),
+    ("dropped", "fragment"),
     [
-        ("report `land.sh --pr <n>` for anything you leave", "never names"),
-        ("leave a PR titled `k8s_autodeploy: false` open", "land.sh command"),
+        (_TITLE_TELL, "'k8s_autodeploy: false'"),
+        (_SLUG_TELL, "'k8s_autodeploy-false'"),
+        (_BRANCH_READ, "read the branch name"),
+        (_LAND, "land.sh command"),
     ],
 )
-def test_a_prompt_missing_the_marker_or_the_command_is_flagged(
-    prompt: str, fragment: str
+def test_a_prompt_missing_any_one_of_them_is_flagged(
+    dropped: str, fragment: str
 ) -> None:
+    """Each half is checked on its own: a prompt naming three of the four is not clean."""
+    parts = [_TITLE_TELL, _SLUG_TELL, _BRANCH_READ, _LAND]
+    prompt = "- leave a PR " + "; ".join(p for p in parts if p != dropped)
     problems = prompt_exclusion_problems(prompt, "k8s_autodeploy: false")
     assert len(problems) == 1 and fragment in problems[0], problems
+
+
+def test_the_branch_slug_tell_is_the_marker_renovate_would_put_in_a_branch() -> None:
+    """`: ` becomes `-`; the underscore and the word survive, as #2620's branch shows."""
+    assert branch_slug_tell("k8s_autodeploy: false") == "k8s_autodeploy-false"
 
 
 def test_the_marker_is_read_from_the_rule_not_typed_here() -> None:
