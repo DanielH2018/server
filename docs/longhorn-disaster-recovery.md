@@ -238,6 +238,14 @@ fresh deploy does not page for volumes whose turn has not come, and neither does
 joins the backup set later. A rotation-wide start date would flag every such volume the day it
 joined.
 
+The candidate list is written after the drill's `actualSize` cap
+(`k3s_longhorn_restore_drill_max_actual_bytes`), so a volume that grows past the cap would leave
+the rotation and check 8 together. The drill therefore also writes
+`/var/lib/longhorn-restore-drill/excluded_oversize`, one `<pvc>\t<actualSize>` line per backed-up
+volume the cap keeps out, and the heartbeat pages naming each one. The page clears on the next
+drill run after the cap is raised, the volume's snapshots are pruned and trimmed, or the volume
+moves to `no-backup`.
+
 What is still not covered: each night proves one volume, so at any moment the fleet-wide claim is
 "every volume restored within the last cycle," not "every volume restores right now." A full-cluster restore is also still rationed — at 16 MiB blocks
 (set 2026-08-19) new volumes cost ~8x less to restore, but existing volumes remain at 2 MiB until
