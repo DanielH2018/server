@@ -103,7 +103,16 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_toolbox",
     },
     # The marker files, plus the two pure hold-marker decisions `clear_broad_hold` makes.
-    "deploy_state": {"deploy_config", "deploy_git", "gitops_markers"},
+    "deploy_state": {
+        "deploy_config",
+        "deploy_git",
+        "deploy_state_k8s",
+        "gitops_markers",
+    },
+    # The `k8s_deferred` and `k8s_unapplied` families, as a mixin `DeployerState` inherits.
+    # It reads and writes through the methods that class defines, so it imports only the
+    # parsers — never `deploy_state`, which would be a cycle.
+    "deploy_state_k8s": {"gitops_markers"},
     "deploy_io": {
         "deploy_config",
         "deploy_failtext",
