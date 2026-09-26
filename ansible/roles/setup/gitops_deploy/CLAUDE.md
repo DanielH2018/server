@@ -190,7 +190,13 @@ Each arm below is a rule and the function that holds it. The record page has the
       roles are denylisted, so paging on those would hold Status red as normal operation.
       **Those two classes go to `k8s_unapplied` instead** (#2570), the same line format in a
       second file that `gitops_status` never opens: a durable record that does not page, read
-      by the SessionStart banner and by the journal. `deploy_alerts.alert_deferred` writes it,
+      by the SessionStart banner and by the journal. **A second change to a service already
+      listed there MOVES its line to the newer SHA**, keeping the first-seen stamp (#2644):
+      the line is discharged by comparing its origin to a release record, so one left at the
+      oldest origin drops as soon as any deploy descends from the FIRST change, with the
+      second still unapplied. `k8s_deferred` keeps its oldest origin, because a tick clears
+      that marker by deploying the service and `unrecord` can reset the tree under it.
+      `deploy_alerts.alert_deferred` writes it,
       which covers every exit that leaves the range merged — the contention arm resets and
       returns before reaching any of them, so `unrecord` owns no reverse for it. Every tick
       DISCHARGES a line whose service has since been deployed
