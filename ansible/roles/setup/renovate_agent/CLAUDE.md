@@ -84,7 +84,7 @@ the caps or the schedule cannot quietly widen it.
   pins the value to the wrapper's census), **never** a bare
   `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
   holds unlanded work (the tick skips, posts the path and exits non-zero), and **never a PR whose
-  title carries `k8s_autodeploy: false`** (#1939). That phrase is renovate.json's
+  title OR BRANCH carries `k8s_autodeploy: false`** (#1939). That phrase is renovate.json's
   denylist marker, not a work order: the roles behind it (authelia, traefik, crowdsec, …) are
   denied because a failed deploy is one `probe.py health` cannot see, so the "look" the
   denial asks for is a person and not this session's gated land. The prompt leaves such a PR
@@ -94,8 +94,15 @@ the caps or the schedule cannot quietly widen it.
   marker; a per-package rule whose pin a denied role owns ends its own with it (the crowdsec
   bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n through the
   n8n-images build coupling, #1963), because
-  those rules override the denylist rule's groupName and the title is the only thing the
-  prompt can read. `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
+  those rules override the denylist rule's groupName.
+  **The title carries the marker only for a group holding more than one dependency** (#2641).
+  Renovate titles a single-dependency group `Update <dep> …` and drops the group name, so for
+  most denied roles' pins the marker survives only in the branch, slugified as
+  `k8s_autodeploy-false` — #2620 was `Update klutchell/unbound Docker tag to v1.26.1` against
+  pihole's defaults. The prompt therefore reads `headRefName` beside the title, and
+  `test_the_prompt_leaves_a_denylisted_pr_to_a_person` pins both tells. Making the marker reach
+  the title as well (a `commitMessageTopic` or `prTitle` on the rule) is filed as #2646:
+  unverifiable from a session, and the field that shapes a title can also shape the branch. `ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py`
   asserts the marker sits on exactly the per-package rules whose pin a denied role owns.
   A third rule carries it for a denied role's base image — the `FROM` in
   `templates/Dockerfile*.j2`, which Renovate's built-in dockerfile manager finds and the
