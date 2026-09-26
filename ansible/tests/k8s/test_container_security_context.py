@@ -279,9 +279,6 @@ _ROOT_OWNED_DATA = {
     ("freshrss", "nginx"),
     # Measured uid 0 (`tini -- /bin/sh -c /bin/meilisearch`), writing a PVC it owns as root.
     ("karakeep", "meilisearch"),
-    # Measured uid 0. Its uv cache is mounted at /root/.cache/uv, a hardcoded root HOME, so a
-    # non-root uid cannot write it — the mount path is the blocker, not the data's ownership.
-    ("karakeep", "time-tagger"),
 }
 
 # Emptied 2026-08-31, one deploy after it was written, by measuring every member instead of
@@ -306,6 +303,11 @@ _UID_PIN_DECLINED = {
 # Short-lived init and probe containers with no uid declared and no persistent process to measure.
 # Unclassified rather than cleared: the census could not observe them, and guessing from an image
 # name is the error that produced the finding this list came from.
+#
+# karakeep's two — `wait-for-deps` and `wait-for-karakeep` — left this set in #2672, along with
+# `("karakeep", "time-tagger")` from _ROOT_OWNED_DATA above. All three ran the stock uv image,
+# which could only run as root because its uv cache sat behind Debian's 0700 /root; the role now
+# builds that image through k8s/image-builder and all three assert uid 1000.
 _UNMEASURED_SHORT_LIVED = {
     ("crowdsec", "config-install"),
     # Added by the LAPI startup gate that landed in #675, one PR before this guard. Neither PR
@@ -315,8 +317,6 @@ _UNMEASURED_SHORT_LIVED = {
     ("crowdsec", "wait-for-lapi"),
     ("headlamp", "probe"),
     ("homepage", "seed-config"),
-    ("karakeep", "wait-for-deps"),
-    ("karakeep", "wait-for-karakeep"),
     ("livesync", "seed-config"),
     ("n8n", "probe"),
     ("n8n", "wait-for-broker"),

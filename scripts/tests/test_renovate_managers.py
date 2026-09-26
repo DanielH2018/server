@@ -189,6 +189,11 @@ REGISTRY_BUILT_IMAGES = {
     "ical_proxy_k8s_image",  # ansible/roles/k8s/ical-proxy/templates/Dockerfile.j2
     "code_server_k8s_image",  # ansible/roles/k8s/code-server/templates/Dockerfile.j2
     "homelab_mcp_k8s_image",  # ansible/roles/k8s/homelab-mcp/templates/Dockerfile.j2
+    # ansible/roles/k8s/karakeep/templates/Dockerfile.j2 — a chown layer over the pinned uv
+    # base so the time-tagger runs as uid 1000 (#2672). Its FROM is watched like the rest; the
+    # pip pins the container installs at boot sit in deployment-time-tagger.yaml.j2 and have
+    # their own regex manager.
+    "karakeep_k8s_tagger_image",
     "nut_k8s_image",  # ansible/roles/k8s/nut/templates/Dockerfile.j2
     "pi_peer_backup_k8s_image",  # ansible/roles/k8s/pi-peer-backup/templates/Dockerfile.j2
     "terraria_k8s_image",  # ansible/roles/k8s/terraria/templates/Dockerfile.j2

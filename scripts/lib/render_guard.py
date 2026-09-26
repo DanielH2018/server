@@ -81,6 +81,7 @@ BUILT_IMAGE_TAG_STUBS: dict[str, str] = {
     "code-server": "sha-c0de5e2e7000",
     "homelab-mcp": "sha-70c1ab0e1111",
     "ical-proxy": "sha-1ca17e2d2222",
+    "karakeep": "sha-ca4a6eef9999",
     "n8n": "sha-8a8a8a8a3333",
     "n8n-runners": "sha-8b8b8b8b4444",
     "nut": "sha-4a7f6d0e5555",

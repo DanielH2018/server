@@ -1,0 +1,44 @@
+# A one-layer image whose only job is to make the time-tagger runnable as a non-root uid.
+#
+# The tagger installs its five pinned runtime deps on every container start
+# (`uv pip install ... --system`, in deployment-time-tagger.yaml.j2's command) and caches the
+# wheels. Both of those writes land on paths that root owns in the stock uv image, so the stock
+# image can only run as root — no securityContext fixes it from the manifest side. Two paths,
+# for two different reasons:
+#
+#   the interpreter's site-packages and its script directory
+#             `--system` is what targets the image's own interpreter rather than a venv, so the
+#             install writes here on every start. Owned by root:root 0755 upstream.
+#   the uv cache
+#             was mounted at `/root/.cache/uv`, and Debian's `/root` is 0700 root:root, so a
+#             non-root uid cannot even traverse to it. Relocated to `/uv-cache` by the
+#             `UV_CACHE_DIR` below rather than fixed with a second chown: the hardcoded `/root`
+#             was the defect, and an image that no longer names it cannot regrow the coupling.
+#             Nothing chowns `/uv-cache` — kubelet creates an emptyDir 0777, and the mount
+#             replaces whatever this image put there.
+#
+# Chowning site-packages lets the app rewrite its own installed packages, which is worth stating
+# plainly. It is still strictly LESS privilege than the status quo: today PID 1 is root and can
+# rewrite every path in the container, this one included.
+#
+# DIGEST-PINNED on a mutable tag, so the digest is the entire pin, and Renovate's built-in
+# dockerfile manager raises the bump PR. karakeep is `k8s_autodeploy: false`, so renovate.json's
+# denylist-marker rule lists this file — a bump is realised by an operator rebuild
+# (`./scripts/deploy.sh --tags karakeep`), never by a pull. The 3.12 -> 3.14 reasoning that used
+# to sit beside this pin in defaults/main.yml moved here with it.
+FROM ghcr.io/astral-sh/uv:python3.14-bookworm-slim@sha256:7cf77f594be8042dab6daa9fe326f90962252268b4f120a7f5dccce4d947e6c1
+
+# Read off the interpreter rather than written out, so a base-image bump to python3.15 cannot
+# leave this layer chowning a directory that no longer exists while the build still reports
+# success. The `test -d` is this layer's own red proof: `chown -R` on a missing path fails, but
+# `sysconfig` returning a path for an interpreter that ships no such directory would not.
+RUN set -eu; \
+    purelib="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["purelib"])')"; \
+    scripts="$(python3 -c 'import sysconfig; print(sysconfig.get_paths()["scripts"])')"; \
+    test -d "$purelib" && test -d "$scripts"; \
+    chown -R 1000:1000 "$purelib" "$scripts"
+
+# uv's default cache is `$XDG_CACHE_HOME/uv`, falling back to `$HOME/.cache/uv` — and a uid with
+# no /etc/passwd entry gets HOME=/, which is root-owned too. Naming the directory outright is the
+# only form that does not depend on either.
+ENV UV_CACHE_DIR=/uv-cache

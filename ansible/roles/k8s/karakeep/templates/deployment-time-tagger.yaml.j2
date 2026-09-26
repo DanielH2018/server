@@ -37,6 +37,10 @@ spec:
         # readiness probe passes, which is what service_healthy meant.
         - name: wait-for-karakeep
           image: {{ karakeep_k8s_tagger_image }}
+          # Built in-cluster, so `Always` rather than the `IfNotPresent` an unchanged content tag
+          # would otherwise take from the node's cache — see
+          # ansible/tests/k8s/test_built_images_pull_always.py.
+          imagePullPolicy: Always
           command:
             - python3
             - -c
@@ -54,7 +58,7 @@ spec:
           # nothing — so it needs no writable path and gets no emptyDir. Even if the bytecode
           # were missing, CPython's `__pycache__` write is best-effort and fails soft on a
           # read-only tree, so the container still runs.
-{{ hardened_security_context(read_only=true) }}
+{{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
       # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
       # Weighted so the pod still schedules if daniel-server is cordoned or full.
@@ -62,6 +66,7 @@ spec:
       containers:
         - name: time-tagger
           image: {{ karakeep_k8s_tagger_image }}
+          imagePullPolicy: Always
           # Runtime deps are version-pinned rather than floating so a container start does not
           # silently re-resolve them to whatever is newest on PyPI — the same silent drift the
           # base-image digest pin closes, one layer down. Renovate tracks each pin via a custom
@@ -81,21 +86,26 @@ spec:
               sleep 900;
               done
           workingDir: /work
-          # No DAC_OVERRIDE, unlike the compose template. That cap existed only because the
-          # uv cache was a bind mount owned by uid 1000 while the container ran as root; an
-          # emptyDir is created root-owned, so the reason is gone with the bind mount.
+          # uid 1000, and the IMAGE is what makes that possible (#2672). This container ran as
+          # root until then, for two reasons a securityContext cannot reach: the uv cache was
+          # mounted at `/root/.cache/uv` behind Debian's 0700 `/root`, and `uv pip install
+          # --system` writes into the image's own site-packages. `templates/Dockerfile.j2` chowns
+          # site-packages to 1000 and relocates the cache to `/uv-cache` via `UV_CACHE_DIR`; read
+          # it before changing either path here. No DAC_OVERRIDE and no added capability: the
+          # container now owns what it writes instead of overriding the permission check.
           #
           # DECIDED: no readOnlyRootFilesystem here, unlike the wait-for-karakeep init container
           # above. The `uv pip install ... --system` in the command block installs five packages
           # into the interpreter's site-packages, on the image's own root filesystem, on EVERY
           # container start — `--system` is what targets it there rather than a venv. A read-only
-          # root makes that first command fail, so the container never reaches the script. This
-          # is readable off the template; it needed no live measurement.
+          # root makes that first command fail, so the container never reaches the script. The
+          # chown changes who may write that path, never whether the path is writable, so the
+          # in-cluster build does not reopen this.
           # Redirecting the install into a mounted emptyDir instead (a venv on /work, or
           # PYTHONUSERBASE) would make read-only reachable, but it re-resolves the same install
           # against a cache that no longer persists and changes how the container boots — a
           # bigger change than the hardening it buys, and out of scope for #1129.
-{{ hardened_security_context() }}
+{{ hardened_security_context(non_root=true, run_as_user=1000, run_as_group=1000) }}
           env:
             # This container was the homelab's single largest Loki emitter — 22,786 lines per 30
             # minutes measured 2026-08-29 — and every INFO line was written THREE times, byte- and
@@ -137,8 +147,11 @@ spec:
             - name: time-tagger-script
               mountPath: /script
               readOnly: true
+            # /uv-cache, not /root/.cache/uv: `UV_CACHE_DIR` in templates/Dockerfile.j2 names this
+            # path, and the two move together. kubelet creates an emptyDir 0777, so uid 1000 can
+            # write it with no fsGroup and nothing to chown.
             - name: time-tagger-uv-cache
-              mountPath: /root/.cache/uv
+              mountPath: /uv-cache
             - name: time-tagger-work
               mountPath: /work
           # The compose healthcheck, unchanged: /tmp/healthy is touched only after a SUCCESSFUL
