@@ -80,6 +80,25 @@ It prints the verdict at once and returns at the timeout; that is not a failure.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.
+
+### A verdict that leaves a host apply owed
+`needs-manual-apply` and `blocked` mean the PR merged and an apply is still owed on a host.
+`land.sh` has already printed the exact command — the playbook line, the `deploy.sh --tags`
+line, the remaining-hosts note, and any `gitops_state.py clear-manual-plane <role>`. Read the
+deployer's own markers for what is still pending:
+```bash
+cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/manual_plane
+```
+A non-empty `hold_sha` or a `manual_plane` line naming your role is CLAUDE.md *When to wait*.
+Do exactly one of these two things, never neither:
+- Apply the change and verify it, where *When to wait* leaves it to you — the marker is this
+  PR's own work, no bring-up playbook sits in the range, and no other session owns it.
+- Otherwise file it with `findings.py open`, carrying the host, the role and the exact command
+  `land.sh` printed, verbatim. Then list that issue number under a `MANUAL APPLY PENDING`
+  heading in your final report.
+
+A verdict that is neither `settled` nor `nothing-to-deploy`, with no `MANUAL APPLY PENDING`
+heading and no apply, leaves the pending apply in prose only, which nothing tracks.
 """
     return f"""## Landing
 This host is {host}, not the deploy host. Open the PR with `gh pr create` and STOP there:

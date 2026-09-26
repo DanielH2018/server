@@ -341,6 +341,27 @@ requires a verified commit signature, and a PR signed with an unregistered key s
 with every check green (PR #1572 needed a hand re-sign), so the dispatcher checks the key
 before it spends an agent.
 
+`launch` fast-forwards a host with no GitOps tick to `origin/master` before it creates the
+worktree, between the `fetch` and the `worktree add`. `.claude/settings.json` names every hook
+by an absolute path into that host's primary checkout, so a worktree cut from a fresher
+`origin/master` registers hook scripts the checkout does not have yet: `/bin/sh` exits 127,
+Claude Code logs a non-blocking hook error, and the tool call runs with the guard skipped.
+About 2,100 Bash calls on daniel-server ran with no `PreToolUse:Bash` guard across two windows
+in September 2026 — one opened by the commit adding `inject-nested-docs`, one by the commit
+adding `bash-pretool.sh`, each closing when that checkout next pulled (issue #2675).
+
+The fast-forward is gated on HEAD being `master`, because `merge --ff-only origin/master` on a
+checkout parked on another branch takes master's commits onto that branch. A refusal —
+detached HEAD, a local commit, a tree `--ff-only` cannot cross — refuses the launch: the host's
+hook state is then unknown, which is exactly when a batch must not be placed on it.
+
+**It does nothing on daniel-box.** The tick pulls that checkout every 10 minutes, so the window
+there is bounded already, and the tick takes `/var/lock/server-git-tree.lock` for its own
+`--ff-only` merge — moving HEAD under an in-flight deploy ships a different SHA than the one the
+health gate cleared. A launch cannot hold that lock, since a deploy holds it for up to 20
+minutes and `LAUNCH_TIMEOUT_S` is 120 seconds, so taking it would turn a bounded stale-hook
+window into a failed launch.
+
 That check compares each candidate host's `user.signingkey` against the account's live list,
 read with `gh api /users/<login>/ssh_signing_keys`. `launch` exits 6 when no candidate host
 passes, and also when the list could not be read at all — a `gh` outage refuses the launch
@@ -385,9 +406,15 @@ what exit 6 would refuse without spending an agent.
    `findings.py open`.
 4. **Land.** Each agent goes all the way to a verified deploy. Every agent's `land.sh` queues on
    `/var/lock/server-git-tree.lock`, so the brief must say that exit 75 is a resume point to
-   retry rather than a failure to report.
+   retry rather than a failure to report. A `needs-manual-apply` or `blocked` verdict means the
+   PR merged and a host apply is still owed, so the brief also tells the agent to read
+   `hold_sha` and `manual_plane` after the verdict and either apply the change or file the
+   pending apply with `findings.py open`, under a `MANUAL APPLY PENDING` heading in its report.
+   At least five headless sessions between 2026-09-12 and 2026-09-26 left that apply in
+   end-of-job prose, which no register tracks (issue #2683).
 5. **Report.** A table of issue → worktree → PR → verdict. Any issue still claimed when the
-   fan-out ends is named explicitly, so nothing is held silently.
+   fan-out ends is named explicitly, so nothing is held silently, and every agent's
+   `MANUAL APPLY PENDING` heading is carried into the report.
 
 ### Width is bounded by measured headroom
 

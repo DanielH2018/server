@@ -297,6 +297,22 @@ Each agent starts with none of this conversation's context, so its brief must ca
   backgrounded `land.sh` has a live session to notify when it exits. Issue #1298 tracks a
   command that returns on the match.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
+- **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
+  `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a
+  non-empty `hold_sha`, a bring-up playbook in the range, or a daniel-server or daniel-pi
+  change. `land.sh` prints the exact command for each; nothing else records that it is owed.
+  Tell the agent to read the deployer's markers after the verdict:
+
+  ```bash
+  cat /var/lib/gitops-deploy/hold_sha /var/lib/gitops-deploy/manual_plane
+  ```
+
+  Then exactly one of two things, never neither: apply and verify the change where CLAUDE.md
+  *When to wait* leaves it to this session, or file it with `findings.py open` carrying the
+  host, the role and `land.sh`'s own command verbatim, and list that issue number under a
+  `MANUAL APPLY PENDING` heading in its report. Five headless sessions between 2026-09-12 and
+  2026-09-26 ended with the PR merged and the apply left in end-of-job prose (issue #2683),
+  which no register tracks.
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent
   holding that authority could bury a real finding invisibly.
@@ -315,7 +331,8 @@ actually produced; don't split further just to add width.
 
 Done when: every batch has a spawned agent carrying both `isolation: "worktree"` and
 `model: "opus"`, and every brief names the claim already held, the comment it must post first,
-the landing path, the blocking-wait command, and the close restriction.
+the landing path, the blocking-wait command, the close restriction, and what to do with a
+verdict that leaves a host apply owed.
 
 ## 4. Land
 
@@ -340,5 +357,11 @@ uv run python scripts/dev/findings.py release <n> --worktree <orchestrator-branc
 Anything left claimed past this point sits until the next fan-out's triage step reaps it —
 releasing explicitly is faster and says why.
 
-Done when: the table accounts for every issue in every batch, and nothing is left claimed
-without an explicit reason in the report.
+**Collect every `MANUAL APPLY PENDING` heading.** An agent whose landing ended
+`needs-manual-apply` or `blocked` filed the pending apply as its own issue (step 3). Carry
+those issue numbers into this report under one heading of the same name, so the operator reads
+the owed applies in one place instead of per-agent prose.
+
+Done when: the table accounts for every issue in every batch, nothing is left claimed
+without an explicit reason in the report, and every agent's `MANUAL APPLY PENDING` heading is
+carried into it.
