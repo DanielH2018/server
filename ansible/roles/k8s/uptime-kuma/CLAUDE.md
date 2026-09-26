@@ -182,8 +182,10 @@ set.
 A declaration that omits `applyExisting` is therefore permanently one key short of what Kuma
 stores, never compares equal, and is rewritten on every sync pass. That ran from the k3s
 cutover to 2026-08-21: 716 rewrites per 30 minutes, ~34k SQLite writes a day onto a Longhorn
-volume whose changed blocks the nightly backup then ships. Fixed in PR #309 by declaring the
-key; the sidecar went from 10 `Updating notification` lines per 5 minutes to zero `Updating`
+volume. The cost was the write amplification alone, never a backup bill — `uptime-kuma-data`
+entered `k3s_longhorn_nobackup_volumes` on 2026-08-12, two days before the cutover, so no backup
+ever shipped those blocks, and the fleet's backed-up tier is weekly to B2 rather than nightly.
+Fixed in PR #309 by declaring the key; the sidecar went from 10 `Updating notification` lines per 5 minutes to zero `Updating`
 lines of any kind.
 
 Raising `AUTOKUMA__SYNC_INTERVAL` from 5 to 60 cut the cost 12x and made the loop look
