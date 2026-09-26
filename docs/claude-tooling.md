@@ -567,6 +567,22 @@ guard refuses a git command targeting the shared checkout, and the failure it do
 (`deploy.sh` exit 4) names its own tree instead. The banner is the only place that cause
 reaches the session that pays for it.
 
+It also names **a hook script this session registers that the primary checkout does not have**
+(`.claude/hooks/hooklib/hook_registration_lines.py`). `.claude/settings.json` names every hook by
+an absolute path into the primary checkout, so a worktree cut from a fresher `origin/master`
+registers a file that is not there, `/bin/sh` exits 127, Claude Code logs a non-blocking hook
+error, and the tool call runs with the guard skipped — about 2,100 Bash calls did on
+daniel-server in September 2026 (issue #2675). `fanout_lib/launch.py` fast-forwards the primary
+checkout before a fan-out worktree is created; this arm is what reaches a hand-made worktree,
+which nothing fast-forwards.
+
+The arm reads the SESSION's `settings.json` (`$CLAUDE_PROJECT_DIR`, or the first parent of the
+cwd holding one) against the files on disk. Reading the primary checkout's own `settings.json`
+would compare a file against the `.claude/hooks/` directory it was committed beside and never
+disagree. Two gaps stay open by construction: the arm cannot report `session-health.sh`'s own
+absence, because a SessionStart hook that does not exist prints nothing, and it sees only the
+`.sh` shims `settings.json` names, not the `.py` sibling each shim resolves for itself.
+
 ## What an edit costs, by file type
 
 Six hooks match `Edit|Write`, and each is a ~7 ms no-op except on the paths it owns. Measured

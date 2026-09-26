@@ -192,9 +192,11 @@ denies prints its own reason.
 - **Shell `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.**
   The validate-compose hook re-renders the templates after an edit and fails on a single `$`.
 - **session-health** — the SessionStart banner. It names unhealthy workloads, a dirty primary
-  checkout, a GitOps deployer parked behind origin, and a setup role the tick merged but cannot
-  apply. The first two stop every deploy in the fleet, and the banner is the only place a
-  worktree session sees them.
+  checkout, a GitOps deployer parked behind origin, a setup role the tick merged but cannot
+  apply, and a hook script this session registers that the primary checkout lacks. The first two
+  stop every deploy in the fleet, and the banner is the only place a worktree session sees them.
+  A missing hook script exits 127 and the guarded tool call runs anyway, so that line reads
+  first.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 The rules for promoting a review learning into memory live in the `memory-consolidation` and
