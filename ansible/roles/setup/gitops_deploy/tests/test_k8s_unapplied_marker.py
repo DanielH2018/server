@@ -131,6 +131,62 @@ def test_a_missing_release_record_keeps_the_line(pending, settings):
     assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
 
 
+# ── a shared role has no record of its own, so its callers' records stand in (#2643) ───────
+@pytest.fixture
+def shared_pending(gitops_deploy, state_dir, settings):
+    """A pending `k8s_unapplied` line for the shared role `game-stats-lib` at ORIGIN."""
+    gitops_deploy.STATE.record_k8s_unapplied(ORIGIN, {"game-stats-lib"}, 1000.0)
+    return gitops_deploy.STATE
+
+
+def _discharge_shared(state, settings, behind=(), shared_role_callers=None):
+    tools = _tools(
+        release_commit=lambda svc: None if svc == "game-stats-lib" else APPLIED + svc,
+        is_ancestor=lambda _repo, _origin, commit: commit[40:] not in behind,
+        shared_role_callers=shared_role_callers
+        or (
+            lambda _repo, roles: {r: {"terraria-stats", "valheim-stats"} for r in roles}
+        ),
+    )
+    return deploy_defer.discharge_k8s_unapplied(tools, state, settings)
+
+
+def test_a_shared_role_whose_callers_all_carry_the_change_is_discharged(
+    shared_pending, settings
+):
+    """FLAGGED half: the full deploy of 2026-09-26, which left this line standing."""
+    assert _discharge_shared(shared_pending, settings) == ["game-stats-lib"]
+    assert shared_pending.k8s_unapplied_pending() == []
+
+
+def test_a_shared_role_with_one_caller_behind_is_kept(shared_pending, settings):
+    """CLEAN half: one caller's record predates the change, so it is not applied there."""
+    assert _discharge_shared(shared_pending, settings, behind={"valheim-stats"}) == []
+    assert [e.service for e in shared_pending.k8s_unapplied_pending()] == [
+        "game-stats-lib"
+    ]
+
+
+@pytest.mark.parametrize(
+    "shared_role_callers",
+    [
+        pytest.param(lambda _repo, roles: {r: set() for r in roles}, id="no-callers"),
+        pytest.param(
+            lambda _repo, _roles: (_ for _ in ()).throw(ValueError("bad json")),
+            id="derivation-fails",
+        ),
+    ],
+)
+def test_a_shared_role_with_no_derivable_caller_is_kept(
+    shared_pending, settings, shared_role_callers
+):
+    """An empty caller set must not read as vacuously covered, nor a crash as evidence."""
+    assert _discharge_shared(shared_pending, settings, (), shared_role_callers) == []
+    assert [e.service for e in shared_pending.k8s_unapplied_pending()] == [
+        "game-stats-lib"
+    ]
+
+
 # ── the release record reader ──────────────────────────────────────────────────────────────
 def test_release_commit_reads_the_applied_commit(tmp_path):
     (tmp_path / "authelia.json").write_text(json.dumps({"commit": APPLIED}))

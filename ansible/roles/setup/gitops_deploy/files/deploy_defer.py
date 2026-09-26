@@ -474,8 +474,8 @@ def discharge_k8s_unapplied(
     SHA we recorded", answered from the service's release record
     (`roles/k8s/manifests/tasks/release_stamp.yml`) and one `git merge-base --is-ancestor`.
     That is deliberately NOT the question `probe.py releases --stale-only` asks: this one
-    needs no role paths, no shared-role consumers and no deploy-plane narrowing, so the two
-    cannot drift into disagreeing. It discharges an operator's own `deploy.sh`, which the
+    needs no role paths and no deploy-plane narrowing, so the two cannot drift into
+    disagreeing. It discharges an operator's own `deploy.sh`, which the
     deployer has no other way to see — the gap `clear-manual-plane` fills by hand one plane
     over.
 
@@ -483,11 +483,27 @@ def discharge_k8s_unapplied(
     the line. `is_ancestor` already reads a git error as False, and that is the direction this
     wants: a kept line is a banner entry an operator can clear in one command, where a dropped
     one loses the only record that the change was never applied.
+
+    A SHARED ROLE HAS NO RECORD OF ITS OWN (#2643). `manifests`, `image-builder` and the rest
+    carry no `containers_list` entry, so the question moves to the tags that apply them: the
+    line drops when every one of those, as `shared_role_callers.py` derives them, holds a
+    record at or after the line's commit. The derivation is asked once per tick, and only
+    when a pending line has no record. If it fails, or names no tag, the line is kept.
     """
+    pending = state.k8s_unapplied_pending()
+    records = {e.service: tools.release_commit(e.service) for e in pending}
+    callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
+
+    def carries(service: str, origin: str) -> bool:
+        if service not in records:
+            records[service] = tools.release_commit(service)
+        commit = records[service]
+        return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
+
     discharged = []
-    for entry in state.k8s_unapplied_pending():
-        applied = tools.release_commit(entry.service)
-        if applied and tools.is_ancestor(config.repo, entry.origin, applied):
+    for entry in pending:
+        tags = {entry.service} if records[entry.service] else callers.get(entry.service)
+        if tags and all(carries(t, entry.origin) for t in tags):
             discharged.append(entry.service)
     if discharged:
         state.clear_k8s_unapplied(discharged)
@@ -496,6 +512,26 @@ def discharge_k8s_unapplied(
             f"record names a commit that carries the change"
         )
     return sorted(discharged)
+
+
+def _shared_callers(
+    tools: DeployTools, config: Config, services: set[str]
+) -> dict[str, set[str]]:
+    """`tools.shared_role_callers` for `services`, or no callers at all when it fails.
+
+    Any exception, not a tuple: the call decodes a subprocess's JSON, and the one safe
+    reading of a failure is "no evidence", which keeps every line it would have judged.
+    """
+    if not services:
+        return {}
+    try:
+        return tools.shared_role_callers(config.repo, services)
+    except Exception as exc:
+        log(
+            f"k8s_unapplied: could not derive the callers of {', '.join(sorted(services))} "
+            f"({type(exc).__name__}: {exc}) — keeping their lines"
+        )
+        return {}
 
 
 def log_k8s_unapplied(state: DeployerState) -> None:

@@ -198,6 +198,9 @@ Each arm below is a rule and the function that holds it. The record page has the
       `git merge-base --is-ancestor`; that is what drops the line for an operator's own
       `deploy.sh`, which this deployer cannot see, and without it the marker would hold a
       permanent line per routine landing. A record that is absent or undatable KEEPS the line.
+      A shared role (`manifests`, `image-builder`, `game-stats-lib`) has no record of its own,
+      so its line drops when every tag that applies it and writes a record carries the change,
+      as `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
       `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear, needed only for a change
       that was reverted rather than applied. The demotion is recorded at the ff-merge
       (`deploy_defer.record_demoted`), not in the `gate_broad_k8s` that decided it: the gate

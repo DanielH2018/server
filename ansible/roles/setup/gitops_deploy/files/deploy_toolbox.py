@@ -140,6 +140,11 @@ class DeployTools:
     # discharge. A field because the record is written by a DIFFERENT process — an operator's
     # `deploy.sh` — so the suite has to script it rather than stage a file.
     release_commit: Callable[[str], str | None] = deploy_release.release_commit
+    # The tags whose release records stand in for a shared role's own (#2643), which has none.
+    # A subprocess that parses YAML, so a field for the reason `narrow_setup_role` is one.
+    shared_role_callers: Callable[..., dict[str, set[str]]] = (
+        deploy_narrow.shared_role_callers
+    )
     fetch_ci_verdict: Callable[[str], str] = _ci_unconfigured
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated

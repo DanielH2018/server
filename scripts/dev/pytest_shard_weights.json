@@ -658,6 +658,7 @@
  "scripts/deploy_tools/tests/test_prune_releases.py": 0.02,
  "scripts/deploy_tools/tests/test_publish_pr.py": 0.27,
  "scripts/deploy_tools/tests/test_render_targets.py": 0.0,
+ "scripts/deploy_tools/tests/test_shared_role_callers.py": 0.05,
  "scripts/deploy_tools/tests/test_shared_role_reach.py": 1.26,
  "scripts/deploy_tools/tests/test_staging_expectations.py": 0.08,
  "scripts/deploy_tools/tests/test_staging_gate.py": 0.07,
