@@ -16,6 +16,7 @@ Split out of `land_tags.py` at the module-length cap; the path-to-tag mappers st
 
 import functools
 import json
+import re
 import sys
 from pathlib import Path
 
@@ -294,7 +295,15 @@ def _gates_in(
         chain = inherited + ((task["when"],) if "when" in task else ())
         target = next((task[k] for k in _IMPORT_KEYS if k in task), None)
         if isinstance(target, str):
-            if "{{" in target:  # a cross-role import; nothing it ships is this role's
+            if "{{" in target:
+                # A cross-role import (`{{ role_path }}/../common/tasks/...`): nothing the
+                # imported file ships is this role's, so it is not followed. The importing
+                # task is still offered as a leaf, because its own `vars:` block is where
+                # this role feeds the shared file -- gitops_deploy's install.yml passes
+                # `gitops_deploy_ruleset_drift_cron_hour` to `kuma_check_timer.yml` that
+                # way, and `_var_consumer_chains` finds no consumer without it.
+                if keep(task, task_file):
+                    found.append(chain)
                 continue
             found.extend(_task_chains(role_dir, keep, Path(target).name, chain) or [])
         elif "block" in task:
@@ -302,6 +311,87 @@ def _gates_in(
         elif keep(task, task_file):
             found.append(chain)
     return found
+
+
+_VARS_DIRS = ("defaults", "vars")
+
+
+def _leaf_chains_with_text(role_dir: Path) -> list[tuple[str, tuple]] | None:
+    """Each leaf task's JSON text paired with its `when:` chain, or None if unreadable.
+
+    `_task_chains` appends one chain per leaf `keep` accepts, in traversal order, so a
+    `keep` that records what it is handed and accepts everything pairs positionally with
+    the chains it gets back.
+    """
+    texts: list[str] = []
+
+    def keep(task, _task_file) -> bool:
+        texts.append(json.dumps(task))
+        return True
+
+    chains = _task_chains(role_dir, keep)
+    return None if chains is None else list(zip(texts, chains, strict=True))
+
+
+def _shipped_texts(role_dir: Path) -> dict[str, str]:
+    """{basename: text} for each readable file under the role's `templates/` and `files/`."""
+    texts: dict[str, str] = {}
+    for sub in _SHIPPED_DIRS:
+        for path in sorted((role_dir / sub).glob("*")):
+            if not path.is_file():
+                continue
+            try:
+                texts[path.name] = path.read_text()
+            except OSError, UnicodeDecodeError:
+                continue
+    return texts
+
+
+def _var_consumer_chains(role_dir: Path, vars_file: Path) -> list[tuple] | None:
+    """Every `when:` chain on a task that consumes a var `vars_file` defines.
+
+    A `defaults/main.yml` is not itself shipped, so no task names it and `setup_file_hosts`
+    fell back to the role-level reach -- which for a `has_gitops` dispatcher is all three
+    hosts. PR #2553 changed `gitops_deploy/defaults/main.yml` and its landing prescribed
+    `initial_setup.yml --tags gitops_deploy` on daniel-server and daniel-pi, where the role
+    runs `teardown.yml` alone and every one of those vars is read by `install.yml` (#2610).
+    A var reaches the hosts that run a task consuming it, so this collects the chain on each
+    consumer: a leaf task naming the var, or a `templates/`/`files/` file naming it, under
+    the chain of the task that ships that file.
+
+    Returns None -- caller keeps the role-level answer -- unless EVERY var defined here has
+    at least one consumer. One var resolved by textual search says nothing about the next,
+    and a var consumed only through a shape this cannot read (a `hostvars` lookup, a cron
+    the deployer's Python reads at runtime) would otherwise narrow the whole file on absence
+    of evidence. That is the failure `_eval_when`'s docstring names: narrower than the truth
+    hides an unconverged host, where wider costs an operator one no-op command.
+    """
+    try:
+        defined = yaml_fast.safe_load(vars_file.read_text())
+    except OSError, yaml.YAMLError:
+        return None
+    leaves = _leaf_chains_with_text(role_dir)
+    if not isinstance(defined, dict) or not defined or leaves is None:
+        return None
+    shipped = _shipped_texts(role_dir)
+    shipping_chains: dict[str, list[tuple]] = {}
+    chains: list[tuple] = []
+    for name in defined:
+        # Whole word, so `gitops_deploy_staging_gate` is not counted as consumed by a task
+        # that only names `gitops_deploy_staging_gate_blocking` -- coverage passing on a
+        # longer sibling's chains is the one way this gate narrows on the wrong evidence.
+        named = re.compile(rf"\b{re.escape(name)}\b").search
+        consumers = [chain for text, chain in leaves if named(text)]
+        for basename, text in shipped.items():
+            if not named(text):
+                continue
+            if basename not in shipping_chains:
+                shipping_chains[basename] = _task_gates_naming(role_dir, basename) or []
+            consumers.extend(shipping_chains[basename])
+        if not consumers:
+            return None
+        chains.extend(consumers)
+    return chains
 
 
 def setup_file_hosts(
@@ -332,7 +422,12 @@ def setup_file_hosts(
     task file holding only includes -- `main.yml` of a dispatcher -- has no leaf of its
     own and returns the role-level answer, which for a dispatcher is the union.
 
-    Narrows only on evidence. A path outside `templates/`, `files/` or `tasks/`, a file no
+    A `defaults/` or `vars/` file ships nowhere, so its reach is read from the tasks that
+    consume the vars it defines (`_var_consumer_chains`), and stays at the role level unless
+    every var has a consumer.
+
+    Narrows only on evidence. A path outside `templates/`, `files/`, `tasks/`, `defaults/`
+    or `vars/`, a file no
     task names, or a tasks tree that cannot be read all return the role-level answer, the
     same "unknown stays wide" asymmetry `_eval_when` applies inside one gate.
     """
@@ -361,6 +456,10 @@ def setup_file_hosts(
         chains = _task_chains(roles_dir / role, lambda task, f: f == task_file)
     elif parts[4] in _SHIPPED_DIRS:
         chains = _task_gates_naming(roles_dir / role, parts[-1])
+    elif parts[4] in _VARS_DIRS:
+        chains = _var_consumer_chains(
+            roles_dir / role, roles_dir / role / Path(*parts[4:])
+        )
     else:
         return role_hosts
     if not chains:
