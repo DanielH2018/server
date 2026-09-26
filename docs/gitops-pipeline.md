@@ -619,7 +619,9 @@ stay).
       never opens. The SessionStart banner and the deployer's journal read it, and every tick
       DISCHARGES a line whose service has since been deployed — asked of the service's release
       record and one `git merge-base --is-ancestor`, which is what makes an operator's own
-      `deploy.sh` drop the line without anybody running a command. `deploy.sh` is otherwise
+      `deploy.sh` drop the line without anybody running a command. A shared role has no
+      record of its own, so its line drops once every tag that applies it and writes a record
+      carries the change (`scripts/deploy_tools/shared_role_callers.py`, #2643). `deploy.sh` is otherwise
       invisible to the deployer, and without that discharge the marker would hold one
       permanent line per routine landing. `gitops_state.py clear-k8s-unapplied <svc>` is the
       hand clear, for a change that was REVERTED rather than applied — nothing else needs it.

@@ -14,6 +14,7 @@ field, so a test replaces it rather than a module attribute.
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
+import json
 import subprocess
 from typing import Callable, NamedTuple
 
@@ -37,6 +38,11 @@ NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
 # still going at thirty seconds has wedged.
 NARROW_SETUP_TIMEOUT_S = 30.0
 NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
+
+# How long the shared-role caller derivation gets, and the script that does it. One walk of
+# the k8s role tree's tasks, so thirty seconds is the wedged case, as for the setup narrowing.
+SHARED_CALLERS_TIMEOUT_S = 30.0
+SHARED_CALLERS_SCRIPT = "scripts/deploy_tools/shared_role_callers.py"
 
 
 class BroadPlan(NamedTuple):
@@ -159,6 +165,37 @@ def narrow_setup_role(
         if line.strip():
             log(line.strip())
     return r.returncode, r.stdout.strip()
+
+
+def shared_callers_argv(roles) -> list[str]:
+    """The command `shared_role_callers` runs, split out for the reason `narrow_setup_argv` is."""
+    return ["uv", "run", "--frozen", "python", SHARED_CALLERS_SCRIPT, *sorted(roles)]
+
+
+def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
+    """Ask `shared_role_callers.py` which tags' release records prove each role applied.
+
+    A subprocess for the reason `narrow_deploy_plane` is one. The one reader,
+    `deploy_defer.discharge_k8s_unapplied`, keeps every line on any exception this raises.
+
+    Raises:
+        subprocess.CalledProcessError: the child exited non-zero.
+        subprocess.TimeoutExpired: the child outlived `SHARED_CALLERS_TIMEOUT_S`.
+        ValueError: its stdout was not the JSON object it prints.
+    """
+    r = subprocess.run(
+        shared_callers_argv(roles),
+        cwd=repo,
+        capture_output=True,
+        text=True,
+        timeout=SHARED_CALLERS_TIMEOUT_S,
+        check=False,
+    )
+    for line in r.stderr.splitlines():
+        if line.strip():
+            log(line.strip())
+    r.check_returncode()
+    return {role: set(tags) for role, tags in json.loads(r.stdout).items()}
 
 
 def plan(
