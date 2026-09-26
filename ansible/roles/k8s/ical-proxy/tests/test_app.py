@@ -1,4 +1,4 @@
-"""Unit tests for the ical-proxy Obsidian transform in app.py.
+"""Unit tests for the ical-proxy Obsidian transform in ical_proxy.py.
 
 Run: uv run pytest ansible/roles/k8s/ical-proxy/tests
 (or `uv run pytest` for the whole repo suite).
@@ -17,7 +17,7 @@ sys.path.insert(
     0, os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 )
 
-import app
+import ical_proxy as app
 
 CRLF = "\r\n"
 

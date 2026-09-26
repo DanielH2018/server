@@ -12,7 +12,7 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Built in-cluster** from `templates/Dockerfile.j2` (Flask app in `files/app.py`)
+- **Built in-cluster** from `templates/Dockerfile.j2` (Flask app in `files/ical_proxy.py`, shipped into the image as `app.py`)
 - **Host:** daniel-box (k8s), since 2026-08-10 — slice-7 Phase C
 - **The route guards by ClientIP** so only Homepage reads the unauthenticated private feeds
 
@@ -23,5 +23,5 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
   — update via redeploy.
 
 ## Editing
-- App: `files/app.py` (tests in `tests/test_app.py`) · Image: `templates/Dockerfile.j2`
+- App: `files/ical_proxy.py` (tests in `tests/test_app.py`) · Image: `templates/Dockerfile.j2`
 - Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "ical-proxy"`
