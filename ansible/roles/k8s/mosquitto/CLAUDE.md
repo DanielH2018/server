@@ -29,4 +29,4 @@ web UI, no route — infra role.
 
 ## Editing
 - Broker/password config: `templates/config-secret.yaml.j2`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "mosquitto"`.
+- Deploy: `./scripts/deploy.sh --tags "mosquitto"`.

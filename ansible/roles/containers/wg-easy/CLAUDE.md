@@ -104,6 +104,6 @@ the port split only makes sense read together.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy (Pi, driven from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "wg-easy" -e target=daniel-pi`
+- Deploy (Pi, driven from daniel-box): `./scripts/deploy.sh --tags "wg-easy" -e target=daniel-pi`
   (`-e target=`, not `--limit` — the play's `hosts:` defaults to the local hostname, so
   `--limit daniel-pi` from the server matches zero hosts)

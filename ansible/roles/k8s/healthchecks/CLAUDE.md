@@ -105,4 +105,4 @@ noticed instead of silently going quiet. See repo-root `CLAUDE.md` for shared co
   `tests/test_strip_local_settings_owned.py`.
 - Notification channel: `files/seed_discord_channel.py`, tested by
   `tests/test_seed_discord_channel.py` (`uv run pytest ansible/roles/k8s/healthchecks/tests`).
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "healthchecks"`.
+- Deploy: `./scripts/deploy.sh --tags "healthchecks"`.

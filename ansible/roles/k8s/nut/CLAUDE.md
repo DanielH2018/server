@@ -80,7 +80,7 @@ because each host's token and tile are provisioned together, one leg at a time.
 
 ## Editing
 - Manifests/config: `templates/*.j2` (config-secret.yaml.j2 holds all six NUT files)
-- Deploy (on daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "nut"`
+- Deploy (on daniel-box): `./scripts/deploy.sh --tags "nut"`
 - Host half (udev rule, secondary upsmon): `ansible/roles/setup/nut_host/`, via
   `initial_setup.yml --tags nut_host` on **both** daniel-server and daniel-box. The role's
   own `when:` (`initial_setup.yml`) is `inventory_hostname == ups_host or

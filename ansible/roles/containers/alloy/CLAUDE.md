@@ -70,4 +70,4 @@ verdict lines to loki-homelab. See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Config: `templates/config.alloy.j2` · Compose: `templates/docker-compose.yml.j2`
-- Deploy (Pi, driven from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "alloy" -e target=daniel-pi`
+- Deploy (Pi, driven from daniel-box): `./scripts/deploy.sh --tags "alloy" -e target=daniel-pi`

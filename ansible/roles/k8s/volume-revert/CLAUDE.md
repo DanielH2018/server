@@ -232,7 +232,7 @@ is still an extrapolation.
 Worst case per claim is `3 x volume_revert_state_timeout + 3 x volume_revert_api_timeout`,
 because the role makes three state waits and three API calls. At the original 180/60 that was
 **720s per claim, 1440s for a two-claim service** — and `tdarr`/`code-server` each hold two
-claims and are inside slice 7's promotion set, so this was not hypothetical.
+claims and both declare `k8s_autodeploy_snapshot_pvcs`, so this was not hypothetical.
 
 Task 4's manifests-level rehearsal (Phase 4 of the task-6 drill) is the number this sizing uses,
 because it is the path production actually takes: a rollback redeploy pays the snapshot wait

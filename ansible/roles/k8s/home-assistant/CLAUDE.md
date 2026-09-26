@@ -146,7 +146,7 @@ every task in this directory whether or not it is needed.
 ## Editing
 - HA cfg: `files/` (shipped into the cluster by `roles/k8s/home-assistant`; only
   `templates/config/secrets.yaml.j2` is rendered)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "home-assistant"`
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "home-assistant"`
   — or the `/ha-verify-state` skill, which adds the health + loaded-config gates
 
 ## Traps

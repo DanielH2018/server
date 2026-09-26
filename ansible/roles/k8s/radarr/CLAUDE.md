@@ -41,4 +41,4 @@ when both paths share one mount.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "radarr"`
+- Deploy: `./scripts/deploy.sh --tags "radarr"`

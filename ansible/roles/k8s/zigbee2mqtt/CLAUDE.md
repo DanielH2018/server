@@ -31,8 +31,8 @@ See repo-root `CLAUDE.md` for shared conventions.
   redeploy can NEVER regenerate it and un-pair every device. Do not switch these to GENERATE.
 - **Device/pairing state is Z2M-owned, NOT templated:** `data/database.db`,
   `coordinator_backup.json`, `devices.yaml`, `groups.yaml`. All on the `zigbee2mqtt-data`
-  Longhorn PVC (`longhorn` class → nightly B2 backup; Kopia stopped covering this at the
-  cutover). Losing the PVC = re-pair everything. **Friendly names** (renamed 2026-06-18:
+  Longhorn PVC, backed up daily to R2 (the tier is in the generated block above; Kopia
+  stopped covering this at the cutover). Losing the PVC = re-pair everything. **Friendly names** (renamed 2026-06-18:
   Lamp / Left Light / Right Light / Tap Dial / Aqara FP300) live here too — set via the Z2M UI or
   the `zigbee2mqtt/bridge/request/device/rename` MQTT request `{"from":"<ieee>","to":"<name>"}`.
   **Per-device settings** (exposed as HA number/select entities) are also Z2M-owned device state —
@@ -58,12 +58,11 @@ See repo-root `CLAUDE.md` for shared conventions.
   false offline alerts. Tune per observed cadence. Verify after deploy (from daniel-box):
   `kubectl -n homelab logs deploy/zigbee2mqtt | grep "/availability'"` should show `online` publishes.
 - **Coordinator monitored at the infra level (since 2026-06-18).** An AutoKuma `port` monitor
-  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`) — declared on the **uptime-kuma** container's own
-  labels since the k8s cutover (AutoKuma derives monitors from running-container labels, and this
-  role no longer runs a container; same monitor id, so history survived the move). It pages even if
-  HA/MQTT are down — catching
-  an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which the container's own `docker` monitor
-  misses (Z2M stays "running" while crash-looping against an unreachable radio). HA layers a second,
+  ("SLZB-06M Coordinator", `{{ slzb_ip }}:6638`), declared statically as `slzb-coordinator.json`
+  in `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2`. It pages even if
+  HA/MQTT are down, catching an `EHOSTUNREACH` like the 2026-06-18 accidental unplug, which a
+  pod-level health check misses (Z2M stays running while it crash-loops against an unreachable
+  radio). HA layers a second,
   software-side alert on `binary_sensor.zigbee2mqtt_bridge_connection_state` (the home-assistant role's
   `zigbee_bridge_offline` automation, fed by Z2M's MQTT Last-Will).
 - **Pairing is closed by default** (no `permit_join` in 2.x). Enable join from the Z2M UI
@@ -71,4 +70,4 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Z2M cfg: `templates/config/configuration.yaml.j2` (rendered into the k8s Secret by `roles/k8s/zigbee2mqtt`)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "zigbee2mqtt"`
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "zigbee2mqtt"`

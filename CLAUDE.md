@@ -176,28 +176,18 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   shell control flow (`for`/`while` loops, `if/then/else/fi`); anything that writes or execs
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
-
-- **The remote-ssh auto-approve depends on the dotfiles `claude_guard` package**
-  (`~/.local/share/claude-guard`). A machine without that deploy prompts on that path;
-  `docs/claude-shell-permissions.md` has both guards' failure postures.
-
+- **The remote-ssh auto-approve depends on the dotfiles `claude_guard` package**; a machine
+  without it prompts on that path.
 - **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** A denial is
-  the classifier, not a broken script: re-run it, and check `last_run` first. The **`gitops-tick`
-  skill**, *When it is denied*, owns the rest (#2164).
-
-Full tables, hook wiring and measurement history: `docs/claude-shell-permissions.md`.
+  the classifier: re-run it, and check `last_run` first. The **`gitops-tick` skill**, *When it
+  is denied*, owns the rest (#2164).
 
 ### `kubectl` — what actually decides
-- The **classifier judges the whole command text** in a normal session
-  (`autoMode.classifyAllShell: true`), which suspends every `Bash()` allow rule — the per-verb
-  allow-list decides nothing.
-- Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
-  verb. `sudo` is in `permissions.deny` (so `sudo k3s kubectl` is blocked, not prompted), and
-  `kubectl delete` is denied outright.
-- Therefore **Ansible is the only write path to this cluster** — prefer
-  `uv run ansible-playbook … --tags <svc>`.
+Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
+verb, and `sudo` and `kubectl delete` are denied outright. **Ansible is the only write path to
+this cluster**: deploy through `./scripts/deploy.sh --tags <svc>`.
 
-Per-verb tiers, the RBAC evidence and the rule-matching measurements: `docs/claude-shell-permissions.md`.
+Full tables, per-verb tiers, hook wiring and the RBAC evidence: `docs/claude-shell-permissions.md`.
 
 ## Claude Tooling in This Repo (`.claude/`)
 One directive per tool. `docs/claude-tooling.md` is the full reference, and a hook that

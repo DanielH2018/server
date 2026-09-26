@@ -1,8 +1,8 @@
 # traefik — the cluster ingress edge
 
 Traefik terminates TLS and installs the IngressRoute/Middleware CRDs every other k8s
-role depends on. See repo-root `CLAUDE.md` for shared conventions, and the "Where to
-Look" table's note that this role must render before anything referencing its CRDs.
+role depends on, so it must render before any role whose manifests reference those CRDs.
+See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -121,8 +121,8 @@ Look" table's note that this role must render before anything referencing its CR
   directory already exists owned by the pod uid, and root with `ALL` dropped cannot
   write into it.
 - A second initContainer seeds the CrowdSec bouncer sidecar's config
-  (`traefik_k8s_manage_crowdsec`) — `crowdsec` deploys **before** traefik in
-  `containers_list` specifically so its LAPI machine credential exists before this
+  (`traefik_k8s_manage_crowdsec`) — traefik's `containers_list` entry declares
+  `depends_on: [crowdsec]` specifically so crowdsec's LAPI machine credential exists before this
   sidecar starts.
 - A third initContainer copies the CrowdSec image's bundled datafiles into the agent's
   data volume, world-readable. The image ships them `0600 root:root` and its entrypoint

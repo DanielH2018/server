@@ -1,7 +1,8 @@
 # registry — in-cluster Docker image cache
 
 A local `registry:3.1.1` that stores images `k8s/image-builder` builds in-cluster, so
-n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup and code-server pull without a public
+n8n, homelab-mcp, ical-proxy, nut, pi-peer-backup, code-server, terraria and valheim pull
+without a public
 registry round trip. See repo-root `CLAUDE.md` for shared conventions.
 
 ## At a glance

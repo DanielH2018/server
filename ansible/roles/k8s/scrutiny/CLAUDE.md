@@ -23,9 +23,11 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   meets Authelia: the collector DaemonSet (`COLLECTOR_API_ENDPOINT`), monitor-bridge
   (`SCRUTINY_URL`) and homelab-mcp. Scrutiny's web app has no auth of its own, so a wider
   bypass would hand the LAN `DELETE /api/device/:uuid` and `POST /api/settings`.
-- **`scrutiny-influxdb-data`** (2Gi, `longhorn`, backed up — the SMART history is the point
-  of the tool) and **`scrutiny-web-config`** (1Gi, `longhorn`, the SQLite config DB: device
-  metadata, notification settings), seeded through `k8s/volume-claim`.
+- **`scrutiny-influxdb-data`** (2Gi) is deliberately not backed up. It holds only the SMART
+  time series, which the daily collector runs rebuild; the reason sits beside its entry in
+  `k3s_longhorn_nobackup_volumes` in `ansible/roles/setup/k3s/defaults/main.yml`.
+  **`scrutiny-web-config`** (1Gi) is the SQLite config DB: device metadata and notification
+  settings. `k8s/volume-claim` creates both claims.
 - **The rolling branch tags** are `master-web` and `master-collector`.
 
 ## Notable
@@ -33,8 +35,11 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   scrutiny-web EXITS rather than degrades when InfluxDB is unreachable: it calls
   `/api/v2/setup` during AppEngine.Setup and `panic(err)`s on a connection error instead of
   retrying (upstream `webapp/backend/pkg/web/middleware/repository.go`, read against upstream
-  master 2026-09-06). `wait-for-influxdb` in `web.yaml.j2` bounds that at 60 x 2s, so with the
-  policy absent the pod fails init after two minutes. Same class as authelia's session store
+  master 2026-09-06). `wait-for-influxdb` in `web.yaml.j2` holds the web container for up to
+  60 x 2s until InfluxDB answers, so with the policy absent the pod fails init after two
+  minutes. Without that init container a shared restart costs a crash and a `restarts=1` that
+  fails `probe.py health scrutiny`'s 180s window. A probe cannot cover this, because the panic
+  happens before either probe runs. Same class as authelia's session store
   (#1609). `ansible/tests/services/test_scrutiny_influxdb_policy.py` pins the co-location, the
   port and the `manifests_files` entry. The policy carries no `netpol_baseline_enforced` branch:
   that lever is a netpol-baseline role default and role defaults are role-scoped, so it does not
@@ -56,14 +61,6 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
   This does not replace monitor-bridge's `check_scrutiny` — that reads `/api/summary` on a
   poll and covers freshness, wear and temperature as well as `device_status`, and it pages
   when the collector stops reporting at all, which scrutiny itself cannot.
-- **scrutiny-web panics if InfluxDB is not answering when it starts.** It calls
-  `/api/v2/setup` during `AppEngine.Setup` and upstream `panic(err)`s instead of retrying
-  (`webapp/backend/pkg/web/middleware/repository.go`, unchanged since 2022; read against
-  upstream master 2026-09-06). The `wait-for-influxdb` init container in `web.yaml.j2` polls
-  `http://scrutiny-influxdb:8086/api/v2/setup` for up to 120s and holds the web container
-  until it answers. Without it a shared restart costs a crash and a `restarts=1` that fails
-  `probe.py health scrutiny`'s own 180s window, so a deploy that worked reports unhealthy.
-  A probe cannot cover this — the panic is before either probe is in play.
 - **The notify LEVEL is not settable here.** `notify.level` is deprecated upstream and
   rejected at startup with a `ConfigValidationError`, so `SCRUTINY_NOTIFY_LEVEL` crashloops
   the pod. The level lives in the dashboard Settings page — SQLite in `scrutiny-web-config`,

@@ -16,7 +16,8 @@ built into an image. See repo-root `CLAUDE.md` for shared conventions.
 
 - **Its `:9420` Prometheus exporter** is scraped in-cluster by the `claude-otel`
   `terraria-stats` job.
-- **`terraria-stats-data`** is 1Gi, `k8s/volume-claim`-seeded, on the **weekly** B2 backup tier.
+- **`terraria-stats-data`** is 1Gi, created by `k8s/volume-claim` and seeded once at cutover from
+  the Docker-era DB, on the **weekly** B2 backup tier.
   It holds the all-time playtime SQLite DB — irreplaceable, since Loki's ~28-day backfill
   window can't fully reconstruct it.
 

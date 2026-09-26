@@ -59,8 +59,9 @@ Three consequences, each of which is a trap:
 ## Verification status — read before trusting the numbers
 The line formats above came from documentation and other projects, **not** from this
 server: Valheim was archived in January, long before this Loki existed, so there is no
-historical log anywhere to test against and there had been no players at the time of
-writing. **The first real play session is the acceptance test.**
+historical log to test against, and the role shipped before anyone had played. Real play
+since the 2026-09-09 fresh world has exercised the parser: on 2026-09-26 the exporter reported
+375 deaths and `valheim_stats_unmatched_player_lines_total` at 0.
 
 Two things exist to make a mismatch visible rather than silent:
 - `valheim_stats_unmatched_player_lines_total` — player-shaped lines that did not parse.
@@ -80,7 +81,7 @@ Two things exist to make a mismatch visible rather than silent:
 
 ## Editing
 - Logic: `files/valheim_stats.py` · Tests: `tests/test_valheim_stats.py` (`uv run pytest ansible/roles/k8s/valheim-stats/tests`)
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "valheim-stats" -e target=daniel-box`
+- Deploy: `./scripts/deploy.sh --tags "valheim-stats"`
 - The Loki fetch, cursor handling, metric rendering, the HTTP handler and the run loop live
   in `k8s/game-stats-lib`'s `stats_lib.py`, shared with terraria-stats — see that role's
   CLAUDE.md for how it ships (its include stages the copy beside this script and hands this

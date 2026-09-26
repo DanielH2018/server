@@ -39,4 +39,4 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 
 ## Editing
 Per-workload policy: `templates/networkpolicy-<name>.yaml.j2`. Deploy:
-`uv run ansible-playbook ansible/deploy.yml --tags "netpol-baseline"`.
+`./scripts/deploy.sh --tags "netpol-baseline"`.
