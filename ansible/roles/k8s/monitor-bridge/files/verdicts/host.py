@@ -17,11 +17,12 @@ def pi_pressure(
     load5_per_core: float | None,
     avail_bytes: float | None,
     disk_used_pct: dict[str, float],
+    readonly_by_mount: dict[str, float],
     load_max: float,
     mem_min_mb: float,
     disk_max_pct: float,
 ) -> tuple[bool, str]:
-    """Pure: load per core, available-memory floor, or a full filesystem on the Pi.
+    """Pure: load per core, available-memory floor, a full or a read-only filesystem on the Pi.
 
     Fed from the Pi's own node-exporter series on the `node-pi` scrape job (glances until
     2026-09-18, #2004). load5 (not load1) matches the 5-min poll interval and rides out
@@ -31,14 +32,31 @@ def pi_pressure(
     Root Disk check can't see. A missing arm alerts rather than silently passing — a renamed
     series or a blind collector must surface, same principle as the other checks'
     unreachable-source handling.
+
+    `readonly_by_mount` is `node_filesystem_readonly` keyed by mountpoint: the SD card
+    remounting its root read-only after an I/O error is the classic Pi failure, and every
+    other arm stays green through it — the fill % freezes, open sockets stay open, and
+    log2ram keeps syslog flowing from RAM. It leads the message because it is the fault a
+    reboot does not come back from. No grace, like kubelet_plugin_readonly: a read-only
+    remount does not self-heal.
     """
-    if load5_per_core is None or avail_bytes is None or not disk_used_pct:
+    if (
+        load5_per_core is None
+        or avail_bytes is None
+        or not disk_used_pct
+        or not readonly_by_mount
+    ):
         return (
             False,
             "node-pi series missing load/mem/fs (Pi node_exporter not reporting?)",
         )
     avail_mb = avail_bytes / 1048576.0
     problems = []
+    readonly = sorted(mp for mp, ro in readonly_by_mount.items() if ro)
+    if readonly:
+        problems.append(
+            "READ-ONLY %s (SD card remounted after an I/O error?)" % ", ".join(readonly)
+        )
     if load5_per_core > load_max:
         problems.append("load5 %.2f/core (> %.2f)" % (load5_per_core, load_max))
     if avail_mb < mem_min_mb:
@@ -51,11 +69,12 @@ def pi_pressure(
     # The fullest device is named on the healthy path too: the Pi's vfat /boot/firmware sits
     # at 37% while the SD root reads 8%, and a bare "disk 37%" reads as the card.
     fullest, pct = max(disk_used_pct.items(), key=lambda dp: dp[1])
-    return True, "load5 %.2f/core, %.0fMB available, disk %s %.0f%%" % (
+    return True, "load5 %.2f/core, %.0fMB available, disk %s %.0f%%, rw %s" % (
         load5_per_core,
         avail_mb,
         fullest,
         pct,
+        ", ".join(sorted(readonly_by_mount)),
     )
 
 

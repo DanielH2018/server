@@ -608,10 +608,15 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
   disabled; `UPS_SOURCE_UP_QUERY` is the all-absent gate) so a series rename needs no code edit.
   Pure `ups_health()` and `ups_on_battery_verdict()` are unit-tested.)
-- **Pi Pressure** (the Pi's own node-exporter series on the `node-pi` scrape job, four
+- **Pi Pressure** (the Pi's own node-exporter series on the `node-pi` scrape job, five
   instant queries selected by `origin=PI_ORIGIN`: `down` when `node_load5` per core >
-  `PI_LOAD_MAX`, `node_memory_MemAvailable_bytes` < `PI_MEM_MIN_MB`, or any block device's
-  `node_filesystem_*` usage > `PI_DISK_MAX_PCT`. Filesystems are keyed by device rather
+  `PI_LOAD_MAX`, `node_memory_MemAvailable_bytes` < `PI_MEM_MIN_MB`, any block device's
+  `node_filesystem_*` usage > `PI_DISK_MAX_PCT`, or `node_filesystem_readonly` is 1 on `/` or
+  `/boot/firmware`. The read-only arm landed 2026-09-26 (#2668). An SD card that remounts its
+  root read-only after an I/O error freezes the fill % at its last value, keeps its open
+  sockets, and keeps syslog flowing through log2ram, so every other arm stayed green through
+  the classic Pi failure. It takes no grace, like `kubelet_plugin_readonly`, because a
+  read-only remount does not self-heal. Filesystems are keyed by device rather
   than mountpoint because the SD card is mounted twice (`/` and `/var/hdd.log`) and one full
   card is one problem; tmpfs is excluded because log2ram's 128 MiB `/var/log` fills and
   flushes by design. A filling SD card is the classic slow Pi death the server-only Root
