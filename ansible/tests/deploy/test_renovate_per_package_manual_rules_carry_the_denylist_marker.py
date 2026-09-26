@@ -49,6 +49,12 @@ KNOWN_DENIED_PER_PACKAGE_GROUPS = frozenset(
 
 _ROLES = REPO / "ansible" / "roles"
 
+# Manual rules whose pin sits outside every role, so no deploy can ship it and no marker is
+# owed. Named one by one, like GROUP_VARS in the automerge guard: a second entry has to be
+# argued for. kubernetes-validate is the manifest guard's schema (pyproject.toml, read by the
+# built-in pep621 manager); its PR is the work order for the next k3s minor (#2367).
+REPO_ONLY_PINS = {"kubernetes-validate": "pyproject.toml"}
+
 # Renovate's built-in dockerfile manager, which `customManagers` does not list: its second
 # default pattern is what reaches `templates/Dockerfile*.j2`. Content-derived, like the
 # `_image:` manager.
@@ -140,6 +146,8 @@ def per_package_marker_problems(
         denied = sorted(owners & denylist)
         carries = DENYLIST_MARKER in group
         if not owners:
+            if set(rule["matchPackageNames"]) <= REPO_ONLY_PINS.keys() and not carries:
+                continue
             problems.append(
                 f"{group!r} matches {rule['matchPackageNames']} but no manager reads that "
                 "pin from a role — an unmappable pin cannot be argued as eligible; find its "
@@ -307,6 +315,18 @@ def test_a_pin_no_role_owns_is_flagged() -> None:
     rules = _rule_set("plugin (manual — finish it)")
     problems = per_package_marker_problems(rules, {}, _DENYLIST)
     assert len(problems) == 1 and "no manager reads" in problems[0], problems
+
+
+def test_a_named_repo_only_pin_no_role_owns_is_clean() -> None:
+    rules = _rule_set("schema (manual — finish it)", package="kubernetes-validate")
+    assert per_package_marker_problems(rules, {}, _DENYLIST) == []
+
+
+def test_every_repo_only_pin_is_pinned_where_it_says() -> None:
+    for package, path in REPO_ONLY_PINS.items():
+        assert f'"{package}==' in (REPO / path).read_text(), (
+            f"{package} is no longer pinned in {path} — drop it from REPO_ONLY_PINS"
+        )
 
 
 def test_a_promoted_owner_whose_rule_still_carries_the_marker_is_flagged() -> None:

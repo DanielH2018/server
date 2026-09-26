@@ -5,6 +5,15 @@ raises the PR and the `k3s control plane (manual — plan the upgrade, mind Long
 rule blocks its automerge, which means the daily unattended `/renovate-prs` run can never land it.
 This page is what an operator follows instead.
 
+Renovate raises k3s patch releases only. An `allowedVersions` cap on `k3s-io/k3s` holds k3s at
+the minor that `kubernetes-validate` has a schema for, because
+`test_schema_version_matches_the_cluster` fails a k3s pin whose minor differs from
+`K8S_SCHEMA_VERSION` (#2367). Upstream publishes each schema 26 to 51 days after the Kubernetes
+release. The `kubernetes-validate` PR is therefore where a minor upgrade happens: in it, move
+`K8S_SCHEMA_VERSION`, `k3s_version`, `k3s_install_script_sha256` and the cap together, then
+follow this page before merging. `test_renovate_k3s_cap_follows_the_schema` holds the cap one
+minor above the schema.
+
 The pin is `k3s_version` in `ansible/roles/setup/k3s/defaults/main.yml`. It covers both nodes:
 `server.yml` installs daniel-box, `agent.yml` installs daniel-server, and both pass it to the same
 installer as `INSTALL_K3S_VERSION`. The installer is `install.sh` from that same release tag,
