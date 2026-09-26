@@ -48,7 +48,7 @@ evidence, and the three verdicts — so don't restate it; give it the finding, i
 the HA-specific evidence it would not otherwise know to consult: the home-assistant role's CLAUDE.md
 (accepted trade-offs + verification traps), the role's tasks/templates and `sanctioned_writers.yml`,
 and live state via `scripts/diagnostics/probe.py ha …` (mind the recorder-stale and alias-slug traps — the
-`ha-verify-state` skill encodes them).
+`ha-edit-automation` skill, step 5, encodes them).
 
 `skeptic` pins no `model`, so set it per dispatch, at least the tier of the reviewer that raised the
 finding — the HA reviewer runs opus, so its Highs get `model: opus`. Verdicts: **CONFIRMED**
@@ -64,8 +64,7 @@ established pattern that keeps the next review high-signal.
 
 ## Notes
 - `home-assistant-engineer` is a read+write agent — it MUST be told to review only.
-- This skill is the **review** half only. Implementation (`/ha-edit-automation` →
-  `/ha-verify-state`) stays an explicit, operator-gated sequence — keep it out of this skill.
+- This skill is the **review** half only. Implementation (`/ha-edit-automation`) stays an explicit, operator-gated sequence — keep it out of this skill.
 - For a whole-homelab review across the other domains, use `/homelab-review` (HA was split out of it
   into this skill).
 - **DECIDED: `ha-review` stays its own skill, not a `/homelab-review` domain** (#2428,

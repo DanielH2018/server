@@ -46,7 +46,7 @@ Read the exit code, not just the output:
   command; the second run's read-back is the confirmation.
 
 If the setting changes what HA sees (e.g. presence hold behaviour), verify downstream with
-`ha-verify-state` — e.g. `probe.py ha state binary_sensor.aqara_fp300_presence`.
+`ha-edit-automation` step 5 — e.g. `probe.py ha state binary_sensor.aqara_fp300_presence`.
 
 ## 3. Record it (the part people forget)
 
