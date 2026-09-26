@@ -202,8 +202,9 @@ problem, and it is what `read` shows as `signing=unknown`, so run `read` first â
 `signing=` field gives the gate's verdict per host before a launch spends an agent on it.
 
 When every PR has merged: `uv run python scripts/dev/fanout_place.py clean <run-id>`. It
-removes each worktree once its branch is merged into `origin/master` and the tree is clean, and
-reports a kept tree with its reason. `clean` records each removal in the run's manifest, so a
+removes each worktree once its branch is merged into `origin/master` and the tree is clean,
+then deletes that `worktree-fanout-<batch>` branch, and reports a kept tree with its reason. A
+branch that refuses to delete reads `kept`, naming it. `clean` records each removal in the run's manifest, so a
 later pass skips a batch it already removed rather than reading a host for a worktree that is
 gone, and `status` shows such a batch as `cleaned`. `clean` deletes the manifest under
 `~/.claude/fanout/` only once every batch is removed, and exits 1 naming any batch whose remote

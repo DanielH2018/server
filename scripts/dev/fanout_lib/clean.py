@@ -39,6 +39,34 @@ def lock(repo: str, path: str, reason: str) -> None:
     git("worktree", "lock", "--reason", reason, path, cwd=repo, check=False)
 
 
+def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
+    """Force-delete `branch` in `repo`, returning `(ok, git's first stderr line)`.
+
+    `-D`, not `-d`: a squash- or rebase-landed branch is never an ancestor of master, and
+    the caller only reaches this for a branch `is_merged` has already settled.
+    """
+    deleted = git("branch", "-D", branch, cwd=repo, check=False)
+    if deleted.returncode == 0:
+        return True, ""
+    first_line = next(
+        (ln for ln in deleted.stderr.splitlines() if ln.strip()),
+        f"git branch -D exited {deleted.returncode}",
+    )
+    return False, first_line.strip()
+
+
+def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> str:
+    """Delete a removed tree's branch when it landed; return the `kept` reason, or `""`.
+
+    Removing a worktree leaves its branch, so without this every cleaned batch left a
+    `worktree-fanout-<batch>` branch for the operator to delete by hand (#2674).
+    """
+    if not (tree.branch and merged):
+        return ""
+    ok, err = brancher(repo, tree.branch)
+    return "" if ok else f"— branch {tree.branch} not deleted: {err}"
+
+
 def clean_one(
     repo: str,
     tree: Worktree,
@@ -47,6 +75,7 @@ def clean_one(
     remover=remove,
     unlocker=unlock,
     locker=lock,
+    brancher=delete_branch,
 ) -> tuple[str, str]:
     """Remove `tree` when its branch landed and it is clean; otherwise keep it and say why.
 
@@ -72,16 +101,18 @@ def clean_one(
         remover: `prune_worktrees.remove`-shaped — removes a worktree.
         unlocker: unlocks `tree` right before an actual removal.
         locker: re-locks `tree` with its original reason when a removal attempt fails.
+        brancher: `delete_branch`-shaped — deletes the landed branch once its tree is gone.
 
     Returns:
-        `("removed" | "kept", reason)`.
+        `("removed" | "kept", reason)`. A tree removed whose branch then refuses to delete
+        reads `kept`, naming the branch, so `cmd_clean` keeps the manifest pointing at it.
     """
     unlocked = dataclasses.replace(tree, locked=False, lock_reason="")
     merged = ask(repo, tree.head, tree.branch or "")
     try:
         tree_is_dirty = dirty(tree.path)
     except FileNotFoundError:
-        return _clean_missing_tree(repo, tree, merged, remover)
+        return _clean_missing_tree(repo, tree, merged, remover, brancher)
     verdict, reason = classify(unlocked, merged=merged, dirty=tree_is_dirty)
     if verdict != REMOVABLE:
         return "kept", reason
@@ -89,14 +120,15 @@ def clean_one(
         unlocker(repo, tree.path)
     ok, err = remover(repo, unlocked)
     if ok:
-        return "removed", ""
+        branch_err = _drop_merged_branch(repo, tree, merged, brancher)
+        return ("kept", branch_err) if branch_err else ("removed", "")
     if tree.locked:
         locker(repo, tree.path, tree.lock_reason)
     return "kept", err
 
 
 def _clean_missing_tree(
-    repo: str, tree: Worktree, merged: bool, remover
+    repo: str, tree: Worktree, merged: bool, remover, brancher
 ) -> tuple[str, str]:
     """Deregister a worktree whose directory is already gone from disk.
 
@@ -118,15 +150,8 @@ def _clean_missing_tree(
     ok, err = remover(repo, tree)
     if not ok:
         return "kept", err
-    if tree.branch and merged:
-        deleted = git("branch", "-D", tree.branch, cwd=repo, check=False)
-        if deleted.returncode != 0:
-            first_line = next(
-                (ln for ln in deleted.stderr.splitlines() if ln.strip()),
-                f"git branch -D exited {deleted.returncode}",
-            )
-            return "kept", f"— branch {tree.branch} not deleted: {first_line.strip()}"
-    return "removed", "(already gone)"
+    branch_err = _drop_merged_branch(repo, tree, merged, brancher)
+    return ("kept", branch_err) if branch_err else ("removed", "(already gone)")
 
 
 def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
