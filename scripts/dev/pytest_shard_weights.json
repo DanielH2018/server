@@ -631,6 +631,7 @@
  "scripts/deploy_tools/tests/test_land_quotes_the_deployers_narrowing.py": 0.07,
  "scripts/deploy_tools/tests/test_land_reach.py": 0.18,
  "scripts/deploy_tools/tests/test_land_reach_block_gate.py": 0.11,
+ "scripts/deploy_tools/tests/test_land_reach_handlers.py": 0.02,
  "scripts/deploy_tools/tests/test_land_reach_role_tests.py": 0.09,
  "scripts/deploy_tools/tests/test_land_reach_vars_files.py": 0.66,
  "scripts/deploy_tools/tests/test_land_reads_a_narrowed_broad_applied_marker.py": 0.0,
