@@ -7,8 +7,8 @@ a BackupTarget points at.
 
 Each names the cluster it reads (production by default) and takes an injectable `_run` —
 `lib.kubectl.kubectl` minus its cluster argument — so the projections are testable without one.
-longhorn.py keeps the subcommands that drive these, and b2_ledger.py reads `pvc_names` and
-`backup_target_url` through that facade.
+longhorn.py keeps the subcommands that drive these, and b2_ledger.py reads `pvc_names`,
+`volume_backup_targets` and `backup_target_url` through that facade.
 """
 
 import json
@@ -91,6 +91,35 @@ def pvc_names(cluster=DEFAULT_CLUSTER, _run=None):
 # mapping has to come from the CRs — inferring B2 from the `us-east-005` region component would
 # be exactly the guess `docs/adr/0014` and the tiering memory warn against.
 B2_BACKUP_TARGET_NAME = "default"
+
+
+def volume_backup_targets(cluster=DEFAULT_CLUSTER, _run=None):
+    """{longhorn volume: spec.backupTargetName}, so a report can tell B2 rows from R2 ones.
+
+    A volume with no target set is returned as "" rather than omitted: absent from the map and
+    present-but-blank are different states, and a caller that has to decide which store a
+    backup went to needs to tell them apart.
+
+    `pvc_names` cannot answer this. It reads PVs, and `backupTargetName` lives on the Longhorn
+    Volume CR — the same object `volume_shard_labels` reads. The two key spaces coincide because
+    a Longhorn volume is named after its PV (`pvc-<uuid>`).
+    """
+    run = _run or (lambda *args: kubectl(cluster, *args))
+    out = run("-n", "longhorn-system", "get", "volumes.longhorn.io", "-o", "json")
+    if out.returncode != 0:
+        return {}
+    try:
+        items = json.loads(out.stdout).get("items", [])
+    except json.JSONDecodeError:
+        return {}
+    return {
+        (item.get("metadata") or {}).get("name", ""): (item.get("spec") or {}).get(
+            "backupTargetName"
+        )
+        or ""
+        for item in items
+        if (item.get("metadata") or {}).get("name")
+    }
 
 
 def backup_target_url(name=B2_BACKUP_TARGET_NAME, cluster=DEFAULT_CLUSTER, _run=None):

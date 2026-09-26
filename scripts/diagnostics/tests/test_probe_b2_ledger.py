@@ -1,16 +1,22 @@
 """`probe.py b2-spend` and `probe.py b2-deletions`: the B2 transaction ledger.
 
+Covers `b2_ledger.py` and the `b2_spend.py` report split out of it.
+
 B2 publishes no usage API, so backup spend is measured from Longhorn's own logs and
 maintenance spend is recorded here, into a local ledger, so it is not reconstructed from
 memory after the fact.
 """
 
+import json
 from datetime import datetime, timezone
+from types import SimpleNamespace
 
 import pytest
 
 from diagnostics.probe_lib import b2_ledger as ledger
+from diagnostics.probe_lib import b2_spend
 from diagnostics.probe_lib import core
+from diagnostics.probe_lib import longhorn_cluster
 
 SPEND_LOG = [
     (
@@ -45,7 +51,7 @@ def test_parse_duration_seconds_rejects_junk_rather_than_defaulting():
 def test_parse_backup_spend_counts_delta_blocks_per_volume():
     """`blocks` is the delta Longhorn walks, and it HeadObjects each one — so that count is the
     backup's Class B cost. `new blocks` is what it uploaded, which is Class A and free."""
-    vols = ledger.parse_backup_spend(SPEND_LOG)
+    vols = b2_spend.parse_backup_spend(SPEND_LOG)
     assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["blocks"] == 104
     assert vols["pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"]["new_blocks"] == 75
     assert vols["pvc-00d8210a-e38d-49f9-ba22-3aff333f59ab"]["backups"] == 1
@@ -56,7 +62,7 @@ def test_parse_backup_spend_counts_delta_blocks_per_volume():
 def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
     """Dropping an unattributable line would understate spend, and understating is the failure
     mode that matters — the cap does not care which volume it was."""
-    vols = ledger.parse_backup_spend(
+    vols = b2_spend.parse_backup_spend(
         [
             (
                 1,
@@ -68,9 +74,9 @@ def test_parse_backup_spend_keeps_lines_whose_replica_prefix_was_trimmed():
 
 
 def test_format_backup_spend_totals_and_says_when_the_window_was_empty():
-    text = ledger.format_backup_spend(ledger.parse_backup_spend(SPEND_LOG), "6h")
+    text = b2_spend.format_backup_spend(b2_spend.parse_backup_spend(SPEND_LOG), "6h")
     assert "backups over 6h: 181 Class B measured" in text
-    empty = ledger.format_backup_spend({}, "6h")
+    empty = b2_spend.format_backup_spend({}, "6h")
     assert "no backups logged" in empty and "widen --since" in empty
 
 
@@ -79,14 +85,96 @@ def test_format_backup_spend_shows_maintenance_and_never_sums_the_two_windows():
 
     A combined total would match neither, so the report must keep them apart.
     """
-    text = ledger.format_backup_spend(
-        ledger.parse_backup_spend(SPEND_LOG),
+    text = b2_spend.format_backup_spend(
+        b2_spend.parse_backup_spend(SPEND_LOG),
         "6h",
         ledger={"drain": {"runs": 2, "class_a": 0, "class_b": 64, "class_c": 9}},
     )
     assert "backups over 6h: 181 Class B measured" in text
     assert "drain" in text and "64 Class B" in text
     assert "245" not in text  # 181 + 64 must not appear as a combined figure
+
+
+_B2_VOL = "pvc-1c0e18da-dd0a-4059-af81-f5f346c7eabc"
+_R2_VOL = "pvc-00d8210a-e38d-49f9-ba22-3aff333f59ab"
+# The two SPEND_LOG volumes, one per backup target, which is the whole point of the pair.
+TARGETS = {_B2_VOL: "default", _R2_VOL: "r2"}
+
+
+def test_format_backup_spend_excludes_r2_volumes_from_the_class_b_total():
+    """R2's caps are monthly and vast, so an R2 block charged to B2's daily figure is the meter
+    lying by 5.6x during the incident class it exists for (#2669)."""
+    text = b2_spend.format_backup_spend(
+        b2_spend.parse_backup_spend(SPEND_LOG), "6h", targets=TARGETS
+    )
+    assert "backups over 6h: 104 Class B measured against B2" in text
+    assert "77 Class B on the r2 target, excluded" in text
+    assert "181" not in text  # 104 + 77 must not appear as a combined B2 figure
+
+
+def test_format_backup_spend_counts_only_b2_volumes_when_both_targets_are_b2():
+    """The excluding half's partner: with nothing on R2 the figure is the full total, so a
+    filter that dropped rows for the wrong reason fails here."""
+    text = b2_spend.format_backup_spend(
+        b2_spend.parse_backup_spend(SPEND_LOG),
+        "6h",
+        targets={_B2_VOL: "default", _R2_VOL: "default"},
+    )
+    assert "backups over 6h: 181 Class B measured against B2" in text
+    assert "excluded" not in text
+
+
+def test_format_backup_spend_counts_an_unresolved_target_against_b2():
+    """An empty map is what a failed `kubectl get volumes.longhorn.io` produces. Reporting 0
+    Class B then would blind the operator during a cap incident, so unknown counts as B2."""
+    text = b2_spend.format_backup_spend(
+        b2_spend.parse_backup_spend(SPEND_LOG), "6h", targets={}
+    )
+    assert "backups over 6h: 181 Class B measured against B2" in text
+    assert "includes 181 Class B from 2 volume(s) whose target did not resolve" in text
+
+
+def test_split_spend_by_target_keys_other_stores_by_their_own_name():
+    """A third store must not land in B2's figure by default."""
+    vols = b2_spend.parse_backup_spend(SPEND_LOG)
+    b2, other, unknown = b2_spend.split_spend_by_target(
+        vols, {_B2_VOL: "default", _R2_VOL: "gcs"}
+    )
+    assert set(b2) == {_B2_VOL}
+    assert set(other) == {"gcs"} and set(other["gcs"]) == {_R2_VOL}
+    assert unknown == {}
+
+
+def test_volume_backup_targets_reads_the_spec_field_and_survives_a_failed_read():
+    doc = json.dumps(
+        {
+            "items": [
+                {
+                    "metadata": {"name": _B2_VOL},
+                    "spec": {"backupTargetName": "default"},
+                },
+                {"metadata": {"name": _R2_VOL}, "spec": {"backupTargetName": "r2"}},
+                {"metadata": {"name": "pvc-no-target"}, "spec": {}},
+            ]
+        }
+    )
+    assert longhorn_cluster.volume_backup_targets(
+        _run=lambda *a: SimpleNamespace(returncode=0, stdout=doc, stderr="")
+    ) == {_B2_VOL: "default", _R2_VOL: "r2", "pvc-no-target": ""}
+    # A failed or unparseable read is {} — every volume then reads as unknown, which
+    # format_backup_spend charges to B2 rather than silently reporting nothing.
+    assert (
+        longhorn_cluster.volume_backup_targets(
+            _run=lambda *a: SimpleNamespace(returncode=1, stdout="", stderr="boom")
+        )
+        == {}
+    )
+    assert (
+        longhorn_cluster.volume_backup_targets(
+            _run=lambda *a: SimpleNamespace(returncode=0, stdout="not json", stderr="")
+        )
+        == {}
+    )
 
 
 def test_parse_b2_ledger_totals_per_tool_and_skips_malformed_lines():

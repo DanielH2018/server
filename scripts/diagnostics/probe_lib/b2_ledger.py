@@ -12,6 +12,10 @@ bill stops being guesswork.
 Patched in tests via the module attribute (`ledger.B2_LEDGER_DIR`), so keep callers inside
 this module referring to the bare name and let the tests patch here. See core's
 docstring for why that matters.
+
+What stays here is the ledger store plus the two `run_*` entry points. The `b2-spend` report
+itself — the log parse, the per-target split and the rendering — moved to `b2_spend.py` when
+this file reached its 600-line cap.
 """
 
 import json
@@ -29,6 +33,11 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from diagnostics.probe_lib import core
 from diagnostics.probe_lib import longhorn
+from diagnostics.probe_lib.b2_spend import (
+    SPEND_LOGQL,
+    format_backup_spend,
+    parse_backup_spend,
+)
 from lib.kubectl import DEFAULT_CLUSTER
 
 from diagnostics.probe_lib.core import (
@@ -106,103 +115,7 @@ def read_b2_ledger(day=None):
         return {}
 
 
-# Longhorn logs one of these per backup, naming the delta it processed:
-#   "Created snapshot changed blocks: 46 mappings, 46 blocks and 45 new blocks"
-# `blocks` is the delta it walks, and it issues one HeadObject per block to decide whether the
-# block is already in the store — so that count IS the backup's Class B transaction cost. `new`
-# is what it then uploaded, which is Class A and unmetered. B2 publishes no usage endpoint (its
-# per-class counters are Partner-tier only), so this line is the closest thing to a meter the
-# backup plane has, and it costs nothing because the logs are already in Loki.
-BACKUP_BLOCKS_RE = re.compile(
-    r"Created snapshot changed blocks: \d+ mappings, (\d+) blocks and (\d+) new blocks"
-)
-# The replica that emitted the line, e.g. "[pvc-1c0e18da-...-r-9d333575] time=..."
-BACKUP_VOLUME_RE = re.compile(r"\[(pvc-[0-9a-f-]{36})-r-[0-9a-f]+\]")
-SPEND_LOGQL = '{namespace="longhorn-system"} |= "Created snapshot changed blocks"'
-
-
-def parse_backup_spend(rows):
-    """[(ns_timestamp, line)] -> per-volume {backups, blocks, new_blocks}.
-
-    Lines whose replica prefix was trimmed by the log pipeline still count toward the totals;
-    they are attributed to "unattributed" rather than dropped, because losing them would
-    understate spend and understating is the failure mode that matters here.
-    """
-    vols = {}
-    for _, line in rows:
-        m = BACKUP_BLOCKS_RE.search(line)
-        if not m:
-            continue
-        v = BACKUP_VOLUME_RE.search(line)
-        name = v.group(1) if v else "unattributed"
-        entry = vols.setdefault(name, {"backups": 0, "blocks": 0, "new_blocks": 0})
-        entry["backups"] += 1
-        entry["blocks"] += int(m.group(1))
-        entry["new_blocks"] += int(m.group(2))
-    return vols
-
-
-def format_backup_spend(vols, window, names=None, ledger=None):
-    """Render measured backup spend alongside recorded maintenance spend.
-
-    Never exits non-zero: this is a meter, not a gate. The two halves are printed separately and
-    deliberately NOT summed — the backup figure spans --since while the ledger covers the UTC day
-    B2's counters reset on, so a combined total would match neither window.
-    """
-    names = names or {}
-    rows = []
-    if vols:
-        rows.append("%-24s %8s %8s %10s" % ("PVC", "BACKUPS", "BLOCKS", "UPLOADED"))
-        for vol in sorted(vols, key=lambda k: -vols[k]["blocks"]):
-            v = vols[vol]
-            rows.append(
-                "%-24s %8d %8d %10d"
-                % (names.get(vol, vol)[:24], v["backups"], v["blocks"], v["new_blocks"])
-            )
-        rows.append("")
-        rows.append(
-            "backups over %s: %d Class B measured, %d blocks uploaded (Class A, unmetered)"
-            % (
-                window,
-                sum(v["blocks"] for v in vols.values()),
-                sum(v["new_blocks"] for v in vols.values()),
-            )
-        )
-    else:
-        rows.append(
-            f"no backups logged in the last {window} — widen --since, or nothing ran"
-        )
-
-    ledger = ledger or {}
-    rows.append("")
-    if ledger:
-        rows.append("maintenance recorded today (UTC), from the ledger:")
-        for tool in sorted(ledger, key=lambda k: -ledger[k]["class_c"]):
-            t = ledger[tool]
-            rows.append(
-                "  %-22s %3d run(s) %6d Class B %6d Class C"
-                % (tool[:22], t["runs"], t["class_b"], t["class_c"])
-            )
-        rows.append(
-            "  %-22s %10d Class B %6d Class C"
-            % (
-                "TOTAL",
-                sum(t["class_b"] for t in ledger.values()),
-                sum(t["class_c"] for t in ledger.values()),
-            )
-        )
-    else:
-        rows.append(
-            "no maintenance recorded today — nothing has written the ledger yet"
-        )
-
-    rows.append("")
-    rows.append(
-        "Still unrecorded: Longhorn's own metadata reads (Backup-CR pulls, target syncs) and "
-        "the monitor's B2 probes. B2 publishes no counter to reconcile against, so the console's "
-        "Caps & Alerts page remains the only ground truth."
-    )
-    return "\n".join(rows)
+# --- b2-spend: measured backup spend ----------------------------------------------------------
 
 
 def run_b2_spend(ns):
@@ -226,13 +139,15 @@ def run_b2_spend(ns):
     if ns.dry_run:
         return core.print_dry_run(url, resolve=pin)
     rows = _rows_from_loki(core.fetch_parsed(url, resolve=pin))
+    cluster = getattr(ns, "cluster", DEFAULT_CLUSTER)
     # Reads Loki, not B2 — nothing to record for this command itself.
     print(
         format_backup_spend(
             parse_backup_spend(rows),
             ns.since,
-            longhorn.pvc_names(getattr(ns, "cluster", DEFAULT_CLUSTER)),
+            longhorn.pvc_names(cluster),
             read_b2_ledger(),
+            longhorn.volume_backup_targets(cluster),
         )
     )
     return 0
