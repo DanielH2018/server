@@ -180,4 +180,4 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
   PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_replace.py`.
 - Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` (`test_autofix.py`) and
   `uv run pytest ansible/roles/setup/fake_remux/files` (the two fake-remux logic suites).
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "autofix-bridge"`
+- Deploy: `./scripts/deploy.sh --tags "autofix-bridge"`

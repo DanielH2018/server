@@ -29,4 +29,4 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 
 ## Editing
 - CouchDB cfg: `templates/config/local.ini.j2` (rendered into the k8s ConfigMap by `roles/k8s/livesync`)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "livesync"`
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "livesync"`

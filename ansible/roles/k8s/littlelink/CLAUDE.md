@@ -19,4 +19,4 @@
 
 ## Editing
 - Image bump: `defaults/main.yml` (`littlelink_k8s_image`).
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "littlelink"`.
+- Deploy: `./scripts/deploy.sh --tags "littlelink"`.

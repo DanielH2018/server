@@ -138,4 +138,4 @@ trust in Authelia (`roles/setup/k3s`), the Authelia client, and these defaults.
   `templates/oidc-secret.yaml.j2` (rendered under `no_log` through the manifests role's secret list),
   `templates/networkpolicy.yaml.j2`, `templates/netpol-probe-job.yaml.j2`,
   `templates/ingressroute.yaml.j2`, `templates/service.yaml.j2`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "headlamp"`.
+- Deploy: `./scripts/deploy.sh --tags "headlamp"`.

@@ -14,7 +14,7 @@ while reporting success.
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
 - **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n-images`, `code-server`,
-  `nut`, `homelab-mcp` — each `include_role`s this with its own `image_builder_*` vars.
+  `nut`, `homelab-mcp`, `valheim` — each `include_role`s this with its own `image_builder_*` vars.
 - **Auto-deploy: denylisted.** Renders a Job and a ConfigMap, no Deployment — nothing for
   `rollout status` to gate. Builds the images every other role above consumes, so a bad
   build here is upstream of all of them.
@@ -71,4 +71,4 @@ while reporting success.
 - Task logic: `tasks/main.yml` · Job/ConfigMap shape: `templates/build-job.yaml.j2`,
   `templates/context-configmap.yaml.j2`.
 - Not deployed standalone — deploy a caller instead, e.g.
-  `uv run ansible-playbook ansible/deploy.yml --tags "ical-proxy"`.
+  `./scripts/deploy.sh --tags "ical-proxy"`.

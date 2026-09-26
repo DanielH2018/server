@@ -42,8 +42,8 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 
 ## Notable
 - **Logs ship via the loki-homelab promtail DaemonSet** (`{container="terraria"}`,
-  `job="k8s"`) — that stream is what feeds terraria-stats (still a Docker sidecar on
-  daniel-server, reading the cluster Loki since Phase D.2).
+  `job="k8s"`). That stream feeds `k8s/terraria-stats`, which reads it from the cluster
+  Loki.
 - cloudflare-ddns publishes `terraria.<domain>` (direct/unproxied — game traffic can't
   ride Cloudflare's HTTP proxy).
 - Seeding used a sudo-staged copy — the world files **on the pre-migration Docker host**
@@ -55,4 +55,4 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "terraria" -e target=daniel-box`
+- Deploy: `./scripts/deploy.sh --tags "terraria"`

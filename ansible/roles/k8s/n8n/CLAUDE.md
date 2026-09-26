@@ -104,4 +104,4 @@ shape — see the `TWO_FACTOR_SERVICES` comment in `scripts/diagnostics/tests/te
 ## Editing
 - Images: `templates/Dockerfile*.j2` + `templates/n8n-task-runners.json.j2` (built/copied by
   the `n8n-images` k8s role)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "n8n"`
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "n8n"`

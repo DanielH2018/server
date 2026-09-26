@@ -74,8 +74,8 @@ didn't create.
   *permanently* upgrade-eligible. That's intended, not a bug: cutoff stays 400 precisely so it keeps
   searching and upgrades to a listed-group sub when one appears. Accepted trade-off (2026-07-18
   review): ongoing RSS/search churn for such an episode, plus a hard-delete on each upgrade (Sonarr's
-  recycle bin is off — no undo). No existing file re-grabs (all on-disk Anime files currently score
-  506/705, none in the 100-399 gap). Blunt total-score lever, reversible via the API; the refreshed
+  recycle bin is off — no undo). No existing file re-grabs (on 2026-07-18 every on-disk Anime file scored
+  506 or 705, none in the 100-399 gap). Blunt total-score lever, reversible via the API; the refreshed
   `files/baseline/anime-profile.json` snapshot is its only git record. A full read-only snapshot of the
   current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
   live CF definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2).
@@ -93,14 +93,6 @@ CF) in `templates/config/config.yml.j2`. To have Configarr own MORE of the Anime
 `quality_profiles` block for it — but that makes Configarr authoritative (UI edits get reverted),
 so weigh it against the bespoke scheme first.
 
-## Deploy ordering
-`/opt/configarr` (scripts) and `/var/lib/configarr` (state.json) are created `sys_user`-owned by
-this role. **Deploy `configarr` before `monitor-bridge`** on a fresh host — otherwise Docker
-auto-creates the `/var/lib/configarr:/configarr:ro` bind-mount source root-owned and the
-non-root monitor-bridge container can't read it. The state file is written on every deploy (the
-role runs the sync wrapper as a `deploy`-tagged task), which doubles as the first-deploy seed so
-the Configarr Sync monitor doesn't false-DOWN before the first daily cron tick.
-
 ## Refreshing the Anime baseline snapshot
 ```bash
 uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" --json \
@@ -114,7 +106,7 @@ uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" -
   `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
   (Its Docker-era compose wrapper `files/configarr_sync.py` was deleted 2026-08-14, with the
   host residue it wrote to — `/opt/configarr` and `/var/lib/configarr` — removed 2026-08-09.)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "configarr"` —
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "configarr"` —
   the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.
 - Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` (or the latest
   `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.

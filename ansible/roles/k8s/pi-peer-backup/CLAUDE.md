@@ -61,7 +61,7 @@ replaced the retired Kopia scope for the Pi.
 
 ## Editing
 - Script: `files/pull-pi-peers.sh` (baked into the image — redeploy rebuilds)
-- Deploy (on daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "pi-peer-backup"`
+- Deploy (on daniel-box): `./scripts/deploy.sh --tags "pi-peer-backup"`
 - Deploy-time gate: `k8s/cronjob-gate`, included after the manifests deploy task. Its default
   timeout (660s) exceeds this CronJob's `activeDeadlineSeconds` (600s); see
   `ansible/roles/k8s/cronjob-gate/CLAUDE.md` for what it proves and does not prove.

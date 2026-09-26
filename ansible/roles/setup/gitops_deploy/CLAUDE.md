@@ -117,10 +117,7 @@ Each arm below is a rule and the function that holds it. The record page has the
     An unreachable or malformed API reads as `pending`, never `pass`; `last_run` is still
     written.
   - Both outcomes leave the host on `local`, which `behind_marker` records, so a persistently
-    red master pages through the 6h behind-origin watchdog; don't add a second timer. An
-    ancestor fast-forward keeps it armed: `entrypoint()` re-resolves the real `origin/<branch>`
-    after `main()`, so `behind_since` names the tip. `Landing.tick_state` checks the PR's own
-    merge commit before it believes `behind_since` (#1786).
+    red master pages through the 6h behind-origin watchdog; don't add a second timer.
   - **This gates the DEPLOY, and it is the only gate**: there is no branch protection on
     `master`, and PR CI is scoped to changed files while master runs the full sweep.
     `cancelled`/`stale` are **no verdict, not failure**. `CI_CONTEXTS` must match `ci.yml`'s
@@ -132,14 +129,10 @@ Each arm below is a rule and the function that holds it. The record page has the
   `consult_staging` runs BEFORE the ff-merge, so a rejection holds the SHA with nothing to
   roll back; moving it after the merge silently breaks that. The escape hatch is one tick:
   `touch /var/lib/gitops-deploy/staging_gate_override`, read only where the gate would block.
-- **The staging-backfill ratchet is retired** (#2414, 2026-09-24), and the trade-off is a
-  `DECIDED:` marker above the retirement tasks in `tasks/install.yml`. The ratchet was the only
-  regular exerciser of the gate. Without it, a real gated tick reaches `consult_staging` about
-  once a month, and a gate that rots answers NO VERDICT, which does not block. The one alarm left
-  is `consult_staging`'s Discord post on every non-PASS. `install.yml` stops the ratchet's timer
-  and service on daniel-box and removes its three units and its two liveness files.
-  `teardown.yml` reaps the same units on any other host. `staging-backfill.jsonl` is kept as the
-  Part 1 evidence; nothing writes or reads it any more.
+- **The staging-backfill ratchet is retired** (#2414, 2026-09-24); the trade-off is the
+  `DECIDED:` above the retirement tasks in `tasks/install.yml`. A real gated tick now reaches
+  `consult_staging` about once a month, and its Discord post on every non-PASS is the one
+  alarm left for a gate that rots into NO VERDICT.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True) ->
   "dirty"`): `last_run` is still written, so GitOps-Alive stays green, and the page is
@@ -147,23 +140,18 @@ Each arm below is a rule and the function that holds it. The record page has the
 - **Test-suite paths are skipped before every plane** (`deploy_logic._is_test_only_path`):
   `ansible/tests/`, any role-local `tests/`, a `test_*.py`/`conftest.py` beside its module. The
   invariant — no role ships a test file — is `ansible/tests/repo/test_no_role_ships_a_test_file.py`.
-- **A new module in `files/` goes in two lists in `tasks/main.yml`** — the copy task's
-  `loop:` and `stamp_deployed_pairs`; a module missing from the copy loop passes CI and kills
-  the deployer at import. ENFORCED by `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
+- **A new module in `files/` goes in the copy `loop:` and `stamp_deployed_pairs` in
+  `tasks/main.yml`.** ENFORCED by `ansible/tests/deploy/test_gitops_deploy_ship_list.py`.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
   (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml --tags <name>`
   with the tag from `setup_tags_for`; a deploy-plane change (`ansible/templates/*`,
   `inventory/`, `common/`, `deploy.yml`) applies as `deploy.yml` narrowed by
   `deploy_narrow.plan`. **A range carrying both planes applies both, setup first**, sharing
   one `BROAD_DEPLOY_TIMEOUT_S` (1800) — it was an if/else until #2046.
-  - **The deploy plane is narrowed before it is applied**: `scripts/deploy_tools/deploy_tags.py
-    narrow <local> <origin>` as a subprocess, at the two refs the tick pinned. Tags →
-    `deploy.yml --tags`; no tags → nothing applied, `broad_applied` records
-    `narrowed-to-nothing`; any refusal → the full `deploy.yml` (the `# DECIDED:` at the
-    fallback in `deploy_narrow.py`). The narrowed list is not filtered through
-    `K8S_AUTODEPLOY_DENYLIST` (the `# DECIDED:` on `deploy_narrow.denylisted_in`). A failed
-    narrowed apply adds a `hold_plane` entry naming its tags. The caller graph is read from the
-    WORKING TREE, still on `local`, so a range adding a caller of a shared role refuses.
+  - **The deploy plane is narrowed before it is applied** (`scripts/deploy_tools/deploy_tags.py
+    narrow <local> <origin>`): tags → `deploy.yml --tags`, no tags → nothing applied, any
+    refusal → the full `deploy.yml` (the `# DECIDED:` markers in `deploy_narrow.py`). The
+    record page's *A deploy-plane change is narrowed before it is applied* has the rules.
   - **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`**: the
     playbook may not include the role (`k3s`, `common`) and the tag may not be the directory
     name (`chezmoi_setup` → `chezmoi`). `setup_role_playbook` / `setup_role_tag` own the
@@ -178,66 +166,27 @@ Each arm below is a rule and the function that holds it. The record page has the
     or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
     (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
-    - **A BUDGET deferral is also recorded in `k8s_deferred`** (#2449), one line per service
-      as `"<origin_sha> <service> <unix_ts>"`. The post names it once and the range is merged,
-      so no later tick's `local..origin` carries the bump — `Release Staleness Drift` reads
-      the unapplied pin, but that monitor is DOWN for any stale record in the fleet, so a new
-      deferral adds nothing to an already-red tile. `gitops_status` pages on the marker's own
-      age at the six hours `manual_plane` uses. **So is a bump the STAGING gate demoted**,
-      decided per class rather than per channel (#2471): a demotion has the same two properties
-      the budget case has, in that the tick chose it and nothing reports it again. A hand-edited
-      or denylisted k8s role on that channel is not recorded HERE — forty of the fifty-four k8s
-      roles are denylisted, so paging on those would hold Status red as normal operation.
-      **Those two classes go to `k8s_unapplied` instead** (#2570), the same line format in a
-      second file that `gitops_status` never opens: a durable record that does not page, read
-      by the SessionStart banner and by the journal. **A second change to a service already
-      listed there MOVES its line to the newer SHA**, keeping the first-seen stamp (#2644):
-      the line is discharged by comparing its origin to a release record, so one left at the
-      oldest origin drops as soon as any deploy descends from the FIRST change, with the
-      second still unapplied. **A TORN LINE NAMING A SERVICE IS REPAIRED IN PLACE, on both
-      markers** (#2657): the parser skips a line it cannot read, so a writer trusting only the
-      parsed entries appends a second line beside the torn one, and every clear and every
-      discharge leaves that one standing forever. The repair happens at the next record OR
-      clear NAMING THAT SERVICE, so a torn line for a service nothing touches again stands
-      until `gitops_state.py clear-k8s-unapplied <svc>`. A line naming nobody is carried
-      untouched whatever happens — nothing can say what it recorded.
-      `k8s_deferred` keeps its oldest origin, because a tick clears
-      that marker by deploying the service and `unrecord` can reset the tree under it.
-      `deploy_alerts.alert_deferred` writes it,
-      which covers every exit that leaves the range merged — the contention arm resets and
-      returns before reaching any of them, so `unrecord` owns no reverse for it. Every tick
-      DISCHARGES a line whose service has since been deployed
-      (`deploy_defer.discharge_k8s_unapplied`), from the service's release record and one
-      `git merge-base --is-ancestor`; that is what drops the line for an operator's own
-      `deploy.sh`, which this deployer cannot see, and without it the marker would hold a
-      permanent line per routine landing. A record that is absent or undatable KEEPS the line.
-      A shared role (`manifests`, `image-builder`, `game-stats-lib`) has no record of its own,
-      so its line drops when every tag that applies it and writes a record carries the change,
-      as `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
-      `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear, needed only for a change
-      that was reverted rather than applied. The demotion is recorded at the ff-merge
-      (`deploy_defer.record_demoted`), not in the `gate_broad_k8s` that decided it: the gate
-      runs before that merge, and a contention arm after it resets the tree. A contention arm
-      takes the line back with the `manual_plane` lines beside it; a failed broad apply keeps
-      it, because that arm leaves the range merged. Any tick that
-      deploys the service clears the line (`deploy_defer.clear_applied_k8s_deferred`, called from both
-      k8s deploy paths and from the plane-covered set); an operator's own `deploy.sh` is
-      invisible to the deployer, so it clears with `gitops_state.py clear-k8s-deferred <svc>`.
+    - **Two markers record a k8s change the tick merged and did not deploy**, one
+      `"<origin_sha> <service> <unix_ts>"` line per service. `k8s_deferred` holds a BUDGET
+      deferral (#2449) or a STAGING-gate demotion (#2471), and `gitops_status` pages on its age
+      at six hours. `k8s_unapplied` holds the hand-edited and denylisted classes (#2570) and
+      never pages; the SessionStart banner reads it. Every tick discharges a `k8s_unapplied`
+      line once its service's release record descends from the line's SHA
+      (`deploy_defer.discharge_k8s_unapplied`), and any tick that deploys a service clears its
+      `k8s_deferred` line. The hand clears are `gitops_state.py clear-k8s-deferred <svc>` and
+      `clear-k8s-unapplied <svc>`. Who writes each line, the move-to-newer-SHA and torn-line
+      repair rules, and the shared-role discharge are in `docs/gitops-pipeline.md`, *The
+      `k8s_deferred` and `k8s_unapplied` markers, in full*.
   - **`_BROAD_MANUAL_PREFIXES` parks with no ff-merge**: the bring-up playbooks, plus a setup-plane
     path that resolves to no role. Staying parked keeps `behind_since` set, and the journal names
     the park's reason every tick (`deploy_remediation.broad_park_reason`). **A setup ROLE whose
     tag cannot be derived fast-forwards and is recorded in `manual_plane`** instead (`k3s`,
     `common`; the `DECIDED:` in `deploy_defer.py`'s docstring) — one line per role, first-seen
     stamp kept, logged on EVERY later tick, paged once per SHA, cleared by the tick applying the
-    role's real playbook or by `gitops_state.py clear-manual-plane <role>` — with `--applied
-    <tags>` after a NARROWED apply, which drops only those tags and leaves the line standing
-    for anything a later range added to the row (#2349). `--applied` against an empty or
-    missing row keeps the line, since that row means the whole role. **Its remediation
-    names the NARROWEST tag the change needs** (#2307), derived by `deploy_defer.record` into the
-    `manual_plane_tags` sidecar every surface READS; on doubt, the role tag plus
-    `deploy_remediation.maximal_tag_warning`. A line pending with no row stays at the role
-    tag, and `land.sh` quotes a row only after its awaited tick and only where the row
-    contains its own PR's tags (`docs/gitops-pipeline.md` has the rules).
+    role's real playbook or by `gitops_state.py clear-manual-plane <role>`, with `--applied
+    <tags>` after a NARROWED apply (#2349). **Its remediation names the NARROWEST tag the change
+    needs** (#2307), from the `manual_plane_tags` sidecar `deploy_defer.record` writes. The
+    `--applied` edge cases and how `land.sh` quotes a row are in `docs/gitops-pipeline.md`.
   - **This role applies itself.** The `Run gitops-deploy once` handler is `state: started`,
     which Ansible skips for an `activating` unit. The `DECIDED:` above
     `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py`.
@@ -250,12 +199,8 @@ Each arm below is a rule and the function that holds it. The record page has the
   once the oldest pending line is older than the same 6 h, last of its four arms.
 - **Secrets-only pushes** (`secrets.yml` with no template) fast-forward but do not redeploy;
   the deployer alerts once per SHA (`secrets_alerted_sha`) to redeploy the consumers. On a
-  broad tick the page fires from EVERY exit that leaves the range merged — the failure arm in
-  `deploy_handlers.handle_broad`, and the failure arm and tail of
-  `deploy_broad_k8s.apply_broad_k8s`. Each of those returns with the range fast-forwarded, so
-  a page skipped there is never sent by any later tick (#2383). The contention arm sends
-  nothing: it resets the tree, so the post's "fast-forwarded, redeploy the consumers" would
-  send the operator holding the lock at a tree back on `local` (#2459).
+  broad tick the page fires from every exit that leaves the range merged (#2383), and never
+  from the contention arm, which resets the tree (#2459).
 - **k8s roles auto-deploy ONLY for an image-pin bump to a non-denylisted service; every
   other k8s change defers-and-alerts.** `deploy_logic.split_k8s_auto_deploy` is diff-shape
   first, identity second: the only path touched under the role is `defaults/main.yml`, every
@@ -267,15 +212,10 @@ Each arm below is a rule and the function that holds it. The record page has the
     `k8s_autodeploy: false` in its defaults.
   - **That edit lands under `roles/k8s/`, so nothing re-renders `config.env` from the changed
     path.** `deploy_phases.reconcile_denylist` closes the gap (#1294): each tick compares
-    config.env with the declarations at HEAD and re-renders by running `initial_setup.yml
-    --tags gitops_deploy` itself, gating on the FILE-level enable flag (#1317), passing
-    `gitops_deploy_kick_after_change=false` (ENFORCED by
-    `ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py`), once per checkout SHA
-    (`denylist_rendered_sha`), ENDING the tick, never from a dirty tree, and writing no
-    `hold_sha` on failure — the `DECIDED:` markers in `deploy_phases.py`. The origin-side
-    comparison (`k8s_declarations_at(origin)`, a regex biased toward denied,
-    `test_denylist_parsers_agree.py`) stays the fail-safe: any mismatch disarms auto-deploy for
-    that tick and pages once (`stale_denylist_alerted`), leading with the re-render.
+    config.env with the declarations at HEAD and re-renders it with `initial_setup.yml --tags
+    gitops_deploy`, once per checkout SHA, ending the tick — the `DECIDED:` markers in
+    `deploy_phases.py`. Any origin-side mismatch disarms auto-deploy for that tick and pages
+    once (`stale_denylist_alerted`). The record page has the guards on the re-render.
   - **The gate is in the play, not here**: `roles/k8s/manifests` applies, `rollout-drain`
     waits, `post_tasks/k8s_stabilise_gate.yml` soaks. `containers_for()` returns `[]` for k8s.
   - **A k8s rollback is local-only, and not sufficient on its own**: `skip_hold` matches only
@@ -286,13 +226,9 @@ Each arm below is a rule and the function that holds it. The record page has the
     ones — the `DECIDED:` in `deploy_k8s.py` beside that cap. The surplus defer-and-alerts and
     is NOT retried: the ff-merge runs first, so `local == origin` afterwards.
   - **The deferral page is a one-shot, not a durable signal** (#947; the `# DECIDED:` at the
-    `cs.k8s` branch of `deploy_alerts.alert_deferred`). Two durable signals carry it. The
-    `k8s_unapplied` marker records the hand-edited and denylisted classes, written by
-    `deploy_defer.alert_and_record_deferred` and read by the SessionStart banner (#2570). The
-    `release-staleness` cron in `roles/setup/k3s/` runs `probe.py releases --stale-only` as
-    `sys_user` against each service's release record (`releases.py`'s
-    `manifest_affecting_shared_roles()` names the shared roles it charges; the deploy plane is
-    charged through `narrow_broad.broad_path_tags`).
+    `cs.k8s` branch of `deploy_alerts.alert_deferred`). The durable signals are the
+    `k8s_unapplied` marker above and the `release-staleness` cron in `roles/setup/k3s/`, which
+    runs `probe.py releases --stale-only` against each service's release record.
   - **Accepted trade-offs, each marked `# DECIDED:` at the line that makes it:** the
     batch-abort blast radius (`deploy_k8s.py`, at the claim cap), the silently skipped snapshot
     (`k8s/volume-snapshot/tasks/claim.yml`, the warn-and-skip task) and the volume left in
@@ -419,18 +355,11 @@ so an unbounded error evicts the remediation prose after it
 ## Traps
 
 - **Do not wrap `initial_setup.yml --tags gitops_deploy` in `flock
-  /var/lock/server-git-tree.lock`.** The `Run gitops-deploy once` handler invokes the
-  deployer, whose ExecStart is `flock -w 180 -E 75` on the same lock; held from outside, the
-  smoke run waits 180 s and deploys nothing, and `SuccessExitStatus=75` makes systemd and the
-  play both report success. The one immediate signal is the unit's `tick skipped (lock
-  contention)` journal marker, which `gitops_tick.sh` reads to exit 3.
-- **Moving a config source changes which remediation the alert prescribes.** `config.env` is
-  rendered only by `initial_setup.yml --tags gitops_deploy`, so a value that moves from this
-  role's defaults to `roles/k8s/<role>/defaults/main.yml` routes to `ChangeSet.k8s` and the
-  alert names `deploy.yml`, which cannot re-render it. Before moving any value that lands in a
-  host config file, check which `_ACTIVE_*` regex its new path matches and what
-  `broad_remediation()` says for that plane. A set difference says what diverged, never why —
-  the re-render leads in both directions (`deploy_phases._promote_k8s_auto_deploys`).
+  /var/lock/server-git-tree.lock`.** The handler's own run waits 180 s on that lock, deploys
+  nothing, and reports success (`SuccessExitStatus=75`). The record page has the trap in full.
+- **Moving a config source changes which remediation the alert prescribes.** `config.env`
+  renders only from `initial_setup.yml --tags gitops_deploy`, so check which `_ACTIVE_*` regex
+  a moved value's new path matches before moving it. The record page has the trap in full.
 - **`restore_sha=origin[:8]` is a fixed slice; `git rev-parse --short=8` is a minimum
   width.** They diverge only when 8 hex chars are ambiguous in this repo's history, and then
   `k8s/volume-revert`'s no-snapshot assert fires before the scale-down — the safe failure.
@@ -442,10 +371,8 @@ so an unbounded error evicts the remediation prose after it
 The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
 (`k8s/volume-revert`), so it gets its own timeout, sized for the worst SINGLE promoted,
 claim-declaring service. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
-`tests/test_gitops_deploy_timeout_budgets.py` computes the ceiling from role sources, so a
-rollout bump or a new promoted claim-declaring role fails it rather than under-sizing the
-budget; the arithmetic and the re-sizing that produced today's figure are in
-`docs/gitops-pipeline.md`.
+`tests/test_gitops_deploy_timeout_budgets.py` computes it from role sources and fails when it is
+under-sized. `docs/gitops-pipeline.md` has the arithmetic.
 
 - Two claim-declaring services in one batch stack additively;
   `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` bounds that (the `DECIDED:` in
@@ -457,15 +384,10 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
   and the template's own comment carries the arithmetic. Under-sizing the staging pair does
   not fail safe: a timed-out consultation is NO VERDICT.
 - **The FORWARD cap is derived from the worst promoted role** (#2397).
-  `gitops_deploy_k8s_timeout_s` is 1440 s. prowlarr needs 1260 s of it: one claim's snapshot,
-  300 s of in-role waiting, a 780 s rollout and the 60 s soak. The tick adds a 90 s service-lock
-  allowance and 60 s of playbook overhead on top. Under that sum a cap kill lands as a killpg
-  MID-DRAIN routed to `_rollback_k8s`.
   `test_the_forward_cap_covers_the_worst_promoted_role` derives the sum from role sources and
-  fails when it outgrows the cap. The rollout term counts only for a role that queues one:
-  netpol-baseline waits the longest of any role in its own `tasks/` and passes
-  `manifests_rollout: ""`, so it pays 710 s, not 1310 s. The cap cannot be raised alone. It
-  moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+  fails when it outgrows `gitops_deploy_k8s_timeout_s`; under-sized, a cap kill lands MID-DRAIN
+  and routes to `_rollback_k8s`. The cap cannot be raised alone: it moves the four waiters below
+  and `TimeoutStartSec` with it, in the same change. The record page has the arithmetic.
 - **All four tree-lock waiters are pinned as a census** (`_LOCK_WAITERS`,
   `_worst_lock_hold()` in the same test file): `deploy.sh`, secret-rotate, docs-refresh and
   eval-run each wait 3840 s, derived from the four timeouts.
@@ -473,16 +395,10 @@ budget; the arithmetic and the re-sizing that produced today's figure are in
   of each handler's failure arm; `deploy_defer.for_contention` resets to `local`, returns 0,
   writes no hold). The streak IS recorded in `contention_since` (#1847): monitor-bridge pages
   past `GITOPS_CONTENTION_MAX_MIN` (30) and `gitops_state.py clear-contention` drops it. **The
-  reset takes back every marker the tick wrote about the merge**, through
-  `deploy_defer.unrecord`: the `manual_plane` line and row (#2320), and the `broad_applied` an
-  earlier plan in the same loop wrote, which would otherwise name a SHA the tree no longer
-  carries (#2382). The bump's Grafana annotation is not emitted on this path either, because
-  the next tick re-applies the same plane and would annotate it twice (#2453). A
+  reset takes back every marker the tick wrote about the merge** (`deploy_defer.unrecord`). A
   broad apply takes `all` EXCLUSIVELY. **Waiting for a service lock spends the phase's own
-  budget** (`deploy_locks.locked_budget`), so a queued phase can be SIGTERMed early and read
-  as a failed deploy. The lock order is `all` first, then each service sorted — the
-  `# DECIDED:` in `files/deploy_locks.py`; `deploy.sh` takes the order `deploy_locks.plan`
-  returns and refuses (exit 79) without it.
+  budget** (`deploy_locks.locked_budget`). The lock order is the `# DECIDED:` in
+  `files/deploy_locks.py`. The record page has what `unrecord` takes back and why.
 - An overrun never produces a second concurrent run — the timer coalesces the new start into
   the activation in flight — and it does not alert: `-E 75` plus `SuccessExitStatus=75` is
   `Result=success`.

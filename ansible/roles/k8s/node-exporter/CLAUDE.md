@@ -35,4 +35,4 @@ Prometheus `node_exporter` as a DaemonSet, added at the Phase F drain so daniel-
 
 ## Editing
 `templates/daemonset.yaml.j2` (all the tuning history lives in its comments). Deploy:
-`uv run ansible-playbook ansible/deploy.yml --tags "node-exporter"`.
+`./scripts/deploy.sh --tags "node-exporter"`.

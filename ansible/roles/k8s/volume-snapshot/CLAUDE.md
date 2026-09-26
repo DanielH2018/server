@@ -30,8 +30,8 @@ k8s_autodeploy_snapshot_pvcs:
   - widget-config   # PVC name(s) in k8s_namespace
 ```
 
-A role that never declares `k8s_autodeploy_snapshot_pvcs` — everything except the thirteen roles
-task 3 opted in — gets `| default([]) | length == 0`, and the include in `roles/k8s/manifests`
+A role that never declares `k8s_autodeploy_snapshot_pvcs` — everything except the fourteen opted-in
+roles (thirteen from task 3, plus karakeep in `c49d5c4a4`) — gets `| default([]) | length == 0`, and the include in `roles/k8s/manifests`
 never runs: no extra kubectl call, no extra fact, nothing.
 
 `roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`
@@ -77,12 +77,10 @@ failed downgrade, at which point there is nothing to go back to.
 `k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
 criteria, not from a data-migration survey. The other 18 (authelia, claude-otel, crowdsec,
 healthchecks, karakeep, loki-homelab, mosquitto, n8n, pihole, registry, scrutiny, terraria,
-terraria-stats, traefik, uptime-kuma, valheim, valheim-stats, wg-easy) carry the same
-manual-deploy migration risk today, unprotected by this role, exactly as they were before this
-branch. Widening to all 31 was considered and deferred: the create path
-here is entirely unexercised live (no Snapshot CR has been applied by this code), and widening an
-unexercised new failure mode from 13 deploy paths to 31 before the first real deploy proves it
-out was judged the worse risk. Follow-up, not done here.
+terraria-stats, traefik, uptime-kuma, valheim, valheim-stats, wg-easy) carried the same
+manual-deploy migration risk; karakeep opted in later (`c49d5c4a4`), so 17 remain. Widening
+was deferred on 2026-08-21 because the create path had not yet run live. It has since; see
+"What is unverified" below.
 
 ## The snapshot name is deterministic, and 7b depends on that
 
@@ -214,7 +212,7 @@ it), which means it depends on the deploying user owning the checkout — the **
 since the task is delegated to localhost. `gitops-deploy.service` runs `User=ubuntu` with
 `WorkingDirectory=/home/ubuntu/server`, so the refusal is not reachable there — but a hand-run
 deploy as a different user, or from a checkout owned by someone else, would fail every one of
-these 13 roles at this task before it fails anywhere more specific.
+these 14 roles at this task before it fails anywhere more specific.
 
 The last table row is a deliberate choice rather than an oversight. A prune failure is not itself
 dangerous, but swallowing it means unbounded snapshot growth, and a retained snapshot pins every
@@ -228,7 +226,7 @@ actually changed, so this cost is rare in the automated pipeline. A manual deplo
 story: each run gets its own token (see "The snapshot name is deterministic" above), so a no-op
 manual deploy of an already-up-to-date service still creates a real Snapshot CR and runs a real
 prune against it, not a skipped no-op. Running a full manual deploy twice in one day churns the
-snapshot chain of all 13 protected volumes. Not worth gating on.
+snapshot chain of every protected volume. Not worth gating on.
 
 ## A detached volume gets a maintenance-mode attach before it gets skipped
 
@@ -245,8 +243,8 @@ drill got a `500` reverting a plainly detached volume for the same reason.
 **Ruling from slice 7a task 2: a detached claim does not fail the deploy.** Two realistic ways a
 `Recreate` + RWO volume is detached at snapshot time, and failing the deploy would block a
 legitimate action in both: an operator deliberately scaled the service to zero, or this is the
-service's first-ever deploy (all 13 roles run `k8s/volume-claim` first, which deletes its seed pod
-with `--wait=false`, and no Deployment has ever attached the volume yet — so a brand-new empty
+service's first-ever deploy (`k8s/volume-claim` creates the claim, and no Deployment has ever
+attached the volume yet — so a brand-new empty
 volume is legitimately detached).
 
 **Slice 7b closes the gap 7a left open.** After the first wait times out, `claim.yml` reads the
@@ -291,16 +289,13 @@ the point of the slice.
 ## The maintenance-mode attach is not reachable through a deploy
 
 Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1Gi,
-`longhorn-nobackup`, Longhorn v1.12.1). Two independent reasons, either of which alone is
-enough:
+`longhorn-nobackup`, Longhorn v1.12.1). The drill found two reasons. Only the second still
+holds.
 
-**1. `k8s/volume-claim` attaches the volume first.** All 13 roles that declare
-`k8s_autodeploy_snapshot_pvcs` also include `k8s/volume-claim`, which runs before `k8s/manifests`
-and therefore before this role. It starts a seed pod that MOUNTS the claim, and mounting attaches
-the Longhorn volume. The drill scaled `speedtest` to zero, confirmed the volume reached
-`detached`, then ran a real deploy — and this role still took the ordinary attached path,
-because the seed pod had attached the volume 11s earlier. So on the deploy path this role
-actually runs on, the volume is never detached when it looks.
+**1. (History, void since 2026-09-01.) `k8s/volume-claim` attached the volume first.** Its seed
+pod mounted the claim before this role ran, so in the drill a volume scaled to zero was attached
+again 11s before this role looked. volume-claim stopped seeding on 2026-09-01, so on a deploy
+today a scaled-to-zero service's volume IS detached when this role reads it.
 
 **2. Longhorn snapshotted the detached volume anyway.** Invoked directly against a genuinely
 detached volume — the same include `k8s/manifests` makes, only without volume-claim ahead of it —
@@ -312,8 +307,10 @@ chain.
 
 So the premise this section's code rests on — "a Longhorn snapshot needs a running engine, and a
 workload scaled to zero has none" — does not hold for a volume that is detached but still has
-healthy replicas. It may well hold for a volume that has NEVER been attached, which is a
-genuinely different state and one the drill did not test.
+healthy replicas, and reason 2 alone keeps the maintenance-mode attach unreached for such a
+volume. It may well hold for a volume that has NEVER been attached — a service's first deploy —
+which is a genuinely different state, the drill did not test it, and with seeding gone it is
+the one deploy path that can reach the block below. Tracked in #2681.
 
 ### The premise was never true on this Longhorn version
 
@@ -432,14 +429,14 @@ one, never by assuming the match is unique.
 
 ## What is unverified
 
-`kubectl` in this repo authenticates as a read-only ServiceAccount and Ansible is the only write
-path to the cluster, so the create path here has **not** been exercised end to end. What was
-checked live on 2026-08-21 is the shape it depends on: `longhorn.io/v1beta2` `Snapshot` is a
-served resource; live CRs carry `spec.volume`, `spec.createSnapshot`, `status.readyToUse`,
-`status.markRemoved` and a `longhorn.io` finalizer; and Longhorn's own snapshots use custom names
-(`daily-ba-<uuid>`) rather than requiring a generated one. Whether a hand-applied Snapshot CR with
-`createSnapshot: true` produces a snapshot was not observed here — the drill recorded in this
-CLAUDE.md's revert sequence is the nearest evidence, and the first real deploy through this role
-is what confirms it. The prune's live behaviour (`--wait=false` + `--ignore-not-found` against a
-real finalizer) is likewise unexercised, and `readyToUse` timing against the 120s ceiling is
-unmeasured.
+The create path and the prune have both run on real deploys. On 2026-09-26 the cluster held 61
+`autodeploy-*` Snapshot CRs across 14 services, created from 2026-08-22 onward, 48 of them
+`readyToUse`, and most claims sat at exactly `volume_snapshot_retain` (3). Still unverified:
+
+- **13 CRs from 2026-08-22 are not ready and were never pruned.** They belong to code-server,
+  home-assistant and qbittorrent, and each carries `status.error` "lost track of the
+  corresponding snapshot info inside volume engine". They sit beside each service's three
+  ready snapshots rather than counting toward them.
+- **A never-attached volume** (a service's first deploy) may still need the maintenance-mode
+  attach; see "The maintenance-mode attach is not reachable through a deploy" above.
+- **`readyToUse` timing** against the 120s ceiling has not been measured.

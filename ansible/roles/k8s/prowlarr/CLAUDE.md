@@ -41,4 +41,4 @@ rendering attacker-supplied pages in a headless browser.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`, `templates/deployment-flaresolverr.yaml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "prowlarr"`
+- Deploy: `./scripts/deploy.sh --tags "prowlarr"`

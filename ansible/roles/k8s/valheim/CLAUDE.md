@@ -1,9 +1,8 @@
 # valheim (k8s) — Valheim dedicated server
 
 Archived on Docker 2026-01-07 (`6f942bd2`), reactivated 2026-08-13 **straight onto k3s**.
-It did not go back to Docker: the Docker edge retired at E7 and Phase F is draining
-daniel-server, so both the archived compose role and the archive's four-step reactivation
-recipe (both deleted in #2385; `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/CLAUDE.md`) describe a topology
+It did not go back to Docker, which was uninstalled from daniel-server on 2026-08-14. The
+archived compose role and the archive's four-step reactivation recipe (both deleted in #2385; `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/CLAUDE.md`) describe a topology
 that no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
@@ -78,15 +77,15 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   the timeout says (#2409). Later boots are a delta check plus world load and clear in under a
   minute.
 - **`/opt/valheim` is a PVC, not an emptyDir**, purely so that download happens once.
-- **No `DAC_OVERRIDE`**, unlike terraria: `PUID`/`PGID` default to 0, the seed pod restores
+- **No `DAC_OVERRIDE`**: `PUID`/`PGID` default to 0, the one-off seed at reactivation restored
   uid 0 with `tar -p --numeric-owner`, and root writing root-owned files needs no override.
   Add it only if a world save ever fails on the backup step. `SYS_NICE` is kept — Steam's
   threading layer raises its own thread priority and warns on every boot without it.
 - **9001 (supervisord) is deliberately unpublished.** The archived compose exposed it; it is
   unauthenticated remote process control inside the container. `SUPERVISOR_HTTP` is off.
 - **2458 is unpublished too** — crossplay backend, only bound with `CROSSPLAY=true`. The
-  image's README warns that mods using RPC want gameport+2 open; none of the seven installed
-  here has needed it. If a mod's sync misbehaves, that port plus a router forward is the first
+  image's README warns that mods using RPC want gameport+2 open; no plugin run here
+  has needed it. If a mod's sync misbehaves, that port plus a router forward is the first
   thing to try.
 - The image's hourly world zips go to `/opt/valheim/backups` on the nobackup claim
   (`BACKUPS_DIRECTORY`), pruned at `BACKUPS_MAX_AGE=3` days. At the default `/config/backups`
@@ -95,7 +94,7 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   7.6 G B2 bucket by 2026-09-02, which tripped the storage-cap alert. The 385 M of 2025 zips
   that came over in the seed aged out under the same rule; the originals stay on daniel-server.
 - cloudflare-ddns publishes `valheim.<domain>` direct/unproxied (game traffic cannot ride
-  Cloudflare's HTTP proxy) — in **both** the k8s role and the Docker rollback role.
+  Cloudflare's HTTP proxy).
 
 ## Modding
 Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
@@ -191,4 +190,4 @@ per-player deaths and playtime across worlds by design.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "valheim" -e target=daniel-box`
+- Deploy: `./scripts/deploy.sh --tags "valheim"`

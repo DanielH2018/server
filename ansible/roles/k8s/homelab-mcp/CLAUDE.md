@@ -45,4 +45,4 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 ## Editing
 - App: `files/app.py`, `files/safe_reads.py` (tests in `tests/`) · Image:
   `templates/Dockerfile.j2` · RBAC: `templates/rbac.yaml.j2`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "homelab-mcp"`.
+- Deploy: `./scripts/deploy.sh --tags "homelab-mcp"`.

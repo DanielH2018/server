@@ -1109,9 +1109,68 @@ stay).
     success while the Pi never actually redeploys ("cross-host phantom-success," review CI-L2). This
     is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see
     [[daniel-pi-zero2w-memory-constrained]]), and a Renovate image bump to a Pi service is rare. Push
-    deploys to the Pi by hand: `uv run ansible-playbook ansible/deploy.yml --tags <svc> -e target=daniel-pi`.
+    deploys to the Pi by hand: `./scripts/deploy.sh --tags <svc> -e target=daniel-pi`.
     Revisit (a Pi-side deployer / a CI cross-host gate) only if Pi-service churn ever makes the manual
     step a real miss.
+
+### The `k8s_deferred` and `k8s_unapplied` markers, in full
+
+Moved from the role file's *Safety* section on 2026-09-26 (#2679). Both markers hold one line
+per service, `"<origin_sha> <service> <unix_ts>"`, for a k8s change a broad tick merged and
+did not deploy.
+
+**`k8s_deferred` records what the tick chose to defer and does not report again.** A BUDGET
+deferral goes here (#2449). The deferral post names it once and the range is merged, so no
+later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
+pin, but that monitor is DOWN for any stale record in the fleet, so a new deferral adds
+nothing to an already-red tile. `gitops_status` therefore pages on the marker's own age, at
+the six hours `manual_plane` uses. A bump the STAGING gate demoted goes here too, decided per
+class rather than per channel (#2471): a demotion has the same two properties the budget case
+has, in that the tick chose it and nothing reports it again.
+
+**`k8s_unapplied` records the hand-edited and denylisted classes** (#2570). Forty of the
+fifty-four k8s roles are denylisted, so paging on those would hold Status red as normal
+operation. `gitops_status` never opens this file; the SessionStart banner and the journal
+read it, so it is a durable record that does not page.
+
+**A second change to a service already in `k8s_unapplied` moves its line to the newer SHA**,
+keeping the first-seen stamp (#2644). The line is discharged by comparing its origin to a
+release record, so a line left at the oldest origin would drop as soon as any deploy descended
+from the FIRST change, with the second still unapplied. `k8s_deferred` keeps its oldest origin
+instead, because a tick clears that marker by deploying the service, and `unrecord` can reset
+the tree under it.
+
+**A torn line naming a service is repaired in place, on both markers** (#2657). The parser
+skips a line it cannot read, so a writer trusting only the parsed entries would append a
+second line beside the torn one, and every clear and every discharge would leave that one
+standing forever. The repair happens at the next record or clear naming that service, so a
+torn line for a service nothing touches again stands until `gitops_state.py
+clear-k8s-unapplied <svc>`. A line naming no service is carried untouched: nothing can say
+what it recorded.
+
+**Who writes, who discharges, who clears.**
+
+- `deploy_alerts.alert_deferred` writes the lines. It covers every exit that leaves the range
+  merged; the contention arm resets and returns before reaching any of them, so `unrecord`
+  owns no reverse for it.
+- The demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
+  `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm after
+  it resets the tree. A contention arm takes the line back with the `manual_plane` lines beside
+  it. A failed broad apply keeps it, because that arm leaves the range merged.
+- Every tick DISCHARGES a `k8s_unapplied` line whose service has since been deployed
+  (`deploy_defer.discharge_k8s_unapplied`), from the service's release record and one `git
+  merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
+  which the deployer cannot see; without it the marker would hold a permanent line per routine
+  landing. A record that is absent or carries no date KEEPS the line. A shared role (`manifests`,
+  `image-builder`, `game-stats-lib`) has no record of its own, so its line drops when every
+  tag that applies it and writes a record carries the change, as
+  `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
+- Any tick that deploys the service clears its `k8s_deferred` line
+  (`deploy_defer.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
+  plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears
+  with `gitops_state.py clear-k8s-deferred <svc>`.
+- `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
+  only for a change that was reverted rather than applied.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history

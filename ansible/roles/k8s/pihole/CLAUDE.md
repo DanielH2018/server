@@ -48,4 +48,4 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
 
 ## Editing
 Adlists/regex: `defaults/main.yml`. Deploy:
-`uv run ansible-playbook ansible/deploy.yml --tags "pihole"`.
+`./scripts/deploy.sh --tags "pihole"`.

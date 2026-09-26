@@ -31,10 +31,15 @@ census must contain, so a renamed `tasks/` layout fails loudly rather than check
    loaded whole on every touch of the role. A doc over `MAX_LINES` (`wc -l` lines, the issue's
    verify-by) fails unless `OVER_CEILING` names the role with the reason, and an entry there for
    a doc that has since shrunk fails too. Same shape as the k8s test's ceiling.
+
+   Each reason opens with the line count it was written against, and a doc that grows past that
+   count fails (#2679). Before that check, `gitops_deploy`'s entry said "404 lines" while the doc
+   grew to 488, because a listed role passed at any length.
 """
 
 from pathlib import Path
 
+from _doc_size import recorded_count_problems
 from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 
 CONTRACT_HEADING = "## Autonomous-role contract"
@@ -46,10 +51,11 @@ MAX_LINES = 400
 # docs/ page, or split the file instead.
 OVER_CEILING: dict[str, str] = {
     "gitops_deploy": (
-        "404 lines on 2026-09-24. It sat at exactly 400 and #2348 added a fourth broad-plane "
-        "rule — that a broad range deploys the promoted image bumps riding on it — which is "
-        "an operating rule, not history: its record is already in docs/gitops-pipeline.md. "
-        "Trim two lines of an existing rule before adding to it."
+        "404 lines on 2026-09-26, trimmed back from 488 by moving the k8s marker mechanics to "
+        "docs/gitops-pipeline.md (#2679). It sat at exactly 400 and #2348 added a fourth "
+        "broad-plane rule — that a broad range deploys the promoted image bumps riding on it — "
+        "which is an operating rule, not history. Trim a line of an existing rule before "
+        "adding one."
     ),
     "hypervisor": (
         "411 lines on 2026-09-21, predating the ceiling; the staging-guest lifecycle it "
@@ -133,6 +139,10 @@ def _doc_problems(
             f"ceiling — move history and measurements to a docs/ page, or add the role to "
             f"OVER_CEILING with the reason (issue #2126)"
         ]
+    if role_dir.name in over_ceiling:
+        return recorded_count_problems(
+            role_dir.name, lines, over_ceiling[role_dir.name]
+        )
     return []
 
 
@@ -286,7 +296,26 @@ def test_fixture_role_at_the_ceiling_passes(tmp_path):
 
 def test_fixture_role_over_the_ceiling_passes_when_justified(tmp_path):
     role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
-    assert _doc_problems(role, over_ceiling={"widget": "a reason"}) == []
+    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    assert _doc_problems(role, over_ceiling={"widget": reason}) == []
+
+
+def test_fixture_role_grown_past_its_recorded_count_is_flagged(tmp_path):
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 2))
+    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    problems = _doc_problems(role, over_ceiling={"widget": reason})
+    assert (
+        len(problems) == 1
+        and "past the 401 its OVER_CEILING reason records" in problems[0]
+    )
+
+
+def test_fixture_reason_without_a_recorded_count_is_flagged(tmp_path):
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
+    problems = _doc_problems(role, over_ceiling={"widget": "a reason"})
+    assert problems == [
+        "widget: OVER_CEILING reason must open with '<N> lines on <date>'"
+    ]
 
 
 def test_over_ceiling_entries_are_still_over_the_ceiling():

@@ -43,5 +43,5 @@ directory, so the library mount is an `emptyDir`.
 ## Bringing it back
 Set `navidrome_k8s_replicas: 1`, point `navidrome_k8s_music_dir` at a real library on the
 media volume, flip `k8s_autodeploy: true`, and add a Kuma monitor (one added while parked
-would be permanently red). The route comes back with the replica count — no separate step. Deploy with `uv run ansible-playbook ansible/deploy.yml --tags
+would be permanently red). The route comes back with the replica count — no separate step. Deploy with `./scripts/deploy.sh --tags
 "navidrome"`.

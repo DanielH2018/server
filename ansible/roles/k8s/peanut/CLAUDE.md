@@ -32,4 +32,4 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2` · Secret: `templates/secret.yaml.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "peanut"`
+- Deploy: `./scripts/deploy.sh --tags "peanut"`

@@ -27,4 +27,4 @@ FreshRSS with a small nginx feed-cache sidecar. See repo-root `CLAUDE.md`.
 
 ## Editing
 - Extensions/cache: `files/` (the nginx conf is embedded into this role's ConfigMap)
-- Deploy (from daniel-box): `uv run ansible-playbook ansible/deploy.yml --tags "freshrss"`
+- Deploy (from daniel-box): `./scripts/deploy.sh --tags "freshrss"`

@@ -1,8 +1,7 @@
 # n8n-images — builds n8n's two container images in-cluster
 
-n8n has not migrated to its own k8s role. This role is the half that had to come first:
-it builds the `n8n` and `n8n-runners` images into the cluster registry so a future `k8s/n8n`
-role has something to run. It renders no manifest of its own.
+This role builds the `n8n` and `n8n-runners` images into the cluster registry for
+`k8s/n8n`, the live workflow service, to run. It renders no manifest of its own.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -55,4 +54,4 @@ so a withdrawn release has to be followable; what the guard forbids is a silent 
 
 ## Editing
 - Dockerfiles: `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2`
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "n8n-images,n8n"`
+- Deploy: `./scripts/deploy.sh --tags "n8n-images,n8n"`

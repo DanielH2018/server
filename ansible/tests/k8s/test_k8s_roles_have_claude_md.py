@@ -32,7 +32,7 @@ only over the ceiling.
 import warnings
 from pathlib import Path
 
-from _doc_size import RoleDocNearCeiling
+from _doc_size import RoleDocNearCeiling, recorded_count_problems
 from _helpers import REPO
 
 K8S_ROLES_DIR = REPO / "ansible" / "roles" / "k8s"
@@ -125,6 +125,10 @@ def _check_role_doc(
             f"{role_dir.name}: CLAUDE.md is {lines} lines (wc -l), over the {MAX_LINES}-line "
             f"ceiling — move history and measurements to a docs/ page, or add the role to "
             f"OVER_CEILING with the reason (issue #2126)"
+        )
+    if role_dir.name in over_ceiling:
+        problems.extend(
+            recorded_count_problems(role_dir.name, lines, over_ceiling[role_dir.name])
         )
     if not _mentions_deploy_tag(role_dir.name, text):
         problems.append(
@@ -240,7 +244,20 @@ def test_fixture_role_over_the_ceiling_passes_when_justified(tmp_path):
     role = tmp_path / "widget"
     role.mkdir()
     (role / "CLAUDE.md").write_text(_sized_doc(MAX_LINES + 1))
-    assert _check_role_doc(role, over_ceiling={"widget": "a reason"}) == []
+    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    assert _check_role_doc(role, over_ceiling={"widget": reason}) == []
+
+
+def test_fixture_role_grown_past_its_recorded_count_is_flagged(tmp_path):
+    role = tmp_path / "widget"
+    role.mkdir()
+    (role / "CLAUDE.md").write_text(_sized_doc(MAX_LINES + 2))
+    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    problems = _check_role_doc(role, over_ceiling={"widget": reason})
+    assert (
+        len(problems) == 1
+        and "past the 401 its OVER_CEILING reason records" in problems[0]
+    )
 
 
 def test_over_ceiling_entries_are_still_over_the_ceiling():

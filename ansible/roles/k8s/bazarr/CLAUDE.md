@@ -73,4 +73,4 @@ library.
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
   `templates/networkpolicy-bazarr.yaml.j2`, `templates/service.yaml.j2`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "bazarr"`.
+- Deploy: `./scripts/deploy.sh --tags "bazarr"`.

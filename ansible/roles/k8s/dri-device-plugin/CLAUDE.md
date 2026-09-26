@@ -32,4 +32,4 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 
 ## Editing
 - Manifest: `templates/daemonset.yaml.j2`.
-- Deploy: `uv run ansible-playbook ansible/deploy.yml --tags "dri-device-plugin"`.
+- Deploy: `./scripts/deploy.sh --tags "dri-device-plugin"`.
