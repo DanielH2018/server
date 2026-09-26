@@ -454,6 +454,22 @@ def check_restore_drill_oversize(
     )
 
 
+def check_restore_drill_nopvc(excluded: list[str]) -> tuple[int, str] | None:
+    """Names each backed-up volume the drill skips because no PVC is bound to it.
+
+    The drill restores into a PVC in the source namespace, so a volume with an empty
+    `kubernetesStatus.pvcName` is never a candidate and would leave check 8 unreported (#2706).
+    `excluded` is the drill's `excluded_nopvc` file. Same severity as the oversize check.
+    """
+    if not excluded:
+        return None
+    return (
+        3,
+        "backed-up volume(s) with no bound PVC, never drilled "
+        "(rebind, delete, or move to no-backup): " + ", ".join(excluded),
+    )
+
+
 # ── final verdict assembly ───────────────────────────────────────────────────────────────────
 
 

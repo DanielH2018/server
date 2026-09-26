@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Executing tests for the heartbeat's restore-drill arms: checks 7 and 8, and the oversize check.
+"""Executing tests for the heartbeat's restore-drill arms: checks 7 and 8, and the oversize and no-PVC checks.
 
 Split out of `test_longhorn_backup_health.py` when it reached its line cap, with the same
 `..._is_clean` / `..._is_flagged` pairing. The stamp files these arms read are pinned by real
@@ -139,4 +139,17 @@ def test_restore_drill_oversize_is_flagged_naming_each_excluded_volume():
         3,
         "volume(s) over the restore-drill actualSize cap, never drilled: "
         "jellyfin-config (5.00 GiB), valheim-config (4.50 GiB)",
+    )
+
+
+def test_restore_drill_nopvc_is_clean_when_nothing_is_excluded():
+    assert logic.check_restore_drill_nopvc([]) is None
+
+
+def test_restore_drill_nopvc_is_flagged_naming_each_excluded_volume():
+    problem = logic.check_restore_drill_nopvc(["pvc-a", "pvc-b"])
+    assert problem == (
+        3,
+        "backed-up volume(s) with no bound PVC, never drilled "
+        "(rebind, delete, or move to no-backup): pvc-a, pvc-b",
     )

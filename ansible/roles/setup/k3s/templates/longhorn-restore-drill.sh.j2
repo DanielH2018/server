@@ -54,6 +54,10 @@ CANDIDATES="${STAMP_DIR}/candidates"
 # line. Check 8 iterates only the candidates, so without this file a volume that grows past the
 # cap leaves the rotation and the coverage check together and nothing reports it (#2667).
 EXCLUDED_OVERSIZE="${STAMP_DIR}/excluded_oversize"
+# The backed-up volumes under the cap that the drill still cannot drill because no PVC is bound to
+# them, one volume name per line. The drill restores into a PVC in the source namespace, so such a
+# volume is not a candidate, and without this file it would leave check 8 silently too (#2706).
+EXCLUDED_NOPVC="${STAMP_DIR}/excluded_nopvc"
 MANIFEST=$(mktemp /tmp/restore-drill.XXXXXX.yaml)
 DRILL=""
 
@@ -140,15 +144,28 @@ OVERSIZE=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
           asize: (((.status.actualSize // 0) | tonumber) | tostring)}]
       | sort_by(.name)[]
       | [.name, .asize] | @tsv' <<<"$VOLUMES")
+# Under the cap but with no bound PVC: a released PVC whose volume is still in a backup group, for
+# example. Bounded by the cap so a volume that is both oversize and pvc-less is named once, by
+# OVERSIZE above, rather than paging twice.
+NOPVC=$(jq -r --argjson backed "$BACKED" --argjson max "$MAX_BYTES" '
+      [.items[]
+       | select('"$IN_BACKUP_GROUP"')
+       | select(.metadata.name as $v | $backed | index($v))
+       | select(((.status.actualSize // 0) | tonumber) <= $max)
+       | select((.status.kubernetesStatus.pvcName // "") == "")
+       | .metadata.name]
+      | sort[]' <<<"$VOLUMES")
 
 mkdir -p "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
 chmod 0755 "$STAMP_DIR" "$ATTEMPT_DIR" "$SUCCESS_DIR" "$SEEN_DIR" "$RETRY_DIR"
-# Published before the empty-eligible failure below, so a cap that excludes EVERY volume still
-# names them, and before the pin, for the same reason as the candidates file: it describes the
-# rotation, not tonight's run. Rewritten every run, so it empties once the volume shrinks back
-# under the cap, the cap is raised, or the volume moves to no-backup.
+# Both exclusion files are published before the empty-eligible failure below, so a filter that
+# excludes EVERY volume still names them, and before the pin, for the same reason as the candidates file: it describes the
+# rotation, not tonight's run. Rewritten every run, so each empties once its volume is drillable
+# again (shrunk under the cap, the cap raised, a PVC rebound) or moves to no-backup.
 if [[ -n "$OVERSIZE" ]]; then printf '%s\n' "$OVERSIZE"; fi >"$EXCLUDED_OVERSIZE"
 chmod 0644 "$EXCLUDED_OVERSIZE"
+if [[ -n "$NOPVC" ]]; then printf '%s\n' "$NOPVC"; fi >"$EXCLUDED_NOPVC"
+chmod 0644 "$EXCLUDED_NOPVC"
 [[ -n "$ELIGIBLE" ]] || fail "no eligible volume has a Completed backup"
 
 # DECIDED: the candidate list is published from the FULL eligible set, and the pin is applied
