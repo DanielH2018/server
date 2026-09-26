@@ -48,7 +48,10 @@ A `tests/` sibling keeps a test out of every `files/` ship list and lets the dep
 test-only path rule stay a directory check (ENFORCED by
 `ansible/tests/repo/test_testpaths_covers_every_test_file.py`). A test in a `tests/` directory
 reaches its module through a `sys.path` bootstrap pointing at the sibling `files/`, or through
-`pythonpath` where the module is shared across roles. A role that ships a `files/*.py` with
+`pythonpath` where the module is shared across roles. Every such bootstrap lands in the one
+session a full run shares, so a top-level `files/*.py` needs a basename no other role's
+`files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
+(#2608). `ansible/tests/repo/test_pythonpath_module_basenames.py` enforces it. A role that ships a `files/*.py` with
 logic adds its `tests/` directory to `testpaths`.
 
 `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy

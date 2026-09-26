@@ -1,4 +1,4 @@
-"""Guard: no two `pythonpath` roots hold a top-level module of the same name.
+"""Guard: no two import roots hold a top-level module of the same name.
 
 The repo has no `__init__.py` files, so every `*.py` sitting directly in a `pythonpath` root
 is a BARE-importable top-level module. Two roots holding the same name means `import <name>`
@@ -8,6 +8,14 @@ is. PR #1149 landed `ansible/roles/k8s/monitor-bridge/files/registry.py` next to
 import it bare, while every consumer of the `scripts/` one spells it `lib.registry`, so the
 clash resolved correctly by accident of ordering rather than by construction. The `scripts/`
 module is now `lib/cli_registry.py`, and this test is what stops the next pair landing.
+
+The census is the `pythonpath` roots PLUS every role's `files/` directory. A role test reaches
+its own `files/` through a `sys.path.insert` at collection time, not through `pythonpath`, and
+every such insert lands in the one pytest session a full run shares. Issue #2608 was that gap:
+`homelab-mcp` and `ical-proxy` both shipped `files/app.py`, and whichever test module collected
+last owned the bare `import app` for the whole session. `uv run pytest ansible scripts` failed
+the six homelab-mcp `cert_expiry` tests reading attributes off ical-proxy's Flask app, while
+either role run alone passed. ical-proxy's module is now `ical_proxy.py`.
 
 Scope is deliberately TOP-LEVEL ONLY. A module in a subdirectory of a root is reached as
 `package.module`, so it cannot shadow anything; that is why this is a sibling of
@@ -56,6 +64,7 @@ KNOWN_MODULES = frozenset(
         "registry",
         "cli_registry",
         "repo_paths",
+        "safe_reads",
     }
 )
 
@@ -65,10 +74,22 @@ def pythonpath_roots() -> list[str]:
     return list(cfg["tool"]["pytest"]["ini_options"]["pythonpath"])
 
 
+def import_roots() -> list[str]:
+    """The `pythonpath` roots plus every role `files/` directory, each named once.
+
+    Several role `files/` directories are also `pythonpath` roots; listing one twice would
+    report every module in it as clashing with itself.
+    """
+    roles = sorted(
+        str(path.relative_to(REPO)) for path in REPO.glob("ansible/roles/*/*/files")
+    )
+    return list(dict.fromkeys(pythonpath_roots() + roles))
+
+
 def top_level_modules() -> dict[str, list[str]]:
     """`{module name: [<root>/<file>, ...]}` for every bare-importable top-level module."""
     found: dict[str, list[str]] = {}
-    for root in pythonpath_roots():
+    for root in import_roots():
         for path in sorted((REPO / root).glob("*.py")):
             if path.name in EXEMPT:
                 continue
@@ -99,10 +120,10 @@ def test_the_census_reaches_the_known_modules():
     )
 
 
-def test_no_two_pythonpath_roots_share_a_module_basename():
+def test_no_two_import_roots_share_a_module_basename():
     clashes = shadowing_pairs(top_level_modules())
     assert not clashes, (
-        "these top-level module names exist at more than one pythonpath root, so a bare "
+        "these top-level module names exist at more than one import root, so a bare "
         f"`import <name>` resolves by sys.path order rather than by construction: {clashes}"
     )
 
