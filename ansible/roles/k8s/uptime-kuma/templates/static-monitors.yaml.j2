@@ -415,7 +415,7 @@ stringData:
    -- the same margin the */10 heartbeats keep against their 600s cron. Move both together. #}
 {% if release_staleness_push_token | default('') %}
   release-staleness-check.json: |
-    {"type": "push", "name": "Release Staleness Drift", "description": "A k8s service's role paths, shared roles or inventory keys changed on origin/master after its last applied commit, so what runs is not what master says. Redeploy the named services with `./scripts/deploy.sh --tags <svc>`; `probe.py releases --stale-only` prints every reason.", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+    {"type": "push", "name": "Release Staleness Drift", "description": "A k8s service's role paths, shared roles or inventory keys changed on origin/master after its last applied commit, so what runs is not what master says. Redeploy the named services with `./scripts/deploy.sh --tags <svc>`; `probe.py releases --stale-only` prints every reason. When the stale set changes while this tile is DOWN, the cron pushes an UP marked 'Not a recovery' and then a DOWN carrying the current list, so each change notifies.", "interval": 3600, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ release_staleness_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
 {# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
    installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
