@@ -1,0 +1,125 @@
+---
+# Delete Longhorn backups that nothing else will ever prune. One playbook, three modes, each with
+# its own safety floor. Every mode is a dry run unless you pass -e prune_apply=true.
+#
+#   migrated-chain  the old chain a volume left behind when migrate_volume_block_size.yml rebuilt
+#                   it. Deletes Longhorn Backup CRs.
+#   seeds           the seed backups seed_volume_backup.yml made, once the rotation covers their
+#                   volume. Deletes Longhorn Backup CRs.
+#   b2-drain        whole stranded volume prefixes, straight out of B2 through the B2 API.
+#
+# WHICH PATH TO USE. The first two modes delete through Longhorn. That path reaches both backup
+# targets, R2 (the daily tier) and B2 (the weekly shards). It is also the expensive one: each
+# Longhorn backup deletion walks the volume's whole block tree, about 1.28 B2 Class C
+# transactions per stored block (`probe.py b2-budget` prints the per-volume figure). The
+# b2-drain mode goes through the B2 API instead: one listing for the entire store (5 Class C,
+# measured 2026-08-19) plus Class A deletes, which are unmetered. It reaches B2 only, never R2.
+# Scoping and measurements: docs/b2-api-drain-scoping.md.
+#
+# Usage:
+#   uv run ansible-playbook ansible/prune_backups.yml -i ansible/inventory/hosts.ini \
+#     -e prune_mode=migrated-chain -e prune_claim=sonarr-config
+#   uv run ansible-playbook ansible/prune_backups.yml -i ansible/inventory/hosts.ini \
+#     -e prune_mode=seeds [-e prune_claim=valheim-config] [-e prune_seed_floor=2]
+#   uv run ansible-playbook ansible/prune_backups.yml -i ansible/inventory/hosts.ini \
+#     -e prune_mode=b2-drain -e prune_volumes=pvc-aaa,pvc-bbb    (or -e prune_volumes_file=<path>)
+#
+# Read the dry run, then re-run the same command with -e prune_apply=true.
+#
+# ---------------------------------------------------------------------------------------------
+# migrated-chain (prune_backups/tasks/migrated-chain.yml)
+#
+# WHY NOT THE REAPER. longhorn-reap-orphan-backups.sh already deletes stranded backups and has the
+# better safety floor, but it is all-or-nothing: it reaps every orphan it finds. At about 1.28
+# Class C LISTs per stored block, the full backlog from a 20-volume migration is roughly 13,900
+# Class C against a 2,100/day budget. Reaping it in one pass would cause exactly the
+# transaction-cap event the migration exists to prevent. This mode deletes one claim's chain, so
+# the spend can be paced. For a weekly-tier (B2) backlog too large to pace, use the b2-drain
+# mode instead: it deletes the objects through the B2 API, then its backup-target sync drops the
+# dangling Backup CRs. b2-drain cannot reach R2, so a daily-tier volume's chain still goes
+# through this mode, one claim at a time.
+#
+# THE SAFETY CONDITION. A migrated volume's old chain belongs to a Longhorn volume that no longer
+# exists, so no RecurringJob will ever prune it — retain is per job, over its own backups, and
+# only while the job still selects the volume. It is also, until the replacement has been backed
+# up, the only copy of that data. So this mode refuses to run unless the replacement has a
+# Completed backup of its own. That check is machine-made rather than operator-remembered on
+# purpose.
+#
+# The old volume is resolved from the Backup objects themselves: any Completed backup naming a
+# volume that no longer exists, for a PVC of this name. prune_claim is required.
+#
+# ---------------------------------------------------------------------------------------------
+# seeds (prune_backups/tasks/seeds.yml)
+#
+# WHY THEY NEED RETIRING. A seed carries no RecurringJob label, so no job's `retain` ever counts
+# it and no job ever prunes it — retention is per job, over that job's own backups. Every seed is
+# therefore stranded by construction, and the orphan reaper leaves it alone too: a backup with
+# no job label reads as the current tier's own. On 2026-09-02 the eleven seeds from the 16 MiB
+# migration held 5.4 G nominal against a 10 G B2 storage cap, valheim-config's alone 1.76 G.
+#
+# THE SAFETY CONDITION. A seed is the only copy a volume has until its weekday shard has run,
+# and one shard run is not coverage — the health check needs the rotation, not a point in time.
+# So a seed goes only when its volume holds at least `prune_seed_floor` Completed backups that DO
+# carry a RecurringJob label. The floor defaults to the shard jobs' retain (2), which is the
+# state the rotation reaches on its own; the seed is then surplus to what retain would keep.
+#
+# COST. The eleven seeds above came to ~880 blocks, ~1,130 Class C, against a 2,500/day cap.
+# Check the day's headroom before applying; the dry run lists the volumes so the sum can be read
+# off b2-budget. prune_claim is optional here: pass it to retire one claim's seed, which is how
+# the spend is paced when the whole set does not fit in a day.
+#
+# ---------------------------------------------------------------------------------------------
+# b2-drain (prune_backups/tasks/b2-drain.yml)
+#
+# WHAT THIS MODE ADDS over running the script by hand: the SOPS credentials, and the live
+# Longhorn volume list the script refuses to act without. The safety logic lives in the script
+# (scripts/backup/b2_drain.py) where it is unit-tested: it refuses everything on an empty live
+# list, and refuses by name any requested volume that still exists. Twenty volume names is 820
+# characters, which no shell pastes reliably on one line, so use prune_volumes_file for a full
+# sweep.
+- name: Prune stranded Longhorn backups
+  hosts: daniel-box
+  # An escalated task imports from this tree's .venv as root, and the root-owned
+  # __pycache__ that leaves behind blocks the worktree's removal. See
+  # ansible/tests/deploy/test_plays_disable_bytecode_writes.py.
+  environment:
+    PYTHONDONTWRITEBYTECODE: "1"
+  connection: local
+  gather_facts: false
+  vars:
+    prune_modes: [migrated-chain, seeds, b2-drain]
+    prune_apply: false
+    prune_namespace: homelab
+    prune_seed_floor: 2
+    # The b2-drain mode's command. It sits here rather than in the mode's task file because
+    # the scripts reference page (scripts/lib/script_classify.py) credits a script's caller only
+    # from a line in a top-level playbook that runs it.
+    prune_drain_argv: [uv, run, python, scripts/backup/b2_drain.py]
+    # The repo this playbook is part of, not a fixed path. It used to name the worktree the
+    # drain was written in; that worktree was removed after the 2026-08-20 run, so the play
+    # failed as shipped from then on — the one path nobody re-runs after a successful drain.
+    prune_repo: "{{ playbook_dir | dirname }}"
+    prune_drain_live_file: /tmp/longhorn-live-volumes.txt
+  pre_tasks:
+    - name: Require a known mode
+      ansible.builtin.assert:
+        that: (prune_mode | default('')) in prune_modes
+        fail_msg: >-
+          pass -e prune_mode=<mode>, one of: migrated-chain, seeds, b2-drain.
+          Got {{ prune_mode | default('nothing') }}.
+
+    - name: Load secrets
+      community.sops.load_vars:
+        file: "{{ playbook_dir }}/vars/secrets.yml"
+      delegate_to: localhost
+      no_log: true
+
+    - name: Set become password
+      ansible.builtin.set_fact:
+        ansible_become_password: "{{ become_password }}"
+      no_log: true
+
+  tasks:
+    - name: Run the requested mode
+      ansible.builtin.include_tasks: "prune_backups/tasks/{{ prune_mode }}.yml"

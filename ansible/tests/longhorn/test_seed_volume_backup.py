@@ -129,7 +129,7 @@ def test_the_migrate_playbook_points_at_the_seed_step():
 def test_both_seed_crs_carry_the_owning_jobs_label():
     """Retain counts only backups labelled with its own job, and the snapshot auto-cleanup only
     deletes snapshots that are. An unlabelled seed is unowned: its backup sat in B2 until
-    drop_seed_backups.yml and its snapshot pinned 3.5 GB of deleted files into every weekly backup
+    prune_backups.yml's seeds mode and its snapshot pinned 3.5 GB of deleted files into every weekly backup
     of valheim-config (issue #942)."""
     snapshot = _named("Create the snapshot")[0]["ansible.builtin.command"]["stdin"]
     backup = _named("Request the backup")[0]["ansible.builtin.command"]["stdin"]

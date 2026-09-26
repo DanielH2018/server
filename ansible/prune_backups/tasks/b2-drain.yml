@@ -1,0 +1,69 @@
+---
+# prune_mode=b2-drain: delete stranded Longhorn backup prefixes straight out of B2.
+# WHY and COST are in the header of ansible/prune_backups.yml; the safety logic is in
+# scripts/backup/b2_drain.py, where it is unit-tested.
+- name: Require the volumes to drain
+  ansible.builtin.assert:
+    that: >-
+      (prune_volumes | default('')) | length > 0
+      or (prune_volumes_file | default('')) | length > 0
+    fail_msg: >-
+      the b2-drain mode needs -e prune_volumes=<name>[,<name>...] or
+      -e prune_volumes_file=<path>. Twenty names is 820 characters, which no shell pastes
+      reliably on one line, so the file form is the one to use for a full sweep.
+
+- name: Read the live Longhorn volumes
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, get, volumes.longhorn.io,
+           -o, 'custom-columns=V:.metadata.name', --no-headers]
+  become: true
+  register: prune_drain_live
+  changed_when: false
+
+# The script fails closed on an empty list, but catching it here names the cause rather
+# than leaving the script to report that nothing could be proven stranded.
+- name: Refuse to drain against an unusable volume list
+  ansible.builtin.assert:
+    that: prune_drain_live.stdout_lines | length > 0
+    fail_msg: >-
+      the cluster returned no Longhorn volumes. Nothing can be proven stranded against an
+      empty list, so no prefix is safe to delete right now.
+
+- name: Stage the live-volume list for the script
+  ansible.builtin.copy:
+    content: "{{ prune_drain_live.stdout_lines | map('trim') | join('\n') }}\n"
+    dest: "{{ prune_drain_live_file }}"
+    mode: "0600"
+
+# Exit 1 means the script refused at least one named volume (still live, or no such prefix)
+# and drained the rest; it prints each refusal. Only exit 2 is a failed run.
+- name: Drain the prefixes
+  ansible.builtin.command:
+    argv: "{{ prune_drain_argv
+              + ['--live-volumes-file', prune_drain_live_file]
+              + (['--volumes-file', prune_volumes_file]
+                 if (prune_volumes_file | default('')) | length > 0
+                 else ['--volumes', prune_volumes])
+              + (['--apply'] if prune_apply | bool else []) }}"
+    chdir: "{{ prune_repo }}"
+  environment:
+    B2_KEY_ID: "{{ longhorn_b2_key_id }}"
+    B2_APP_KEY: "{{ longhorn_b2_application_key }}"
+  register: prune_drain_run
+  changed_when: prune_apply | bool
+  failed_when: prune_drain_run.rc == 2
+
+- name: Report
+  ansible.builtin.debug:
+    var: prune_drain_run.stdout_lines
+
+# Longhorn keeps Backup and BackupVolume CRs for objects that are now gone. A target sync
+# reconciles them; it walks volume directories only, not block trees.
+- name: Ask Longhorn to re-read the backup target
+  ansible.builtin.command:
+    argv: [k3s, kubectl, -n, longhorn-system, patch, backuptarget, default,
+           --type, merge, -p,
+           '{"spec":{"syncRequestedAt":"{{ lookup("pipe", "date -u +%Y-%m-%dT%H:%M:%SZ") }}"}}']
+  become: true
+  changed_when: true
+  when: prune_apply | bool
