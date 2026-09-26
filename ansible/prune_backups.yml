@@ -34,8 +34,10 @@
 # Class C LISTs per stored block, the full backlog from a 20-volume migration is roughly 13,900
 # Class C against a 2,100/day budget. Reaping it in one pass would cause exactly the
 # transaction-cap event the migration exists to prevent. This mode deletes one claim's chain, so
-# the spend can be paced. For a backlog too large to pace, use the b2-drain mode, then let its
-# backup-target sync drop the dangling Backup CRs.
+# the spend can be paced. For a weekly-tier (B2) backlog too large to pace, use the b2-drain
+# mode instead: it deletes the objects through the B2 API, then its backup-target sync drops the
+# dangling Backup CRs. b2-drain cannot reach R2, so a daily-tier volume's chain still goes
+# through this mode, one claim at a time.
 #
 # THE SAFETY CONDITION. A migrated volume's old chain belongs to a Longhorn volume that no longer
 # exists, so no RecurringJob will ever prune it — retain is per job, over its own backups, and
