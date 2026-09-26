@@ -11,6 +11,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_deploy_stamps_are_utc.py
 """
 
 import re
+import time
 from pathlib import Path
 
 import pytest
@@ -19,7 +20,10 @@ _REPO = Path(__file__).resolve().parents[3]
 _SCRIPTS = (_REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",)
 # A `date` invocation that formats or converts a time: `date +FMT`, `date -d @N +FMT`, and
 # the `-u` form of each. Comment lines are skipped so prose naming the flag does not count.
-_DATE_CALL = re.compile(r"\bdate\b((?:\s+-\S+(?:\s+\S+)?)*)\s+'?\+")
+# A flag's argument may not start with `-`, `'` or `+`, so each token has exactly one reading:
+# an unrestricted `\S+` argument let `-a -b` parse as one flag or two, which backtracks
+# exponentially on a long run of flags (CodeQL py/redos, alert #55).
+_DATE_CALL = re.compile(r"\bdate\b((?:\s+-\S+(?:\s+[^\s'+-]\S*)?)*)\s+'?\+")
 _DATE_UTC = re.compile(r"\bdate\s+-u\b")
 
 
@@ -47,6 +51,16 @@ def test_the_pattern_flags_a_local_time_stamp():
     assert _DATE_CALL.search(local)
     assert _DATE_CALL.search("""since="$(date '+%Y-%m-%d %H:%M:%S')\"""")
     assert not _DATE_UTC.search(local)
+    # A flag with an argument still reaches the format.
+    assert _DATE_CALL.search("""date -u -d "@$last_run" '+%F'""")
+
+
+def test_the_pattern_stays_linear_on_a_run_of_flags():
+    # The unambiguous argument class is the fix for the backtracking; 40 flags took over a
+    # minute under the old pattern and take microseconds under this one.
+    start = time.perf_counter()
+    assert not _DATE_CALL.search("date" + " -!" * 40)
+    assert time.perf_counter() - start < 1.0
 
 
 # deploy.sh stamps its snapshot and its --detach log in Python since #2412.
