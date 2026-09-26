@@ -182,8 +182,9 @@ One number for both Claude cgroups, on the one slice that is a parent of both:
 `templates/fleet-slice-caps.conf.j2` into
 `/etc/systemd/system/user.slice.d/claude-fleet-caps.conf`. `claude-rc.service` reaches that
 parent through a `Slice=` line; `user-<uid>.slice` is under `user.slice` already. The
-per-plane 8G/2G stay as sub-bounds, so either plane may take most of the budget while the
-other is idle and the parent is what holds the pair. `claude_code_fleet_caps_enabled: false`
+per-plane caps (10G/2G on daniel-box, 11G/2G on daniel-server) stay as sub-bounds, so either
+plane may take most of the budget while the other is idle and the parent is what holds the
+pair. `claude_code_fleet_caps_enabled: false`
 removes the drop-in and the `Slice=` line together, returning the unit to `system.slice`.
 
 **`user-<uid>.slice` cannot be reparented, and that is what picked the shape.** A slice's

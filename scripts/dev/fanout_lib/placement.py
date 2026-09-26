@@ -29,9 +29,9 @@ RESERVATION_BYTES = 2_684_354_560
 # Both slices are read because an agent is throttled by both. A launch starts a transient
 # user service, which systemd places in user-1000.slice (the login plane, capped by
 # claude_code_rc_memory_high), nested under user.slice (the fleet, capped by
-# claude_code_fleet_memory_high). Reading the fleet alone picks a host whose 12G/10G fleet
-# cap has room while the 8G cap that actually binds the agent is full: daniel-box's login
-# slice peaked at 8.58 GB against that 8G cap on 2026-09-10.
+# claude_code_fleet_memory_high). Reading the fleet alone picks a host whose fleet cap has
+# room while the login-plane cap that actually binds the agent is full: daniel-box's login
+# slice peaked at 8.58 GB against its then-8G cap on 2026-09-10.
 READ_COMMAND = (
     "cat /sys/fs/cgroup/user.slice/memory.current /sys/fs/cgroup/user.slice/memory.high "
     "/sys/fs/cgroup/user.slice/user-1000.slice/memory.current "
