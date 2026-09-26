@@ -63,8 +63,8 @@ command it suggests, from
 single file reached 1058 lines. Imports are static, so `--tags` selection sees every task's own
 tags. `defaults/main.yml` is long on purpose: each tunable sits under the paragraph that
 explains it, and several carry `DECIDED` markers. `files/` holds the Python the crons run
-(`longhorn_backup_health*.py`, `longhorn_reap_*.py`, `live_drift_check.py`,
-`manifest_declares.py`) with their tests under `tests/`; `templates/` holds the cron scripts
+(`longhorn_backup_health*.py`, `longhorn_restore_drill_stamps.py`, `longhorn_reap_*.py`,
+`live_drift_check.py`, `manifest_declares.py`) with their tests under `tests/`; `templates/` holds the cron scripts
 and the cluster manifests this role applies directly.
 
 Where the long form lives, by topic:
