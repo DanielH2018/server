@@ -45,24 +45,6 @@ DENY_GUARD_SHIMS = frozenset(
     {
         "bash-pretool.sh",
         "block-protected-edits.sh",
-        # Transition shims (#2465): unregistered, kept for sessions that started before
-        # bash-pretool.sh and still run them by path. They keep their own `ask` until deleted.
-        "block-footguns.sh",
-        "block-protected-bash.sh",
-        "nudge-land-sh.sh",
-    }
-)
-
-# The pre-#2394 shims, kept as `# gen-hooks: library` files so a session started before the
-# dispatcher does not find its deny guards missing. Delete them, and this set, together.
-# `auto-approve-readonly.sh` went first, with its classifier (dotfiles #628): it is an allow
-# hook, so a stale session that still names it loses approvals, never a deny.
-TRANSITION_SHIMS = frozenset(
-    {
-        "block-footguns.sh",
-        "block-protected-bash.sh",
-        "inject-nested-docs.sh",
-        "nudge-land-sh.sh",
     }
 )
 
@@ -104,16 +86,12 @@ def test_the_shim_census_is_non_vacuous():
     # are renamed, and every parametrized test below would then pass by iterating zero times —
     # the failure mode the repo-root CLAUDE.md describes, and the one the old `len() == 4`
     # anchor could not see because it pinned the size of a hand-written list instead.
-    assert (
-        set(SHIM_NAMES)
-        == {
-            "ansible-lint.sh",
-            "auto-mode-bridge.sh",
-            "bash-pretool.sh",
-            "block-protected-edits.sh",
-        }
-        | TRANSITION_SHIMS
-    )
+    assert set(SHIM_NAMES) == {
+        "ansible-lint.sh",
+        "auto-mode-bridge.sh",
+        "bash-pretool.sh",
+        "block-protected-edits.sh",
+    }
     assert DENY_GUARD_SHIMS <= set(SHIM_NAMES)
     # ansible-lint.sh is the only one that does not exec into a paired .py.
     assert set(SHIM_NAMES) - set(EXEC_SHIM_NAMES) == {"ansible-lint.sh"}
