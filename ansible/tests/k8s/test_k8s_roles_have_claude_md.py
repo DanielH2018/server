@@ -57,9 +57,11 @@ WARN_LINES = int(MAX_LINES * WARN_FRACTION)
 # rule that cannot move to docs/, or split the file instead.
 OVER_CEILING: dict[str, str] = {
     "volume-snapshot": (
-        "443 lines on 2026-09-21, predating the ceiling; its snapshot-naming and prune "
-        "rules are operating rules a deploy reads, and no docs/ page holds them yet. "
-        "Trim or split it before adding to it."
+        "513 lines on 2026-09-26, up from 443: #2686's answer (why the prune cannot delete 13 "
+        "over-long CRs, and what can) and #2681's (which of the two reasons the maintenance-mode "
+        "attach stays unreached for still holds) are both operating rules a deploy reads, and no "
+        "docs/ page holds them yet. The split this doc has needed since 2026-09-21 is #2699 — do "
+        "that before adding to it again."
     ),
 }
 

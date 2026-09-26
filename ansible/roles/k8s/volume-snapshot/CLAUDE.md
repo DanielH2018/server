@@ -186,6 +186,46 @@ name become invisible to both this role's own prefix filter and the reaper: noth
 nothing reaps them, and they pin their blocks against `filesystem trim` forever. Not touched in
 this slice.
 
+### The 13 over-long CRs the prune retries and Longhorn refuses, every deploy
+
+Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
+(`code-server-config`, `code-server-workspace`, `home-assistant-config`, `qbittorrent-config`)
+cannot be deleted through the Kubernetes API at all. All thirteen were still there on 2026-09-26,
+`status.readyToUse: false`, most carrying `status.error` "lost track of the corresponding
+snapshot info inside volume engine". Issue #2686 filed them as never pruned. The prune does
+reach them; the delete is what fails.
+
+**The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
+(2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
+claims rendered names of 65, 68, 71 and 65 bytes; after it, 53, 56, 56 and 53.
+
+**The prune selects them on every deploy.** It filters the live listing on `markRemoved` and the
+`autodeploy-<service>-` prefix — never on `readyToUse` — so an error-state CR with `markRemoved`
+unset is in `volume_snapshot_live`, sorts oldest under the newest-first order, and lands in the
+slice past `volume_snapshot_retain`. The `kubectl delete` is issued, the webhook denies it, and
+the prune's `failed_when` tolerates exactly that one message. Retention is therefore intact —
+the thirteen consume no slot in the window — which is why this stayed invisible: the only signal
+is the `Report snapshots Longhorn refuses to delete` debug line, and under the GitOps deployer
+the play output reaches nobody. The two CRs that do carry `markRemoved: true` leave the candidate
+set instead, so the prune does not retry those two at all.
+
+**Teaching the orphan reaper the `autodeploy-` prefix would not help.** It skips them today for
+the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it would
+hit the same webhook.
+
+**Removing them is out of band, through the Longhorn manager API rather than the Kubernetes
+API.** The manager's own `snapshotDelete` volume action does not run the validating webhook:
+`http://<longhorn-manager-pod-ip>:9500/v1/volumes/<volume>?action=snapshotDelete` with
+`{"name": "<snapshot>"}`, then `?action=snapshotPurge` — the same base the reaper purges
+against. The Longhorn UI's per-volume snapshot delete is the same call. Untried here, so #2686
+stays open until one of the two has actually removed them.
+
+**They likely pin no blocks, which is an inference rather than a measurement.** "Lost track of
+the corresponding snapshot info inside volume engine" says the engine no longer holds the
+snapshot the CR names, so there is no chain entry beneath which `filesystem trim` stops. The
+cost of leaving them is then a stale Kubernetes object and a denied delete per deploy, not
+reclaimable space. Confirming it needs a live read of each volume's snapshot chain.
+
 ## What fails the deploy, and what does not
 
 The whole role runs **before** the apply, so every failure below stops the deploy without having
@@ -231,7 +271,7 @@ snapshot chain of every protected volume. Not worth gating on.
 ## A detached volume gets a maintenance-mode attach before it gets skipped
 
 > **The task-6 drill of 2026-08-21 did not reach this path, and could not.** Read the section
-> "The maintenance-mode attach is not reachable through a deploy" below before relying on
+> "The maintenance-mode attach has never been reached by a deploy" below before relying on
 > anything in this one. The reasoning below is preserved because it is what the code implements;
 > it is not a description of observed behaviour.
 
@@ -252,8 +292,12 @@ volume's own `status.state`; when it is not `attached`, the claim reuses `k8s/lo
 the maintenance-mode attach `k8s/volume-revert` proved (`POST ?action=attach
 {hostId, disableFrontend: true}`, wait for `attached` with the frontend disabled) to attach the
 volume long enough to retake the same-named snapshot, then detaches it again regardless of
-whether the retake succeeded. **Both of 7a's cases — the deliberate scale-to-zero and the
-service's first deploy — now get a real snapshot through this attach**, not the warning. Any
+whether the retake succeeded. **Neither of 7a's cases is observed to reach this
+attach.** The drill measured the deliberate scale-to-zero taking its real snapshot on the
+ORDINARY path, before this block's condition could be true at all, and the service's first deploy
+is untested either way. What the code IMPLEMENTS is that both cases get a snapshot through this
+attach rather than the warning — see "The maintenance-mode attach has never been reached by a
+deploy" below. Any
 other unready cause on the FIRST attempt (a same-second name collision on a `markRemoved` CR, or
 a stuck engine on a volume that *is* attached) still fails the deploy, unchanged from 7a.
 
@@ -286,7 +330,7 @@ migrate the on-disk format, and there is then no recovery point behind it. The w
 service, the claim, and that the deploy is proceeding unprotected — a silent skip would defeat
 the point of the slice.
 
-## The maintenance-mode attach is not reachable through a deploy
+## The maintenance-mode attach has never been reached by a deploy
 
 Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1Gi,
 `longhorn-nobackup`, Longhorn v1.12.1). The drill found two reasons. Only the second still
@@ -307,15 +351,42 @@ chain.
 
 So the premise this section's code rests on — "a Longhorn snapshot needs a running engine, and a
 workload scaled to zero has none" — does not hold for a volume that is detached but still has
-healthy replicas, and reason 2 alone keeps the maintenance-mode attach unreached for such a
-volume. It may well hold for a volume that has NEVER been attached — a service's first deploy —
-which is a genuinely different state, the drill did not test it, and with seeding gone it is
-the one deploy path that can reach the block below. Tracked in #2681.
+healthy replicas. Reason 2 alone keeps the maintenance-mode attach unreached for such a volume,
+and the end of volume-claim's seeding does not change that.
+
+**Established from the code path 2026-09-26, answering #2681: a detached volume is not enough to
+reach the block.** `volume_snapshot_detached` is set from three conditions at once — this claim's
+snapshot is not `readyToUse`, it is not `markRemoved`, and the volume's `status.state` is not
+`attached`. Reason 2 measured the first of those false: Longhorn completed the snapshot of a
+plainly detached volume, so the wait succeeded and the flag came out `false` however detached the
+volume was. Reason 1's death moves which volumes arrive here detached; it does not make a
+Longhorn-side snapshot failure any likelier. Reaching the block still needs the snapshot itself
+to fail on a volume the state read also finds unattached.
+
+**A service's first deploy is the one path where that is unestablished.** A never-attached volume
+is a genuinely different state, the drill did not test it, and with seeding gone nothing attaches
+the volume before this role reads it. The claim does still bind: both Longhorn StorageClasses
+here set `volumeBindingMode: Immediate`
+(`ansible/roles/setup/k3s/files/longhorn-storageclass.yaml`,
+`ansible/roles/setup/k3s/files/longhorn-storageclass-nobackup.yaml`), so a PVC no pod has ever
+consumed carries a `spec.volumeName` and passes this role's binding assert rather than stopping
+the deploy there. Whether Longhorn then completes a snapshot of it is what decides reachability,
+and that is untested.
+
+**"Does it behave" has no answer, only a bound on the question.** The block has never executed,
+so nothing here is observed behaviour: `k8s/volume-revert` proved the attach/detach mechanism the
+block reuses, and that is the whole of the evidence. Unexecuted code in this role has carried a
+real defect before — the drill's first failure was this file sharing one register between the
+first wait and the retake wait, where a SKIPPED task still overwrote the value its consumer read.
+Reaching the block for the first time should be expected to find more of that kind, not to
+validate it. Still tracked in #2681.
 
 ### The premise was never true on this Longhorn version
 
 Settled from git history 2026-08-21, because it decides whether the block above is dead code to
-retire or a version-compat guard worth keeping. **It is dead code**, and it was never a guard:
+retire or a version-compat guard worth keeping. **It is dead for a detached volume with healthy
+replicas, and it was never a guard** — dead for a never-attached volume is the part nobody has
+checked:
 
 - The premise entered the tree in `410751a`, 2026-08-21. Its commit message derives it from two
   observations: `longhorn-reap-orphan-snapshots.sh` refusing to reap on a detached volume, and
@@ -438,5 +509,5 @@ The create path and the prune have both run on real deploys. On 2026-09-26 the c
   corresponding snapshot info inside volume engine". They sit beside each service's three
   ready snapshots rather than counting toward them.
 - **A never-attached volume** (a service's first deploy) may still need the maintenance-mode
-  attach; see "The maintenance-mode attach is not reachable through a deploy" above.
+  attach; see "The maintenance-mode attach has never been reached by a deploy" above.
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
