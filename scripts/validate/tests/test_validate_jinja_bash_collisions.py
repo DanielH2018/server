@@ -51,6 +51,17 @@ def test_blanking_a_raw_block_preserves_line_numbers():
     assert blanked.splitlines()[4] == "b"
 
 
+def test_the_vendored_collections_are_not_scanned(tmp_path):
+    # Present only when ansible-galaxy has run, uneditable, and full of upstream fixtures —
+    # scanning them would make the verdict depend on whether they happen to be installed.
+    (tmp_path / "roles").mkdir()
+    (tmp_path / "roles" / "ours.j2").write_text("echo hi\n")
+    vendored = tmp_path / "collections" / "community" / "general" / "templates"
+    vendored.mkdir(parents=True)
+    (vendored / "theirs.j2").write_text("echo ${#x}\n")
+    assert [p.name for p in v.templates(tmp_path)] == ["ours.j2"]
+
+
 def test_the_scan_finds_the_templates():
     """Without this, the live-tree test below passes vacuously on an empty glob."""
     found = {str(p.relative_to(v.REPO)) for p in v.templates()}

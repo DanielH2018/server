@@ -71,18 +71,30 @@ def blank_raw_blocks(text: str) -> str:
 
 
 def find_collisions(text: str) -> list[tuple[int, str]]:
-    """Return (line number, stripped line) for every `${#` outside a `{% raw %}` block."""
-    scannable = blank_raw_blocks(text)
+    """Return (line number, stripped line) for every `${#` outside a `{% raw %}` block.
+
+    The snippet comes from the ORIGINAL line, not the blanked one, so a line that is partly
+    inside a raw block still prints the text the reader finds at that `file:line`.
+    """
+    original = text.splitlines()
     return [
-        (n, line.strip())
-        for n, line in enumerate(scannable.splitlines(), start=1)
+        (n, original[n - 1].strip())
+        for n, line in enumerate(blank_raw_blocks(text).splitlines(), start=1)
         if COLLISION in line
     ]
 
 
 def templates(root: Path = ANSIBLE) -> list[Path]:
-    """Every Jinja template under `root`, sorted."""
-    return sorted(root.rglob("*.j2"))
+    """Every Jinja template under `root`, sorted, minus the vendored collections.
+
+    `ansible/collections/` is the galaxy-installed third-party tree — gitignored, present only
+    after `ansible-galaxy collection install`, and holding ~19 upstream test fixtures this
+    repo cannot edit. Scanning it would make the hook's verdict depend on whether the
+    collections happen to be installed. pytest's testpaths and ruff's extend-exclude skip it
+    the same way, and `shell_templates.py` avoids it by scanning `roles/` alone.
+    """
+    vendored = root / "collections"
+    return sorted(p for p in root.rglob("*.j2") if not p.is_relative_to(vendored))
 
 
 def main() -> int:
