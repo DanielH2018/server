@@ -24,8 +24,11 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from hooklib import hook_registration_lines as arm
 
-_CHECKOUT = "/home/ubuntu/server/.claude/worktrees/fanout-2697"
-_HOOKS = "/home/ubuntu/server/.claude/hooks"
+# Derived from `~` because `_SETTINGS` registers `~/server/...` and the arm expands it: a
+# literal `/home/ubuntu` fails on a CI runner whose HOME is `/home/runner`.
+_ROOT = os.path.expanduser("~/server")
+_CHECKOUT = f"{_ROOT}/.claude/worktrees/fanout-2697"
+_HOOKS = f"{_ROOT}/.claude/hooks"
 
 _SETTINGS = {
     "hooks": {
@@ -61,7 +64,7 @@ def test_a_registered_script_the_primary_checkout_lacks_is_flagged():
     assert f"{_HOOKS}/old.sh" not in line, "a script that exists is not a finding"
     assert "127" in line, "the symptom the operator will have already seen"
     assert "SKIPPED" in line, "the consequence, not just the missing file"
-    assert "git -C /home/ubuntu/server merge --ff-only origin/master" in line, (
+    assert f"git -C {_ROOT} merge --ff-only origin/master" in line, (
         "the way out belongs in the line: the session reading it is in a worktree and "
         "cannot look at the primary checkout for itself"
     )

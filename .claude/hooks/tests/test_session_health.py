@@ -85,13 +85,16 @@ def _run_main(
             monkeypatch.setenv(k, v)
     # Passed as call arguments, not monkeypatched: main() reads the PRIMARY checkout's
     # `git status --porcelain` by default (genuinely dirty under prek's `pytest` hook right
-    # after docs-refresh stages its pages), and remote_fanout_lines reads real
-    # ~/.claude/fanout content. Both are keyword seams (main()'s docstring) -- the
-    # monkeypatch ratchet (ansible/tests/_ratchet.py) caps this file's allowlist entry.
+    # after docs-refresh stages its pages), remote_fanout_lines reads real
+    # ~/.claude/fanout content, and missing_hook_script_lines checks the registered hook
+    # paths against ~/server, which a CI runner does not have. All three are keyword seams
+    # (main()'s docstring) -- the monkeypatch ratchet (ansible/tests/_ratchet.py) caps this
+    # file's allowlist entry.
     return functools.partial(
         _mod.main,
         parked_deployer_problems=lambda: parked or [],
         remote_fanout_lines=lambda: remote_fanout or [],
+        missing_hook_script_lines=lambda **_: [],
     )
 
 
