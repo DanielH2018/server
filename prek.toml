@@ -245,6 +245,23 @@ pass_filenames = false
 # explicitly since it doesn't match the *.service.j2/*.timer.j2 half of this pattern.
 files = "^(ansible/roles/.*\\.(service|timer)\\.j2|ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy\\.rules\\.j2|ansible/roles/setup/.*/defaults/main\\.yml|ansible/inventory/group_vars/all\\.yml|scripts/validate/unit_templates\\.py|scripts/lib/ansible_jinja_env\\.py)$"
 
+# Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. `{#`
+# opens a Jinja comment, so a shell script inside a `.j2` that writes `${#var}` either fails the
+# render with `Missing end of comment tag` (a message naming neither bash nor a fix) or, when a
+# `#}` appears later, has everything between the two silently dropped from the output. The
+# render-then-lint hooks above cannot see either case: the first never renders, and the second
+# renders with the evidence already deleted. This one scans template TEXT, across every `.j2` in
+# the tree rather than one validator's own subtree.
+[[repos.hooks]]
+id = "validate-jinja-bash-collisions"
+name = "Flag bash ${#var} length expansions in Jinja templates"
+entry = "uv run --frozen python scripts/validate/jinja_bash_collisions.py"
+language = "system"
+pass_filenames = false
+# Every template in the tree, plus the scanner itself. No inventory or defaults file is in
+# scope: this reads template text and renders nothing, so no variable can change its verdict.
+files = "^(ansible/.*\\.j2|scripts/validate/jinja_bash_collisions\\.py)$"
+
 # Render every setup-plane template and fail on a variable nothing defines. The guards above
 # stop at their own trees — containers, k8s, *.sh.j2, *.service.j2 — so a setup template with
 # an undefined variable, a Jinja syntax error, or a rename its consumer missed passed the whole
