@@ -59,6 +59,26 @@ and the `otel-review` skill has the query shapes.
 An agent or skill with zero invocations is not automatically dead — it may cover a rare case that
 matters (disaster recovery, a yearly rotation). Name the case, or drop it.
 
+The counts that settled the 2026-09-26 run:
+
+- `sum by (skill_name) (count_over_time({service_name="claude-code"} | event_name="skill_activated" [30d]))`,
+  and the same with `agent_type` over `subagent_completed`. `invocation_trigger=user-slash`
+  shows typed slash commands are counted, so a zero is a real zero.
+- The cluster Loki holds daniel-box and daniel-server only. A user-level skill or agent also
+  runs on the PC and the work laptop, so its zero there is unknown.
+- Split transcript evidence at the upgrade's first request
+  (`… | event_name="api_request" | model="<new model>"`, `--direction forward --limit 1`). A
+  30-day count is mostly the old model.
+
+Before calling anything uncalled, grep the dotfiles repo too — `.github/workflows/`, `evals/`,
+`rules/`, and hooks. That run found `migration-reviewer` backing a CI workflow and
+`distill-scan` feeding the vault pre-commit hook, after a skills-and-agents grep had reported
+no callers for either.
+
+For drift in the config itself — orphaned hook paths, dead plugin toggles, duplicate skill
+names — run `node ~/.claude/skills/config-lint/scripts/config-lint.js` (`--json` for machine
+output, or a project `.claude/` path as the argument).
+
 ### 3. Read the candidates in this order
 
 Cheapest to reverse first, so a mistake costs least:
@@ -98,5 +118,5 @@ having run the pass.
 
 The natural trigger is a model upgrade, which `changelog-watch` already surfaces. When that skill
 reports a new model, it should name this pass as a follow-up rather than only proposing additions
-— an upgrade is the one moment when both directions are worth considering, and only one of them
-currently has an owner.
+— an upgrade is the one moment when both directions are worth considering, and before this pass
+only one of them had an owner.

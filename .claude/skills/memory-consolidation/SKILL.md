@@ -29,6 +29,15 @@ as its own session or subagent, and do not fold it into the end of a working ses
 - **Never retire on the survey alone.** `unreferenced` means no session cited it in the window,
   not that it is wrong. A B2 fact goes unmentioned for a month and is still true the moment
   someone touches B2. Age is a reason to *read* an entry, never a reason to drop it.
+- **Corroborate before you promote.** One run's learning is a candidate, not a fact. An
+  uncorroborated entry is injected into every session and reinforces itself as an instruction
+  even when it is wrong. Promote a candidate only on a **second independent occurrence**, or
+  after checking it against real evidence: a diff, a log, a passing test, live `probe.py` state.
+- **Escalate a recurring correction down the ladder, not into a longer ledger.** When the same
+  correction lands two or three times, move it one rung down: run-local note, memory fact, a
+  `CLAUDE.md` rule, an executable check (a pytest guard, a prek hook, a hook rule). A rule a
+  machine enforces beats a paragraph an agent has to remember. Ask whether the entry is a class
+  with sibling instances, and whether it should be a lint instead.
 
 ## Procedure
 

@@ -133,16 +133,10 @@ change* took effect, so exercise the thing you actually changed as well.
 
 ### Working alongside other sessions
 
-- **Two exits mean another session got there first**, and both are resume points: 75 (a lock
-  stayed busy) and 4 (the tree is behind `origin/master`; under `--at`, a commit merged after
-  yours renders what your tags render, and that landing owns the service).
-- **The tick pulls all of master, not just your commit.** Another session's merged work
-  fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
-  `--tags`, keep it to your own services.
-- **Check the SessionStart banner before deploying a shared role.** It lists the other live
-  sessions and the paths each has touched.
-- **`--detach` returning is not a verified deploy.** Wait for the health gate before reporting
-  success.
+**The tick pulls all of master, not just your commit.** Another session's merged work
+fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
+`--tags`, keep it to your own services. The exit codes that mean another session got there
+first are in the **`land-after-merge` skill**.
 
 ### When to wait
 
@@ -176,11 +170,6 @@ Write exploratory commands so they auto-approve; expect a prompt for the rest.
   shell control flow (`for`/`while` loops, `if/then/else/fi`); anything that writes or execs
   (`> file`, `tee`, `sed -i`, subshells `(…)`, backgrounding `&`).
 - Restructure rather than loop: one `grep`/`find`/`awk` usually replaces the control flow.
-- **The remote-ssh auto-approve depends on the dotfiles `claude_guard` package**; a machine
-  without it prompts on that path.
-- **`./scripts/deploy_tools/gitops_tick.sh` is allow-listed but not guaranteed.** A denial is
-  the classifier: re-run it, and check `last_run` first. The **`gitops-tick` skill**, *When it
-  is denied*, owns the rest (#2164).
 
 ### `kubectl` — what actually decides
 Plain `kubectl` authenticates as a **read-only ServiceAccount**, so RBAC refuses every write
@@ -200,46 +189,16 @@ denies prints its own reason.
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
   service's UI — the half `probe.py health` structurally cannot cover.
-- **bash-pretool** — the one process that runs the four Bash arms below
-  (`block-protected-bash`, `nudge-land-sh`, `block-footguns`, `inject-nested-docs`). It
-  merges their verdicts `deny > ask` and decides nothing itself. Edit the arm, not the
-  dispatcher. The read-only auto-approve is the dotfiles `claude_guard` hook's
-  `readonly.py`, which allows in this repo, the dotfiles checkout and `$HOME` only.
-- **block-protected-edits** and **block-protected-bash** — guard anything under `containers/`,
-  SOPS-encrypted files and generated pages. Edit the `ansible/roles/containers/<svc>/templates/`
-  source, use `sops` / the `/add-secret` skill, or change the generator. The Bash guard also
-  denies a write that leaves an isolated session's worktree.
-- **inject-nested-docs** — adds a role's `CLAUDE.md` and matching `.claude/rules/*.md` as context
-  when a Bash command names their paths. It never makes a decision.
-- **nudge-land-sh** — denies a command that blocks on CI and the third CI-status read in one
-  session. Use `land.sh --pr <n> --since <sha>` instead.
-- **block-footguns** — denies this repo's commands that return a plausible wrong answer
-  rather than an error, such as a `kubectl rollout restart` that prints success while
-  Forbidden. Its docstring is the full list. The host-generic ones (`grep -Z` under `ugrep`, a
-  bare `git stash pop`) are denied by the dotfiles `claude_guard` hook in every repo.
-- **validate-compose** — re-renders the compose templates after a template or vars edit. Shell
-  `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.
-- **auto-mode-bridge** — retries a denied `gitops_tick.sh` and decodes a `deploy.sh` exit.
+- **Shell `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.**
+  The validate-compose hook re-renders the templates after an edit and fails on a single `$`.
 - **session-health** — the SessionStart banner. It names unhealthy workloads, a dirty primary
   checkout, a GitOps deployer parked behind origin, and a setup role the tick merged but cannot
   apply. The first two stop every deploy in the fleet, and the banner is the only place a
   worktree session sees them.
 
 ## Review & Memory Hygiene (making judgment cumulative)
-Two rules keep the review→memory loop from compounding noise (adapted from harness-engineering's
-feedback + MLD discipline):
-- **Corroborate before you promote.** A single review run's "learning" is a *candidate*, not a fact.
-  Don't write a new auto-memory entry (or a don't-re-flag verdict) off one run's say-so — an
-  uncorroborated learning that then gets auto-injected every session reinforces itself as an
-  instruction even if it was wrong. Promote a candidate to durable memory only when a **second
-  independent occurrence** confirms it, or you've checked it against real evidence (a diff, a log, a
-  passing test, live `probe.py` state). Until then it stays a run-local note, not a memory file.
-- **Escalate a recurring finding to the smallest durable owner — don't just grow the ledger.** When
-  the same correction lands 2–3 times, move it *down* this ladder instead of filing another
-  don't-re-flag verdict: run-local note → memory fact → a CLAUDE.md rule → an executable check (a
-  pytest guard, a prek hook, a `validate-compose`/`auto-approve` rule). A rule a machine enforces
-  beats a paragraph an agent has to remember. Before adding a don't-re-flag verdict, ask: is this a
-  *class* (are there sibling instances the same principle governs), and should it be a lint instead?
+The rules for promoting a review learning into memory live in the `memory-consolidation` and
+`homelab-review` skills, which run at the moment they apply.
 - **Mark a settled trade-off `# DECIDED:` at the line it governs.** A decision recorded only in a
   memory file or a commit message is a decision every future reviewer re-derives; one written as a
   comment where the code makes the trade-off is one they trip over before they spend an hour on it.
@@ -274,12 +233,8 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
   vs `origin/master`. It's derived from `git worktree list` and `/proc`, not from anything a
   session declares, so check it before editing a file several sessions are near (`CLAUDE.md`,
   `group_vars/`, a shared role) rather than assuming you're alone.
-- **Deploys serialize on a lock** — use `./scripts/deploy.sh`, see *Common Commands*.
-- **`ExitWorktree` refuses to remove a squash-merged or rebase-merged worktree**, reporting
-  "N commits on <branch>". Do **not** pass `discard_changes` to argue with it — that is how
-  unlanded work is lost, and from the tool's side the two cases look identical. Retiring a
-  worktree is the `worktree-cleanup` skill: the content check that settles it, and
-  `scripts/dev/prune_worktrees.py`, which collects what `ExitWorktree` refused.
+- **Never pass `discard_changes` to `ExitWorktree`** when it refuses a merged worktree. That is
+  how unlanded work is lost. Retiring a worktree is the `worktree-cleanup` skill.
 
 ## Secrets Management
 - Secrets live in `ansible/vars/secrets.yml`, encrypted with SOPS + age. Edit them with `sops`
@@ -323,18 +278,8 @@ uv run pytest                 # all repo unit tests (auto-syncs the env from uv.
 uv run pytest scripts         # just one suite
 ```
 
-- **Bare `python3` cannot parse this repo** (it needs 3.14; Ubuntu's is 3.12).
-  `.claude/hooks/uv-python.sh` rewrites a bare invocation into `uv run …`.
-- **What runs is defined once** in `pyproject.toml` `[tool.pytest.ini_options]` `testpaths` —
-  consumed by both `uv run pytest` and the prek `pytest` hook. It deliberately excludes the
-  vendored `ansible/collections/**` third-party tests.
-- **Deps live once** in the `dev` dependency group; the prek `pytest` and
-  `validate-compose-templates` hooks call `uv run`, so there's no duplicated dependency list.
-  **uv must be on `PATH` for `prek run`** (CI installs it via `astral-sh/setup-uv`).
-- **Suites:** read `testpaths` in `pyproject.toml` — it names every one, with a comment saying
-  what each covers. Tests never sit beside the code they cover; where a new test or module
-  goes, and the `sys.path` bootstrap a cross-directory import needs, is
-  `.claude/rules/python-layout.md`, which loads when you touch a path it governs.
+- **Suites:** `testpaths` in `pyproject.toml` names every one, for both `uv run pytest` and the
+  prek `pytest` hook. Where a new test or module goes is `.claude/rules/python-layout.md`.
 - **A new check ships with a proof it can go RED**, a named member it must find if it finds its
   subject by pattern, and a measured transport if it reaches over a network.
   `.claude/rules/python-layout.md` has the three rules and the incidents behind them.
