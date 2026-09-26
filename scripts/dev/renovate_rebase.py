@@ -46,7 +46,9 @@ TICKED = "- [x] <!-- rebase-check -->"
 
 # Renovate posts this commit status per branch: PENDING while the update is inside its
 # `minimumReleaseAge`, SUCCESS once the soak is over. It is a `StatusContext` in the rollup,
-# not a `CheckRun`, so it carries `context`/`state` rather than `name`/`conclusion`.
+# not a `CheckRun`, so it carries `context`/`state` rather than `name`/`conclusion`. The name
+# lives GitHub-side rather than in `renovate.json`, so nothing here can pin it: a rename by
+# Renovate returns this script to ticking through a soak, and no test would catch it.
 SOAK_CONTEXT = "renovate/stability-days"
 
 # The one seam: `gh(*args) -> CompletedProcess`, the signature of `lib.gh.gh`.

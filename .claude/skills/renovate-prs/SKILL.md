@@ -173,6 +173,11 @@ gh workflow run ci.yml --ref "$(gh pr view <n> --json headRefName -q .headRefNam
 gh run list --workflow ci.yml --event workflow_dispatch --limit 1
 ```
 
+A CI-toolchain pin inherits `minimumReleaseAge` from the catch-all rule (`renovate.json`, the
+`{{depName}}` rule's own description says so), so the first line exits 3 while the PR soaks.
+Stop there: the dispatch needs the refreshed branch, and dispatching the unrefreshed one
+sweeps the old image.
+
 The dispatched run takes the full-sweep path in every job, because each one reads a dispatch as a
 push. Dispatch the branch and never master: a red dispatch run pins the required context red on
 that master SHA, and the deployer's gate reads the worst outcome of every run sharing the name
