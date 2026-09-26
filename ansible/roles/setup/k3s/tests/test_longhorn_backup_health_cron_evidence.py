@@ -33,12 +33,17 @@ _TRIM_CLEAN = "trimmed 41 volume(s), 3 skipped, 0 failed"
 _TRIM_FAILED = "trimmed 38 volume(s), 3 skipped, 3 failed"
 _TRIM_ABORT = "ABORT: no ready longhorn-manager pod on daniel-box"
 
+# The one line a COMPLETED `b2-deletions` run always ends with, copied from
+# `deletions_summary_line` in `scripts/diagnostics/probe_lib/b2_ledger.py` and matched as
+# written for the same reason the trim's lines are.
+_SUMMARY = "b2-deletions: charged 3, skipped 0, unpriced 0"
+
 
 def test_cron_evidence_is_clean_on_a_successful_trim_and_a_priced_accounting():
     assert (
         logic.check_cron_evidence(
             [_TRIM_CLEAN],
-            ["charged 3 deletion(s) over 26h: 186 Class C, priced from the listing"],
+            [_SUMMARY],
             26,
         )
         == []
@@ -110,7 +115,6 @@ _B2 = logic.CronState(
     False,
     True,
 )
-_PRICED = "charged 3 deletion(s) over 26h: 186 Class C, priced from the listing"
 
 
 def _liveness(trim_lines, deletion_lines, trim=_TRIM, deletion=_B2, window=26):
@@ -120,12 +124,12 @@ def _liveness(trim_lines, deletion_lines, trim=_TRIM, deletion=_B2, window=26):
 
 
 def test_cron_liveness_is_clean_when_both_crons_spoke_in_the_window():
-    assert _liveness([_TRIM_CLEAN], [_PRICED]) == []
+    assert _liveness([_TRIM_CLEAN], [_SUMMARY]) == []
 
 
 def test_cron_liveness_is_flagged_when_a_long_installed_cron_says_nothing():
     """The gap check 9 leaves open: an empty window reads as green to the content arm."""
-    problems = _liveness([], [_PRICED])
+    problems = _liveness([], [_SUMMARY])
     assert len(problems) == 1
     assert problems[0][0] == 4
     assert "longhorn-trim has logged nothing in the last 26h" in problems[0][1]
@@ -136,7 +140,7 @@ def test_cron_liveness_is_flagged_when_the_cron_entry_is_gone():
     """The issue's verify-by: remove the entry and the tile names the silent cron."""
     # fact: ansible/roles/setup/k3s/CLAUDE.md#Autonomous-role contract (the crons that change state with no human in the loop)
     gone = _TRIM._replace(installed_at=None)
-    problems = _liveness([], [_PRICED], trim=gone)
+    problems = _liveness([], [_SUMMARY], trim=gone)
     assert len(problems) == 1
     assert "the longhorn-trim cron is not installed" in problems[0][1]
 
@@ -144,7 +148,7 @@ def test_cron_liveness_is_flagged_when_the_cron_entry_is_gone():
 def test_cron_liveness_is_clean_on_a_freshly_provisioned_host():
     """Installed inside the window, so it has not yet had a full period to fire in."""
     fresh = _TRIM._replace(installed_at=_NOW - 3600)
-    assert _liveness([], [_PRICED], trim=fresh) == []
+    assert _liveness([], [_SUMMARY], trim=fresh) == []
 
 
 def test_cron_liveness_is_clean_for_a_cron_this_host_does_not_install():
@@ -156,7 +160,7 @@ def test_cron_liveness_is_clean_for_a_cron_this_host_does_not_install():
 def test_cron_liveness_separates_a_missing_cron_from_one_it_cannot_stat():
     """A missing cron and one it cannot stat have different fixes — the drill's lesson."""
     blind = _TRIM._replace(installed_at=None, unreadable=True)
-    problems = _liveness([], [_PRICED], trim=blind)
+    problems = _liveness([], [_SUMMARY], trim=blind)
     assert len(problems) == 1
     assert "could not stat /etc/cron.d/longhorn-trim" in problems[0][1]
     assert "not installed" not in problems[0][1]
@@ -174,7 +178,7 @@ def test_cron_liveness_does_not_run_on_a_window_shorter_than_one_cron_period():
 
 def test_cron_liveness_reads_trim_chatter_as_silence():
     """Only a line check 9 recognises counts: the trim's verdict has its own two shapes."""
-    problems = _liveness(["some unrelated line under the tag"], [_PRICED])
+    problems = _liveness(["some unrelated line under the tag"], [_SUMMARY])
     assert len(problems) == 1
     assert "longhorn-trim has logged nothing" in problems[0][1]
 
@@ -215,3 +219,20 @@ def test_cron_liveness_accepts_the_summary_line_the_probe_writes():
     assert (
         _liveness([_TRIM_CLEAN], [b2_ledger.deletions_declined_line("disarmed")]) == []
     )
+
+
+def test_cron_liveness_reads_a_body_line_without_a_summary_as_silence():
+    """#2565: the two shapes the legacy arm used to accept are body rows, not a verdict.
+
+    `b2_ledger.py` still writes both — the priced total and the nothing-deleted row — but a run
+    that dies after printing one of them never reaches `deletions_summary_line`. Accepting them
+    kept the weaker "any line at all" reading alive for two line shapes.
+    """
+    body_rows = [
+        "no new B2 backup deletions in the last 26h",
+        "charged 3 deletion(s) over 26h: 186 Class C, priced from the listing",
+    ]
+    assert not logic.deletions_have_spoken(body_rows)
+    problems = _liveness([_TRIM_CLEAN], body_rows)
+    assert len(problems) == 1
+    assert "b2-deletions has logged nothing in the last 26h" in problems[0][1]
