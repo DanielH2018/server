@@ -604,10 +604,10 @@ render_records_host: daniel-box
 # and removes the units, the worktree and the role's directories. To move the producer, apply
 # false on the old host first, then change render_records_host.
 #
-# False until #2614 lands. A k8s dry run still installs host scripts, crons and node-staged
-# modules from the tree it renders, so an armed producer would ship origin/master's host half
-# every hour ahead of its landing. The uptime-kuma tile is gated on this too, so a disarmed
-# producer leaves no tile red.
+# False until #2587 arms it. The host-write blocker is gone — #2614 guarded every host write in
+# a role this renders on `not k8s_dry_run | bool`, so an hourly dry run no longer installs that
+# tree's host scripts, crons and node-staged modules ahead of their landing. The uptime-kuma
+# tile is gated on this too, so a disarmed producer leaves no tile red.
 render_records_enabled: false
 # The producer runs hourly at this minute. Here rather than in the role's defaults because the
 # uptime-kuma role derives the monitor's interval from the same cadence below.

@@ -62,6 +62,7 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Install the qbittorrent prefs-check script
   tags: [config]
@@ -72,6 +73,7 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Deploy the qbittorrent prefs-check wrapper
   tags: [cron]
@@ -86,6 +88,7 @@
     group: "{{ sys_user }}"
   become: true
   no_log: true  # renders qbittorrent_username / qbittorrent_password
+  when: not k8s_dry_run | bool
 
 - name: Schedule the qbittorrent prefs-check drift check
   tags: [cron]
@@ -97,3 +100,4 @@
     job: "/usr/local/bin/qbittorrent-prefs-check.sh"
     cron_file: qbittorrent-prefs-check
   become: true
+  when: not k8s_dry_run | bool

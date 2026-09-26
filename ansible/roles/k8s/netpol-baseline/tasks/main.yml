@@ -175,6 +175,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the netpol-baseline probe
   tags: [config]
@@ -185,6 +186,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Clear the previous netpol-baseline probe run
   tags: [deploy]
@@ -310,6 +312,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the netpol-baseline-probe-slice2 probe
   tags: [config]
@@ -320,6 +323,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 # The slice-2 probe's assertions are INVERTED (see netpol-probe-slice2-job.yaml.j2): a failed
 # `nc` is the PASS case. That means a crashlooping or scaled-to-zero target reads
@@ -497,6 +501,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the netpol-baseline-probe-slice3 probe
   tags: [config]
@@ -507,6 +512,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 # The slice-3 probe's assertions are INVERTED, same as slice 2's: a failed `nc` is the PASS
 # case. That means a crashlooping or scaled-to-zero target reads identically to a correctly-
@@ -671,6 +677,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the netpol-baseline-probe-slice4 probe
   tags: [config]
@@ -681,6 +688,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 # The slice-4 probe's assertions are INVERTED, same as slices 2-3: a failed `nc` is the PASS
 # case. That means a crashlooping or scaled-to-zero target reads identically to a correctly-
@@ -837,6 +845,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the netpol-baseline-probe-slice45 probe
   tags: [config]
@@ -847,6 +856,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 # Five of this probe's legs are INVERTED, so a crashlooping or scaled-to-zero target reads
 # identically to a correctly-fenced one. This gate proves the targets are up first — otherwise

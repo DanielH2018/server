@@ -70,8 +70,12 @@ manifest bug reaches production.
 | `--dry-run` | The **live API server**, via `kubectl apply --dry-run=server` | Everything prek catches, plus CRD schemas, CRD ordering and admission rejections |
 
 `--dry-run` renders to a temp directory, applies with `--dry-run=server`, and discards it.
-Nothing in the cluster is applied, patched or rolled. A role's own `config` tasks still write
-their staging files on the node, such as the bridge scripts under `/etc/rancher/k3s/<role>/`.
+Nothing in the cluster is applied, patched or rolled, and nothing on the node is written either:
+a role's host-plane tasks — the staged modules under `/etc/rancher/k3s/<role>/`, the
+`/usr/local/bin` scripts, the crons that run them, the probe-Job manifests — all carry
+`when: not k8s_dry_run | bool` (#2614), and
+`ansible/tests/deploy/test_k8s_dry_run_host_writes.py::test_every_host_write_outside_manifests_is_guarded`
+fails on one that does not.
 
 ### What a green dry run does not prove
 

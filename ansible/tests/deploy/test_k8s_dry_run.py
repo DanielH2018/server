@@ -33,6 +33,14 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import REPO, load_tasks
 
+# The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
+from _k8s_guards import (
+    _GUARD_FACT,
+    _guard_covered_files,
+    _role_with_tasks,
+    _task_chunks,
+)
+
 _REPO = REPO
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
 _DEPLOY = _REPO / "ansible/deploy.yml"
@@ -247,39 +255,6 @@ _EXEC_WRITE = re.compile(
 _BARE_EXEC = re.compile(r"kubectl\b[^\n]*\bexec\s+(?!-i\b)\S")
 
 
-def _task_chunks(task_file: Path, strip_trailing_comments: bool = False) -> list[str]:
-    """Join each task's (possibly multi-line, folded-scalar) body into one string.
-
-    A raw per-line scan can't see `kubectl … exec pod --` and the write verb it pipes to when
-    they land on different physical lines of a `cmd: >-` block — which is the normal shape here.
-    Splitting on `- name:` (a task boundary in every file in this tree, block-nested or not) and
-    joining what follows gives each task one flat string to search, without needing a full YAML
-    parse that would miss commands nested under `block:`/`loop:`.
-
-    Whole-line comments are always dropped. `strip_trailing_comments` additionally drops a
-    trailing `#…` from every line BEFORE they are joined — per line, because joining first and
-    stripping after would delete the rest of the task. That direction is only safe for a check
-    that must not credit a comment (the guard search below); it is deliberately off for the
-    mutation search, where dropping text could only hide a write.
-    """
-    chunks: list[str] = []
-    current: list[str] = []
-    for line in task_file.read_text().splitlines():
-        stripped = line.strip()
-        if re.match(r"^-\s*name:", stripped):
-            if current:
-                chunks.append(" ".join(current))
-            current = []
-        if stripped.startswith("#"):
-            continue
-        if strip_trailing_comments:
-            stripped = re.sub(r"\s#.*$", "", stripped)
-        current.append(stripped)
-    if current:
-        chunks.append(" ".join(current))
-    return chunks
-
-
 def _chunk_mutates(chunk: str) -> bool:
     if "--dry-run=client" in chunk:
         return False
@@ -301,57 +276,6 @@ def _bypasses_manifests(role: Path) -> bool:
     """A role that never includes roles/k8s/manifests applies its objects some other way."""
     main = role / "tasks/main.yml"
     return main.exists() and "manifests" not in main.read_text()
-
-
-# Whole-identifier, not a bare substring: janitorr's unrelated `janitorr_dry_run: "{{
-# janitorr_k8s_dry_run }}"` contains the literal text "k8s_dry_run" inside a longer variable
-# name, which a substring check reads as a guard that isn't there. `\b` anchors this to the
-# real fact names, which are underscore-joined identifiers with no boundary in the middle of
-# `janitorr_k8s_dry_run` for `\b` to land on.
-_GUARD_FACT = re.compile(r"\bk8s_no_mutate\b|\bk8s_dry_run\b")
-
-
-_INCLUDED_FILE = re.compile(r"(?:import_tasks|include_tasks):\s*[\"']?([\w.-]+\.ya?ml)")
-
-
-def _guard_covered_files(role: Path) -> set[str]:
-    """Task files every one of whose tasks inherits a no-mutation guard from its caller.
-
-    volume-claim is the shape this exists for: main.yml is a single
-    `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagates that
-    `when` to every task in seed.yml — and on to copy.yml, which seed.yml includes. Nothing in
-    either file names the guard, so a per-task rule alone would call the role unguarded and
-    demand it be added to k8s_dry_run_unsupported, where it would do nothing (the refusal reads
-    --tags, and volume-claim is reached as a dependency of 25 roles).
-
-    Only main.yml is scanned for the guarded include; from there the closure is transitive and
-    unconditional, because a file whose caller is guarded is guarded whatever it does next.
-    """
-    tasks_dir = role / "tasks"
-    main = tasks_dir / "main.yml"
-    if not main.is_file():
-        return set()
-    pending = [
-        m.group(1)
-        for chunk in _task_chunks(main, strip_trailing_comments=True)
-        if _GUARD_FACT.search(chunk)
-        for m in [_INCLUDED_FILE.search(chunk)]
-        if m
-    ]
-    covered: set[str] = set()
-    while pending:
-        name = pending.pop()
-        if name in covered:
-            continue
-        covered.add(name)
-        included = tasks_dir / name
-        if not included.is_file():
-            continue
-        for chunk in _task_chunks(included):
-            m = _INCLUDED_FILE.search(chunk)
-            if m:
-                pending.append(m.group(1))
-    return covered
 
 
 def _unguarded_mutations(role: Path) -> list[str]:
@@ -464,14 +388,6 @@ def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
         "unrelated service reaches them. Listing them in k8s_dry_run_unsupported does NOT help "
         "— that check only sees --tags. Guard tasks/main.yml on k8s_no_mutate instead."
     )
-
-
-def _role_with_tasks(tmp_path: Path, **files: str) -> Path:
-    role = tmp_path / "widget"
-    (role / "tasks").mkdir(parents=True)
-    for name, body in files.items():
-        (role / "tasks" / f"{name}.yml").write_text(body)
-    return role
 
 
 _CREATE_JOB = (

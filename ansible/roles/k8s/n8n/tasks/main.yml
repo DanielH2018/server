@@ -61,6 +61,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the broker-isolation probe
   tags: [deploy]
@@ -71,6 +72,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Remove any previous broker-isolation probe
   when: not k8s_no_mutate

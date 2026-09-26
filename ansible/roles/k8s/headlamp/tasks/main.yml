@@ -34,6 +34,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the headlamp isolation probe
   tags: [config]
@@ -44,6 +45,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Clear the previous headlamp probe run
   when: not k8s_no_mutate

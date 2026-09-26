@@ -87,6 +87,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the registry self-test jobs
   tags: [config]
@@ -100,6 +101,7 @@
     - selftest-push-job.yaml
     - selftest-pull-job.yaml
   become: true
+  when: not k8s_dry_run | bool
 
 # Deleted first because a Job's pod template is immutable: re-applying a completed Job is either
 # a no-op or an error, and in both cases it proves nothing about today.
@@ -190,6 +192,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Remove any previous registry netpol-isolation probe
   when: not k8s_no_mutate
@@ -246,7 +249,9 @@
 # daniel-stage sets the flag false.
 - name: Remove the registry garbage-collection job manifest where GC is unmanaged
   tags: [config, registry-gc]
-  when: not (registry_k8s_manage_gc | bool)
+  when:
+    - not (registry_k8s_manage_gc | bool)
+    - not k8s_dry_run | bool
   ansible.builtin.file:
     path: /etc/rancher/k3s/manifests/registry-jobs/gc-job.yaml
     state: absent
@@ -264,6 +269,7 @@
         owner: root
         group: root
       become: true
+      when: not k8s_dry_run | bool
 
     - name: Deploy the registry garbage-collection script
       tags: [config, registry-gc]
@@ -278,6 +284,7 @@
         group: root
       become: true
       no_log: true  # renders the Kuma push token
+      when: not k8s_dry_run | bool
 
     - name: Create the registry garbage-collection state directory
       tags: [config, registry-gc]
@@ -288,6 +295,7 @@
         owner: root
         group: root
       become: true
+      when: not k8s_dry_run | bool
 
     - name: Schedule the registry garbage collection
       tags: [config, registry-gc]
@@ -300,3 +308,4 @@
         job: "/usr/local/bin/registry-gc.sh"
         cron_file: registry-gc
       become: true
+      when: not k8s_dry_run | bool

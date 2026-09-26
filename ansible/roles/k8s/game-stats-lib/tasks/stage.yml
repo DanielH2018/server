@@ -45,7 +45,9 @@
 #                             A per-host fact, overwritten by the next consumer's import in
 #                             the same play — correct only because every import sits directly
 #                             above its own consumer's render, the same way
-#                             `game_stats_lib_stage` is read for the checksum.
+#                             `game_stats_lib_checksum` is read for the pod-roll trigger.
+#   game_stats_lib_checksum   the sha1 of the shared module's own bytes, which the caller folds
+#                             into its `checksum/stats-script` pod annotation.
 #
 # ENFORCED by ansible/tests/k8s/test_game_stats_lib_ships_through_the_include.py: every role
 # whose files/ scripts `import stats_lib` imports this file, and its ConfigMap ship list
@@ -60,7 +62,16 @@
     group: root
   become: true
   register: game_stats_lib_stage
+  when: not k8s_dry_run | bool
 
 - name: Name the staged stats_lib copy for the caller's ConfigMap ship list
   ansible.builtin.set_fact:
     game_stats_lib_from_file: "--from-file=stats_lib.py={{ game_stats_lib_dest_dir }}/stats_lib.py"
+    # Hashed off the source file, not off `game_stats_lib_stage`: the copy above is skipped on a
+    # dry run (#2614), and `.checksum` on a skipped result is Undefined — the caller's
+    # `[own, shared] | sort` would raise at template time. `rstrip=False` makes these the bytes
+    # `copy` hashed, so the caller's pod-roll trigger keeps its value either way.
+    game_stats_lib_checksum: >-
+      {{ lookup('ansible.builtin.file',
+                playbook_dir ~ '/roles/k8s/game-stats-lib/files/stats_lib.py',
+                rstrip=False) | hash('sha1') }}

@@ -39,6 +39,7 @@
     group: "{{ sys_user }}"
     mode: "0755"
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Install the shared host_lib helper beside the janitorr health reader
   tags: [config]
@@ -63,6 +64,7 @@
     - janitorr_health.py
     - janitorr_health_logic.py
   become: true
+  when: not k8s_dry_run | bool
 
 # The reader scripts and their host_lib sibling were `copy:`-deployed and watched by nothing
 # (#2590): setup-drift-lib.sh's deployed-code arm only compares pairs a role declared, so a
@@ -100,6 +102,7 @@
     group: "{{ sys_user }}"
   become: true
   no_log: true  # renders the Kuma push token
+  when: not k8s_dry_run | bool
 
 - name: Schedule the janitorr error heartbeat
   tags: [cron]
@@ -110,3 +113,4 @@
     job: "/usr/local/bin/janitorr-health.sh"
     cron_file: janitorr-health
   become: true
+  when: not k8s_dry_run | bool

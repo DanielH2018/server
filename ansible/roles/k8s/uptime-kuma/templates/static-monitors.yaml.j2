@@ -566,7 +566,7 @@ stringData:
    identifier of each if-gate, innermost first, as a SOPS key. As one compound condition it
    read the set token and reported this tile "declared, not live" for as long as the producer
    stays disarmed. Innermost, the flag reads as an undeclared key and the absence is excused.
-   Drop this inner gate in the PR that arms the producer (#2614): armed, the excuse would hide
+   Drop this inner gate in the PR that arms the producer (#2587): armed, the excuse would hide
    a tile that failed to appear. #}
 {% if render_records_push_token | default('') %}
 {% if render_records_enabled | default(false) | bool %}

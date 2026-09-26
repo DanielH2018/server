@@ -100,6 +100,7 @@
     owner: root
     group: root
   become: true
+  when: not k8s_dry_run | bool
 
 - name: Render the build context and job for {{ image_builder_name }}
   tags: [config]
@@ -124,6 +125,7 @@
   # flag; measured 2026-08-22 in both the looped and unlooped shapes, because a suppressed flag
   # would fail silently as a permanently stale image rather than as an error.
   register: image_builder_render
+  when: not k8s_dry_run | bool
 
 # The digest the tag resolves to BEFORE the build, so it can be compared with the one after.
 # Every image here is pushed to a mutable tag (`:latest`), which means a rebuild changes what
