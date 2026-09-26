@@ -408,13 +408,14 @@ def cmd_clean_one(
     remover=None,
     unlocker=None,
     locker=None,
+    brancher=None,
 ) -> int:
     """Hidden: runs ON the host holding the worktree. `clean` calls it over Tools.run.
 
-    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker` and `locker` are seams —
-    parameters rather than patched module attributes, so a test can drive this without
-    pinning a first-party module name. Every default reaches the real thing, and all five
-    of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
+    `list_worktrees`, `ask`, `dirty`, `remover`, `unlocker`, `locker` and `brancher` are
+    seams — parameters rather than patched module attributes, so a test can drive this
+    without pinning a first-party module name. Every default reaches the real thing, and all
+    six of `clean_one`'s own seams are forwarded so a REMOVABLE-with-lock case run through this
     entry point stays hermetic too.
 
     An absent worktree reads `removed`, not `kept` — it is the goal state, not a failure.
@@ -424,6 +425,7 @@ def cmd_clean_one(
     below stays for a `clean-one` run by hand against a tree that is already gone.
     """
     from fanout_lib.clean import clean_one
+    from fanout_lib.clean import delete_branch as default_brancher
     from fanout_lib.clean import lock as default_locker
     from fanout_lib.clean import unlock as default_unlocker
     from prune_worktrees import is_dirty, is_merged, parse_worktree_list, remove
@@ -455,6 +457,7 @@ def cmd_clean_one(
         remover=remover if remover is not None else remove,
         unlocker=unlocker if unlocker is not None else default_unlocker,
         locker=locker if locker is not None else default_locker,
+        brancher=brancher if brancher is not None else default_brancher,
     )
     print(f"{state}: {args.worktree} {why}".rstrip())
     return 0

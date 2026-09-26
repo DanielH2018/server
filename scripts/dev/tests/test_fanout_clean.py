@@ -96,8 +96,24 @@ def test_a_merged_clean_tree_is_removed():
         remover=lambda repo, tree: (removed.append(tree.path), (True, ""))[1],
         unlocker=_noop_unlocker,
         locker=_noop_locker,
+        brancher=lambda repo, branch: (True, ""),
     )
     assert state == "removed" and removed == [B.worktree]
+
+
+def test_a_removed_tree_whose_branch_refuses_to_delete_is_reported_as_kept():
+    state, why = clean_one(
+        "/r",
+        _tree(),
+        ask=lambda *a, **k: True,
+        dirty=lambda p: False,
+        remover=lambda r, t: (True, ""),
+        unlocker=_noop_unlocker,
+        locker=_noop_locker,
+        brancher=lambda repo, branch: (False, "error: branch is checked out"),
+    )
+    assert state == "kept"
+    assert f"branch {B.branch} not deleted: error: branch is checked out" in why
 
 
 def test_an_unmerged_tree_is_kept_and_named():
@@ -167,6 +183,7 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
         ],
         unlocker=unlocker,
         locker=locker,
+        brancher=lambda r, b: (True, ""),
     )
     assert state == "removed"
     assert calls == [("unlock", tree.path), ("remove", tree.path, False)]
@@ -222,6 +239,29 @@ def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_drop
     assert state == "removed" and "already gone" in why
     assert str(wt) not in _worktree_list(repo)
     assert "gone-branch" not in _branches(repo)
+
+
+def test_a_present_merged_worktree_is_removed_and_its_branch_dropped(
+    tmp_path, monkeypatch
+):
+    """#2674: removing a landed tree used to leave its `worktree-fanout-<batch>` branch
+    behind, so every cleaned batch left one for the operator. Real git throughout, and no
+    `dirty` override, so the tree really is present and clean.
+    """
+    _scrub_git_env(monkeypatch)
+    repo = tmp_path / "repo"
+    _init_scratch_repo(repo)
+    wt = tmp_path / "wt"
+    _git(repo, "worktree", "add", "-q", "-b", "done-branch", str(wt))
+    tree = next(
+        t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
+    )
+
+    state, why = clean_one(str(repo), tree, ask=lambda *a, **k: True, remover=remove)
+
+    assert (state, why) == ("removed", "")
+    assert not wt.exists()
+    assert "done-branch" not in _branches(repo)
 
 
 def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkeypatch):
@@ -370,9 +410,10 @@ def test_cmd_clean_one_forwards_unlocker_and_locker_seams(tmp_path):
         remover=lambda r, t: (True, ""),
         unlocker=lambda r, p: calls.append(("unlock", p)),
         locker=lambda r, p, reason: calls.append(("lock", p, reason)),
+        brancher=lambda r, b: (calls.append(("branch -D", b)), (True, ""))[1],
     )
     assert code == 0
-    assert calls == [("unlock", str(wt))]
+    assert calls == [("unlock", str(wt)), ("branch -D", "worktree-fanout-b")]
 
 
 def _manifest(tmp_path, batches):
