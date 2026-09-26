@@ -290,9 +290,9 @@ def branch_slug_tell(marker: str) -> str:
     branch can be the only place the marker reaches — #2620 was
     `Update klutchell/unbound Docker tag to v1.26.1` on
     `renovate/k8s-image-klutchellunbound-(manual-k8s_autodeploy-false-…)` (issue #2641).
-    The denylist and base-image rules carry `groupSingleUpdates: true` since #2646, which puts
-    the marker in their titles too; a per-package rule's PR and every PR raised before that
-    flag landed still title bare, so both tells stay load-bearing.
+    Every rule carrying the marker sets `groupSingleUpdates: true` since #2646 and #2654, which
+    puts the marker in their titles too; every PR raised before that flag landed still titles
+    bare, so both tells stay load-bearing.
     Derived rather than typed, for the reason `denylist_marker` is read out of renovate.json:
     a rename of the rule's marker must fail this guard rather than leave the prompt behind.
     """

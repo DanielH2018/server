@@ -675,6 +675,7 @@
         "getmeili/meilisearch"
       ],
       "groupName": "meilisearch (manual upgrade \u2014 DB format migration; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -711,6 +712,7 @@
         "maxlerebourg/crowdsec-bouncer-traefik-plugin"
       ],
       "groupName": "crowdsec bouncer plugin (manual \u2014 needs traefik redeploy; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -783,6 +785,7 @@
         "loguru"
       ],
       "groupName": "karakeep time-tagger pip deps (manual \u2014 track the pinned app; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -800,6 +803,7 @@
         "node-version"
       ],
       "groupName": "code-server build pins (manual — built image, finish code_server_k8s_node_sha256 on a node bump; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -839,6 +843,7 @@
         "n8nio/runners"
       ],
       "groupName": "n8n (manual — append each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
@@ -853,6 +858,7 @@
         "npm"
       ],
       "groupName": "n8n fuzzball (manual — built image, rebuild with deploy.sh --tags n8n-images,n8n; k8s_autodeploy: false)",
+      "groupSingleUpdates": true,
       "automerge": false
     },
     {
