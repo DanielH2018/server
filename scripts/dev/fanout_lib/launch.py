@@ -11,6 +11,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from fanout_lib.brief import LANDS
 from fanout_lib.manifest import Batch
 from fanout_lib.transport import REPO, Tools
 
@@ -64,28 +65,62 @@ def exists_check_command(batch: str) -> str:
     )
 
 
-def create_worktree_command(batch: str) -> str:
+def fast_forward_primary_command(host: str) -> str:
+    """Bring `host`'s primary checkout up to `origin/master`, or "" where a tick already does.
+
+    Issue #2675: `.claude/settings.json` names every hook by an absolute path into the
+    PRIMARY checkout, not into the session's worktree. A worktree cut from a fresher
+    `origin/master` than the primary checkout therefore registers hook scripts the primary
+    checkout does not have yet, `/bin/sh` exits 127, Claude Code treats that as a
+    non-blocking hook error, and the tool call runs with the guard skipped. About 2,100 Bash
+    calls ran that way on daniel-server across two windows in September 2026, each window
+    opened by a commit adding a hook script and closed when that checkout next pulled.
+
+    DECIDED: nothing on `LANDS`, where the GitOps tick pulls every 10 minutes. The window
+    there is bounded by the tick, and the tick takes `/var/lock/server-git-tree.lock` for its
+    own `--ff-only` merge (`deploy_locks.TREE_LOCK`) because moving HEAD under an in-flight
+    deploy ships a different SHA than the one the health gate cleared. A launch cannot hold
+    that lock: a deploy holds it for up to 20 minutes, well past `LAUNCH_TIMEOUT_S`, so taking
+    it would turn a bounded stale-hook window into a failed launch. The defect is a host with
+    no tick, which is the only host this fast-forwards.
+
+    Gated on HEAD being `master`: `merge --ff-only origin/master` on a checkout parked on
+    another branch would take master's commits onto THAT branch. A refusal here — detached
+    HEAD, a local commit, a diverged branch, a dirty tree `--ff-only` cannot cross — refuses
+    the launch, which is the right answer rather than a fallback: the host's hook state is
+    then unknown, and that is exactly when a batch must not be placed on it.
+    """
+    if host == LANDS:
+        return ""
+    return _step(
+        f"git -C {REPO} symbolic-ref --quiet --short HEAD | grep -qx master && "
+        f"git -C {REPO} merge --ff-only origin/master",
+        "primary ff",
+    )
+
+
+def create_worktree_command(batch: str, host: str) -> str:
     # The lock keeps prune_worktrees.py off this tree: its `--reason` doesn't match the
     # `claude session ... (pid ... start ...)` shape prune_worktrees.session_is_alive
     # recognizes, so an unrecognized reason reads as alive and the tree survives every
     # prune until Task 10's `clean` unlocks it. Without this a merged, clean, unlocked
     # tree is removable the moment the PR lands — even while the unit is still running.
-    return " && ".join(
-        [
-            exists_check_command(batch),
-            _step(f"git -C {REPO} fetch origin", "fetch"),
-            _step(
-                f"git -C {REPO} worktree add -b {branch_name(batch)} "
-                f"{worktree_path(batch)} origin/master",
-                "worktree add",
-            ),
-            _step(
-                f"git -C {REPO} worktree lock --reason {unit_name(batch)} "
-                f"{worktree_path(batch)}",
-                "worktree lock",
-            ),
-        ]
-    )
+    steps = [
+        exists_check_command(batch),
+        _step(f"git -C {REPO} fetch origin", "fetch"),
+        fast_forward_primary_command(host),
+        _step(
+            f"git -C {REPO} worktree add -b {branch_name(batch)} "
+            f"{worktree_path(batch)} origin/master",
+            "worktree add",
+        ),
+        _step(
+            f"git -C {REPO} worktree lock --reason {unit_name(batch)} "
+            f"{worktree_path(batch)}",
+            "worktree lock",
+        ),
+    ]
+    return " && ".join(s for s in steps if s)
 
 
 def remove_worktree_command(batch: str) -> str:
@@ -124,7 +159,7 @@ def systemd_run_command(batch: str) -> str:
     )
 
 
-def launch_command(batch: str) -> str:
+def launch_command(batch: str, host: str) -> str:
     """The one call a batch launch runs: worktree add+lock, brief write, systemd-run.
 
     The brief text is this command's own stdin, consumed by the `cat` in the middle of the
@@ -134,7 +169,7 @@ def launch_command(batch: str) -> str:
     """
     return " && ".join(
         [
-            create_worktree_command(batch),
+            create_worktree_command(batch, host),
             write_brief_command(batch),
             systemd_run_command(batch),
         ]
@@ -144,9 +179,9 @@ def launch_command(batch: str) -> str:
 _STEP_SENTINEL_RE = re.compile(r"^fanout-step: (.+)$", re.MULTILINE)
 
 # Cleanup removes the worktree and its branch, so it only runs for a step that could have
-# left one half-made: `worktree add`/`worktree lock` do; a `fetch` failure precedes both and
-# created nothing (cleanup there would fail its own `worktree remove` with a confusing
-# "not a working tree"); `brief write`/`systemd-run` come after the tree already exists and
+# left one half-made: `worktree add`/`worktree lock` do; `fetch` and `primary ff` failures
+# precede both and created nothing (cleanup there would fail its own `worktree remove` with a
+# confusing "not a working tree"); `brief write`/`systemd-run` come after the tree already exists and
 # leave it in place for inspection instead. `exists` is the one that must never be here: it
 # fails BECAUSE a tree is there, and that tree belongs to an earlier batch, not this launch.
 _CLEANUP_STEPS = frozenset({"worktree add", "worktree lock"})
@@ -217,9 +252,9 @@ def launch(
             removed. A `worktree add`/`worktree lock` failure (or a timeout, which is a
             hung git step in practice — see the `DECIDED:` note above the cleanup check)
             removes the half-made tree and its branch before raising, folding a cleanup
-            failure into the same message. A `fetch`, `brief write` or `systemd-run`
-            failure, or one this can't attribute, leaves the worktree as it found it
-            instead.
+            failure into the same message. A `fetch`, `primary ff`, `brief write` or
+            `systemd-run` failure, or one this can't attribute, leaves the worktree as it
+            found it instead.
     """
     # DECIDED: no exit or timeout from this call can happen after the unit is live.
     # `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns
@@ -231,7 +266,7 @@ def launch(
     # `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts
     # `"--scope" not in cmd` as the guard.
     try:
-        proc = _run(tools, host, launch_command(batch), brief_text, "launch")
+        proc = _run(tools, host, launch_command(batch, host), brief_text, "launch")
     except LaunchError as exc:
         message = str(exc) + (_cleanup_worktree(tools, host, batch) or "")
         raise LaunchError(message) from None
