@@ -12,13 +12,23 @@ Idempotent: a box already ticked writes nothing and exits 0. A body with no box 
 an error, not a no-op — Renovate did not author that PR, or the box was edited away, and
 either way a `gh pr edit` would change nothing and report success.
 
+A PR still inside its `minimumReleaseAge` is refused (exit 3) rather than ticked. Renovate
+skips updating a soaking branch, including a requested rebase: it answers the tick with a
+"Rebase not applied" comment and LEAVES THE BOX TICKED. A ticked box is then spent — a run
+after the soak ends reads `already-ticked`, writes nothing, and there is no way left to ask
+for the rebase. #2335 sat CONFLICTING for 38 hours in exactly that state and an agent read
+the stall as a broken rebase (#2368, #2630). Leaving the box unticked keeps the post-soak
+request working.
+
 Usage:
     uv run python scripts/dev/renovate_rebase.py <pr-number>
 
 Exit codes: 0 ticked (or already ticked); 1 the body carries no rebase checkbox;
-2 `gh` failed (its stderr is printed); 64 the argument is not one PR number.
+2 `gh` failed (its stderr is printed); 3 the PR is still soaking, so nothing was ticked;
+64 the argument is not one PR number.
 """
 
+import json
 import subprocess
 import sys
 import tempfile
@@ -34,6 +44,11 @@ from lib.gh import gh as _gh
 UNTICKED = "- [ ] <!-- rebase-check -->"
 TICKED = "- [x] <!-- rebase-check -->"
 
+# Renovate posts this commit status per branch: PENDING while the update is inside its
+# `minimumReleaseAge`, SUCCESS once the soak is over. It is a `StatusContext` in the rollup,
+# not a `CheckRun`, so it carries `context`/`state` rather than `name`/`conclusion`.
+SOAK_CONTEXT = "renovate/stability-days"
+
 # The one seam: `gh(*args) -> CompletedProcess`, the signature of `lib.gh.gh`.
 Gh = Callable[..., subprocess.CompletedProcess[str]]
 
@@ -47,6 +62,20 @@ def tick_rebase_box(body: str) -> tuple[str | None, str]:
     return None, "no-box"
 
 
+def soaking(rollup: list[dict]) -> bool:
+    """Is this PR's `renovate/stability-days` status pending?
+
+    A PR with no such status is not soaking — Renovate posts it only where a
+    `minimumReleaseAge` rule matched the dependency. `state` arrives uppercase from
+    `gh pr view --json statusCheckRollup` and lowercase from the commit-status API.
+    """
+    return any(
+        entry.get("context") == SOAK_CONTEXT
+        and (entry.get("state") or "").upper() == "PENDING"
+        for entry in rollup
+    )
+
+
 def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
     argv = sys.argv[1:] if argv is None else argv
     if len(argv) != 1 or not argv[0].isdigit():
@@ -54,23 +83,46 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
         return 64
     number = argv[0]
     try:
-        body = gh("pr", "view", number, "--json", "body", "-q", ".body").stdout
+        # One read for both: the body carries the box, the rollup carries the soak status.
+        view = json.loads(
+            gh("pr", "view", number, "--json", "body,statusCheckRollup").stdout
+        )
     except subprocess.CalledProcessError as exc:
         print(f"gh pr view {number} failed: {exc.stderr.strip()}", file=out)
         return 2
+    body = view.get("body") or ""
+    soak = soaking(view.get("statusCheckRollup") or [])
     new_body, outcome = tick_rebase_box(body)
-    if new_body is None:
-        if outcome == "already-ticked":
-            print(
-                f"PR #{number}: rebase box already ticked; Renovate refreshes it on its next run",
-                file=out,
-            )
-            return 0
+    if outcome == "no-box":
         print(
             f"PR #{number}: body carries no `{UNTICKED}` — not a Renovate PR, or the box was edited away",
             file=out,
         )
         return 1
+    if soak and outcome == "already-ticked":
+        print(
+            f"PR #{number}: rebase box already ticked AND `{SOAK_CONTEXT}` is pending — "
+            "Renovate answered the tick with 'Rebase not applied' and will not rebase until "
+            "the soak ends. Do not tick it again; wait, or force it with the branch's "
+            "`unpend-branch` checkbox on the Dependency Dashboard (which bypasses the soak).",
+            file=out,
+        )
+        return 3
+    if soak:
+        print(
+            f"PR #{number}: `{SOAK_CONTEXT}` is pending — the update is still inside its "
+            "`minimumReleaseAge`, so a rebase would not apply. Left the box unticked: a tick "
+            "Renovate skips stays ticked and cannot be re-used after the soak. Wait, or force "
+            "it with the branch's `unpend-branch` checkbox on the Dependency Dashboard.",
+            file=out,
+        )
+        return 3
+    if new_body is None:
+        print(
+            f"PR #{number}: rebase box already ticked; Renovate refreshes it on its next run",
+            file=out,
+        )
+        return 0
     # `--body-file` rather than `--body`: the body is markdown with backticks and newlines,
     # and a file is the one shape no shell quoting can mangle.
     with tempfile.TemporaryDirectory() as tmp:

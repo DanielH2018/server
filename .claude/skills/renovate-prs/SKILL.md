@@ -202,8 +202,9 @@ the PR body:
 uv run python scripts/dev/renovate_rebase.py <n>
 ```
 
-It is idempotent (a ticked box exits 0 and writes nothing) and exits 1 on a body with no
-`<!-- rebase-check -->` box, which is a PR Renovate did not author. Renovate refreshes the
+It is idempotent (a ticked box exits 0 and writes nothing), exits 1 on a body with no
+`<!-- rebase-check -->` box, which is a PR Renovate did not author, and exits 3 on a PR still
+inside its soak, naming `renovate/stability-days` and writing nothing. Renovate refreshes the
 branch within a cycle. Do not hand-edit the digest: the next Renovate
 run would rewrite it anyway.
 
@@ -215,6 +216,12 @@ Renovate rebases the branch once its update has met those checks. #2335 sat CONF
 and an agent read the stall as a broken rebase. Wait for the soak rather than ticking again.
 Only the branch's `unpend-branch` checkbox on issue #3 forces it earlier, and that bypasses
 the soak.
+
+`renovate_rebase.py` now enforces that paragraph rather than relying on you to remember it: it
+reads the PR's status rollup, and on a pending `renovate/stability-days` it names the soak and
+exits 3 without ticking (#2630). It refuses even where the box is unticked, because a tick
+Renovate skips stays ticked — the box is then spent, and no run after the soak can request the
+rebase.
 
 ## 6. Land them one at a time
 

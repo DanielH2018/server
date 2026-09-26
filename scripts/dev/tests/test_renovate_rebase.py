@@ -1,25 +1,55 @@
-"""`renovate_rebase.py` against a fake `gh`: the box is ticked once, never twice, never invented.
+"""`renovate_rebase.py` against a fake `gh`: the box is ticked once, never twice, never
+invented, and never while the PR is soaking.
 
 Run: uv run pytest scripts/dev/tests/test_renovate_rebase.py
 """
 
 import io
+import json
 import subprocess
 from pathlib import Path
 
 import pytest
-from renovate_rebase import TICKED, UNTICKED, main, tick_rebase_box
+from renovate_rebase import (
+    SOAK_CONTEXT,
+    TICKED,
+    UNTICKED,
+    main,
+    soaking,
+    tick_rebase_box,
+)
 
 BODY = f"This PR contains the following updates:\n\n---\n\n{UNTICKED}\n\nSome text\n"
 
+# The shapes `gh pr view --json statusCheckRollup` really returns, copied off PRs #2335
+# (soaking) and #2620 (soak over) on 2026-09-26. A CI check is a `CheckRun` with
+# `name`/`conclusion`; the soak is a `StatusContext` with `context`/`state`.
+CI_RUN = {
+    "__typename": "CheckRun",
+    "name": "pytest (shard 1 of 6)",
+    "status": "COMPLETED",
+    "conclusion": "SUCCESS",
+}
+SOAK_PENDING = {
+    "__typename": "StatusContext",
+    "context": SOAK_CONTEXT,
+    "state": "PENDING",
+    "startedAt": "2026-09-24T01:31:18Z",
+    "targetUrl": "https://docs.renovatebot.com/key-concepts/minimum-release-age/",
+}
+SOAK_DONE = {**SOAK_PENDING, "state": "SUCCESS"}
 
-def _gh(body: str, edit_fails: bool = False):
+
+def _gh(body: str, edit_fails: bool = False, rollup: list[dict] | None = None):
     """A `gh` whose `pr view` answers `body` and whose `pr edit` records what it was handed."""
     calls: list[tuple[str, str]] = []
 
     def gh(*args, **kwargs):
         if args[:2] == ("pr", "view"):
-            return subprocess.CompletedProcess(args, 0, body, "")
+            payload = json.dumps(
+                {"body": body, "statusCheckRollup": [CI_RUN, *(rollup or [])]}
+            )
+            return subprocess.CompletedProcess(args, 0, payload, "")
         if args[:2] == ("pr", "edit"):
             if edit_fails:
                 raise subprocess.CalledProcessError(1, args, "", "HTTP 403")
@@ -79,3 +109,60 @@ def test_a_bad_argument_is_a_usage_error(argv):
         raise AssertionError(f"gh must not run on a usage error: {args}")
 
     assert main(argv, gh=gh, out=io.StringIO()) == 64
+
+
+def test_a_pending_soak_status_is_detected():
+    assert soaking([CI_RUN, SOAK_PENDING]) is True
+
+
+def test_a_finished_soak_is_not_pending():
+    assert soaking([CI_RUN, SOAK_DONE]) is False
+
+
+def test_a_pr_with_no_soak_status_is_not_soaking():
+    """Renovate posts the status only where a `minimumReleaseAge` rule matched; absent is
+    not pending, or every PR without one would be refused."""
+    assert soaking([CI_RUN]) is False
+    assert soaking([]) is False
+
+
+def test_a_lowercase_state_still_counts_as_pending():
+    """The commit-status API answers `pending`; the rollup answers `PENDING`."""
+    assert soaking([{"context": SOAK_CONTEXT, "state": "pending"}]) is True
+
+
+def test_another_pending_status_is_not_the_soak():
+    assert soaking([{"context": "renovate/artifacts", "state": "PENDING"}]) is False
+
+
+def test_main_refuses_to_tick_a_soaking_pr():
+    gh, calls = _gh(BODY, rollup=[SOAK_PENDING])
+    out = io.StringIO()
+    assert main(["123"], gh=gh, out=out) == 3
+    assert calls == []
+    assert SOAK_CONTEXT in out.getvalue()
+    assert "minimumReleaseAge" in out.getvalue()
+
+
+def test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked():
+    """#2335's state: the box was ticked, Renovate answered 'Rebase not applied', and exit 0
+    read as 'the rebase is coming' for 38 hours (#2368)."""
+    gh, calls = _gh(BODY.replace(UNTICKED, TICKED), rollup=[SOAK_PENDING])
+    out = io.StringIO()
+    assert main(["123"], gh=gh, out=out) == 3
+    assert calls == []
+    assert "already ticked" in out.getvalue()
+    assert SOAK_CONTEXT in out.getvalue()
+
+
+def test_a_finished_soak_ticks_normally():
+    gh, calls = _gh(BODY, rollup=[SOAK_DONE])
+    assert main(["123"], gh=gh, out=io.StringIO()) == 0
+    assert calls == [("123", BODY.replace(UNTICKED, TICKED))]
+
+
+def test_a_soaking_pr_with_no_box_is_still_a_no_box_error():
+    """The box check comes first: a non-Renovate PR is exit 1 whatever its statuses say."""
+    gh, calls = _gh("hand-written PR body", rollup=[SOAK_PENDING])
+    assert main(["123"], gh=gh, out=io.StringIO()) == 1
+    assert calls == []
