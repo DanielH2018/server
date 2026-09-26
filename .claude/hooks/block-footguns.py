@@ -159,6 +159,16 @@ def burst_public_hostname_problem(stage: list[str]) -> str | None:
     )
 
 
+def _repo_flag(words: list[str]) -> str | None:
+    """The value of a `-R`/`--repo` flag in `words`, in any of its three spellings, or None."""
+    for i, word in enumerate(words):
+        if word.startswith("--repo="):
+            return word.partition("=")[2]
+        if word in ("-R", "--repo") and i + 1 < len(words):
+            return words[i + 1]
+    return None
+
+
 def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     """`gh issue create` typed directly, bypassing `findings.py open`.
 
@@ -166,16 +176,23 @@ def issue_create_by_hand_problem(stage: list[str]) -> str | None:
     subcommand), never as a substring, so `gh issue list --search 'gh issue create'` stays
     clean. `findings.py open` runs `gh` through `subprocess` inside Python, so its own call
     never reaches a PreToolUse(Bash) hook and needs no exemption here.
+
+    A create aimed at another repo is denied too, and the reason names `findings.py open
+    --repo` with that repo. The wrapper files there with the same labels and fingerprint
+    dedup, so passing the hand-filed form would give that repo's register the duplicates
+    this rule prevents here (#2685).
     """
     words = strip_shell_keywords(stage)
     if not invokes(words, ("gh", "issue", "create")):
         return None
+    repo = _repo_flag(words)
+    repo_arg = f" --repo {repo}" if repo else ""
     return (
         "A hand-filed `gh issue create` lands without the `claude` label, the fingerprint "
         "trailer and the title/file dedup the register keys on, so `findings.py list`/`next` "
         "never see it and a later session files the same finding again. File it with "
-        "`uv run python scripts/dev/findings.py open --title '<title>' ...` instead "
-        "(flags: docs/reference/scripts.md)."
+        f"`uv run python scripts/dev/findings.py open{repo_arg} --title '<title>' ...` "
+        "instead (flags: docs/reference/scripts.md)."
     )
 
 

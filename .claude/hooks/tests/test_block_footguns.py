@@ -303,6 +303,21 @@ def test_a_gh_issue_create_later_in_a_pipeline_is_denied():
     assert _mod.problem("git fetch && gh issue create --title x")
 
 
+def test_a_gh_issue_create_aimed_at_another_repo_names_findings_open_repo():
+    """#2685: the wrapper files into another repo too, so the reason names that door."""
+    for command in (
+        "gh issue create -R DanielH2018/dotfiles --title x",
+        "gh issue create --repo DanielH2018/dotfiles --title x",
+        "gh issue create --repo=DanielH2018/dotfiles --title x",
+    ):
+        assert "findings.py open --repo DanielH2018/dotfiles" in _mod.problem(command)
+
+
+def test_a_gh_issue_create_with_no_repo_names_no_repo_flag():
+    reason = _mod.problem("gh issue create --title x --body y")
+    assert "findings.py open --title" in reason and "--repo" not in reason
+
+
 def test_findings_py_open_is_clean():
     """The sanctioned path: `findings.py open` is not `gh issue create` on the command line."""
     assert (

@@ -33,7 +33,7 @@ Usage::
         --severity high --kind gap [--domain network] [--file path/to/file.py:12] \\
         [--source review-2026-09-02] [--no-vetted-remediation] \\
         [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \\
-        [--not-before 2026-09-12] [--dry-run]
+        [--not-before 2026-09-12] [--repo DanielH2018/dotfiles] [--dry-run]
     uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
     uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
     uv run python scripts/dev/findings.py defer 688 --clear
@@ -49,6 +49,13 @@ Usage::
     uv run python scripts/dev/findings.py verify --all
     uv run python scripts/dev/findings.py verify 688 701
     uv run python scripts/dev/findings.py next [--limit N] [--json]
+
+FILING TO ANOTHER REPO. `open --repo OWNER/NAME` files the finding in that repo's own `claude`
+register, with the same labels, trailer and fingerprint dedup it gets here: every gh call on
+the `open` path, reads included, carries the flag. A dedup read against this repo while the
+create went elsewhere would re-file the finding on every run. Only `open` takes it. The other
+subcommands read this repo's register alone, and a finding filed elsewhere closes through
+that repo's own PR (#2685).
 
 CLOSING A FINDING. `--fixed` closes as completed. The other two close as not planned and are
 terminal, so `open` refuses to re-file the same fingerprint afterwards: `--refuted` records
@@ -105,6 +112,7 @@ birth.
 """
 
 import argparse
+import dataclasses
 import json
 import subprocess
 import sys
@@ -178,6 +186,16 @@ def _release_held_claim(issue: dict, reason: str) -> list[list[str]]:
     return plan_release(issue, worktree=held, when=now_iso(), reason=reason)
 
 
+def _aimed(plans: list[list[str]], repo: str | None) -> list[list[str]]:
+    """``plans`` with ``--repo`` appended to each argv, or unchanged when ``repo`` is None.
+
+    Appended to the plan rather than added inside `tools.gh`, so a `--dry-run` prints the
+    repo it would write to. Appended after the subcommand pair: gh defines `--repo` on each
+    subcommand, not on the root.
+    """
+    return plans if repo is None else [argv + ["--repo", repo] for argv in plans]
+
+
 def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     """Handles the ``open`` subcommand: files, touches or reopens a finding's issue.
 
@@ -197,6 +215,14 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         sys.stderr.write(f"open: body file not found: {args.body_file}\n")
         return 2
     body = args.body_file.read_text()
+    repo = args.repo
+    if repo is not None:
+        # The reads go through `gh_json`, so the dedup and the label read see the same repo
+        # the writes land in. The writes carry the flag in their plans, via `_aimed`.
+        read = tools.gh_json
+        tools = dataclasses.replace(
+            tools, gh_json=lambda *argv, **kw: read(*argv, "--repo", repo, **kw)
+        )
     fp = fingerprint(args.title, args.file)
     labels = ["claude", f"severity/{args.severity}", f"kind/{args.kind}"]
     if args.domain:
@@ -206,11 +232,11 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
     # `gh issue create --label` fails on a label the repo does not have, so the first `open`
     # in a fresh repo has to create the label set before it can use it.
     have = _existing_labels(tools)
-    run(plan_sync_labels(have), args.dry_run, tools)
+    run(_aimed(plan_sync_labels(have), repo), args.dry_run, tools)
     if args.not_before:
         # Dated, so not in LABELS and not synced above; created the first time it is used.
         run(
-            plan_ensure_label(not_before_label(args.not_before), have),
+            _aimed(plan_ensure_label(not_before_label(args.not_before), have), repo),
             args.dry_run,
             tools,
         )
@@ -225,6 +251,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         verify_by=args.verify_by,
         defer_until=args.not_before,
     )
+    plans = _aimed(plans, repo)
     if outcome == "created":
         if args.dry_run:
             run(plans, True, tools)
@@ -250,7 +277,9 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
         # claiming worktree exists — an orchestrator's can be a long time (#1277). Released
         # as its OWN comment rather than folded into the regression note, so the body never
         # carries two claim trailers at once (see `current_claim`'s DECIDED marker).
-        plans += _release_held_claim(existing, "reopened after a re-observation")
+        plans += _aimed(
+            _release_held_claim(existing, "reopened after a re-observation"), repo
+        )
     run(plans, args.dry_run, tools)
     print(f"#{existing['number']} {outcome}  {existing.get('url', '')}")
     return 0

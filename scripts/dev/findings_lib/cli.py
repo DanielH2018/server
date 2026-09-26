@@ -76,6 +76,12 @@ def _parser(description: str) -> argparse.ArgumentParser:
         help="withhold from `next` and `claim` until this date; for a finding whose own "
         "precondition (a metric window, a cron firing) is not met before it",
     )
+    o.add_argument(
+        "--repo",
+        metavar="OWNER/NAME",
+        help="file into another repo's `claude` register (the dotfiles repo, say); the "
+        "dedup reads that repo too. Other subcommands read this repo only",
+    )
 
     df = sub.add_parser(
         "defer",
