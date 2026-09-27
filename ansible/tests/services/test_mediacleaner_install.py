@@ -256,12 +256,12 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
 @pytest.mark.parametrize(
     ("what", "before", "after"),
     [
-        ("a version suffix naming another ABI", "3.2.0.101109", "3.2.0.101100"),
+        ("a version suffix naming another ABI", "3.4.0.101109", "3.4.0.101100"),
         ("a targetAbi naming another asset", "10.11.9.0", "10.11.0.0"),
         (
             "a release tag the version does not name",
+            "/download/v3.4.0/",
             "/download/v3.2.0/",
-            "/download/v3.1.0/",
         ),
     ],
 )
