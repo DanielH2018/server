@@ -120,6 +120,11 @@ deliberately want that.
 # Deploy a specific service
 ./scripts/deploy.sh --tags "<service-name>"
 
+# Apply a change to a shared k8s role (manifests, volume-snapshot, image-builder, ...).
+# It has no containers_list entry, so deploy.sh replaces the name with every service
+# that includes it and prints the list. manifests and volume-snapshot reach ~58 services.
+./scripts/deploy.sh --tags "<shared-role>"
+
 # Target the Pi. NB `-e target=`, NOT `--limit` — the play's hosts: defaults to the local
 # hostname, so --limit daniel-pi matches zero hosts. The Pi is ansible_connection=ssh, so
 # this reaches it from either node. `-e target=` a LOCAL-connection host (either cluster

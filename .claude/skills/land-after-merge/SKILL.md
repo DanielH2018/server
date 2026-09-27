@@ -302,18 +302,23 @@ one.** One PR can reach two of these at once — a plane a hand applies, and a s
 role the tick installed on its own host alone — and the verdict then prints one line per half.
 PR #2568 carried exactly that pairing, and until #2569 the plane's line suppressed the other:
 daniel-server and daniel-pi kept the old `kuma-push-lib.sh` behind a printed remediation that
-named neither. Four things are in that position. A
-**setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`, `common` in
-no playbook) or a bring-up playbook, because the tick applies every other setup role itself
-and `deploy.yml` is a `containers_list` loop. A **shared k8s role** —
-`manifests`, `volume-claim`, `rollout-drain`, `volume-snapshot`, `volume-revert`,
-`image-builder`, `longhorn-api`, `cronjob-gate`, `arr-notification`, `game-stats-lib` — has no
-`containers_list` entry at all, so `--tags manifests` matches nothing and only a full
-`ansible/deploy.yml` applies it. The exception is a shared role the SAME PR already applied:
-`deploy.yml` runs a helper under the tag of every role that includes it, so when the PR's own
-tags cover EVERY caller — sonarr and radarr for `arr-notification` — the change is already
-live and nothing is reported. One caller short is not enough, which is why `manifests` (54
-callers) is always reported. A **rotated
+named neither. Three things are in that position. A
+**setup role `initial_setup.yml` does not include** (`k3s` is in `k3s-bringup.yml`; `common`
+is include-only, so the note names each consumer's playbook and tag) or a bring-up playbook,
+because the tick applies every other setup role itself and `deploy.yml` is a
+`containers_list` loop. A **shared k8s role that no declared role runs** has no tag at all
+and still needs a full `ansible/deploy.yml`.
+
+Every other **shared k8s role** is deployed rather than reported (#2704). `manifests`,
+`volume-claim`, `volume-snapshot`, `image-builder`, `arr-notification` and the rest have no
+`containers_list` entry, but `deploy.yml` runs each under the tag of every role that includes
+it. So the landing adds the tags of every caller, followed through callers that are
+themselves shared, and deploys them. A `tasks/` change to `volume-snapshot` or `manifests`
+reaches about 58 services, which costs about a full deploy. A shared-role change that reaches
+no rendered manifest, a comment or a deploy-time default, fans out to nothing. By hand,
+`deploy.sh --tags <shared role>` performs the same expansion.
+
+A **rotated
 secret** has no path to match at all: a secret's value lives in no role's template, so
 `ansible/vars/secrets.yml` derives zero tags however many roles consume it. Run `uv run python
 scripts/secrets_mgmt/secret_rotation.py consumers <secret>` for who holds a stale copy and the

@@ -90,6 +90,8 @@ class Fakes:
     self_applied_command: str = "`ansible-playbook ansible/initial_setup.yml --tags x`"
     remaining_setup: str = ""
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
+    # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
+    shared_callers: dict[str, set[str]] = field(default_factory=dict)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
     declared_at: set[str] | None = None
@@ -148,6 +150,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
             list(f.derived[0]), DeriveSource(f.derived[1])
         ),
         quiet_paths=lambda paths, range_: set(),
+        shared_caller_tags=lambda paths, declared=None: f.shared_callers,
     )
 
 

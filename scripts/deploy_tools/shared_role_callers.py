@@ -24,6 +24,11 @@ because this parses YAML and the unit runs under `uv run --no-project` — the b
 tag list. An empty list means no record can ever prove the role applied, and the deployer
 keeps that line.
 
+`caller_tags` and `expand_shared_tags` ask the question a CHANGE asks: which tags deploy a
+shared role at all, record or no record. `deploy_run` reads them to turn `deploy.sh --tags
+volume-snapshot` into a deploy of every caller, and `land_tags` reads them to deploy a shared
+role's callers instead of reporting `needs-manual-apply` (#2704).
+
 Usage: shared_role_callers.py [--repo PATH] ROLE [ROLE ...]
 """
 
@@ -50,6 +55,65 @@ def _tags(role: str, ctx: Context) -> set[str]:
         return set()
 
 
+def caller_tags(
+    role: str, declared: set[str], callers: dict[str, set[str]]
+) -> set[str]:
+    """The declared tags whose deploy runs `role`, followed through shared callers.
+
+    `_role_tags` for one role, except that a caller with neither an entry nor a caller of its
+    own contributes nothing rather than refusing the whole answer. Nothing can deploy that
+    caller, so there is nothing more to run for it. An empty set means no tag deploys `role`.
+
+    Args:
+        role: a role directory under `roles/k8s/`.
+        declared: every name `containers_list` declares as a tag.
+        callers: the role-caller graph, as `lib.k8s_roles.role_callers` walks it.
+    """
+    tags: set[str] = set()
+    pending, seen = {role}, set()
+    while pending:
+        name = pending.pop()
+        if name in seen:
+            continue
+        seen.add(name)
+        if name in declared:
+            tags.add(name)
+        else:
+            pending |= callers.get(name, set())
+    return tags
+
+
+def expand_shared_tags(
+    tags: list[str], declared: set[str], callers: dict[str, set[str]]
+) -> tuple[list[str], dict[str, list[str]]]:
+    """`tags` with each shared-role name replaced by the tags of every role that runs it.
+
+    A shared role runs with its caller's variables (`manifests_service`, the claims, the
+    rollout names), so it has nothing to act on without a caller. Its callers are therefore
+    the unit a `--tags` run can select.
+
+    Args:
+        tags: the tags as typed, in order.
+        declared: every name `containers_list` declares as a tag.
+        callers: the role-caller graph, as `lib.k8s_roles.role_callers` walks it.
+
+    Returns:
+        The expanded list, in typed order and de-duplicated, and for each name that was
+        replaced the sorted tags it became. A name that is neither declared nor run by any
+        declared role stays as typed, so `deploy_tags.validate` refuses it by name.
+    """
+    out: list[str] = []
+    replaced: dict[str, list[str]] = {}
+    for tag in tags:
+        reached = [] if tag in declared else sorted(caller_tags(tag, declared, callers))
+        if reached:
+            replaced[tag] = reached
+        for name in reached or [tag]:
+            if name not in out:
+                out.append(name)
+    return out, replaced
+
+
 def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
     """Every declared role a deploy of `role` also runs, `role` itself included.
 
@@ -72,9 +136,9 @@ def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
     return {s for s, tags in entry_tags.items() if tags <= mine} if mine else set()
 
 
-# DECIDED: transitive, where `land_tags.covered_roles` is not. land.sh asks whether ONE
-# landing deployed every caller, and a non-transitive answer only errs toward a note. Here
-# the question is whether the fleet has been redeployed since, and a non-transitive answer
+# DECIDED: transitive, as `caller_tags` is. The land-side check that stopped at the first
+# hop (`covered_roles`) was replaced by `caller_tags` in #2704. Here the question is whether
+# the fleet has been redeployed since, and a non-transitive answer
 # would leave `longhorn-api` and `volume-revert` — whose only callers are shared — with a
 # line nothing but a hand clears, which is the defect this exists to remove.
 # DECIDED: a caller that never runs `manifests` is dropped rather than required. It writes

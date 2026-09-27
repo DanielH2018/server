@@ -535,4 +535,8 @@ class Classifier:
     self_applied_command: SelfAppliedCommand = land_tags.self_applied_command
     remaining_setup_hosts: RemainingSetupHosts = land_reach.remaining_setup_hosts_note
     derive: Derive = land_tags.derive
+    # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
+    shared_caller_tags: Callable[[list[str], set[str] | None], dict[str, set[str]]] = (
+        land_tags.shared_caller_tags
+    )
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths
