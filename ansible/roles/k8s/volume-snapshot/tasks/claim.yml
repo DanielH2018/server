@@ -145,7 +145,7 @@
   # Its own register, never shared with the reads below — a SKIPPED task still sets the
   # variable it registers to, and `include_tasks: claim.yml` keeps facts across claims, so a
   # shared name lets one claim's answer stand for another's. Same discipline as the
-  # detached-volume reads further down this file.
+  # volume-state read further down this file.
   ansible.builtin.command:
     argv:
       - k3s
@@ -280,12 +280,10 @@
         volume: {{ volume_snapshot_volume }}
         createSnapshot: true
   become: true
-  # Distinct name from the detached-path apply below. Both are conditional and mutually
-  # exclusive, and a SKIPPED task still sets the variable it registers to — so a shared name
-  # lets whichever ran second overwrite the real reading with a skipped one. Safe today only
-  # because each task's own changed_when is the sole reader; any future reader downstream would
-  # get the wrong result. This is the trap the comment further down this file already spells
-  # out for volume_snapshot_ready.
+  # Its own register, read only by this task's own changed_when. #2740 removed the second,
+  # detached-path apply that made the distinct name load-bearing; the name stays distinct
+  # because a SKIPPED task still sets the variable it registers to, so any apply added back
+  # here must not share a register with this one.
   register: volume_snapshot_apply_attached
   changed_when: "'created' in volume_snapshot_apply_attached.stdout"
 
@@ -358,369 +356,24 @@
   failed_when: false
   register: volume_snapshot_volume_state
 
-# Computed unconditionally (whenever mutation is allowed at all), not only when the wait
-# failed, and always from THIS claim's own `volume_snapshot_ready` — never `default(false)`
-# fallback to a stale value. `include_tasks: claim.yml` runs this file once per claim in one
-# loop, and `set_fact` values are host facts that persist across loop iterations; if this task
-# were skipped whenever the wait already succeeded, a later claim that also succeeds would
-# inherit an EARLIER claim's `volume_snapshot_detached` verdict instead of getting its own. The
-# leading `first == 'true'` clause below makes a stale `volume_snapshot_volume_state` from a
-# previous claim harmless too: when this claim's own snapshot is ready, the expression is false
-# on that clause alone regardless of what an earlier claim's volume-state read left behind.
-- name: Decide whether this claim's unready snapshot is a detached-volume case for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when: not (k8s_no_mutate | bool)
-  ansible.builtin.set_fact:
-    volume_snapshot_detached: >-
-      {{ (volume_snapshot_ready.stdout | default('') | split('|') | first) != 'true'
-         and (volume_snapshot_ready.stdout | default('') | split('|') | last) != 'true'
-         and (volume_snapshot_volume_state.stdout | default('') | trim) != 'attached' }}
-
-# the maintenance-mode attach (slice 7b)
-#
-# 7a stopped here and warned: a detached volume has no running engine, so the snapshot above
-# could not complete. 7b reuses k8s/longhorn-api and the maintenance-mode attach k8s/volume-revert
-# proved (attach with disableFrontend, wait, act, detach) to attach the volume long enough to take
-# the snapshot, then leaves it exactly as it found it.
-#
-# Every task below runs only for THIS claim's detached case, and every one carries BOTH guards:
-# k8s_no_mutate (nothing here may run under --check/--dry-run) and volume_snapshot_detached
-# (nothing here may run for a claim whose snapshot already succeeded above).
-#
-# ANY failure in this sequence — no longhorn-manager on this node, the attach never reaching
-# `attached` with `disableFrontend: true`, the retaken snapshot never becoming usable — falls
-# through to the warn-and-skip task below rather than failing the deploy: a detached volume is
-# not itself an error (see the two legitimate cases in CLAUDE.md), and this attempt is
-# best-effort on top of that ruling. `failed_when: false` on the API calls and waits, plus
-# `longhorn_api_required: false` on the resolve below, are what make a failure inside this block
-# non-fatal — NOT `ignore_errors` on the resolve's `include_role`. `ignore_errors` on a dynamic
-# include only catches a failure of the include statement itself, never a fatal `fail()` raised
-# by a task the include pulls in — documented Ansible behaviour, proven here by
-# `test_longhorn_api_soft_mode_survives_no_manager` in test_longhorn_api.py, which runs the real
-# (unmodified) k8s/longhorn-api role through a scratch play and shows `ignore_errors` alone does
-# NOT stop the play from aborting. `longhorn_api_required: false` makes k8s/longhorn-api itself
-# choose not to raise, which is the only thing that works. The "Fold" task at the end reads what
-# happened and decides whether the claim is still the detached case.
-- name: Resolve the node-local Longhorn API to attach {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-  ansible.builtin.include_role:
-    name: k8s/longhorn-api
-    tasks_from: resolve.yml
-  vars:
-    longhorn_api_required: false
-
-- name: Attach the volume in maintenance mode for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - longhorn_api_resolved | default(false) | bool
-  # `disableFrontend: true` IS maintenance mode — the only attach a snapshot on a volume with
-  # no other engine can use. No `attachmentID`: the detach below omits it too, and both then key
-  # the ticket "" — see k8s/volume-revert's CLAUDE.md for the manager.Attach/Detach behaviour
-  # this depends on.
-  ansible.builtin.uri:
-    url: "{{ longhorn_api }}/v1/volumes/{{ volume_snapshot_volume }}?action=attach"
-    method: POST
-    body_format: json
-    body:
-      hostId: "{{ longhorn_api_node }}"
-      disableFrontend: true
-    status_code: 200
-    timeout: "{{ volume_snapshot_api_timeout }}"
-  register: volume_snapshot_maint_attach
-  failed_when: false
-
-# Single condition, matching k8s/volume-revert's own attach wait: only `state == 'attached'`.
-# Folding `disableFrontend` into the same `until` (7b's first cut) means a volume that reaches
-# `attached` with the frontend still enabled burns the WHOLE timeout before giving up, since the
-# compound condition never becomes true and `until` has no way to fail fast on the half that
-# already settled. The separate assert below is what checks the frontend flag, immediately.
-- name: Wait for the maintenance-mode attach for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - longhorn_api_resolved | default(false) | bool
-    - (volume_snapshot_maint_attach.status | default(0) | int) == 200
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - -n
-      - longhorn-system
-      - get
-      - volumes.longhorn.io
-      - "{{ volume_snapshot_volume }}"
-      - -o
-      - 'jsonpath={.status.state}{"|"}{.spec.disableFrontend}'
-  become: true
-  changed_when: false
-  register: volume_snapshot_maint_wait
-  until: volume_snapshot_maint_wait.stdout | default('') | split('|') | first == 'attached'
-  retries: "{{ (volume_snapshot_state_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
-  delay: "{{ volume_snapshot_poll_interval }}"
-  failed_when: false
-
-# The frontend half of the wait above, split out so a volume that reached `attached` with the
-# frontend still enabled fails immediately rather than after burning the whole timeout — see the
-# comment on the wait task. `ignore_errors: true` on a plain leaf task like this one DOES
-# suppress a failure and let the play continue (verified against a throwaway play 2026-08-21) —
-# unlike `ignore_errors` on the dynamic `include_role` above, which does not. The two look
-# similar and behave completely differently; that is the whole reason the include above no
-# longer uses it.
-- name: Assert the maintenance-mode attach really set disableFrontend for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - longhorn_api_resolved | default(false) | bool
-    - (volume_snapshot_maint_attach.status | default(0) | int) == 200
-  ansible.builtin.assert:
-    that:
-      - volume_snapshot_maint_wait.stdout | default('') | split('|') | last == 'true'
-    fail_msg: >-
-      Longhorn volume {{ volume_snapshot_volume }} came back as
-      '{{ volume_snapshot_maint_wait.stdout | default('') }}' (state|disableFrontend) after the
-      maintenance-mode attach, so its frontend is live — a snapshot taken now would be no more
-      reliable than one taken on a normal attach, and this attempt counts as failed.
-    quiet: true
-  ignore_errors: true
-  register: volume_snapshot_maint_frontend
-
-# Computed unconditionally whenever this claim started detached — never a stale value from an
-# earlier claim's attempt, the same invariant the original "Decide whether ... detached-volume
-# case" task above documents. Read with `default({})`/`default(false)` throughout: any of the
-# three inputs can be entirely unset if an earlier step in this sequence never ran (no manager
-# on this node, the attach never returning 200), and that must read as failure rather than raise
-# on the missing var.
-- name: Decide whether the maintenance-mode attach succeeded for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-  ansible.builtin.set_fact:
-    volume_snapshot_maintenance_attached: >-
-      {{ ((volume_snapshot_maint_attach | default({})).status | default(0) | int) == 200
-         and ((volume_snapshot_maint_wait | default({})).stdout | default('') | split('|') | first) == 'attached'
-         and not ((volume_snapshot_maint_frontend | default({})).failed | default(true)) }}
-
-# Same name, same CR as the first attempt above (`volume_snapshot_name`) — the prune's "found
-# this run's own snapshot" assert and the wait below both key on it, and a different name would
-# make the prune fail and strand this run's snapshot outside its own retention window.
-- name: Retake the pre-deploy snapshot now the volume is attached for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - volume_snapshot_maintenance_attached | bool
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - apply
-      - -f
-      - "-"
-    stdin: |
-      apiVersion: longhorn.io/v1beta2
-      kind: Snapshot
-      metadata:
-        name: {{ volume_snapshot_name }}
-        namespace: longhorn-system
-      spec:
-        volume: {{ volume_snapshot_volume }}
-        createSnapshot: true
-  become: true
-  register: volume_snapshot_apply_detached
-  changed_when: "'created' in volume_snapshot_apply_detached.stdout or 'configured' in volume_snapshot_apply_detached.stdout"
-
-# Registers to its OWN name, never to `volume_snapshot_ready`. Sharing that register was this
-# role's first shipped bug and the task-6 drill's first failure: **a SKIPPED task still sets the
-# variable it registers to**, to a result carrying `skipped: true` and no `stdout` at all. On
-# the ordinary attached-volume path — the path all thirteen opted-in services take on every
-# normal deploy — this wait is skipped, so it overwrote the first wait's genuine `true|false`
-# with a stdout-less skip result, and the "Fail on a snapshot that never became usable" task
-# below then read `''` and failed a deploy whose snapshot was healthy and `readyToUse`.
-# Measured 2026-08-21 against speedtest-config; `test_skipped_retake_wait_keeps_first_read` in
-# test_volume_snapshot_register.py pins the semantics and the fix.
-#
-# `failed_when: false`: an engine that attached but still can't snapshot in time must fall
-# through to the existing fail task below (which fires because the Fold task clears
-# `volume_snapshot_detached` whenever the attach itself succeeded), not abort here with no
-# detach performed.
-- name: Wait for the retaken snapshot to become usable for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - volume_snapshot_maintenance_attached | bool
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - -n
-      - longhorn-system
-      - get
-      - snapshots.longhorn.io
-      - "{{ volume_snapshot_name }}"
-      - -o
-      - 'jsonpath={.status.readyToUse}{"|"}{.status.markRemoved}'
-  become: true
-  changed_when: false
-  register: volume_snapshot_retake_ready
-  until: volume_snapshot_retake_ready.stdout | default('') | split('|') | first == 'true'
-  # Same poll cadence as the first wait above, for the same reason. This path only runs for a
-  # detached volume, which a deploy does not reach (see the role's CLAUDE.md), so the change
-  # buys no measured time here — it is kept in step so the two waits cannot drift apart.
-  retries: "{{ (volume_snapshot_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
-  delay: "{{ volume_snapshot_poll_interval }}"
-  failed_when: false
-
-# The single readiness answer every task BELOW this point reads, folding the two waits into one
-# value so neither has to know which path ran. Computed here rather than left to a `default`
-# chain at each consumer, for two reasons the drill made concrete:
-#
-#   1. A `default` chain cannot tell "this claim skipped the retake" from "an EARLIER claim ran
-#      it". Registers persist across `include_tasks` loop iterations, so on a two-claim service
-#      (`tdarr`, `code-server`) claim 1's retake result would still be in scope for claim 2. The
-#      path guard below keys on this claim's own decision instead.
-#   2. It must run BEFORE the Fold task clears `volume_snapshot_detached`, and before the detach
-#      — hence its position here rather than next to its consumers.
-#
-# Unconditional whenever mutation is allowed at all, matching the "Decide whether this claim's
-# unready snapshot is a detached-volume case" task above and for the same reason: a task that
-# only ran on one branch would let a previous claim's verdict stand for this one.
-- name: Record which readiness read applies to {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when: not (k8s_no_mutate | bool)
-  ansible.builtin.set_fact:
-    volume_snapshot_ready_out: >-
-      {{ ((volume_snapshot_retake_ready | default({})).stdout | default(''))
-         if ((volume_snapshot_detached | default(false) | bool)
-             and (volume_snapshot_maintenance_attached | default(false) | bool))
-         else ((volume_snapshot_ready | default({})).stdout | default('')) }}
-
-# Guarded on the attach outcome ALONE, never on whether the retaken snapshot became ready. A
-# snapshot that stays stuck after a successful attach must not leave the volume attached in
-# maintenance mode — a stale attachment ticket costs the NEXT deploy's own maintenance-mode
-# attach (this one, or k8s/volume-revert's) a full 180s state wait before it fails, naming the
-# wrong cause. Recorded in this slice's design notes, not in either role's own CLAUDE.md.
-- name: Detach the volume after the maintenance-mode snapshot attempt for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - volume_snapshot_maintenance_attached | bool
-  ansible.builtin.uri:
-    url: "{{ longhorn_api }}/v1/volumes/{{ volume_snapshot_volume }}?action=detach"
-    method: POST
-    body_format: json
-    body: {}
-    status_code: 200
-    timeout: "{{ volume_snapshot_api_timeout }}"
-
-# The only proof that a 200 detach actually detached — never suppressed, matching
-# k8s/volume-revert's own final wait.
-- name: Wait for the detach after the maintenance-mode snapshot attempt for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-    - volume_snapshot_maintenance_attached | bool
-  ansible.builtin.command:
-    argv:
-      - k3s
-      - kubectl
-      - -n
-      - longhorn-system
-      - get
-      - volumes.longhorn.io
-      - "{{ volume_snapshot_volume }}"
-      - -o
-      - 'jsonpath={.status.state}'
-  become: true
-  changed_when: false
-  register: volume_snapshot_maint_detach_wait
-  until: volume_snapshot_maint_detach_wait.stdout | default('') | trim == 'detached'
-  retries: "{{ (volume_snapshot_state_timeout | int / volume_snapshot_poll_interval | int) | round | int }}"
-  delay: "{{ volume_snapshot_poll_interval }}"
-
-# The one place `volume_snapshot_detached` changes meaning: from here down it means "still
-# unprotected", not "was plainly detached". A successful maintenance attach clears it — whether
-# or not the retake above actually became ready — so the existing fail task below can catch a
-# genuinely stuck engine post-attach, and the existing prune block can run once there is a real
-# snapshot. `default(false)` fails closed: a claim that somehow reaches here with no recorded
-# outcome stays counted as unprotected rather than silently clearing the flag it never earned.
-- name: Fold the maintenance-mode attempt back into the detached-volume decision for {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-  ansible.builtin.set_fact:
-    volume_snapshot_detached: "{{ not (volume_snapshot_maintenance_attached | default(false) | bool) }}"
-
-# Ruling from slice 7a task 2, narrowed by 7b: a detached volume no longer skips outright — the
-# maintenance-mode attach above is tried first, and only when THAT fails does this fire. Two
-# realistic ways the attach itself fails, and failing the deploy over either would block a
-# legitimate action: no longhorn-manager pod on this node, or the attach/wait/retake sequence
-# timing out. An operator's own workload scaled to zero, and a brand-new service's first deploy
-# (k8s/volume-claim leaves the volume detached, no Deployment has ever attached it), are both
-# MEANT to get a real snapshot through the attach above rather than reaching this warning. Neither
-# has been observed doing so: the scale-to-zero case takes its snapshot on the ordinary path
-# instead (Longhorn snapshots a detached volume with healthy replicas), and the first-deploy case
-# is untested. docs/volume-snapshot-drills.md's "The maintenance-mode attach has never been
-# reached by a deploy" has the measurement, and #2698 is the drill that would settle the
-# first-deploy case.
-#
-# The gap this leaves is real and must stay visible rather than glossed: the apply below may
-# set replicas back above zero, the pod starts, and it can migrate the on-disk format with no
-# recovery point behind it. A silent skip would defeat the point of the slice, so this warns by
-# name — service, claim, and the fact that the deploy proceeds unprotected — rather than only
-# in a debug log nobody reads.
-#
-# DECIDED: this warning is an Ansible debug line and nothing forwards it to Discord. Accepted,
-# not fixed. Under the GitOps deployer the play output reaches nobody, and a later rollback's
-# revert-status note (gitops_deploy's `rollback_volume_revert_note`) names a service as one the
-# revert targets by reading its role DEFAULTS (`k8s_autodeploy_snapshot_pvcs`), not what this
-# task did on THAT run — so an operator reading the rollback alert has no signal that this
-# snapshot never happened, and no reason to expect the revert that follows to fail loudly rather
-# than do nothing. Closing it means threading a per-run "snapshot skipped" fact from this play
-# into the deployer's alert. Long form: docs/gitops-pipeline.md, *The deployer's record*.
-- name: Warn and skip the snapshot for a detached volume backing {{ volume_snapshot_claim }}
-  tags: [deploy]
-  when:
-    - not (k8s_no_mutate | bool)
-    - volume_snapshot_detached | bool
-  ansible.builtin.debug:
-    msg: >-
-      WARNING: {{ volume_snapshot_service }}'s claim {{ volume_snapshot_claim }} (Longhorn
-      volume {{ volume_snapshot_volume }}) is not attached
-      (status.state='{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}'),
-      and the maintenance-mode attach that would have let Longhorn snapshot it anyway also
-      failed. Skipping the pre-deploy snapshot for this claim and continuing the deploy — THIS
-      DEPLOY IS UNPROTECTED for {{ volume_snapshot_claim }}: if the apply scales
-      {{ volume_snapshot_service }} back up and the new pod migrates its on-disk format, there is
-      no recovery point to revert to. A first deploy and a deliberate scale-to-zero both take a
-      real snapshot through the maintenance-mode attach by design, though no deploy has been
-      observed reaching that attach — so treat this as an untested path as well as a failed one
-      (no longhorn-manager reachable on this node, or it never reached attached state in time);
-      investigate before trusting a revert of
-      {{ volume_snapshot_claim }}.
-
+# Every unready snapshot fails the deploy, including one on a detached volume. Until #2740 a
+# detached claim was attached in maintenance mode first and, when that failed, warned and
+# skipped — two drills (2026-08-21 task 6, and #2698 on 2026-09-27 for a never-attached volume)
+# measured Longhorn v1.12.1 snapshotting a detached volume on the ordinary path, so that branch
+# never ran on a deploy and was retired. `status.state` is still read above and named here: if
+# Longhorn ever stops snapshotting a detached volume, this failure is where it surfaces, and the
+# state is what tells the operator that is what happened.
 - name: Fail on a snapshot that never became usable for {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - volume_snapshot_ready_out | default('') | split('|') | first != 'true'
-    - not (volume_snapshot_detached | bool)
+    - volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'
   ansible.builtin.fail:
     msg: >-
       The pre-deploy snapshot {{ volume_snapshot_name }} of Longhorn volume
       {{ volume_snapshot_volume }} did not report readyToUse within
-      {{ volume_snapshot_timeout }}s (last read: '{{ volume_snapshot_ready_out | default('') }}',
+      {{ volume_snapshot_timeout }}s (last read:
+      '{{ volume_snapshot_ready.stdout | default('') }}',
       as readyToUse|markRemoved; volume state:
       '{{ volume_snapshot_volume_state.stdout | default('') | trim or 'unknown' }}').
       {{ 'It is markRemoved. Every run gets its own token in the name, so a same-second collision
@@ -728,11 +381,14 @@
       concurrent prune deleting this run''s own snapshot during the wait produces the identical
       state. Check who or what deleted {{ volume_snapshot_name }} before assuming a collision.
       Retrying a moment later gets a fresh token and a fresh name regardless of the cause.'
-      if (volume_snapshot_ready_out | default('') | split('|') | last) == 'true'
-      else 'The volume is attached and the engine did not complete the snapshot in time — this
-      is not the detached-volume case (that one skips and warns instead of failing here), so it
+      if (volume_snapshot_ready.stdout | default('') | split('|') | last) == 'true'
+      else ('The volume is not attached, which two drills measured Longhorn v1.12.1 snapshotting
+      anyway — so this is either a faulted volume or a Longhorn that no longer snapshots a
+      detached one. Check the volume''s replicas before retrying.'
+      if (volume_snapshot_volume_state.stdout | default('') | trim) != 'attached'
+      else 'The volume is attached and the engine did not complete the snapshot in time, so it
       is a genuine stuck engine or an overloaded cluster. Retrying the deploy is reasonable;
-      raising volume_snapshot_timeout is the fix if it keeps happening.' }}
+      raising volume_snapshot_timeout is the fix if it keeps happening.') }}
       Stopping before the apply: {{ volume_snapshot_service }} would be deployed with no way
       back.
 
@@ -749,15 +405,10 @@
 # The volume filter is one comparison because kubectl's jsonpath has no `&&` — verified
 # 2026-08-21, `unrecognized character in action: U+0026`. markRemoved and the name prefix are
 # therefore filtered in Jinja below.
-#
-# Also skipped for a detached-volume claim: this claim's snapshot was never taken, so there is
-# nothing of this run's to find in the listing, and the "found this run's snapshot" assert a
-# few tasks down would fail for a claim that was deliberately, correctly skipped.
 - name: List this service's live snapshots of {{ volume_snapshot_claim }}
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - not (volume_snapshot_detached | bool)
   ansible.builtin.command:
     argv:
       - k3s
@@ -776,7 +427,6 @@
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - not (volume_snapshot_detached | bool)
   # markRemoved snapshots are dropped from the window rather than counted in it. A CR that
   # survives its own delete is normal here (see CLAUDE.md), and counting three of those as the
   # retained three would make the next pass delete live snapshots to make room.
@@ -815,7 +465,6 @@
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - not (volume_snapshot_detached | bool)
   # The listing above is the input to a DELETE, so a listing that silently returns nothing —
   # a jsonpath the shlex split tore in half, a field Longhorn renamed — must fail rather than
   # read as "nothing to prune". The snapshot taken a few tasks up is a known member of the set,
@@ -846,7 +495,6 @@
   tags: [deploy]
   when:
     - not (k8s_no_mutate | bool)
-    - not (volume_snapshot_detached | bool)
   ansible.builtin.command:
     argv:
       - k3s
@@ -859,9 +507,9 @@
       - --wait=false
       - --ignore-not-found
   become: true
-  # Defensive `default()` on both sides of the slice, for a detached-volume claim where
+  # Defensive `default()` on both sides of the slice, for a run where
   # `volume_snapshot_live`/`volume_snapshot_keep` are never set (the "Choose which older
-  # snapshots" task above shares this task's `volume_snapshot_detached` guard, so it is skipped
+  # snapshots" task above shares this task's `k8s_no_mutate` guard, so it is skipped
   # too). Verified 2026-08-21: when a task's `when:` does not reference `item` and evaluates
   # false, Ansible skips it without templating `loop:` at all, so this is not observed to be
   # reachable today — but relying on that rather than stating it costs nothing here, and it is
@@ -885,9 +533,17 @@
     - "'must be no more than 63 bytes' not in (volume_snapshot_prune.stderr | default(''))"
 
 # A tolerated rejection is not a non-event: the snapshot stays, is selected for pruning again on
-# the next deploy, and is denied again. Whether it also costs space is an inference this role has
-# not measured — see CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
+# the next deploy, and is denied again. It costs no space — the eleven remaining CRs were
+# measured on 2026-09-27 to appear in no running engine's `status.snapshots`, so they pin no
+# blocks. See CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
 # Named here so it appears in the deploy output instead of only in a register nobody reads.
+#
+# The message names NO removal route, deliberately (#2733). It used to send the operator at the
+# Longhorn manager API — `?action=snapshotDelete` then `?action=snapshotPurge`, or the UI's
+# per-volume delete, which is the same call — and neither can work: on longhorn-manager v1.12.1
+# `snapshotDelete` acts on the engine chain and never touches the CR, and `snapshotCRDelete` is
+# a Kubernetes DELETE the same webhook denies. The role's CLAUDE.md holds the reading of the
+# v1.12.1 source; the operator decision left open is #2734.
 - name: Report snapshots Longhorn refuses to delete for {{ volume_snapshot_claim }}
   tags: [deploy]
   when: volume_snapshot_prune.results | default([]) | selectattr('rc', 'defined')
@@ -898,7 +554,9 @@
          | map(attribute='item') | list }} exceed Longhorn's 63-byte delete limit and cannot be
       deleted through the Kubernetes API at all — the prune retries them on every deploy and
       Longhorn's webhook denies each one. New snapshots are no
-      longer named this way; these predate 0c0317a77. Removing them means the Longhorn manager
-      API, which does not run that webhook: the UI's per-volume snapshot delete, or POST
-      ?action=snapshotDelete then ?action=snapshotPurge against the manager on this node. See
-      this role's CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn refuses".
+      longer named this way; these predate 0c0317a77. No supported route removes them on
+      Longhorn v1.12.1: every client's DELETE hits the same webhook, and the manager API's
+      own snapshot actions either act on the engine chain alone or issue that same DELETE.
+      They pin no blocks, so leaving them costs a stale object and one denied delete per
+      deploy. Read this role's CLAUDE.md, "The 13 over-long CRs the prune retries and Longhorn
+      refuses", before trying to remove one.

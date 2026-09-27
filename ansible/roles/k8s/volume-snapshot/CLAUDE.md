@@ -255,9 +255,7 @@ changed the workload.
 |---|---|
 | a claim is missing or still `Pending` | **fails** — named by claim, before anything is applied |
 | `git rev-parse` returns nothing | **fails** — an undated name is one 7b cannot find |
-| the volume is detached and the maintenance-mode attach also fails | **skips this claim and warns loudly** — see below |
-| the volume is detached, the maintenance-mode attach succeeds, but the retaken snapshot never reports `readyToUse` | **fails** — this is now an attached, stuck engine, the same as the row below |
-| the snapshot never reports `readyToUse` for any other reason (attached and stuck) | **fails** — this is the recovery point the deploy is about to need |
+| the snapshot never reports `readyToUse`, whatever the volume's state | **fails** — this is the recovery point the deploy is about to need |
 | the snapshot listing does not contain this run's own snapshot | **fails** — the read is broken, so the prune would be deleting from a set it cannot see |
 | a delete in the prune returns non-zero | **fails** — see below |
 
@@ -288,32 +286,29 @@ manual deploy of an already-up-to-date service still creates a real Snapshot CR 
 prune against it, not a skipped no-op. Running a full manual deploy twice in one day churns the
 snapshot chain of every protected volume. Not worth gating on.
 
-## A detached volume gets a maintenance-mode attach before it gets skipped
+## A detached volume is snapshotted on the ordinary path
 
-The rule, in the order `claim.yml` runs it. Longhorn has completed a snapshot of a detached
-volume on the ordinary path, so this branch has never executed on a deploy — the evidence, and
-what that means for retiring it, are in `docs/volume-snapshot-drills.md`.
+Longhorn v1.12.1 completes a snapshot of a detached volume with healthy replicas, so a detached
+claim needs nothing special from this role. `tasks/claim.yml` treats it as any other claim: the
+apply, the one readiness wait, then the prune.
 
-- **A detached claim does not fail the deploy.** Two legitimate ways a `Recreate` + RWO volume
-  is detached at snapshot time: an operator scaled the service to zero, or this is the service's
-  first-ever deploy. Failing would block a legitimate action in both.
-- **After the first wait times out**, the claim reads the volume's own `status.state`. When it is
-  not `attached`, the claim reuses `k8s/longhorn-api` for the maintenance-mode attach
-  `k8s/volume-revert` proved (`POST ?action=attach {hostId, disableFrontend: true}`, wait for
-  `attached`), retakes the same-named snapshot, then detaches again whether or not the retake
-  succeeded.
-- **Any other unready cause on the FIRST attempt** — a same-second name collision on a
-  `markRemoved` CR, a stuck engine on a volume that *is* attached — still fails the deploy.
-- **Only one case reaches the warning: the maintenance-mode attach itself fails.** No reachable
-  longhorn-manager, or the attach/wait timing out, fall through to `ansible_debug` naming the
-  service, the claim and that the deploy is proceeding unprotected. A silent skip would defeat
-  the point. If the attach succeeds and the retaken snapshot still never becomes ready, that is
-  the "attached and stuck" row above instead, and it fails the deploy.
-- **Accepted, not fixed: `!= 'attached'` is not `== 'detached'`.** `volume_snapshot_detached` is
-  also true for `faulted`, `attaching` and `detaching`, so a `faulted` volume reaches the same
-  unprotected warning as a merely-detached one with no way to tell them apart. It is not worth
-  narrowing: the #2698 drill proved the block unreachable for a never-attached volume as well,
-  and #2740 retires the block together with this condition.
+**Two drills measured it, covering both ways a volume reaches this role detached.** The
+2026-08-21 task-6 drill snapshotted a volume that had been attached before; the #2698 drill on
+2026-09-27 snapshotted a throwaway PVC no pod had ever mounted, `readyToUse=true` about 13 s
+after the PVC was created. `docs/volume-snapshot-drills.md` holds both records.
+
+**#2740 retired the maintenance-mode attach those drills made dead code.** Between 2026-08 and
+2026-09-27 a claim whose first wait timed out read the volume's `status.state`, and a state other
+than `attached` triggered an attach through `k8s/longhorn-api` with `disableFrontend: true`, a
+retake, a detach, and — when the attach itself failed — a warning that the deploy was proceeding
+with no recovery point. No deploy ever reached it. The retirement also removed the `faulted` /
+`attaching` / `detaching` ambiguity that block carried: those states were read as "detached" and
+took the same unprotected path as a genuinely detached volume.
+
+**A detached claim that cannot be snapshotted now fails the deploy**, at "did not report
+readyToUse", like any other unready snapshot. `claim.yml` still reads `status.state` after a
+failed wait and names it in that failure, which is what tells an operator that Longhorn stopped
+snapshotting a detached volume rather than that an engine wedged.
 
 ## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role at all
 

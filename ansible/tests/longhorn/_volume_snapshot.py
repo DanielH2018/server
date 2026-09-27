@@ -1,7 +1,8 @@
 """Paths and the task reader the `k8s/volume-snapshot` guards share.
 
-The guards split three ways on 2026-09-01 -- retention and naming, the maintenance-attach
-path, and the deploy-hygiene checks -- and each reads the same three task files.
+The guards split two ways -- retention and naming, and the deploy-hygiene checks -- and each
+reads the same three task files. A third split covered the maintenance-attach path until #2740
+retired that block.
 """
 
 from pathlib import Path

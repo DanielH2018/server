@@ -1,6 +1,6 @@
 # volume-snapshot: the drill record
 
-The measurements behind `k8s/volume-snapshot`'s detached-volume path, and the traps its
+The measurements behind `k8s/volume-snapshot`, and the traps its
 `kubectl` calls and Ansible registers are written around. The operating rules — what the role
 does on each path, what fails a deploy, what a caller can and cannot override — are in
 `ansible/roles/k8s/volume-snapshot/CLAUDE.md`, which is the file a session loads before touching
@@ -11,70 +11,14 @@ monitor-bridge, #2699).
 Nothing tests this page. `ansible/roles/k8s/volume-snapshot/tasks/claim.yml` is the authority on
 what the role does; where a paragraph here disagrees with it, the task file is right.
 
-## A detached volume gets a maintenance-mode attach before it gets skipped
+## The maintenance-mode attach was never reached by a deploy, and #2740 retired it
 
-> **The task-6 drill of 2026-08-21 did not reach this path, and could not.** Read the section
-> "The maintenance-mode attach has never been reached by a deploy" below before relying on
-> anything in this one. The reasoning below is preserved because it is what the code implements;
-> it is not a description of observed behaviour.
-
-A Longhorn snapshot needs a running engine, and a workload scaled to zero has none. Two records
-of the same constraint: `longhorn-reap-orphan-snapshots.sh.j2` refuses to reap on a detached
-volume ("no engine to purge it," observed on `terraria-config` on 2026-08-16), and the slice 7
-drill got a `500` reverting a plainly detached volume for the same reason.
-
-**Ruling from slice 7a task 2: a detached claim does not fail the deploy.** Two realistic ways a
-`Recreate` + RWO volume is detached at snapshot time, and failing the deploy would block a
-legitimate action in both: an operator deliberately scaled the service to zero, or this is the
-service's first-ever deploy (`k8s/volume-claim` creates the claim, and no Deployment has ever
-attached the volume yet — so a brand-new empty
-volume is legitimately detached).
-
-**Slice 7b closes the gap 7a left open.** After the first wait times out, `claim.yml` reads the
-volume's own `status.state`; when it is not `attached`, the claim reuses `k8s/longhorn-api` and
-the maintenance-mode attach `k8s/volume-revert` proved (`POST ?action=attach
-{hostId, disableFrontend: true}`, wait for `attached` with the frontend disabled) to attach the
-volume long enough to retake the same-named snapshot, then detaches it again regardless of
-whether the retake succeeded. **Neither of 7a's cases is observed to reach this
-attach.** The drill measured the deliberate scale-to-zero taking its real snapshot on the
-ORDINARY path, before this block's condition could be true at all. The #2698 drill measured the
-same for a service's first deploy on 2026-09-27. What the code IMPLEMENTS is that both cases get a snapshot through this
-attach rather than the warning — see "The maintenance-mode attach has never been reached by a
-deploy" below. Any
-other unready cause on the FIRST attempt (a same-second name collision on a `markRemoved` CR, or
-a stuck engine on a volume that *is* attached) still fails the deploy, unchanged from 7a.
-
-**Accepted, not fixed here: `!= 'attached'` is not `== 'detached'`.**
-`volume_snapshot_detached` is set from `status.state != 'attached'`, which is also true for
-`faulted`, `attaching` and `detaching` — none of which are the two legitimate cases this section
-exists for. On a `faulted` volume specifically, this block runs, its attach attempt fails against
-a genuinely broken volume (not a merely detached one), and that failure falls through to the
-same unprotected "THIS DEPLOY IS UNPROTECTED" warning below as an ordinary detached-and-attach-
-failed case — so the deploy proceeds on a volume that was never just detached, with no way for
-the warning's reader to tell the two apart. Narrowing the condition to the two legitimate
-`detached` cases (checking `== 'detached'` and treating every other non-`attached` state as the
-"attached and stuck" failure it already is for other states) would fix this; not done here
-because the maintenance-attach block this guards is itself dead on this Longhorn version (see
-"The premise was never true on this Longhorn version" below) — narrowing a condition inside code
-that is already unreachable on the one deploy path that exists buys nothing until that block is
-either retired or proven reachable.
-
-**The warning survives, narrowed to one case: the maintenance-mode attach itself fails.** No
-longhorn-manager reachable on this node, or the attach/wait sequence timing out, both fall
-through to `ansible_debug` rather than failing the deploy — a detached volume is still not itself
-an error, and this attempt is best-effort on top of 7a's ruling. If the attach succeeds but the
-retaken snapshot still never becomes ready, that is no longer read as the detached case at all:
-it folds into the ordinary "attached and stuck" row in the role doc's *What fails the deploy,
-and what does not* and fails the deploy, because by then
-the volume genuinely is attached.
-
-The gap that remains is narrower than 7a's, but still real and still visible on purpose: if the
-attach itself fails, the apply that follows may scale the workload back up, the new pod can
-migrate the on-disk format, and there is then no recovery point behind it. The warning names the
-service, the claim, and that the deploy is proceeding unprotected — a silent skip would defeat
-the point of the slice.
-
-## The maintenance-mode attach has never been reached by a deploy
+Between 2026-08 and 2026-09-27 a claim whose readiness wait timed out on a non-`attached` volume
+was attached in maintenance mode, given a second snapshot attempt, then detached, and warned
+"THIS DEPLOY IS UNPROTECTED" when that attach failed. The two drills below measured it unreachable on
+Longhorn v1.12.1, on both ways a volume reaches the role detached, and #2740 removed it. The
+measurements are kept because they are the evidence for the removal, and because they are what a
+future session would otherwise re-derive before adding such a block back.
 
 Measured by the task-6 drill, 2026-08-21, on `speedtest` / `speedtest-config` (1Gi,
 `longhorn-nobackup`, Longhorn v1.12.1). The drill found two reasons. Only the second still
@@ -146,7 +90,7 @@ only `autodeploy-drill-*`. What it recorded:
 
 So the block is unreachable on every deploy path on this Longhorn version: the 2026-08-21 drill
 covered a detached volume that had been attached before, and this drill covers one that never
-was. Retiring it is #2740.
+was. #2740 retired it.
 
 **A never-attached volume's snapshot cannot be deleted until the volume attaches.** The drill's
 cleanup found this. Its `kubectl delete` of the snapshot CR set the `deletionTimestamp` and then
@@ -182,11 +126,11 @@ behaviour change, so it belongs in its own change with its own justification, no
 drill. The case that would have kept it honest, a volume that has never been attached, was
 measured on 2026-09-27 and snapshots on the ordinary path.
 
-**What this means for the code.** The maintenance-attach block, its `longhorn-api` include, its
-detach and both of their state waits are dead on this Longhorn version on every deploy path. The
-"THIS DEPLOY IS UNPROTECTED" warning `claim.yml` falls through to is correspondingly unreachable.
-Retiring them is #2740. Until that lands, nobody reading this role should believe the path is
-exercised: none of it has ever executed.
+**What this meant for the code.** The maintenance-attach block, its `longhorn-api` include, its
+detach and both of their state waits were dead on this Longhorn version on every deploy path, as
+was the "THIS DEPLOY IS UNPROTECTED" warning `claim.yml` fell through to. #2740 retired all of
+it, so a detached claim now takes the ordinary path and an unready snapshot fails the deploy
+whatever the volume's state.
 
 ## Things measured rather than assumed
 
@@ -195,11 +139,12 @@ exercised: none of it has ever executed.
   both always run. The retake wait shared `volume_snapshot_ready` with the first wait, and on
   the ordinary attached path — where the retake is skipped — it erased the first wait's real
   reading, so the deploy failed on a snapshot that was healthy and `readyToUse`. Measured
-  2026-08-21 on `speedtest-config`; the tasks below the retake now read the
-  `volume_snapshot_ready_out` fact, which folds the two waits by the path actually taken.
-  `test_skipped_retake_wait_keeps_first_read` runs the role and pins it. Note that only a
-  behavioural test can: this bug lives in when Ansible assigns a register, not in any
-  expression's text, and a source-text test asserted the broken design and passed.
+  2026-08-21 on `speedtest-config`. #2740 removed the retake, so one wait now writes that
+  register and nothing can clobber it; the rule stands for any register a future task adds.
+  `test_the_attached_path_completes_against_a_ready_snapshot` runs the role end to end and pins
+  the path that bug broke. Note that only a behavioural test can: the bug lived in when Ansible
+  assigns a register, not in any expression's text, and a source-text test asserted the broken
+  design and passed.
 - `kubectl`'s `jsonpath` has **no `&&`** — `unrecognized character in action: U+0026`, verified
   2026-08-21. The snapshot listing therefore filters on `spec.volume` alone and does the rest in
   Jinja. Do not "simplify" it into a compound filter expression.
