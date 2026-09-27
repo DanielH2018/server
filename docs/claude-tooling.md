@@ -579,9 +579,20 @@ which nothing fast-forwards.
 The arm reads the SESSION's `settings.json` (`$CLAUDE_PROJECT_DIR`, or the first parent of the
 cwd holding one) against the files on disk. Reading the primary checkout's own `settings.json`
 would compare a file against the `.claude/hooks/` directory it was committed beside and never
-disagree. Two gaps stay open by construction: the arm cannot report `session-health.sh`'s own
-absence, because a SessionStart hook that does not exist prints nothing, and it sees only the
-`.sh` shims `settings.json` names, not the `.py` sibling each shim resolves for itself.
+disagree. One gap stays open by construction: the arm cannot report `session-health.sh`'s own
+absence, because a SessionStart hook that does not exist prints nothing.
+
+It also reads each present shim for the **`.py` sibling the shim runs**, which `settings.json`
+never names (issue #2709). That failure is the quieter of the two: `session-health.sh` holds a
+present `.sh` beside a missing `.py`, so the shim runs, `uv run` cannot find the script, and
+`2>/dev/null; exit 0` turns it into a hook that succeeds and guards nothing. It gets its own
+banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
+`sibling_py_paths` matches the one idiom five shims share —
+`"$(dirname "$(readlink -f "$0")")/<name>.py"` — as text, and abstains on anything else rather
+than parsing shell: `validate-compose.sh` composes its path from a variable and reports its own
+missing validator loudly instead (exit 2). Abstention is held honest by
+`test_the_repos_own_shims_name_the_siblings_this_parse_must_find`, which names the five
+siblings the parse must resolve and the three shims that resolve none.
 
 ## What an edit costs, by file type
 
