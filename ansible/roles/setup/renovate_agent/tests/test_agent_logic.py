@@ -289,7 +289,12 @@ class _FakeHost:
         if argv[0] == "gh":
             return 0, json.dumps(
                 [
-                    {"number": n, "title": f"Update dep {n}", "url": f"u/{n}"}
+                    {
+                        "number": n,
+                        "title": f"Update dep {n}",
+                        "url": f"u/{n}",
+                        "author": {"login": "app/renovate"},
+                    }
                     for n in self.prs
                 ]
             )
@@ -343,17 +348,61 @@ class TestPrStates:
         assert renovate_agent.pr_states("o/r", [1], tools) == {}
 
 
+_LISTING = json.dumps(
+    [
+        {
+            "number": 60,
+            "title": "r",
+            "headRefName": "renovate/x",
+            "author": {"login": "app/renovate"},
+        },
+        {"number": 50, "title": "t", "headRefName": "b-1", "author": {"login": "me"}},
+        {
+            "number": 40,
+            "title": "o",
+            "headRefName": "b-2",
+            "author": {"login": "someone"},
+        },
+    ]
+)
+
+
+def _listing_tools(login=(0, "me\n")) -> renovate_agent.AgentTools:
+    """A gh that answers the repository listing, and refuses the search form (#2772)."""
+
+    def run(argv, cwd=None, timeout=120):
+        if argv[:3] == ["gh", "api", "user"]:
+            return login
+        assert argv[:3] == ["gh", "pr", "list"]
+        assert "--author" not in argv, "--author makes gh read the lagging search index"
+        return 0, _LISTING
+
+    return renovate_agent.AgentTools(run=run)
+
+
+class TestOpenPrs:
+    """The Renovate census: every open PR, kept to app/renovate's locally."""
+
+    def test_the_census_keeps_only_renovates_prs(self) -> None:
+        prs = renovate_agent.open_prs("o/r", _listing_tools())
+        assert prs == [al.OpenPR(number=60, title="r", branch="renovate/x")]
+
+    def test_a_failed_census_raises(self) -> None:
+        tools = renovate_agent.AgentTools(run=lambda argv, **kw: (1, "HTTP 502"))
+        with pytest.raises(RuntimeError):
+            renovate_agent.open_prs("o/r", tools)
+
+
 class TestOwnPrs:
     """The hand-off census: the session account's open PRs with their head branches."""
 
     def test_the_census_reads_this_accounts_branches(self) -> None:
-        def run(argv, cwd=None, timeout=120):
-            assert argv[argv.index("--author") + 1] == "@me"
-            assert "headRefName" in argv[argv.index("--json") + 1]
-            return 0, '[{"number": 50, "title": "t", "headRefName": "b-1"}]'
-
-        prs = renovate_agent.own_prs("o/r", renovate_agent.AgentTools(run=run))
+        prs = renovate_agent.own_prs("o/r", _listing_tools())
         assert prs == [al.OpenPR(number=50, title="t", branch="b-1")]
+
+    def test_an_unreadable_login_is_flagged_as_none(self) -> None:
+        tools = _listing_tools(login=(1, "HTTP 401"))
+        assert renovate_agent.own_prs("o/r", tools) is None
 
     @pytest.mark.parametrize("answer", [(1, "HTTP 502"), (0, "not json")])
     def test_a_failed_census_is_flagged_as_none(self, answer) -> None:
