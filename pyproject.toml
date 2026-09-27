@@ -59,7 +59,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
   "ansible/roles/k8s/gpu-exporter/tests",          # DRM sysfs read + the amdgpu/i915 driver split
   "ansible/roles/k8s/ical-proxy/tests",
   "ansible/roles/k8s/homelab-mcp/tests",
-  "ansible/roles/k8s/crowdsec/tests",              # the remote-ips allowlist cron: authenticated-router derivation + write plan
+  "ansible/roles/k8s/crowdsec/tests",              # the remote-ips allowlist cron (router derivation + write plan) and the bouncer-prune cron
   "ansible/roles/k8s/artifacts/tests",             # artifact index/search server + path confinement
   "ansible/roles/k8s/uptime-kuma/tests",           # status-page group rules + the sync's write-only-on-change
   "ansible/roles/k8s/karakeep/tests",              # deployment flags + pins vs the vendored time-tagger

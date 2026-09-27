@@ -1,0 +1,28 @@
+#!/bin/bash
+# Prunes the LAPI bouncer rows past Traefik pod IPs left behind (#2762). Hourly. The decision,
+# and why `cscli bouncers prune` is safe only while one `k8straefik` row is still pulling, is in
+# /opt/crowdsec-bouncer-prune/bouncer_prune.py's docstring; this wrapper owns cron's PATH and the
+# syslog line.
+#
+# No Kuma monitor: a failed run costs only rows accumulating until the next one succeeds. Every
+# run logs its summary, so `probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`
+# shows which rows went and which row was kept, which a session cannot read through `cscli`
+# (the read-only ServiceAccount is refused `pods/exec`).
+set -uo pipefail
+
+export PATH=/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin  # cron ships a bare PATH
+
+# Root cron, interpreter installed under {{ sys_user }}'s HOME: the remote-allowlist wrapper
+# has the incident behind this export.
+export UV_PYTHON_INSTALL_DIR="/home/{{ sys_user }}/.local/share/uv/python"
+OUTPUT=$(/usr/local/bin/uv run --no-project --no-python-downloads --python {{ host_python_version }} /opt/crowdsec-bouncer-prune/bouncer_prune.py 2>&1)
+RC=$?
+SUMMARY=$(printf '%s' "$OUTPUT" | tail -1)
+: "${SUMMARY:=bouncer_prune.py exited $RC with no output}"
+
+if [ "$RC" -ne 0 ]; then
+  # The `status=down` prefix is load-bearing for probe.py alerts' parse_syslog_down_line.
+  logger -t crowdsec-bouncer-prune "status=down $SUMMARY"
+  exit 1
+fi
+logger -t crowdsec-bouncer-prune "$SUMMARY"

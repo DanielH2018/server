@@ -197,6 +197,53 @@
   become: true
   when: not k8s_dry_run | bool
 
+- name: Create the bouncer-prune module directory
+  tags: [cron]
+  ansible.builtin.file:
+    path: /opt/crowdsec-bouncer-prune
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Install the bouncer-prune decision module
+  tags: [cron]
+  ansible.builtin.copy:
+    src: bouncer_prune.py
+    dest: /opt/crowdsec-bouncer-prune/bouncer_prune.py
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Deploy the bouncer-prune wrapper
+  tags: [cron]
+  ansible.builtin.template:
+    src: crowdsec-prune-bouncers.sh.j2
+    dest: /usr/local/bin/crowdsec-prune-bouncers.sh
+    mode: "0750"
+    owner: root
+    group: root
+  become: true
+  when: not k8s_dry_run | bool
+
+- name: Schedule the bouncer prune
+  tags: [cron]
+  # root, for the same reason as the allowlist crons: it execs into the engine pod. Hourly,
+  # matching the module's 60-minute window (#2762). The wrapper logs its own summary; the
+  # pipe catches anything else, such as a uv error, rather than mailing it.
+  ansible.builtin.cron:
+    name: "CrowdSec bouncer prune"
+    minute: "17"
+    user: root
+    job: "/usr/local/bin/crowdsec-prune-bouncers.sh 2>&1 | logger -t crowdsec-bouncer-prune"
+    cron_file: crowdsec-bouncer-prune
+  become: true
+  when: not k8s_dry_run | bool
+
 - name: Deploy the AppSec verifier
   tags: [cron]
   # Re-homed from the containers/traefik role at E7 — the Docker edge retired and this
