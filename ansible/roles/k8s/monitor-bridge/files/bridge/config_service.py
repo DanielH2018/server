@@ -38,6 +38,7 @@ class ServiceConfig:
     RADARR_URL: str
     RADARR_API_KEY: str = field(repr=False)
     ARR_FETCH_CONSECUTIVE: int
+    ARR_TITLE_HOLD_GRACE_H: float
     BAZARR_URL: str
     BAZARR_API_KEY: str = field(repr=False)
     PROWLARR_URL: str
@@ -176,6 +177,16 @@ def service_config(
         # it: that grace covered the same transient at 2 cycles and covered the queue verdict
         # too, which this deliberately does not.
         ARR_FETCH_CONSECUTIVE=_int("ARR_FETCH_CONSECUTIVE", "3"),
+        # Hours a queue item on Sonarr's own self-clearing title hold is held before it pages
+        # (#2786). 48 is upstream's OWN window, not a taste: EpisodeTitleSpecification stops
+        # applying the rule once the episode's `airDateUtc` is more than 48h old, so an item
+        # still carrying "Episode has a TBA title and recently aired" past that is stuck rather
+        # than waiting. Measured 2026-09-27: three of arr_queue's seven DOWN episodes over the
+        # preceding 14 days were this hold (2.9h, 7.4h, 2.9h) and named no action an operator
+        # could take; the other four were Custom Format rejections and still page on sight. The
+        # grace is narrow by construction — see verdicts/service.py's queue_warnings for the
+        # four conditions that turn it off.
+        ARR_TITLE_HOLD_GRACE_H=_num("ARR_TITLE_HOLD_GRACE_H", "48"),
         # Bazarr's link to Sonarr and Radarr. Bazarr holds its OWN copies of their API keys, in
         # its config on the bazarr-config PVC and entered through its UI — so no Ansible
         # template carries them and no deploy updates them. On 2026-08-29 a rotation swept the
