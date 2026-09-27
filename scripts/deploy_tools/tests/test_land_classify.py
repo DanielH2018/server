@@ -85,7 +85,7 @@ def test_classify_records_which_tags_only_the_caller_graph_named(landing):
     )
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
-    assert (ln.resolved_tags, ln.caller_expanded) == (
+    assert (ln.resolved_tags, ln.k8s_only) == (
         ["sonarr", "wg-easy"],
         ["wg-easy"],
     )
@@ -96,7 +96,42 @@ def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr,radarr"
-    assert ln.caller_expanded == []
+    assert ln.k8s_only == []
+
+
+def test_classify_records_the_tags_a_changed_path_proves_are_k3s(landing):
+    """Issue #2730: a PR touching only `roles/k8s/wg-easy/` names a tag the Pi also declares,
+    and the routing read has to be told the change is the cluster's."""
+    ln, _ = landing(Fakes(derived=(["wg-easy"], "pr"), path_k8s_only=["wg-easy"]))
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.k8s_only == ["wg-easy"]
+
+
+def test_both_provenances_land_in_one_list(landing):
+    """The caller graph and the path derivation answer for different tags, and `deploy_by_host`
+    routes the union: recording one over the other loses the restriction for the other."""
+    ln, _ = landing(
+        Fakes(
+            derived=(["wg-easy"], "pr"),
+            path_k8s_only=["wg-easy"],
+            shared_callers={"helper": {"sonarr"}},
+        )
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.k8s_only == ["sonarr", "wg-easy"]
+
+
+def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):
+    """REJECTING half: on the FALLBACK path `derive_from_diff` rebuilds the tags in step 5 from
+    a diff this classification never reads, so no tag may be restricted here."""
+    ln, _ = landing(
+        Fakes(derived=([], "fallback"), path_k8s_only=["wg-easy"]), since="abc"
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert ln.k8s_only == []
 
 
 # ── a role this PR registers is not a role somebody forgot to register (issue #1544) ──

@@ -227,16 +227,15 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
     failure arm below stays the one that ends the landing. A tag under no host in either read
     falls through to one local deploy, which is right for a new cluster role.
 
-    `caller_expanded` routes to a `platform: k8s` entry only, through both reads. A tag the
-    caller graph reached names a k3s role, and `wg-easy` is declared on daniel-box as k8s and
-    on daniel-pi as Docker -- so a `manifests` change used to deploy the Pi's Compose wg-easy
-    too, over one extra ssh deploy the change never touched (issue #2718).
+    `k8s_only` routes to a `platform: k8s` entry only, through both reads. `wg-easy` is declared
+    on daniel-box as k8s and on daniel-pi as Docker, so a change to either used to deploy both
+    -- one extra ssh deploy of a service the change never touched. A tag the k8s caller graph
+    reached names a k3s role (issue #2718), and so does one whose every changed path sits under
+    `ansible/roles/k8s/` (issue #2730); `classify` records the union of the two.
     """
     o, t = ln.opts, ln.tools
     by_host = (
-        t.landing_hosts_at(ln.resolved_tags, at, o.primary, ln.caller_expanded)
-        if at
-        else None
+        t.landing_hosts_at(ln.resolved_tags, at, o.primary, ln.k8s_only) if at else None
     )
     if by_host is not None:
         lines = [
@@ -244,8 +243,8 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
         ]
     else:
         argv = ["hosts", ln.tags_csv]
-        if ln.caller_expanded:
-            argv.append(f"--k8s-only={','.join(ln.caller_expanded)}")
+        if ln.k8s_only:
+            argv.append(f"--k8s-only={','.join(ln.k8s_only)}")
         r = t.deploy_tags(o.primary, argv)
         if r.returncode != DEPLOY_OK:
             # deploy.sh was never invoked for any host, so nothing here overlaps with the

@@ -92,6 +92,9 @@ class Fakes:
     derived: tuple[list[str], str] = field(default_factory=lambda: (["sonarr"], "pr"))
     # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
     shared_callers: dict[str, set[str]] = field(default_factory=dict)
+    # `land_platform.k8s_only_tags`: the derived tags whose every changed path sits under the
+    # k8s role tree, so the landing may route them to a `platform: k8s` entry alone (#2730).
+    path_k8s_only: list[str] = field(default_factory=list)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
     declared_at: set[str] | None = None
@@ -129,7 +132,7 @@ def _seq(values: list, calls: list, name: str):
 
 
 def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
-    """The five pure classifiers, each answering from `Fakes` instead of the real tree.
+    """The pure classifiers, each answering from `Fakes` instead of the real tree.
 
     `calls` is the list `build_tools` returned, so a classifier call lands in the same
     ordering record as a boundary call.
@@ -151,6 +154,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         ),
         quiet_paths=lambda paths, range_: set(),
         shared_caller_tags=lambda paths, declared=None: f.shared_callers,
+        k8s_only_tags=lambda paths, declared=None: list(f.path_k8s_only),
     )
 
 

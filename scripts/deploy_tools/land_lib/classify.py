@@ -167,6 +167,14 @@ def classify(ln: Landing) -> None:
     )
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:
+        # Which of these tags a changed PATH proves is a k3s change (#2730). Read over `paths`
+        # rather than `tags`, which `derive` has already widened with the build couplings: a
+        # coupled tag is named by no path, so nothing proves its platform. On the FALLBACK
+        # path nothing is read at all -- `derive_from_diff` rebuilds the tags in step 5 from a
+        # diff this classification never sees, and an empty set routes to every declaring host.
+        ln.k8s_only = _classified(
+            ln, "k8s-only tag classification", c.k8s_only_tags, paths, declared
+        )
         # A shared role deploys through every role that runs it, so `plane_note` no longer
         # names one (#2704). Read over `plane_paths`, the list that note read, so a change
         # `shared_role_reach` found deploy-time only fans out to nothing.
@@ -188,7 +196,7 @@ def classify(ln: Landing) -> None:
             # Recorded BEFORE `expand_build_couplings`: a coupled tag is named by neither a
             # path nor the caller graph, so nothing here proves which platform it belongs to
             # and it stays routed to every host that declares it (#2718).
-            ln.caller_expanded = sorted(extra)
+            ln.k8s_only = sorted(set(ln.k8s_only) | extra)
             ln.resolved_tags = sorted(expand_build_couplings(set(tags) | extra))
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
