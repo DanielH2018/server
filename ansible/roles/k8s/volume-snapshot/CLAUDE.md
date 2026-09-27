@@ -199,7 +199,8 @@ Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
 cannot be deleted through the Kubernetes API at all. All thirteen were still there on 2026-09-26,
 `status.readyToUse: false`, most carrying `status.error` "lost track of the corresponding
 snapshot info inside volume engine". Issue #2686 filed them as never pruned. The prune does
-reach them; the delete is what fails.
+reach them; the delete is what fails. On 2026-09-27 eleven remained, every one of them
+`markRemoved: false` with the lost-track error. The two `markRemoved: true` CRs were gone.
 
 **The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
 (2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
@@ -219,18 +220,29 @@ set instead, so the prune does not retry those two at all.
 the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it would
 hit the same webhook.
 
-**Removing them is out of band, through the Longhorn manager API rather than the Kubernetes
-API.** The manager's own `snapshotDelete` volume action does not run the validating webhook:
-`http://<longhorn-manager-pod-ip>:9500/v1/volumes/<volume>?action=snapshotDelete` with
-`{"name": "<snapshot>"}`, then `?action=snapshotPurge` — the same base the reaper purges
-against. The Longhorn UI's per-volume snapshot delete is the same call. Untried here, so #2686
-stays open until one of the two has actually removed them.
+**No supported route removes them on Longhorn v1.12.1, the manager API included.** Read from
+the `longhorn-manager` v1.12.1 source on 2026-09-27:
 
-**They likely pin no blocks, which is an inference rather than a measurement.** "Lost track of
-the corresponding snapshot info inside volume engine" says the engine no longer holds the
-snapshot the CR names, so there is no chain entry beneath which `filesystem trim` stops. The
-cost of leaving them is then a stale Kubernetes object and a denied delete per deploy, not
-reclaimable space. Confirming it needs a live read of each volume's snapshot chain.
+- Only a Kubernetes DELETE sets the `deletionTimestamp` that the snapshot controller's
+  finalizer removal waits on.
+- The validator's `Delete` hook calls `IsSnapshotLinkedCloneEntrypoint`, which builds a label
+  selector from the raw snapshot name. That selector is invalid past 63 bytes, so the webhook
+  denies every DELETE, whatever client sends it.
+- The manager API's `snapshotDelete` action (`VolumeManager.DeleteSnapshot`) deletes from the
+  engine's chain and never touches the CR. The engine no longer holds these snapshots, so it has
+  nothing to delete. The UI's per-volume delete makes the same call.
+- The manager API's `snapshotCRDelete` action goes through `DeleteSnapshotCR`, which is a
+  Kubernetes DELETE and hits the same webhook.
+- The controller sets the lost-track error and nothing else. It never removes such a CR itself.
+
+Upstream master still builds the selector from the raw name, so an upgrade does not fix this
+either. What remains is bypassing the webhook for one delete, which is an operator decision.
+
+**They pin no blocks.** Measured 2026-09-27: none of the eleven names appears in
+`status.snapshots` of any of the four volumes' running engines. The controller sets the
+lost-track error exactly when a CR's name is missing from that map. With no chain entry,
+`filesystem trim` has nothing to stop beneath. Leaving them costs a stale Kubernetes object and
+one denied delete per deploy, not reclaimable space.
 
 ## What fails the deploy, and what does not
 
