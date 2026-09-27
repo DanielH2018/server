@@ -22,11 +22,20 @@ def loki_ingestion_fresh(count: float | None, window: str) -> tuple[bool, str]:
     return True, "%d log lines in %s" % (int(count), window)
 
 
+# Loki's discard reason for an entry that arrived outside its accept window. Distinct from every
+# other reason in kind, not just in name: rate_limited / stream_limited / line_too_long are
+# throughput or limit faults that recur until someone changes something, while this one is a
+# backfill arriving late — which is what a shipper does for hours after the node it runs on
+# rebooted. `backlog_grace_active` drops it for that window and nothing else.
+TOO_FAR_BEHIND = "too_far_behind"
+
+
 def shipper_dropped(
     client_count: float | None,
     server_reasons: list[tuple[str, float]] | None,
     window: str,
     threshold: float,
+    backlog_grace_active: bool = False,
 ) -> tuple[bool, str]:
     """Pure: did the shipper give up on entries, or did Loki discard them, past `threshold`?
 
@@ -50,16 +59,33 @@ def shipper_dropped(
     outside Loki's accept window — a clock/backfill problem — where every other reason
     (rate_limited / stream_limited / line_too_long) is a throughput or limit problem, and the
     operator needs to know which they are chasing.
+
+    `backlog_grace_active` drops the `too_far_behind` reason from the server side and says so in
+    the message. The weekly reboot makes Alloy ship a backlog for hours, and Loki discards the
+    part that arrives outside its accept window under exactly that reason — 4.4h of red on
+    2026-09-27 for a fault nobody acts on (#2783). Every other reason and the whole client side
+    stay live inside the window, so a real throughput fault on a reboot morning still pages.
     """
     client_n = client_count or 0.0
     server_reasons = server_reasons or []
+    grace_note = ""
+    if backlog_grace_active:
+        held = sum(c for r, c in server_reasons if r == TOO_FAR_BEHIND)
+        if held:
+            server_reasons = [r for r in server_reasons if r[0] != TOO_FAR_BEHIND]
+            grace_note = (
+                ", holding %.0f %s server-side discards: the node rebooted inside "
+                "SHIPPER_BACKLOG_GRACE_S and the shipper is still catching up"
+                % (held, TOO_FAR_BEHIND)
+            )
     server_n = sum(c for _, c in server_reasons)
     n = max(client_n, server_n)
     if n <= threshold:
-        return True, "shipper drops ok (client %.0f, server %.0f in %s)" % (
+        return True, "shipper drops ok (client %.0f, server %.0f in %s)%s" % (
             client_n,
             server_n,
             window,
+            grace_note,
         )
     if server_n >= client_n:
         top_reason, top_count = max(server_reasons, key=lambda kv: kv[1])

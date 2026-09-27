@@ -199,3 +199,80 @@ boot_grace_active() {
   logger -t "$tag" "boot grace: uptime ${up}s < ${grace}s — skipped, dead-man grace covers it"
   return 0
 }
+
+# wan_reachable TAG URL...
+#
+# True (exit 0) as soon as one URL answers; false only when EVERY one failed. The peer of
+# monitor-bridge's `wan_reachable` gate (`ansible/roles/k8s/monitor-bridge/files/checks/wan.py`),
+# for the crons that run on the host and push their own tiles — outside the bridge's loop, where
+# that gate structurally cannot reach them. On 2026-09-18 one WAN outage lit four host tiles
+# beside the WAN tile: crowdsec-home-allowlist for 3.8h, github-ruleset-drift,
+# release-staleness-check for 3h and docs-refresh (#2793).
+#
+# BY HOSTNAME, against two independent providers, for the two reasons the Python gate's docstring
+# gives: that outage included DNS failure, so resolution has to be part of what is probed, and
+# one provider's own outage must not silence a caller reading the other. The URLs are ARGUMENTS
+# rather than a library constant, the same rule every other field here follows — each caller
+# renders `wan_probe_urls` from `ansible/inventory/group_vars/all.yml`, which
+# `ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py` pins to the bridge's own
+# `WAN_PROBE_DEFAULT` so the two halves cannot drift apart.
+#
+# No endpoints at all returns TRUE: an empty list disables the gate, and a gate that cannot
+# probe must report a fault rather than suppress one. Same direction as `boot_grace_active`
+# failing open on an unreadable /proc/uptime.
+#
+# `--max-time 5` and NO `--retry`: the probe only ever runs on a path that has already failed, so
+# its whole cost is added to a run that is about to end, and the crowdsec cron's worst-case run
+# budget is asserted against its `*/5` period
+# (`ansible/tests/services/test_crowdsec_allowlist_push_retry.py::test_a_whole_run_still_fits_the_cron_period`).
+# 5s is also ~50x the 0.074-0.122s both endpoints measured from daniel-server on 2026-09-27.
+# `-f` so a provider answering 5xx counts as that provider failing, matching the Python gate.
+wan_reachable() {
+  local tag="$1"
+  shift
+  [ "$#" -gt 0 ] || return 0
+  local url
+  for url in "$@"; do
+    curl -fs --max-time 5 -o /dev/null "$url" 2>/dev/null && return 0
+  done
+  logger -t "$tag" "WAN probe: no endpoint answered ($*)"
+  return 1
+}
+
+# reachout_verdict TAG WAN_URL...
+#
+# How a cron reports a failure whose cause was reaching the internet. Sets REACHOUT_STATUS to
+# `down` when the WAN answers — the source refused, which is a real fault that tile must page —
+# and to `up` when neither endpoint answers, because this house's link is gone and the WAN tile
+# owns that page. REACHOUT_NOTE is the prefix the caller puts in front of its own message, empty
+# on the `down` path.
+#
+# The caller applies both to its OWN `logger` line as well as to the push, and that is why this
+# sets variables rather than wrapping `kuma_push`. `probe.py alerts` reconstructs a host cron's
+# DOWN episodes from `{job="syslog"} |= "status=down"`, so a wrapper that converted only the push
+# would leave an episode in `alerts` for a tile that never went red — a skip visible in exactly
+# the place an operator reads to find out what alerted.
+#
+# The probe, not the failure text, is what classifies. Reading curl exit codes and git stderr
+# across four heterogeneous crons is the "green and inert" shape this file's own header records
+# paying for twice (#1010): a classifier that stops matching reports the old verdict forever.
+# The probe answers the same question empirically and needs no per-cron parsing — a GitHub 403
+# while the link is up makes it succeed, so that tile still pages.
+#
+# The one case it gets wrong: an HTTP-level failure that coincides with a WAN outage is reported
+# as a skip. Accepted — both tiles would be red for one root cause anyway, and the source's own
+# refusal is still there to find on the next run.
+reachout_verdict() {
+  local tag="$1"
+  shift
+  # shellcheck disable=SC2034  # read by the sourcing script, not by this file
+  REACHOUT_STATUS=down
+  # shellcheck disable=SC2034  # read by the sourcing script, not by this file
+  REACHOUT_NOTE=""
+  if ! wan_reachable "$tag" "$@"; then
+    # shellcheck disable=SC2034  # read by the sourcing script, not by this file
+    REACHOUT_STATUS=up
+    # shellcheck disable=SC2034  # read by the sourcing script, not by this file
+    REACHOUT_NOTE="skipped: WAN unreachable — "
+  fi
+}

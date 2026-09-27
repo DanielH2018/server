@@ -117,8 +117,8 @@ def test_failure_paths_keep_their_error_text(path, commit_marker):
         f"{path.name} does not capture the publisher's message and stderr for the alert: "
         f"{call.strip()!r}"
     )
-    assert re.search(r'alert "[^"]*\$PUB_MSG', read(path)), (
-        f"{path.name} captures the publisher's message but never alerts with it"
+    assert re.search(r'(alert|reachout_down) "[^"]*\$PUB_MSG', read(path)), (
+        f"{path.name} never alerts with the publisher's message (`reachout_down` counts)"
     )
 
 
