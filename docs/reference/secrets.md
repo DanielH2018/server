@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-27 06:17 UTC
-generated_sha: 0e5e82b9e
+generated_at: 2026-09-27 18:17 UTC
+generated_sha: 79c866a24
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 0e5e82b9e
 
 # Secrets
 
-180 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+181 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -199,6 +199,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_swallowed_verdicts_push_token` | 2026-06-20 | 2026-12-04 | 68 |
 | `monitor_bridge_targets_push_token` | 2026-08-30 | 2027-02-14 | 140 |
 | `monitor_bridge_traefik_404_push_token` | 2026-06-05 | 2026-12-02 | 66 |
+| `monitor_bridge_traefik_421_push_token` | 2026-06-20 | 2026-12-16 | 80 |
 | `monitor_bridge_traefik_latency_push_token` | 2026-08-30 | 2027-02-24 | 150 |
 | `monitor_bridge_traefik_push_token` | 2026-08-30 | 2027-02-18 | 144 |
 | `monitor_bridge_ups_push_token` | 2026-08-30 | 2027-02-18 | 144 |
