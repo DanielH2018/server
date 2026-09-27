@@ -16,23 +16,15 @@ volume_snapshot_retain: 3
 # ceiling for a wedged engine, not an expected wait, and a larger number costs nothing on a
 # good deploy.
 #
-# The wait is deliberately NOT best-effort: a snapshot that never becomes ready fails the
-# deploy, because it is the recovery point the deploy is about to need — with one exception.
-# A detached volume (an operator's own workload scaled to zero) cannot be snapshotted at all,
-# and that case skips with a loud warning instead of failing. See claim.yml and this role's
-# CLAUDE.md ("A detached volume cannot be snapshotted at all, and that is not fatal").
+# The wait is deliberately NOT best-effort and has no exception: a snapshot that never becomes
+# ready fails the deploy, because it is the recovery point the deploy is about to need. A
+# detached volume is not a special case — Longhorn v1.12.1 snapshots one on this same path, drilled
+# twice (see this role's CLAUDE.md, "A detached volume is snapshotted on the ordinary path").
 volume_snapshot_timeout: 120
 
-# The maintenance-mode attach 7b uses to snapshot a detached volume — proven unreachable by the
-# task-6 drill (volume-claim attaches first, and Longhorn snapshots a detached volume anyway; see
-# "The maintenance-mode attach is not reachable through a deploy" in this role's CLAUDE.md), so
-# unlike k8s/volume-revert's matching pair this isn't under the same budget pressure to tighten.
-# Left at the pre-drill values rather than following volume_revert_state_timeout/api_timeout
-# down to 90/30 (task 6b) — same drill, same Longhorn operation, but this path runs on the
-# FORWARD deploy for all 13 opted-in services, not inside the rollback's own timeout.
-volume_snapshot_state_timeout: 180
+# How often the readiness wait polls. The retries above are derived from this and
+# volume_snapshot_timeout, so the timeout budget is unchanged by the cadence.
 volume_snapshot_poll_interval: 2
-volume_snapshot_api_timeout: 60
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # This role deploys no workload of its own: it is a pre-apply step other roles include, it

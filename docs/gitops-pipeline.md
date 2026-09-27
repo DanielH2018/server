@@ -1018,16 +1018,16 @@ stay).
     path (each service's rollback in its own `ansible-playbook` run, so one failure can't abort
     a sibling's), not attempted in this pass. See the rollback-timeout section below for the
     same batching mechanism's effect on `K8S_ROLLBACK_TIMEOUT_S`.
-  - **Accepted: a silently skipped snapshot is only an Ansible `debug` line, and that is what
-    makes the batch-abort item above reachable in a single tick.** When
-    `k8s/volume-snapshot`'s maintenance-mode attach fails on a detached volume, the deploy
-    proceeds unprotected with a loud `ansible.builtin.debug` warning — but nothing forwards that
-    warning to Discord, and a later rollback's revert-status note
-    (`rollback_volume_revert_note`) names a service as one the revert targets purely by reading
-    its role DEFAULTS (`k8s_autodeploy_snapshot_pvcs`), not what the snapshot phase actually did
-    on THIS run. So an operator reading the rollback alert has no signal that this particular
-    snapshot never happened, and no reason to suspect the revert that follows fails loudly
-    rather than silently do nothing.
+  - **A deploy can no longer proceed without its snapshot, so the alert cannot be silently
+    wrong about one.** Until #2740, `k8s/volume-snapshot` warned and continued when its
+    maintenance-mode attach failed on a detached volume, and nothing forwarded that
+    `ansible.builtin.debug` line to Discord — so a later rollback's revert-status note
+    (`rollback_volume_revert_note`), which names a service by reading its role DEFAULTS
+    (`k8s_autodeploy_snapshot_pvcs`) rather than what the snapshot phase did on THAT run, could
+    promise a revert for a service that had no recovery point. #2740 retired the attach and the
+    warning: every unready snapshot now fails the deploy before the apply. The note still reads
+    defaults rather than the run, which is now a redundancy rather than a gap — a service in that
+    list either got its snapshot or never reached the apply.
   - **Accepted: nothing self-heals a volume left attached in Longhorn maintenance mode after a
     failed rollback, and the seed pod of the next deploy mounts the same RWO claim.** If
     `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left

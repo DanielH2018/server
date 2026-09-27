@@ -1,7 +1,11 @@
 """Behaviour anchor for k8s/volume-snapshot's ATTACHED-volume path — the path every one of the
 thirteen roles declaring `k8s_autodeploy_snapshot_pvcs` takes on a normal deploy.
 
-WHY THIS EXISTS. Slice 7b's task 5 added a second readiness wait (the retake, for a volume it
+WHY THIS EXISTS. #2740 removed the retake this was written against, so the exact clobber below
+cannot recur — what survives is the end-to-end proof that the one path every deploy takes
+completes, which no rendered-expression test gives.
+
+Slice 7b's task 5 added a second readiness wait (the retake, for a volume it
 had just attached in maintenance mode) and deliberately registered it to `volume_snapshot_ready`
 — the same name the first wait uses — so that the downstream fail task would "keep working
 unmodified against whichever attempt actually produced a result".
@@ -82,7 +86,7 @@ _PLAY = """- hosts: localhost
         volume_snapshot_claims: [drillsvc-config]
     - name: Prove the attached path completed
       ansible.builtin.debug:
-        msg: "REACHED_END ready_out='{{{{ volume_snapshot_ready_out | default('undef') }}}}'"
+        msg: "REACHED_END ready='{{{{ volume_snapshot_ready.stdout | default('undef') }}}}'"
 """
 
 
@@ -154,7 +158,7 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
     shutil.which("ansible-playbook") is None, reason="ansible-playbook not on PATH"
 )
 @pytest.mark.skipif(shutil.which("git") is None, reason="git not on PATH")
-def test_skipped_retake_wait_keeps_first_read() -> None:
+def test_the_attached_path_completes_against_a_ready_snapshot() -> None:
     """The attached-volume path must complete when the snapshot reports readyToUse.
 
     Before the fix this went red: the skipped retake wait clobbered `volume_snapshot_ready`, and
@@ -164,16 +168,16 @@ def test_skipped_retake_wait_keeps_first_read() -> None:
     """
     result = _run_attached_path()
     assert "did not report readyToUse" not in result.stdout, (
-        "k8s/volume-snapshot failed the attached-volume path on a snapshot that IS ready. The "
-        "skipped retake wait has clobbered the first wait's register again — see this module's "
+        "k8s/volume-snapshot failed the attached-volume path on a snapshot that IS ready. A "
+        "task has clobbered the readiness register again — see this module's "
         f"docstring.\nSTDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
     assert result.returncode == 0, (
         f"the attached-volume path must complete.\n"
         f"STDOUT:\n{result.stdout}\nSTDERR:\n{result.stderr}"
     )
-    # The folded fact must carry the FIRST wait's reading, not a skip result's empty string.
-    assert "REACHED_END ready_out='true|false'" in result.stdout, (
-        "volume_snapshot_ready_out must hold the attached path's own readiness read.\n"
+    # The register must carry the wait's own reading, not a skip result's empty string.
+    assert "REACHED_END ready='true|false'" in result.stdout, (
+        "volume_snapshot_ready must hold the attached path's own readiness read.\n"
         f"STDOUT:\n{result.stdout}"
     )

@@ -31,8 +31,7 @@ objects where Ansible renders "True"/"False" strings — which the role's `| int
 coercions collapse identically.
 
 The retention window and the name/prefix coupling are pinned in
-`test_volume_snapshot_retention.py`; the maintenance-attach path for a detached volume in
-`test_volume_snapshot_maintenance.py`. What stays here is deploy hygiene — every mutation
+`test_volume_snapshot_retention.py`. What stays here is deploy hygiene — every mutation
 guarded, argv-form kubectl, the `roles/k8s/manifests` include — and the two seam tests
 against the live API server that the retention tests inject downstream of.
 """
@@ -50,10 +49,64 @@ from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
 
 #
-# 7a skipped a detached volume outright, because Longhorn needs a running engine to snapshot
-# it. 7b reuses k8s/longhorn-api and the maintenance-mode attach k8s/volume-revert proved: a
-# detached claim gets attached with disableFrontend, snapshotted, and detached again, and only
-# an attach that itself fails still falls through to the loud "UNPROTECTED" warning.
+# A detached volume takes the ordinary path: Longhorn v1.12.1 snapshots one with healthy
+# replicas, measured by two drills, and #2740 retired the maintenance-mode attach that stood
+# between the wait and the failure. The two tests below hold that retirement in place.
+
+
+def test_the_role_makes_no_longhorn_api_call_and_attaches_nothing() -> None:
+    """#2740 retired the maintenance-mode attach; adding one back must be a deliberate edit.
+
+    Two drills measured Longhorn v1.12.1 snapshotting a detached volume on the ordinary path, so
+    an attach here buys nothing and costs the deploy an unreachable branch with its own failure
+    modes. The assertion names what came back rather than only that something did.
+    """
+    for task in _tasks(_CLAIM):
+        assert "ansible.builtin.uri" not in task, (
+            f"task {task.get('name')!r} calls the Longhorn manager API. The maintenance-mode "
+            f"attach was retired in #2740 — see the role's CLAUDE.md, 'A detached volume is "
+            f"snapshotted on the ordinary path'."
+        )
+        include = task.get("ansible.builtin.include_role") or {}
+        assert include.get("name") != "k8s/longhorn-api", (
+            f"task {task.get('name')!r} includes k8s/longhorn-api, whose only caller here was "
+            f"the retired maintenance-mode attach (#2740)."
+        )
+
+
+def test_an_unready_snapshot_fails_the_deploy_whatever_the_volume_state() -> None:
+    """The fail task must not carry a detached-volume escape hatch.
+
+    Retiring the attach without also dropping `volume_snapshot_detached` from this `when:` would
+    leave a detached claim skipping the failure AND the prune — an unprotected deploy that no
+    longer even warns. The `when:` is read as a list, not stringified, so a guard added back in
+    any form fails this.
+    """
+    conditions = _named(_CLAIM, "Fail on a snapshot that never became usable")["when"]
+    assert conditions == [
+        _GUARD,
+        "volume_snapshot_ready.stdout | default('') | split('|') | first != 'true'",
+    ], conditions
+
+
+def test_the_refused_delete_report_points_at_no_removal_route() -> None:
+    """#2733: the report used to send the operator at the Longhorn manager API.
+
+    `snapshotDelete` acts on the engine chain and never touches the CR, `snapshotCRDelete` is a
+    Kubernetes DELETE the same webhook denies, and the UI's per-volume delete makes the first
+    call — so every route the message named was wrong. It must name none.
+    """
+    msg = _named(_CLAIM, "Report snapshots Longhorn refuses to delete")[
+        "ansible.builtin.debug"
+    ]["msg"]
+    for route in ("snapshotDelete", "snapshotPurge", "snapshotCRDelete", "UI"):
+        assert route not in msg, (
+            f"the refused-delete report names {route!r} as a way to remove these CRs. No "
+            f"supported route removes them on Longhorn v1.12.1 (#2733)."
+        )
+    assert "CLAUDE.md" in msg, (
+        "the report must point at the role doc's section instead of naming a route"
+    )
 
 
 def test_the_prune_loop_slices_cleanly_at_the_defaulted_floor_values() -> None:

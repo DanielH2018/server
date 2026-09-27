@@ -1,7 +1,9 @@
-"""Longhorn-API contract assertions shared by k8s/volume-revert and k8s/volume-snapshot.
+"""Longhorn-API contract assertions for k8s/volume-revert and k8s/volume-snapshot.
 
-The two roles carry two genuinely identical contracts, extracted here: every maintenance-mode
-API call pins a single status code, and every role declares its autodeploy stance. Other
+Two contracts are extracted here: every maintenance-mode API call pins a single status code,
+and every role declares its autodeploy stance. The first had two callers until #2740 retired
+`k8s/volume-snapshot`'s maintenance-mode attach; only `k8s/volume-revert` makes an API call now,
+and the assertion stays shared because a snapshot-side call added back must meet it. Other
 apparent pairs between the two test files — the detach's body shape, the mutating-task census,
 the listing jsonpath's unreachable-cluster detection — were checked and found to differ in what
 they assert (one checks `hostId` absence, the other the whole body is empty; one is a
