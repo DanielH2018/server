@@ -199,7 +199,6 @@ kuma_status_page_groups:
       - "^jellyfin-lan-vip$"
       - "^k3s-speedtest$"
       - "^loki$"
-      - "^livesync-bridge$"
       - "^email-to-rss$"
       - "^slzb-coordinator$"
       - "^monitor-bridge-(ha|n8n)$"
