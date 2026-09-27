@@ -126,6 +126,46 @@ push() { # up|down msg
 # which is why 7 days of these flaps produced zero rows in `probe.py alerts`.
 fail() { push down "$1"; logger -t crowdsec-home-allowlist "status=down $1"; exit 1; }
 
+# wan_reachable — true (exit 0) as soon as one provider answers, false only when every one failed.
+#
+# Inline rather than sourced from kuma-push-lib.sh, for the same reason the push above is inline:
+# this script is self-contained by design (see the block at the top), and its worst-case run cost
+# is asserted against the */5 period by
+# ansible/tests/services/test_crowdsec_allowlist_push_retry.py::test_a_whole_run_still_fits_the_cron_period,
+# which reads the curl invocations out of THIS file. One curl line per endpoint, rendered from
+# `wan_probe_urls`, so that guard counts every probe rather than one iteration of a loop.
+# ansible/tests/services/test_crowdsec_allowlist_wan_skip.py pins the flags equal to the
+# library's, so the two copies cannot drift.
+#
+# `--max-time 5` and no `--retry`: the probe only runs on a path that has already failed, so its
+# cost lands on a run that is about to end. `-f` so a provider answering 5xx counts as that
+# provider failing.
+wan_reachable() {
+{% for url in wan_probe_urls %}
+  curl -fs --max-time 5 -o /dev/null "{{ url }}" 2>/dev/null && return 0
+{% endfor %}
+  logger -t crowdsec-home-allowlist "WAN probe: no endpoint answered"
+  return 1
+}
+
+# fail_reachout MSG — exit on a failure whose cause was reaching ipify.
+#
+# One WAN outage held this tile red for 3.8h on 2026-09-18 ("failed to resolve public IPv4 from
+# ipify", #2793) beside the WAN tile that owned the fault. When neither provider answers this
+# pushes `up` with the skip named instead, and the `status=` journal line follows the push so
+# `probe.py alerts` does not reconstruct a DOWN episode for a tile that never went red. An ipify
+# that answers and refuses still fails — the probe is what decides, not the error text.
+#
+# Still `exit 1`: nothing was synced, and the */5 cron retries in five minutes either way.
+fail_reachout() { # msg
+  if wan_reachable; then
+    fail "$1"
+  fi
+  push up "skipped: WAN unreachable — $1"
+  logger -t crowdsec-home-allowlist "status=up skipped: WAN unreachable — $1"
+  exit 1
+}
+
 # Sourced directly by ansible/tests/services/test_crowdsec_allowlist_v6_failure_isolated.py: the
 # down-overrides-clean-sync decision (issue #1248) pulled out where it can be called with a fake
 # `push` instead of only read as text.
@@ -142,7 +182,7 @@ cscli_lapi() {
 }
 
 if ! CURRENT_IP=$(curl -sf --max-time 10 --retry 3 --retry-all-errors https://api4.ipify.org); then
-  fail "failed to resolve public IPv4 from ipify"
+  fail_reachout "failed to resolve public IPv4 from ipify"
 fi
 
 # Validate the response is a well-formed IPv4 before using it — guards a malformed/MITM'd

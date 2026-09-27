@@ -18,6 +18,12 @@ import jinja2
 
 from _helpers import ANSIBLE
 
+# `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
+# every case here means: the git fetch failed and the link is fine, so the tile must page. The
+# skip path is covered against the real function by
+# ansible/tests/setup/test_kuma_push_wan_skip.py.
+REACHOUT_STUB = 'reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }\n'
+
 TEMPLATE = ANSIBLE / "roles/setup/k3s/templates/release-staleness-check.sh.j2"
 
 GROUPED = (
@@ -42,6 +48,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
             k3s_metallb_ingress_vip="10.0.0.240",
             sys_user="u",
             k3s_release_staleness_grace_minutes=60,
+            wan_probe_urls=["https://a.example", "https://b.example"],
         )
     )
     for literal in (
@@ -64,7 +71,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
         "kuma_push() {\n"
         f'  printf "%s\\n%s{SEP}" "$1" "$2" >> "{pushed}"\n'
         "}\n"
-        "git() { :; }\nlogger() { :; }\n"
+        "git() { :; }\nlogger() { :; }\n" + REACHOUT_STUB
     )
     env = tmp_path / "kuma-push.env"
     env.write_text("RELEASE_STALENESS_PUSH_TOKEN=stubtoken\n")

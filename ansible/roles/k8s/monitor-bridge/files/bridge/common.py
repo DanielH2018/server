@@ -114,6 +114,30 @@ def _num(name: str, default: str) -> float:
 HTTP_TIMEOUT = _int("HTTP_TIMEOUT", "10")
 
 
+def host_uptime_s(path: str = "/proc/uptime") -> float | None:
+    """Seconds since the NODE booted, or None when the file cannot be read or parsed.
+
+    `/proc/uptime` is not namespaced, so a container reading it gets the host's uptime rather
+    than its own — which is the clock the two post-reboot arms need. The bridge's own process
+    age would be the wrong one: an ordinary deploy restarts this pod without rebooting anything,
+    and both arms suppress a fault that only a reboot produces.
+
+    Args:
+      path: The file to read. A parameter so a test can state an uptime instead of patching the
+        module, the same rule bridge/config.py's header gives for configuration.
+
+    Returns:
+      The uptime in seconds, or None. None makes every caller evaluate normally: a grace that
+      cannot read the clock must report a fault rather than suppress one indefinitely, the same
+      direction kuma-push-lib.sh's `boot_grace_active` fails in.
+    """
+    try:
+        with open(path) as fh:
+            return float(fh.read().split()[0])
+    except Exception:
+        return None
+
+
 def log(*args: object) -> None:
     """Print one log line to stdout.
 

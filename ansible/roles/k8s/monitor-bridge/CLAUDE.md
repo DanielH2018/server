@@ -77,12 +77,10 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
 
 ## Checks
 
-One bullet per registry entry, in registry order: source, rule, gate or streak, and the
-switch that disables it. An empty credential or URL disables a check (it stays `up`); an
-unreachable source pages through `_evaluate` unless a streak is named. **What set each number
-is not here** — `docs/monitor-bridge-checks.md`'s *Live checks* carries one entry per check, in
-this order, with the measurement behind every threshold, the incident that added each arm, and
-the alternatives rejected. Read this file for the rule, that one before you change a number.
+One bullet per registry entry, in registry order: source, rule, gate or streak, and the switch
+that disables it. An empty credential or URL disables a check (it stays `up`); an unreachable
+source pages through `_evaluate` unless a streak is named. `docs/monitor-bridge-checks.md`'s
+*Live checks* carries the same order, with every measurement.
 
 - **Root Disk** (`disk`): `node_filesystem_*` for `/`, `/boot` and `/boot/efi` on the two
   nodes, over `DISK_MAX_PCT` (the Pi is excluded by `HOST_METRIC_ORIGIN_EXCLUDE`; Pi Pressure
@@ -193,13 +191,15 @@ the alternatives rejected. Read this file for the rule, that one before you chan
 - **Log Shipper Dropped Entries** (`shipper_dropped`): the larger of the client-side
   `loki_write_dropped_entries_total` and Loki's own `loki_discarded_samples_total` over
   `SHIPPER_DROPPED_WINDOW`, past `SHIPPER_DROPPED_MAX` (3000, derivation at the `DECIDED:` in
-  `bridge/config_io.py`), naming the server-side reason. Both counters are matched by
-  `__name__` regex so a rename cannot read as 0 forever.
-- **Swallowed Push Verdicts** (`swallowed_verdicts`): a host cron's `status=down` line whose
-  push `kuma-push-lib.sh` then lost, read from Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h)
-  through `bridge.net.loki_lines` (plus `SWALLOWED_VERDICTS_POD_LOGQL` for pi-peer-backup's
-  pod). Pages only when some OTHER tag landed a push in the window. A swallowed `up` is not
-  counted.
+  `bridge/config_io.py`), naming the server-side reason. Both counters are matched by `__name__`
+  regex so a rename cannot read as 0 forever. Inside `SHIPPER_BACKLOG_GRACE_S` (6h) of the NODE's
+  boot, `too_far_behind` alone leaves the server total (Alloy's backlog arrives late).
+- **Swallowed Push Verdicts** (`swallowed_verdicts`): a host cron's `status=down` line whose push
+  `kuma-push-lib.sh` then lost, read from Loki over `SWALLOWED_VERDICTS_WINDOW_S` (3h) through
+  `bridge.net.loki_lines` (plus `SWALLOWED_VERDICTS_POD_LOGQL` for pi-peer-backup's pod). Pages
+  only when some OTHER tag landed a push in the window; a swallowed `up` is not counted. It never
+  reads past the node's boot — uptime-kuma has no endpoint for ~16 min of the weekly restart: in
+  `BOOT_SETTLE_S` (1200 s) the cycle is skipped, then the lookback grows back to the window.
 - **Kuma Notification Delivery** (`kuma_notify_failures`): Kuma's `Cannot send notification
   to <name>` lines over `KUMA_NOTIFY_FAILURES_WINDOW_S` (3h), the reason from the next line
   reduced to its HTTP status. The window is the whole hysteresis. Its tile notifies EMAIL as
@@ -339,7 +339,7 @@ pytest cannot see it because it imports from `files/`.
 | `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` with `cap_push_msg` (`PUSH_MSG_MAX`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |
 | `bridge/streaks.py` | `down_streak` (the consecutive-down counter four domains share, cleared by `conftest.py`) and `apply_startup_grace` |
-| `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected |
+| `bridge/common.py` | `_env`, `sanitize` — the two helpers shared verbatim with autofix-bridge's `autofix.py`; its header records what was considered and rejected — plus `host_uptime_s`, the node's boot clock the two post-reboot arms key on |
 | `bridge/parsing.py` | duration/timestamp parsing, `endpoint_label`, `describe_fetch_failure` |
 | `verdicts/<domain>.py` | pure decisions taking every threshold as an argument: `cluster`, `host` (`hwmon_temp_limits`, `pi_pressure`), `host_smart` (`scrutiny_*`), `host_power` (`ups_health`, `thermal_monitor_verdict`), `host_cgroups`, `service`, `logs`, `notify`, `storage` (the B2/R2 decisions with the R2 Class A/B/free ACTION LISTS beside them — policy, not configuration) |
 

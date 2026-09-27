@@ -15,6 +15,17 @@ import gates
 import registry
 from verdicts.logs import HC_ROUTED_TAGS, parse_push_line, swallowed_verdicts
 
+
+def _unread_clock():
+    """The node uptime a check sees when `/proc/uptime` cannot be read: no post-reboot grace.
+
+    Left to its default, the check reads the uptime of the machine running the suite, and a CI
+    runner booted a minute ago puts the call inside BOOT_SETTLE_S, where it returns the grace's
+    `skipped` instead of the verdict under test.
+    """
+    return None
+
+
 _H = "2026-09-10T13:00:00.000000+00:00 daniel-box "
 _RUN_DOWN = _H + (
     "release-staleness-check: status=down homepage: changed since applied: "
@@ -223,7 +234,7 @@ def test_a_fetch_error_fails_open_and_names_the_owner(monkeypatch, cfg):
         raise RuntimeError("loki-homelab: timed out")
 
     _patch_fetch(monkeypatch, _raise)
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
     assert ok
     assert "timed out" in msg and "Loki Reachable" in msg
 
@@ -263,7 +274,7 @@ def test_a_rejected_push_from_the_pod_stream_is_flagged(monkeypatch, cfg):
         monkeypatch,
         _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP), (3, _POD_REJECTED)]),
     )
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
     assert not ok
     assert (
         "Kuma rejected the push for pi-peer-backup on pi-peer-backup-29312345-x7k2q"
@@ -276,7 +287,7 @@ def test_the_pre_1943_pod_line_is_not_read_as_anything(monkeypatch, cfg):
     # landed sibling.
     assert parse_push_line(_POD_PRE_1943) is None
     _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_PRE_1943)]))
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
     assert ok, msg
     assert "1 tag(s) pushed" in msg
 
@@ -284,7 +295,7 @@ def test_the_pre_1943_pod_line_is_not_read_as_anything(monkeypatch, cfg):
 def test_a_capped_pod_fetch_reports_truncation_too(monkeypatch, cfg):
     cap = checks.logs.SWALLOWED_VERDICTS_LIMIT
     _patch_fetch(monkeypatch, _streams([(1, _SIBLING_RUN)], [(2, _POD_RUN_UP)] * cap))
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
     assert ok
     assert "hit its line cap" in msg
 
@@ -298,7 +309,7 @@ def test_a_failed_pod_fetch_keeps_the_syslog_verdict_and_says_so(monkeypatch, cf
         return [(1, _RUN_DOWN), (2, _SWALLOWED_DOWN), (3, _SIBLING_RUN)]
 
     _patch_fetch(monkeypatch, _fetch)
-    ok, msg = checks.logs.check_swallowed_verdicts(cfg)
+    ok, msg = checks.logs.check_swallowed_verdicts(cfg, uptime_s=_unread_clock)
     assert not ok
     assert "release-staleness-check on daniel-box (http=500 rc=0)" in msg
     assert "pod-stream fetch unavailable: loki-homelab: pod query timed out" in msg

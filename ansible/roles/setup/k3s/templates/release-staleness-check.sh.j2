@@ -75,8 +75,22 @@ seed_empty_set() {
 
 REPO_DIR=/home/{{ sys_user }}/server
 if ! FETCH_ERR="$(git -C "$REPO_DIR" fetch --quiet origin master 2>&1)"; then
+  # The fetch reaches github.com, so one WAN outage would otherwise light this tile beside the WAN
+  # tile — it did on 2026-09-18, for 3h ("git fetch origin master failed"). reachout_verdict probes
+  # the link and reports a skip only when neither provider answers; a fetch GitHub itself refused
+  # still pushes down. See kuma-push-lib.sh for why the probe classifies and not the error text.
   STATUS=down
-  MSG="git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
+  REACHOUT_NOTE=""
+  # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
+  # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
+  # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
+  # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
+  # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
+  if command -v reachout_verdict >/dev/null 2>&1; then
+    reachout_verdict release-staleness-check {{ wan_probe_urls | join(' ') }}
+    STATUS="$REACHOUT_STATUS"
+  fi
+  MSG="${REACHOUT_NOTE}git fetch origin master failed in ${REPO_DIR}: ${FETCH_ERR}"
   logger -t release-staleness-check "status=${STATUS} ${MSG}"
   kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" release-staleness-check
   seed_empty_set

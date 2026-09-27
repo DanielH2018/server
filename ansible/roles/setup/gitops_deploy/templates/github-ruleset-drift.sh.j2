@@ -66,6 +66,29 @@ push() { # up|down msg
   kuma_push "$1" "$2" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" github-ruleset-drift
 }
 
+# push_reachout MSG — report a failure whose cause was reaching api.github.com.
+#
+# Only the two fetch arms use it. One WAN outage lit this tile beside the WAN tile on 2026-09-18
+# (#2793), and a link that is gone is the WAN tile's page, not this one's. A 200 carrying the wrong
+# shape keeps `push down`: GitHub answered, so the link is fine and the body is the fault.
+#
+# The exit 1 at each call site is unchanged. `kuma-check-github-ruleset-drift.timer` restarts
+# on-failure, so a skipped run retries rather than waiting out the day — which is what should
+# happen while the link is down.
+push_reachout() { # msg
+  REACHOUT_STATUS=down
+  REACHOUT_NOTE=""
+  # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
+  # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
+  # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
+  # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
+  # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
+  if command -v reachout_verdict >/dev/null 2>&1; then
+    reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}
+  fi
+  push "$REACHOUT_STATUS" "${REACHOUT_NOTE}$1"
+}
+
 RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_ruleset_id }}"
 
 # The expected set, baked in at template time from defaults/main.yml. Quoted heredoc so nothing
@@ -100,7 +123,7 @@ if ! BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$RULESET_URL"); then
   # Unreachable is NOT "no drift". A check whose source is down must say it could not look,
   # or it is a deadman reporting a pass.
-  push down "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"
+  push_reachout "failed to fetch ruleset {{ gitops_deploy_ruleset_id }} — branch protection UNVERIFIED"
   exit 1
 fi
 
@@ -153,7 +176,7 @@ fi
 BRANCH_RULESET_URL="https://api.github.com/repos/{{ gitops_deploy_github_repo }}/rulesets/{{ gitops_deploy_branch_ruleset_id }}"
 if ! BRANCH_BODY=$(curl -sf --max-time 20 -K <(printf '%s\n' "$AUTH_CONFIG") \
   -H "Accept: application/vnd.github+json" "$BRANCH_RULESET_URL"); then
-  push down "failed to fetch ruleset {{ gitops_deploy_branch_ruleset_id }} — renovate branch exclusion UNVERIFIED"
+  push_reachout "failed to fetch ruleset {{ gitops_deploy_branch_ruleset_id }} — renovate branch exclusion UNVERIFIED"
   exit 1
 fi
 

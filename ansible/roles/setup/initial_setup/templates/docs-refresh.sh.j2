@@ -127,6 +127,30 @@ trap on_exit EXIT
 # needing its own push call -- there are eleven exit paths and one of them is a bare crash.
 alert() { logger -t docs-refresh "$1"; PUSH_MSG="$1"; }
 
+# reachout_down MSG -- report a failure whose cause was reaching origin (github.com).
+#
+# Sets PUSH_STATUS from the link rather than to a flat `down`: one WAN outage lit this tile on
+# 2026-09-18 ("cannot reach origin", #2793), and a link that is gone is the WAN tile's page. An
+# HTTP-level refusal -- a 403, the 60/hour `gh` quota -- keeps `down`, because that is the source
+# answering. The trap below does the pushing, so this only has to decide.
+#
+# Named at the two call sites that actually reach out rather than applied to every failure in the
+# trap: a generator crash or a commit failure has nothing to do with the link, and suppressing
+# those during an outage would hide a fault this cron is the only reporter of.
+reachout_down() { # msg
+  # The library is sourced without aborting on a miss (above), so this re-checks the way the trap
+  # re-checks kuma_push. Without it, a host whose monitoring wiring is broken would leave
+  # REACHOUT_STATUS unset and `set -u` would abort the run on its error path.
+  if ! command -v reachout_verdict >/dev/null 2>&1; then
+    PUSH_STATUS=down
+    alert "$1"
+    return 0
+  fi
+  reachout_verdict docs-refresh {{ wan_probe_urls | join(' ') }}
+  PUSH_STATUS="$REACHOUT_STATUS"
+  alert "${REACHOUT_NOTE}$1"
+}
+
 # Errors used to go to /dev/null, which is why a ruleset rejection went undiagnosed for a
 # day: the alert said the push failed and nothing said why. logger takes one line, so
 # flatten and cap -- the first few hundred characters of a git or gh failure carry the
@@ -301,12 +325,17 @@ UNLANDED="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py unlande
   --prefix "$PR_BRANCH_PREFIX" 2>&1)"
 UNLANDED_RC=$?
 if [ "$UNLANDED_RC" -ne 0 ]; then
-  alert "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
   # 2 is a PR waiting on CI: benign, it clears itself, and the docs are only a run behind.
   # 1 (origin unreadable) and 3 (a branch with no PR) both need a human, so they report down.
+  # 1 is also the code a WAN outage produces, so it goes through reachout_down -- a branch with
+  # no PR (3) is local state and stays a flat down.
   if [ "$UNLANDED_RC" -eq 2 ]; then
+    alert "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
     PUSH_STATUS=up
+  elif [ "$UNLANDED_RC" -eq 1 ]; then
+    reachout_down "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
   else
+    alert "docs-refresh: $UNLANDED; rebuilt site only, no regeneration"
     PUSH_STATUS=down
   fi
   "$UV" run --frozen python scripts/docs/build_docs.py --skip-generators --site-dir "$SITE_DIR" \
@@ -466,7 +495,10 @@ PUB_MSG="$(printf '%s' "$PUB_MSG" | tr '\n' ' ' | tail -c 400)"
 # already reset the local master, so the tree is clean either way and there is nothing for this
 # script to undo; the unlanded arm above is what catches the orphaned branch on the next run.
 if [ "$PUB_RC" -ne 0 ]; then
-  alert "docs-refresh: $PUB_MSG"
+  # The publisher pushes a branch and opens a PR, both over the network, so this is the second
+  # arm a WAN outage reaches. PUSH_STATUS is already `down` from its default; reachout_down
+  # lowers it to a skip only when neither provider answers.
+  reachout_down "docs-refresh: $PUB_MSG"
   exit 1
 fi
 

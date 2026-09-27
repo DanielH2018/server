@@ -21,6 +21,17 @@ import registry
 from bridge.types import Check
 from gates import Gates
 
+
+def _unread_clock():
+    """The node uptime a check sees when `/proc/uptime` cannot be read: no post-reboot grace.
+
+    Left to its default, the check reads the uptime of the machine running the suite, and a CI
+    runner booted a minute ago puts the call inside BOOT_SETTLE_S, where it returns the grace's
+    `skipped` instead of the verdict under test.
+    """
+    return None
+
+
 _REPO = Path(__file__).resolve().parents[5]
 
 
@@ -315,7 +326,7 @@ def test_check_shipper_dropped_reads_both_shippers_counters(monkeypatch, cfg):
 
     monkeypatch.setattr(bridge.net, "prom_scalar", fake_scalar)
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, _ = checks.logs.check_shipper_dropped(cfg)
+    ok, _ = checks.logs.check_shipper_dropped(cfg, uptime_s=_unread_clock)
     assert not ok
     assert any(
         "increase(" in q
@@ -341,6 +352,6 @@ def test_check_shipper_dropped_reads_server_side_by_reason(monkeypatch, cfg):
         return [({"reason": "too_far_behind"}, 161608.0)]
 
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
-    ok, msg = checks.logs.check_shipper_dropped(cfg)
+    ok, msg = checks.logs.check_shipper_dropped(cfg, uptime_s=_unread_clock)
     assert not ok
     assert "too_far_behind" in msg

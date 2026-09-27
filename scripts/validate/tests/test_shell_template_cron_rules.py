@@ -209,13 +209,26 @@ def test_home_allowlist_curls_all_retry():
     # a real allowlist problem. Both `bash -n` and shellcheck pass a script with the flags
     # stripped, so the DECIDED comment above them is the only thing holding them today, and a
     # comment is not enforcement. Pin every curl instead.
+    #
+    # The WAN probes are the ONE exemption, and it is a different rule rather than a hole in this
+    # one (#2793). Their failure is not a lost verdict to ride out — it IS the verdict the script
+    # reads, so a retry would delay the answer and spend budget the */5 period does not have.
+    # `ansible/tests/services/test_crowdsec_allowlist_wan_skip.py` pins their flags equal to
+    # kuma-push-lib.sh's copy, including the absence of `--retry`, so the exemption is enforced
+    # rather than merely allowed.
     lines = [
         ln.strip()
         for ln in HOME_ALLOWLIST.read_text().splitlines()
         if "curl " in ln and not ln.lstrip().startswith("#")
     ]
     assert lines, "no curl invocations found — did the script move or get rewritten?"
+    probes = [ln for ln in lines if "--max-time 5" in ln]
+    assert probes, (
+        "the WAN-probe curls went missing — the exemption below matches nothing"
+    )
     for ln in lines:
+        if ln in probes:
+            continue
         assert _RETRY_COUNT.search(ln), f"curl without a --retry count: {ln}"
         # --retry-all-errors is what covers connection-refused, and a rollout's 404. Measured on
         # curl 8.5.0: bare --retry returns instantly on a refused port (exit 7) and on a 404; it

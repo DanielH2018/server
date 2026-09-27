@@ -10,6 +10,9 @@ because it is a Loki arm folded into a cluster verdict — the caller reaches it
 `checks.logs.with_log_errors` and test_check_loki.py patches it here.
 """
 
+from collections.abc import Callable
+
+from bridge.common import host_uptime_s
 from bridge.config import Config
 import bridge.net
 from verdicts.cluster import log_error_verdict
@@ -59,7 +62,12 @@ def check_loki_ingestion(cfg: Config) -> tuple[bool, str]:
     return True, "%s (+ container stream, + pi)" % msg_all
 
 
-def check_shipper_dropped(cfg: Config) -> tuple[bool, str]:
+def check_shipper_dropped(
+    cfg: Config,
+    uptime_s: Callable[[], float | None] = host_uptime_s,
+    prom_scalar: Callable[..., float | None] | None = None,
+    prom_vector: Callable[..., list[tuple[dict, float]]] | None = None,
+) -> tuple[bool, str]:
     """Prometheus-based log-shipper + Loki-distributor partial-loss watchdog. Prom-dependent.
 
     Reads BOTH sides of the pipe (see shipper_dropped): the shippers' own client-side
@@ -70,24 +78,35 @@ def check_shipper_dropped(cfg: Config) -> tuple[bool, str]:
     metric name, the same reason SHIPPER_DROPPED_METRICS does: a counter rename on either side
     must not silently read as "0 dropped forever".
     """
-    client_count = bridge.net.prom_scalar(
+    # Three seams, each defaulting to the real thing, so a test states a boot time and a pair of
+    # metric answers instead of patching this module — the rule `with_pi_ports` follows with
+    # `tcp_open`, and what keeps the grace below from being provable only by inspection.
+    prom_scalar = prom_scalar or bridge.net.prom_scalar
+    prom_vector = prom_vector or bridge.net.prom_vector
+    client_count = prom_scalar(
         cfg,
         'sum(increase({__name__=~"%s"}[%s]))'
         % (cfg.SHIPPER_DROPPED_METRICS, cfg.SHIPPER_DROPPED_WINDOW),
     )
     server_reasons = [
         (labels.get("reason", "unknown"), value)
-        for labels, value in bridge.net.prom_vector(
+        for labels, value in prom_vector(
             cfg,
             'sum by (reason) (increase({__name__=~"%s"}[%s]))'
             % (cfg.SHIPPER_DROPPED_SERVER_METRIC, cfg.SHIPPER_DROPPED_WINDOW),
         )
     ]
+    # The node's uptime, not this pod's age: an ordinary deploy restarts the bridge without
+    # rebooting anything, and the grace covers a fault only a reboot produces. An unreadable
+    # /proc/uptime reads as no grace, so the check evaluates normally.
+    uptime = uptime_s()
     return shipper_dropped(
         client_count,
         server_reasons,
         cfg.SHIPPER_DROPPED_WINDOW,
         cfg.SHIPPER_DROPPED_MAX,
+        backlog_grace_active=uptime is not None
+        and uptime < cfg.SHIPPER_BACKLOG_GRACE_S,
     )
 
 
@@ -147,7 +166,11 @@ SWALLOWED_VERDICTS_POD_LOGQL = '{container="pi-peer-backup"} |~ `: (status=(up|d
 SWALLOWED_VERDICTS_LIMIT = 5000
 
 
-def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
+def check_swallowed_verdicts(
+    cfg: Config,
+    uptime_s: Callable[[], float | None] = host_uptime_s,
+    fetch: Callable[..., list[tuple[int, str]]] | None = None,
+) -> tuple[bool, str]:
     """A host cron's DOWN verdict that kuma-push-lib.sh logged and then lost (#1869).
 
     The library returns 0 after a failed push by design — a non-zero exit would fail the cron
@@ -160,11 +183,28 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
     is slow at, so a raise here would page this tile for a slow Loki rather than a lost
     verdict. The tile's heartbeat deadline is still the backstop for the cycle this skips.
     """
+    # Never read back past the reboot (#2783). uptime-kuma has no endpoint for ~16 minutes of the
+    # weekly restart, so every host cron whose slot falls in there loses a push for one known
+    # cause; a daily producer's lost verdict then stays the newest line for its tag until
+    # tomorrow, and the 3h window held this tile red for 2.9h after everything else recovered.
+    # Inside BOOT_SETTLE_S there is no window left to read, so the cycle is skipped; after it the
+    # window grows back to its configured length, and the tile pages again on the first verdict
+    # lost for any other reason.
+    # Both seams default to the real thing; see check_shipper_dropped for the rule.
+    fetch = fetch or bridge.net.loki_lines
+    uptime = uptime_s()
     window_s = cfg.SWALLOWED_VERDICTS_WINDOW_S
+    if uptime is not None and uptime - cfg.BOOT_SETTLE_S < window_s:
+        since_settle = int(uptime - cfg.BOOT_SETTLE_S)
+        if since_settle <= 0:
+            return True, (
+                "skipped — the node booted %ds ago, inside BOOT_SETTLE_S (%ds): the reboot's own "
+                "lost pushes are owned by the reboot, not by this tile"
+                % (int(uptime), cfg.BOOT_SETTLE_S)
+            )
+        window_s = since_settle
     try:
-        lines = bridge.net.loki_lines(
-            cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
-        )
+        lines = fetch(cfg, SWALLOWED_VERDICTS_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT)
     except Exception as e:
         return (
             True,
@@ -175,7 +215,7 @@ def check_swallowed_verdicts(cfg: Config) -> tuple[bool, str]:
     # syslog arm's, and the message says so rather than reading clean.
     pod_note = ""
     try:
-        pod_lines = bridge.net.loki_lines(
+        pod_lines = fetch(
             cfg, SWALLOWED_VERDICTS_POD_LOGQL, window_s, SWALLOWED_VERDICTS_LIMIT
         )
     except Exception as e:

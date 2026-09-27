@@ -38,6 +38,10 @@ LIB_STUB = """\
 kuma_push() {
   printf '%s\\n%s\\n' "$1" "$2" > "$KUMA_PUSH_OUT"
 }
+# `reachout_verdict` from the real library, stubbed to the WAN-reachable answer — which is what
+# every case here means: the source refused, so the tile must page. The skip path is covered by
+# ansible/tests/setup/test_kuma_push_wan_skip.py against the real function.
+reachout_verdict() { REACHOUT_STATUS=down; REACHOUT_NOTE=""; }
 """
 
 
@@ -103,6 +107,7 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
             gitops_deploy_expected_ruleset_contexts=DECLARED,
             gitops_deploy_branch_ruleset_id=BRANCH_RULESET_ID,
             gitops_deploy_branch_ruleset_renovate_exclude=RENOVATE_EXCLUDE,
+            wan_probe_urls=["https://a.example", "https://b.example"],
         )
     )
 

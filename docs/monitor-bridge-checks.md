@@ -822,6 +822,22 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   Loki, so the Loki gate owns their source, and what failed for them on 2026-09-18 was Kuma's
   own outbound send, which is a real fault the tile should report.
 
+  **The four HOST crons that outage lit are covered by a second, separate half** (#2793).
+  `crowdsec-home-allowlist`, `github-ruleset-drift`, `release-staleness-check` and
+  `docs-refresh` run on the host and push their own tiles, so they are outside this loop and
+  this gate structurally cannot suppress them. Each now consults `wan_reachable` in
+  `ansible/roles/setup/initial_setup/files/kuma-push-lib.sh` on the failure path that reached
+  the internet, and reports `skipped: WAN unreachable` as an `up` when neither provider
+  answers. The probe is what classifies, not the error text: parsing curl exit codes and git
+  stderr across four heterogeneous crons is the "green and inert" shape that library's header
+  records paying for twice, and the probe answers the same question empirically — a GitHub 403
+  while the link is up makes it succeed, so that tile still pages. The endpoint list is
+  `ansible/inventory/group_vars/all.yml:wan_probe_urls`, pinned equal to this gate's
+  `WAN_PROBE_DEFAULT` by a test, because two halves disagreeing about what "the internet"
+  means would leave a single-endpoint outage reported by nothing at all. The one case it gets
+  wrong is an HTTP-level failure coinciding with a WAN outage, reported as a skip; both tiles
+  would have been red for one root cause anyway.
+
   `r2_usage` and `healthchecks_drift` left `STARTUP_GRACE` to join this set, the move
   `pi_pressure` made when it gained the Prometheus gate (#2004): the two sets must stay
   disjoint so a graced check reaches the evaluation path every cycle, and the gate covers the
@@ -1145,7 +1161,17 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   it must page: a benign re-tail still means the SLA on "logs land in Loki promptly" briefly
   broke, and nothing but this arm would have shown an operator the shape of what happened.
   Land a shipper change more than an hour before pointing this check at its counters, to
-  keep the cutover's own re-tail from paging the deploy.)
+  keep the cutover's own re-tail from paging the deploy.
+  **The weekly reboot is the one `too_far_behind` case that is neither data loss worth paging
+  nor a benign re-tail**, and the one exemption to "either way it must page" above (#2783): Alloy ships its backlog for hours afterwards and Loki
+  discards the late part, which held this tile red for 4.4h on 2026-09-27 against a 1h rolling
+  window — so the discards ran ~3.4h past boot. Inside `SHIPPER_BACKLOG_GRACE_S` (21600 s,
+  ~1.75x that) of the NODE's boot — `bridge/common.py:host_uptime_s`, never this pod's age,
+  because a deploy restarts the bridge without rebooting anything — the `too_far_behind`
+  reason alone is dropped from the server-side total and named in the `up` message. Every
+  other reason and the whole client-side arm stay live, so a throughput fault on a reboot
+  morning still pages; suppressing the check outright would be six hours of weekly blindness
+  on partial log loss.)
 - **Swallowed Push Verdicts** (a host cron's DOWN verdict that `kuma-push-lib.sh` logged
   and then lost — added 2026-09-17, #1869. The library returns 0 after a failed push by
   design, so the cron does not fail, and the verdict reached nobody until the tile's
@@ -1162,7 +1188,15 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   a second time for one cause. That gate is what separates this from the plain count of
   push failures `uptime-kuma/CLAUDE.md` measured and rejected. A swallowed `up` is not
   counted: its tile goes red at the deadline for a cron that ran, which is the library's
-  case for the library's retry (#1010), not a hidden finding. The one push counted whatever its status and
+  case for the library's retry (#1010), not a hidden finding. **It never reads back past the node's
+  boot** (#2783): uptime-kuma's Service has no endpoint at all for ~16 minutes of the weekly
+  restart, so every host cron whose slot falls in there loses its push for one known cause, and
+  a daily producer's lost verdict stays the newest line for its tag until tomorrow — 2.9h of red
+  on 2026-09-27 after everything else had recovered. Inside `BOOT_SETTLE_S` (1200 s) the cycle
+  is skipped and says so; after it the lookback is the smaller of the configured window and the
+  time since the settle window ended, so the full window returns on its own and the tile pages
+  again on the first verdict lost for any other reason. `BOOT_SETTLE_S=0` restores the earlier
+  reading exactly. The one push counted whatever its status and
   company is one Kuma REJECTED — `by=kuma` in the http/rc pair, which the library appends
   when the 404 came back as Kuma's own `application/json` rather than Traefik's `text/plain`
   page (#1803). That is a token no live monitor holds: the edge and Kuma are both up so no

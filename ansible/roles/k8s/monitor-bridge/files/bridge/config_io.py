@@ -67,6 +67,8 @@ class IoConfig:
     SHIPPER_DROPPED_WINDOW: str
     SHIPPER_DROPPED_MAX: float
     SWALLOWED_VERDICTS_WINDOW_S: int
+    BOOT_SETTLE_S: int
+    SHIPPER_BACKLOG_GRACE_S: int
     KUMA_NOTIFY_FAILURES_WINDOW_S: int
     DISCORD_WEBHOOK_URL: str = field(repr=False)
     DISCORD_CROWDSEC_WEBHOOK_URL: str = field(repr=False)
@@ -390,6 +392,32 @@ def io_config(
         # any window, so the window does not need to reach their period — the page fires
         # within a cycle and the tile's own deadline reports the same verdict a day later.
         SWALLOWED_VERDICTS_WINDOW_S=_int("SWALLOWED_VERDICTS_WINDOW_S", "10800"),
+        # The two post-reboot arms (#2783). The weekly Sunday 07:30 reboot held these two
+        # tiles red for hours AFTER every other tile recovered — shipper_dropped for 4.4h and
+        # swallowed_verdicts for 2.9h on 2026-09-27 — because each reads a window that still
+        # contained the reboot. Both are keyed on the NODE's uptime (bridge.common.host_uptime_s),
+        # never on this pod's age: a deploy restarts the pod without rebooting anything.
+        #
+        # BOOT_SETTLE_S is how long the reboot itself takes to stop producing push failures.
+        # uptime-kuma's Service has no endpoint at all for ~16 minutes of the reboot (the
+        # measurement in uptime-kuma/templates/status-page-sync-cronjob.yaml.j2), so every host
+        # cron whose slot falls in there loses its push — real losses with one known cause, and
+        # a daily producer's lost verdict is the newest line for its tag until tomorrow.
+        # check_swallowed_verdicts skips entirely inside this window and then reads only back to
+        # the end of it, so the reboot's own failures are never in range and the tile clears at
+        # recovery instead of 2.9h later.
+        BOOT_SETTLE_S=_int("BOOT_SETTLE_S", "1200"),
+        # SHIPPER_BACKLOG_GRACE_S covers a different fault with the same trigger: Alloy ships
+        # its post-reboot backlog for hours, and Loki discards what arrives outside its accept
+        # window as `reason=too_far_behind`. Those entries are genuinely lost and nothing an
+        # operator does recovers them. Measured on 2026-09-27 the tile was red 4.4h against a 1h
+        # rolling window, so the discards continued ~3.4h past boot; 6h is ~1.75x that.
+        #
+        # It suppresses ONLY the `too_far_behind` reason, never the whole check: rate_limited,
+        # stream_limited, line_too_long and the client-side counter all stay live inside the
+        # window, so a real throughput fault during a reboot morning still pages. Dropping the
+        # whole verdict for 6h weekly would be six hours of blindness on partial log loss.
+        SHIPPER_BACKLOG_GRACE_S=_int("SHIPPER_BACKLOG_GRACE_S", "21600"),
         # How far back check_kuma_notify_failures reads Kuma's `Cannot send notification`
         # lines (#1891). The same 3h as the swallowed-verdict window: a drop stays paged past
         # Loki ingest lag and past the resend that likely follows it, and the tile clears on

@@ -251,6 +251,24 @@ loki_route_witness_hosts:
   - daniel-box
   - daniel-server
 
+# The endpoints the host crons probe to tell "this house's link is gone" from "the source I asked
+# refused me" (issue #2793). Read by `wan_reachable` in kuma-push-lib.sh, which is the host-side
+# peer of monitor-bridge's `wan_reachable` gate — that gate runs in the bridge's loop and cannot
+# reach a cron pushing its own tile from the host.
+#
+# Two independent providers, by hostname, never an anycast IP. The reasoning is
+# `ansible/roles/k8s/monitor-bridge/files/checks/wan.py`'s docstring: the 2026-09-18 outage
+# included DNS failure, so resolution has to be part of what is probed, and one provider's own
+# outage must not silence a caller reading the other.
+#
+# The SAME two URLs the bridge defaults to (`bridge/config_io.py:WAN_PROBE_DEFAULT`), pinned equal
+# by ansible/tests/setup/test_wan_probe_urls_match_the_bridge.py — two halves of one gate
+# disagreeing about what "the internet" means is the drift that test exists to refuse. Empty
+# disables the host-side gate, the same way an empty WAN_PROBE_URLS disables the bridge's.
+wan_probe_urls:
+  - https://cloudflare.com/cdn-cgi/trace
+  - https://www.google.com/generate_204
+
 # Seconds after boot in which the witness skips its run. Shorter than its hourly cron, so at most
 # one slot is ever skipped — the constraint kuma-push-lib.sh's boot_grace_active documents. The
 # 2026-08-30 restart had the last pod reach Ready 5m18s after boot, so a witness firing inside
