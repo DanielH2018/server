@@ -125,7 +125,8 @@ def test_both_provenances_land_in_one_list(landing):
 
 def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):
     """REJECTING half: on the FALLBACK path `derive_from_diff` rebuilds the tags in step 5 from
-    a diff this classification never reads, so no tag may be restricted here."""
+    a diff this classification never reads, so no tag may be restricted here. Step 5 answers
+    the same question over the diff's own paths instead (`deploy.record_k8s_only`, #2738)."""
     ln, _ = landing(
         Fakes(derived=([], "fallback"), path_k8s_only=["wg-easy"]), since="abc"
     )

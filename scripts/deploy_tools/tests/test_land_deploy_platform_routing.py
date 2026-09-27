@@ -79,10 +79,21 @@ def test_the_fallback_proves_a_platform_from_the_diffs_own_paths(landing):
     the cluster alone instead of adding an ssh deploy of the Pi's wg-easy."""
     ln, calls = _fallback(
         landing,
-        Fakes(changed="wg-easy\n", diff_paths=[_K8S_PATH], path_k8s_only=["wg-easy"]),
+        Fakes(
+            changed="wg-easy\n",
+            diff_paths=[_K8S_PATH],
+            path_k8s_only=["wg-easy"],
+            hosts_at={"daniel-box": ["wg-easy"]},
+        ),
     )
     deploy.derive_from_diff(ln)
     assert ln.k8s_only == ["wg-easy"]
+    # Through the seam to the routing read, which is #2738's own verify-by: the attribute
+    # `record_k8s_only` set has to reach `deploy_by_host`'s `landing_hosts_at` call.
+    assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
+    assert [c[2]["k8s_only"] for c in calls if c[0] == "landing_hosts_at"] == [
+        ["wg-easy"]
+    ]
     # The DIFF's paths, not the PR's file list: the fake answers the same either way, so
     # asserting only on `k8s_only` would pass with the truncated list handed over.
     assert [c[1] for c in calls if c[0] == "k8s_only_tags"] == [(_K8S_PATH,)]
