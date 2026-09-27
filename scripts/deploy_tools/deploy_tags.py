@@ -58,6 +58,7 @@ from lib.render_guard import (
     entry_tags,
     host_files,
     hosts_for_tags,
+    landing_hosts_for_tags,
     service_tags_at_or_none,
 )
 from deploy_tools.exit_codes import DEPLOY_BROAD
@@ -151,7 +152,9 @@ def known_tags(host_vars: Path = HOST_VARS, at: str = "") -> set[str]:
     return (declared or service_tags(host_vars)) | set(BLOCK_TAGS) | set(RESERVED_TAGS)
 
 
-def tags_by_host(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
+def tags_by_host(
+    tags, host_vars: Path = HOST_VARS, k8s_only=()
+) -> dict[str, list[str]]:
     """{host: sorted tags} for every host whose containers_list declares one of `tags`.
 
     A deploy reaches only the host it runs against: deploy.yml's `hosts:` defaults to the
@@ -162,11 +165,12 @@ def tags_by_host(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
     play matched no service and exited 0, and the landing read `settled` while the Pi still
     ran the old container.
 
-    A tag declared on two hosts (wg-easy: Docker on daniel-pi, k8s on daniel-box) lands under
-    both, so each host's copy is deployed. A tag no host declares (a block tag, a typo) lands
-    under none; `validate` is the place that refuses those.
+    A tag no host declares (a block tag, a typo) lands under none; `validate` is the place
+    that refuses those. A tag declared on two hosts lands under both, so each host's copy is
+    deployed -- unless it is named in `k8s_only`, which routes it to the `platform: k8s` entry
+    alone. `hosts_for_tags` carries that rule and why it is opt-in (#2718).
     """
-    return hosts_for_tags(tags, service_records(host_vars))
+    return hosts_for_tags(tags, service_records(host_vars), k8s_only)
 
 
 def tag_platforms(tag: str, host_vars: Path = HOST_VARS) -> set[str]:
@@ -511,23 +515,11 @@ def changed(ref: str, cwd: Path = REPO) -> int:
     return 0
 
 
-# DECIDED: land.sh never deploys to daniel-stage. The staging guest sits on daniel-server's
-# libvirt NAT network, which daniel-box cannot route to, and the deployer's staging gate
-# owns every deploy there (`staging_gate.py`). `tags_by_host` still lists it, because it
-# answers "who declares this tag" and staging does; only the landing shape drops it. Without
-# this, landing any of the six STAGING_SUBSET tags (traefik, authelia, node-exporter, ...)
-# ran `deploy.sh -e target=daniel-stage` from daniel-box after the box's own deploy had
-# succeeded, and the unreachable host turned a good landing into `deploy-failed`.
-HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
-
-
-def landing_hosts(tags, host_vars: Path = HOST_VARS) -> dict[str, list[str]]:
+def landing_hosts(
+    tags, host_vars: Path = HOST_VARS, k8s_only=()
+) -> dict[str, list[str]]:
     """`tags_by_host` minus the hosts land.sh never deploys to."""
-    return {
-        host: host_tags
-        for host, host_tags in tags_by_host(tags, host_vars).items()
-        if host not in HOSTS_LAND_SH_NEVER_DEPLOYS
-    }
+    return landing_hosts_for_tags(tags, service_records(host_vars), k8s_only)
 
 
 def _cmd_hosts(args: argparse.Namespace) -> int:
@@ -535,9 +527,13 @@ def _cmd_hosts(args: argparse.Namespace) -> int:
 
     The shape land.sh consumes: one line per host, so a `while read host tags` loop can run
     one deploy.sh per host and add `-e target=` when the host is not the local node.
+
+    `--k8s-only` is the tree-read twin of `land_tags.landing_hosts_at`'s own argument, and the
+    landing passes the same subset to both (#2718).
     """
     tags = [t for t in args.tags.split(",") if t]
-    for host, host_tags in landing_hosts(tags).items():
+    k8s_only = [t for t in (args.k8s_only or "").split(",") if t]
+    for host, host_tags in landing_hosts(tags, k8s_only=k8s_only).items():
         print(f"{host}\t{','.join(host_tags)}")
     return 0
 
@@ -589,6 +585,11 @@ def main(argv: list[str] | None = None) -> int:
         help="print `<host>\\t<tags>` per host declaring one of the comma-joined tags",
     )
     ho.add_argument("tags")
+    ho.add_argument(
+        "--k8s-only",
+        default="",
+        help="comma-joined subset of TAGS to route to their `platform: k8s` entry only",
+    )
     ho.set_defaults(func=_cmd_hosts)
 
     args = parser.parse_args(argv)

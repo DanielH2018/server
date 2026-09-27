@@ -4,7 +4,7 @@ A deploy reaches only the host the play runs against. PR #928 changed roles/cont
 a role only daniel-pi declares; `deploy.sh --tags alloy` on daniel-box matched no service,
 exited 0, and land.sh printed `settled` while the Pi ran the old container (issue #929).
 deploy_tags.py hosts says which host declares each tag. daniel-stage is never on the list
-(issue #935; HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py).
+(issue #935; HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py).
 """
 
 from typing import NoReturn
@@ -226,15 +226,27 @@ def deploy_by_host(ln: Landing, at: str = "") -> int:
     cannot be read falls back to `deploy_tags.py hosts` against the primary, whose own
     failure arm below stays the one that ends the landing. A tag under no host in either read
     falls through to one local deploy, which is right for a new cluster role.
+
+    `caller_expanded` routes to a `platform: k8s` entry only, through both reads. A tag the
+    caller graph reached names a k3s role, and `wg-easy` is declared on daniel-box as k8s and
+    on daniel-pi as Docker -- so a `manifests` change used to deploy the Pi's Compose wg-easy
+    too, over one extra ssh deploy the change never touched (issue #2718).
     """
     o, t = ln.opts, ln.tools
-    by_host = t.landing_hosts_at(ln.resolved_tags, at, o.primary) if at else None
+    by_host = (
+        t.landing_hosts_at(ln.resolved_tags, at, o.primary, ln.caller_expanded)
+        if at
+        else None
+    )
     if by_host is not None:
         lines = [
             f"{host}\t{','.join(host_tags)}" for host, host_tags in by_host.items()
         ]
     else:
-        r = t.deploy_tags(o.primary, ["hosts", ln.tags_csv])
+        argv = ["hosts", ln.tags_csv]
+        if ln.caller_expanded:
+            argv.append(f"--k8s-only={','.join(ln.caller_expanded)}")
+        r = t.deploy_tags(o.primary, argv)
         if r.returncode != DEPLOY_OK:
             # deploy.sh was never invoked for any host, so nothing here overlaps with the
             # catch-all in deploy_outcome, which really did run it (issue #1016).

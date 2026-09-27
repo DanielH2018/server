@@ -500,7 +500,7 @@ class Tools:
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
     # commit a fast-path landing deploys (issue #1839). None sends the caller to the subprocess.
-    landing_hosts_at: Callable[[Any, str, Path], dict[str, list[str]] | None] = (
+    landing_hosts_at: Callable[[Any, str, Path, Any], dict[str, list[str]] | None] = (
         land_tags.landing_hosts_at
     )
     read_state: Callable[[Path, str], str | None] = read_state

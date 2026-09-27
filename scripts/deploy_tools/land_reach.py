@@ -42,7 +42,7 @@ from setup_role_chains import (
 )
 
 # The hosts land.sh's setup-role remediation ever names. daniel-stage is excluded on
-# purpose -- it is not land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in deploy_tags.py is
+# purpose -- it is not land.sh's business (HOSTS_LAND_SH_NEVER_DEPLOYS in scripts/lib/render_guard.py is
 # the same exclusion for a deploy tag), and initial_setup.yml is never run against it from
 # here.
 _HOSTS = ("daniel-box", "daniel-server", "daniel-pi")

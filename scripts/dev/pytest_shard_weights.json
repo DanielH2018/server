@@ -625,6 +625,7 @@
  "scripts/deploy_tools/tests/test_land_ci.py": 0.0,
  "scripts/deploy_tools/tests/test_land_classify.py": 0.1,
  "scripts/deploy_tools/tests/test_land_deploy.py": 0.0,
+ "scripts/deploy_tools/tests/test_land_deploy_platform_routing.py": 0.0,
  "scripts/deploy_tools/tests/test_land_doc_change_reaches_a_verdict.py": 0.28,
  "scripts/deploy_tools/tests/test_land_fakes_cleanup.py": 0.14,
  "scripts/deploy_tools/tests/test_land_health_verdict.py": 0.0,

@@ -185,6 +185,10 @@ def classify(ln: Landing) -> None:
                 )
         extra = set().union(*reached.values()) - set(tags)
         if extra:
+            # Recorded BEFORE `expand_build_couplings`: a coupled tag is named by neither a
+            # path nor the caller graph, so nothing here proves which platform it belongs to
+            # and it stays routed to every host that declares it (#2718).
+            ln.caller_expanded = sorted(extra)
             ln.resolved_tags = sorted(expand_build_couplings(set(tags) | extra))
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
