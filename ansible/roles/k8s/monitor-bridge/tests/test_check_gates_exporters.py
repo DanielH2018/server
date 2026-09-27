@@ -192,6 +192,7 @@ def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
             prom_dependent=frozenset(prom_dependent),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
         ),
     )
     return ran, pushes
@@ -340,6 +341,58 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
             prom_dependent=frozenset({"disk"}),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
         ),
     )
     assert "disk" in ran  # not suppressed
+
+
+# ── The origin pin the stub above cannot see ────────────────────────────────────────────────
+# `_wire_run_once_prom_up` answers the literal query "up" and nothing else, which is exactly how
+# a Prometheus honouring a selector behaves. What hid the fault (#2779) is the `cfg` fixture:
+# PROM_ORIGIN is empty there, so the probe's `up%s % origin_sel(cfg)` rendered as a bare `up` and
+# the pin the pod actually runs with never appeared in a test.
+
+# One target per node-exporter, labelled the way Prometheus labels them: the `node` job relabels
+# each target with its own node name, `node-pi` is statically labelled daniel-pi.
+_THREE_ORIGIN_UP = [
+    ({"job": "node", "origin": "daniel-box"}, 1.0),
+    ({"job": "node", "origin": "daniel-server"}, 1.0),
+    ({"job": "node-pi", "origin": "daniel-pi"}, 0.0),
+]
+
+
+def test_pi_exporter_death_suppresses_its_dependents_under_the_deployed_origin_pin(
+    monkeypatch, cfg
+):
+    """The Pi's node-exporter is down; pi_pressure and host_temp must not also page.
+
+    This is the 2026-09-21 15:09 incident: pi_pressure paged with "node-pi series missing
+    load/mem/fs", which is exactly what EXPORTER_DEPENDENT["node-pi"] exists to suppress. Under
+    the pinned probe the whole vector was invisible — daniel-server's only series is healthy, so
+    `up{origin="daniel-server"}` carried no dead exporter to suppress on.
+    """
+    names = ["pi_pressure", "host_temp", "targets"]
+    ran, pushes = _wire_run_once_prom_up(
+        replace(cfg, PROM_ORIGIN='origin="daniel-server"'),
+        monkeypatch,
+        _THREE_ORIGIN_UP,
+        names,
+        names,
+    )
+    assert not ({"pi_pressure", "host_temp"} & set(ran))
+    assert "targets" in ran  # Scrape Targets is still the single page
+    by_tok = {t: (ok, m) for t, ok, m in pushes}
+    assert by_tok["tok_pi_pressure"][0] is True
+    assert "exporter" in by_tok["tok_pi_pressure"][1].lower()
+
+
+def test_an_origin_pinned_probe_would_see_no_dead_exporter():
+    """The reject half, stated as the query it turns on rather than by reverting the fix.
+
+    `down_exporters` reads whatever vector the probe returns. A pinned probe selects nothing
+    from a fleet whose only dead exporter is on another host, so the gate suppresses nothing.
+    """
+    pinned = [(m, v) for m, v in _THREE_ORIGIN_UP if m["origin"] == "daniel-server"]
+    assert gates.down_exporters(pinned) == set()
+    assert gates.down_exporters(_THREE_ORIGIN_UP) == {"node-pi"}

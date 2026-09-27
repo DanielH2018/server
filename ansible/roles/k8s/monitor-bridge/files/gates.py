@@ -1,18 +1,18 @@
 """The reachability gates: which checks a single outage suppresses, and how one gate is run.
 
 A gate differs from an ordinary check only in what its verdict is used for. `run_once` in
-`check.py` evaluates the four gates first and uses each verdict to suppress that gate's
+`check.py` evaluates the five gates first and uses each verdict to suppress that gate's
 dependents, so one root cause pages once instead of storming across every monitor reading the
 same source. This module owns the membership sets, the filter rules that keep a gate from being
 disabled underneath its dependents, and the `Gates` seam that lets a test STATE a gate
 configuration instead of patching module globals.
 
-It is a leaf: it imports `bridge.*` and the four gate probe bodies out of `checks.*`, and never
+It is a leaf: it imports `bridge.*` and the five gate probe bodies out of `checks.*`, and never
 `check`, `registry` or `cli`.
 
 `apply_startup_grace` and `_grace_streaks` are NOT here — they live in `bridge/streaks.py`
 beside the `down_streak` hysteresis they are built on, and `Gates.grace_streaks` defaults to
-that module's dict. The startup grace is a gate in the same sense the other four are (it holds
+that module's dict. The startup grace is a gate in the same sense the other five are (it holds
 a verdict back rather than reporting it), which is why the membership set `STARTUP_GRACE` is
 here and the mechanism is there.
 """
@@ -29,6 +29,7 @@ from bridge.types import Check, CheckFn, CheckResult
 from checks.b2 import check_b2_reachable
 from checks.cluster import check_cluster_prometheus, check_prometheus
 from checks.logs import check_loki_reachable
+from checks.wan import check_wan_reachable
 
 # Checks that query Prometheus. A single Prometheus outage would fail every one of them at once
 # — one root cause, a storm of identical pages. run_once probes Prometheus first (check_prometheus
@@ -45,6 +46,11 @@ PROM_DEPENDENT = frozenset(
         "cpu",
         "targets",
         "traefik5xx",
+        # Reads traefik_service_request_duration_seconds_count/_bucket through prom_vector, so
+        # a Prometheus outage raises in its fetch and _evaluate turns that into a down. Missing
+        # until 2026-09-27 (#2778): it co-fired with the `prometheus` gate on 2026-09-18 and in
+        # both Sunday reboots, one root cause paging twice.
+        "traefik_latency",
         "traefik_404",
         "traefik_421",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
@@ -168,6 +174,24 @@ CLUSTER_DEPENDENT = frozenset(
     {"k8s_workloads", "cluster_targets", "pvc_fullness", "etcd_db_size"}
 )
 
+# WAN-reachability gate — the fifth peer, and the one whose absence cost the most. An internet
+# outage had no gate at all, so every check reaching the internet paged on its own: on
+# 2026-09-18 from 05:05 a single WAN outage turned 11 tiles red inside 90 minutes (#2784).
+# run_once probes two independent providers by hostname (checks/wan.py) and, when NEITHER
+# answers, suppresses these so only the WAN tile pages.
+#
+# b2_reachable is deliberately a PEER rather than a member. It is itself a gate, and a gate
+# suppressing a gate is machinery this loop does not have — GATE_DEPENDENTS' values are check
+# names run_once iterates, not gates it evaluates. Two tiles for a WAN outage instead of one is
+# the accepted cost; the alternative is building gate-of-a-gate for one caller.
+#
+# kuma_notify_failures and swallowed_verdicts also went red on 2026-09-18 and are NOT here:
+# both read Loki, which is in-cluster, so the Loki gate already owns their source. What failed
+# for them was Kuma's own outbound Discord send, which is a real fault the tiles should report.
+WAN_DEPENDENT = frozenset(
+    {"r2_usage", "cloudflare_ips_drift", "healthchecks_drift", "discord"}
+)
+
 # Reach-out checks that poll a live app dependency (n8n/sonarr/radarr/prowlarr/scrutiny/the
 # Cloudflare GraphQL API) with NO reachability gate above them and NO per-check
 # hysteresis of their own — unlike
@@ -194,11 +218,13 @@ STARTUP_GRACE = frozenset(
         # stay disjoint.
         "prowlarr_indexers",
         "scrutiny",
-        "r2_usage",
+        # r2_usage and healthchecks_drift left this set on 2026-09-27 (#2784): both are
+        # WAN_DEPENDENT now, and the two sets must stay disjoint so a graced check still
+        # reaches the eval path every cycle. Same move pi_pressure made when it gained the
+        # Prometheus gate (#2004). The WAN gate covers the reboot transient too — a bridge
+        # cycling before the node's DNS is up fails the WAN probe as well — and it covers the
+        # outage the grace never could.
         "speedtest",
-        # A reach-out to healthchecks.io with no gate of its own (#2566); a failed read is
-        # never cached, so the post-reboot blip would page without this.
-        "healthchecks_drift",
     }
 )
 
@@ -211,6 +237,7 @@ GATE_DEPENDENTS = {
     "loki_reachable": LOKI_DEPENDENT,
     "b2_reachable": B2_DEPENDENT,
     "cluster_prometheus": CLUSTER_DEPENDENT,
+    "wan_reachable": WAN_DEPENDENT,
 }
 
 
@@ -218,7 +245,7 @@ GATE_DEPENDENTS = {
 class Gates:
     """Everything `run_once` needs to know about suppression, as one injectable value.
 
-    The membership sets and the four probe bodies used to be module globals `run_once` read
+    The membership sets and the five probe bodies used to be module globals `run_once` read
     directly, so a test that wanted a two-entry PROM_DEPENDENT or a stubbed Prometheus probe had
     to `monkeypatch.setattr` this module — ~25 sites in the gates suite alone, each one a
     process-wide mutation that a typo turns into a silent no-op. A test now STATES the gate
@@ -238,6 +265,7 @@ class Gates:
       loki_dependent: Checks suppressed when the Loki gate is down.
       b2_dependent: Checks suppressed when the B2 gate is down.
       cluster_dependent: Checks suppressed when the cluster-Prometheus gate is down.
+      wan_dependent: Checks suppressed when neither WAN endpoint answers.
       startup_grace: Reach-out checks held `up` through their first consecutive down cycles.
       grace_streaks: The name -> consecutive-down count the startup grace mutates in place.
         Defaults to `bridge.streaks._grace_streaks`, the process-wide dict the pod uses, so a
@@ -251,6 +279,7 @@ class Gates:
       probe_loki: The Loki gate's body.
       probe_b2: The B2 gate's body.
       probe_cluster: The cluster-Prometheus gate's body.
+      probe_wan: The WAN gate's body.
     """
 
     prom_dependent: frozenset[str] = PROM_DEPENDENT
@@ -262,6 +291,7 @@ class Gates:
     loki_dependent: frozenset[str] = LOKI_DEPENDENT
     b2_dependent: frozenset[str] = B2_DEPENDENT
     cluster_dependent: frozenset[str] = CLUSTER_DEPENDENT
+    wan_dependent: frozenset[str] = WAN_DEPENDENT
     startup_grace: frozenset[str] = STARTUP_GRACE
     grace_streaks: dict[str, int] = field(
         default_factory=lambda: bridge.streaks._grace_streaks
@@ -270,11 +300,12 @@ class Gates:
     probe_loki: CheckFn = check_loki_reachable
     probe_b2: CheckFn = check_b2_reachable
     probe_cluster: CheckFn = check_cluster_prometheus
+    probe_wan: CheckFn = check_wan_reachable
 
     def gate_dependents(self) -> dict[str, frozenset[str]]:
         """This value's own gate -> dependents map, in GATE_DEPENDENTS' shape.
 
-        `run_once` reads the four dependent sets through this instance, so the startup filter
+        `run_once` reads the five dependent sets through this instance, so the startup filter
         validation must read them from the same place. Reading the module table there instead
         would validate a stated `Gates` against rules the run loop does not use — the asymmetry
         would only show up as a filter accepted at startup and then behaving differently.
@@ -284,6 +315,7 @@ class Gates:
             "loki_reachable": self.loki_dependent,
             "b2_reachable": self.b2_dependent,
             "cluster_prometheus": self.cluster_dependent,
+            "wan_reachable": self.wan_dependent,
         }
 
 

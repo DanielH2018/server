@@ -31,37 +31,45 @@ is, and this file when you need to know what the rule is.
 
 ## Gates and hysteresis
 
-Four reachability gates run first each cycle; each suppresses its dependents so one outage
+Five reachability gates run first each cycle; each suppresses its dependents so one outage
 pages once. A suppressed check pushes `up` with a `skipped — <source> unreachable` message so
 its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the registry.
 
 - **Prometheus Reachable** (`vector(1)`): when Prometheus is unreachable, every
-  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/traefik_421/ups/
+  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_latency/traefik_404/traefik_421/ups/
   host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
   **suppressed**. `tests/test_claude_md_prom_dependent_enumeration.py` pins that list to
   `PROM_DEPENDENT`; edit the set and the sentence together.
 - **Loki Reachable** (`/loki/api/v1/labels`): gates `LOKI_DEPENDENT` — `loki_ingestion`,
   `swallowed_verdicts`, `kuma_notify_failures`. `ha_heartbeat` is deliberately NOT a member:
   its ban arm fails open on a Loki error so the heartbeat verdict survives.
-- **B2 Reachable** (`b2_authorize_account`): gates `B2_DEPENDENT` (`b2_storage`). One probe
-  per `B2_PROBE_INTERVAL_S` (1800 s) with a BILLED outcome cached, because the fault it
-  detects is a transaction cap; a failure that never reached B2 (DNS, connect, timeout) takes
-  the short `B2_TRANSPORT_RETRY_S` TTL. A real cap denial arrives as `HTTPError`, never
-  `RuntimeError` — a test faking it the other way proves the opposite of what it claims.
+- **B2 Reachable** (`b2_authorize_account`): gates `B2_DEPENDENT` (`b2_storage`). One probe per
+  `B2_PROBE_INTERVAL_S` (1800 s) with a BILLED outcome cached, because the fault it detects is a
+  transaction cap; a failure that never reached B2 takes the short `B2_TRANSPORT_RETRY_S` TTL.
+- **WAN Reachable** (two provider URLs, by hostname): gates `WAN_DEPENDENT` — `r2_usage`,
+  `cloudflare_ips_drift`, `healthchecks_drift`, `discord`. DOWN only when NEITHER answers, so
+  one provider's outage cannot silence a dependent reading the other. Never an anycast IP: the
+  2026-09-18 outage included DNS failure. `b2_reachable` is the tile's PEER, not a member — it
+  is a gate itself, and this loop has no gate-of-a-gate.
 - **Cluster Prometheus Reachable**: gates `CLUSTER_DEPENDENT` (`k8s_workloads`,
-  `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both Prometheus URLs render to the same cluster Service,
-  so `run_once` reuses the first gate's verdict here; the split survives so a second
-  Prometheus can be reintroduced, with membership following the URL a check reads. Do not
-  read the pair as independent coverage.
+  `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both URLs render to the same cluster
+  Service, so `run_once` reuses the first gate's verdict; the split survives so a second
+  Prometheus can be reintroduced. Do not read the pair as independent coverage. On the reuse
+  path the tile is pushed `up` with `same instance, see Prometheus Reachable` while the reused
+  verdict still suppresses `CLUSTER_DEPENDENT` — pushing the reused DOWN turned two tiles red
+  for one fact (#2780).
 - **`EXPORTER_DEPENDENT`** maps a node-exporter scrape job to the checks a dead exporter would
   otherwise page twice: `node` → disk, memory, host_temp; `node-pi` → host_temp, pi_pressure.
   `pvc_fullness` gets NO entry keyed on the kubelet job on purpose — its claim-count floor
   exists to page on that partial outage. A new node-exporter scrape job fails
-  `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped.
-- **`STARTUP_GRACE`** (`n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `r2_usage`,
-  `speedtest`, `healthchecks_drift`) holds a reach-out check with no gate and no streak of
-  its own `up` for the first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday
-  reboot's first cycle does not page. The set is disjoint from every skip set, and a test holds both invariants.
+  `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped. The probe
+  reads a BARE `up`, never `origin_sel()` — the pin left node-pi and daniel-box unreachable
+  (#2779) — and suppression is keyed by job, so one host's dead exporter holds its dependents
+  estate-wide (`DECIDED:` at the probe in `files/check.py`).
+- **`STARTUP_GRACE`** (`n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `speedtest`) holds a
+  reach-out check with no gate and no streak of its own `up` for the first `GRACE_CYCLES`-1
+  consecutive down cycles, so the weekly Sunday reboot's first cycle does not page. Disjoint
+  from every skip set, so a check that gains a gate leaves this set; a test holds both.
 - **Consecutive-cycle streaks** (`bridge/streaks.py`, every `*_CONSECUTIVE` in cycles of
   `INTERVAL`) are the per-check hysteresis. A held cycle pushes `up` with a `down streak n/N`
   note, because a monitor that is up while a fault accumulates has to say so. A streak delays

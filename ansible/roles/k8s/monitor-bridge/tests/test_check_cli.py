@@ -46,6 +46,7 @@ def _silence(monkeypatch, pushes, ran, names=("disk",), probe_prometheus=None):
         "gate_config": Gates(
             probe_prometheus=probe_prometheus or (lambda _cfg: (True, "prom ok")),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
             probe_b2=lambda _cfg: (True, "b2 ok"),
             probe_cluster=lambda _cfg: (True, "cluster ok"),
         ),

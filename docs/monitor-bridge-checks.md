@@ -767,6 +767,40 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   firing both at once is why the gate exists. Loki being UP but promtail not
   shipping is a different signal Loki Log Ingestion still surfaces. `LOKI_DEPENDENT` is guarded by
   a test against the live `CHECKS` so it can't drift.)
+- **WAN Reachable** (two provider URLs fetched by hostname, tried in order — the root-cause
+  GATE for the internet-reaching checks, and the newest peer of Prometheus/Loki/B2 Reachable.
+  An internet outage had no gate at all before 2026-09-27: on 2026-09-18 from 05:05 a single
+  WAN outage turned 11 tiles red inside 90 minutes — `b2_reachable` (3.9 h), `r2_usage`
+  (3.6 h), `discord` (3.7 h), `kuma_notify_failures` with 16 sends dropped on ETIMEDOUT or
+  ENETUNREACH, `crowdsec-home-allowlist` (3.8 h, `failed to resolve public IPv4 from ipify`),
+  `cloudflare-ip-drift`, `github-ruleset-drift`, `release-staleness-check` (3 h),
+  `docs-refresh`, `swallowed_verdicts` and `gitops_alive`. Gates `WAN_DEPENDENT` — `r2_usage`,
+  `cloudflare_ips_drift`, `healthchecks_drift`, `discord`.
+
+  **DOWN only when NEITHER endpoint answers.** One provider's outage is that provider's
+  problem, and suppressing on it would turn Cloudflare's own tiles green during a Cloudflare
+  outage. Requiring both to fail leaves the gate reporting the one fault it can attribute to
+  this house's link. The endpoints are checked in order and the first answer stops the probe,
+  so a healthy cycle costs one request.
+
+  **By hostname, never an `anycast` IP.** That outage included DNS failure, and an IP-only probe
+  stays green through a DNS-only outage while every dependent fails — the exact storm the gate
+  exists to suppress. Measured from daniel-server 2026-09-27, three runs each:
+  `cloudflare.com/cdn-cgi/trace` 0.095-0.100 s total, `www.google.com/generate_204`
+  0.074-0.122 s, both with 0.002-0.052 s of DNS.
+
+  `b2_reachable` is the tile's PEER rather than a member: it is itself a gate, and
+  `GATE_DEPENDENTS`' values are check names `run_once` iterates, not gates it evaluates. Two
+  tiles for a WAN outage is the accepted cost of not building gate-of-a-gate for one caller.
+  `kuma_notify_failures` and `swallowed_verdicts` are not members either — both read in-cluster
+  Loki, so the Loki gate owns their source, and what failed for them on 2026-09-18 was Kuma's
+  own outbound send, which is a real fault the tile should report.
+
+  `r2_usage` and `healthchecks_drift` left `STARTUP_GRACE` to join this set, the move
+  `pi_pressure` made when it gained the Prometheus gate (#2004): the two sets must stay
+  disjoint so a graced check reaches the evaluation path every cycle, and the gate covers the
+  post-reboot transient the grace covered plus the outage it never could.
+  Empty `WAN_PROBE_URLS` = disabled.)
 - **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
   over its in-cluster Service DNS name. Its own gate rather than an arm of `PROM_DEPENDENT`,
   because a gate that isn't watching a check's real source reports confidence it doesn't have.

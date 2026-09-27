@@ -13,6 +13,14 @@ from collections.abc import Callable
 from dataclasses import dataclass, field
 import json
 
+# The WAN gate's default endpoints. They live here rather than in checks/wan.py because
+# `bridge/` is a leaf every check imports, and reading the default off the check module would
+# invert that. Two independent providers, by hostname; checks/wan.py's header has the reasoning
+# and the measured latency of each.
+WAN_PROBE_DEFAULT = (
+    "https://cloudflare.com/cdn-cgi/trace,https://www.google.com/generate_204"
+)
+
 
 @dataclass(frozen=True)
 class IoConfig:
@@ -39,6 +47,7 @@ class IoConfig:
     R2_PROBE_INTERVAL_S: float
     CLOUDFLARE_IPS_EXPECTED: frozenset[str]
     CLOUDFLARE_IPS_PROBE_INTERVAL_S: float
+    WAN_PROBE_URLS: tuple[str, ...]
     HEALTHCHECKS_API_URL: str
     HEALTHCHECKS_API_KEY: str = field(repr=False)
     HEALTHCHECKS_EXPECTED: tuple[dict, ...]
@@ -224,6 +233,14 @@ def io_config(
         ),
         CLOUDFLARE_IPS_PROBE_INTERVAL_S=_num(
             "CLOUDFLARE_IPS_PROBE_INTERVAL_S", "86400"
+        ),
+        # The WAN gate's endpoints, comma-separated and tried in order; empty disables the
+        # gate. They are URLs rather than hosts so resolution, connect and TLS are all probed
+        # by one request — checks/wan.py's header has why an anycast IP would not do.
+        WAN_PROBE_URLS=tuple(
+            u.strip()
+            for u in _env("WAN_PROBE_URLS", WAN_PROBE_DEFAULT).split(",")
+            if u.strip()
         ),
         # The Healthchecks.io console against docs/healthchecks-io-deadman.md (#2566). The key
         # is the project's READ-ONLY API key, file-mounted like CF_ANALYTICS_TOKEN; the expected

@@ -43,7 +43,7 @@ def run_once(
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
-    Evaluates the Prometheus, Loki, B2 and cluster-Prometheus gates first, so a single
+    Evaluates the Prometheus, Loki, B2, WAN and cluster-Prometheus gates first, so a single
     outage in one of them suppresses its dependent checks (pushed `up` with a skip
     message) instead of paging each of them separately. Every enabled check in `checks` is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
@@ -81,11 +81,27 @@ def run_once(
     # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
     # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
     # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
+    #
+    # A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
+    # while the `node` job labels each target with its own node name (daniel-box, daniel-server)
+    # and `node-pi` is statically labelled daniel-pi. A pinned probe therefore saw one node
+    # exporter of three, so EXPORTER_DEPENDENT["node-pi"] was unreachable and the daniel-box half
+    # of "node" with it: on 2026-09-21 15:09 pi_pressure paged with "node-pi series missing" —
+    # exactly what that entry exists to suppress — and on 2026-09-26 one Pi outage paged both
+    # pi_pressure and cluster_targets (#2779).
+    #
+    # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
+    # now suppresses its dependents estate-wide — daniel-box's node exporter dying holds
+    # daniel-server's disk and memory verdicts too. Accepted over per-origin suppression: the
+    # dependents report the worst origin in one verdict, so splitting suppression by origin would
+    # mean splitting the checks by origin first. Scrape Targets still names the dead job, so the
+    # outage is reported; what is lost is a second host's verdict while one host's exporter is
+    # down. check_targets_down keeps its origin_sel() pin — TARGETS_MIN is sized to it.
     suppressed = set()
     if prom_ok and gate_lib.check_enabled("prometheus", only, skip):
         try:
             for job in gate_lib.down_exporters(
-                bridge.net.prom_vector(cfg, "up%s" % bridge.net.origin_sel(cfg)),
+                bridge.net.prom_vector(cfg, "up"),
                 gates.exporter_dependent,
             ):
                 suppressed |= gates.exporter_dependent[job]
@@ -114,6 +130,14 @@ def run_once(
         cfg, "b2_reachable", gates.probe_b2, "KUMA_PUSH_B2_REACHABLE", dry_run, only
     )
 
+    # WAN-reachability gate (peer of the three above): an internet outage had no gate at all,
+    # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
+    # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
+    # answers, so a single provider's outage does not silence a dependent reading the other.
+    wan_ok, _wan_msg = gate_lib._gate(
+        cfg, "wan_reachable", gates.probe_wan, "KUMA_PUSH_WAN_REACHABLE", dry_run, only
+    )
+
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
     # covers. Without this, a cluster ingress/Traefik outage would page as a workload fault rather
@@ -128,22 +152,34 @@ def run_once(
     # DECIDED: this gate does NOT go through _gate() — the reuse branch below sits between the
     # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
     # precomputed verdict through would add a parameter for one caller and hide the reuse.
+    #
+    # DECIDED (#2780): in the reuse branch the GATING verdict and the PUSHED status part company.
+    # `cluster_ok` stays `prom_ok`, so CLUSTER_DEPENDENT is suppressed exactly as before; the tile
+    # is pushed `up` regardless, because reusing a DOWN verdict turned two tiles red for one fact
+    # — 2026-09-18 15:37, 2026-09-20 07:44, 2026-09-27 07:40. Lighting a second monitor is the one
+    # thing the reuse exists to avoid, so pushing the reused DOWN undid it. The LOG keeps the real
+    # verdict: a log line reading OK while Prometheus is down would be a second bug. A genuinely
+    # separate endpoint still probes and still pages on its own.
     cluster_ok, cluster_msg = True, "disabled by check filter"
     if gate_lib.check_enabled("cluster_prometheus", only, skip):
         # The same-instance reuse only holds when the prometheus gate actually probed.
-        if (
-            cfg.CLUSTER_PROM_URL
+        reused = (
+            bool(cfg.CLUSTER_PROM_URL)
             and cfg.CLUSTER_PROM_URL == cfg.PROM_URL
             and gate_lib.check_enabled("prometheus", only, skip)
-        ):
+        )
+        if reused:
             cluster_ok, cluster_msg = (
                 prom_ok,
                 "same instance as the Prometheus gate (%s)" % prom_msg,
             )
+            push_ok = True
+            push_msg = "same instance, see Prometheus Reachable (%s)" % prom_msg
         else:
             cluster_ok, cluster_msg = gate_lib._evaluate(
                 cfg, "cluster_prometheus", gates.probe_cluster
             )
+            push_ok, push_msg = cluster_ok, cluster_msg
         bridge.common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
@@ -151,8 +187,8 @@ def run_once(
             bridge.net.push(
                 cfg,
                 bridge.common._env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""),
-                cluster_ok,
-                cluster_msg,
+                push_ok,
+                push_msg,
             )
 
     for entry in checks:
@@ -167,6 +203,9 @@ def run_once(
             bridge.common.log("SKIP", name, "-", msg)
         elif not b2_ok and name in gates.b2_dependent:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
+            bridge.common.log("SKIP", name, "-", msg)
+        elif not wan_ok and name in gates.wan_dependent:
+            ok, msg = True, "skipped — WAN unreachable (see WAN Reachable monitor)"
             bridge.common.log("SKIP", name, "-", msg)
         elif not cluster_ok and name in gates.cluster_dependent:
             ok, msg = (

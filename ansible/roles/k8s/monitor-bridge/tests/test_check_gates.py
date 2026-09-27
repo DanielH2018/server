@@ -21,7 +21,11 @@ import bridge.parsing
 import check
 import checks.cluster
 import checks.logs
-from _check_gate_helpers import run_once_with_gates, wire_run_once, wire_run_once_loki
+from _check_gate_helpers import (
+    run_once_with_gates,
+    wire_run_once,
+    wire_run_once_reachability,
+)
 from bridge.types import Check
 from gates import Gates
 
@@ -89,12 +93,12 @@ def test_run_once_runs_all_when_prometheus_up(monkeypatch, cfg):
 
 
 def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch, cfg):
-    ran, pushes = wire_run_once_loki(
+    ran, pushes = wire_run_once_reachability(
         cfg,
         monkeypatch,
-        (False, "loki unreachable"),
         ["recyclarr", "janitorr", "backup"],
-        {"recyclarr", "janitorr"},
+        loki_result=(False, "loki unreachable"),
+        loki_dependent={"recyclarr", "janitorr"},
     )
     # Loki-dependent checks suppressed (never run, pushed up w/ a skip msg); non-loki still runs
     assert not ({"recyclarr", "janitorr"} & set(ran))
@@ -108,24 +112,24 @@ def test_run_once_suppresses_loki_dependent_when_loki_down(monkeypatch, cfg):
 
 def test_run_once_unreachable_loki_exception_suppresses(monkeypatch, cfg):
     # the Loki probe raising (the real outage path) -> _evaluate down -> suppression
-    ran, _ = wire_run_once_loki(
+    ran, _ = wire_run_once_reachability(
         cfg,
         monkeypatch,
-        RuntimeError("connection refused"),
         ["recyclarr", "backup"],
-        {"recyclarr"},
+        loki_result=RuntimeError("connection refused"),
+        loki_dependent={"recyclarr"},
     )
     assert "recyclarr" not in ran
     assert "backup" in ran
 
 
 def test_run_once_runs_loki_dependent_when_loki_up(monkeypatch, cfg):
-    ran, _ = wire_run_once_loki(
+    ran, _ = wire_run_once_reachability(
         cfg,
         monkeypatch,
-        (True, "Loki reachable"),
         ["recyclarr", "janitorr"],
-        {"recyclarr", "janitorr"},
+        loki_result=(True, "Loki reachable"),
+        loki_dependent={"recyclarr", "janitorr"},
     )
     assert "recyclarr" in ran and "janitorr" in ran
 
@@ -169,16 +173,70 @@ def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch,
     assert pushed["tok"][1] == "real failure"
 
 
+def test_reused_verdict_pushes_the_cluster_tile_up_but_still_suppresses(
+    monkeypatch, cfg
+):
+    """One Prometheus outage must light ONE tile, and still gate CLUSTER_DEPENDENT (#2780).
+
+    With both URLs naming one Service, run_once reuses the Prometheus gate's verdict here
+    rather than probing twice — and used to push that verdict, so every Prometheus outage
+    turned Prometheus Reachable and Cluster Prometheus red together. The gating half is what
+    the reuse is for and must survive: the tile reads up, k8s_workloads is still skipped.
+    """
+    one_url = "https://prom.example"
+    pushed = run_once_with_gates(
+        replace(cfg, PROM_URL=one_url, CLUSTER_PROM_URL=one_url),
+        monkeypatch,
+        cluster_ok=True,  # unread on the reuse path — the Prometheus verdict decides
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "should not run"))],
+        cluster_dependent={"k8s_workloads"},
+        prom_result=(False, "connection refused"),
+    )
+    cluster_tile_ok, cluster_tile_msg = pushed[""]
+    assert cluster_tile_ok is True
+    assert "see Prometheus Reachable" in cluster_tile_msg
+    assert pushed["tok"][0] is True
+    assert "cluster Prometheus unreachable" in pushed["tok"][1]
+
+
+def test_a_separate_cluster_prometheus_still_pages_on_its_own(monkeypatch, cfg):
+    """The other half: the reuse is what suppresses the tile, not the gate being down.
+
+    Two genuinely separate endpoints get their own probe and their own page, which is the
+    coverage the split gate exists to keep.
+    """
+    pushed = run_once_with_gates(
+        replace(
+            cfg,
+            PROM_URL="https://prom.example",
+            CLUSTER_PROM_URL="https://prom-k8s.example",
+        ),
+        monkeypatch,
+        cluster_ok=False,
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "should not run"))],
+        cluster_dependent={"k8s_workloads"},
+    )
+    assert pushed[""][0] is False
+
+
 def test_run_once_reads_every_gates_field(monkeypatch, cfg):
     """The seam must not be inert: a value passed on `Gates` has to reach the loop.
 
-    Eleven fields, and a field `run_once` never reads is a knob a test can turn with no effect —
+    Thirteen fields, and a field `run_once` never reads is a knob a test can turn with no effect —
     a stated configuration and a green assertion agreeing about nothing. Two cycles, because the
     exporter probe runs only when the Prometheus gate is UP, so one cycle cannot exercise both
     `prom_dependent` and `exporter_dependent`. Every field is set to a sentinel no production
     table contains, so a field that stops being read fails here rather than quietly.
     """
-    names = ["prom_dep", "exp_dep", "loki_dep", "b2_dep", "cluster_dep", "graced"]
+    names = [
+        "prom_dep",
+        "exp_dep",
+        "loki_dep",
+        "b2_dep",
+        "cluster_dep",
+        "wan_dep",
+        "graced",
+    ]
 
     def body(name, seen):
         def fn(_cfg):
@@ -202,10 +260,12 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
                 loki_dependent=frozenset({"loki_dep"}),
                 b2_dependent=frozenset({"b2_dep"}),
                 cluster_dependent=frozenset({"cluster_dep"}),
+                wan_dependent=frozenset({"wan_dep"}),
                 startup_grace=frozenset({"graced"}),
                 grace_streaks=streaks,
                 probe_prometheus=lambda _cfg: prom_result,
                 probe_loki=lambda _cfg: (False, "loki down"),
+                probe_wan=lambda _cfg: (False, "wan down"),
                 probe_b2=lambda _cfg: (False, "b2 down"),
                 probe_cluster=lambda _cfg: (False, "cluster down"),
             ),
@@ -213,12 +273,12 @@ def test_run_once_reads_every_gates_field(monkeypatch, cfg):
         return seen, pushed
 
     # Cycle 1 — Prometheus UP with the sentinel exporter job down. exporter_dependent,
-    # loki_dependent, b2_dependent, cluster_dependent, startup_grace, grace_streaks and three of
-    # the four probes all decide here.
+    # loki_dependent, b2_dependent, cluster_dependent, wan_dependent, startup_grace,
+    # grace_streaks and four of the five probes all decide here.
     streaks = {}
     seen, pushed = cycle((True, "prom up"), [({"job": "sentinel_job"}, 0.0)], streaks)
     assert seen == ["prom_dep", "graced"]
-    for name in ("exp_dep", "loki_dep", "b2_dep", "cluster_dep"):
+    for name in ("exp_dep", "loki_dep", "b2_dep", "cluster_dep", "wan_dep"):
         assert pushed["tok_%s" % name][0] is True, name
         assert "skipped" in pushed["tok_%s" % name][1], name
     # startup_grace + grace_streaks: `graced` went down but was held `up`, and the streak landed
