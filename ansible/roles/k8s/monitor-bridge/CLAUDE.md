@@ -36,7 +36,7 @@ pages once. A suppressed check pushes `up` with a `skipped — <source> unreacha
 its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the registry.
 
 - **Prometheus Reachable** (`vector(1)`): when Prometheus is unreachable, every
-  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/traefik_421/ups/
+  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_latency/traefik_404/traefik_421/ups/
   host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
   **suppressed**. `tests/test_claude_md_prom_dependent_enumeration.py` pins that list to
   `PROM_DEPENDENT`; edit the set and the sentence together.

@@ -9,6 +9,8 @@ The suppression BEHAVIOUR each set drives lives in `test_check_gates.py`; this f
 about membership.
 """
 
+import inspect
+
 import gates
 import registry
 
@@ -131,3 +133,61 @@ def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
     # versa — the same separation k8s_workloads has.
     assert "cluster_targets" in gates.CLUSTER_DEPENDENT
     assert "cluster_targets" not in gates.PROM_DEPENDENT
+
+
+# ── The COMPLETENESS axis: a Prometheus reader missing from every gate set ──────────────────
+# The guards above assert `<SET> <= names` — every member is a real check. That direction
+# cannot see a check that reads Prometheus and is in NO set, which is what shipped for
+# `traefik_latency` until 2026-09-27 (#2778): it co-fired with the `prometheus` gate on
+# 2026-09-18 and in both Sunday reboots, one root cause paging twice.
+
+
+def prom_readers(checks) -> set[str]:
+    """Registry names whose check body names prom_vector or prom_scalar in its source.
+
+    Derived from the registry rather than transcribed, so a renamed check follows. Direct
+    calls only: a check that reaches Prometheus through a helper of its own passes this
+    vacuously, and chasing transitive calls would trade a guard that is exactly right about
+    what it sees for one that is approximately right about everything.
+    """
+    return {
+        c.name
+        for c in checks
+        if any(
+            token in inspect.getsource(c.fn) for token in ("prom_vector", "prom_scalar")
+        )
+    }
+
+
+def test_prom_readers_are_derivable_from_the_registry():
+    """Non-vacuity: an empty derivation makes the completeness guard below pass on nothing."""
+    readers = prom_readers(registry.build_checks())
+    assert {"disk", "targets", "traefik_latency"} <= readers, (
+        f"prom readers derived from the registry look wrong: {sorted(readers)} — "
+        "the source-scan or the registry shape changed, and the guard below is now inert"
+    )
+
+
+def test_every_prometheus_reader_is_gated():
+    """Every check reading Prometheus is suppressed by the gate that watches its instance.
+
+    PROM_DEPENDENT covers the checks reading PROM_URL, CLUSTER_DEPENDENT those reading
+    CLUSTER_PROM_URL; membership follows the URL a check reads. A reader in neither pages on
+    its own during a Prometheus outage, alongside the gate that already reported it.
+    """
+    ungated = prom_readers(registry.build_checks()) - (
+        gates.PROM_DEPENDENT | gates.CLUSTER_DEPENDENT
+    )
+    assert not ungated, (
+        f"check(s) {sorted(ungated)} query Prometheus but are in neither PROM_DEPENDENT nor "
+        "CLUSTER_DEPENDENT, so a Prometheus outage pages them alongside the gate. Add each to "
+        "the set for the URL it reads — PROM_URL -> PROM_DEPENDENT, CLUSTER_PROM_URL -> "
+        "CLUSTER_DEPENDENT."
+    )
+
+
+def test_a_reader_dropped_from_the_gate_sets_is_flagged():
+    """The reject half: the exact state #2778 describes must not read as clean."""
+    readers = prom_readers(registry.build_checks())
+    without_latency = gates.PROM_DEPENDENT - {"traefik_latency"}
+    assert readers - (without_latency | gates.CLUSTER_DEPENDENT) == {"traefik_latency"}

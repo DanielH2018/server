@@ -45,6 +45,11 @@ PROM_DEPENDENT = frozenset(
         "cpu",
         "targets",
         "traefik5xx",
+        # Reads traefik_service_request_duration_seconds_count/_bucket through prom_vector, so
+        # a Prometheus outage raises in its fetch and _evaluate turns that into a down. Missing
+        # until 2026-09-27 (#2778): it co-fired with the `prometheus` gate on 2026-09-18 and in
+        # both Sunday reboots, one root cause paging twice.
+        "traefik_latency",
         "traefik_404",
         "traefik_421",
         "ups",  # queries HA's Prometheus-scraped UPS battery sensors
