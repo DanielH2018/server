@@ -192,38 +192,42 @@ name become invisible to both this role's own prefix filter and the reaper: noth
 nothing reaps them, and they pin their blocks against `filesystem trim` forever. Not touched in
 this slice.
 
-### The 13 over-long CRs the prune retries and Longhorn refuses, every deploy
+### The 13 over-long CRs the prune retries and Longhorn refuses, removed by hand 2026-09-27
+
+**They are gone.** The operator removed all thirteen on 2026-09-27 (#2734), bypassing the webhook
+for exactly those objects; *How they were removed* below has the method. Nothing refused remains,
+so the prune's tolerated-rejection branch and the `Report snapshots Longhorn refuses to delete`
+task have no live target. The rest of this section records why they could not be deleted
+through any supported route, which still holds for any future over-long name.
 
 Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
 (`code-server-config`, `code-server-workspace`, `home-assistant-config`, `qbittorrent-config`)
-cannot be deleted through the Kubernetes API at all. All thirteen were still there on 2026-09-26,
+could not be deleted through the Kubernetes API at all. On 2026-09-26 they read
 `status.readyToUse: false`, most carrying `status.error` "lost track of the corresponding
-snapshot info inside volume engine". Issue #2686 filed them as never pruned. The prune does
-reach them; the delete is what fails. All thirteen were still listed at 04:30 UTC on
-2026-09-27. Eleven are `markRemoved: false` with the lost-track error. The other two, both
-`code-server-workspace`, carry `markRemoved: true`, and a report earlier that day wrongly
-recorded those two as gone.
+snapshot info inside volume engine". Issue #2686 filed them as never pruned. The prune did
+reach them; the delete was what failed. Eleven were `markRemoved: false` with the lost-track
+error. The other two, both `code-server-workspace`, carried `markRemoved: true`.
 
 **The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
 (2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
 claims rendered names of 65, 68, 71 and 65 bytes; after it, 53, 56, 56 and 53.
 
-**The prune selects them on every deploy.** It filters the live listing on `markRemoved` and the
-`autodeploy-<service>-` prefix — never on `readyToUse` — so an error-state CR with `markRemoved`
-unset is in `volume_snapshot_live`, sorts oldest under the newest-first order, and lands in the
-slice past `volume_snapshot_retain`. The `kubectl delete` is issued, the webhook denies it, and
-the prune's `failed_when` tolerates exactly that one message. Retention is therefore intact —
-the thirteen consume no slot in the window — which is why this stayed invisible: the only signal
-is the `Report snapshots Longhorn refuses to delete` debug line, and under the GitOps deployer
-the play output reaches nobody. The two CRs that do carry `markRemoved: true` leave the candidate
-set instead, so the prune does not retry those two at all.
+**The prune selected them on every deploy.** It filters the live listing on `markRemoved` and
+the `autodeploy-<service>-` prefix — never on `readyToUse` — so an error-state CR with
+`markRemoved` unset is in `volume_snapshot_live`, sorts oldest under the newest-first order, and
+lands in the slice past `volume_snapshot_retain`. The `kubectl delete` is issued, the webhook
+denies it, and the prune's `failed_when` tolerates exactly that one message. Retention stayed
+intact — the thirteen consumed no slot in the window — which is why this stayed invisible: the
+only signal was the `Report snapshots Longhorn refuses to delete` debug line, and under the
+GitOps deployer the play output reaches nobody. The two `markRemoved: true` CRs left the
+candidate set instead, so the prune never retried those two.
 
-**Teaching the orphan reaper the `autodeploy-` prefix would not help.** It skips them today for
-the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it would
-hit the same webhook.
+**Teaching the orphan reaper the `autodeploy-` prefix would not have helped.** It skipped them
+for the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it
+would have hit the same webhook.
 
-**No supported route removes them on Longhorn v1.12.1, the manager API included.** Read from
-the `longhorn-manager` v1.12.1 source on 2026-09-27:
+**No supported route removes an over-long CR on Longhorn v1.12.1, the manager API included.**
+Read from the `longhorn-manager` v1.12.1 source on 2026-09-27:
 
 - Only a Kubernetes DELETE sets the `deletionTimestamp` that the snapshot controller's
   finalizer removal waits on.
@@ -231,20 +235,37 @@ the `longhorn-manager` v1.12.1 source on 2026-09-27:
   selector from the raw snapshot name. That selector is invalid past 63 bytes, so the webhook
   denies every DELETE, whatever client sends it.
 - The manager API's `snapshotDelete` action (`VolumeManager.DeleteSnapshot`) deletes from the
-  engine's chain and never touches the CR. The engine no longer holds these snapshots, so it has
-  nothing to delete. The UI's per-volume delete makes the same call.
+  engine's chain and never touches the CR. The engine no longer held these snapshots, so it had
+  nothing to delete. The UI's per-volume delete makes the same call. The refused-delete report in
+  `claim.yml` still names this route; #2733 corrects it.
 - The manager API's `snapshotCRDelete` action goes through `DeleteSnapshotCR`, which is a
   Kubernetes DELETE and hits the same webhook.
 - The controller sets the lost-track error and nothing else. It never removes such a CR itself.
 
 Upstream master still builds the selector from the raw name, so an upgrade does not fix this
-either. What remains is bypassing the webhook for one delete, which is an operator decision.
+either. `claim.yml`'s name-length assert is what keeps new snapshots under the ceiling.
 
-**They pin no blocks.** Measured 2026-09-27: none of the eleven names appears in
-`status.snapshots` of any of the four volumes' running engines. The controller sets the
-lost-track error exactly when a CR's name is missing from that map. With no chain entry,
-`filesystem trim` has nothing to stop beneath. Leaving them costs a stale Kubernetes object and
-one denied delete per deploy, not reclaimable space.
+**They pinned no blocks.** Measured 2026-09-27, before the removal: none of the thirteen names
+appeared in `status.snapshots` of any of the four volumes' running engines. The controller sets
+the lost-track error exactly when a CR's name is missing from that map. One `markRemoved` CR
+still reported `size: 344064`, which is a stale status field rather than blocks in the chain.
+
+**How they were removed.** An operator-approved scratch play, run from a direct operator session
+because the auto-mode classifier refuses a webhook bypass from an agent session:
+
+1. It asserts the targets by name, and asserts the `longhorn-webhook-validator` webhook's
+   `objectSelector` is `{}`.
+2. It labels only the targets, which is an UPDATE the validator allows.
+3. It sets the webhook's `objectSelector` to skip that label. For a DELETE, the selector matches
+   the old object, so every other object in the cluster stays validated.
+4. It deletes the targets by exact name, then restores `objectSelector: {}` in an `always` block
+   and asserts the restore.
+
+The webhook configuration is applied by longhorn-manager through wrangler's `objectset` with the
+`longhorn-webhook-ca` Secret as owner. longhorn-manager re-applies it on start or on a CA change,
+not on a short loop, so nothing raced the patch and the restore was the play's job. Two runs, both
+`failed=0` with nothing left afterwards: the eleven lost-track CRs, then the two `markRemoved`
+ones.
 
 ## What fails the deploy, and what does not
 
