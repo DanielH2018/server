@@ -347,9 +347,19 @@ def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
     rather than derived here. Issue #929 is a tag that reached no host and read ``settled``
     while the Pi ran old code, so a caller may only pass a tag it can PROVE is k3s-only.
     Empty by default: every existing caller keeps routing to both.
+
+    A named tag that ``records`` declares on NO k8s entry drops out of the restriction rather
+    than out of the routing. The restriction would otherwise leave it under no host at all,
+    which is issue #929 again -- the landing falls through to one local deploy that matches
+    nothing and reads ``settled``. No tag the caller graph produces is Docker-only today; this
+    keeps that from becoming a silent failure if a Pi-only role ever takes a k8s role's name.
     """
     wanted = set(tags)
-    restricted = set(k8s_only)
+    restricted = {
+        tag
+        for tag in k8s_only
+        if any(t == tag and p == "k8s" for _host, p, t in records)
+    }
     by_host: dict[str, set[str]] = {}
     for host, platform, tag in records:
         if tag not in wanted:

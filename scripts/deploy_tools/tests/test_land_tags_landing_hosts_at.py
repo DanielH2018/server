@@ -118,3 +118,13 @@ def test_restricting_one_tag_leaves_the_others_routed_as_before(tmp_path):
     assert land_tags.landing_hosts_at(
         ["newpi", "wg-easy"], shas[1], tmp_path, k8s_only=["wg-easy"]
     ) == {"daniel-box": ["wg-easy"], "daniel-pi": ["newpi"]}
+
+
+def test_restricting_a_tag_with_no_k8s_entry_leaves_it_routed(tmp_path):
+    """The fail-safe: `newpi` is declared on daniel-pi alone, so restricting it to k8s would
+    route it to NO host -- and the landing then falls through to one local deploy that matches
+    nothing and reads `settled` (issue #929). The restriction drops instead."""
+    shas = _repo(tmp_path)
+    assert land_tags.landing_hosts_at(
+        ["newpi"], shas[1], tmp_path, k8s_only=["newpi"]
+    ) == {"daniel-pi": ["newpi"]}
