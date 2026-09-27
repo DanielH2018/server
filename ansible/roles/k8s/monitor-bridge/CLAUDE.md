@@ -36,7 +36,7 @@ pages once. A suppressed check pushes `up` with a `skipped — <source> unreacha
 its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the registry.
 
 - **Prometheus Reachable** (`vector(1)`): when Prometheus is unreachable, every
-  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/ups/
+  prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_404/traefik_421/ups/
   host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
   **suppressed**. `tests/test_claude_md_prom_dependent_enumeration.py` pins that list to
   `PROM_DEPENDENT`; edit the set and the sentence together.
@@ -105,6 +105,10 @@ the alternatives rejected. Read this file for the rule, that one before you chan
 - **Traefik 404 Flood** (`traefik_404`): 404 share of ENTRYPOINT traffic over 5m past
   `TRAEFIK_404_PCT` (90), behind `TRAEFIK_MIN_RPS`. Entrypoint-level, so it survives an edge
   that has lost every router.
+- **Traefik 421** (`traefik_421`): per-ROUTER 421 rate over 5m past `TRAEFIK_421_RPS` (0.02),
+  held for `TRAEFIK_421_CONSECUTIVE` (3) cycles. A client wedged on a connection SNICheck
+  pinned wrong never reaches a service, so the three checks above cannot see it. The message
+  names the router; restarting that client is the fix.
 - **n8n Prod Workflows** (`n8n`): per-active-workflow consecutive-failure streak from n8n's
   public API, accumulated across cycles. `down` at `N8N_CONSECUTIVE_MAX` (3) for one workflow,
   or `N8N_SYSTEMIC_MAX` (2) workflows each at `N8N_SYSTEMIC_STREAK` (2). Streak state resets
@@ -322,7 +326,7 @@ pytest cannot see it because it imports from `files/`.
 | `registry.py` | `build_checks(env)`, every `Check` with its `KUMA_PUSH_*` name read from the environment it is handed |
 | `gates.py` | the five `*_DEPENDENT` sets, `STARTUP_GRACE`, `GATE_DEPENDENTS`, `check_enabled`, `validate_check_filter`, `expand_gates_for_cli`, `down_exporters`, `_evaluate`, `_gate`, and the frozen `Gates` seam `run_once` reads every gate fact through |
 | `bridge/types.py` | `Check`, `CheckResult`, `CheckFn` — shared by `registry.py` and `check.py` without either importing the other |
-| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py`, the generated copy of the deployer's module. `host_edge`'s entry points take the prober as `tcp_open` so a test injects a port map |
+| `checks/<domain>.py` | the `check_*` bodies by domain: `service`, `gitops`, `notify`, `logs`, `cluster` (+ `cluster_etcd`, `cluster_rollout`, `cluster_traefik`, `cluster_zero`), `host`, `host_thermal`, `host_edge`, `b2`, `r2`, `cloudflare_ips`, `healthchecks`, `storage`. `checks/gitops.py` holds `gitops_status` beside its check — the one verdict that reads `cfg` itself — and its parsers come from `gitops_markers.py`, the generated copy of the deployer's module. `host_edge`'s entry points take the prober as `tcp_open` so a test injects a port map |
 | `bridge/config.py` + `config_{host,service,cluster,io}.py` | the `_env`/`_int`/`_num`/`_env_file` parsers, `class Config(HostConfig, ServiceConfig, ClusterConfig, IoConfig)`, `load_config(env)`; one builder per domain. `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` stay in `config.py` because a repo test greps for them by text |
 | `bridge/net.py` | `_get_json`, `_post_json`, `prom_scalar`, `prom_vector`, the `loki_*` queries, `push` with `cap_push_msg` (`PUSH_MSG_MAX`), and the selector builders (`origin_sel`, `cadvisor_sel`, `host_metric_sel`). Every helper that reads a URL or the origin pin takes `cfg` FIRST |
 | `bridge/msgfmt.py` | `format_down(unit, state, items, details)` — the one grammar for a push message naming several things; import-free so `probe.py releases --kuma` loads it from a host too |

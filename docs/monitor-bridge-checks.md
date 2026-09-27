@@ -166,6 +166,16 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   before routing, so it survives that. `TRAEFIK_404_PCT` is 90 rather than a low number
   because a homelab edge serves a steady 404 trickle: measured 2026-09-06, 4.0% of 0.83 rps
   healthy against 100% of 0.61 rps during the outage.)
+- **Traefik 421** (per-**router** 421 rate over 5m, #2757 — the failure all three checks
+  above miss. `SNICheck` pins the TLS-options name once per connection, so a client that
+  connects while Traefik is still reconciling routes after a reboot gets 421 for the life of
+  that connection. The request never reaches a service, and its code is not 404. Three such
+  wedges went unseen in the week to 2026-09-27: authelia for 14.5h from 2026-09-20 23:10, the
+  Pi's Alloy for 4h15m (#2747) and the apiserver's OIDC fetches for 5h30m (#2749). Their
+  steady-state rates were 0.10-0.18 rps. The only other 421 in that week was one 5-minute
+  window on uptime-kuma at 0.0083 rps. `TRAEFIK_421_RPS` is 0.02, an absolute rate rather
+  than a share, and `TRAEFIK_421_CONSECUTIVE` (3) holds a one-shot mismatch below a page: it
+  stays inside a `[5m]` rate for at most two evaluations.)
 - **n8n Prod Workflows** (n8n public API: per-*active*-workflow **consecutive-failure
   streak**. n8n doesn't save successful executions (`EXECUTIONS_DATA_SAVE_ON_SUCCESS=none`, to
   bound `database.sqlite` + its B2 backup churn — 2026-07-03), so "consecutive" can't be read

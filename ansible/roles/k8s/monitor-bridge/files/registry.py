@@ -40,6 +40,7 @@ from checks.cluster import (
     check_traefik_latency,
 )
 from checks.cluster_etcd import check_etcd_db_size
+from checks.cluster_traefik import check_traefik_421
 from checks.host import check_cert, check_disk, check_mem
 from checks.host_thermal import check_host_temp, check_scrutiny, check_ups
 from checks.host_edge import check_pi_pressure, check_speedtest
@@ -106,6 +107,10 @@ def build_checks(env: Mapping[str, str] | None = None) -> list[Check]:
             tok("KUMA_PUSH_TRAEFIK_404"),
             check_traefik_404_flood,
         ),
+        # Minted 2026-09-27 after #2747 and #2749: a client wedged on a connection SNICheck
+        # pinned wrong gets 421 from the router and never reaches a service, so none of the
+        # three Traefik checks above counts it.
+        Check("traefik_421", tok("KUMA_PUSH_TRAEFIK_421"), check_traefik_421),
         Check("n8n", tok("KUMA_PUSH_N8N"), check_n8n),
         Check("arr_queue", tok("KUMA_PUSH_ARR_QUEUE"), check_arr_queue),
         Check("bazarr", tok("KUMA_PUSH_BAZARR"), check_bazarr),

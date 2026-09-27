@@ -127,9 +127,10 @@ See repo-root `CLAUDE.md` for shared conventions.
   `modern`. On 2026-09-27 that wedged the Pi's Alloy (`loki.write` dropping every batch) and
   both of the kube-apiserver's OIDC discovery fetches, for 4h15m and 5h30m respectively, while
   a fresh `curl` to the same URLs answered 200 throughout. **The only recovery is to make the
-  client redial**, which is why a restart fixes it and a config change does not. Nothing
-  detects this state: the request never reaches a backend, so the per-service 5xx and latency
-  checks are blind and `check_traefik_404_flood` counts a different code.
+  client redial**, which is why a restart fixes it and a config change does not. The request
+  never reaches a backend, so the per-service 5xx and latency checks are blind and
+  `check_traefik_404_flood` counts a different code. monitor-bridge's `check_traefik_421`
+  reads the per-router 421 rate instead and pages when one stays up for 15 minutes (#2757).
 - **The router-less window was a backend with no ready endpoints, and `allowEmptyServices`
   closes it** (#2747, #2758). The CRD provider drops a route whose Service has no endpoints
   (`no servers found for homelab/loki-homelab`, 07:49:00Z-07:49:35Z on the reboot, 16s before
