@@ -117,6 +117,25 @@ consumed carries a `spec.volumeName` and passes this role's binding assert rathe
 the deploy there. Whether Longhorn then completes a snapshot of it is what decides reachability,
 and that is untested.
 
+**The Longhorn source explains reason 2, and predicts the never-attached answer.** Read from
+`longhorn-manager` v1.12.1 on 2026-09-27. For a new Snapshot CR with `createSnapshot: true`, the
+snapshot controller calls `handleAttachmentTicketCreation` before it checks the engine. That
+call adds the controller's own attachment ticket, so Longhorn attaches a detached volume by
+itself. The controller then waits for the engine to run, takes the snapshot, and deletes its
+ticket once the snapshot exists. That is why task-6's detached volume got its snapshot on the
+ordinary path. The code draws no line between a detached volume and a never-attached one, so the
+prediction is that a first deploy also snapshots on the ordinary path and the block stays dead.
+This is a reading, not a measurement. The drill in #2698 still has to confirm it and to check
+that the ticket is released and the volume returns to `detached`.
+
+**The drill needs an operator-run `ansible-playbook`.** A scratch play creates the throwaway PVC
+in `default` on `longhorn-nobackup` and includes `k8s/volume-snapshot` the way `k8s/manifests`
+does. It then records the first wait's result, the volume state and the attachment tickets, and
+deletes the claim and its snapshot CRs. A headless session cannot run it, because the
+permission layer holds `ansible-playbook` on a play outside the repo's playbooks for approval.
+No natural first deploy has covered the case either. On 2026-09-27 every surviving first
+`autodeploy-*` snapshot was taken weeks after its volume was created.
+
 **"Does it behave" has no answer, only a bound on the question.** The block has never executed,
 so nothing here is observed behaviour: `k8s/volume-revert` proved the attach/detach mechanism the
 block reuses, and that is the whole of the evidence. Unexecuted code in this role has carried a
@@ -202,10 +221,11 @@ The create path and the prune have both run on real deploys. On 2026-09-26 the c
 `autodeploy-*` Snapshot CRs across 14 services, created from 2026-08-22 onward, 48 of them
 `readyToUse`, and most claims sat at exactly `volume_snapshot_retain` (3). Still unverified:
 
-- **13 CRs from 2026-08-22 are not ready, and the Kubernetes API cannot delete them.** The
-  prune selects them every deploy and Longhorn's webhook denies each delete; removing them needs
-  the Longhorn manager API and has not been tried (#2686). The role doc's *The 13 over-long CRs
-  the prune retries and Longhorn refuses, every deploy* has the cause and the call.
+- **11 CRs from 2026-08-22 are not ready, and nothing supported can delete them.** The prune
+  selects them every deploy and Longhorn's webhook denies each delete. The manager API does not
+  get around it: one of its actions deletes from the engine only, and the other deletes the CR
+  through the same webhook (#2686). They pin no blocks. The role doc's *The 13 over-long CRs the
+  prune retries and Longhorn refuses, every deploy* has the source reading and the measurement.
 - **A never-attached volume** (a service's first deploy) may still need the maintenance-mode
   attach; see "The maintenance-mode attach has never been reached by a deploy" above.
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
