@@ -14,35 +14,122 @@
 # hostname matches from any client IP, unlike unsuffixed names (bridge-ClientIP-gated
 # until k8s_public_route flips).
 
-- name: Ban daniel-pi at the cluster LAPI for the gate window
+# The ban, the proof, and the lift are one block (#2752): the lift sits in `always`, so a gate
+# that fails no longer leaves the Pi banned at the edge for the rest of the decision's life.
+# The gate proves each hop separately, so a failure names the hop that broke: the decision
+# lands at LAPI, then the edge bouncer pulls after it, then the edge answers 403. Waiting
+# on the pull, rather than probing on a guessed timer, is what #2752 was missing. On
+# 2026-09-27 the decision landed at 12:25:18Z, and the bouncer then made no pull at all from
+# 12:22:24Z to 12:32:24Z (the plugin's metrics-ticker stall, see the DECIDED marker in
+# roles/k8s/traefik/templates/dynamic.yaml.j2). Eight probes at 10s intervals saw 302
+# throughout, and the gate failed with nothing naming why.
+- name: Ban daniel-pi and prove the edge enforces it
   tags: [never, b1-gate]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
-      cscli decisions add --ip {{ hostvars['daniel-pi'].server_ip }} --duration 6m
-      --reason slice6-gate
-  become: true
-  changed_when: true
+  block:
+    - name: Ban daniel-pi at the cluster LAPI for the gate window
+      # 15m, not the gate's expected ~1 min: the decision must outlive the pull wait below
+      # plus the probe. The `always` lift removes it the moment the gate ends either way.
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+          cscli decisions add --ip {{ hostvars['daniel-pi'].server_ip }} --duration 15m
+          --reason slice6-gate
+      become: true
+      changed_when: true
 
-- name: Probe the VIP from the banned Pi — expect 403
-  tags: [never, b1-gate]
-  # STILL A POLL, and not convertible to `kubectl wait` (#2205). What it waits on is the Traefik
-  # bouncer plugin picking the decision up: `crowdsecMode: stream` with `updateIntervalSeconds:
-  # 60` in roles/k8s/traefik/templates/dynamic.yaml.j2, so the plugin refreshes its in-process
-  # decision cache from LAPI on its own timer. The decision itself lands in LAPI instantly; the
-  # 403 appears when that timer next fires. Nothing about the cache is a cluster object — no
-  # pod condition, no jsonpath field — so there is no condition for `kubectl wait` to name.
-  # 8 x 10s spans one full interval plus slack.
-  ansible.builtin.command:
-    cmd: >-
-      ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
-      --resolve jellyfin.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
-      https://jellyfin.local.{{ domain }}/
-  register: crowdsec_k8s_gate_banned
-  changed_when: false
-  retries: 8
-  delay: 10
-  until: crowdsec_k8s_gate_banned.stdout == "403"
+    - name: Confirm the ban reached LAPI
+      # `cscli decisions add` exits 0 in cases that store nothing, so read the decision back.
+      # An empty result prints `[]` (clidecision/decisions.go, v1.8.1).
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+          cscli decisions list --ip {{ hostvars['daniel-pi'].server_ip }} -o json
+      become: true
+      register: crowdsec_k8s_gate_decision
+      changed_when: false
+      failed_when: >-
+        crowdsec_k8s_gate_decision.rc != 0
+        or (crowdsec_k8s_gate_decision.stdout | from_json | default([], true) | length) == 0
+
+    - name: Read the edge bouncer's last pull right after the ban
+      # The bouncer is `k8straefik`: templates/config-secret.yaml.j2 registers it as
+      # BOUNCER_KEY_k8straefik. LAPI stamps `last_pull` on every successful stream pull, so a
+      # value newer than this one means the plugin has fetched a stream that holds the ban.
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+          cscli bouncers list -o json
+      become: true
+      register: crowdsec_k8s_gate_bouncers_before
+      changed_when: false
+
+    - name: Wait for the edge bouncer to pull after the ban
+      # One `updateIntervalSeconds: 60` interval plus slack. This is still a poll, and not
+      # convertible to `kubectl wait` (#2205): `last_pull` is a row in the LAPI database, not
+      # a field on any cluster object.
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+          cscli bouncers list -o json
+      become: true
+      register: crowdsec_k8s_gate_bouncers
+      changed_when: false
+      retries: 12
+      delay: 10
+      until: >-
+        crowdsec_k8s_gate_bouncers.rc == 0
+        and (crowdsec_k8s_gate_bouncers.stdout | from_json
+             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list)
+        != (crowdsec_k8s_gate_bouncers_before.stdout | from_json
+             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list)
+
+    - name: Probe the VIP from the banned Pi — expect 403
+      # The bouncer has already pulled the ban, so the 403 is immediate. The retries absorb
+      # only the ssh hop and the plugin's in-process cache write.
+      ansible.builtin.command:
+        cmd: >-
+          ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'
+          --resolve jellyfin.local.{{ domain }}:443:{{ k3s_metallb_ingress_vip }}
+          https://jellyfin.local.{{ domain }}/
+      register: crowdsec_k8s_gate_banned
+      changed_when: false
+      retries: 3
+      delay: 5
+      until: crowdsec_k8s_gate_banned.stdout == "403"
+
+  rescue:
+    - name: Name why the edge did not enforce the ban
+      ansible.builtin.fail:
+        msg: >-
+          The edge ban gate failed at "{{ ansible_failed_task.name }}".
+          {% if ansible_failed_task.name is search('reached LAPI') %}
+          LAPI holds no decision for {{ hostvars['daniel-pi'].server_ip }} after
+          `cscli decisions add`, so the edge had nothing to enforce. Output:
+          {{ crowdsec_k8s_gate_decision.stdout | default('') | truncate(300) }}
+          {% elif ansible_failed_task.name is search('pull after the ban') %}
+          The decision is in LAPI, but the k8straefik bouncer made no stream pull in 120s, so
+          the edge never fetched it. Its last_pull stayed at
+          {{ crowdsec_k8s_gate_bouncers_before.stdout | default('[]') | from_json
+             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list }}.
+          A plugin stream-ticker stall (#2752) or a Traefik pod that cannot reach LAPI does
+          this. Check the LAPI log for GET /v1/decisions/stream from the traefik pod.
+          {% elif ansible_failed_task.name is search('expect 403') %}
+          The bouncer pulled after the ban, but the edge still answered
+          {{ crowdsec_k8s_gate_banned.stdout | default('nothing') }}, not 403. Look at what
+          sits between the pull and the edge: the `crowdsec` Middleware on the https
+          entrypoint's chain, and whether the Pi's address is the client IP Traefik sees.
+          {% else %}
+          {{ ansible_failed_result.msg | default(ansible_failed_result.stderr | default('')) }}
+          {% endif %}
+
+  always:
+    - name: Lift the test ban
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
+          cscli decisions delete --ip {{ hostvars['daniel-pi'].server_ip }}
+      become: true
+      changed_when: true
 
 # The Docker-edge leg of this gate ("B2, one LAPI both edges") retired at E7: it probed
 # homepage.<domain> resolved to daniel-server, a route E3 had already moved to the cluster
@@ -50,20 +137,12 @@
 # tag does not protect these tasks from `--tags crowdsec` — deploy.yml's per-role block
 # tag is added to every inner task, so the explicit service tag requests them.
 
-- name: Lift the test ban
-  tags: [never, b1-gate]
-  ansible.builtin.command:
-    cmd: >-
-      k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
-      cscli decisions delete --ip {{ hostvars['daniel-pi'].server_ip }}
-  become: true
-  changed_when: true
-
 - name: Probe the VIP from the unbanned Pi — expect service to resume
   tags: [never, b1-gate]
-  # The same poll as the banned probe above, for the same reason: the lift is instant at LAPI
-  # and reaches the edge only when the plugin's stream timer next refreshes its cache. No
-  # cluster object carries that, so `kubectl wait` has no condition to name (#2205).
+  # Runs only when the block above passed; a failed gate stops the play at its rescue. The
+  # lift is instant at LAPI and reaches the edge only at the plugin's next stream pull, so
+  # this polls one interval plus slack. No cluster object carries that pull, so `kubectl
+  # wait` has no condition to name (#2205).
   ansible.builtin.command:
     cmd: >-
       ssh daniel-pi curl -sk -o /dev/null -w '%{http_code}'

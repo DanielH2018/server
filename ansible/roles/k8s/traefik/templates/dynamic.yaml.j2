@@ -194,6 +194,18 @@ spec:
       # permanently dead LAPI must still eventually fail closed rather than serve a
       # silently frozen ban-list forever.
       updateMaxFailure: 5
+      # DECIDED: no usage-metrics ticker. At the default 600s the plugin's metrics tick lands
+      # on every tenth stream tick, and on some of those coincidences (v1.7.1, under Yaegi) the
+      # stream ticker then skips every pull until a later metrics tick, silently and with no
+      # log line: 13 stalls of exactly 600s or 1200s in 3 days here, each starting on a
+      # metrics tick (#2752). A ban or an unban made in that window never reaches the edge.
+      # Upstream maxlerebourg/crowdsec-bouncer-traefik-plugin#377 reproduced it with both
+      # periods scaled down 30x, and saw zero stalls over 284 host-hours with this set to 0.
+      # 0 passes the plugin's validation and New() starts no metrics ticker. The cost is the
+      # bouncer's dropped-request count in `cscli metrics`, which nothing here reads. Revisit
+      # when a release closes #377. The ticker is a package global, so only a Traefik restart
+      # (the manifests rollout-restart does one) stops a ticker already running.
+      metricsUpdateIntervalSeconds: 0
       # AppSec Component — inline L7 WAF. stream mode above is the reactive ban-list (bans
       # an IP after a pattern of log lines); this inspects each request inline BEFORE the
       # backend, so a first-hit malicious payload (CVE string / SQLi / path traversal) is

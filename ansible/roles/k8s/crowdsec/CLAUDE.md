@@ -88,14 +88,37 @@ The gate is unprovable in check mode by construction: you cannot demonstrate a b
 enforced without taking the ban. Check mode skips the *ban* task, so the probe that follows
 it can never see a 403. `ansible/roles/k8s/crowdsec/tasks/main.yml` therefore gates its
 `import_tasks: verify.yml` on `not k8s_no_mutate`, which also covers a `k8s_dry_run`. A
-`when` on an import propagates to every task in the imported file, so one line covers all
-four tasks in `ansible/roles/k8s/crowdsec/tasks/verify.yml`. Keep that guard when adding a
-task there.
+`when` on an import propagates to every task in the imported file, including those nested in
+a block, so one line covers every task in `ansible/roles/k8s/crowdsec/tasks/verify.yml`.
+Keep that guard when adding a task there.
 
 Before the guard, check mode ran the probe against an un-banned host and it burned all eight
 retries on every `--check` of this role. A dry run that always reports red trains an operator
 to skip the check, which is what `.claude/rules/ansible.md` asks for before touching
 production state.
+
+### The ban gate waits for the edge bouncer's pull, not a timer
+
+The gate proves three hops in order, and its rescue names the hop that failed:
+
+1. The decision reads back from LAPI (`cscli decisions list --ip`).
+1. The `k8straefik` bouncer's `last_pull` in `cscli bouncers list` moves past its value
+   read just after the ban. Only a stream pull after the ban can carry it to the edge.
+1. The edge answers 403 to the Pi.
+
+The ban, the checks and the probe sit in one block, and the lift is in its `always`. A failed
+gate therefore leaves no ban on the Pi behind it.
+
+Until #2752 the gate probed on a fixed 80s timer. On 2026-09-27 that failed a 58-service
+deploy with eight 302s, then passed on a re-run. The decision had landed at LAPI at 12:25:18Z,
+but the Traefik bouncer made no stream pull from 12:22:24Z to 12:32:24Z. That was the
+plugin's metrics-ticker stall, which `metricsUpdateIntervalSeconds: 0` turns off. The
+`DECIDED: no usage-metrics ticker` comment in
+`ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` has the evidence. A failure at hop 2
+means the stall is back, or the traefik pod cannot reach LAPI. The LAPI log's
+`GET /v1/decisions/stream` lines from the traefik pod tell those two apart.
+`ansible/tests/services/test_crowdsec_ban_gate.py` evaluates the hop-2 wait against sample
+`cscli` output and pins the order and the `always` lift.
 
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
 The agent sidecar in the traefik pod logs this against a Traefik access-log line cut at a
@@ -116,7 +139,7 @@ fails the parser with no error at all, so nothing here can count that loss.
 Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Traefik's
 `bufferingSize` batches entries into a channel and still writes one line per call, and
 `poll_without_inotify` only changes when the reader wakes. The fix is
-crowdsecurity/crowdsec#4678 (sets `CompleteLines: true`, open as of 2026-09-22, not in any
+crowdsecurity/crowdsec#4678 (sets `CompleteLines: true`; on 2026-09-22 it was open and in no
 release). **Re-check #2124 on the next `crowdsec_k8s_image` bump**
 (`ansible/inventory/group_vars/all.yml:crowdsec_k8s_image`): a release carrying that PR
 closes it; verify with
