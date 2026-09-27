@@ -55,6 +55,9 @@
       # The bouncer is `k8straefik`: templates/config-secret.yaml.j2 registers it as
       # BOUNCER_KEY_k8straefik. LAPI stamps `last_pull` on every successful stream pull, so a
       # value newer than this one means the plugin has fetched a stream that holds the ban.
+      # The pulls land on an auto-created `k8straefik@<pod IP>` row, not on `k8straefik`:
+      # LAPI adds one per new Traefik pod IP (80 rows on 2026-09-27), and the base row last
+      # pulled on 2026-08-09. So the gate reads the newest `last_pull` across all of them.
       ansible.builtin.command:
         cmd: >-
           k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
@@ -79,9 +82,11 @@
       until: >-
         crowdsec_k8s_gate_bouncers.rc == 0
         and (crowdsec_k8s_gate_bouncers.stdout | from_json
-             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list)
-        != (crowdsec_k8s_gate_bouncers_before.stdout | from_json
-             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list)
+             | selectattr('name', 'match', '^k8straefik(@|$)') | map(attribute='last_pull')
+             | reject('none') | max | default(''))
+        > (crowdsec_k8s_gate_bouncers_before.stdout | from_json
+           | selectattr('name', 'match', '^k8straefik(@|$)') | map(attribute='last_pull')
+           | reject('none') | max | default(''))
 
     - name: Probe the VIP from the banned Pi — expect 403
       # The bouncer has already pulled the ban, so the 403 is immediate. The retries absorb
@@ -110,7 +115,8 @@
           The decision is in LAPI, but the k8straefik bouncer made no stream pull in 120s, so
           the edge never fetched it. Its last_pull stayed at
           {{ crowdsec_k8s_gate_bouncers_before.stdout | default('[]') | from_json
-             | selectattr('name', 'equalto', 'k8straefik') | map(attribute='last_pull') | list }}.
+             | selectattr('name', 'match', '^k8straefik(@|$)') | map(attribute='last_pull')
+             | reject('none') | max | default('never') }}.
           A plugin stream-ticker stall (#2752) or a Traefik pod that cannot reach LAPI does
           this. Check the LAPI log for GET /v1/decisions/stream from the traefik pod.
           {% elif ansible_failed_task.name is search('expect 403') %}

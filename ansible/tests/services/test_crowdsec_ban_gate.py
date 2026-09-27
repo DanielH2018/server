@@ -40,11 +40,27 @@ def _task(tasks: list[dict], prefix: str) -> dict:
     return matches[0]
 
 
-def _bouncers(last_pull: str | None, rc: int = 0) -> dict:
+def _bouncers(
+    live_pull: str | None, rc: int = 0, new_pod_pull: str | None = None
+) -> dict:
+    """`cscli bouncers list -o json` as LAPI returns it on daniel-box.
+
+    The base `k8straefik` row is stale: LAPI records each Traefik pod's pulls on an
+    auto-created `k8straefik@<pod IP>` row. The gate's first live run compared only the base
+    row and waited out a pull that had happened (#2752).
+    """
     rows = [
-        {"name": "k8straefik", "last_pull": last_pull},
-        {"name": "some-other-bouncer", "last_pull": "2026-09-27T12:40:00Z"},
+        {"name": "k8straefik", "last_pull": "2026-08-09T14:11:31.542634271Z"},
+        {
+            "name": "k8straefik@10.42.0.118",
+            "last_pull": "2026-09-27T07:36:07.091402493Z",
+        },
+        {"name": "k8straefik@10.42.0.207", "last_pull": live_pull},
+        {"name": "dockertraefik", "last_pull": None},
+        {"name": "k8straefik-lookalike", "last_pull": "2026-09-27T13:59:00Z"},
     ]
+    if new_pod_pull:
+        rows.append({"name": "k8straefik@10.42.0.31", "last_pull": new_pod_pull})
     return {"rc": rc, "stdout": json.dumps(rows) if rc == 0 else ""}
 
 
@@ -60,21 +76,40 @@ def _pulled(before: dict, now: dict) -> bool:
     return templar.template(trust_as_template("{{ " + until + " }}"))
 
 
-def test_a_pull_after_the_ban_releases_the_wait() -> None:
-    before = _bouncers("2026-09-27T12:22:24.4Z")
-    assert _pulled(before, _bouncers("2026-09-27T12:23:24.4Z")) is True
+_BEFORE = _bouncers("2026-09-27T13:32:24.382113004Z")
 
 
 @pytest.mark.parametrize(
     "now",
     [
-        pytest.param(_bouncers("2026-09-27T12:22:24.4Z"), id="no-pull-since-the-ban"),
+        pytest.param(
+            _bouncers("2026-09-27T13:33:24.383283726Z"), id="live-pod-row-pulled"
+        ),
+        pytest.param(
+            _bouncers(
+                "2026-09-27T13:32:24.382113004Z", new_pod_pull="2026-09-27T13:33:40.1Z"
+            ),
+            id="restarted-pod-new-row-pulled",
+        ),
+    ],
+)
+def test_a_pull_after_the_ban_releases_the_wait(now: dict) -> None:
+    assert _pulled(_BEFORE, now) is True
+
+
+@pytest.mark.parametrize(
+    "now",
+    [
+        pytest.param(
+            _bouncers("2026-09-27T13:32:24.382113004Z"), id="no-pull-since-the-ban"
+        ),
         pytest.param(_bouncers(None, rc=1), id="cscli-failed"),
     ],
 )
 def test_no_pull_after_the_ban_holds_the_wait(now: dict) -> None:
-    # The other bouncer's pull must not count: only the edge bouncer fetches the ban.
-    assert _pulled(_bouncers("2026-09-27T12:22:24.4Z"), now) is False
+    # `k8straefik-lookalike` pulled recently in every fixture, and must not count: only the
+    # edge bouncer's own rows carry the ban to Traefik.
+    assert _pulled(_BEFORE, now) is False
 
 
 def test_the_probe_runs_only_after_the_pull_wait() -> None:
