@@ -6,6 +6,11 @@ worktree cut from a fresher `origin/master` registers scripts that checkout does
 `/bin/sh` exits 127, and the tool call runs with the guard skipped. `fanout_lib/launch.py`
 closed the fan-out half; this arm is how a hand-made worktree hears about it.
 
+Issue #2709 added the second half: `settings.json` names only the `.sh` shims, and each shim
+runs a `.py` sibling it resolves itself, so a present `session-health.sh` beside a missing
+`session-health.py` used to read as covered. That one fails quieter than the 127 — the shim runs
+— so it gets its own banner line, and the pairs below hold the two diagnoses apart.
+
 Every test drives `hooklib.hook_registration_lines` through its `checkout`, `read_settings` and
 `exists` seams rather than patching a module attribute, because the monkeypatch ratchet
 (`ansible/tests/_ratchet.py`) caps a new test module at zero patches on a first-party module.
@@ -209,3 +214,154 @@ def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
     assert len(commands) >= 9, commands
     names = {os.path.basename(c) for c in commands}
     assert {"session-health.sh", "bash-pretool.sh", "block-protected-edits.sh"} <= names
+
+
+# --- the `.py` sibling each shim resolves for itself (issue #2709) -------------------------
+
+# The idiom every shim in this repo uses, and the only one `sibling_py_paths` rules on.
+_SHIM_BODY = (
+    "exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \\\n"
+    '  "$(dirname "$(readlink -f "$0")")/new.py"\n'
+)
+
+
+def _sibling_lines(present, shim_body=_SHIM_BODY):
+    """The banner lines when `new.sh` is registered and carries `shim_body`."""
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    return arm.missing_hook_script_lines(
+        checkout=_CHECKOUT,
+        read_settings=lambda: settings,
+        exists=lambda path: path in set(present),
+        read_text=lambda _path: shim_body,
+    )
+
+
+def test_a_shim_whose_py_sibling_the_primary_checkout_has_is_clean():
+    assert _sibling_lines(present=(f"{_HOOKS}/new.sh", f"{_HOOKS}/new.py")) == []
+
+
+def test_a_shim_whose_py_sibling_the_primary_checkout_lacks_is_flagged():
+    (line,) = _sibling_lines(present=(f"{_HOOKS}/new.sh",))
+    assert f"{_HOOKS}/new.py" in line
+    assert "127" not in line, (
+        "the shim is present and runs, so nothing exits 127 — handing the operator the "
+        "missing-shim diagnosis here is a false one"
+    )
+    assert "RUNS" in line, "what makes this one quieter than a missing shim"
+    assert "SKIPPED" in line, "the consequence, not just the missing file"
+    assert f"git -C {_ROOT} merge --ff-only origin/master" in line
+
+
+def test_the_sibling_resolves_against_the_checkout_that_holds_the_shim():
+    """Joining it to the SESSION's checkout would point the arm at the tree that has the file."""
+    (line,) = _sibling_lines(present=(f"{_HOOKS}/new.sh",))
+    assert _CHECKOUT not in line
+
+
+def test_each_failure_mode_gets_its_own_line():
+    settings = {
+        "hooks": {
+            "PreToolUse": [
+                {
+                    "hooks": [
+                        {"command": f"{_HOOKS}/gone.sh"},
+                        {"command": f"{_HOOKS}/new.sh"},
+                    ]
+                }
+            ]
+        }
+    }
+    shim, sibling = arm.missing_hook_script_lines(
+        checkout=_CHECKOUT,
+        read_settings=lambda: settings,
+        exists=lambda path: path == f"{_HOOKS}/new.sh",
+        read_text=lambda _path: _SHIM_BODY,
+    )
+    assert f"{_HOOKS}/gone.sh" in shim and "127" in shim
+    assert f"{_HOOKS}/new.py" in sibling and "127" not in sibling
+
+
+def test_a_missing_shim_is_not_also_read_for_siblings():
+    """One cause, one finding: the file that would name the siblings is the one that is gone."""
+
+    def boom(path):
+        raise AssertionError(f"read the shim that does not exist: {path}")
+
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    (line,) = arm.missing_hook_script_lines(
+        checkout=_CHECKOUT,
+        read_settings=lambda: settings,
+        exists=lambda _path: False,
+        read_text=boom,
+    )
+    assert ".py" not in line
+
+
+def test_a_shim_that_names_no_sibling_is_not_ruled_on():
+    """`uv-python.sh` and `ansible-lint.sh` run no `.py` at all."""
+    assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body="exit 0\n") == []
+
+
+def test_a_sibling_path_composed_from_a_variable_is_not_ruled_on():
+    """`validate-compose.sh`'s `$repo_root/scripts/validate/${script}.py` is undecidable here.
+
+    It reports its own absence loudly instead (`… MISSING at … — the hook needs updating`,
+    exit 2), which is why abstaining costs nothing.
+    """
+    body = 'script_path="$repo_root/scripts/validate/${script}.py"\n'
+    assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body=body) == []
+
+
+def test_a_shim_this_cannot_read_says_nothing():
+    def boom(path):
+        raise PermissionError(path)
+
+    settings = {"hooks": {"PreToolUse": [{"hooks": [{"command": f"{_HOOKS}/new.sh"}]}]}}
+    assert (
+        arm.missing_hook_script_lines(
+            checkout=_CHECKOUT,
+            read_settings=lambda: settings,
+            exists=lambda path: path == f"{_HOOKS}/new.sh",
+            read_text=boom,
+        )
+        == []
+    )
+
+
+def test_the_repos_own_shims_name_the_siblings_this_parse_must_find():
+    """Non-vacuity: the parse finds its subjects by matching one idiom in shell text.
+
+    A shim that stops spelling that idiom — a reformat splitting the line differently, a move
+    to `$CLAUDE_PROJECT_DIR` — resolves to nothing, and every `..._is_clean` half above stays
+    green while the arm covers no sibling at all. So the real shims are the anchor, named
+    rather than counted so the failure says which one went missing.
+    """
+    hooks = Path(__file__).resolve().parents[1]
+    found = {
+        shim.name: {Path(p).name for p in arm.sibling_py_paths(str(shim))}
+        for shim in sorted(hooks.glob("*.sh"))
+    }
+    expected = {
+        "auto-mode-bridge.sh": {"auto-mode-bridge.py"},
+        "bash-pretool.sh": {"bash-pretool.py"},
+        "block-protected-edits.sh": {"block-protected-edits.py"},
+        "log-instructions.sh": {"log-instructions.py"},
+        "session-health.sh": {"session-health.py"},
+    }
+    for name, siblings in expected.items():
+        assert found.get(name) == siblings, found
+    # The three that name no resolvable sibling, listed so a NEW shim with an unrecognised
+    # idiom fails here instead of abstaining in silence.
+    assert {name for name, siblings in found.items() if not siblings} == {
+        "ansible-lint.sh",
+        "uv-python.sh",
+        "validate-compose.sh",
+    }, found
+
+
+def test_every_named_sibling_exists_in_this_checkout():
+    """The parse resolves real files, not plausible names: a typo would abstain-by-existing."""
+    hooks = Path(__file__).resolve().parents[1]
+    for shim in sorted(hooks.glob("*.sh")):
+        for sibling in arm.sibling_py_paths(str(shim)):
+            assert Path(sibling).is_file(), f"{shim.name} names a missing {sibling}"

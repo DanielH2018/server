@@ -17,10 +17,13 @@ Two limits, stated rather than implied:
     primary checkout may lack, and a SessionStart hook that does not exist prints nothing. The
     window this arm closes is "the primary checkout is missing SOME hook scripts"; the window
     where it is missing THIS one stays open, and only a fast-forward closes it.
-  * **It sees the `.sh` shims only, because that is all `settings.json` names.** Every shim runs
-    a `.py` sibling it resolves itself, so a present `session-health.sh` beside a missing
-    `session-health.py` reads as covered here. That failure surfaces as a hook that runs and
-    does nothing instead of one that exits 127.
+  * **It rules on the `.py` sibling only where the shim names it by the shared idiom.** Five
+    shims run their sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and that form is
+    matched literally rather than parsed as shell (issue #2709). A shim naming its `.py` some
+    other way, or composing the path from a variable the way `validate-compose.sh` does, gets
+    no verdict — abstaining is the posture `script_path` already takes for a path it cannot
+    resolve, and `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what
+    keeps abstention from quietly becoming the whole answer.
 
 Split out of session-health.py, which sits at its own 600-line cap (`ansible/tests/_ratchet.py`)
 with no headroom left. Package name is `hooklib`, not `lib`, for the reason session-health.py's
@@ -29,6 +32,7 @@ own import comment gives.
 
 import json
 import os
+import re
 import shlex
 
 # How many missing scripts the line names before it counts the rest. A behind checkout is
@@ -127,6 +131,51 @@ def script_path(command, checkout):
     return os.path.normpath(path)
 
 
+# The `.py` sibling a shim runs from its own location:
+#
+#     exec /home/ubuntu/.local/bin/uv run --no-sync --quiet python \
+#       "$(dirname "$(readlink -f "$0")")/bash-pretool.py"
+#
+# One literal idiom, matched as text. Reading a shim in general means parsing shell, which is
+# why #2697 left the siblings out; five of this repo's eight shims share this one form, so
+# matching the form covers every sibling that exists without a parser. Anything else abstains,
+# because a banner line that cries wolf over a working hook is worse than one that stays quiet
+# about an odd one — `script_path`'s own docstring makes the same trade.
+_SIBLING_PY = re.compile(
+    r"""\$\(\s*dirname\s+"?\$\(\s*readlink\s+-f\s+"\$0"\s*\)"?\s*\)/([A-Za-z0-9_.-]+\.py)"""
+)
+
+
+def sibling_py_paths(shim_path, read_text=None):
+    """The `.py` files the shim at `shim_path` runs out of its own directory, in file order.
+
+    `$(dirname "$(readlink -f "$0")")` is the directory of the RESOLVED shim — the primary
+    checkout's `.claude/hooks/`, since `settings.json` names the shim by an absolute path there.
+    So the sibling is joined to `shim_path`'s directory and never to the session's checkout:
+    joining it to the checkout would point the whole arm at the worktree, which has the file.
+
+    An unreadable shim yields [], the same best-effort posture as an unparsable settings file.
+    """
+    if not shim_path.endswith(".sh"):
+        return []
+    if read_text is None:
+
+        def read_text(path):
+            with open(path, encoding="utf-8") as handle:
+                return handle.read()
+
+    try:
+        text = read_text(shim_path)
+    except OSError:
+        return []
+    directory = os.path.dirname(shim_path)
+    names = []
+    for name in _SIBLING_PY.findall(text):
+        if name not in names:
+            names.append(name)
+    return [os.path.join(directory, name) for name in names]
+
+
 def _fix_command(path):
     """The fast-forward that restores `path`, when its checkout root is derivable from it.
 
@@ -141,17 +190,44 @@ def _fix_command(path):
     return f"git -C {root} merge --ff-only origin/master"
 
 
-def missing_hook_script_lines(checkout=None, read_settings=None, exists=None, cwd=None):
-    """One banner line for the hook scripts this session registers and cannot run, or [].
+def _shown(paths):
+    """The paths a line names, with a count standing in for the rest past `MISSING_LIMIT`."""
+    shown = ", ".join(paths[:MISSING_LIMIT])
+    if len(paths) > MISSING_LIMIT:
+        shown += f", +{len(paths) - MISSING_LIMIT} more"
+    return shown
+
+
+def _with_fix(line, paths):
+    """`line` plus the fast-forward for `paths`, where the first path names its checkout."""
+    fix = _fix_command(paths[0])
+    if not fix:
+        return line
+    return line + f"; fast-forward the checkout that holds them: `{fix}`"
+
+
+def missing_hook_script_lines(
+    checkout=None, read_settings=None, exists=None, cwd=None, read_text=None
+):
+    """Banner lines for the hook scripts this session registers and cannot run, or [].
+
+    Up to two lines, because the two failure modes have different symptoms and an operator
+    reading one diagnosis must not be handed the other's:
+
+      * a registered `.sh` the primary checkout lacks — `/bin/sh` exits 127 and Claude Code
+        logs a non-blocking hook error (issue #2697);
+      * a `.py` sibling that shim runs, which the primary checkout lacks — the shim RUNS, so
+        nothing exits 127 and the guard is skipped anyway (issue #2709).
 
     Args:
         checkout: the session's checkout. Defaults to `session_checkout(cwd=cwd)`.
         cwd: the session's directory, for the walk `session_checkout` falls back to. The
             SessionStart payload's `cwd` where the caller has it, since the hook's own process
-            cwd is whatever Claude Code happened to launch it with.
+            cwd is whatever Claude Code launched it with.
         read_settings: returns the parsed `.claude/settings.json` of `checkout`. Defaults to
             reading and parsing it.
         exists: path predicate. Defaults to `os.path.exists`.
+        read_text: returns a shim's text, for `sibling_py_paths`. Defaults to reading the file.
 
     Seams are parameters rather than patched attributes, like `parked_deployer_problems`: the
     monkeypatch ratchet (`ansible/tests/_ratchet.py`) caps a new test module at zero patches on
@@ -177,22 +253,41 @@ def missing_hook_script_lines(checkout=None, read_settings=None, exists=None, cw
         settings = read_settings()
     except OSError, ValueError:
         return []
-    missing = []
+    missing_shims = []
+    missing_siblings = []
     for command in registered_hook_commands(settings):
         path = script_path(command, checkout)
-        if path and not exists(path) and path not in missing:
-            missing.append(path)
-    if not missing:
-        return []
-    shown = ", ".join(missing[:MISSING_LIMIT])
-    if len(missing) > MISSING_LIMIT:
-        shown += f", +{len(missing) - MISSING_LIMIT} more"
-    fix = _fix_command(missing[0])
-    line = (
-        f"  ✗ {len(missing)} hook script(s) this session registers do not exist: {shown} — "
-        "/bin/sh exits 127, Claude Code logs a non-blocking hook error, and every matching "
-        "tool call runs with that guard SKIPPED"
-    )
-    if fix:
-        line += f"; fast-forward the checkout that holds them: `{fix}`"
-    return [line]
+        if not path:
+            continue
+        # A missing shim is not also read for siblings: the shim that would name them is the
+        # file that is gone, so every sibling it names is a guess, and the fast-forward the
+        # first line already carries is the same one either way.
+        if not exists(path):
+            if path not in missing_shims:
+                missing_shims.append(path)
+            continue
+        for sibling in sibling_py_paths(path, read_text=read_text):
+            if not exists(sibling) and sibling not in missing_siblings:
+                missing_siblings.append(sibling)
+    lines = []
+    if missing_shims:
+        lines.append(
+            _with_fix(
+                f"  ✗ {len(missing_shims)} hook script(s) this session registers do not "
+                f"exist: {_shown(missing_shims)} — /bin/sh exits 127, Claude Code logs a "
+                "non-blocking hook error, and every matching tool call runs with that guard "
+                "SKIPPED",
+                missing_shims,
+            )
+        )
+    if missing_siblings:
+        lines.append(
+            _with_fix(
+                f"  ✗ {len(missing_siblings)} .py script(s) a registered shim runs do not "
+                f"exist: {_shown(missing_siblings)} — the shim is there, so it RUNS: "
+                "`uv run` cannot find the script, and the guard is SKIPPED behind a hook that "
+                "reports no error",
+                missing_siblings,
+            )
+        )
+    return lines
