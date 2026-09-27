@@ -126,7 +126,12 @@ not rotated again by the weekly cron. Examples:
   consumers (`--tags traefik`/`--tags authelia` on daniel-box for the sidecars). The delete is
   required because re-registration never UPDATES an existing key. For the bouncer key that is
   one command:
-  `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers delete k8straefik`.
+  `kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli bouncers delete --ignore-missing k8straefik`.
+  The hourly bouncer-prune cron usually deletes the base `k8straefik` row first, and then this
+  command deletes nothing. The old key's `k8straefik@<pod IP>` rows cannot be deleted by name,
+  so they stay valid until the prune removes them, within two hours of the Traefik redeploy.
+  The engine restart registers the new key either way, because the base name is missing. The
+  bouncer-prune section of `ansible/roles/k8s/crowdsec/CLAUDE.md` has the mechanism.
   For the agent password it is one `cscli machines delete <name>` per machine, and there are
   four: `k8s-traefik-agent`, `k8s-authelia-agent`, `k8s-node-agent-daniel-box` and
   `k8s-node-agent-daniel-server`. The last two are per-node and come from

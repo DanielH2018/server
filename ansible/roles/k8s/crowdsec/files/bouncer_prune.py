@@ -70,20 +70,25 @@ def base_name(name):
 @dataclass
 class Plan:
     prune: list
-    survivor: dict | None
     refused: str = ""
 
-    def summary(self):
-        if self.refused or self.survivor is None:
-            return self.refused
-        kept = f"kept {self.survivor['name']} (last pull {self.survivor['last_pull']})"
-        if not self.prune:
-            return f"nothing to prune; {kept}"
-        names = ",".join(self.prune[:LISTED])
-        more = (
-            f" and {len(self.prune) - LISTED} more" if len(self.prune) > LISTED else ""
-        )
-        return f"pruned {len(self.prune)} rows: {names}{more}; {kept}"
+
+def report(before, after, edge=EDGE_BOUNCER):
+    """The summary line, read from the list taken AFTER the prune rather than from the plan.
+
+    It names the rows that actually went and the edge rows left, with the oldest `last_pull`
+    among them: the number to compare with the live Traefik pod's start (#2762's Verify-by).
+    """
+    gone = sorted({r["name"] for r in before} - {r["name"] for r in after})
+    left = [r for r in after if base_name(r["name"]) == edge]
+    pulled = [r for r in left if r.get("last_pull")]
+    oldest = min(pulled, key=lambda r: parse_time(r["last_pull"]), default=None)
+    oldest = oldest["last_pull"] if oldest else "none"
+    state = f"{len(left)} {edge} rows left, oldest last pull {oldest}"
+    if not gone:
+        return f"nothing pruned; {state}"
+    more = f" and {len(gone) - LISTED} more" if len(gone) > LISTED else ""
+    return f"pruned {len(gone)} rows: {','.join(gone[:LISTED])}{more}; {state}"
 
 
 def plan(rows, now, window=WINDOW, margin=MARGIN, edge=EDGE_BOUNCER):
@@ -100,12 +105,11 @@ def plan(rows, now, window=WINDOW, margin=MARGIN, edge=EDGE_BOUNCER):
         newest = survivor["last_pull"] if survivor else "never"
         return Plan(
             prune,
-            survivor,
             f"refusing to prune: no {edge} row pulled in the last "
             f"{int((window - margin).total_seconds() // 60)}m (newest {newest}), so the prune "
             "could delete the last row holding its key",
         )
-    return Plan(prune, survivor)
+    return Plan(prune)
 
 
 def run(argv):
@@ -135,12 +139,15 @@ def main(runner=run, now=None):
     rows = json.loads(cscli(runner, "bouncers", "list", "-o", "json") or "[]")
     decided = plan(rows, now)
     if decided.refused:
-        print(decided.summary())
+        print(decided.refused)
         return 1
-    if decided.prune:
-        minutes = int(WINDOW.total_seconds() // 60)
-        cscli(runner, "bouncers", "prune", "-d", f"{minutes}m", "--force")
-    print(decided.summary())
+    if not decided.prune:
+        print(report(rows, rows))
+        return 0
+    minutes = int(WINDOW.total_seconds() // 60)
+    cscli(runner, "bouncers", "prune", "-d", f"{minutes}m", "--force")
+    after = json.loads(cscli(runner, "bouncers", "list", "-o", "json") or "[]")
+    print(report(rows, after))
     return 0
 
 

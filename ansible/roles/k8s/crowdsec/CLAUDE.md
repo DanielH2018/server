@@ -143,8 +143,9 @@ in the hour. That includes the base `k8straefik` row, and the image entrypoint r
 - Pruning the LAST row that holds the key makes LAPI answer 403 to the edge. The module
   therefore refuses to prune unless a `k8straefik*` row pulled in the last 50 minutes.
 
-Each run logs one line under the `crowdsec-bouncer-prune` syslog tag. The line names the
-rows deleted and the row kept, or starts `status=down` for a refusal. A session reads it with
+Each run logs one line under the `crowdsec-bouncer-prune` syslog tag. The line comes from a
+second `cscli bouncers list` taken after the prune. It names the rows deleted, the count of
+`k8straefik` rows left and the oldest `last_pull` among them. A refusal starts `status=down`. A session reads it with
 `probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`, because `cscli bouncers
 list` needs `pods/exec`. There is no Kuma monitor: a failed run only lets rows accumulate
 until the next run succeeds. To stop pruning, remove the "Schedule the bouncer prune" task
