@@ -70,7 +70,7 @@ def check_n8n(cfg: Config, now: datetime | None = None) -> tuple[bool, str]:
     )
 
 
-def check_arr_queue(cfg: Config, fetch=None) -> tuple[bool, str]:
+def check_arr_queue(cfg: Config, fetch=None, now=None) -> tuple[bool, str]:
     """Sonarr/Radarr queue warning/blocked-import watchdog (see queue_warnings).
 
     Empty SONARR_API_KEY/RADARR_API_KEY independently skip that app (like the multi-webhook
@@ -89,9 +89,15 @@ def check_arr_queue(cfg: Config, fetch=None) -> tuple[bool, str]:
     is not a transient, and delaying it is the 2026-07-01 incident this check exists for.
     pageSize=250 mirrors n8n's page cap — ample for a homelab queue.
 
+    The ONE exception to that ungraced queue verdict is Sonarr's self-clearing title hold,
+    held for `ARR_TITLE_HOLD_GRACE_H` (#2786). It is not a fault waiting to be diagnosed:
+    Sonarr applies it and releases it itself, and the four conditions that turn the hold off are
+    in queue_warnings.
+
     `fetch` is the injectable *arr boundary, the seam check_cluster_targets and
     checks/host_edge.py already use. Resolved in the body, not as a default: a default binds at
-    import, before a test could reach bridge.net.
+    import, before a test could reach bridge.net. `now` is the injectable clock the title-hold
+    grace is measured against; None means real time.
     """
     fetch = fetch or bridge.net._get_json
     apps = [
@@ -127,7 +133,9 @@ def check_arr_queue(cfg: Config, fetch=None) -> tuple[bool, str]:
             )
             bridge.streaks._down_streaks["arr_queue_fetch"] = count
             return held, note
-        offenders.extend(queue_warnings(data, app_name))
+        offenders.extend(
+            queue_warnings(data, app_name, now, cfg.ARR_TITLE_HOLD_GRACE_H)
+        )
     bridge.streaks._down_streaks["arr_queue_fetch"] = 0
     if offenders:
         desc = "; ".join(

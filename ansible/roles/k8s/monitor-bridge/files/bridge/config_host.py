@@ -68,6 +68,7 @@ class HostConfig:
     SPEEDTEST_DOWNLOAD_MIN_MBPS: float
     SPEEDTEST_MAX_AGE_H: float
     SPEEDTEST_CONSECUTIVE: int
+    SPEEDTEST_FLOOR_CONSECUTIVE: int
     HOST_ORIGINS_MIN: int
     HOST_ORIGINS_CONSECUTIVE: int
     # The cgroups whose `claude_cgroup_*` textfile series MUST be reporting for the arm folded
@@ -413,11 +414,16 @@ def host_config(
         # per-key filter, so a token in monitor-bridge-env is a token in every process's
         # environment.
         SPEEDTEST_TOKEN=_env_file("SPEEDTEST_TOKEN", ""),
-        # Download floor, Mbit/s. 100 is not a target — it is the empty band. Results are bimodal
-        # by which Ookla server the run drew: over 2026-08-14..24 the 20 runs on server 41671 had
-        # a median of 910 Mbps and a worst of 119, while the 17 runs on six other servers had a
-        # median of 12.8 and a best of 42.8. Nothing landed between 42.8 and 119, so any floor in
-        # that gap separates the two populations with room on both sides.
+        # Download floor, Mbit/s. 100 WAS the empty band between two populations and is no
+        # longer: re-measured 2026-09-27 (#2785). Every scheduled run now draws the pinned
+        # server 41671, so the second population the band sat above is gone from the series
+        # entirely, and 41671's own low tail is continuous — over the 95 six-hourly samples
+        # Prometheus retained (28.4d of the 30d asked for): min 61.4, p2 75.0, p5 95.1, p10
+        # 146.0, median 868.8 Mbps, with 5 samples under 100. So 100 is now a PERCENTILE CUT at
+        # about p5, not a gap, and one result beneath it is a slow run rather than a slow link.
+        # That is why the floor arm needs SPEEDTEST_FLOOR_CONSECUTIVE results, not one. The
+        # value itself stays: it still marks the fifth percentile of a ~870 Mbps link, which is
+        # the "the WAN is degraded" reading this check exists to catch.
         SPEEDTEST_DOWNLOAD_MIN_MBPS=_num("SPEEDTEST_DOWNLOAD_MIN_MBPS", "100"),
         # Staleness ceiling, hours. SPEEDTEST_SCHEDULE runs every 6h, so 8 allows one missed slot
         # plus slack. This arm is what notices the scheduler dying — the failure mode with no
@@ -425,8 +431,22 @@ def host_config(
         # probes.
         SPEEDTEST_MAX_AGE_H=_num("SPEEDTEST_MAX_AGE_H", "8"),
         # Consecutive-cycle hysteresis for the FETCH only, never for the verdict — see
-        # check_speedtest.
+        # check_speedtest. The floor arm's hysteresis is a different knob measured in a
+        # different unit, SPEEDTEST_FLOOR_CONSECUTIVE below: cycles for the fetch, RESULTS for
+        # the floor.
         SPEEDTEST_CONSECUTIVE=_int("SPEEDTEST_CONSECUTIVE", "2"),
+        # Consecutive sub-floor RESULTS the floor arm needs before it pages (#2785). A test runs
+        # every 6h, so one slow result held the tile red for ~6h — three times in the 14 days to
+        # 2026-09-27, 11.6h in total. Read from the API's own history (the fetch asks for this
+        # many rows), never from bridge cycles: 72 cycles re-reading one row prove nothing, while
+        # two results are two measurements. They are usually 6h apart and NOT necessarily so — a
+        # manual run writes into the same results table (the series carries `scheduled="false"`
+        # rows against unpinned servers), so one of the two slots can hold an operator's own
+        # test minutes after the scheduled one. 2 is the smallest value that rejects a
+        # single bad draw, and it caps the page's delay at one test interval. 1 restores the
+        # old page-on-sight behaviour; the status and age arms are untouched by this knob and
+        # still page on the newest row alone.
+        SPEEDTEST_FLOOR_CONSECUTIVE=_int("SPEEDTEST_FLOOR_CONSECUTIVE", "2"),
         # Distinct `origin` values the host-metric checks must see. node-exporter is a DaemonSet
         # on both nodes, so a vector grouped by origin returning fewer than this has LOST a host,
         # not measured a healthy estate — and check_disk/check_mem would report the survivor's
@@ -516,7 +536,8 @@ def host_config(
         # Only 12 one-minute points in the window put daniel-box `fleet` over 0.05%. The
         # SPEEDTEST_DOWNLOAD_MIN_MBPS shape does not apply: there is no second population to sit
         # between, because a legitimate peak of 0.15% and a threshold of 10% are separated by
-        # what `full` means (30 seconds of every task stalled), not by a measured breach.
+        # what `full` means (30 seconds of every task stalled), not by a measured breach. (That
+        # floor has since lost its own second population too — see its comment above.)
         # Lowering it toward 0.15% would page on the first afternoon busier than this window.
         #
         # The CLAUDE_CGROUP_CONSECUTIVE half of #1288 is answered the same way: `resets(...[7d])`

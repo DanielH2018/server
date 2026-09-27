@@ -124,8 +124,8 @@ the alternatives rejected. Read this file for the rule, that one before you chan
 - **Arr Queue Warnings** (`arr_queue`): sonarr's and radarr's `/api/v3/queue` — `down` on
   any item with `trackedDownloadStatus == "warning"`, `importBlocked`, or `importPending`
   carrying `statusMessages`, naming the release. Each API key is independent; both empty
-  disables. The FETCH rides `ARR_FETCH_CONSECUTIVE` (3); a queue item pages on the cycle it
-  is seen.
+  disables. The FETCH rides `ARR_FETCH_CONSECUTIVE` (3); an item pages on the cycle it is seen
+  unless EVERY reason on it is Sonarr's self-clearing title hold (`ARR_TITLE_HOLD_GRACE_H`, 48 h).
 - **Bazarr Health** (`bazarr`): `/api/system/status` + `/api/system/health` — `down` when a
   peer version field (`sonarr_version`/`radarr_version`) is present but empty, or bazarr
   self-reports a health issue. An ABSENT field is ignored. Header is `X-API-KEY`.
@@ -184,8 +184,8 @@ the alternatives rejected. Read this file for the rule, that one before you chan
   Long-Lived Access Token, file-mounted (`HA_TOKEN_FILE`).
 - **k3s Speedtest** (`speedtest`): newest `/api/v1/results` row — status, then age
   (`SPEEDTEST_MAX_AGE_H`, 8 h against a 6 h schedule), then download under
-  `SPEEDTEST_DOWNLOAD_MIN_MBPS` (100). Hysteresis on the fetch only
-  (`SPEEDTEST_CONSECUTIVE`), never on the verdict.
+  `SPEEDTEST_DOWNLOAD_MIN_MBPS` (100), which pages only on `SPEEDTEST_FLOOR_CONSECUTIVE` (2)
+  sub-floor RESULTS from one fetch's rows. Fetch hysteresis is in CYCLES, never the verdict.
 - **Loki Log Ingestion** (`loki_ingestion`): three freshness arms, `down` if ANY is silent —
   the file-tail union `LOKI_STREAM` over `LOKI_FILETAIL_WINDOW` (deployed selector is
   `authlog|syslog`; traefik is NOT covered), the docker stream `LOKI_DOCKER_STREAM` over

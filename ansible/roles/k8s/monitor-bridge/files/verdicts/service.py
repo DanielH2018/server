@@ -127,8 +127,23 @@ def gitops_alive(age_s: float, max_age_s: float) -> tuple[bool, str]:
     return False, "deployer last ran %.0fm ago (> %.0fm)" % (age_s / 60, max_age_s / 60)
 
 
+# Sonarr's two self-clearing title holds, verbatim from
+# NzbDrone.Core/MediaFiles/EpisodeImport/Specifications/EpisodeTitleSpecification.cs
+# (ImportRejectionReason.TitleTba and .TitleMissing). Sonarr applies them itself and clears them
+# itself once the title arrives; no operator action exists for either. Matched as an exact
+# message rather than a loose `TBA` regex, so a reason that merely mentions a TBA title still
+# pages.
+SELF_CLEARING_TITLE_HOLDS = (
+    "Episode has a TBA title and recently aired",
+    "Episode does not have a title and recently aired",
+)
+
+
 def queue_warnings(
-    queue_json: dict | None, app_name: str
+    queue_json: dict | None,
+    app_name: str,
+    now: datetime | None = None,
+    title_hold_grace_h: float = 48.0,
 ) -> list[tuple[str, str, str]]:
     """Pure: (app_name, title, reason) for each queue item needing an operator's eyes.
 
@@ -142,7 +157,25 @@ def queue_warnings(
     the block reason shows up under the pending state instead. Plain "importPending" with
     no messages is the ordinary just-finished-download queue waiting its turn — not a
     problem, so it's left alone.
+
+    SELF_CLEARING_TITLE_HOLDS are held for `title_hold_grace_h` instead of flagged (#2786).
+    Three of this check's seven DOWN episodes in the 14 days to 2026-09-27 were "Episode has a
+    TBA title and recently aired" (2.9h, 7.4h and 2.9h) — a hold Sonarr applies and releases on
+    its own, so the page named no action. The grace is 48h and not the 24h the issue proposed
+    because 48h is upstream's OWN window: EpisodeTitleSpecification skips the check once
+    `airDateUtc` is more than 48 hours old, so a hold still on the item after that can no longer
+    be the title rule and IS stuck. `added` is the clock (it is at or after the air date, so the
+    grace measured from it is never shorter than upstream's), and an item with no parsable
+    `added` is flagged rather than held — a missing timestamp must not buy an item silence.
+
+    The hold is narrow in three further ways. It needs EVERY reason on the item to be a
+    self-clearing one, so a TBA message arriving beside a Custom Format rejection still pages.
+    It never applies to `importBlocked`/`importFailed`, which are harder states than the title
+    rule produces. It never applies to `trackedDownloadStatus == "error"`. The four remaining
+    episodes in that 14-day window were "Not a Custom Format upgrade for existing episode
+    file(s)" and keep paging.
     """
+    now = now or datetime.now(timezone.utc)
     offenders = []
     for item in queue_json.get("records", []):
         status = item.get("trackedDownloadStatus")
@@ -157,9 +190,43 @@ def queue_warnings(
             continue
         title = item.get("title") or "?"
         reasons = [m for sm in messages for m in sm.get("messages", [])]
+        if _within_title_hold_grace(
+            item, status, state, reasons, now, title_hold_grace_h
+        ):
+            continue
         reason = "; ".join(reasons) or status or state or "warning"
         offenders.append((app_name, title, reason))
     return offenders
+
+
+def _within_title_hold_grace(
+    item: dict,
+    status: str | None,
+    state: str | None,
+    reasons: list[str],
+    now: datetime,
+    grace_h: float,
+) -> bool:
+    """Is this item ONLY on Sonarr's self-clearing title hold, and young enough to wait?
+
+    Every gate here fails toward flagging, which is the direction that keeps a real fault
+    visible: no reasons, a reason outside SELF_CLEARING_TITLE_HOLDS, a harder state or status,
+    a missing or unparsable `added`, or an item past the grace all return False.
+    """
+    if not reasons or not all(r.strip() in SELF_CLEARING_TITLE_HOLDS for r in reasons):
+        return False
+    if status == "error" or state in ("importBlocked", "importFailed"):
+        return False
+    added = item.get("added")
+    if not added:
+        return False
+    try:
+        stamp = parse_rfc3339(str(added))
+    except ValueError:
+        return False
+    if stamp.tzinfo is None:
+        stamp = stamp.replace(tzinfo=timezone.utc)
+    return (now - stamp).total_seconds() / 3600 < grace_h
 
 
 def indexers_down(

@@ -262,3 +262,29 @@ google_assistant:
 # Known hosts = 10.0.0.137 (the Hub's reserved lease). This is a one-time .storage step, like the
 # Energy dashboard. external_url/internal_url (in the homeassistant: block above) let the cast
 # receiver reach HA. Full runbook: SETUP.md §11.
+
+# Log levels. `default: info` restates HA's own out-of-box level, so this block changes nothing
+# except the one override below.
+logger:
+  default: info
+  logs:
+    # SILENCED on purpose (#2781), measured 2026-09-27 over the 7 days to that date. Every line
+    # monitor-bridge's log-burst arm matched in this container came from this logger: 197 hits of
+    # its pattern `(?i)(panic:|fatal|traceback|out of memory)`, all of them a bare `Traceback
+    # (most recent call last):`, against exactly 197 `Exception thrown when calling cast status
+    # listener` records. The bursts reach 21-30 lines/hour against LOG_ERROR_MAX=20, so they held
+    # the composite `k8s_workloads` tile red 11 times in 14 days, and a tile already red reports
+    # no new DOWN transition for a real replica, crashloop or DaemonSet failure.
+    #
+    # The fault itself is one-sided and benign. pychromecast's homeassistant controller hands the
+    # Nest Hub Max (10.0.0.137) HA's external_url, the receiver cannot reach it, and
+    # `_connect_hass failed for https://home-assistant.<the public domain>` raises
+    # PyChromecastError on every cast-status callback. Casting a dashboard still works. Silencing
+    # this logger drops the ERROR record and its traceback together, because the traceback is
+    # that record's exc_info rather than a line of its own.
+    #
+    # The cost is that a genuine cast-controller failure is silenced too. The rejected
+    # alternative is monitor-bridge's LOG_ERROR_IGNORE, whose own comment says a growing ignore
+    # list means the arm is decaying. `pychromecast.socket_client` keeps its default level: its
+    # connect-retry lines carry no traceback, so the arm never counted them.
+    pychromecast.controllers: critical

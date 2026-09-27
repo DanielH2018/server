@@ -341,13 +341,41 @@ def hwmon_temp_verdict(limits: list[tuple[str, float, float, str]]) -> tuple[boo
     )
 
 
+def _sub_floor(row: dict | None, min_mbps: float) -> bool:
+    """Pure: is `row` a completed result whose download figure is under the floor?
+
+    Anything else — no row, a failed row, a completed row with no figure — is NOT a sub-floor
+    result, so it cannot be the second half of a consecutive pair. A failed run writes no row at
+    all (see check_speedtest's `# DECIDED:`), and the status and age arms judge such a row on
+    their own account.
+    """
+    if not row or row.get("status") != "completed":
+        return False
+    bits = row.get("download_bits")
+    return bits is not None and float(bits) / 1e6 < min_mbps
+
+
 def speedtest_verdict(
-    row: dict | None, min_mbps: float, max_age_h: float, now: datetime | None = None
+    row: dict | None,
+    min_mbps: float,
+    max_age_h: float,
+    now: datetime | None = None,
+    prev_rows: list | None = None,
+    floor_consecutive: int = 2,
 ) -> tuple[bool, str]:
     """Pure: judge the newest speedtest-tracker result row. (ok, msg).
 
     `row` is one element of /api/v1/results' `data`, or None when the app returned no rows at
-    all.
+    all. `prev_rows` holds the rows BEFORE it, newest first — the floor arm is the only arm that
+    reads them.
+
+    THE FLOOR ARM NEEDS `floor_consecutive` SUB-FLOOR RESULTS, the other arms judge `row` alone
+    (#2785). One slow result held the tile red for the full 6h until the next test, three times
+    in the 14 days to 2026-09-27 (11.6h in total), and a single Ookla run is not evidence the
+    link is slow. Consecutive means consecutive RESULTS, not consecutive bridge cycles: the
+    cycles re-read the identical row. A run of results is genuinely new information; a run of
+    cycles is not. With fewer results available than the knob asks for — a fresh app, or a
+    single row in the window — the arm holds `up` and says so, because it cannot yet see a run.
 
     THE TIMESTAMP IS UTC DESPITE CARRYING NO OFFSET. /api/v1/results serializes `created_at` as
     a bare "2026-08-24 11:00:00", while /api/speedtest/latest serializes the SAME row as
@@ -403,10 +431,21 @@ def speedtest_verdict(
         "name"
     ) or "unknown server"
     if mbps < min_mbps:
-        return False, "download %.1f Mbps (< %g) via %s — %.1fh ago" % (
-            mbps,
-            min_mbps,
-            server,
-            age_h,
+        # A contiguous run backwards from the newest result, not a count of sub-floor rows in
+        # the window: one slow result either side of a fast one is two incidents, not a run.
+        run = 1
+        for older in list(prev_rows or [])[: max(0, floor_consecutive - 1)]:
+            if not _sub_floor(older, min_mbps):
+                break
+            run += 1
+        if run < floor_consecutive:
+            return True, (
+                "download %.1f Mbps (< %g) via %s — %.1fh ago; %d/%d sub-floor results, "
+                "holding for the next test"
+                % (mbps, min_mbps, server, age_h, run, floor_consecutive)
+            )
+        return False, (
+            "download %.1f Mbps (< %g) via %s — %.1fh ago; %d/%d consecutive results under "
+            "the floor" % (mbps, min_mbps, server, age_h, run, floor_consecutive)
         )
     return True, "download %.1f Mbps via %s, %.1fh ago" % (mbps, server, age_h)
