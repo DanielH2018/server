@@ -77,3 +77,20 @@ optimize_pi_gz_integrity_state_file: /var/lib/pi-health/gz-integrity.state
 # missed run is tolerated; shorter than two, so a sweep that stops running goes down rather
 # than reporting yesterday's verdict forever.
 optimize_pi_gz_integrity_max_age_h: 26
+
+# Arms the container-recovery cron (tasks/main.yml, `Schedule the container-recovery heartbeat`).
+# True installs the cron; false REMOVES it, which is the reversal a role re-run respects — where
+# editing the task to `state: absent` is a repo edit another session's `--tags recovery-health`
+# run silently undoes. Set it per host in `inventory/host_vars/daniel-pi.yml`, so the intent
+# lives in the inventory rather than in a working tree.
+#
+# It ships TRUE, unlike renovate_agent's switch. The cron has been installed unconditionally
+# since #1910 and is the only thing that restarts a container whose *create* failed at the OCI
+# runtime — `restart: unless-stopped` does not (autoheal, 2026-08-29, down ~50 min). A
+# default-off flag would make the next `--tags recovery-health` run remove the live cron.
+#
+# Detection and remediation share one script, so disarming ends the heartbeat too: the "Daniel
+# Pi Recovery" Kuma monitor trips its 600s watchdog within ten minutes. That is the intended
+# signal, not a second fault.
+# ENFORCED: ansible/tests/setup/test_pi_recovery_restarts_and_reports.py.
+optimize_pi_recovery_restart_enabled: true

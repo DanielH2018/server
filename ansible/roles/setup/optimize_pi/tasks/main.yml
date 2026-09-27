@@ -954,11 +954,18 @@
   # Every 5 min — the Kuma monitor's 600s window is 2x this. Cost per run: one `docker ps`
   # filter per watched container + one LAN HTTPS request; `docker inspect` and `docker start`
   # run only for a container that is down. Nothing measurable on the Zero 2 W.
+  #
+  # Both directions are wired: setting optimize_pi_recovery_restart_enabled to false removes the
+  # cron, so disarming is an inventory flag rather than an edit to this task that the next
+  # `--tags recovery-health` run undoes. The script above stays installed either way, so an
+  # operator can still run one cycle by hand. ENFORCED:
+  # ansible/tests/setup/test_pi_recovery_restarts_and_reports.py.
   ansible.builtin.cron:
     name: "Pi container-recovery heartbeat"
     minute: "*/5"
     job: "/usr/local/bin/pi-recovery-health.sh"
     user: "{{ sys_user }}"
+    state: "{{ 'present' if optimize_pi_recovery_restart_enabled else 'absent' }}"
   become: true
 
 # SUDO RESOLVES THE LOCAL HOSTNAME ON EVERY INVOCATION, and this file is the first hop. Without
