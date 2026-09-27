@@ -59,3 +59,15 @@ def k8s_only_tags(files, declared: set[str] | None = None) -> list[str]:
         if tag := land_tags.tag_for(path, declared):
             trees.setdefault(tag, set()).add(path.startswith(K8S_TREE))
     return sorted(tag for tag, in_k8s in trees.items() if in_k8s == {True})
+
+
+def diff_range(ref: str) -> str:
+    """The git range `deploy_tags.py changed <ref>` derives its tags from.
+
+    Three dots, and HEAD on the right: `changed` reads `<ref>...HEAD` in the primary checkout
+    (`deploy_tags._git_diff_paths`). The landing's fallback derivation reads the same range's
+    paths to prove a tag's platform (#2738), so the two spellings have to be one spelling --
+    a two-dot range would prove the platform of a different file set than the tags came from.
+    `test_land_platform.py` holds this against that helper.
+    """
+    return f"{ref}...HEAD"

@@ -169,9 +169,9 @@ def classify(ln: Landing) -> None:
     if source == DeriveSource.PR:
         # Which of these tags a changed PATH proves is a k3s change (#2730). Read over `paths`
         # rather than `tags`, which `derive` has already widened with the build couplings: a
-        # coupled tag is named by no path, so nothing proves its platform. On the FALLBACK
-        # path nothing is read at all -- `derive_from_diff` rebuilds the tags in step 5 from a
-        # diff this classification never sees, and an empty set routes to every declaring host.
+        # coupled tag is named by no path, so nothing proves its platform. The FALLBACK path
+        # answers the same question in step 5 instead, over the diff's paths rather than this
+        # file list, which `gh` truncated -- `deploy.record_k8s_only` (#2738).
         ln.k8s_only = _classified(
             ln, "k8s-only tag classification", c.k8s_only_tags, paths, declared
         )

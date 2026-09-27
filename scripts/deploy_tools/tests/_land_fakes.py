@@ -79,6 +79,10 @@ class Fakes:
     # (#2520). It refuses by default, which is what every range written before it did.
     narrowed: str = ""
     narrowed_rc: int = DEPLOY_BROAD
+    # `git diff --name-only <since>...HEAD`: the paths the fallback derivation proves a tag's
+    # platform from (#2738), and the return code of the read.
+    diff_paths: list[str] = field(default_factory=list)
+    diff_rc: int = 0
     gate: tuple[bool, list[str]] = field(
         default_factory=lambda: (True, ["sonarr: healthy"])
     )
@@ -144,6 +148,12 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         record.append(("remaining_setup_hosts", (local_host,), {}))
         return f.remaining_setup
 
+    def k8s_only_tags(paths, declared=None):
+        # The paths are recorded: the fallback derivation must hand the DIFF's paths rather
+        # than the PR's file list, which `gh` truncated (#2738).
+        record.append(("k8s_only_tags", tuple(paths), {}))
+        return list(f.path_k8s_only)
+
     return Classifier(
         plane_note=lambda paths, declared=None, quiet=(), narrow_tags=None: f.plane,
         self_applied=lambda paths, quiet=(): f.self_applied,
@@ -154,7 +164,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
         ),
         quiet_paths=lambda paths, range_: set(),
         shared_caller_tags=lambda paths, declared=None: f.shared_callers,
-        k8s_only_tags=lambda paths, declared=None: list(f.path_k8s_only),
+        k8s_only_tags=k8s_only_tags,
     )
 
 
@@ -206,6 +216,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.fetch_rc)
         if args == ("rev-parse", "FETCH_HEAD"):
             return _cp(0, "prhead\n")
+        if args[0] == "diff":
+            return _cp(f.diff_rc, "\n".join(f.diff_paths) + "\n")
         if args[0] == "merge-base" and "--is-ancestor" in args:
             return _cp(f.merge_applied_rc if args[-1] == "HEAD" else f.is_ancestor_rc)
         if args[0] == "merge-base":

@@ -24,6 +24,7 @@ from deploy_tools.exit_codes import (
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,
 )
+from deploy_tools import land_platform
 from deploy_tools.land_lib import ci, tick
 from deploy_tools.land_lib.landing import Landing, TickState, retry_while_locked
 from deploy_tools.land_lib.outcome import (
@@ -74,8 +75,11 @@ def derive_from_diff(ln: Landing) -> None:
     """
     say(f"deriving tags from the diff since {ln.opts.since}")
     r = ln.tools.deploy_tags(ln.opts.primary, ["changed", ln.opts.since])
+    narrowed = False
     if r.returncode == DEPLOY_BROAD:
-        r = _narrowed(ln) or r
+        alt = _narrowed(ln)
+        narrowed = alt is not None
+        r = alt or r
     if r.returncode == DEPLOY_BROAD:
         # The tick is the apply for this range, so the deployer's own markers answer this
         # landing and `no_tag_outcome` is where they are read. This used to exit 1 with NO
@@ -104,6 +108,54 @@ def derive_from_diff(ln: Landing) -> None:
     # deploy.sh, which would refuse the whole list as a tag miss. Deliberate: the empty
     # element carries no service, so refusing on it is a false failure.
     ln.resolved_tags = [t for t in r.stdout.strip().split(",") if t]
+    if not narrowed:
+        record_k8s_only(ln)
+
+
+def record_k8s_only(ln: Landing) -> None:
+    """Which of the FALLBACK derivation's tags the diff's own paths prove are k3s (#2738).
+
+    `classify` fills `k8s_only` from the PR's file list, and a PR over `gh`'s 100-file page has
+    no such list: `derive_from_diff` rebuilds the tags from `deploy_tags.py changed`, which
+    prints tags and keeps no paths. Nothing proved a platform, so `wg-easy` kept routing to
+    daniel-pi as well -- one extra ssh deploy of a Compose service the change never touched.
+
+    The paths come from the range `changed` derived the tags from, `land_platform.diff_range`,
+    read in the primary checkout because that is the tree `changed` read. Two things narrow the
+    answer further:
+
+    - INTERSECTED with `resolved_tags`, because `--since` bounds a range wider than this PR.
+      A tag another session's merge in the range contributed would otherwise reach the
+      `--k8s-only=` argv for a service this landing never deploys.
+    - `expand_build_couplings` is already applied to what `changed` printed, and a coupled tag
+      is named by no path, so the path derivation leaves it out -- the same reason
+      `classify` records the caller expansion before the widening (#2718).
+
+    Every failure leaves `k8s_only` empty and routes to every declaring host, which is the
+    direction a wrong answer here must fall (issue #929).
+
+    The `_narrowed` sub-branch does not come here at all. Its tags map broad paths to the
+    services whose render they reach, which no path names, so the derivation would return
+    nothing for them; skipping it says that in one place rather than leaving the reader to
+    work out that an empty answer was the right one.
+    """
+    rng = land_platform.diff_range(ln.opts.since)
+    r = ln.git("diff", "--name-only", rng)
+    if r.returncode != 0:
+        say(f"could not read the paths of {rng} — routing every tag to both platforms")
+        return
+    paths = [p for p in r.stdout.splitlines() if p.strip()]
+    try:
+        proved = ln.classifier.k8s_only_tags(paths, ln.declared)
+    except Exception as exc:
+        say(f"platform not proved ({type(exc).__name__}) — routing to both platforms")
+        return
+    ln.k8s_only = sorted(set(proved) & set(ln.resolved_tags))
+    if ln.k8s_only:
+        say(
+            f"the diff proves {','.join(ln.k8s_only)} is a k3s change; "
+            "routing it to the cluster alone"
+        )
 
 
 def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:

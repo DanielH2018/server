@@ -15,6 +15,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy_platform_routing.
 """
 
 from _land_fakes import MERGE_SHA, Fakes
+from deploy_tools.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 
 
@@ -59,3 +60,92 @@ def test_a_landing_that_proved_no_platform_sends_no_restriction(landing):
     ln.resolved_tags = ["alloy"]
     assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
     assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("hosts", "alloy")]
+
+
+# ── where the fallback derivation's own k8s_only comes from (issue #2738) ──
+
+_K8S_PATH = "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2"
+
+
+def _fallback(landing, fakes, **opts):
+    """A landing whose tags come from the diff, `gh` having truncated the PR's file list."""
+    ln, calls = _ready(landing, fakes, since="beefbeef", **opts)
+    ln.needs_diff = True
+    return ln, calls
+
+
+def test_the_fallback_proves_a_platform_from_the_diffs_own_paths(landing):
+    """CLEAN half: the range's paths all sit under the k8s tree, so the rebuilt tag routes to
+    the cluster alone instead of adding an ssh deploy of the Pi's wg-easy."""
+    ln, calls = _fallback(
+        landing,
+        Fakes(changed="wg-easy\n", diff_paths=[_K8S_PATH], path_k8s_only=["wg-easy"]),
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.k8s_only == ["wg-easy"]
+    # The DIFF's paths, not the PR's file list: the fake answers the same either way, so
+    # asserting only on `k8s_only` would pass with the truncated list handed over.
+    assert [c[1] for c in calls if c[0] == "k8s_only_tags"] == [(_K8S_PATH,)]
+    assert [c[1] for c in calls if c[0] == "git" and c[1][0] == "diff"] == [
+        ("diff", "--name-only", "beefbeef...HEAD")
+    ]
+
+
+def test_a_fallback_tag_named_in_both_trees_keeps_both_hosts(landing):
+    """REJECTING half: the derivation proves nothing for a tag whose paths span both role
+    trees, and the landing must then keep deploying the Pi (issue #929)."""
+    ln, _calls = _fallback(
+        landing, Fakes(changed="wg-easy\n", diff_paths=[_K8S_PATH], path_k8s_only=[])
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.k8s_only == []
+
+
+def test_a_tag_the_range_proves_but_this_landing_never_deploys_drops_out(landing):
+    """`--since` bounds a range wider than this PR, so the paths can prove a tag another
+    session's merge contributed. Intersected with the derivation, or the stray reaches the
+    `--k8s-only=` argv for a service this landing does not deploy."""
+    ln, _calls = _fallback(
+        landing,
+        Fakes(
+            changed="wg-easy\n",
+            diff_paths=[_K8S_PATH],
+            path_k8s_only=["sonarr", "wg-easy"],
+        ),
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.k8s_only == ["wg-easy"]
+
+
+def test_the_deployers_own_narrowing_proves_no_platform(landing):
+    """`narrow` maps a broad path to the services whose render it reaches, and no path names
+    those tags, so that branch never asks."""
+    ln, calls = _fallback(
+        landing,
+        Fakes(
+            changed_rc=DEPLOY_BROAD,
+            narrowed_rc=0,
+            narrowed="wg-easy\n",
+            diff_paths=[_K8S_PATH],
+            path_k8s_only=["wg-easy"],
+        ),
+    )
+    deploy.derive_from_diff(ln)
+    assert (ln.resolved_tags, ln.k8s_only) == (["wg-easy"], [])
+    assert [c[0] for c in calls if c[0] == "k8s_only_tags"] == []
+
+
+def test_a_path_read_that_fails_routes_to_both_platforms(landing):
+    """Every failure falls the safe way: no restriction rather than a guessed one."""
+    ln, calls = _fallback(
+        landing,
+        Fakes(
+            changed="wg-easy\n",
+            diff_rc=1,
+            diff_paths=[_K8S_PATH],
+            path_k8s_only=["wg-easy"],
+        ),
+    )
+    deploy.derive_from_diff(ln)
+    assert ln.k8s_only == []
+    assert [c[0] for c in calls if c[0] == "k8s_only_tags"] == []
