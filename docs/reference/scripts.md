@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-27 06:17 UTC
-generated_sha: 0e5e82b9e
+generated_at: 2026-09-27 18:17 UTC
+generated_sha: 79c866a24
 ---
 
 !!! warning "Generated file — do not edit"
@@ -167,7 +167,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/lib/k8s_yaml.py` | YAML parsing for rendered k8s manifests: the strict loaders and the ``lookup()`` stub. | imported by ansible_jinja_env.py, k8s_manifests.py, k8s_pvc.py | `test_k8s_yaml.py` |
 | `scripts/lib/kubectl.py` | One way to run kubectl from a script, and every call names the cluster it must reach. | imported by _gates_fakes.py, arr.py, b2_ledger.py, cli_parser.py, export_grafana_dashboards.py, gen_infra_map.py, health.py, health_docker.py, k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, live.py, longhorn.py, longhorn_cluster.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, monitors.py, pinned_rotation_gates.py, postflight.py, probe.py, readonly_rbac.py, runbook_gates.py, vip_placement.py | `test_kubectl.py` |
 | `scripts/deploy_tools/land_changes.py` | One reading of a changed-path list, for the five callers that need it. | imported by deploy_tags.py, land_reach.py, land_tags.py | `test_land_changes.py` |
-| `scripts/deploy_tools/land_platform.py` | Which of a PR's derived tags its own changed paths PROVE are a k3s change (#2730). | imported by tools.py | `test_land_platform.py` |
+| `scripts/deploy_tools/land_platform.py` | Which of a PR's derived tags its own changed paths PROVE are a k3s change (#2730). | imported by deploy.py, tools.py | `test_land_platform.py` |
 | `scripts/deploy_tools/land_reach.py` | Which hosts a self-applied setup-role change still owes a hand, beyond the tick's own host. | imported by land_tags.py, tools.py | `test_land_reach.py` |
 | `scripts/deploy_tools/land_tags.py` | Derive deploy tags from a merged PR's own file list. | imported by _land_fakes.py, classify.py, land_platform.py, shared_role_reach.py, tools.py | `test_land_tags.py` |
 | `scripts/deploy_tools/land_lib/landing.py` | One PR's landing: the state every phase reads and writes, and the ways it ends. | imported by _land_fakes.py, ci.py, classify.py, deploy.py, health_verdict.py, land.py, merge.py, pipeline.py, tick.py | `test_land_landing.py` *(indirect)* |

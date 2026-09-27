@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-27 06:17 UTC
-generated_sha: 0e5e82b9e
+generated_at: 2026-09-27 18:18 UTC
+generated_sha: 79c866a24
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,12 +20,10 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
 | [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
-| [#2686](https://github.com/DanielH2018/server/issues/2686) | low | gap | backup-observability | 13 autodeploy Snapshot CRs in a 'lost track' error state are never pruned | 2026-09-26 | 0 | - | - |
-| [#2733](https://github.com/DanielH2018/server/issues/2733) | low | gap | docs | volume-snapshot's refused-delete report names a manager-API route that cannot delete the CR | 2026-09-27 | 0 | - | ✓ |
-| [#2734](https://github.com/DanielH2018/server/issues/2734) | low | improvement | backup-observability | Decide how to remove the 11 over-long autodeploy Snapshot CRs Longhorn's webhook refuses to delete | 2026-09-27 | 0 | - | ✓ |
-| [#2736](https://github.com/DanielH2018/server/issues/2736) | low | improvement | - | optimize_pi's container-recovery cron has no arming flag; disarming it means editing a task | 2026-09-27 | 0 | - | ✓ |
-| [#2738](https://github.com/DanielH2018/server/issues/2738) | low | improvement | cicd | The fallback and --tags landing paths still route a two-platform tag to both hosts | 2026-09-27 | 0 | - | ✓ |
-| [#2740](https://github.com/DanielH2018/server/issues/2740) | low | improvement | backup-observability | Retire volume-snapshot's maintenance-mode attach block, which the #2698 drill proved unreachable | 2026-09-27 | 0 | - | ✓ |
+| [#2759](https://github.com/DanielH2018/server/issues/2759) | low | gap | network | Confirm the Traefik bouncer's stream-pull stalls stopped after disabling its metrics ticker | 2026-09-27 | 0 | - | ✓ |
+| [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | worktree-fanout-orch-2026-09-27-deferred | ✓ |
+| [#2774](https://github.com/DanielH2018/server/issues/2774) | low | gap | cicd | fanout_place.py clean crashes on a worktree whose submodule gitdir is broken | 2026-09-27 | 0 | - | ✓ |
+| [#2775](https://github.com/DanielH2018/server/issues/2775) | low | gap | docs | inject-nested-docs head form starves a short matching rules file of the payload | 2026-09-27 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
