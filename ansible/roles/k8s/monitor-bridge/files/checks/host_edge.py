@@ -149,20 +149,31 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
 
     Empty URL/token -> disabled (stays up), like check_ha_heartbeat.
 
-    NO HYSTERESIS ON THE VERDICT, deliberately. The app runs every 6h and this loop every 5
-    min, so a consecutive-cycle streak would re-read the IDENTICAL row up to 72 times: it would
-    delay the page by N*INTERVAL and prove nothing new about the run. The FETCH failure does
-    ride the streak, because the app restarting under a deploy is a genuine transient — the
-    same split check_ha_heartbeat draws, for the same reason. `speedtest` is also in
-    STARTUP_GRACE, which covers the post-reboot cycle where the app has not finished booting.
+    NO CONSECUTIVE-CYCLE HYSTERESIS ON THE VERDICT, deliberately, and that is still true after
+    #2785. The app runs every 6h and this loop every 5 min, so a cycle streak would re-read the
+    IDENTICAL row up to 72 times: it would delay the page by N*INTERVAL and prove nothing new
+    about the run. What #2785 added is hysteresis in a different unit — SPEEDTEST_FLOOR_CONSECUTIVE
+    counts RESULTS, read from the API's own history in one fetch, so each one is a fresh
+    measurement. It applies to the floor arm alone; the status and age arms still judge the
+    newest row on sight.
+
+    The FETCH failure does ride a cycle streak, because the app restarting under a deploy is a
+    genuine transient — the same split check_ha_heartbeat draws, for the same reason. `speedtest`
+    is also in STARTUP_GRACE, which covers the post-reboot cycle where the app has not finished
+    booting.
     """
     if not cfg.SPEEDTEST_URL or not cfg.SPEEDTEST_TOKEN:
         return True, "speedtest monitoring disabled (no URL/token)"
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.
+        # The page holds SPEEDTEST_FLOOR_CONSECUTIVE rows, not one: the floor arm's hysteresis
+        # is a run of RESULTS and this fetch is where that history comes from. rows[0] is still
+        # the newest, so every other arm is unaffected.
         payload = bridge.net._get_json(
-            cfg.SPEEDTEST_URL + "/api/v1/results?sort=-created_at&page%5Bsize%5D=1",
+            cfg.SPEEDTEST_URL
+            + "/api/v1/results?sort=-created_at&page%5Bsize%5D="
+            + str(max(1, cfg.SPEEDTEST_FLOOR_CONSECUTIVE)),
             headers={
                 "Authorization": "Bearer " + cfg.SPEEDTEST_TOKEN,
                 "Accept": "application/json",
@@ -194,4 +205,6 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
         rows[0] if rows else None,
         cfg.SPEEDTEST_DOWNLOAD_MIN_MBPS,
         cfg.SPEEDTEST_MAX_AGE_H,
+        prev_rows=rows[1:],
+        floor_consecutive=cfg.SPEEDTEST_FLOOR_CONSECUTIVE,
     )

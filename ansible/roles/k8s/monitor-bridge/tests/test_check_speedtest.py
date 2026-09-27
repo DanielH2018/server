@@ -45,6 +45,7 @@ def test_speedtest_fast_completed_run_is_ok():
 
 
 def test_speedtest_below_floor_pages_and_names_the_server():
+    # TWO sub-floor results, because one is a slow run rather than a slow link (#2785).
     ok, msg = verdicts.host.speedtest_verdict(
         _st_row(
             download_bits=13_800_312,
@@ -53,6 +54,7 @@ def test_speedtest_below_floor_pages_and_names_the_server():
         100.0,
         8.0,
         now=ST_NOW,
+        prev_rows=[_st_row(id=779, download_bits=20_000_000)],
     )
     assert not ok
     assert "13.8 Mbps" in msg
@@ -65,7 +67,11 @@ def test_speedtest_floor_is_exclusive_at_the_boundary():
         _st_row(download_bits=100_000_000), 100.0, 8.0, now=ST_NOW
     )[0]
     assert not verdicts.host.speedtest_verdict(
-        _st_row(download_bits=99_999_999), 100.0, 8.0, now=ST_NOW
+        _st_row(download_bits=99_999_999),
+        100.0,
+        8.0,
+        now=ST_NOW,
+        prev_rows=[_st_row(id=779, download_bits=99_999_999)],
     )[0]
 
 
@@ -195,17 +201,29 @@ def test_speedtest_fetch_failure_rides_the_streak_but_a_bad_row_does_not(
     monkeypatch.setattr(
         bridge.net,
         "_get_json",
-        lambda *a, **k: {"data": [_st_row(download_bits=13_800_312)]},
+        lambda *a, **k: {
+            "data": [
+                _st_row(download_bits=13_800_312),
+                _st_row(id=779, download_bits=20_000_000),
+            ]
+        },
     )
     assert not checks.host_edge.check_speedtest(cfg)[
         0
-    ]  # a bad row pages on the FIRST cycle
+    ]  # two sub-floor rows page on the FIRST cycle — no cycle streak
 
 
-def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch, cfg):
+def test_speedtest_requests_the_newest_rows_not_the_oldest(monkeypatch, cfg):
     # The API defaults to ASCENDING order, so an unsorted request returns the oldest row in
     # the 30-day window — permanently stale, and stale in a way that looks like a real verdict.
-    cfg = replace(cfg, SPEEDTEST_URL="http://speedtest", SPEEDTEST_TOKEN="t")
+    # The page size is asserted here rather than in a test of its own: the floor arm's history
+    # comes from THIS request, so a page of one row could never show a run (#2785).
+    cfg = replace(
+        cfg,
+        SPEEDTEST_URL="http://speedtest",
+        SPEEDTEST_TOKEN="t",
+        SPEEDTEST_FLOOR_CONSECUTIVE=3,
+    )
     seen = {}
 
     def _capture(url, headers=None):
@@ -216,7 +234,76 @@ def test_speedtest_requests_the_newest_row_not_the_oldest(monkeypatch, cfg):
     monkeypatch.setattr(bridge.net, "_get_json", _capture)
     checks.host_edge.check_speedtest(cfg)
     assert "sort=-created_at" in seen["url"]
+    assert "page%5Bsize%5D=3" in seen["url"]
     assert seen["headers"]["Authorization"] == "Bearer t"
 
 
 # --- a held BROAD apply needs a different remediation than a held service deploy ----------
+
+
+# ── the floor arm's run of RESULTS (#2785) ───────────────────────────────────────────────
+
+
+def test_speedtest_one_sub_floor_result_holds_up_with_a_streak_note():
+    # A test runs every 6h, so paging on one result held the tile red for ~6h — three times in
+    # the 14 days to 2026-09-27. The note has to say a fault is accumulating.
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(download_bits=81_500_000),
+        100.0,
+        8.0,
+        now=ST_NOW,
+        prev_rows=[_st_row(id=779, download_bits=910_000_000)],
+    )
+    assert ok
+    assert "81.5 Mbps" in msg
+    assert "1/2 sub-floor results" in msg
+
+
+def test_speedtest_single_result_in_the_window_cannot_confirm_a_run():
+    # A fresh app, or a single row in the window: no history means no run to see, so hold.
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(download_bits=81_500_000), 100.0, 8.0, now=ST_NOW, prev_rows=[]
+    )
+    assert ok
+    assert "1/2 sub-floor results" in msg
+
+
+def test_speedtest_failed_previous_row_is_not_a_sub_floor_result():
+    # A failed row records no figure, so it is not evidence of a slow link. The status arm
+    # judges a failed row when it is the NEWEST one; here it is only history.
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(download_bits=81_500_000),
+        100.0,
+        8.0,
+        now=ST_NOW,
+        prev_rows=[_st_row(id=779, status="failed", download_bits=None)],
+    )
+    assert ok
+    assert "1/2 sub-floor results" in msg
+
+
+def test_speedtest_floor_consecutive_one_pages_on_sight():
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(download_bits=81_500_000),
+        100.0,
+        8.0,
+        now=ST_NOW,
+        prev_rows=[],
+        floor_consecutive=1,
+    )
+    assert not ok
+    assert "1/1 consecutive results under the floor" in msg
+
+
+def test_speedtest_stale_newest_row_pages_regardless_of_the_floor_run():
+    # The age arm reads the newest row alone — the floor knob must not buy a dead scheduler
+    # any grace.
+    ok, msg = verdicts.host.speedtest_verdict(
+        _st_row(created_at="2026-08-22 11:00:00", download_bits=81_500_000),
+        100.0,
+        8.0,
+        now=ST_NOW,
+        prev_rows=[_st_row(id=779, download_bits=910_000_000)],
+    )
+    assert not ok
+    assert "no row written since" in msg
