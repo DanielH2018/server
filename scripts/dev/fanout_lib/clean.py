@@ -26,6 +26,18 @@ from lib.git import git
 from prune_worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
 
 
+def _first_line(proc) -> str:
+    """git's first non-empty stderr line, or a statement of its exit status.
+
+    `git()` captures text, so `.stderr` is a str on both a `CompletedProcess` and a
+    `CalledProcessError`. A git that failed silently still has to say something.
+    """
+    return next(
+        (ln.strip() for ln in (proc.stderr or "").splitlines() if ln.strip()),
+        f"git exited {proc.returncode}",
+    )
+
+
 def unlock(repo: str, path: str) -> None:
     """Unlock `path` in `repo`'s worktree admin, ignoring the git call's own exit status.
 
@@ -48,11 +60,7 @@ def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
     deleted = git("branch", "-D", branch, cwd=repo, check=False)
     if deleted.returncode == 0:
         return True, ""
-    first_line = next(
-        (ln for ln in deleted.stderr.splitlines() if ln.strip()),
-        f"git branch -D exited {deleted.returncode}",
-    )
-    return False, first_line.strip()
+    return False, _first_line(deleted)
 
 
 def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> str:
@@ -93,6 +101,13 @@ def clean_one(
     that no longer exists — so that specific failure hands the tree to
     `_clean_missing_tree` instead of propagating.
 
+    The two ways `dirty` fails mean opposite things, so they are answered differently. A
+    `FileNotFoundError` says the cwd itself is gone, which is the goal state — that tree is
+    handed to `_clean_missing_tree` to deregister. A `CalledProcessError` says the directory
+    is there and git refuses to read it, which a worktree carrying a submodule whose `.git`
+    file points at a missing gitdir does (#2774). Unreadable is not clean: the tree is kept,
+    naming git's own first line, so the operator reads why instead of a truncated traceback.
+
     Args:
         repo: the checkout `tree` is registered under.
         tree: the worktree to evaluate, as read from `git worktree list --porcelain`.
@@ -113,6 +128,8 @@ def clean_one(
         tree_is_dirty = dirty(tree.path)
     except FileNotFoundError:
         return _clean_missing_tree(repo, tree, merged, remover, brancher)
+    except subprocess.CalledProcessError as exc:
+        return "kept", f"— git status failed: {_first_line(exc)}"
     verdict, reason = classify(unlocked, merged=merged, dirty=tree_is_dirty)
     if verdict != REMOVABLE:
         return "kept", reason
