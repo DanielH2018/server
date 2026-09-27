@@ -19,6 +19,8 @@ Run: uv run pytest ansible/tests/setup/test_optimize_pi_declares_log2ram_sizes.p
 """
 
 import re
+import shutil
+import subprocess
 
 import pytest
 from _helpers import SETUP_ROLES, load_tasks, load_yaml, walk_tasks
@@ -104,3 +106,73 @@ def test_the_size_reader_rejects_a_unit_it_does_not_know():
     """The RED half: without this, a typo'd `128MB` would read as some number and compare true."""
     with pytest.raises(AssertionError):
         _mb("128MB")
+
+
+# ── The duplicate JOURNALD_AWARE line (#2726) ─────────────────────────────────────────
+
+
+def _journald_guard() -> dict:
+    """The task that reads JOURNALD_AWARE out of /etc/log2ram.conf, or {} if it is gone."""
+    for task in walk_tasks(load_tasks(TASKS)):
+        spec = task.get("ansible.builtin.command")
+        argv = spec.get("argv") if isinstance(spec, dict) else None
+        if argv and any("JOURNALD_AWARE" in str(arg) for arg in argv):
+            return task
+    return {}
+
+
+def _awk_program(task: dict) -> str:
+    """The awk program the role actually ships, so the RED half below cannot drift from it."""
+    argv = [str(arg) for arg in task["ansible.builtin.command"]["argv"]]
+    return next(arg for arg in argv if "JOURNALD_AWARE" in arg)
+
+
+def test_the_role_checks_the_duplicate_journald_aware_lines_agree():
+    """log2ram 1.7.2 ships JOURNALD_AWARE twice. Both copies read `true`, log2ram sources the
+    file, so the duplicate is inert and the role leaves the conffile dpkg-pristine rather than
+    deleting a shipped line. Two copies that DISAGREE are a real signal — the last one silently
+    wins — and that is what this task fails on.
+    """
+    task = _journald_guard()
+    assert task, (
+        f"no task reads JOURNALD_AWARE from {CONF}. The role leaves upstream's duplicate line "
+        "in place on purpose (#2726); the check that the copies agree is what makes that safe"
+    )
+    argv = [str(arg) for arg in task["ansible.builtin.command"]["argv"]]
+    assert CONF in argv, f"the guard does not read {CONF}: {argv}"
+    assert task.get("changed_when") is False, (
+        "a read-only check must not report changed"
+    )
+    assert "!= 1" in str(task.get("failed_when", "")), (
+        "the guard must fail on anything but ONE distinct value: 2+ means the copies disagree, "
+        f"0 means the anchor stopped matching. failed_when: {task.get('failed_when')!r}"
+    )
+
+
+@pytest.mark.skipif(shutil.which("awk") is None, reason="the guard's program is awk")
+@pytest.mark.parametrize(
+    ("conf", "distinct"),
+    [
+        (
+            "JOURNALD_AWARE=true\n#x\nJOURNALD_AWARE=true\n",
+            1,
+        ),  # upstream 1.7.2, as shipped
+        ("JOURNALD_AWARE=true\n", 1),  # upstream master, and any later fixed release
+        (
+            "JOURNALD_AWARE=true\nJOURNALD_AWARE=false\n",
+            2,
+        ),  # RED: the last one silently wins
+        ("SIZE=128M\n", 0),  # RED: the anchor matches nothing and would check nothing
+    ],
+)
+def test_the_guards_awk_program_counts_distinct_values(tmp_path, conf, distinct):
+    """The verdict half, run through the program the task ships rather than a retyped copy."""
+    conf_file = tmp_path / "log2ram.conf"
+    conf_file.write_text(conf)
+    out = subprocess.run(
+        ["awk", "-F=", _awk_program(_journald_guard()), str(conf_file)],
+        capture_output=True,
+        text=True,
+        check=True,
+    )
+    assert int(out.stdout.strip()) == distinct

@@ -97,6 +97,15 @@ See repo-root `CLAUDE.md` for conventions.
    which is when the caps below need the number pinned (log2ram shipped `SIZE=40M` before
    128M). #2714 read the live file as hand-edited; it is not, and its duplicate
    `JOURNALD_AWARE=true` is upstream's own bug at 1.7.2, fixed on master.
+   **The duplicate line stays.** Both copies read `true`, log2ram sources the file, so the
+   last assignment wins and the duplicate is inert — while deleting a shipped line would make
+   the conffile dpkg-MODIFIED and manufacture the apt-upgrade conffile prompt #2714 wanted
+   gone. What the role checks instead is that the copies AGREE (#2726): a task counts the
+   DISTINCT `JOURNALD_AWARE=` values and fails on anything but one, so two lines that disagree
+   — where the effective value is silently whichever sits last — stop the play, and a later
+   log2ram that ships the line once passes unchanged. ENFORCED by
+   `ansible/tests/setup/test_optimize_pi_declares_log2ram_sizes.py`, which runs the task's own
+   awk program against an agreeing pair, a disagreeing pair and a file with no such line.
    The caps themselves (was 81% full 2026-06-11): a Pi journald drop-in (`60-homelab-pi.conf`, `SystemMaxUse=32M`) overrides
    initial_setup's server-sized 1G cap, `ACCT_LOGGING="3"` cuts pacct retention from
    30 daily generations (savelog via `/etc/cron.daily/acct`, ~28 MB/day of healthcheck
@@ -282,6 +291,49 @@ See repo-root `CLAUDE.md` for conventions.
     the line survives a reboot.
     ENFORCED by `ansible/tests/setup/test_pi_resolves_its_own_hostname.py`, which fails if the
     task goes away or its regexp stops anchoring on the address.
+
+## Autonomous-role contract (the container-recovery cron restarts what it finds dead)
+
+The role's other two crons only read and report. This one acts: `pi-recovery-health.sh` runs
+`docker start` on any watched container it finds not running, every 5 minutes, unattended.
+
+- **Scope / exclusions:** exactly the containers this host deploys — every `containers_list`
+  entry in `inventory/host_vars/daniel-pi.yml`, plus the docker-proxy role's sub-proxies
+  (`docker-proxy-lifecycle` always, `docker-proxy-codeserver` under `has_code_server`). The set
+  is derived from the list, never hardcoded, so a new Pi service joins it on the next deploy.
+  It runs **one `docker start` per watched container per cycle** and nothing else: never
+  `docker restart`, never a recreate, never a `docker rm`, never a pull, never an image or
+  compose change, and nothing at all on daniel-box or daniel-server. **A container an operator
+  stopped on purpose is not in the set** — the set is the deploy list rather than
+  `docker ps -a --filter status=exited`, which is what keeps this from resurrecting a
+  deliberate `docker stop` every 5 minutes.
+- **Why it acts at all:** `restart: unless-stopped` covers a container whose PROCESS exits, not
+  one whose *create* fails at the OCI runtime, which is the failure this 512 MB board actually
+  produces. On 2026-08-29 autoheal died with "Timeout waiting for systemd to create scope",
+  sat at `RestartCount 0`, and stayed down ~50 minutes until a human ran `docker start`.
+- **Mode (explicit + reversible):** the cron is installed unconditionally by
+  `initial_setup.yml --tags recovery-health -e target=daniel-pi`; there is no arming flag.
+  Disarming it means removing the cron — flip the `Schedule the container-recovery heartbeat`
+  task to `state: absent` and re-run that tag, which is the reversal a role re-run respects.
+  `sudo crontab -r`-style edits on the host are undone by the next role run. Detection and
+  remediation share one script, so disarming the restart also ends the heartbeat: expect the
+  "Daniel Pi Recovery" monitor to trip its 600s watchdog once the crons stop.
+- **Authoritative sources:** `docker ps` against the real socket (not docker-proxy, so it still
+  reports docker-proxy's own death), and `docker inspect` read BEFORE the restart — the restart
+  erases the exit code, the daemon's `Error` string and `FinishedAt` of the instance that died.
+- **Required evidence, every cycle:** a Kuma push to "Daniel Pi Recovery" and a line in
+  `/var/log/pi-health/health.log`, which the Pi's promtail ships to Loki under `job="syslog"`.
+  A cycle that intervened reads `not running: <name> [status=… exit=… error=…]; restarted:
+  <name>`, and `restart FAILED: <name>` when the `docker start` did not take.
+- **It pushes `down` on a cycle it fixed**, on purpose: an `up` after a successful restart would
+  make a container crashing every 5 minutes read green forever. The `# DECIDED:` marker in the
+  script carries the re-proposal that was declined.
+- **Next-run review:** a repeat `restarted:` for the same container is not a solved problem —
+  it is the thing to fix upstream. Read the week's `status=down` lines before widening the
+  watch set or adding a second action.
+
+ENFORCED by `ansible/tests/setup/test_pi_recovery_restarts_and_reports.py`, which renders the
+script and runs it against a stub `docker`.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart Watchdog`,

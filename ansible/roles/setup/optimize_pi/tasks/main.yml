@@ -407,6 +407,33 @@
   become: true
   notify: Reboot Pi
 
+- name: Verify log2ram.conf's JOURNALD_AWARE lines all agree
+  tags: [log2ram]
+  # DECIDED: keep upstream's DUPLICATE JOURNALD_AWARE line and check the copies agree, rather
+  # than deleting one (#2726, re-verified 2026-09-27). log2ram 1.7.2 ships the assignment TWICE
+  # in /etc/log2ram.conf (lines 35 and 41, both `true`) and once on master; daniel-pi's copy is
+  # byte-identical to upstream's (md5 f62aef1aeae1473882baba0e521f752e, which is also the
+  # conffile md5 dpkg recorded), and installed and candidate were both 1.7.2 on that date.
+  # The duplicate is inert: log2ram sources the file, so the last assignment wins and both read
+  # the same value. Deleting a shipped line makes the conffile dpkg-MODIFIED, which manufactures
+  # the apt-upgrade conffile prompt #2714 asked to be rid of, in exchange for a cosmetic change
+  # — and removing it idempotently takes count-then-delete-then-re-add, because `lineinfile`
+  # replaces the LAST match and leaves earlier ones.
+  # What IS a real signal is the copies DISAGREEING: the effective value is then whichever sits
+  # last, the file is no longer pristine, and nothing announces either. This is the half that
+  # can go red. It counts DISTINCT values, not lines, so a log2ram that ships the line once
+  # passes unchanged; a file with no JOURNALD_AWARE line at all fails too, because the anchor
+  # would then be checking nothing.
+  ansible.builtin.command:
+    argv:
+      - awk
+      - -F=
+      - /^[[:space:]]*JOURNALD_AWARE=/ { seen[$2] } END { print length(seen) }
+      - /etc/log2ram.conf
+  register: optimize_pi_log2ram_journald_aware_values
+  changed_when: false
+  failed_when: optimize_pi_log2ram_journald_aware_values.stdout | trim | int != 1
+
 # Everything under /var/log lives in log2ram's RAM-backed tmpfs. Found 2026-06-11
 # at 81% (103/128 MB): journald carried the server-sized 1G cap from initial_setup
 # (would overflow the tmpfs and fail log writes), and acct's savelog kept 30 daily

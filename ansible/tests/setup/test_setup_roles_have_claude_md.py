@@ -66,12 +66,6 @@ OVER_CEILING: dict[str, str] = {
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
 EXEMPT: dict[str, str] = {
-    "optimize_pi": (
-        "`Pi SD-card health heartbeat` and `Pi container-recovery heartbeat` read the Pi and "
-        "push Kuma; `Pi rotated-log integrity sweep` reads every rotated log with `gzip -t` and "
-        "writes only its own verdict file, which the SD-card heartbeat then pushes. None of the "
-        "three deletes anything or changes a service's configuration"
-    ),
     "claude_code": (
         "`claude-cgroup-metrics.timer` reads cgroup counters; `claude-rc-restart.timer` is a "
         "weekly `systemctl try-restart` to adopt an auto-update, which starts nothing that was "
@@ -206,6 +200,16 @@ def test_census_finds_the_roles_known_to_install_crons():
 def test_census_sees_at_least_twelve_setup_roles():
     n = len(_role_dirs())
     assert n >= 12, f"only found {n} setup role directories under {SETUP_ROLES}"
+
+
+def test_optimize_pi_is_not_exempt():
+    """Its container-recovery cron runs `docker start` on any watched container it finds down,
+    so it is an autonomous actor and owes the contract (#2727). The exemption it used to carry
+    claimed only that the crons delete nothing and change no service configuration, which is a
+    narrower claim than "changes no state" — and an argument this guard exists to refuse.
+    """
+    assert "optimize_pi" not in EXEMPT
+    assert _contract_problems(SETUP_ROLES / "optimize_pi") == []
 
 
 def test_docker_install_is_out_of_the_subject_not_exempt():
