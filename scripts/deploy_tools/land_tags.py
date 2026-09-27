@@ -10,7 +10,8 @@ WHY A ROLE NAME IS NOT AUTOMATICALLY A TAG. Only a role with a `containers_list`
 one. Eight roles under ansible/roles/k8s/ have no entry because other roles include them by
 literal name, and handing one to `--tags` makes deploy.sh refuse the WHOLE list (exit 2) --
 so the valid services beside it are refused too. PR #617 landed 22 digest pins that way and
-none of them deployed. Those roles come out of the tags and into `plane_note` instead.
+none of them deployed. Those roles come out of the tags, and `shared_caller_tags` puts
+the tags of every role that runs them back in (#2704).
 
 WHY THE COUNT ASSERTION. `gh pr view --json files` paginates at 100. A 137-file PR returns
 100 entries with no error and no marker, so the derived tag list is a silent subset of what
@@ -214,11 +215,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
 
 
 def derived_tags(files, declared: set[str] | None = None) -> set[str]:
-    """The tags this PR's own file list deploys. `derive` and `covered_roles` share it.
-
-    Two derivations of "what did this landing deploy" that disagree is how a coverage check
-    silently suppresses a note for a role nothing applied, so there is one.
-    """
+    """The tags this PR's own file list maps to by path, before any shared-role expansion."""
     declared = declared_tags() if declared is None else declared
     return expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
 

@@ -19,7 +19,7 @@ def _entry_tags(declared: set[str], **overrides: set[str]) -> dict[str, set[str]
 
 
 def test_a_caller_reached_through_another_shared_role_is_counted():
-    """`land_tags.covered_roles` stops at the first hop; this must not, or `longhorn-api`
+    """A first-hop-only walk would miss this, and then `longhorn-api`
     — called only by shared roles — could never discharge."""
     ctx = _ctx(
         {

@@ -136,9 +136,9 @@ def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
     return {s for s, tags in entry_tags.items() if tags <= mine} if mine else set()
 
 
-# DECIDED: transitive, where `land_tags.covered_roles` is not. land.sh asks whether ONE
-# landing deployed every caller, and a non-transitive answer only errs toward a note. Here
-# the question is whether the fleet has been redeployed since, and a non-transitive answer
+# DECIDED: transitive, as `caller_tags` is. The land-side check that stopped at the first
+# hop (`covered_roles`) was replaced by `caller_tags` in #2704. Here the question is whether
+# the fleet has been redeployed since, and a non-transitive answer
 # would leave `longhorn-api` and `volume-revert` — whose only callers are shared — with a
 # line nothing but a hand clears, which is the defect this exists to remove.
 # DECIDED: a caller that never runs `manifests` is dropped rather than required. It writes

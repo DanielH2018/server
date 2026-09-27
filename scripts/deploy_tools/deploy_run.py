@@ -50,7 +50,10 @@ from deploy_tools.exit_codes import (
     DEPLOY_TAG_MISS,
 )
 from lib.git import git
-from lib.repo_paths import HOST_VARS, REPO
+from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
+
+# `deploy_logic`, for the build couplings `expand_shared_roles` adds. Imported lazily there.
+sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # What a detached run starts once its playbook exits. Named here, in the script every deploy
 # runs, rather than in `deploy_detach.py`: `script_classify` credits a spawn to the script
@@ -205,6 +208,11 @@ def expand_shared_roles(plan: Plan) -> None:
         tags, replaced = expand_shared_tags(
             plan.tags, declared, role_callers(plan.repo_root)
         )
+        # A caller that only builds an image (`n8n-images` under `image-builder`) needs the
+        # role that rolls it, the coupling `deploy_tags.changed` and land.sh add too.
+        from deploy_logic import expand_build_couplings
+
+        tags += sorted(expand_build_couplings(set(tags)) - set(tags))
     # Broad on purpose: the expansion fails open, per the docstring.
     except Exception:
         traceback.print_exc()

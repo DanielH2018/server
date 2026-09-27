@@ -55,3 +55,17 @@ def test_a_declared_tag_beside_a_shared_role_is_kept_once(tmp_path, monkeypatch)
         monkeypatch, _repo(tmp_path), ["--tags=beta,helper,gamma-not-declared"]
     )
     assert _gate_tags(calls, "validate") == ("beta", "alpha", "gamma-not-declared")
+
+
+def test_a_build_only_caller_brings_the_role_that_rolls_its_image(
+    tmp_path, monkeypatch
+):
+    """`n8n-images` builds what `n8n` deploys, so expanding to it alone would roll nothing."""
+    repo = _repo(tmp_path)
+    tasks = repo / "ansible" / "roles" / "k8s" / "n8n-images" / "tasks"
+    tasks.mkdir(parents=True)
+    (tasks / "main.yml").write_text(_INCLUDE_HELPER.replace("helper", "builder"))
+    host_vars = repo / "ansible" / "inventory" / "host_vars" / "daniel-box.yml"
+    host_vars.write_text(host_vars.read_text() + "  - { name: n8n-images }\n")
+    _, calls = run_front_half(monkeypatch, repo, ["--tags", "builder"])
+    assert _gate_tags(calls, "validate") == ("n8n-images", "n8n")
