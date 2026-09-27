@@ -102,8 +102,12 @@ production state.
 The gate proves three hops in order, and its rescue names the hop that failed:
 
 1. The decision reads back from LAPI (`cscli decisions list --ip`).
-1. The `k8straefik` bouncer's `last_pull` in `cscli bouncers list` moves past its value
+1. The edge bouncer's newest `last_pull` in `cscli bouncers list` moves past its value
    read just after the ban. Only a stream pull after the ban can carry it to the edge.
+   LAPI records those pulls on an auto-created `k8straefik@<pod IP>` row, one per Traefik
+   pod IP. The base `k8straefik` row stopped moving on 2026-08-09, so the gate reads every
+   `k8straefik` and `k8straefik@*` row. Reading only the base row failed the gate's first
+   live run, after the pull it waited for had already happened.
 1. The edge answers 403 to the Pi.
 
 The ban, the checks and the probe sit in one block, and the lift is in its `always`. A failed
