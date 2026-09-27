@@ -162,6 +162,33 @@ k3s_secrets_encryption: true
 # (the API server fetches JWKS from each URL itself, so host reachability is a requirement and
 # not an incidental).
 #
+# REACHABILITY AT APISERVER-START TIME IS THE ONE THAT MATTERS, AND THE APISERVER STARTS
+# FIRST. kube-apiserver builds the JWT authenticator by fetching each issuer's
+# `/.well-known/openid-configuration` at startup, but both URLs are served by Authelia behind
+# Traefik — workloads this same apiserver has to schedule. Every boot therefore races, and
+# `oidc.go` retries every 10s until one succeeds, which is why the race normally costs nothing.
+#
+# THE RETRY LOOP CANNOT RECOVER FROM A 421, and that is the failure to recognise (#2749).
+# Traefik's SNICheck pins a connection's TLS-options name at handshake time, so a connection
+# opened while Traefik is still reconciling routes is answered 421 for as long as it lives.
+# Go's HTTP client reuses it, so the apiserver redials never. Measured 2026-09-27 after the
+# weekly reboot: 3924 `oidc.go:433 oidc authenticator: initializing plugin` errors in
+# `/var/log/k3s.log`, unbroken from 07:40:23Z, walking DNS `Try again` -> `no route to host`
+# -> `404 page not found` -> `421 Misdirected Request` as the edge came up around the two
+# pinned connections. One connection per issuer below: `auth.local.<domain>` over the VIP,
+# `auth.<domain>` out through Cloudflare and back to daniel-box's own global IPv6. The
+# authenticator never initialised, so Headlamp login was dead for 5.5 hours while client-cert
+# and ServiceAccount auth carried on untouched — which is why nothing paged.
+#
+# RECOVERY IS A SOCKET CLOSE, not a k3s restart: the apiserver redials on its next 10s tick.
+# CLOSE BOTH — there is one connection per issuer, and a filter written for the VIP misses the
+# public one entirely, which leaves half the errors running. `sudo ss -tnp | grep k3s-server`
+# on daniel-box names them: one to the ingress VIP on 443, one from the host's own global IPv6
+# to Cloudflare on 443. This is reasoned from the retry loop above and NOT yet measured —
+# confirm the `oidc.go:433` lines stop in `/var/log/k3s.log` and a Headlamp login mints a
+# token. A k3s restart also works and is the heavier option on a Type=notify unit with
+# `TimeoutStartSec=0`.
+#
 # Order does not matter; kube-apiserver selects the entry by the token's `iss`. Duplicates are
 # a validation error, so the two must stay distinct. NO TRAILING SLASH on either: the
 # comparison against `iss` is exact.
