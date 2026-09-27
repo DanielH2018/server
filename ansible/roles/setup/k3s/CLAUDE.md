@@ -229,6 +229,21 @@ so a check already down is not paged again.
   notice was the alternative and was rejected: notice passes the rsyslog info filter, so
   every k3s line would land in `/var/log/syslog` and ship to Loki.
   `ansible/tests/setup/test_k3s_unit_logging.py` holds both node types to it.
+- **The apiserver's OIDC authenticator can wedge for the life of the boot, and nothing pages
+  when it does** (#2749). `k3s_oidc_issuer_urls` in
+  `ansible/roles/setup/k3s/defaults/main.yml` points the apiserver at two names Authelia
+  serves behind Traefik, so every boot races workloads this same apiserver schedules.
+  `oidc.go` retries the discovery fetch every 10s, which normally makes the race free. It is
+  not free when the answer is 421: Traefik's SNICheck pins a connection's TLS-options name at
+  handshake time, Go's HTTP client reuses that connection forever, and the apiserver never
+  redials. On 2026-09-27 that left 3924 `oidc authenticator: initializing plugin` errors in
+  `/var/log/k3s.log` from 07:40:23Z with no success, one per issuer, so Headlamp login was
+  dead for 5.5 hours. **The tell is which auth still works:** client certificates and every
+  ServiceAccount are untouched, so kubectl, the controllers and every probe read green
+  throughout. To recover without restarting the control plane, close the two sockets
+  (`sudo ss -tnp | grep :443` names them as `k3s-server`) and let the next 10s tick redial.
+  The full sequence, the recovery caveat and the measured error chain are in that file's
+  comment above the key. The same pin wedged the Pi's Alloy on the same reboot (#2747).
 - **The release-staleness check is the durable half of a one-shot Discord page.** When the
   deployer defers a k8s change it cannot auto-apply (`deploy_alerts.alert_deferred`'s
   `cs.k8s` branch), it fast-forwards the tree and pages once per SHA; the ff-merge clears the
