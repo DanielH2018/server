@@ -67,8 +67,10 @@ OVER_CEILING: dict[str, str] = {
 # Each reason is the thing to re-check before keeping the role here.
 EXEMPT: dict[str, str] = {
     "optimize_pi": (
-        "both crons (`Pi SD-card health heartbeat`, `Pi container-recovery heartbeat`) read the "
-        "Pi and push Kuma; neither restarts, deletes or writes anything on the host"
+        "`Pi SD-card health heartbeat` and `Pi container-recovery heartbeat` read the Pi and "
+        "push Kuma; `Pi rotated-log integrity sweep` reads every rotated log with `gzip -t` and "
+        "writes only its own verdict file, which the SD-card heartbeat then pushes. None of the "
+        "three deletes anything or changes a service's configuration"
     ),
     "claude_code": (
         "`claude-cgroup-metrics.timer` reads cgroup counters; `claude-rc-restart.timer` is a "

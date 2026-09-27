@@ -1,0 +1,105 @@
+#!/usr/bin/env bash
+# Pi rotated-log integrity sweep — managed by Ansible (optimize_pi role); edits overwritten.
+#
+# Runs `gzip -t` over every rotated log on this host, once a day, and writes a verdict file.
+# It pushes nothing itself: pi-sd-health.sh reads the verdict every 5 minutes and folds it into
+# the "Daniel Pi SD Health" Kuma push, so this sweep needs no monitor and no push token.
+#
+# A rotated .gz that stops decompressing has two causes here, and the point is to tell either
+# from silence rather than to tell them apart:
+#   * A sync bug. log2ram's shipped `rsync --sparse --inplace` clobbered the trailing NUL bytes
+#     of 37 rotated .gz on the SD copy (#2694). `gzip -t` was the ONLY reader that disagreed —
+#     every CRC32 matched and `zcat` recovered every byte — so nothing else would have noticed.
+#   * A failing SD card. mmcblk0 has no SMART, so a bad block announces itself only through a
+#     file that reads back wrong (#2668). A compressed log is the most sensitive file on this
+#     host for that, because gzip carries a CRC32 over every byte it holds.
+#
+# Cost, measured by running THIS script on daniel-pi 2026-09-27 over 144 files and 9.7 MB:
+# 1.9s wall on the first run, 1.7s (1.44s user) once warm, and ~13s when the SD-side copies are
+# cold. One gzip process, not one per file. That is why the cron is daily and not the 5-minute
+# heartbeat: at */5 this would be ~8 min/day of CPU and ~2.8 GB/day of reads on a 512 MB
+# Zero 2 W whose probe cadence has already caused RCU stalls (pi-healthcheck-fork-churn).
+#
+# No bash array-length operator anywhere below, on purpose: Ansible templates this file, and the
+# brace-hash that operator opens with is how Jinja starts a comment block, so a single use of it
+# fails the render with "Missing end of comment tag". Counts come from `wc` instead.
+set -uo pipefail
+
+STATE="{{ optimize_pi_gz_integrity_state_file }}"
+FLOOR={{ optimize_pi_gz_integrity_min_files }}
+ROOTS=({% for root in optimize_pi_gz_integrity_roots %}"{{ root }}"{{ " " if not loop.last }}{% endfor %})
+
+work=$(mktemp -d) || exit 1
+trap 'rm -rf "$work"' EXIT
+
+verdict=up
+detail=
+
+# Per root, not just in total: a root that exists but holds no rotated log is the case the
+# combined floor below cannot see. /var/hdd.log survives as a plain directory when log2ram stops
+# syncing to it, and /var/log's own 72 files would then clear a floor of 40 on their own while the
+# SD-side tree — the one that carries the signal — went unswept. One extra `find` per root, 0.03s
+# measured, is the price of catching it.
+missing=
+empty=
+for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
+  if [ ! -d "$root" ]; then
+    missing="${missing}${missing:+ }${root}"
+  elif [ "$(find "$root" -xdev -type f -name '*.gz' -readable 2>/dev/null | wc -l)" -eq 0 ]; then
+    empty="${empty}${empty:+ }${root}"
+  fi
+done
+
+if [ -z "${ROOTS[*]:-}" ] || [ -n "$missing" ]; then
+  # A missing root is not "nothing to check". /var/hdd.log absent means log2ram is not mounted,
+  # and a glob over an absent tree reports success — the vacuity this check has to refuse.
+  verdict=down
+  detail="log tree(s) missing: ${missing:-<no roots configured>} — log2ram may not be mounted, so nothing was checked"
+elif [ -n "$empty" ]; then
+  verdict=down
+  detail="no rotated .gz at all under: ${empty} — that tree is unswept, whatever the other roots hold"
+else
+  find "${ROOTS[@]}" -xdev -type f -name '*.gz' -readable -print0 2>/dev/null >"$work/files"
+  # One NUL per path, so counting NULs counts files without re-walking the tree.
+  count=$(tr -dc '\0' <"$work/files" | wc -c)
+  unreadable=$(find "${ROOTS[@]}" -xdev -type f -name '*.gz' ! -readable 2>/dev/null | wc -l)
+
+  # One `gzip -t` over the whole list. It names each failing file on stderr as
+  # `gzip: <path>: <reason>`, so the file names come out of the same process that tests them.
+  xargs -0 -r gzip -t <"$work/files" 2>&1 >/dev/null |
+    sed -n 's/^gzip: \([^:]*\):.*/\1/p' >"$work/bad"
+  bad_count=$(wc -l <"$work/bad")
+
+  if [ "$bad_count" -gt 0 ]; then
+    verdict=down
+    named=$(head -n 3 "$work/bad" | tr '\n' ' ')
+    detail="${bad_count} of ${count} rotated .gz fail gzip -t: ${named% }"
+    if [ "$bad_count" -gt 3 ]; then
+      detail="${detail} (+$((bad_count - 3)) more)"
+    fi
+  elif [ "$count" -lt "$FLOOR" ]; then
+    # The non-vacuity half. Zero files, or a count that collapsed, means the sweep stopped
+    # looking at rotated logs — not that every rotated log is healthy.
+    verdict=down
+    detail="only ${count} rotated .gz found under ${ROOTS[*]} (floor ${FLOOR}) — logrotate stopped compressing, or the sweep is pointed at the wrong tree"
+  elif [ "$unreadable" -gt 0 ]; then
+    # The same reasoning one step in: `-readable` keeps find quiet, which would let a file the
+    # sweep cannot open drift the count toward the floor instead of being reported.
+    verdict=down
+    detail="${unreadable} rotated .gz are unreadable by $(id -un) — the sweep cannot test them, so ${count} checked is an undercount"
+  else
+    detail="${count} rotated .gz pass gzip -t under ${ROOTS[*]}"
+  fi
+fi
+
+# Two lines, verdict then detail, written through a temp file: pi-sd-health.sh reads this every
+# 5 minutes, and a half-written verdict would read there as an empty status (a down) for that run.
+mkdir -p "${STATE%/*}" 2>/dev/null || true
+if ! { printf '%s\n%s\n' "$verdict" "$detail" >"$work/state" && mv -f "$work/state" "$STATE"; }; then
+  echo "cannot write ${STATE} — the heartbeat will report a missing verdict" >&2
+  exit 1
+fi
+
+# The cron routes both streams to `logger -t pi-gz-integrity`, so this line is the journal
+# record of the sweep. The ALERT is the heartbeat's Kuma push, not this line.
+printf 'status=%s %s\n' "$verdict" "$detail"

@@ -361,6 +361,52 @@
   become: true
 
 # 7. LOG RAM BUDGET (log2ram tmpfs is 128 MB of REAL RAM)
+#
+# Declare the tmpfs size first: every cap below is computed from it, and until this task the
+# role asserted none of it (#2714).
+- name: Declare the log2ram sizes the rest of this section is computed from
+  tags: [log2ram]
+  # log2ram 1.7.2 SHIPS all four of these values, and daniel-pi's /etc/log2ram.conf is
+  # byte-identical to upstream's (md5 f62aef1aeae1473882baba0e521f752e, which is also the
+  # conffile md5 dpkg recorded — so nothing in that file was ever hand-edited, contrary to
+  # #2714's reading of the duplicate JOURNALD_AWARE line, which upstream ships twice at 1.7.2
+  # and once on master).
+  #
+  # That makes declaring them free TODAY — lineinfile writes nothing and the conffile stays
+  # pristine — and it costs something only at the moment an upstream default MOVES, which is
+  # exactly when the caps below need the number pinned. log2ram shipped SIZE=40M before it
+  # shipped 128M, and a reinstall or a fresh Pi provision under a 40M tmpfs runs a 32M journald
+  # cap plus auditd's 12M ceiling into a full /var/log, with nothing to announce it.
+  #
+  # lineinfile, not a template of the whole file: the other 60 lines are upstream's own
+  # documentation and its notification knobs, and templating would freeze all of them at
+  # whatever 1.7.2 happened to say. The `^#?` anchor matters — an unanchored `SIZE=` also
+  # matches `LOG_DISK_SIZE=256M` and rewrites the wrong line.
+  #
+  # A change here needs the tmpfs remounted, so it reboots (`notify: Reboot Pi`) rather than
+  # restarting log2ram, which unmounts /var/log under whatever is writing to it.
+  ansible.builtin.lineinfile:
+    path: /etc/log2ram.conf
+    regexp: "{{ item.regexp }}"
+    line: "{{ item.line }}"
+  loop:
+    - regexp: "^#?SIZE="
+      line: "SIZE={{ optimize_pi_log2ram_size }}"
+    # ZL2R is the switch that decides WHICH size governs: false keeps /var/log a plain tmpfs of
+    # SIZE, which makes the two values below inert. They are declared as a record of the mode
+    # this host is not in — flipping ZL2R true makes them live, and a package default that
+    # flipped it would silently change what the caps below are sized against.
+    - regexp: "^#?ZL2R="
+      line: "ZL2R={{ optimize_pi_log2ram_zram_backed }}"
+    - regexp: "^#?LOG_DISK_SIZE="
+      line: "LOG_DISK_SIZE={{ optimize_pi_log2ram_disk_size }}"
+    - regexp: "^#?COMP_ALG="
+      line: "COMP_ALG={{ optimize_pi_log2ram_comp_alg }}"
+  loop_control:
+    label: "{{ item.regexp }}"
+  become: true
+  notify: Reboot Pi
+
 # Everything under /var/log lives in log2ram's RAM-backed tmpfs. Found 2026-06-11
 # at 81% (103/128 MB): journald carried the server-sized 1G cap from initial_setup
 # (would overflow the tmpfs and fail log writes), and acct's savelog kept 30 daily
@@ -790,6 +836,71 @@
     name: "Pi SD-card health heartbeat"
     minute: "*/5"
     job: "/usr/local/bin/pi-sd-health.sh"
+    user: "{{ sys_user }}"
+  become: true
+
+# The rotated-log integrity sweep the heartbeat above reads (#2715). Dual-tagged `sd-health`
+# throughout: the heartbeat reads a missing verdict as a down, so a `--tags sd-health` run has to
+# install the whole chain it depends on, the same reason sd-health and recovery-health both
+# create /var/log/pi-health.
+- name: Create the directory the rotated-log integrity verdict lives in
+  tags: [sd-health, gz-integrity]
+  # /var/lib, NOT /var/log: /var/log is log2ram's tmpfs, so a verdict written there is gone after
+  # a reboot and the heartbeat would report "no verdict" — a down — until the next daily sweep,
+  # up to a day later. One small write a day on the SD card is the cheaper side of that trade.
+  ansible.builtin.file:
+    path: "{{ optimize_pi_gz_integrity_state_file | dirname }}"
+    state: directory
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+
+- name: Deploy the rotated-log integrity sweep
+  tags: [sd-health, gz-integrity]
+  # Mode 0755 and no `no_log`, unlike the two heartbeats: this script embeds no push token. It
+  # writes a verdict file and the heartbeat does the pushing.
+  ansible.builtin.template:
+    src: pi-gz-integrity.sh.j2
+    dest: /usr/local/bin/pi-gz-integrity.sh
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  become: true
+  register: optimize_pi_gz_integrity_script
+
+- name: Check whether a rotated-log integrity verdict exists yet
+  tags: [sd-health, gz-integrity]
+  ansible.builtin.stat:
+    path: "{{ optimize_pi_gz_integrity_state_file }}"
+  register: optimize_pi_gz_integrity_state
+
+- name: Prime the rotated-log integrity verdict before the first daily sweep
+  tags: [sd-health, gz-integrity]
+  # Without this the verdict file does not exist until the cron first fires, and the heartbeat
+  # reads a missing verdict as a down — so a fresh Pi, or one whose sweep was just reshaped,
+  # would page for up to a day over a check that had never run. Runs as the cron's own user, so
+  # the verdict reflects what that user can read.
+  ansible.builtin.command:
+    cmd: /usr/local/bin/pi-gz-integrity.sh
+  become: true
+  become_user: "{{ sys_user }}"
+  changed_when: false
+  when:
+    - not ansible_check_mode
+    - optimize_pi_gz_integrity_script.changed or not optimize_pi_gz_integrity_state.stat.exists
+
+- name: Schedule the rotated-log integrity sweep
+  tags: [sd-health, gz-integrity]
+  # Daily at 01:40 UTC: after log2ram's own 23:55 daily sync (so /var/hdd.log holds the day's
+  # rotation) and clear of the 00:00-00:10 cluster of logrotate, dpkg-db-backup and sysstat. Both
+  # streams to the journal — the sweep prints its verdict line on every run, which cron would
+  # otherwise mail to a spool nothing reads.
+  ansible.builtin.cron:
+    name: "Pi rotated-log integrity sweep"
+    minute: "40"
+    hour: "1"
+    job: "/usr/local/bin/pi-gz-integrity.sh 2>&1 | logger -t pi-gz-integrity"
     user: "{{ sys_user }}"
   become: true
 

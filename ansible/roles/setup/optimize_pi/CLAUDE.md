@@ -8,8 +8,9 @@ See repo-root `CLAUDE.md` for conventions.
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
 - **Applied by:** `initial_setup.yml --tags "optimize_pi"` when `inventory_hostname ==
   'daniel-pi'`
-- **Crons (2):**
+- **Crons (3):**
   - `Pi SD-card health heartbeat` — `*/5 * * * *`
+  - `Pi rotated-log integrity sweep` — `40 1 * * *`
   - `Pi container-recovery heartbeat` — `*/5 * * * *`
 <!-- /generated_from -->
 
@@ -23,14 +24,17 @@ See repo-root `CLAUDE.md` for conventions.
   server intersects to zero hosts and silently does nothing.
 - **Granular tags** (one section without the whole role): `gpu-mem`, `zram`, `log2ram`,
   `watchdog`, `debloat`, `earlyoom`, `apt-timers`, `node-exporter-host`, `sd-health`,
-  `recovery-health`, `pi-dns`. The shared prep
+  `recovery-health`, `gz-integrity`, `pi-dns`. The shared prep
   tasks are dual-tagged (`Set variables` →
   `[gpu-mem, zram]`; the config.txt path detection → `[gpu-mem, watchdog]`) so
   tag-scoped runs still get the facts they consume. `log2ram` also covers the log
   RAM-budget tasks (journald cap, acct retention, the auditd cap and its rotation
   cleanup, sysstat retention) — they exist because of the tmpfs. `sd-health` and
   `recovery-health` each also create `/var/log/pi-health` and its logrotate stanza, so
-  either tag alone leaves the cron it installs able to write its verdict.
+  either tag alone leaves the cron it installs able to write its verdict. Everything the
+  rotated-log sweep needs carries BOTH `sd-health` and `gz-integrity`, because the SD-card
+  heartbeat reads that sweep's verdict and treats a missing one as a `down` — so a
+  `--tags sd-health` run has to install the sweep, prime its verdict and schedule it too.
 - **The two health crons source `/usr/local/lib/kuma-push-lib.sh`**, installed by the
   `initial_setup` role under `tags: [always]` so a `--tags sd-health` or `--tags recovery-health`
   run still copies it. Both scripts guard the `source` with `|| exit 1`, so a host missing the
@@ -84,8 +88,16 @@ See repo-root `CLAUDE.md` for conventions.
    The mask is why `host_vars/daniel-pi.yml` sets `has_rsyslog: false`: [[initial_setup]]'s
    rsyslog filter block reads that flag and skips, since its `Restart rsyslog` handler fails
    on a masked unit (#1946). Unmasking rsyslog here means flipping that flag too.
-7. **Log RAM budget** — `/var/log` is log2ram's 128 MB RAM-backed tmpfs (was 81% full
-   2026-06-11): a Pi journald drop-in (`60-homelab-pi.conf`, `SystemMaxUse=32M`) overrides
+7. **Log RAM budget** — `/var/log` is log2ram's 128 MB RAM-backed tmpfs, and the role now
+   declares that size rather than inheriting it
+   (`ansible/roles/setup/optimize_pi/defaults/main.yml:optimize_pi_log2ram_size`, with
+   `LOG_DISK_SIZE`, `ZL2R` and `COMP_ALG` beside it). log2ram 1.7.2 ships exactly those four
+   values and daniel-pi's `/etc/log2ram.conf` is byte-identical to upstream's, so the
+   declaration writes nothing today — it costs something only when a package default moves,
+   which is when the caps below need the number pinned (log2ram shipped `SIZE=40M` before
+   128M). #2714 read the live file as hand-edited; it is not, and its duplicate
+   `JOURNALD_AWARE=true` is upstream's own bug at 1.7.2, fixed on master.
+   The caps themselves (was 81% full 2026-06-11): a Pi journald drop-in (`60-homelab-pi.conf`, `SystemMaxUse=32M`) overrides
    initial_setup's server-sized 1G cap, `ACCT_LOGGING="3"` cuts pacct retention from
    30 daily generations (savelog via `/etc/cron.daily/acct`, ~28 MB/day of healthcheck
    exec churn) to 3, auditd is capped to a 12 MB ceiling, and `HISTORY=2` cuts sysstat's
@@ -138,6 +150,25 @@ See repo-root `CLAUDE.md` for conventions.
    Health" Kuma push monitor (uptime-kuma role) via the LAN-only Authelia bypass on
    `^/api/push/` (authelia role). Nonzero count = explicit `down`; a dead cron/host
    trips the 600s push watchdog. Token: `pi_sd_health_push_token` in `secrets.yml`.
+   **The same push carries the rotated-log integrity verdict** (#2715).
+   `templates/pi-gz-integrity.sh.j2` (cron, daily 01:40 UTC) runs `gzip -t` over every
+   rotated `.gz` under `/var/log` and `/var/hdd.log` and writes a two-line verdict to
+   `defaults/main.yml:optimize_pi_gz_integrity_state_file`; the heartbeat reads that file and
+   pushes `down` on a failing verdict, on a verdict older than
+   `optimize_pi_gz_integrity_max_age_h`, and on no verdict at all. Three things about it:
+   - **`/var/hdd.log` is the load-bearing tree.** `/var/log` is the RAM tmpfs, rewritten from
+     RAM on every rotation; `/var/hdd.log` is the copy on the card and the destination of the
+     sync that corrupted 37 files in #2694. Running the sweep against the live Pi on 2026-09-27
+     found 37 of 144 failing and every one of them under `/var/hdd.log`, none under `/var/log`.
+     A `/var/log`-only sweep read green through all of #2694.
+   - **It is daily, not `*/5`.** 1.7s wall (1.44s user) over 144 files and 9.7 MB warm, ~13s
+     with the SD-side copies cold, measured by running the script on the Pi. At the
+     heartbeat's cadence that is ~8 min/day of CPU and ~2.8 GB/day of reads.
+   - **A file count below `optimize_pi_gz_integrity_min_files` is itself a `down`.** `gzip -t`
+     over no files exits 0, so without the floor a moved root or a logrotate change turns the
+     check green forever.
+   The verdict lives under `/var/lib`, not `/var/log`: a verdict in the tmpfs is gone after a
+   reboot, and the heartbeat would then report a missing verdict for up to a day.
 12. **Container-recovery heartbeat** — AutoKuma reads only the SERVER's docker socket, so the
     Pi's containers have no liveness monitor of their own. The two that die silently are
     `autoheal` (restarts unhealthy containers) and `docker-proxy` (the read-only socket

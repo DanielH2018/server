@@ -15,7 +15,9 @@ import jinja2
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
 
 
-TEMPLATES = ANSIBLE / "roles" / "setup" / "optimize_pi" / "templates"
+ROLE = ANSIBLE / "roles" / "setup" / "optimize_pi"
+TEMPLATES = ROLE / "templates"
+OPTIMIZE_PI_DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 REAL_LIB = "/usr/local/lib/kuma-push-lib.sh"
 REAL_LOG = "/var/log/pi-health/health.log"
 
@@ -97,6 +99,10 @@ printf '%b' "$STUB_JOURNAL"
 # a temp file by substituting the assignment's value.
 SD_COUNTER = "/sys/fs/ext4/mmcblk0p2/errors_count"
 
+# The role default naming the rotated-log integrity verdict pi-sd-health reads. `run()` seeds an
+# `up` verdict at a temp path under this name; test_pi_gz_integrity_sweep.py overrides it.
+GZ_STATE_VAR = "optimize_pi_gz_integrity_state_file"
+
 
 # The Pi's own containers_list, so the recovery cron's watch set is the one the host deploys.
 PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
@@ -105,18 +111,24 @@ PI_HOST_VARS = load_yaml(HOST_VARS / "daniel-pi.yml")
 def render(name, tmp_path, jinja_vars=None):
     """The real template, rendered, with only its absolute paths repointed at temp files."""
     template = TEMPLATES / f"{name}.sh.j2"
+    # The role's own defaults, so a test that does not care about the gz-integrity wiring still
+    # renders (StrictUndefined would otherwise abort on it), and one that does can override any
+    # key by name — hence a dict updated in place rather than keyword arguments, which would
+    # raise on a duplicate.
+    context = {
+        "containers_list": PI_HOST_VARS["containers_list"],
+        "has_code_server": False,
+        "domain": "example.test",
+        "k3s_metallb_ingress_vip": "10.0.0.240",
+        "pi_recovery_push_token": "stubtoken",
+        "pi_sd_health_push_token": "stubtoken",
+        **OPTIMIZE_PI_DEFAULTS,
+    }
+    context.update(jinja_vars or {})
     body = (
         jinja2.Environment(undefined=jinja2.StrictUndefined)
         .from_string(template.read_text())
-        .render(
-            containers_list=PI_HOST_VARS["containers_list"],
-            has_code_server=False,
-            domain="example.test",
-            k3s_metallb_ingress_vip="10.0.0.240",
-            pi_recovery_push_token="stubtoken",
-            pi_sd_health_push_token="stubtoken",
-            **(jinja_vars or {}),
-        )
+        .render(**context)
     )
 
     for literal, label in ((REAL_LIB, "push helper"), (REAL_LOG, "health log")):
@@ -156,7 +168,17 @@ def run(
 
     `journal` is what the journalctl stub answers, `\\n`-separated; `journalctl_calls(tmp_path)`
     reads back every invocation the script made.
+
+    pi-sd-health also reads the daily rotated-log integrity verdict, so an `up` one is seeded in
+    tmp_path unless the caller points the script at its own file through `jinja_vars`. Without
+    the seed every run here would read the real /var/lib path, find nothing, and push `down`.
     """
+    jinja_vars = dict(jinja_vars or {})
+    if GZ_STATE_VAR not in jinja_vars:
+        verdict = tmp_path / "gz-integrity.state"
+        verdict.write_text("up\nseeded by the test harness\n")
+        jinja_vars[GZ_STATE_VAR] = str(verdict)
+
     script, log = render(name, tmp_path, jinja_vars)
 
     if counter is not None:
