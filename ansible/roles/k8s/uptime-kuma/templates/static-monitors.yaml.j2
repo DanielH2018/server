@@ -486,6 +486,11 @@ stringData:
   # entrypoint counter, which survives that failure.
   monitor-bridge-traefik-404.json: |
     {"type": "push", "name": "Traefik 404 Flood", "description": "monitor-bridge: 404 share of entrypoint traffic over 5 min above 90%, the shape of an edge that lost its routers (a missing CrowdSec plugin, #1322). DOWN means most requests to the edge are 404; check Traefik's startup log for a router or plugin error.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_404_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
+  # Minted 2026-09-27 for #2757, ahead of the check that pushes to it. A client wedged on a
+  # connection SNICheck pinned wrong gets 421 at the router and never reaches a service, so
+  # neither the 5xx, latency nor 404 tile above sees it (#2747, #2749).
+  monitor-bridge-traefik-421.json: |
+    {"type": "push", "name": "Traefik 421", "description": "monitor-bridge: a Traefik router serving 421 above 0.02 rps for 3 cycles (15 min). A long-lived client connected while Traefik was still reconciling routes and SNICheck pinned the wrong TLS options on that connection; it gets 421 until it redials. DOWN names the router: restart the client that calls it (a Traefik config change does not help). #2747, #2749.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_traefik_421_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-n8n.json: |
     {"type": "push", "name": "n8n Prod Workflows", "description": "monitor-bridge reads n8n's executions API every 5 min: DOWN when an active workflow failed 3 times in a row, or 2+ workflows are each failing repeatedly. The message names the workflow; open its last execution in n8n.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_n8n_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-arr-queue.json: |
