@@ -44,6 +44,27 @@ else
   STATUS=down; MSG="cannot read ${COUNTER}"
 fi
 
+# The rotated-log integrity verdict, produced daily by pi-gz-integrity.sh and folded in here.
+# Same monitor on purpose (#2715): a rotated log that stops decompressing and a climbing ext4
+# errors_count are the same operator action on the same device, and a second Kuma monitor would
+# need its own push token, SOPS entry and rotation registry row. A verdict older than the
+# sweep's own period is itself a down — the unreachable-source rule above, applied to a source
+# that happens to be a file: a sweep that stopped running must not keep reporting yesterday.
+GZ_STATE="{{ optimize_pi_gz_integrity_state_file }}"
+GZ_MAX_AGE_H={{ optimize_pi_gz_integrity_max_age_h }}
+if [ -r "$GZ_STATE" ] &&
+  [ -n "$(find "$GZ_STATE" -newermt "-${GZ_MAX_AGE_H} hours" -print 2>/dev/null)" ]; then
+  GZ_STATUS=$(sed -n 1p "$GZ_STATE")
+  GZ_MSG=$(sed -n 2p "$GZ_STATE")
+else
+  GZ_STATUS=down
+  GZ_MSG="rotated-log integrity verdict missing or older than ${GZ_MAX_AGE_H}h (${GZ_STATE}) — the daily sweep is not running"
+fi
+if [ "$GZ_STATUS" != "up" ]; then
+  STATUS=down
+fi
+MSG="${MSG}; ${GZ_MSG}"
+
 kuma_push "$STATUS" "$MSG" "$PUSH_URL" "$KUMA_HOST" "$KUMA_RESOLVE_IP" pi-sd-health
 
 # Durable record of this cycle, so `probe.py alerts` can reconstruct the episode. The full

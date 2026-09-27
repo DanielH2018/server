@@ -38,3 +38,42 @@ optimize_pi_apt_timers:
 optimize_pi_node_exporter_version: "1.12.1"
 optimize_pi_node_exporter_url: "https://github.com/prometheus/node_exporter/releases/download/v{{ optimize_pi_node_exporter_version }}/node_exporter-{{ optimize_pi_node_exporter_version }}.linux-arm64.tar.gz"
 optimize_pi_node_exporter_sha256: "ad35b605f9954b9f1ffddf5ba054bdc5a98d790b9eae5291e1eeb83f1ecbd0e7"
+
+# /etc/log2ram.conf — the premise every cap in tasks/main.yml section 7 is computed from.
+# log2ram 1.7.2 SHIPS exactly these four values, and daniel-pi's copy is byte-identical to
+# upstream's (md5 f62aef1aeae1473882baba0e521f752e, which is also the conffile md5 dpkg
+# recorded, so nothing there was ever hand-edited). Declaring them therefore writes nothing
+# today; it costs something only at the moment an upstream default MOVES, which is exactly when
+# the caps below need the number pinned — log2ram shipped SIZE=40M before it shipped 128M, and a
+# package default that moves under a 32M journald cap either overflows the tmpfs or wastes RAM
+# on a 512 MB board, with nothing to announce it.
+optimize_pi_log2ram_size: 128M
+# ZL2R decides WHICH of the two sizes governs: false means /var/log is a plain tmpfs of
+# `optimize_pi_log2ram_size`, so the two zram-backing values below are inert and declared as a
+# record of the mode this host is not in. Flipping ZL2R to true makes them live.
+optimize_pi_log2ram_zram_backed: "false"
+optimize_pi_log2ram_disk_size: 256M
+optimize_pi_log2ram_comp_alg: lz4
+
+# The daily rotated-log integrity sweep (templates/pi-gz-integrity.sh.j2). It `gzip -t`s every
+# rotated log and writes a verdict the 5-minute SD-health heartbeat folds into its Kuma push.
+#
+# BOTH roots, and /var/hdd.log is the load-bearing one: /var/log is log2ram's RAM tmpfs, while
+# /var/hdd.log is the copy on the SD card and the destination of the sync that corrupted 37
+# files in #2694. Run against the live Pi on 2026-09-27 the sweep found 37 of 144 files failing,
+# every one of them under /var/hdd.log and none under /var/log.
+optimize_pi_gz_integrity_roots:
+  - /var/log
+  - /var/hdd.log
+# Non-vacuity floor: a glob that matches nothing passes `gzip -t` trivially, so a logrotate
+# config change or a moved root would turn the sweep green forever. 144 files across both roots
+# on 2026-09-27; /var/log alone swings 35-72 over a logrotate cycle, so 40 sits below the
+# trough of either root and well above zero.
+optimize_pi_gz_integrity_min_files: 40
+# /var/lib, NOT /var/log: a verdict written into log2ram's tmpfs is gone after a reboot, and the
+# heartbeat would then read "no verdict" (a down) until the next daily sweep.
+optimize_pi_gz_integrity_state_file: /var/lib/pi-health/gz-integrity.state
+# How old a verdict the heartbeat still trusts. Longer than the sweep's daily period so one
+# missed run is tolerated; shorter than two, so a sweep that stops running goes down rather
+# than reporting yesterday's verdict forever.
+optimize_pi_gz_integrity_max_age_h: 26
