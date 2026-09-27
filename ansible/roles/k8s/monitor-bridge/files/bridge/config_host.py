@@ -439,7 +439,10 @@ def host_config(
         # every 6h, so one slow result held the tile red for ~6h — three times in the 14 days to
         # 2026-09-27, 11.6h in total. Read from the API's own history (the fetch asks for this
         # many rows), never from bridge cycles: 72 cycles re-reading one row prove nothing, while
-        # two results 6h apart are two measurements. 2 is the smallest value that rejects a
+        # two results are two measurements. They are usually 6h apart and NOT necessarily so — a
+        # manual run writes into the same results table (the series carries `scheduled="false"`
+        # rows against unpinned servers), so one of the two slots can hold an operator's own
+        # test minutes after the scheduled one. 2 is the smallest value that rejects a
         # single bad draw, and it caps the page's delay at one test interval. 1 restores the
         # old page-on-sight behaviour; the status and age arms are untouched by this knob and
         # still page on the newest row alone.
