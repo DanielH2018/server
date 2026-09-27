@@ -35,6 +35,17 @@ automations do.
   pattern that declares one, so every HACS package here is a one-time dashboard action and
   survives only because the Longhorn PVC does. Record any such install in this file.
 
+- **`logger:` silences `pychromecast.controllers` at `critical` (2026-09-27, issue #2781).**
+  pychromecast's homeassistant controller hands the Nest Hub Max HA's `external_url`, the
+  receiver cannot reach it, and `_connect_hass failed` raises `PyChromecastError` on every
+  cast-status callback. Casting a dashboard still works, so the fault is cosmetic to HA and
+  expensive to monitoring: each exception logs a traceback, and over the 7 days to 2026-09-27
+  all 197 lines matching monitor-bridge's fatal-log pattern in this container were those
+  tracebacks. The bursts reach 21-30/hour against `LOG_ERROR_MAX=20`, which held the composite
+  `k8s_workloads` tile red 11 times in 14 days and masked real workload failures while red.
+  The underlying reach-back failure is unfixed — the operator-visible symptom is none, and the
+  candidate fix changes the instance URLs that casting depends on.
+
 ### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
 
 `thomasloven/hass-browser_mod` was proposed to make the Nest Hub Max cast dashboard
