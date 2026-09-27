@@ -57,7 +57,11 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   otherwise page twice: `node` → disk, memory, host_temp; `node-pi` → host_temp, pi_pressure.
   `pvc_fullness` gets NO entry keyed on the kubelet job on purpose — its claim-count floor
   exists to page on that partial outage. A new node-exporter scrape job fails
-  `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped.
+  `test_every_node_exporter_job_is_mapped_in_exporter_dependent` until it is mapped. The probe
+  reads a BARE `up`, never `origin_sel()`: the pin resolved to daniel-server and left the
+  node-pi entry and daniel-box's half of `node` unreachable (#2779). Suppression is keyed by
+  job, so one host's dead exporter holds its dependents for the whole estate — the `DECIDED:`
+  at the probe in `files/check.py` has the trade-off.
 - **`STARTUP_GRACE`** (`n8n`, `bazarr`, `prowlarr_indexers`, `scrutiny`, `r2_usage`,
   `speedtest`, `healthchecks_drift`) holds a reach-out check with no gate and no streak of
   its own `up` for the first `GRACE_CYCLES`-1 consecutive down cycles, so the weekly Sunday

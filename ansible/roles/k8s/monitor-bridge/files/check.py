@@ -81,11 +81,27 @@ def run_once(
     # `up` once and suppress each dead exporter's dependents so a node-exporter/cadvisor death is one
     # page (Scrape Targets), not a 3-monitor false-page storm / silent-green split. A failure to
     # DETERMINE exporter health leaves `suppressed` empty (fail toward alerting, never masking).
+    #
+    # A BARE `up`, deliberately — no origin_sel(). PROM_ORIGIN resolves to origin="daniel-server",
+    # while the `node` job labels each target with its own node name (daniel-box, daniel-server)
+    # and `node-pi` is statically labelled daniel-pi. A pinned probe therefore saw one node
+    # exporter of three, so EXPORTER_DEPENDENT["node-pi"] was unreachable and the daniel-box half
+    # of "node" with it: on 2026-09-21 15:09 pi_pressure paged with "node-pi series missing" —
+    # exactly what that entry exists to suppress — and on 2026-09-26 one Pi outage paged both
+    # pi_pressure and cluster_targets (#2779).
+    #
+    # DECIDED: suppression stays keyed on the Prometheus `job`, so a dead exporter on ONE host
+    # now suppresses its dependents estate-wide — daniel-box's node exporter dying holds
+    # daniel-server's disk and memory verdicts too. Accepted over per-origin suppression: the
+    # dependents report the worst origin in one verdict, so splitting suppression by origin would
+    # mean splitting the checks by origin first. Scrape Targets still names the dead job, so the
+    # outage is reported; what is lost is a second host's verdict while one host's exporter is
+    # down. check_targets_down keeps its origin_sel() pin — TARGETS_MIN is sized to it.
     suppressed = set()
     if prom_ok and gate_lib.check_enabled("prometheus", only, skip):
         try:
             for job in gate_lib.down_exporters(
-                bridge.net.prom_vector(cfg, "up%s" % bridge.net.origin_sel(cfg)),
+                bridge.net.prom_vector(cfg, "up"),
                 gates.exporter_dependent,
             ):
                 suppressed |= gates.exporter_dependent[job]
