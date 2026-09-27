@@ -64,6 +64,9 @@ LOCK_WAIT = 3840
 # The snapshot this run is using, told apart from a dead one by an advisory lock inside it.
 OWNER_LOCK = ".deploy-owner.lock"
 SNAPSHOT_ROOT_DEFAULT = "/tmp/homelab-deploy-snapshots"
+# The label's share of a 255-byte filename: the snapshot directory adds `-<stamp>-<pid>` and
+# deploy_detach's log file adds `deploy-`, `.log` and the same stamp and pid.
+LABEL_MAX_BYTES = 200
 # How long `deploy_tags.py list` may take under the tree lock. ADR-0017's "the hold is
 # seconds" rests on it staying fast; measured 2026-09-17 on a warm venv: 0.9s.
 TAG_LIST_TIMEOUT_DEFAULT = 120
@@ -190,8 +193,22 @@ class Run:
         Joined with `+`, never `,`: the snapshot is the playbook's cwd, and ansible-core reads
         a comma anywhere in the resolved inventory path as an inline host list, so every
         multi-tag deploy matched no host while exiting 0 (issue #1813).
+
+        Capped at LABEL_MAX_BYTES, naming how many tags were cut. A shared role's caller
+        expansion (#2704) passes 58 tags, and their full join is past the 255-byte filename
+        limit, so `git worktree add` refused the snapshot. The directory's stamp and pid keep
+        it unique, so the label only has to be readable.
         """
-        return re.sub(r"[^A-Za-z0-9_.-]", "_", "+".join(self.tags) or "full")
+        label = "+".join(self.tags)
+        if len(label) > LABEL_MAX_BYTES:
+            shown: list[str] = []
+            for tag in self.tags:
+                cut = f"{len(self.tags) - len(shown) - 1}more"
+                if len("+".join([*shown, tag, cut])) > LABEL_MAX_BYTES:
+                    break
+                shown.append(tag)
+            label = "+".join([*shown, f"{len(self.tags) - len(shown)}more"])
+        return re.sub(r"[^A-Za-z0-9_.-]", "_", label or "full")
 
     def close(self) -> None:
         for fd in self.service_fds:

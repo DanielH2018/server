@@ -95,3 +95,45 @@ def test_single_tag_snapshot_dir_is_unaffected(tmp_path: Path) -> None:
     assert result.returncode == 0, result.stderr
     snapshot_dir = cwd_file.read_text().strip()
     assert "authelia" in Path(snapshot_dir).name
+
+
+# The 58 callers `--tags volume-snapshot` expanded to on 2026-09-27. Joined in full they name
+# a directory past the 255-byte filename limit, and `git worktree add` refused it.
+_SHARED_ROLE_CALLERS: list[str] = (
+    "artifacts authelia autofix-bridge bazarr bento-pdf claude-otel cloudflare-ddns "
+    "code-server configarr crowdsec deploy-ui docs dri-device-plugin freshrss gpu-exporter "
+    "headlamp healthchecks home-assistant homelab-mcp homepage ical-proxy janitorr jellyfin "
+    "karakeep littlelink livesync loki-homelab longhorn-ui media-volume monitor-bridge "
+    "mosquitto n8n navidrome netpol-baseline node-exporter nut nut-exporter peanut "
+    "pi-peer-backup pihole pihole-exporter prowlarr qbittorrent radarr registry scrutiny "
+    "sonarr speedtest tdarr terraria terraria-stats texbrain traefik uptime-kuma valheim "
+    "valheim-stats wg-easy zigbee2mqtt"
+).split()
+
+
+def _label(tags: list[str]) -> str:
+    # Imported here rather than at the top: the end-to-end tests above drive deploy.sh as a
+    # subprocess and need nothing from the module itself.
+    import deploy_under_locks
+
+    return deploy_under_locks.Run(
+        repo_root=Path("."), tags=tags, at_sha="", args=[]
+    ).label
+
+
+def test_a_fleet_wide_tag_list_fits_a_filename():
+    # The snapshot directory appends `-<YYYYmmdd-HHMMSS>-<pid>`, at most 24 more bytes.
+    label = _label(_SHARED_ROLE_CALLERS)
+    assert len(label.encode()) + 24 <= 255, label
+    assert label.startswith("artifacts_authelia_"), (
+        "the label still leads with the tags"
+    )
+
+
+def test_two_long_tag_lists_sharing_a_prefix_get_different_labels():
+    fleet = _SHARED_ROLE_CALLERS
+    assert _label(fleet) != _label(fleet[:-1])
+
+
+def test_a_short_tag_list_is_labelled_in_full():
+    assert _label(["authelia", "traefik"]) == "authelia_traefik"
