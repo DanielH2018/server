@@ -118,9 +118,16 @@
   tags: [hypervisor]
   # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
   # mode that REPORTS working-tree status. There is nothing to switch to here.
+  #
+  # `--ignore-submodules=all` for the same reason the gate itself carries it (#2777): the gate
+  # fast-forwards this tree, `git merge --ff-only` never moves a submodule's working tree, so
+  # every commit that bumps the `Email-to-RSS` gitlink leaves a ` M Email-to-RSS` line here that
+  # no one wrote. Without the flag the refusal below reads that as someone's uncommitted work and
+  # blocks teardown on a tree that holds none. Judge the superproject's own files, which are the
+  # only thing a deploy from here renders.
   when: hypervisor_teardown_gate_repo.stat.exists
   ansible.builtin.command:
-    cmd: git status --porcelain
+    cmd: git status --porcelain --ignore-submodules=all
     chdir: "{{ hypervisor_staging_gate_repo }}"
   register: hypervisor_teardown_gate_dirty
   changed_when: false

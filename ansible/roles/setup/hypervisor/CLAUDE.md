@@ -218,36 +218,32 @@ for months, which is how `has_docker: false` came to describe a state nothing co
 FROM. `scripts/deploy_tools/staging_gate_remote.sh` cds there, fast-forwards it to the SHA under
 test, and runs `./scripts/deploy.sh --tags <svc> -e target=daniel-stage`.
 
-That script has **two callers**, and the file is written to suit both. `staging_gate.py` still
-pipes it over ssh (`bash -s`), which is the live path. The restricted key described below execs
-it from the checkout instead. Because the second caller runs it from disk in a tree it
-fast-forwards, **its body is wrapped in a `main` function** — bash reads a script by byte offset
-as it executes, so a `git merge --ff-only` rewriting the file mid-run would resume at a
-meaningless offset. Wrapping makes bash parse the whole body before any of it runs. Don't unwrap
-it.
+That script has **one caller**: the dispatcher behind the restricted key described below execs
+the copy installed at `hypervisor_staging_gate_runner_path`, and `staging_gate.py` no longer
+pipes it over ssh. **Its body is wrapped in a `main` function** — bash reads a script by byte
+offset, so a `git merge --ff-only` rewriting it mid-run would resume at a meaningless offset.
+The installed copy sits outside the tree it fast-forwards, so don't unwrap it: that wrapper is
+what makes a hand-run from the checkout safe.
 
 **It exists because the gate used to do all of that to `/home/ubuntu/server`, this host's own
-checkout** (2026-08-29 review M-2). Three things were wrong with that and only the first is
-obvious:
+checkout** (2026-08-29 review M-2). Three things were wrong, and only the first is obvious:
 
 - An operator's tree jumped to arbitrary commits behind their back, since the gate never restored
   what it merged. daniel-server's checkout was found sitting on whatever SHA the gate last tested.
-- Two gate runs — the 30-minute tick's and an operator driving `staging_gate.py` by hand — could
-  interleave a fetch, a merge and a deploy on one tree, each believing it had pinned the commit it
-  was measuring.
+- Two gate runs — the 30-minute tick's and a hand-run of `staging_gate.py` — could interleave a
+  fetch, a merge and a deploy on one tree, each believing it had pinned the commit it measured.
 - A dirty tree there made the gate answer `PREP_FAILED` for every commit. That maps to NO_VERDICT,
   which the deployer reports as "staging could not be asked, which is not a rejection" and then
   deploys prod anyway — so the gate could be dead for days and read as staging being down.
 
 The clone fixes all three by giving the gate a tree it owns. **The gate moving its own tree
-forward is the point, not a residual defect** — what M-2 objected to was it moving someone else's.
+forward is the point** — what M-2 objected to was it moving someone else's.
 
-Three things are load-bearing:
+Four things are load-bearing:
 
 - **`update: false` on the git task.** The gate fast-forwards this tree every tick; an updating
   clone would yank it back to master's tip mid-run, and `deploy.sh` renders from the working
-  directory, so the verdict would describe a tree nobody asked about. Ansible creates it once and
-  never touches the branch again.
+  directory, so the verdict would describe a tree nobody asked about.
 - **Cloned from the remote, not from `/home/ubuntu/server`.** A local clone would share an object
   store and re-couple the two trees' fates, which is the thing being undone.
 - **`/var/lock/staging-gate.lock` is NOT `/var/lock/server-git-tree.lock`.** `deploy.sh` takes the
@@ -255,24 +251,28 @@ Three things are load-bearing:
   reentrant across a fresh open — sharing one would deadlock the gate against itself. Contention
   on the staging lock is a PREP failure, because a run that never started learned nothing about
   the SHA.
+- **Both dirty checks pass `--ignore-submodules=all`.** `git merge --ff-only` moves the
+  `Email-to-RSS` gitlink in the index and never touches the submodule's working tree, so a
+  gitlink bump leaves this checkout printing ` M Email-to-RSS` — permanently, because the dirty
+  check runs before the fetch. It wedged the gate for five days in 2026-09 (#2777). Why the gate
+  ignores the submodule rather than syncing it: the `DECIDED:` comment at the check in
+  `scripts/deploy_tools/staging_gate_remote.sh`. ENFORCED by
+  `ansible/tests/staging/test_staging_gate_ignores_submodule_gitlink.py`.
 
 Teardown removes the clone and the lock, but **refuses while the tree is dirty**, on the same
-reasoning that leaves `/var/lib/libvirt` alone: a clean tree costs a re-clone to rebuild, and an
-edit that exists only here is not reproducible from anywhere.
+reasoning that leaves `/var/lib/libvirt` alone: an edit that exists only here is not reproducible
+from anywhere, while a clean tree costs a re-clone. It reads the tree with the same flag.
 
 **The gate refuses to report on a tree that is not the SHA it was asked about.** `git merge
---ff-only <ancestor>` exits 0 and leaves HEAD where it was — git says "Already up to date" and
-means it — so a request for a commit older than this checkout's HEAD would deploy the tree it
-already had and return a verdict attributed to a commit that was never rendered. Measured
-2026-08-30 on a scratch repo. The 30-minute tick cannot reach it, since it only ever asks about
-master's tip and this tree only moves forward; a hand-run or a backfill can, which is why
-`staging_gate_remote.sh` asserts `HEAD == SHA` after the merge rather than trusting the exit
-code. A PASS about the wrong commit is worse than any refusal.
+--ff-only <ancestor>` exits 0 and leaves HEAD unmoved, so `staging_gate_remote.sh` asserts
+`HEAD == SHA` after the merge rather than trusting the exit code; a PASS attributed to a commit
+that was never rendered is worse than any refusal. The measurement and who can reach it are in
+that script's comment.
 
 The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
-script, which cannot read a Jinja var. `ansible/tests/staging/test_staging_gate_paths_agree.py` pins them
-equal — the drift is silent in the worst direction, since a stale path in the script makes every
-tick answer NO_VERDICT rather than fail.
+script, which cannot read a Jinja var. `ansible/tests/staging/test_staging_gate_paths_agree.py`
+pins them equal; the drift is silent in the worst direction, since a stale path makes every tick
+answer NO_VERDICT rather than fail.
 
 ## The staging gate's restricted ssh key
 
