@@ -172,6 +172,9 @@ def _clean_missing_tree(
     return ("kept", branch_err) if branch_err else ("removed", "(already gone)")
 
 
+_TRACEBACK_HEADER = "Traceback (most recent call last):"
+
+
 def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     """Judge one remote clean leg: what happened, and the line to print for it.
 
@@ -183,6 +186,12 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     Args:
         proc: the finished remote call.
 
+    A failed leg is reported by its first non-empty stderr line, except when stderr holds a
+    Python traceback (#2788). There the first line is the `Traceback (most recent call
+    last):` header, which names nothing, so the last non-empty line is reported instead:
+    that is the exception type and message. The check is for the header anywhere, not only
+    first, because `uv` can print a warning ahead of the interpreter's output.
+
     Returns:
         `("removed" | "kept" | "failed", line)`. The verdict comes from the output's own
         prefix, so a `kept:` verdict stays `kept` whatever the exit status: the leg spoke.
@@ -191,10 +200,11 @@ def read_clean_result(proc: subprocess.CompletedProcess) -> tuple[str, str]:
     for verdict in ("removed", "kept"):
         if line.startswith(f"{verdict}:"):
             return verdict, line
-    detail = next(
-        (ln.strip() for ln in (proc.stderr or "").splitlines() if ln.strip()),
-        line or "no output",
-    )
+    errs = [ln.strip() for ln in (proc.stderr or "").splitlines() if ln.strip()]
+    if any(ln.startswith(_TRACEBACK_HEADER) for ln in errs):
+        detail = errs[-1]
+    else:
+        detail = errs[0] if errs else line or "no output"
     return "failed", f"clean failed (exit {proc.returncode}): {detail}"
 
 
