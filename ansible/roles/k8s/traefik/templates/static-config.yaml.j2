@@ -196,6 +196,19 @@ data:
 {% for ns in traefik_k8s_watched_namespaces %}
           - {{ ns }}
 {% endfor %}
+        # DECIDED: keep a router whose Service has no ready endpoints (#2747, #2758). With
+        # this off, v3.7.13's CRD provider logs `no servers found for <ns>/<svc>` and drops
+        # the whole router, so its host briefly maps to no TLS options. A handshake in that
+        # window records the options name `default` (pkg/server/router/tcp/router.go,
+        # SetHTTPSForwarder), and once the router returns naming `modern` or
+        # `cloudflare-origin-pull`, SNICheck answers every request on that connection 421
+        # for the connection's life. On the 2026-09-27 reboot that wedged the Pi's Alloy and
+        # both of the apiserver's OIDC discovery fetches for hours. With it on, the router
+        # stays, the handshake records the router's own option, and the client gets a 503
+        # it retries through. The cost is a 503 instead of a 404 while a backend is down or
+        # scaled to 0, which the per-service traefik5xx check sees and the 404 flood check
+        # did not. Full reasoning in this role's CLAUDE.md, the SNICheck bullet.
+        allowEmptyServices: true
 
 {% if traefik_k8s_manage_acme %}
     certificatesResolvers:

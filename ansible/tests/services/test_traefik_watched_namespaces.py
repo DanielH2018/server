@@ -151,3 +151,35 @@ def test_the_comparison_rejects_a_mismatched_pair(
     problems = disagreements(watched, granted)
     assert len(problems) == 1
     assert expect in problems[0]
+
+
+def empty_services_problem(provider: dict) -> str | None:
+    """None when the CRD provider keeps a router whose Service has no ready endpoints.
+
+    Dropping that router unmaps its host's TLS options, so a handshake in the window records
+    `default` and SNICheck answers that connection 421 for life once the router returns
+    (#2747, #2758). The DECIDED marker in static-config.yaml.j2 has the mechanism.
+    """
+    if provider.get("allowEmptyServices") is not True:
+        return (
+            f"providers.kubernetesCRD.allowEmptyServices is "
+            f"{provider.get('allowEmptyServices')!r}; a backend with no ready endpoints then "
+            f"drops its router and wedges any connection opened meanwhile on 421 (#2747)"
+        )
+    return None
+
+
+def _provider(host: str) -> dict:
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2"))
+    return yaml_fast.safe_load(doc["data"]["traefik.yml"])["providers"]["kubernetesCRD"]
+
+
+@pytest.mark.parametrize("host", _HOSTS)
+def test_empty_services_keep_their_router_is_clean(host: str) -> None:
+    # fact: ansible/roles/k8s/traefik/CLAUDE.md#Notable
+    assert empty_services_problem(_provider(host)) is None
+
+
+@pytest.mark.parametrize("provider", [{}, {"allowEmptyServices": False}])
+def test_empty_services_dropping_their_router_is_flagged(provider: dict) -> None:
+    assert empty_services_problem(provider) is not None
