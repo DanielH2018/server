@@ -144,22 +144,34 @@ def run_once(
     # DECIDED: this gate does NOT go through _gate() — the reuse branch below sits between the
     # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
     # precomputed verdict through would add a parameter for one caller and hide the reuse.
+    #
+    # DECIDED (#2780): in the reuse branch the GATING verdict and the PUSHED status part company.
+    # `cluster_ok` stays `prom_ok`, so CLUSTER_DEPENDENT is suppressed exactly as before; the tile
+    # is pushed `up` regardless, because reusing a DOWN verdict turned two tiles red for one fact
+    # — 2026-09-18 15:37, 2026-09-20 07:44, 2026-09-27 07:40. Lighting a second monitor is the one
+    # thing the reuse exists to avoid, so pushing the reused DOWN undid it. The LOG keeps the real
+    # verdict: a log line reading OK while Prometheus is down would be a second bug. A genuinely
+    # separate endpoint still probes and still pages on its own.
     cluster_ok, cluster_msg = True, "disabled by check filter"
     if gate_lib.check_enabled("cluster_prometheus", only, skip):
         # The same-instance reuse only holds when the prometheus gate actually probed.
-        if (
-            cfg.CLUSTER_PROM_URL
+        reused = (
+            bool(cfg.CLUSTER_PROM_URL)
             and cfg.CLUSTER_PROM_URL == cfg.PROM_URL
             and gate_lib.check_enabled("prometheus", only, skip)
-        ):
+        )
+        if reused:
             cluster_ok, cluster_msg = (
                 prom_ok,
                 "same instance as the Prometheus gate (%s)" % prom_msg,
             )
+            push_ok = True
+            push_msg = "same instance, see Prometheus Reachable (%s)" % prom_msg
         else:
             cluster_ok, cluster_msg = gate_lib._evaluate(
                 cfg, "cluster_prometheus", gates.probe_cluster
             )
+            push_ok, push_msg = cluster_ok, cluster_msg
         bridge.common.log(
             "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
         )
@@ -167,8 +179,8 @@ def run_once(
             bridge.net.push(
                 cfg,
                 bridge.common._env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""),
-                cluster_ok,
-                cluster_msg,
+                push_ok,
+                push_msg,
             )
 
     for entry in checks:

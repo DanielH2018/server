@@ -169,6 +169,52 @@ def test_run_once_runs_cluster_dependent_when_cluster_prometheus_up(monkeypatch,
     assert pushed["tok"][1] == "real failure"
 
 
+def test_reused_verdict_pushes_the_cluster_tile_up_but_still_suppresses(
+    monkeypatch, cfg
+):
+    """One Prometheus outage must light ONE tile, and still gate CLUSTER_DEPENDENT (#2780).
+
+    With both URLs naming one Service, run_once reuses the Prometheus gate's verdict here
+    rather than probing twice — and used to push that verdict, so every Prometheus outage
+    turned Prometheus Reachable and Cluster Prometheus red together. The gating half is what
+    the reuse is for and must survive: the tile reads up, k8s_workloads is still skipped.
+    """
+    one_url = "https://prom.example"
+    pushed = run_once_with_gates(
+        replace(cfg, PROM_URL=one_url, CLUSTER_PROM_URL=one_url),
+        monkeypatch,
+        cluster_ok=True,  # unread on the reuse path — the Prometheus verdict decides
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "should not run"))],
+        cluster_dependent={"k8s_workloads"},
+        prom_result=(False, "connection refused"),
+    )
+    cluster_tile_ok, cluster_tile_msg = pushed[""]
+    assert cluster_tile_ok is True
+    assert "see Prometheus Reachable" in cluster_tile_msg
+    assert pushed["tok"][0] is True
+    assert "cluster Prometheus unreachable" in pushed["tok"][1]
+
+
+def test_a_separate_cluster_prometheus_still_pages_on_its_own(monkeypatch, cfg):
+    """The other half: the reuse is what suppresses the tile, not the gate being down.
+
+    Two genuinely separate endpoints get their own probe and their own page, which is the
+    coverage the split gate exists to keep.
+    """
+    pushed = run_once_with_gates(
+        replace(
+            cfg,
+            PROM_URL="https://prom.example",
+            CLUSTER_PROM_URL="https://prom-k8s.example",
+        ),
+        monkeypatch,
+        cluster_ok=False,
+        checks=[("k8s_workloads", "tok", lambda _cfg: (False, "should not run"))],
+        cluster_dependent={"k8s_workloads"},
+    )
+    assert pushed[""][0] is False
+
+
 def test_run_once_reads_every_gates_field(monkeypatch, cfg):
     """The seam must not be inert: a value passed on `Gates` has to reach the loop.
 

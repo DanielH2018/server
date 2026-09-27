@@ -52,7 +52,10 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both Prometheus URLs render to the same cluster Service,
   so `run_once` reuses the first gate's verdict here; the split survives so a second
   Prometheus can be reintroduced, with membership following the URL a check reads. Do not
-  read the pair as independent coverage.
+  read the pair as independent coverage. On that reuse path the tile is pushed `up` with
+  `same instance, see Prometheus Reachable` while the reused verdict still suppresses
+  `CLUSTER_DEPENDENT` — pushing the reused DOWN turned two tiles red for one fact (#2780).
+  Two separate endpoints still probe separately and each pages on its own.
 - **`EXPORTER_DEPENDENT`** maps a node-exporter scrape job to the checks a dead exporter would
   otherwise page twice: `node` → disk, memory, host_temp; `node-pi` → host_temp, pi_pressure.
   `pvc_fullness` gets NO entry keyed on the kubelet job on purpose — its claim-count floor

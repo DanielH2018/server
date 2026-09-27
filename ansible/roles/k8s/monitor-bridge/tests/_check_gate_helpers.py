@@ -97,8 +97,18 @@ def wire_run_once_loki(cfg, monkeypatch, loki_result, names, loki_dependent):
     return ran, pushes
 
 
-def run_once_with_gates(cfg, monkeypatch, cluster_ok, checks, cluster_dependent):
-    """Drive run_once with every gate but the cluster one forced healthy."""
+def run_once_with_gates(
+    cfg, monkeypatch, cluster_ok, checks, cluster_dependent, prom_result=(True, "up")
+):
+    """Drive run_once with every gate but the cluster one forced healthy.
+
+    Args:
+      cluster_ok: What `probe_cluster` reports. Ignored on the same-instance reuse path, where
+        run_once takes the Prometheus gate's verdict instead of probing.
+      prom_result: What `probe_prometheus` reports. Defaults to up, because most callers are
+        about the cluster gate alone; a caller exercising the reuse branch states a DOWN here,
+        which is the only way that branch produces a down verdict.
+    """
     pushed = {}
     monkeypatch.setattr(bridge.net, "prom_vector", lambda _cfg, *a, **k: [])
     monkeypatch.setattr(
@@ -116,7 +126,7 @@ def run_once_with_gates(cfg, monkeypatch, cluster_ok, checks, cluster_dependent)
             loki_dependent=frozenset(),
             b2_dependent=frozenset(),
             cluster_dependent=frozenset(cluster_dependent),
-            probe_prometheus=lambda _cfg: (True, "up"),
+            probe_prometheus=as_probe(prom_result),
             probe_loki=lambda _cfg: (True, "up"),
             probe_b2=lambda _cfg: (True, "up"),
             probe_cluster=lambda _cfg: (cluster_ok, "gate"),
