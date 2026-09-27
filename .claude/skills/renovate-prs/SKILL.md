@@ -190,7 +190,7 @@ that master SHA, and the deployer's gate reads the worst outcome of every run sh
 
 ## 4. Finish the incomplete ones in a worktree
 
-A half-done bump is a normal code change: worktree, fix, test, PR. Two rules specific to here:
+A half-done bump is a normal code change: worktree, fix, test, PR. Three rules specific to here:
 
 - **Rebase Renovate's commit onto master and build on top of it** rather than opening a
   parallel PR. Fetch the bot's branch, `git rebase origin/master`, add your commit, push to
@@ -199,6 +199,17 @@ A half-done bump is a normal code change: worktree, fix, test, PR. Two rules spe
 - **A coupled pin moves with it.** `raise jellyfin with it` means the image bump is part of
   the same PR, because the repo guards the pair (`test_anisync_pin_matches_server.py`). Run
   the guard the rule points at; it is the completion criterion.
+- **The unattended run hands the superseding PR off; it never lands it.** The PR is yours,
+  not `app/renovate`'s, and `renovate-agent.service` sets `LAND_REQUIRE_AUTHOR=app/renovate`,
+  so `land.sh --arm-merge` refuses it. That refusal is the operator's decision, not an
+  obstacle (#2746): never pass `--any-author` from that run. File one hand-off finding
+  instead, modelled on #2744. Its body carries four things. The first is what you verified,
+  with the commands. The second is the landing command with `<sha>` left as the
+  placeholder: `./scripts/deploy_tools/land.sh --pr <n> --since <sha> --arm-merge --await-merge`.
+  The third is the §7 check that proves the new version took effect. The fourth is the merge
+  ordering: land it before the next Renovate PR for the same pin, which Renovate cuts from a
+  master still carrying the old pin and which conflicts with it. An interactive session lands
+  its own superseding PR as usual.
 
 ## 5. A stale merge base needs a rebase before landing
 

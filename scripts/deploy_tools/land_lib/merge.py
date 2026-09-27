@@ -33,7 +33,9 @@ rule.
 `opts.require_author` (from `LAND_REQUIRE_AUTHOR`, which renovate-agent.service sets to
 `app/renovate`) makes --arm-merge refuse a PR by anyone else, before any merge call. The
 agent's contract said "never a PR by another author" and nothing checked (#2170); an
-interactive session leaves the variable unset and is unaffected.
+interactive session leaves the variable unset and is unaffected. The refusal names the hand-off
+rather than the `--any-author` override: only the unattended session ever reads it, and the
+operator chose that the superseding PR it opens for a `manual —` bump goes to a person (#2746).
 """
 
 import re
@@ -193,8 +195,9 @@ def _require_author(ln: Landing) -> None:
     if have != want:
         ln.die(
             f"authored by {have or '<unknown>'}, not {want} — this session may only arm "
-            f"{want}'s PRs (LAND_REQUIRE_AUTHOR); a session allowed to merge it passes "
-            "--any-author",
+            f"{want}'s PRs (LAND_REQUIRE_AUTHOR). Leave it open and file a hand-off finding "
+            "carrying its land.sh command, so an interactive session lands it (#2746); do "
+            "not pass --any-author from the session this variable is set in",
             1,
         )
 
