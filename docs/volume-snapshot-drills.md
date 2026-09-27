@@ -233,11 +233,10 @@ exercised: none of it has ever executed.
 
 The create path and the prune have both run on real deploys. On 2026-09-26 the cluster held 61
 `autodeploy-*` Snapshot CRs across 14 services, created from 2026-08-22 onward, 48 of them
-`readyToUse`, and most claims sat at exactly `volume_snapshot_retain` (3). Still unverified:
+`readyToUse`, and most claims sat at exactly `volume_snapshot_retain` (3). The 13 that were not
+ready were the over-long CRs from 2026-08-22, which no supported route could delete (#2686). The
+operator removed them on 2026-09-27 by bypassing Longhorn's webhook for exactly those objects
+(#2734). The role doc's *The 13 over-long CRs the prune retries and Longhorn refuses, removed by
+hand 2026-09-27* has the source reading and the method. Still unverified:
 
-- **13 CRs from 2026-08-22 are not ready, and nothing supported can delete them.** The prune
-  selects them every deploy and Longhorn's webhook denies each delete. The manager API does not
-  get around it: one of its actions deletes from the engine only, and the other deletes the CR
-  through the same webhook (#2686). They pin no blocks. The role doc's *The 13 over-long CRs the
-  prune retries and Longhorn refuses, every deploy* has the source reading and the measurement.
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
