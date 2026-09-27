@@ -199,8 +199,10 @@ Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
 cannot be deleted through the Kubernetes API at all. All thirteen were still there on 2026-09-26,
 `status.readyToUse: false`, most carrying `status.error` "lost track of the corresponding
 snapshot info inside volume engine". Issue #2686 filed them as never pruned. The prune does
-reach them; the delete is what fails. On 2026-09-27 eleven remained, every one of them
-`markRemoved: false` with the lost-track error. The two `markRemoved: true` CRs were gone.
+reach them; the delete is what fails. All thirteen were still listed at 04:30 UTC on
+2026-09-27. Eleven are `markRemoved: false` with the lost-track error. The other two, both
+`code-server-workspace`, carry `markRemoved: true`, and a report earlier that day wrongly
+recorded those two as gone.
 
 **The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
 (2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
@@ -309,8 +311,9 @@ what that means for retiring it, are in `docs/volume-snapshot-drills.md`.
   the "attached and stuck" row above instead, and it fails the deploy.
 - **Accepted, not fixed: `!= 'attached'` is not `== 'detached'`.** `volume_snapshot_detached` is
   also true for `faulted`, `attaching` and `detaching`, so a `faulted` volume reaches the same
-  unprotected warning as a merely-detached one with no way to tell them apart. Narrowing it is
-  deferred behind #2698, because the block it guards is itself unreached.
+  unprotected warning as a merely-detached one with no way to tell them apart. It is not worth
+  narrowing: the #2698 drill proved the block unreachable for a never-attached volume as well,
+  and #2740 retires the block together with this condition.
 
 ## The guard is `k8s_no_mutate`, and neither `--check` nor `--dry-run` exercises this role at all
 
@@ -364,6 +367,6 @@ one, never by assuming the match is unique.
 `docs/volume-snapshot-drills.md`, split out 2026-09-26 (#2699) so this file stays under the
 role-doc ceiling. Four sections: the detached-volume reasoning and why its premise is false on
 Longhorn v1.12.1; the 2026-08-21 task-6 drill and which of its two reasons still holds (#2681,
-with the never-attached case left to #2698); *Things measured rather than assumed*, the six
+and the 2026-09-27 #2698 drill that measured the never-attached case); *Things measured rather than assumed*, the six
 traps to read **before editing the `kubectl` calls or the registers** here; and what is still
 unverified.
