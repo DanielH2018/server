@@ -187,8 +187,17 @@ any PR moved — a session that achieved nothing still writes a confident closin
 So the wrapper censuses `gh pr list --author app/renovate --state open` **before and after**,
 and the digest's headline is that delta:
 
-- `✅ resolved #a, #b` — those PR numbers left the open set.
+- `✅ resolved #a, #b` — those PR numbers left the open set and GitHub reports them `MERGED`.
+- `⚠️ ran and merged no Renovate PR` — PRs left the open set, but none merged. Each one is
+  listed as `closed without merging` or `state unreadable`.
 - `⚠️ ran and no Renovate PR changed state` — the failure that would otherwise read green.
+
+Leaving the open set is not landing. The `renovate-prs` skill finishes a `manual —` bump by
+closing the Renovate PR in favour of a superseding PR, and that PR stays open for a person
+(#2746). So the wrapper runs `gh pr view <n> --json state` for every PR that left the open
+set, and only a `MERGED` one counts as resolved (#2755). A failed lookup lands in `state
+unreadable`, never in `resolved`. The superseding PR is authored by the session's account, not
+`app/renovate`, so the census never lists it; the session's own summary line names it.
 - `🚨 FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
 `permission denials:` on a digest line is the one to act on. Headless auto mode approving the

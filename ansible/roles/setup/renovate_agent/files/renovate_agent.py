@@ -108,6 +108,30 @@ def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
     ]
 
 
+def pr_states(
+    repo: str, numbers: list[int], tools: AgentTools | None = None
+) -> dict[int, str]:
+    """GitHub's state (`MERGED`, `CLOSED`) for each PR that left the open set during the run.
+
+    A failed lookup leaves its PR out rather than raising: the session has already run, and a
+    crash here would lose the digest that reports it. `delta` reads a missing PR as `unread`,
+    never as merged.
+    """
+    states: dict[int, str] = {}
+    for n in numbers:
+        rc, out = (tools or TOOLS).run(
+            ["gh", "pr", "view", str(n), "--repo", repo, "--json", "state"]
+        )
+        if rc != 0:
+            log(f"gh pr view #{n} failed (exit {rc}): {out.strip()[:200]}")
+            continue
+        try:
+            states[n] = str(json.loads(out).get("state") or "")
+        except ValueError, AttributeError:
+            log(f"gh pr view #{n} returned unparseable output: {out.strip()[:200]}")
+    return states
+
+
 @dataclass(frozen=True)
 class AgentTools:
     """Every process boundary the worktree and crash-report paths cross, as one object.
@@ -421,8 +445,12 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     outcome = parse_run(stdout, rc, timed_out)
 
     after = open_prs(cfg["REPO"], tools)
-    moved = delta(before, after)
-    log(f"resolved={moved.resolved} remaining={moved.remaining} ok={outcome.ok}")
+    gone = sorted({p.number for p in before} - {p.number for p in after})
+    moved = delta(before, after, pr_states(cfg["REPO"], gone, tools))
+    log(
+        f"resolved={moved.resolved} closed={moved.closed} unread={moved.unread} "
+        f"remaining={moved.remaining} ok={outcome.ok}"
+    )
     tools.discord_post(
         webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log
     )
