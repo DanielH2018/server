@@ -48,6 +48,11 @@ CONFIG = os.environ.get("RENOVATE_AGENT_CONFIG", "/etc/renovate-agent/config.env
 USER_AGENT = "renovate-agent"
 # Distinct from the 1 a failed session returns, so the OnFailure page reads which it was.
 EXIT_WORKTREE_BLOCKED = 2
+# The login gh reports for Renovate's PRs. The unit's LAND_REQUIRE_AUTHOR must match it, and
+# test_renovate_agent_unit.py reads it from here.
+RENOVATE_AUTHOR = "app/renovate"
+# The census lists every open PR and filters locally, so the cap covers all authors.
+OPEN_PR_LIMIT = 200
 
 # Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
 # from `gitops_markers`, the deployer's own table copied beside this file.
@@ -85,35 +90,54 @@ def run(argv: list[str], cwd: str | None = None, timeout: int = 120) -> tuple[in
     return p.returncode, (p.stdout or "") + (p.stderr or "")
 
 
-def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
-    """The open Renovate PRs, newest first. An empty list on any gh failure is NOT a census.
+def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
+    """Every open PR in `repo`, with its author and head branch, from the repository listing.
 
-    Raising rather than returning [] matters: a failed `gh` call that read as "no open PRs"
-    would make the tick skip quietly, which is indistinguishable from the healthy steady state.
+    Never `gh pr list --author`: with that flag gh runs a GraphQL `search(` query, and the
+    search index is eventually consistent. The after-census runs seconds after the session
+    exits, so the index can still omit a PR the session just opened, or list one it just
+    merged (#2772). Without `--author`, gh reads `repository.pullRequests`, which is current.
     """
-    rc, out = (tools or TOOLS).run(
+    return tools.run(
         [
             "gh",
             "pr",
             "list",
             "--repo",
             repo,
-            "--author",
-            "app/renovate",
             "--state",
             "open",
             "--limit",
-            "50",
+            str(OPEN_PR_LIMIT),
             "--json",
-            "number,title,url",
+            "number,title,url,headRefName,author",
         ]
     )
+
+
+def _authored_by(listing: str, login: str) -> list[OpenPR]:
+    return [
+        OpenPR(
+            number=int(p["number"]),
+            title=p.get("title", ""),
+            url=p.get("url", ""),
+            branch=p.get("headRefName", ""),
+        )
+        for p in json.loads(listing)
+        if (p.get("author") or {}).get("login") == login
+    ]
+
+
+def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
+    """The open Renovate PRs, newest first. An empty list on any gh failure is NOT a census.
+
+    Raising rather than returning [] matters: a failed `gh` call that read as "no open PRs"
+    would make the tick skip quietly, which is indistinguishable from the healthy steady state.
+    """
+    rc, out = _open_pr_listing(repo, tools or TOOLS)
     if rc != 0:
         raise RuntimeError(f"gh pr list failed (exit {rc}): {out.strip()[:300]}")
-    return [
-        OpenPR(number=int(p["number"]), title=p.get("title", ""), url=p.get("url", ""))
-        for p in json.loads(out)
-    ]
+    return _authored_by(out, RENOVATE_AUTHOR)
 
 
 def own_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR] | None:
@@ -125,38 +149,20 @@ def own_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR] | None:
     rather than reading as "nothing handed off", and never raises: the after-census runs once
     the session has already spent its money.
     """
-    rc, out = (tools or TOOLS).run(
-        [
-            "gh",
-            "pr",
-            "list",
-            "--repo",
-            repo,
-            "--author",
-            "@me",
-            "--state",
-            "open",
-            "--limit",
-            "100",
-            "--json",
-            "number,title,url,headRefName",
-        ]
-    )
+    tools = tools or TOOLS
+    rc, login = tools.run(["gh", "api", "user", "--jq", ".login"])
+    login = login.strip()
+    if rc != 0 or not login:
+        log(f"gh api user failed (exit {rc}): {login[:200]}")
+        return None
+    rc, out = _open_pr_listing(repo, tools)
     if rc != 0:
-        log(f"gh pr list --author @me failed (exit {rc}): {out.strip()[:200]}")
+        log(f"gh pr list failed (exit {rc}): {out.strip()[:200]}")
         return None
     try:
-        return [
-            OpenPR(
-                number=int(p["number"]),
-                title=p.get("title", ""),
-                url=p.get("url", ""),
-                branch=p.get("headRefName", ""),
-            )
-            for p in json.loads(out)
-        ]
+        return _authored_by(out, login)
     except ValueError, KeyError, TypeError, AttributeError:
-        log(f"gh pr list --author @me returned unparseable output: {out.strip()[:200]}")
+        log(f"gh pr list returned unparseable output: {out.strip()[:200]}")
         return None
 
 

@@ -120,7 +120,7 @@ the caps or the schedule cannot quietly widen it.
   arms the timer, and setting it back stops AND disables the unit (*Arming it*;
   `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once
   handler: a config edit must not kick a paid session as a side effect.
-- **Authoritative sources:** `gh pr list --author app/renovate --state open` before and
+- **Authoritative sources:** the open PRs authored by `app/renovate` before and
   after the session, the same census of the session account's own PRs on the run's branches
   (what it handed off), CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
   Never the session's closing paragraph — it reads confident whatever happened.
@@ -185,8 +185,8 @@ the head SHA, never the branch name: the name is reused every tick.
 
 `is_error: false` plus `terminal_reason: completed` means the process ended cleanly, not that
 any PR moved — a session that achieved nothing still writes a confident closing paragraph.
-So the wrapper censuses `gh pr list --author app/renovate --state open` **before and after**,
-and the digest's headline is that delta:
+So the wrapper censuses the open PRs authored by `app/renovate` **before and after**, and the
+digest's headline is that delta:
 
 - `✅ resolved #a, #b` — those PR numbers left the open set and GitHub reports them `MERGED`.
 - `⚠️ ran and merged no Renovate PR` — PRs left the open set, but none merged. Each one is
@@ -200,13 +200,21 @@ set, and only a `MERGED` one counts as resolved (#2755). A failed lookup lands i
 unreadable`, never in `resolved`.
 
 The superseding PR is authored by the session's account, not `app/renovate`, so a second
-census finds it: `gh pr list --author @me --state open`, before and after, kept to the PRs
-whose head branch is the run branch or `<run branch>-<n>` (#2769). The prompt pins that name.
-The branch filter is required because interactive sessions open PRs as the same account on
-`worktree-renovate-<slug>` branches all day. A PR new to the after-census appears as `handed
-off, open for a person to land: #n`, and a failed census as `hand-off census unreadable`,
-never as an empty list.
+census finds it: the open PRs authored by the login `gh api user` names, before and after,
+kept to the PRs whose head branch is the run branch or `<run branch>-<n>` (#2769). The prompt
+pins that name. The branch filter is required because interactive sessions open PRs as the
+same account on `worktree-renovate-<slug>` branches all day. A PR new to the after-census
+appears as `handed off, open for a person to land: #n`, and a failed census as `hand-off
+census unreadable`, never as an empty list.
 - `🚨 FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
+
+**Both censuses filter the author locally, never with `gh pr list --author`** (#2772). With
+`--author`, gh runs a GraphQL `search(` query, and GitHub's search index is eventually
+consistent. The after-census runs seconds after the session exits, so the index can omit a
+superseding PR opened near the end, or still list a Renovate PR just merged as open. Without
+the flag, gh reads `repository.pullRequests`, which is current. `_open_pr_listing` in
+`files/renovate_agent.py` is the one listing both censuses read, and
+`test_agent_logic.py::TestOpenPrs` refuses the flag.
 
 `permission denials:` on a digest line is the one to act on. Headless auto mode approving the
 session's writes is the assumption the whole design rests on; it was measured
