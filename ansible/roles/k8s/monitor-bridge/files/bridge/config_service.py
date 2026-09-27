@@ -20,6 +20,8 @@ class ServiceConfig:
 
     TRAEFIK_5XX_PCT: float
     TRAEFIK_404_PCT: float
+    TRAEFIK_421_RPS: float
+    TRAEFIK_421_CONSECUTIVE: int
     TRAEFIK_MIN_RPS: float
     TRAEFIK_SLOW_BUCKET: str
     TRAEFIK_SLOW_PCT: float
@@ -72,6 +74,19 @@ def service_config(
         # 2026-09-06, while the total-404 outage that day was 100% of 0.61 rps. 90 sits in
         # that gap with a wide margin on both sides.
         TRAEFIK_404_PCT=_num("TRAEFIK_404_PCT", "90"),
+        # The per-ROUTER 421 rate that means a client is wedged on a connection whose SNICheck
+        # pinned the wrong TLS-options name (#2757; traefik's CLAUDE.md has the mechanism). An
+        # absolute rate, not a share behind TRAEFIK_MIN_RPS: 421 has no legitimate sustained
+        # source here, and the wedged clients are low-rate pollers. Measured over the 7 days to
+        # 2026-09-27, three wedges ran at 0.10-0.18 rps in their steady state (authelia
+        # 2026-09-20 23:10 to 09-21 13:40, then #2747's Loki push and #2749's authelia pair),
+        # while the only 421 outside them was one 5-minute window on uptime-kuma at 0.0083 rps.
+        # 0.02 sits 2.4x above that blip and 5x below the slowest wedge.
+        TRAEFIK_421_RPS=_num("TRAEFIK_421_RPS", "0.02"),
+        # 3 cycles = 15 min at INTERVAL=300, the value CLUSTER_TARGETS_CONSECUTIVE and its
+        # siblings carry. A one-shot handshake mismatch lives in a [5m] rate for at most two
+        # evaluations, so it cannot reach the third; every wedge measured lasted hours.
+        TRAEFIK_421_CONSECUTIVE=_int("TRAEFIK_421_CONSECUTIVE", "3"),
         TRAEFIK_MIN_RPS=_num("TRAEFIK_MIN_RPS", "0.05"),
         # Slowness is measured at a histogram BUCKET BOUNDARY, not with histogram_quantile.
         # Traefik's default buckets are 0.1 / 0.3 / 1.2 / 5.0 / +Inf, so between 1.2s and 5.0s
