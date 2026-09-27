@@ -40,7 +40,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 # and importing this module for it would put a cycle through `deploy_tags`.
 from lib.render_guard import (  # noqa: F401
     containers_entries_in,
-    hosts_for_tags,
+    landing_hosts_for_tags,
     service_records_at_or_none,
     service_tags_at,
 )
@@ -105,7 +105,9 @@ def declared_tags() -> set[str]:
     return deploy_tags.service_tags()
 
 
-def landing_hosts_at(tags, ref: str, cwd: Path) -> dict[str, list[str]] | None:
+def landing_hosts_at(
+    tags, ref: str, cwd: Path, k8s_only=()
+) -> dict[str, list[str]] | None:
     """`deploy_tags.landing_hosts`, with containers_list read AT `ref` rather than a checkout.
 
     A landing that deploys its PR's merge commit (`deploy.sh --at`) must route each tag from
@@ -117,15 +119,15 @@ def landing_hosts_at(tags, ref: str, cwd: Path) -> dict[str, list[str]] | None:
 
     None when the ref cannot be read, for `service_records_at_or_none`'s reason: an empty
     answer here would route every tag to no host, and the caller falls back to the tree.
+
+    `k8s_only` is `hosts_for_tags`' per-tag platform restriction, and the landing passes its
+    caller-expanded tags (#2718). `land_lib/deploy.deploy_by_host` is the one caller that
+    fills it.
     """
     records = service_records_at_or_none(ref, cwd)
     if records is None:
         return None
-    return {
-        host: host_tags
-        for host, host_tags in hosts_for_tags(tags, records).items()
-        if host not in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
-    }
+    return landing_hosts_for_tags(tags, records, k8s_only)
 
 
 def role_for(path: str) -> str | None:

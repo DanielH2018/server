@@ -47,6 +47,7 @@ __all__ = [
     "ANSIBLE",
     "BASE_CONTEXT",
     "BUILT_IMAGE_TAG_STUBS",
+    "HOSTS_LAND_SH_NEVER_DEPLOYS",
     "HOST_VARS",
     "HOST_VARS_IN_TREE",
     "INVENTORY",
@@ -62,6 +63,7 @@ __all__ = [
     "entry_tags_at",
     "host_files",
     "hosts_for_tags",
+    "landing_hosts_for_tags",
     "load_yaml",
     "make_env",
     "render_or_error",
@@ -326,7 +328,7 @@ def service_records_at_or_none(
         return None
 
 
-def hosts_for_tags(tags, records) -> dict[str, list[str]]:
+def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
     """``{host: sorted tags}`` for every host whose records declare one of ``tags``.
 
     ``records`` is a ``(host, platform, tag)`` list: the working tree's
@@ -334,13 +336,53 @@ def hosts_for_tags(tags, records) -> dict[str, list[str]]:
     rule lives once, here, so ``land_tags.landing_hosts_at`` -- records read at a merge
     commit, issue #1839 -- cannot route a tag differently from ``deploy_tags.tags_by_host``.
     A tag no host declares lands under none.
+
+    ``k8s_only`` names the tags whose change is known to be a k3s one, and they route to a
+    ``platform: k8s`` entry alone. One tag name can select two entries on two platforms --
+    ``wg-easy`` is k8s on daniel-box and Docker on daniel-pi -- and a caller-expanded tag
+    names a k8s role by construction, so routing it to the Pi as well deployed a Compose
+    service the change never touched (issue #2718).
+
+    NARROWING HOST ROUTING IS THE DANGEROUS DIRECTION, which is why this is opt-in per tag
+    rather than derived here. Issue #929 is a tag that reached no host and read ``settled``
+    while the Pi ran old code, so a caller may only pass a tag it can PROVE is k3s-only.
+    Empty by default: every existing caller keeps routing to both.
     """
     wanted = set(tags)
+    restricted = set(k8s_only)
     by_host: dict[str, set[str]] = {}
-    for host, _platform, tag in records:
-        if tag in wanted:
-            by_host.setdefault(host, set()).add(tag)
+    for host, platform, tag in records:
+        if tag not in wanted:
+            continue
+        if tag in restricted and platform != "k8s":
+            continue
+        by_host.setdefault(host, set()).add(tag)
     return {host: sorted(by_host[host]) for host in sorted(by_host)}
+
+
+# DECIDED: land.sh never deploys to daniel-stage. The staging guest sits on daniel-server's
+# libvirt NAT network, which daniel-box cannot route to, and the deployer's staging gate
+# owns every deploy there (``staging_gate.py``). ``hosts_for_tags`` still lists it, because it
+# answers "who declares this tag" and staging does; only the landing shape drops it. Without
+# this, landing any of the six STAGING_SUBSET tags (traefik, authelia, node-exporter, ...)
+# ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had
+# succeeded, and the unreachable host turned a good landing into ``deploy-failed``.
+HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
+
+
+def landing_hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
+    """``hosts_for_tags`` minus the hosts land.sh never deploys to.
+
+    Beside ``hosts_for_tags`` rather than in each caller, because the landing routes from two
+    reads -- ``deploy_tags.landing_hosts`` over the working tree and
+    ``land_tags.landing_hosts_at`` over a merge commit -- and the pair dropping a different
+    host is the shape issue #935 already cost a good landing.
+    """
+    return {
+        host: host_tags
+        for host, host_tags in hosts_for_tags(tags, records, k8s_only).items()
+        if host not in HOSTS_LAND_SH_NEVER_DEPLOYS
+    }
 
 
 def service_tags_at(ref: str, cwd: Path) -> set[str]:

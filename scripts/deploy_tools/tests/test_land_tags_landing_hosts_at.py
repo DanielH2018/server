@@ -17,9 +17,18 @@ from pathlib import Path
 import land_tags
 from lib.render_guard import HOST_VARS_IN_TREE
 
-_BOX = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
+# `wg-easy` is the real two-platform shape: a `platform: k8s` entry on daniel-box and a
+# Compose entry on daniel-pi, which carries no `platform` key at all (`entry_platform`
+# defaults it to `docker`). One tag name, two services, two hosts.
+_BOX = (
+    "containers_list:\n"
+    "  - name: sonarr\n"
+    "    platform: k8s\n"
+    "  - name: wg-easy\n"
+    "    platform: k8s\n"
+)
 _STAGE = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
-_PI = "containers_list:\n  - name: newpi\n"
+_PI = "containers_list:\n  - name: newpi\n  - name: wg-easy\n"
 
 
 def _repo(tmp_path: Path) -> list[str]:
@@ -81,3 +90,31 @@ def test_an_unreadable_ref_is_none_not_no_hosts(tmp_path):
     the caller back to the primary read (issue #1331's damage rule)."""
     _repo(tmp_path)
     assert land_tags.landing_hosts_at(["sonarr"], "deadbeefdeadbeef", tmp_path) is None
+
+
+def test_a_caller_expanded_tag_routes_to_the_k8s_entry_alone(tmp_path):
+    """CLEAN half of #2718: a `manifests` change reaches `wg-easy` through the k8s caller
+    graph, so it must not also deploy the Pi's Compose service of that name."""
+    shas = _repo(tmp_path)
+    assert land_tags.landing_hosts_at(
+        ["wg-easy"], shas[1], tmp_path, k8s_only=["wg-easy"]
+    ) == {"daniel-box": ["wg-easy"]}
+
+
+def test_the_same_tag_unrestricted_still_routes_to_both_hosts(tmp_path):
+    """REJECTING half: the filter is opt-in per tag. A tag no caller expansion produced keeps
+    reaching every host that declares it, because narrowing host routing is how issue #929
+    (a landing that read `settled` while the Pi ran old code) comes back."""
+    shas = _repo(tmp_path)
+    assert land_tags.landing_hosts_at(["wg-easy"], shas[1], tmp_path) == {
+        "daniel-box": ["wg-easy"],
+        "daniel-pi": ["wg-easy"],
+    }
+
+
+def test_restricting_one_tag_leaves_the_others_routed_as_before(tmp_path):
+    """The filter is per tag, not per host: `newpi` is Docker-only and stays on the Pi."""
+    shas = _repo(tmp_path)
+    assert land_tags.landing_hosts_at(
+        ["newpi", "wg-easy"], shas[1], tmp_path, k8s_only=["wg-easy"]
+    ) == {"daniel-box": ["wg-easy"], "daniel-pi": ["newpi"]}

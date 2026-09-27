@@ -224,8 +224,14 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
             return _cp(f.narrowed_rc, f.narrowed)
         raise AssertionError(args)
 
-    def landing_hosts_at(tags, ref, primary):
-        calls.append(("landing_hosts_at", (list(tags), ref), {"cwd": primary}))
+    def landing_hosts_at(tags, ref, primary, k8s_only=()):
+        calls.append(
+            (
+                "landing_hosts_at",
+                (list(tags), ref),
+                {"cwd": primary, "k8s_only": list(k8s_only)},
+            )
+        )
         return f.hosts_at
 
     def gate(tags, cwd=None):

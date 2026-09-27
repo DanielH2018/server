@@ -16,6 +16,7 @@ import pytest
 
 
 import deploy_tags
+from lib import render_guard
 
 
 @pytest.fixture
@@ -318,12 +319,26 @@ def test_tag_platforms_reads_the_declaring_platforms(host_vars):
 
 
 def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_vars):
-    real = deploy_tags.tags_by_host
+    real = deploy_tags.landing_hosts
     monkeypatch.setattr(
-        deploy_tags, "tags_by_host", lambda tags, hv=None: real(tags, host_vars)
+        deploy_tags,
+        "landing_hosts",
+        lambda tags, hv=None, k8s_only=(): real(tags, host_vars, k8s_only),
     )
     assert deploy_tags.main(["hosts", "dozzle,jellyfin,sonarr,config"]) == 0
     assert capsys.readouterr().out == "host_a\tjellyfin,sonarr\nhost_b\tdozzle\n"
+
+
+def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(capsys):
+    """`--k8s-only`, the CLI half of #2718, against the live inventory: `wg-easy` is a k8s
+    entry on daniel-box and a Compose entry on daniel-pi, and a caller-expanded change reaches
+    only the first. Reading the real inventory is also this pair's non-vacuity -- a fixture
+    would keep passing the day the repo stopped declaring one tag on two platforms."""
+    assert deploy_tags.main(["hosts", "wg-easy", "--k8s-only=wg-easy"]) == 0
+    assert capsys.readouterr().out == "daniel-box\twg-easy\n"
+    # REJECTING half: without the flag the same tag still reaches both hosts.
+    assert deploy_tags.main(["hosts", "wg-easy"]) == 0
+    assert capsys.readouterr().out == "daniel-box\twg-easy\ndaniel-pi\twg-easy\n"
 
 
 def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
@@ -366,7 +381,7 @@ def test_hosts_never_prints_the_staging_guest(capsys):
     staged = {
         host
         for host, _platform, _tag in deploy_tags.service_records()
-        if host in deploy_tags.HOSTS_LAND_SH_NEVER_DEPLOYS
+        if host in render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS
     }
     assert staged == {"daniel-stage"}, "the staging guest no longer declares any tag"
     assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0

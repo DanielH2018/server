@@ -74,11 +74,29 @@ def test_classify_deploys_the_callers_of_a_shared_role(landing):
     assert ln.tags_csv == "radarr,sonarr"
 
 
+def test_classify_records_which_tags_only_the_caller_graph_named(landing):
+    """Issue #2718: those tags route to a `platform: k8s` entry alone, so the deploy phase has
+    to be able to tell them from the ones a changed path named."""
+    ln, _ = landing(
+        Fakes(
+            derived=(["sonarr"], "pr"),
+            shared_callers={"helper": {"sonarr", "wg-easy"}},
+        )
+    )
+    ln.merge_sha = MERGE_SHA
+    classify.classify(ln)
+    assert (ln.resolved_tags, ln.caller_expanded) == (
+        ["sonarr", "wg-easy"],
+        ["wg-easy"],
+    )
+
+
 def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
     ln, _ = landing(Fakes(derived=(["sonarr", "radarr"], "pr"), shared_callers={}))
     ln.merge_sha = MERGE_SHA
     classify.classify(ln)
     assert ln.tags_csv == "sonarr,radarr"
+    assert ln.caller_expanded == []
 
 
 # ── a role this PR registers is not a role somebody forgot to register (issue #1544) ──

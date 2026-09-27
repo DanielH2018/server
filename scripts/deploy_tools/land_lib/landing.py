@@ -74,6 +74,12 @@ class Landing:
         self.self_applied_command = ""
         self.remaining_setup = ""
         self.needs_diff = False
+        # The tags in `resolved_tags` that no changed path named -- `shared_caller_tags`
+        # reached them by walking the k8s role-caller graph, so each is a k3s role's tag.
+        # `deploy.deploy_by_host` routes them to a `platform: k8s` entry alone, because a tag
+        # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's
+        # change is not in this PR (#2718).
+        self.caller_expanded: list[str] = []
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
         # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
