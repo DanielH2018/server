@@ -13,6 +13,7 @@ a path that cannot be taken, which reads as coverage.
 """
 
 import re
+import subprocess
 
 from lib import yaml_fast
 from _helpers import ALL_VARS, ROLES
@@ -74,3 +75,62 @@ def test_the_skip_path_logs_status_up_beside_the_push():
     body = SCRIPT.read_text().split("fail_reachout() {", 1)[1].split("\n}", 1)[0]
     assert "status=up skipped: WAN unreachable" in body
     assert "status=down" not in body
+
+
+# --- fail_reachout, executed ------------------------------------------------------------------
+
+
+def _fail_reachout(tmp_path, wan_rc: int) -> tuple[int, list[str]]:
+    """Run the script's real `fail_reachout` against a WAN probe with the stated exit code.
+
+    Everything it calls is the I/O boundary — Kuma, syslog, and `fail`, whose own `exit 1` is the
+    thing under test here. `wan_reachable` is stubbed rather than sourced because its body carries
+    a Jinja loop; `test_the_probe_flags_match_the_shared_library` above covers the body itself.
+    """
+    body = (
+        "fail_reachout() {"
+        + SCRIPT.read_text().split("fail_reachout() {", 1)[1].split("\n}", 1)[0]
+        + "\n}"
+    )
+    log = tmp_path / "calls.log"
+    fakes = f"""
+wan_reachable() {{ return {wan_rc}; }}
+push() {{ printf 'push\\t%s\\t%s\\n' "$1" "$2" >> {log}; }}
+logger() {{ printf 'logger\\t%s\\n' "$*" >> {log}; }}
+fail() {{ push down "$1"; logger -t crowdsec-home-allowlist "status=down $1"; exit 1; }}
+"""
+    run = subprocess.run(
+        [
+            "bash",
+            "-uo",
+            "pipefail",
+            "-c",
+            f"{fakes}\n{body}\nfail_reachout 'ipify lookup failed'",
+        ],
+        capture_output=True,
+        text=True,
+    )
+    assert run.stderr == "", run.stderr
+    return run.returncode, log.read_text().splitlines() if log.exists() else []
+
+
+def test_an_unreachable_wan_pushes_only_the_skip(tmp_path):
+    rc, calls = _fail_reachout(tmp_path, wan_rc=1)
+    assert rc == 1, "nothing was synced, so the run still exits non-zero"
+    assert calls == [
+        "push\tup\tskipped: WAN unreachable — ipify lookup failed",
+        "logger\t-t crowdsec-home-allowlist status=up skipped: WAN unreachable — "
+        "ipify lookup failed",
+    ]
+
+
+def test_a_reachable_wan_pushes_down_and_nothing_else(tmp_path):
+    # The reject half, and the coupling worth executing: `fail_reachout` relies on `fail` exiting
+    # to stop the `push up` below it. If `fail` ever stopped exiting, one event would push both a
+    # `down` and an `up`, and the second would win the tile.
+    rc, calls = _fail_reachout(tmp_path, wan_rc=0)
+    assert rc == 1
+    assert calls == [
+        "push\tdown\tipify lookup failed",
+        "logger\t-t crowdsec-home-allowlist status=down ipify lookup failed",
+    ]

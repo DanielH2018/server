@@ -76,7 +76,16 @@ push() { # up|down msg
 # on-failure, so a skipped run retries rather than waiting out the day — which is what should
 # happen while the link is down.
 push_reachout() { # msg
-  reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}
+  REACHOUT_STATUS=down
+  REACHOUT_NOTE=""
+  # The library is deployed by initial_setup, while this cron is rendered by its own role, so a
+  # narrowed apply can put the new script on a host whose /usr/local/lib copy predates
+  # reachout_verdict. Without this the read below aborts on an unbound variable under `set -u` and
+  # NO push happens at all — the tile reads stale-green to its heartbeat deadline, which is worse
+  # than the page this change exists to stop. Same guard docs-refresh.sh.j2 carries.
+  if command -v reachout_verdict >/dev/null 2>&1; then
+    reachout_verdict github-ruleset-drift {{ wan_probe_urls | join(' ') }}
+  fi
   push "$REACHOUT_STATUS" "${REACHOUT_NOTE}$1"
 }
 
