@@ -14,6 +14,7 @@ failures.
 from __future__ import annotations
 
 import json
+from collections.abc import Mapping
 from dataclasses import dataclass
 
 # The session's result JSON marks its final object with this `type`. Anything printed before
@@ -60,11 +61,19 @@ class Outcome:
 
 @dataclass(frozen=True)
 class Delta:
-    """The measured effect of the run: which Renovate PRs left the open set, and which stayed."""
+    """The measured effect of the run: which Renovate PRs left the open set, and which stayed.
+
+    Leaving the open set is not landing. The renovate-prs skill finishes a `manual —` bump by
+    closing the Renovate PR in favour of a superseding PR that stays open for a person (#2746),
+    so a departed PR is split by the state GitHub reports for it: `resolved` merged, `closed`
+    was closed without merging, and `unread` is one whose state lookup failed (#2755).
+    """
 
     resolved: tuple[int, ...]
     remaining: tuple[int, ...]
     opened: tuple[int, ...]
+    closed: tuple[int, ...] = ()
+    unread: tuple[int, ...] = ()
 
 
 def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
@@ -141,15 +150,29 @@ def _last_result_object(stdout: str) -> dict | None:
     return None
 
 
-def delta(before: list[OpenPR], after: list[OpenPR]) -> Delta:
-    """What actually moved. This, not the session's summary, is what the digest reports."""
+def delta(
+    before: list[OpenPR], after: list[OpenPR], states: Mapping[int, str]
+) -> Delta:
+    """What actually moved. This, not the session's summary, is what the digest reports.
+
+    `states` maps a PR that left the open set to its GitHub state (`MERGED` or `CLOSED`). A PR
+    missing from it is `unread` rather than assumed merged, so a failed lookup cannot read as
+    a landing.
+    """
     b = {p.number for p in before}
     a = {p.number for p in after}
+    gone = sorted(b - a)
     return Delta(
-        resolved=tuple(sorted(b - a)),
+        resolved=tuple(n for n in gone if states.get(n) == "MERGED"),
         remaining=tuple(sorted(b & a)),
         opened=tuple(sorted(a - b)),
+        closed=tuple(n for n in gone if states.get(n) == "CLOSED"),
+        unread=tuple(n for n in gone if states.get(n) not in ("MERGED", "CLOSED")),
     )
+
+
+def _nums(numbers: tuple[int, ...]) -> str:
+    return ", ".join(f"#{n}" for n in numbers)
 
 
 def render_skip(gate: Gate, host: str) -> str:
@@ -165,18 +188,26 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
     if not outcome.ok:
         head = f"🚨 renovate-agent FAILED on {host} — {outcome.error}"
     elif moved.resolved:
-        nums = ", ".join(f"#{n}" for n in moved.resolved)
-        head = f"✅ renovate-agent resolved {nums} on {host}"
+        head = f"✅ renovate-agent resolved {_nums(moved.resolved)} on {host}"
+    elif moved.closed or moved.unread:
+        # Nothing merged, so nothing landed. A superseding PR the session opened is authored by
+        # the session's account, not app/renovate, so the census cannot see it; the session's
+        # summary below names it.
+        head = f"⚠️ renovate-agent ran on {host} and merged no Renovate PR"
     else:
         head = f"⚠️ renovate-agent ran on {host} and no Renovate PR changed state"
 
     lines = [head]
-    if moved.remaining:
-        lines.append("still open: " + ", ".join(f"#{n}" for n in moved.remaining))
-    if moved.opened:
+    if moved.closed:
         lines.append(
-            "opened during the run: " + ", ".join(f"#{n}" for n in moved.opened)
+            f"closed without merging (superseded or dropped): {_nums(moved.closed)}"
         )
+    if moved.unread:
+        lines.append(f"left the open set, state unreadable: {_nums(moved.unread)}")
+    if moved.remaining:
+        lines.append("still open: " + _nums(moved.remaining))
+    if moved.opened:
+        lines.append("opened during the run: " + _nums(moved.opened))
     if outcome.denials:
         # A denial is the failure this whole design rests on not happening: auto mode refusing
         # the session's writes leaves it reading green while doing nothing.

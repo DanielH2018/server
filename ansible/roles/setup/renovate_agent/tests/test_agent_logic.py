@@ -104,17 +104,27 @@ class TestParseRun:
 
 class TestDelta:
     def test_a_resolved_pr_is_measured(self) -> None:
-        moved = al.delta([_pr(1), _pr(2)], [_pr(2)])
+        moved = al.delta([_pr(1), _pr(2)], [_pr(2)], {1: "MERGED"})
         assert moved.resolved == (1,)
         assert moved.remaining == (2,)
 
     def test_an_unchanged_set_measures_nothing_resolved(self) -> None:
-        moved = al.delta([_pr(1)], [_pr(1)])
+        moved = al.delta([_pr(1)], [_pr(1)], {})
         assert moved.resolved == ()
         assert moved.remaining == (1,)
 
+    def test_a_pr_closed_without_merging_is_not_resolved(self) -> None:
+        moved = al.delta([_pr(1), _pr(2)], [], {1: "MERGED", 2: "CLOSED"})
+        assert moved.resolved == (1,)
+        assert moved.closed == (2,)
+
+    def test_a_pr_whose_state_was_not_read_is_not_resolved(self) -> None:
+        moved = al.delta([_pr(1)], [], {})
+        assert moved.resolved == ()
+        assert moved.unread == (1,)
+
     def test_a_pr_opened_during_the_run_is_not_counted_as_remaining(self) -> None:
-        moved = al.delta([_pr(1)], [_pr(1), _pr(9)])
+        moved = al.delta([_pr(1)], [_pr(1), _pr(9)], {})
         assert moved.opened == (9,)
         assert moved.remaining == (1,)
 
@@ -124,7 +134,7 @@ class TestRenderDigest:
         """`is_error: false` means the process ended, not that any PR moved."""
         text = al.render_digest(
             al.parse_run(_result(result="I reviewed everything carefully."), 0, False),
-            al.delta([_pr(1)], [_pr(1)]),
+            al.delta([_pr(1)], [_pr(1)], {}),
             "daniel-box",
             "/var/lib/renovate-agent/last_session.json",
         )
@@ -134,17 +144,40 @@ class TestRenderDigest:
     def test_a_run_that_resolved_a_pr_is_clean(self) -> None:
         text = al.render_digest(
             al.parse_run(_result(), 0, False),
-            al.delta([_pr(1), _pr(2)], [_pr(2)]),
+            al.delta([_pr(1), _pr(2)], [_pr(2)], {1: "MERGED"}),
             "daniel-box",
             "/log",
         )
         assert "resolved #1" in text
         assert "still open: #2" in text
 
+    def test_a_superseded_pr_is_flagged_not_resolved(self) -> None:
+        """#2755: closing a `manual —` bump in favour of a hand-off PR lands nothing."""
+        text = al.render_digest(
+            al.parse_run(_result(result="superseded #1 with #50"), 0, False),
+            al.delta([_pr(1)], [], {1: "CLOSED"}),
+            "daniel-box",
+            "/log",
+        )
+        head = text.splitlines()[0]
+        assert "resolved" not in head
+        assert head.startswith("⚠️")
+        assert "closed without merging (superseded or dropped): #1" in text
+
+    def test_an_unread_state_is_flagged_not_resolved(self) -> None:
+        text = al.render_digest(
+            al.parse_run(_result(), 0, False),
+            al.delta([_pr(1)], [], {}),
+            "daniel-box",
+            "/log",
+        )
+        assert "resolved" not in text.splitlines()[0]
+        assert "state unreadable: #1" in text
+
     def test_a_failed_run_leads_with_the_failure(self) -> None:
         text = al.render_digest(
             al.parse_run("", 0, True),
-            al.delta([_pr(1)], [_pr(1)]),
+            al.delta([_pr(1)], [_pr(1)], {}),
             "daniel-box",
             "/log",
         )
@@ -153,7 +186,7 @@ class TestRenderDigest:
     def test_denials_reach_the_digest(self) -> None:
         text = al.render_digest(
             al.parse_run(_result(permission_denials=[{"tool_name": "Edit"}]), 0, False),
-            al.delta([_pr(1)], []),
+            al.delta([_pr(1)], [], {1: "MERGED"}),
             "daniel-box",
             "/log",
         )
@@ -163,7 +196,7 @@ class TestRenderDigest:
         """host_lib.discord_post truncates at 1900 chars; the delta lines must survive."""
         text = al.render_digest(
             al.parse_run(_result(result="x" * 5000), 0, False),
-            al.delta([_pr(1)], []),
+            al.delta([_pr(1)], [], {1: "MERGED"}),
             "daniel-box",
             "/log",
         )
@@ -240,6 +273,28 @@ def _tools(host: _FakeHost) -> renovate_agent.AgentTools:
     return renovate_agent.AgentTools(
         run=host.run, discord_post=host.discord_post, read_file=lambda path: ""
     )
+
+
+class TestPrStates:
+    """The digest's merged/closed split rests on this read, so a failed read must not
+    come back as a state."""
+
+    def test_each_state_is_read(self) -> None:
+        answers = {"1": '{"state":"MERGED"}', "2": '{"state":"CLOSED"}'}
+
+        def run(argv, cwd=None, timeout=120):
+            assert argv[:3] == ["gh", "pr", "view"]
+            return 0, answers[argv[3]]
+
+        tools = renovate_agent.AgentTools(run=run)
+        assert renovate_agent.pr_states("o/r", [1, 2], tools) == {
+            1: "MERGED",
+            2: "CLOSED",
+        }
+
+    def test_a_failed_lookup_is_left_out(self) -> None:
+        tools = renovate_agent.AgentTools(run=lambda argv, **kw: (1, "HTTP 502"))
+        assert renovate_agent.pr_states("o/r", [1], tools) == {}
 
 
 class TestSkipExitCodes:
