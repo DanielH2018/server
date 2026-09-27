@@ -209,7 +209,19 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   **This REPLACED `arr_queue`'s `STARTUP_GRACE` membership** rather than stacking on it — that
   grace covered the same transient at 2 cycles and covered the queue verdict too. Pure
   `queue_warnings()` is unit-tested; the fetch streak has its own accept/reject pair in
-  `test_check_service.py`.)
+  `test_check_service.py`.
+  **Sonarr's self-clearing title holds are the one queue reason that waits** — held for
+  `ARR_TITLE_HOLD_GRACE_H` (48) since #2786. Three of this check's seven DOWN episodes in the
+  14 days to 2026-09-27 were "Episode has a TBA title and recently aired" (2.9h, 7.4h, 2.9h):
+  Sonarr applies that hold itself and releases it once the title arrives, so the page named no
+  action a human could take. 48h is upstream's own window rather than a taste — Sonarr's
+  `EpisodeTitleSpecification` stops applying the rule once the episode aired more than 48h ago,
+  so an item still carrying the message past that is stuck, not waiting. The item's `added`
+  timestamp is the clock. The hold is narrow deliberately: it needs EVERY reason on the item to
+  be self-clearing (the TitleTba and TitleMissing messages), it never applies to
+  `importBlocked`/`importFailed` or to `trackedDownloadStatus == "error"`, and an item with no
+  readable `added` timestamp is flagged rather than held. The other four episodes in that window
+  were "Not a Custom Format upgrade for existing episode files" and still page on sight.)
 - **Bazarr Health** (bazarr's `/api/system/status` + `/api/system/health` over `media`:
   `down` when a peer version field is present-but-empty, or when bazarr self-reports a health
   issue. **Bazarr is the *arr with no exporter, and that is the whole point.** It holds its
@@ -738,18 +750,32 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   `speedtest_api_token` from the mounted credentials Secret. Three arms in this order —
   status, then age, then the download floor. The order is load-bearing: `download_bits` is
   null on a failed row, so a floor comparison ahead of the status arm compares None.
-  **The floor is 100 Mbps because results are bimodal, not because 100 is a target.** Which
-  Ookla server a run draws decides the mode: over 2026-08-14..24, 20 runs on server 41671
-  had a median of 910 Mbps and a worst of 119, while 17 runs on six other servers had a
-  median of 12.8 and a best of 42.8. Nothing landed between. The speedtest role now pins
-  41671, and this floor is what makes that pin degrading visible — 1775 was clean for 54
-  runs and then was not.
+  **The floor was 100 Mbps because results were bimodal; the two populations have since
+  collapsed into one.** As first measured over 2026-08-14..24, 20 runs on server 41671 had a
+  median of 910 Mbps and a worst of 119, while 17 runs on six other servers had a median of
+  12.8 and a best of 42.8, and nothing landed between — so 100 sat in an empty band. Re-measured
+  2026-09-27 (#2785) the band is gone. The speedtest role pins server 41671, so every scheduled
+  run now draws it and the second population has left the series; 41671's own low tail is
+  continuous. Over the 95 six-hourly samples Prometheus retained (28.4d of the 30d asked for):
+  min 61.4, p2 75.0, p5 95.1, p10 146.0, median 868.8 Mbps, 5 samples under 100. **100 is now a
+  percentile cut at about p5, which is why the arm needs a RUN of results rather than one.**
+  The value stays: p5 of a ~870 Mbps link is still the degradation reading this check exists
+  for, and the floor remains what makes the pin going bad visible — 1775 was clean for 54 runs
+  and then was not.
+  **The floor arm pages on `SPEEDTEST_FLOOR_CONSECUTIVE` (2) consecutive sub-floor results**,
+  counted backwards from the newest, and holds `up` with a `1/2 sub-floor results` note below
+  that. The history comes from the same fetch — the page asks for that many rows, newest
+  first — so the arm never waits a second cycle for it. A result that failed or recorded no
+  figure is not a sub-floor result and breaks the run. Before this, one slow result held the
+  tile red for the full 6h until the next test: three times in the 14 days to 2026-09-27,
+  11.6h in total.
   The age arm (`SPEEDTEST_MAX_AGE_H`, 8h against a 6h schedule) is the one that notices the
   scheduler dying, which has no other symptom: the pod keeps serving its UI and passing both
   probes while writing no new rows.
-  **No hysteresis on the verdict, only on the fetch.** The app produces a row every 6h and
-  this loop runs every 5 min, so a consecutive-cycle streak would re-read one row up to 72
-  times — delaying the page and proving nothing. The fetch rides `SPEEDTEST_CONSECUTIVE`
+  **No consecutive-CYCLE hysteresis on the verdict, only on the fetch.** The app produces a row
+  every 6h and this loop runs every 5 min, so a consecutive-cycle streak would re-read one row
+  up to 72 times — delaying the page and proving nothing. `SPEEDTEST_FLOOR_CONSECUTIVE` is not
+  a counter-example: it counts RESULTS, each of them a separate measurement. The fetch rides `SPEEDTEST_CONSECUTIVE`
   because an app restart under a deploy is a real transient; `speedtest` is also in
   `STARTUP_GRACE`. Same split as `check_ha_heartbeat`.
   Reaching the app needs `netpol-baseline/templates/networkpolicy-speedtest.yaml.j2` — the
@@ -1340,11 +1366,11 @@ no successor.
   `CPU_WINDOW`/`CPU_THROTTLE_PCT`/`CPU_MIN_THROTTLED_CORES`/`CPU_CONSECUTIVE`, `TRAEFIK_5XX_PCT`/`TRAEFIK_MIN_RPS`/`TRAEFIK_SLOW_BUCKET`/`TRAEFIK_SLOW_PCT`,
   `N8N_FAIL_WINDOW`/`N8N_CONSECUTIVE_MAX`/`N8N_SYSTEMIC_STREAK`/`N8N_SYSTEMIC_MAX`; n8n connection
   config: `N8N_URL`/`N8N_API_KEY`; arr queue
-  connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`; GitOps
+  connection config: `SONARR_URL`/`SONARR_API_KEY`/`RADARR_URL`/`RADARR_API_KEY`/`ARR_TITLE_HOLD_GRACE_H`; GitOps
   liveness: `GITOPS_MAX_AGE_MIN`/`GITOPS_STATE_DIR`; Pi pressure:
   `PI_ORIGIN`/`PI_HOST`/`PI_LOAD_MAX`/`PI_MEM_MIN_MB`/`PI_DISK_MAX_PCT`/`PI_PUBLISHED_PORTS`/`PI_PORT_TIMEOUT`/`PI_PORTS_CONSECUTIVE`; HA heartbeat:
   `HA_URL`/`HA_TOKEN`/`HA_HEARTBEAT_MAX_AGE`/`HA_CONSECUTIVE`; speedtest:
-  `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`;
+  `SPEEDTEST_URL`/`SPEEDTEST_TOKEN`/`SPEEDTEST_DOWNLOAD_MIN_MBPS`/`SPEEDTEST_MAX_AGE_H`/`SPEEDTEST_CONSECUTIVE`/`SPEEDTEST_FLOOR_CONSECUTIVE`;
   host-coverage floor:
   `HOST_ORIGINS_MIN`/`HOST_ORIGINS_CONSECUTIVE`, and the thermal check's own pair
   `HWMON_TEMP_ORIGINS_MIN`/`HWMON_TEMP_ORIGINS_CONSECUTIVE`). A failed
