@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-26 06:17 UTC
-generated_sha: b4d4d224d
+generated_at: 2026-09-27 06:17 UTC
+generated_sha: 0e5e82b9e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: b4d4d224d
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-26T06:12:07+0000 | 5m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-25T11:08:03+0000 | 19h9m | 1d | ok | session completed |
-| renovate-notify | 2026-09-25T13:57:17+0000 | 16h20m | 1d | ok | notified |
-| docs-refresh | 2026-09-25T18:17:00+0000 | 12h | 12h | ok | generators: failed: backlog.py |
-| secret-rotate | 2026-09-25T23:53:13+0000 | 6h24m | 7d | ok | last touched by: Add an hourly render-record producer for the staleness reader, shipped disarmed until dry runs stop writing the host |
-| longhorn-restore-drill | 2026-09-26T04:10:57+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-21T10:20:03+0000 | 4d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789958702.zip) |
+| gitops-deploy | 2026-09-27T06:13:49+0000 | 3m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-26T11:33:34+0000 | 18h43m | 1d | ok | session completed |
+| renovate-notify | 2026-09-26T13:03:12+0000 | 17h14m | 1d | ok | notified |
+| docs-refresh | 2026-09-26T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-25T23:53:13+0000 | 1d6h | 7d | ok | last touched by: Add an hourly render-record producer for the staleness reader, shipped disarmed until dry runs stop writing the host |
+| longhorn-restore-drill | 2026-09-27T04:10:48+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-21T10:20:03+0000 | 5d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789958702.zip) |

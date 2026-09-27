@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-26 06:18 UTC
-generated_sha: b4d4d224d
+generated_at: 2026-09-27 06:17 UTC
+generated_sha: 0e5e82b9e
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,10 +17,15 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
-| [#2192](https://github.com/DanielH2018/server/issues/2192) | low | gap | docs | Re-measure the Bash-only no-doc share after inject-nested-docs lands | 2026-09-21 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
-| [#2368](https://github.com/DanielH2018/server/issues/2368) | low | gap | cicd | Renovate #2335 (freshrss nginx digest) is conflicting and inside its 3-day soak | 2026-09-24 | 2 | - | - |
-| [#2637](https://github.com/DanielH2018/server/issues/2637) | low | gap | backup-observability | Redeploy the services with secret manifests so their release records carry secret_digest | 2026-09-26 | 0 | - | ✓ |
+| [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
+| [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
+| [#2686](https://github.com/DanielH2018/server/issues/2686) | low | gap | backup-observability | 13 autodeploy Snapshot CRs in a 'lost track' error state are never pruned | 2026-09-26 | 0 | - | - |
+| [#2733](https://github.com/DanielH2018/server/issues/2733) | low | gap | docs | volume-snapshot's refused-delete report names a manager-API route that cannot delete the CR | 2026-09-27 | 0 | - | ✓ |
+| [#2734](https://github.com/DanielH2018/server/issues/2734) | low | improvement | backup-observability | Decide how to remove the 11 over-long autodeploy Snapshot CRs Longhorn's webhook refuses to delete | 2026-09-27 | 0 | - | ✓ |
+| [#2736](https://github.com/DanielH2018/server/issues/2736) | low | improvement | - | optimize_pi's container-recovery cron has no arming flag; disarming it means editing a task | 2026-09-27 | 0 | - | ✓ |
+| [#2738](https://github.com/DanielH2018/server/issues/2738) | low | improvement | cicd | The fallback and --tags landing paths still route a two-platform tag to both hosts | 2026-09-27 | 0 | - | ✓ |
+| [#2740](https://github.com/DanielH2018/server/issues/2740) | low | improvement | backup-observability | Retire volume-snapshot's maintenance-mode attach block, which the #2698 drill proved unreachable | 2026-09-27 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -61,6 +66,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2483](https://github.com/DanielH2018/server/issues/2483) | accepted | findings.py and prune_worktrees.py are broken on deployed hosts: claude_worktree ships no forge_says_merged | Re-checked 2026-09-25: forge_says_merged is in the dotfiles source and deployed on daniel-box and daniel-server; findings.py, prune_worktrees.py and backlog.py all run on both hosts. The ImportError was the window between server master taking the import and each host's chezmoi apply. The remaining gap (CI imports the stand-in, so it cannot catch a server import the deployed dotfiles lack) is accepted by the operator. |
 | [#2505](https://github.com/DanielH2018/server/issues/2505) | refuted | Record the rendered-manifest digest in the release stamp so staleness stops needing path narrowings | Measured 2026-09-25 (PR #2575): an offline render via scripts/validate/k8s_manifests.py reproduces the recorded manifests_digest checksums for only 9 of 57 live release records on daniel-box. The harness stubs SOPS values (literal STUB in 49 of 300 manifests) and uses the placeholder domain example.com, which every ingressroute Host() rule embeds, so a digest comparison would mark 84% of the fleet stale permanently — worse than the false GREEN the five path narrowings guard against. The narrowings stay; #2574 tracks the two routes to a faithful render. |
 | [#2595](https://github.com/DanielH2018/server/issues/2595) | accepted | Clear a k8s_unapplied line in the tick that applies the role, not the next one | Operator decision 2026-09-25: the k8s_unapplied marker is read only by the SessionStart banner and never pages (deploy_defer.py comment at the k8s_unapplied write), the window is one tick (~10 min), and it needs a denylisted role applied through a narrowed broad plane. A second clear path beside clear_applied_k8s_deferred is not worth it. Revisit only if a session redeploys on a stale line. |
+| [#2726](https://github.com/DanielH2018/server/issues/2726) | accepted | log2ram 1.7.2 ships JOURNALD_AWARE twice in its conffile; optimize_pi leaves the duplicate | Upstream log2ram 1.7.2 ships both lines as true, so the duplicate is inert; deleting it would make the conffile dpkg-modified and bring back the upgrade prompt. PR #2735 fails the play if the two lines ever disagree, and upstream master already carries one line. Operator decision 2026-09-27. |
 
 ### container
 
@@ -104,3 +110,4 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 |---|---|---|---|
 | [#917](https://github.com/DanielH2018/server/issues/917) | refuted | The staging gate sees 6 of ~54 services, so most merges cross it ungated | Derived from the tree, as the issue's own suggested approach asked. The 61 roles under roles/k8s/ render 21 distinct top-level kinds; the six subset members exercise 16. The five they do not — CronJob, LimitRange, Namespace, StorageClass, PersistentVolume — are rendered only by configarr, pi-peer-backup, claude-otel and media-volume, every one already permanently excluded by Decision 6. No admissible role adds a kind, so widening buys no mechanism coverage, which is the principle Decision 6 selects on. Non-vacuity: the shared manifests role has no templates/ at all (so the 16 come from the six members, not inherited plumbing), and no StatefulSet exists anywhere in the tree (so the line-anchored kind match drops nothing). What widening still buys is per-role coverage, declined on three bounds now recorded in Decision 6: validate/k8s_manifests.py already renders and parses every template and --dry-run shows them to a real API server; the 8192 MiB VM cannot fit code-server (4096Mi) or valheim (6144Mi) beside the six members' 1664 MiB; and volume-claim/volume-snapshot/volume-revert gate nothing here because k8s_autodeploy_snapshot_pvcs is empty host-wide for reasons that are properties of the cluster. The cost side also moved: a rejection parks prod now that the gate blocks. Census and bounds landed in docs/staging-cluster.md via PR #921. |
 | [#2584](https://github.com/DanielH2018/server/issues/2584) | accepted | Role-doc warning band never reaches the CI log, because prek hides a passing hook's output | Operator decision 2026-09-25: keep the pytest-only surface. The band exists to reach the author, and sessions here run uv run pytest routinely, which prints RoleDocNearCeiling. CI already fails hard at MAX_LINES=400, the one threshold that must hold. A census page reaches nobody mid-edit, and an At-a-glance band field would fire the staleness gate on every prose edit to a banded doc. |
+| [#2717](https://github.com/DanielH2018/server/issues/2717) | accepted | A 58-service shared-role caller expansion is unmeasured against a full deploy.yml | Measured 838s untagged vs 905s for the 58-tag expansion (one run each, within rollout-wait noise); no speed case for switching, and an untagged run holds the all lock for its whole duration. Operator decision 2026-09-27: keep expand_shared_tags as it is. |
