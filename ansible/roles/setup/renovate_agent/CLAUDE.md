@@ -121,7 +121,8 @@ the caps or the schedule cannot quietly widen it.
   `test_renovate_agent_unit.py` pins both directions). There is deliberately no run-once
   handler: a config edit must not kick a paid session as a side effect.
 - **Authoritative sources:** `gh pr list --author app/renovate --state open` before and
-  after the session, CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
+  after the session, the same census of the session account's own PRs on the run's branches
+  (what it handed off), CI's own verdict through `land.sh`, and the health gate `land.sh` runs.
   Never the session's closing paragraph — it reads confident whatever happened.
 - **Abort valves:** `renovate_agent_max_prs` (the bound that stops a normal run),
   `renovate_agent_run_timeout_s` and the systemd `renovate_agent_unit_timeout` backstop, and
@@ -196,8 +197,15 @@ Leaving the open set is not landing. The `renovate-prs` skill finishes a `manual
 closing the Renovate PR in favour of a superseding PR, and that PR stays open for a person
 (#2746). So the wrapper runs `gh pr view <n> --json state` for every PR that left the open
 set, and only a `MERGED` one counts as resolved (#2755). A failed lookup lands in `state
-unreadable`, never in `resolved`. The superseding PR is authored by the session's account, not
-`app/renovate`, so the census never lists it; the session's own summary line names it.
+unreadable`, never in `resolved`.
+
+The superseding PR is authored by the session's account, not `app/renovate`, so a second
+census finds it: `gh pr list --author @me --state open`, before and after, kept to the PRs
+whose head branch is the run branch or `<run branch>-<n>` (#2769). The prompt pins that name.
+The branch filter is required because interactive sessions open PRs as the same account on
+`worktree-renovate-<slug>` branches all day. A PR new to the after-census appears as `handed
+off, open for a person to land: #n`, and a failed census as `hand-off census unreadable`,
+never as an empty list.
 - `🚨 FAILED — <reason>` — timeout, non-zero exit, or `is_error`.
 
 `permission denials:` on a digest line is the one to act on. Headless auto mode approving the

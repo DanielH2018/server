@@ -31,6 +31,7 @@ class OpenPR:
     number: int
     title: str
     url: str = ""
+    branch: str = ""
 
 
 @dataclass(frozen=True)
@@ -67,6 +68,8 @@ class Delta:
     closing the Renovate PR in favour of a superseding PR that stays open for a person (#2746),
     so a departed PR is split by the state GitHub reports for it: `resolved` merged, `closed`
     was closed without merging, and `unread` is one whose state lookup failed (#2755).
+    `handed_off` is the superseding PRs the run opened, from `handed_off()`; None means that
+    census failed, which must not read as "none opened" (#2769).
     """
 
     resolved: tuple[int, ...]
@@ -74,6 +77,7 @@ class Delta:
     opened: tuple[int, ...]
     closed: tuple[int, ...] = ()
     unread: tuple[int, ...] = ()
+    handed_off: tuple[int, ...] | None = ()
 
 
 def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
@@ -151,7 +155,10 @@ def _last_result_object(stdout: str) -> dict | None:
 
 
 def delta(
-    before: list[OpenPR], after: list[OpenPR], states: Mapping[int, str]
+    before: list[OpenPR],
+    after: list[OpenPR],
+    states: Mapping[int, str],
+    handed: tuple[int, ...] | None = (),
 ) -> Delta:
     """What actually moved. This, not the session's summary, is what the digest reports.
 
@@ -168,6 +175,31 @@ def delta(
         opened=tuple(sorted(a - b)),
         closed=tuple(n for n in gone if states.get(n) == "CLOSED"),
         unread=tuple(n for n in gone if states.get(n) not in ("MERGED", "CLOSED")),
+        handed_off=handed,
+    )
+
+
+def handed_off(
+    before: list[OpenPR] | None, after: list[OpenPR] | None, branch: str
+) -> tuple[int, ...] | None:
+    """The superseding PRs this run opened and left for a person, from the own-account census.
+
+    The session's account is also every interactive session's account, and those name their
+    branches `worktree-renovate-<slug>` too, so author alone would list their PRs. The prompt
+    pins a hand-off to `<branch>-<renovate pr>`, and only that name or the run branch itself
+    counts. A PR already open before the run is an earlier hand-off, not this run's. Either
+    census missing returns None, never an empty tuple.
+    """
+    if before is None or after is None:
+        return None
+    known = {p.number for p in before}
+    return tuple(
+        sorted(
+            p.number
+            for p in after
+            if p.number not in known
+            and (p.branch == branch or p.branch.startswith(branch + "-"))
+        )
     )
 
 
@@ -190,9 +222,8 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
     elif moved.resolved:
         head = f"✅ renovate-agent resolved {_nums(moved.resolved)} on {host}"
     elif moved.closed or moved.unread:
-        # Nothing merged, so nothing landed. A superseding PR the session opened is authored by
-        # the session's account, not app/renovate, so the census cannot see it; the session's
-        # summary below names it.
+        # Nothing merged, so nothing landed. A superseding PR the session opened is listed
+        # below as handed off, from the own-account census rather than the session's summary.
         head = f"⚠️ renovate-agent ran on {host} and merged no Renovate PR"
     else:
         head = f"⚠️ renovate-agent ran on {host} and no Renovate PR changed state"
@@ -204,6 +235,15 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
         )
     if moved.unread:
         lines.append(f"left the open set, state unreadable: {_nums(moved.unread)}")
+    if moved.handed_off is None:
+        lines.append(
+            "hand-off census unreadable: a superseding PR this run opened may be open "
+            "and unlisted"
+        )
+    elif moved.handed_off:
+        lines.append(
+            "handed off, open for a person to land: " + _nums(moved.handed_off)
+        )
     if moved.remaining:
         lines.append("still open: " + _nums(moved.remaining))
     if moved.opened:

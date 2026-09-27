@@ -129,6 +129,33 @@ class TestDelta:
         assert moved.remaining == (1,)
 
 
+def _own(number: int, branch: str) -> al.OpenPR:
+    return al.OpenPR(number=number, title="Finish bump", branch=branch)
+
+
+class TestHandedOff:
+    """#2769: the superseding PR is the session account's, so app/renovate's census misses it."""
+
+    RUN = "worktree-renovate-auto"
+
+    def test_a_pr_opened_on_a_run_branch_is_listed(self) -> None:
+        after = [_own(50, f"{self.RUN}-2744"), _own(51, self.RUN)]
+        assert al.handed_off([], after, self.RUN) == (50, 51)
+
+    def test_a_pr_open_before_the_run_is_not_listed(self) -> None:
+        earlier = [_own(50, f"{self.RUN}-2744")]
+        assert al.handed_off(earlier, earlier, self.RUN) == ()
+
+    def test_an_interactive_sessions_pr_is_not_listed(self) -> None:
+        """Interactive sessions share the account and the `worktree-renovate-` prefix."""
+        after = [_own(60, "worktree-renovate-n8n-2-40-7"), _own(61, f"{self.RUN}x")]
+        assert al.handed_off([], after, self.RUN) == ()
+
+    def test_a_failed_census_is_flagged_not_empty(self) -> None:
+        assert al.handed_off(None, [], self.RUN) is None
+        assert al.handed_off([], None, self.RUN) is None
+
+
 class TestRenderDigest:
     def test_a_run_that_moved_nothing_is_flagged(self) -> None:
         """`is_error: false` means the process ended, not that any PR moved."""
@@ -163,6 +190,25 @@ class TestRenderDigest:
         assert "resolved" not in head
         assert head.startswith("⚠️")
         assert "closed without merging (superseded or dropped): #1" in text
+
+    def test_a_handed_off_pr_is_named_from_the_census(self) -> None:
+        text = al.render_digest(
+            al.parse_run(_result(result="done"), 0, False),
+            al.delta([_pr(1)], [], {1: "CLOSED"}, (50,)),
+            "daniel-box",
+            "/log",
+        )
+        assert "handed off, open for a person to land: #50" in text
+
+    def test_an_unreadable_handoff_census_is_flagged(self) -> None:
+        text = al.render_digest(
+            al.parse_run(_result(), 0, False),
+            al.delta([_pr(1)], [], {1: "CLOSED"}, None),
+            "daniel-box",
+            "/log",
+        )
+        assert "hand-off census unreadable" in text
+        assert "handed off, open" not in text
 
     def test_an_unread_state_is_flagged_not_resolved(self) -> None:
         text = al.render_digest(
@@ -295,6 +341,24 @@ class TestPrStates:
     def test_a_failed_lookup_is_left_out(self) -> None:
         tools = renovate_agent.AgentTools(run=lambda argv, **kw: (1, "HTTP 502"))
         assert renovate_agent.pr_states("o/r", [1], tools) == {}
+
+
+class TestOwnPrs:
+    """The hand-off census: the session account's open PRs with their head branches."""
+
+    def test_the_census_reads_this_accounts_branches(self) -> None:
+        def run(argv, cwd=None, timeout=120):
+            assert argv[argv.index("--author") + 1] == "@me"
+            assert "headRefName" in argv[argv.index("--json") + 1]
+            return 0, '[{"number": 50, "title": "t", "headRefName": "b-1"}]'
+
+        prs = renovate_agent.own_prs("o/r", renovate_agent.AgentTools(run=run))
+        assert prs == [al.OpenPR(number=50, title="t", branch="b-1")]
+
+    @pytest.mark.parametrize("answer", [(1, "HTTP 502"), (0, "not json")])
+    def test_a_failed_census_is_flagged_as_none(self, answer) -> None:
+        tools = renovate_agent.AgentTools(run=lambda argv, **kw: answer)
+        assert renovate_agent.own_prs("o/r", tools) is None
 
 
 class TestSkipExitCodes:
