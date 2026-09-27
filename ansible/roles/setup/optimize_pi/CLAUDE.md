@@ -311,13 +311,22 @@ The role's other two crons only read and report. This one acts: `pi-recovery-hea
   one whose *create* fails at the OCI runtime, which is the failure this 512 MB board actually
   produces. On 2026-08-29 autoheal died with "Timeout waiting for systemd to create scope",
   sat at `RestartCount 0`, and stayed down ~50 minutes until a human ran `docker start`.
-- **Mode (explicit + reversible):** the cron is installed unconditionally by
-  `initial_setup.yml --tags recovery-health -e target=daniel-pi`; there is no arming flag.
-  Disarming it means removing the cron — flip the `Schedule the container-recovery heartbeat`
-  task to `state: absent` and re-run that tag, which is the reversal a role re-run respects.
-  `sudo crontab -r`-style edits on the host are undone by the next role run. Detection and
-  remediation share one script, so disarming the restart also ends the heartbeat: expect the
-  "Daniel Pi Recovery" monitor to trip its 600s watchdog once the crons stop.
+- **Mode (explicit + reversible):** `optimize_pi_recovery_restart_enabled` arms the cron, and it
+  ships `true` — the cron has restarted failed-create containers since #1910, so a default-off
+  flag would have the next role run remove a live check. Setting it `false` REMOVES the cron;
+  the heartbeat script stays installed, so one cycle can still be run by hand. Set it in
+  `inventory/host_vars/daniel-pi.yml` rather than editing the task, so the intent survives
+  another session's `--tags recovery-health` run, then apply:
+
+  ```bash
+  uv run ansible-playbook ansible/initial_setup.yml --tags recovery-health -e target=daniel-pi
+  ```
+
+  Read the result with `crontab -l -u <sys_user>` on the Pi — the `pi-recovery-health.sh` line
+  is gone when disarmed. `sudo crontab -r`-style edits on the host are undone by the next role
+  run; the flag is not. Detection and remediation share one script, so disarming the restart
+  also ends the heartbeat: the "Daniel Pi Recovery" monitor trips its 600s watchdog within ten
+  minutes of the crons stopping. That is the intended signal, not a second fault.
 - **Authoritative sources:** `docker ps` against the real socket (not docker-proxy, so it still
   reports docker-proxy's own death), and `docker inspect` read BEFORE the restart — the restart
   erases the exit code, the daemon's `Error` string and `FinishedAt` of the instance that died.

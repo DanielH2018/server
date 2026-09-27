@@ -22,14 +22,22 @@ container reads `inspect failed` and the reason lives only in `journalctl -u doc
 line carries the newest non-info lines of that unit — through a stub, since the real
 journalctl on PATH would read this host's journal.
 
+One property here is not about the script at all: the cron that runs it must be disarmable
+from the inventory. The contract section documented disarming as an edit to the task
+(`state: absent`), which another session's `--tags recovery-health` run silently undoes
+because nothing records the intent (#2736).
+
 Run: uv run pytest ansible/tests/setup/test_pi_recovery_restarts_and_reports.py
 """
 
 import pytest
+from _helpers import SETUP_ROLES, load_defaults, load_tasks
 from _pi_health import PI_HOST_VARS, journalctl_calls, run
 
 
 SCRIPT = "pi-recovery-health"
+OPTIMIZE_PI = SETUP_ROLES / "optimize_pi"
+CRON_NAME = "Pi container-recovery heartbeat"
 
 # The watch set the rendered script must carry: every containers_list name on daniel-pi, plus
 # the sub-proxy the docker-proxy role's compose file declares beside its list entry. Named
@@ -272,3 +280,50 @@ def test_a_dead_daemon_with_an_empty_journal_still_reports(tmp_path):
     assert status == "down"
     assert "dockerd:" not in msg, msg
     assert len(lines) == 1, lines
+
+
+def _cron_task() -> dict:
+    """The task that schedules the recovery heartbeat, found by its cron name."""
+    tasks = load_tasks(OPTIMIZE_PI / "tasks" / "main.yml")
+    scheduling = [
+        t for t in tasks if t.get("ansible.builtin.cron", {}).get("name") == CRON_NAME
+    ]
+    assert len(scheduling) == 1, (
+        f"expected exactly one task scheduling {CRON_NAME!r}, found {len(scheduling)}"
+    )
+    return scheduling[0]
+
+
+def test_the_cron_can_be_disarmed_from_the_inventory():
+    """A one-way arming switch is a bug: adding a way in means adding the way out (#2736)."""
+    state = str(_cron_task()["ansible.builtin.cron"].get("state", "present"))
+    assert "optimize_pi_recovery_restart_enabled" in state, (
+        "state: must follow optimize_pi_recovery_restart_enabled, or disarming the cron means "
+        "editing this task rather than flipping a host_vars flag"
+    )
+    assert "absent" in state, (
+        "the disarmed branch must REMOVE the cron, not leave it installed"
+    )
+
+
+def test_the_cron_ships_armed():
+    """The live Pi runs this cron; a default-off flag would have the next run delete it."""
+    assert load_defaults(OPTIMIZE_PI)["optimize_pi_recovery_restart_enabled"] is True, (
+        "the cron has been installed unconditionally since #1910 and is the only thing that "
+        "restarts a container whose create failed at the OCI runtime"
+    )
+
+
+def test_disarming_leaves_the_script_installed():
+    """Disarming stops the schedule, not the ability to run one cycle by hand."""
+    tasks = load_tasks(OPTIMIZE_PI / "tasks" / "main.yml")
+    deploy = [
+        t
+        for t in tasks
+        if t.get("name") == "Deploy the container-recovery heartbeat script"
+    ]
+    assert len(deploy) == 1, "expected exactly one task deploying the heartbeat script"
+    assert "optimize_pi_recovery_restart_enabled" not in str(deploy[0]), (
+        "the script deploy must stay unconditional: an operator disarming the cron still needs "
+        "to be able to run one cycle by hand"
+    )
