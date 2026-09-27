@@ -29,7 +29,15 @@ import sys
 import time
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
-from agent_logic import OpenPR, decide, delta, parse_run, render_digest, render_skip
+from agent_logic import (
+    OpenPR,
+    decide,
+    delta,
+    handed_off,
+    parse_run,
+    render_digest,
+    render_skip,
+)
 from gitops_markers import MARKERS, STATE_DIR
 from host_lib import atomic_write, discord_post, parse_env_file
 
@@ -106,6 +114,50 @@ def open_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR]:
         OpenPR(number=int(p["number"]), title=p.get("title", ""), url=p.get("url", ""))
         for p in json.loads(out)
     ]
+
+
+def own_prs(repo: str, tools: AgentTools | None = None) -> list[OpenPR] | None:
+    """The open PRs authored by the account this runs as, with their head branches.
+
+    This is the census that sees a superseding PR the session hands off (#2769), which
+    `open_prs` cannot: its author is this account, not app/renovate. `handed_off` narrows it to
+    the run's branches. None on any failure, so a failed read reports itself in the digest
+    rather than reading as "nothing handed off", and never raises: the after-census runs once
+    the session has already spent its money.
+    """
+    rc, out = (tools or TOOLS).run(
+        [
+            "gh",
+            "pr",
+            "list",
+            "--repo",
+            repo,
+            "--author",
+            "@me",
+            "--state",
+            "open",
+            "--limit",
+            "100",
+            "--json",
+            "number,title,url,headRefName",
+        ]
+    )
+    if rc != 0:
+        log(f"gh pr list --author @me failed (exit {rc}): {out.strip()[:200]}")
+        return None
+    try:
+        return [
+            OpenPR(
+                number=int(p["number"]),
+                title=p.get("title", ""),
+                url=p.get("url", ""),
+                branch=p.get("headRefName", ""),
+            )
+            for p in json.loads(out)
+        ]
+    except ValueError, KeyError, TypeError, AttributeError:
+        log(f"gh pr list --author @me returned unparseable output: {out.strip()[:200]}")
+        return None
 
 
 def pr_states(
@@ -441,15 +493,17 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
 
     log(f"{gate.reason}; preparing {path}")
     prepare_worktree(repo_dir, path, branch, tools)
+    own_before = own_prs(cfg["REPO"], tools)
     stdout, rc, timed_out = run_session(cfg, path, log_path)
     outcome = parse_run(stdout, rc, timed_out)
 
     after = open_prs(cfg["REPO"], tools)
     gone = sorted({p.number for p in before} - {p.number for p in after})
-    moved = delta(before, after, pr_states(cfg["REPO"], gone, tools))
+    handed = handed_off(own_before, own_prs(cfg["REPO"], tools), branch)
+    moved = delta(before, after, pr_states(cfg["REPO"], gone, tools), handed)
     log(
         f"resolved={moved.resolved} closed={moved.closed} unread={moved.unread} "
-        f"remaining={moved.remaining} ok={outcome.ok}"
+        f"handed_off={moved.handed_off} remaining={moved.remaining} ok={outcome.ok}"
     )
     tools.discord_post(
         webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log

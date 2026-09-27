@@ -49,7 +49,10 @@ operator's decision (#2746), not an obstacle to work around: never pass `--any-a
 that PR open and file a hand-off finding for it as the skill's §4 describes: what you
 verified, its `land.sh --pr <n>` command with `<sha>` as the placeholder, the check that
 proves the new version took effect, and that it must land before the next Renovate PR for
-the same pin.
+the same pin. Push that PR from a branch named `{{ renovate_agent_branch }}-<renovate pr number>`,
+cut in this worktree with `git switch -c` before your first commit. The wrapper finds the PRs
+you handed off by that name for the digest, and a PR pushed from `{{ renovate_agent_branch }}`
+itself blocks every later tick until a person lands it.
 
 For every other PR you leave open for a reason other than "ran out of budget" or the
 `k8s_autodeploy: false` rule above, file a finding:

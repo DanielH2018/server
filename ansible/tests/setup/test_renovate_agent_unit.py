@@ -382,6 +382,11 @@ def prompt_handoff_problems(prompt: str) -> list[str]:
             "the prompt does not ask for a hand-off finding, so a finished manual bump sits "
             "open with nothing telling a person to land it"
         )
+    if _BRANCH not in prompt:
+        problems.append(
+            "the prompt does not name the hand-off branch, so the wrapper's census of the PRs "
+            "the run handed off (agent_logic.handed_off) matches nothing it opened"
+        )
     return problems
 
 
@@ -393,20 +398,26 @@ def test_the_prompt_hands_off_its_own_superseding_pr() -> None:
 
 _FORBID = "never pass `--any-author`"
 _HANDOFF = "file a hand-off finding"
+# The prefix agent_logic.handed_off matches: the run branch (config.env's BRANCH) plus `-`.
+_BRANCH = "`{{ renovate_agent_branch }}-<"
 
 
 def test_a_prompt_forbidding_the_override_and_asking_for_a_handoff_is_clean() -> None:
-    assert prompt_handoff_problems(f"{_FORBID}; {_HANDOFF}") == []
+    assert prompt_handoff_problems(f"{_FORBID}; {_HANDOFF}; {_BRANCH}") == []
 
 
 @pytest.mark.parametrize(
     ("dropped", "fragment"),
-    [(_FORBID, "--any-author"), (_HANDOFF, "hand-off finding")],
+    [
+        (_FORBID, "--any-author"),
+        (_HANDOFF, "hand-off finding"),
+        (_BRANCH, "hand-off branch"),
+    ],
 )
-def test_a_prompt_missing_either_handoff_rule_is_flagged(
+def test_a_prompt_missing_any_handoff_rule_is_flagged(
     dropped: str, fragment: str
 ) -> None:
-    prompt = "; ".join(p for p in (_FORBID, _HANDOFF) if p != dropped)
+    prompt = "; ".join(p for p in (_FORBID, _HANDOFF, _BRANCH) if p != dropped)
     problems = prompt_handoff_problems(prompt)
     assert len(problems) == 1 and fragment in problems[0], problems
 
