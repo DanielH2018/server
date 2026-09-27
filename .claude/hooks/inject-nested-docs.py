@@ -339,6 +339,25 @@ def _head_lines(lines, max_chars, max_lines):
     return count
 
 
+_CUT_LINE = "----- sections of this file NOT shown above -----"
+
+# A head shorter than this many lines is deferred, like one under `MIN_HEAD_CHARS`.
+_MIN_HEAD_LINES = 20
+
+
+def _notice(doc, text):
+    return (
+        f"This file is {len(text):,} chars, over the {INLINE_MAX_CHARS:,}-char hook budget, "
+        f"so this is its head. Read `{doc}` for the rest before you change anything it covers."
+    )
+
+
+def _head_overhead(doc, text, header, trailer):
+    """(chars, lines) a head block spends on everything but its head text."""
+    fixed = len(header) + len(_notice(doc, text)) + len(_CUT_LINE) + 8
+    return fixed + sum(len(h) + 3 for h in trailer), len(trailer) + 4
+
+
 def _head_block(doc, text, header, budget_chars, budget_lines):
     """A doc over the budget as its head plus the headings its head cut off, or None.
 
@@ -346,28 +365,50 @@ def _head_block(doc, text, header, budget_chars, budget_lines):
     `MIN_HEAD_CHARS`; the caller defers the doc to the next command naming the path.
     """
     lines = text.splitlines()
-    notice = (
-        f"This file is {len(text):,} chars, over the {INLINE_MAX_CHARS:,}-char hook budget, "
-        f"so this is its head. Read `{doc}` for the rest before you change anything it covers."
-    )
-    cut_line = "----- sections of this file NOT shown above -----"
-    fixed = len(header) + len(notice) + len(cut_line) + 8
     # Two passes. The first reserves room for the doc's whole outline, since the cut is not
     # known yet; the second reserves only the headings that first cut left over, which frees
     # the rest for head text. The final trailer is a subset of the one the last pass reserved
     # for — a later cut can only drop headings — so the block stays under the budget.
     trailer, cut = _outline(lines)[:TRAILER_MAX_HEADINGS], 0
     for _ in range(2):
-        head_chars = budget_chars - fixed - sum(len(h) + 3 for h in trailer)
-        head_lines = budget_lines - len(trailer) - 4
-        if head_chars < MIN_HEAD_CHARS or head_lines < 20:
+        over_chars, over_lines = _head_overhead(doc, text, header, trailer)
+        head_chars = budget_chars - over_chars
+        head_lines = budget_lines - over_lines
+        if head_chars < MIN_HEAD_CHARS or head_lines < _MIN_HEAD_LINES:
             return None
         cut = _head_lines(lines, head_chars, head_lines)
         trailer = _outline(lines[cut:])[:TRAILER_MAX_HEADINGS]
-    block = f"{header}\n{notice}\n" + "\n".join(lines[:cut]).rstrip() + "\n"
+    block = f"{header}\n{_notice(doc, text)}\n" + "\n".join(lines[:cut]).rstrip() + "\n"
     if trailer:
-        block += cut_line + "\n" + "\n".join(f"  {h}" for h in trailer) + "\n"
+        block += _CUT_LINE + "\n" + "\n".join(f"  {h}" for h in trailer) + "\n"
     return block
+
+
+def _read(root, doc):
+    with open(os.path.join(root, doc), encoding="utf-8", errors="replace") as fh:
+        return fh.read()
+
+
+def _header(doc, trigger):
+    return f"===== {doc} (applies to `{trigger}`) ====="
+
+
+def _fits_inline(text):
+    return len(text) <= INLINE_MAX_CHARS and text.count("\n") + 1 <= INLINE_MAX_LINES
+
+
+def head_floor(root, doc, trigger):
+    """The smallest (chars, lines) budget `render` injects `doc` as a head for.
+
+    Returns None for a doc that `render` inlines whole instead. The first pass of
+    `_head_block` is the binding one, since it reserves the doc's whole outline.
+    """
+    text = _read(root, doc)
+    if _fits_inline(text):
+        return None
+    trailer = _outline(text.splitlines())[:TRAILER_MAX_HEADINGS]
+    chars, lines = _head_overhead(doc, text, _header(doc, trigger), trailer)
+    return chars + MIN_HEAD_CHARS, lines + _MIN_HEAD_LINES
 
 
 def render(root, doc, trigger, budget_chars, budget_lines):
@@ -382,13 +423,12 @@ def render(root, doc, trigger, budget_chars, budget_lines):
     Both budgets are what is LEFT of the payload, not the per-doc cap, because the harness
     caps the whole `additionalContext`. The line budget only started to bind once the head
     form landed: a heading outline cost a handful of lines, while a head can spend nearly
-    all 190 and push a second doc's block past the 200-line wire truncation (#2650).
+    all 190 and push a second doc's block past the 200-line wire truncation (#2650). Which
+    doc gets the budget first is `build_context`'s call.
     """
-    with open(os.path.join(root, doc), encoding="utf-8", errors="replace") as fh:
-        text = fh.read()
-    lines = text.count("\n") + 1
-    header = f"===== {doc} (applies to `{trigger}`) ====="
-    if len(text) <= INLINE_MAX_CHARS and lines <= INLINE_MAX_LINES:
+    text = _read(root, doc)
+    header = _header(doc, trigger)
+    if _fits_inline(text):
         block = f"{header}\n{text.rstrip()}\n"
         if len(block) > budget_chars or block.count("\n") > budget_lines:
             return None
@@ -397,30 +437,57 @@ def render(root, doc, trigger, budget_chars, budget_lines):
 
 
 def build_context(command, cwd, session_id, log_path=None, agent_id=None):
-    """(context_text, [(doc, trigger)]) for this command, or ("", []) when nothing is new."""
+    """(context_text, [(doc, trigger)]) for this command, or ("", []) when nothing is new.
+
+    Docs that fit whole are rendered before any doc injected as its head, in the order
+    `named_paths` and `docs_for` give. A head spent the payload first until #2775, and
+    deferred a short `.claude/rules` file matched by the same command in 23 of 98 head
+    payloads; in 9 the rule never arrived. The whole docs cannot starve the head in turn,
+    because they only get the budget left after the first head's `head_floor`. A whole doc
+    that does not fit under that reserve is deferred instead. `python-layout.md` is
+    6,960 chars, so it always defers beside a head.
+    """
     key = context_key(session_id, agent_id)
     already = injected_this_session(key)
-    blocks, chosen = [], []
-    remaining = INLINE_MAX_CHARS - len(_PREAMBLE)
-    remaining_lines = INLINE_MAX_LINES - _PREAMBLE.count("\n")
+    candidates = []
     for root, rel in named_paths(command, cwd):
         for doc in docs_for(root, rel):
-            if doc in already or any(doc == d for d, _ in chosen):
+            if doc in already or any(doc == c[1] for c in candidates):
                 continue
             if loaded_by_harness(session_id, doc, log_path, agent_id):
                 already.add(doc)
                 continue
             try:
-                block = render(root, doc, rel, remaining, remaining_lines)
+                floor = head_floor(root, doc, rel)
             except OSError:
                 continue
-            if block is None:
-                continue
-            # The +1 is the blank line `"\n".join` puts between two blocks.
-            remaining = max(0, remaining - len(block) - 1)
-            remaining_lines = max(0, remaining_lines - block.count("\n") - 1)
-            blocks.append(block)
-            chosen.append((doc, rel))
+            candidates.append((root, doc, rel, floor))
+    # Only the first head is reserved for: it spends nearly all it is given, so a second
+    # head in the same command defers whatever the whole docs leave.
+    floors = [c[3] for c in candidates if c[3] is not None]
+    reserve, reserve_lines = (floors[0][0] + 1, floors[0][1] + 1) if floors else (0, 0)
+    blocks, chosen = [], []
+    remaining = INLINE_MAX_CHARS - len(_PREAMBLE)
+    remaining_lines = INLINE_MAX_LINES - _PREAMBLE.count("\n")
+    for root, doc, rel, floor in sorted(candidates, key=lambda c: c[3] is not None):
+        whole = floor is None
+        try:
+            block = render(
+                root,
+                doc,
+                rel,
+                remaining - reserve if whole else remaining,
+                remaining_lines - reserve_lines if whole else remaining_lines,
+            )
+        except OSError:
+            continue
+        if block is None:
+            continue
+        # The +1 is the blank line `"\n".join` puts between two blocks.
+        remaining = max(0, remaining - len(block) - 1)
+        remaining_lines = max(0, remaining_lines - block.count("\n") - 1)
+        blocks.append(block)
+        chosen.append((doc, rel))
     if not chosen:
         if already:
             remember(key, already)
