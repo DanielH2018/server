@@ -77,6 +77,7 @@ def test_gate_dependents_maps_real_gates_to_real_checks():
         "loki_reachable",
         "b2_reachable",
         "cluster_prometheus",
+        "wan_reachable",
     }
     assert set(gates.GATE_DEPENDENTS).isdisjoint(names)
 

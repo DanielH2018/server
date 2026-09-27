@@ -43,7 +43,7 @@ def run_once(
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
-    Evaluates the Prometheus, Loki, B2 and cluster-Prometheus gates first, so a single
+    Evaluates the Prometheus, Loki, B2, WAN and cluster-Prometheus gates first, so a single
     outage in one of them suppresses its dependent checks (pushed `up` with a skip
     message) instead of paging each of them separately. Every enabled check in `checks` is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
@@ -130,6 +130,14 @@ def run_once(
         cfg, "b2_reachable", gates.probe_b2, "KUMA_PUSH_B2_REACHABLE", dry_run, only
     )
 
+    # WAN-reachability gate (peer of the three above): an internet outage had no gate at all,
+    # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
+    # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
+    # answers, so a single provider's outage does not silence a dependent reading the other.
+    wan_ok, _wan_msg = gate_lib._gate(
+        cfg, "wan_reachable", gates.probe_wan, "KUMA_PUSH_WAN_REACHABLE", dry_run, only
+    )
+
     # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
     # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
     # covers. Without this, a cluster ingress/Traefik outage would page as a workload fault rather
@@ -195,6 +203,9 @@ def run_once(
             bridge.common.log("SKIP", name, "-", msg)
         elif not b2_ok and name in gates.b2_dependent:
             ok, msg = True, "skipped — B2 unreachable (see B2 Reachable monitor)"
+            bridge.common.log("SKIP", name, "-", msg)
+        elif not wan_ok and name in gates.wan_dependent:
+            ok, msg = True, "skipped — WAN unreachable (see WAN Reachable monitor)"
             bridge.common.log("SKIP", name, "-", msg)
         elif not cluster_ok and name in gates.cluster_dependent:
             ok, msg = (

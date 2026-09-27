@@ -149,6 +149,8 @@ def test_startup_grace_disjoint_from_run_once_skip_sets():
     assert gates.STARTUP_GRACE.isdisjoint(gates.PROM_DEPENDENT)
     assert gates.STARTUP_GRACE.isdisjoint(gates.LOKI_DEPENDENT)
     assert gates.STARTUP_GRACE.isdisjoint(gates.B2_DEPENDENT)
+    assert gates.STARTUP_GRACE.isdisjoint(gates.CLUSTER_DEPENDENT)
+    assert gates.STARTUP_GRACE.isdisjoint(gates.WAN_DEPENDENT)
     for deps in gates.EXPORTER_DEPENDENT.values():
         assert gates.STARTUP_GRACE.isdisjoint(deps)
 
@@ -163,7 +165,11 @@ def test_startup_grace_covers_every_ungated_reach_out_check():
     import inspect
 
     gated = (
-        set(gates.PROM_DEPENDENT) | set(gates.LOKI_DEPENDENT) | set(gates.B2_DEPENDENT)
+        set(gates.PROM_DEPENDENT)
+        | set(gates.LOKI_DEPENDENT)
+        | set(gates.B2_DEPENDENT)
+        | set(gates.CLUSTER_DEPENDENT)
+        | set(gates.WAN_DEPENDENT)
     )
     for deps in gates.EXPORTER_DEPENDENT.values():
         gated |= set(deps)
@@ -199,6 +205,7 @@ def _wire_run_once_grace(cfg, monkeypatch, results):
         grace_streaks={},
         probe_prometheus=lambda _cfg: (True, "prom ok"),
         probe_loki=lambda _cfg: (True, "loki ok"),
+        probe_wan=lambda _cfg: (True, "wan ok"),
     )
     pushes = []
     monkeypatch.setattr(

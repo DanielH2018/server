@@ -72,13 +72,38 @@ def wire_run_once(cfg, monkeypatch, prom_result):
             probe_prometheus=as_probe(prom_result),
             # Loki reachable by default so run_once's Loki gate makes no real network call here.
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
         ),
     )
     return ran, pushes
 
 
-def wire_run_once_loki(cfg, monkeypatch, loki_result, names, loki_dependent):
-    """Drive run_once with Prometheus UP and a stated Loki-reachability result; capture run+push."""
+def wire_run_once_reachability(
+    cfg,
+    monkeypatch,
+    names,
+    loki_result=(True, "loki ok"),
+    loki_dependent=(),
+    wan_result=(True, "wan ok"),
+    wan_dependent=(),
+):
+    """Drive run_once with Prometheus UP and a stated Loki and WAN result; capture run+push.
+
+    The two gates share one driver because they are the same shape — a reach-out probe whose
+    verdict suppresses a named set — and a second near-identical driver would spend two more
+    monkeypatch sites saying nothing new. Each gate defaults to reachable with an empty
+    dependent set, so a caller states only the gate it is about.
+
+    Args:
+      names: The check names to register, each a body that records that it ran.
+      loki_result: What `probe_loki` reports, or an Exception for it to raise.
+      loki_dependent: The names the Loki gate suppresses.
+      wan_result: What `probe_wan` reports, or an Exception for it to raise.
+      wan_dependent: The names the WAN gate suppresses.
+
+    Returns:
+      (ran, pushes) — the names that actually executed, and [(token, ok, msg), ...].
+    """
     ran, pushes = [], []
     monkeypatch.setattr(
         bridge.net, "push", lambda _cfg, t, ok, m: pushes.append((t, ok, m))
@@ -90,8 +115,10 @@ def wire_run_once_loki(cfg, monkeypatch, loki_result, names, loki_dependent):
         gates=Gates(
             prom_dependent=frozenset(),
             loki_dependent=frozenset(loki_dependent),
+            wan_dependent=frozenset(wan_dependent),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=as_probe(loki_result),
+            probe_wan=as_probe(wan_result),
         ),
     )
     return ran, pushes
@@ -128,6 +155,7 @@ def run_once_with_gates(
             cluster_dependent=frozenset(cluster_dependent),
             probe_prometheus=as_probe(prom_result),
             probe_loki=lambda _cfg: (True, "up"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
             probe_b2=lambda _cfg: (True, "up"),
             probe_cluster=lambda _cfg: (cluster_ok, "gate"),
         ),

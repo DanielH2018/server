@@ -201,6 +201,7 @@ def _wire_run_once_b2(cfg, monkeypatch, b2_result, checks, b2_dependent):
             b2_dependent=frozenset(b2_dependent),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
             probe_b2=lambda _cfg: b2_result,
         ),
     )

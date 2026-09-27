@@ -192,6 +192,7 @@ def _wire_run_once_prom_up(cfg, monkeypatch, up_vector, checks, prom_dependent):
             prom_dependent=frozenset(prom_dependent),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
         ),
     )
     return ran, pushes
@@ -340,6 +341,7 @@ def test_run_once_up_probe_failure_does_not_suppress(monkeypatch, cfg):
             prom_dependent=frozenset({"disk"}),
             probe_prometheus=lambda _cfg: (True, "prom ok"),
             probe_loki=lambda _cfg: (True, "loki ok"),
+            probe_wan=lambda _cfg: (True, "wan ok"),
         ),
     )
     assert "disk" in ran  # not suppressed
