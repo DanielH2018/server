@@ -56,6 +56,15 @@ See repo-root `CLAUDE.md` for shared conventions.
     `selfcheck=200`, and 302/200 on the LAN routes. Total edge outage 11:53Z–11:57Z.
   - Expected boot noise, not a defect: the selfcheck route has no `Host()`, so Traefik logs
     `No domain found in rule PathPrefix(...)` and falls back to the default TLSOption for it.
+- **The bouncer runs with `metricsUpdateIntervalSeconds: 0`, so it reports no usage
+  metrics to LAPI (#2752).** Under plugin v1.7.1 the default 600s metrics ticker
+  intermittently stops the 60s stream ticker for 600s or 1200s, silently. A ban or an
+  unban made in that window does not reach the edge. The
+  `DECIDED: no usage-metrics ticker` comment in `templates/dynamic.yaml.j2` has the
+  evidence and upstream's issue, and
+  `ansible/tests/services/test_traefik_bouncer_metrics_ticker_off.py` pins the value.
+  The ticker is a package global inside the plugin, so a Middleware edit alone does not stop
+  a running one. The traefik pod has to restart, and the manifests rollout-restart does that.
 - **The https entrypoint rewrites a Cloudflare request's X-Forwarded-For to
   CF-Connecting-IP, first in its chain.** Cloudflare appends the client address to any XFF
   the client sent, so without it the leftmost entry is client-chosen. Authelia logs that
