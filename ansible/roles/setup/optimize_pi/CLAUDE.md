@@ -268,6 +268,20 @@ See repo-root `CLAUDE.md` for conventions.
     appear in Pi-hole's client list as its LAN address, not a `10.42.x` one.
     ENFORCED by `ansible/tests/setup/test_node_resolv_order.py`, which checks both callers of the
     shared template for order, a present fallback, and the absence of `rotate`.
+    **The Pi's own name never reaches that resolver.** `sudo` resolves the local hostname on
+    every invocation, and the Pi's image shipped no `/etc/hosts` line for it — so the lookup
+    fell through to the Pi-hole VIP above and every `sudo` printed `unable to resolve host
+    daniel-pi: Name or service not known` (2026-09-27, #2724). During a cluster or Pi-hole
+    outage that lookup waits on the resolver timeout first, which is exactly when an operator
+    needs this host. The role now declares `127.0.1.1 {{ ansible_hostname }}` with
+    `lineinfile`, bringing the Pi up to what daniel-server and daniel-box already carry.
+    **cloud-init does not own that file here**, checked on the live host 2026-09-27:
+    `manage_etc_hosts` is set in neither `/etc/cloud/cloud.cfg` nor `/etc/cloud/cloud.cfg.d/`,
+    and cloud-init defaults it to False, which makes the `update_etc_hosts` module in
+    `cloud_init_modules` a no-op — `/etc/hosts` was last written on the image build date. So
+    the line survives a reboot.
+    ENFORCED by `ansible/tests/setup/test_pi_resolves_its_own_hostname.py`, which fails if the
+    task goes away or its regexp stops anchoring on the address.
 
 ## Notable
 - **Handlers live in the playbook, not this role:** `Reboot Pi`, `Restart Watchdog`,

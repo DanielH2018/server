@@ -934,6 +934,36 @@
     user: "{{ sys_user }}"
   become: true
 
+# SUDO RESOLVES THE LOCAL HOSTNAME ON EVERY INVOCATION, and this file is the first hop. Without
+# a line here the lookup falls through to /etc/resolv.conf, whose first nameserver is the
+# cluster's Pi-hole VIP — so every `sudo` on the Pi printed `unable to resolve host daniel-pi:
+# Name or service not known` (2026-09-27, #2724) and a `sudo` during a cluster outage waits on
+# the resolver timeout first. That is exactly when an operator needs this host.
+#
+# The Pi's image shipped without the line; daniel-server and daniel-box both carry their own
+# `127.0.1.1 <hostname>`, so this only brings the Pi up to what the other two already have.
+#
+# CLOUD-INIT DOES NOT OWN THIS FILE, checked on the live host 2026-09-27: `manage_etc_hosts` is
+# set in neither /etc/cloud/cloud.cfg nor /etc/cloud/cloud.cfg.d/, and cloud-init defaults it to
+# False, which makes the `update_etc_hosts` module in cloud_init_modules a no-op. /etc/hosts was
+# last written 2025-08-05, the image build. So the line survives a reboot.
+- name: Resolve the Pi's own hostname locally so sudo never waits on DNS
+  tags: [pi-dns]
+  # ansible_hostname, not inventory_hostname: sudo resolves what the kernel reports, and an
+  # entry naming anything else would leave the real hostname still going to DNS. They agree
+  # today; this tracks the kernel's name if they ever diverge.
+  #
+  # The regexp anchors on the ADDRESS, not the name. Matching the name instead would miss an
+  # existing 127.0.1.1 line carrying a stale hostname and append a second one beside it.
+  ansible.builtin.lineinfile:
+    path: /etc/hosts
+    regexp: '^127\.0\.1\.1\s'
+    line: "127.0.1.1 {{ ansible_hostname }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Check whether /etc/resolv.conf is still the systemd-resolved stub symlink
   tags: [pi-dns]
   ansible.builtin.stat:
