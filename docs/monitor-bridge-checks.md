@@ -1163,7 +1163,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   Land a shipper change more than an hour before pointing this check at its counters, to
   keep the cutover's own re-tail from paging the deploy.
   **The weekly reboot is the one `too_far_behind` case that is neither data loss worth paging
-  nor a benign re-tail** (#2783): Alloy ships its backlog for hours afterwards and Loki
+  nor a benign re-tail**, and the one exemption to "either way it must page" above (#2783): Alloy ships its backlog for hours afterwards and Loki
   discards the late part, which held this tile red for 4.4h on 2026-09-27 against a 1h rolling
   window — so the discards ran ~3.4h past boot. Inside `SHIPPER_BACKLOG_GRACE_S` (21600 s,
   ~1.75x that) of the NODE's boot — `bridge/common.py:host_uptime_s`, never this pod's age,
