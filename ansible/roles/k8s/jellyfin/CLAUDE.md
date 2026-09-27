@@ -36,13 +36,13 @@ shared `media-data` library and owns its own config volume.
 - **What blocks the Jellyfin 12 image line, which is the question to ask BEFORE planning a bump.**
   Four of the five installed plugins have a 12 build ready (read 2026-09-10): ani-sync `4.6.0.0`
   in the `v4.6b` release, Intro Skipper `12.0/v12.0.3.0`, Webhook `22.0.0.0` declaring
-  `targetAbi 12.0.0.0` in the official manifest, Merge Versions `12.0.0`. **Media Cleaner is the
-  blocker.** Its newest release, `v3.2.0`, ships only `MediaCleaner-10.10.7.zip`,
-  `MediaCleaner-10.11.0.zip` and `MediaCleaner-10.11.9.zip` — no 12 asset at all. Until upstream
-  publishes one, a move to 12 either waits or drops Media Cleaner, and dropping it stops the
-  automated cleanup rules silently: Jellyfin's loader rejects an ABI-mismatched plugin **without
-  logging a failure**, so the pod stays healthy and the rollout stays green (the #1648 silence).
-  SSO-Auth was the other blocker and is gone — see below.
+  `targetAbi 12.0.0.0` in the official manifest, Merge Versions `12.0.0`. **Media Cleaner was the
+  blocker and no longer is.** `v3.2.0` shipped only 10.x assets, and `v3.4.0` (pinned 2026-09-27,
+  #2720) adds `MediaCleaner-12.0.zip`, published as `3.4.0.120000` with `targetAbi 12.0.0.0`.
+  A move to 12 must switch this pin to that asset in the same PR. Leaving it on the 10.11.9
+  asset stops the automated cleanup rules silently: Jellyfin's loader rejects an ABI-mismatched
+  plugin **without logging a failure**, so the pod stays healthy and the rollout stays green (the
+  #1648 silence). SSO-Auth was the other blocker and is gone — see below.
 - **`use_authelia: false` — no forward-auth middleware** on a public route. **Nothing but Jellyfin's own local accounts authenticates it.** The SSO-Auth
   plugin used to, and was removed on 2026-09-10 (#1674) at the operator's request, taking OIDC
   and 2FA off this route with it; authelia's `jellyfin` OIDC client was retired in the same

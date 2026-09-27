@@ -212,9 +212,10 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 # from the dashboard's Troubleshooting tab, which renders a DRY-RUN report of what a real run
 # would delete, before changing anything there.
 #
-# 3.2.0.101109 is what the pod already loaded before this pin existed (read from
+# The first pin, 3.2.0.101109, is what the pod already loaded before this pin existed (read from
 # `kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'`, 2026-09-10), so pinning it
-# changes no running version — it only makes the version a thing git decides.
+# changed no running version — it only made the version a thing git decides. v3.4.0 (Renovate
+# #2720) is the first bump; from v3.4.0 on, the release also ships a MediaCleaner-12.0.zip.
 #
 # THE VERSION ENCODES THE SERVER ABI IN ITS FOURTH SEGMENT, which no sibling pin here does.
 # Upstream ships ONE release tag (`v3.2.0`) carrying three per-ABI assets —
@@ -230,10 +231,10 @@ jellyfin_k8s_mediacleaner_version: "3.4.0.101109"
 jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"
 jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.4.0/MediaCleaner-10.11.9.zip"
 # sha256, the digest GitHub reports for the asset itself — verified by downloading the zip and
-# hashing it (2026-09-10). The plugin's published manifest (shemanaev/jellyfin-plugin-repo,
-# master manifest.json) carries an MD5, 765cbb16756bad5c0f5fda654e02ba5c, and it agrees on the
+# hashing it (2026-09-27, v3.4.0). The plugin's published manifest (shemanaev/jellyfin-plugin-repo,
+# master manifest.json) carries an MD5, abc56d999ff95145d44ea0c59831f977, and it agrees on the
 # same bytes, so two independent digests attest to one download.
-jellyfin_k8s_mediacleaner_sha256: "473e9382d12ccada1a63c240588c7410ce68fa57c9020c751004bc1fd89ebeb1"
+jellyfin_k8s_mediacleaner_sha256: "dc103b4728e0fbacad930c9f62f00869ae0fbcdcaf0ed13368c46aa8b1d758d3"
 # The zip carries its own meta.json beside MediaCleaner.dll and MediaCleaner.Core.dll, so this
 # install is WEBHOOK's shape, not Intro Skipper's: nothing here writes a manifest, and no guid
 # is needed as an input. For the record, the manifest declares
