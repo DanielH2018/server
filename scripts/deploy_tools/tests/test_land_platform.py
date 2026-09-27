@@ -12,6 +12,10 @@ how issue #929 (a landing that read `settled` while the Pi ran old code) comes b
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """
 
+import os
+import subprocess
+
+import deploy_tags
 import land_platform
 import land_tags
 from deploy_tags import service_records
@@ -103,3 +107,46 @@ def test_the_live_tree_declares_wg_easy_on_two_platforms():
     assert platforms == {"k8s", "docker"}
     for path in (_K8S_TEMPLATE, _DOCKER_TEMPLATE):
         assert (REPO / path).exists(), path
+
+
+def test_diff_range_is_the_range_deploy_tags_changed_reads(tmp_path):
+    """Non-vacuity for the fallback derivation (#2738): the landing reads this range's paths to
+    prove a platform, while `deploy_tags.changed` derives the tags from its own spelling. A
+    two-dot range would prove the platform of a different file set with every case above still
+    green, so this holds the two against each other on a history where they disagree -- the
+    `other` branch carries a commit HEAD does not, and only three dots exclude it."""
+    env = dict(os.environ) | {
+        "GIT_AUTHOR_NAME": "t",
+        "GIT_COMMITTER_NAME": "t",
+        "GIT_AUTHOR_EMAIL": "t@example.invalid",
+        "GIT_COMMITTER_EMAIL": "t@example.invalid",
+    }
+
+    def commit(name: str, *args: str) -> None:
+        (tmp_path / name).write_text(name)
+        for argv in (
+            ("git", "add", "-A"),
+            ("git", "commit", "-qm", name, "--no-gpg-sign"),
+        ):
+            subprocess.run(argv, cwd=tmp_path, env=env, check=True, capture_output=True)
+
+    def git(*args: str) -> str:
+        r = subprocess.run(
+            ("git", *args),
+            cwd=tmp_path,
+            env=env,
+            check=True,
+            capture_output=True,
+            text=True,
+        )
+        return r.stdout.strip()
+
+    git("init", "-q", "-b", "master")
+    commit("base")
+    git("checkout", "-q", "-b", "other")
+    commit("theirs")
+    git("checkout", "-q", "master")
+    commit("ours")
+
+    assert deploy_tags._git_diff_paths("other", tmp_path) == ["ours"]
+    assert git("diff", "--name-only", land_platform.diff_range("other")) == "ours"
