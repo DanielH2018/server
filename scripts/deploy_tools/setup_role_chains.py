@@ -15,6 +15,7 @@ where wider costs an operator one no-op command.
 Split out of `land_reach.py` at the module-length cap.
 """
 
+import functools
 import json
 import re
 import sys
@@ -55,10 +56,26 @@ def task_chains(
     """
     path = role_dir / "tasks" / task_file
     try:
-        tasks = yaml_fast.safe_load(path.read_text()) or []
+        tasks = _parse_tasks(path, path.stat().st_mtime_ns)
     except OSError, yaml.YAMLError:
         return None
+    if tasks is None:
+        return None
     return _gates_in(tasks, role_dir, keep, task_file, inherited)
+
+
+@functools.lru_cache(maxsize=256)
+def _parse_tasks(path: Path, _mtime_ns: int) -> list | None:
+    """`path` parsed once per content, mirroring `land_reach._parse_vars_file`'s cache key.
+
+    `setup_repo_file_hosts` asks every setup role whether it ships one changed repo file, so
+    a PR with several of them walks the same 18 task trees once per file. The cache makes
+    that one parse per file on disk rather than one per question; a rewrite changes the
+    mtime and misses. Returns None for a tasks file that parses to something other than a
+    list, which `task_chains` reads the same way as an unreadable one.
+    """
+    tasks = yaml_fast.safe_load(path.read_text()) or []
+    return tasks if isinstance(tasks, list) else None
 
 
 def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
@@ -75,6 +92,30 @@ def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
         role_dir,
         lambda task, _: basename in json.dumps(task) or _ships_via_loop(task, basename),
     )
+
+
+def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]:
+    """Every `when:` chain on a task that ships `repo_path`, a file OUTSIDE this role.
+
+    Three setup-role tasks copy a file from the repo checkout rather than from the role's
+    own `templates/`/`files/`, with `src: "{{ playbook_dir }}/../<repo-relative path>"`:
+    hypervisor's staging-gate runner (`scripts/deploy_tools/staging_gate_remote.sh`) and its
+    etcd drill script, and `common`'s release pruner. `setup_file_hosts` cannot see any of
+    them, because it keys on the path being under `ansible/roles/setup/<role>/`.
+
+    The match is the repo-relative PATH, not the basename `task_gates_naming` uses. A
+    basename is the right key for a file under the role's own directory, where the role
+    already owns it; for a repo file, any of 18 roles could mention `deploy.sh` in a comment
+    and claim to ship it. The path literal appears whole inside the `src:` above, so it is
+    both sufficient and far narrower.
+
+    Returns an EMPTY list, not None, when no task ships the path -- the opposite asymmetry
+    to the rest of this module, and deliberately. Here absence of evidence means the role
+    does not ship the file, so the file owes it nothing; falling back to the role-level
+    reach would make every unrelated repo path in a PR (`scripts/dev/pytest_shard_weights.json`,
+    a test file) widen every changed setup role to every host it reaches.
+    """
+    return task_chains(role_dir, lambda task, _: repo_path in json.dumps(task)) or []
 
 
 def _ships_via_loop(task: dict, basename: str) -> bool:

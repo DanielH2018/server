@@ -8,7 +8,9 @@ in the playbook, or, for a role the playbook does not gate, the gates on its own
 (issue #2073: `deploy_ui` is one `block:` under `when: has_gitops`); `setup_file_hosts`
 reads the gate on the task that ships a changed file, which is what decides where a FILE
 lands when the role reaches more hosts than the file does (PR #1241's shape: box-only cron
-templates under the ungated `initial_setup` role read as reaching every host).
+templates under the ungated `initial_setup` role read as reaching every host);
+`setup_repo_file_hosts` reads the same gate for a changed file OUTSIDE the role's directory
+that one of its tasks copies out of the checkout (issue #2795).
 `remaining_setup_hosts_note` is the string land.sh prints and the verdict hangs on.
 
 Split out of `land_tags.py` at the module-length cap; the path-to-tag mappers stay there.
@@ -38,6 +40,7 @@ from setup_role_chains import (
     handler_notifier_chains,
     task_chains,
     task_gates_naming,
+    task_gates_shipping_repo_path,
     var_consumer_chains,
 )
 
@@ -298,6 +301,41 @@ def setup_file_hosts(
     return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
 
 
+def setup_repo_file_hosts(
+    role: str,
+    path: str,
+    playbook: Path = _INITIAL_SETUP_YML,
+    all_vars: Path = ALL_VARS,
+    host_vars_dir: Path = HOST_VARS,
+    roles_dir: Path = _SETUP_ROLES_DIR,
+) -> frozenset[str]:
+    """Which hosts a changed file OUTSIDE `role`'s own directory lands on, by ship evidence.
+
+    THE HOLE THIS CLOSES. `setup_file_hosts` keys on the path sitting under
+    `ansible/roles/setup/<role>/`, and `remaining_setup_hosts_note` only ever handed it paths
+    with that prefix, so a repo file a role's task copies from the checkout was invisible to
+    the reach. PR #2792 changed `scripts/deploy_tools/staging_gate_remote.sh`, which
+    `hypervisor/tasks/install.yml` installs as `/usr/local/bin/staging-gate-run` on the one
+    host with `has_hypervisor: true`, plus `hypervisor/tasks/teardown.yml`. The union over
+    the role's own files was `{daniel-box, daniel-pi}` from the teardown half alone, so the
+    note named daniel-pi and omitted **daniel-server** -- the only host the changed script
+    actually runs on. An operator following that line applies the teardown half to the Pi and
+    leaves the staging gate on the old script, which is what happened on 2026-09-27: the
+    hand-run on daniel-server went from 0 to 3 `ignore-submodules` matches (issue #2795).
+
+    Evidence only: a role that ships nothing named `path` contributes the empty set, not its
+    role-level reach. `task_gates_shipping_repo_path`'s docstring has why -- the inverse
+    would let any unrelated repo path in a PR widen every changed setup role to every host.
+    """
+    role_hosts = setup_role_hosts(role, playbook, all_vars, host_vars_dir, roles_dir)
+    if not role_hosts:
+        return frozenset()
+    chains = task_gates_shipping_repo_path(roles_dir / role, path)
+    if not chains:
+        return frozenset()
+    return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
+
+
 def _setup_apply_command(role: str, host: str) -> str:
     """The exact command that applies `role` on `host` via initial_setup.yml.
 
@@ -343,12 +381,17 @@ def remaining_setup_hosts_note(
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
     unowed to a hand, exactly as `plane_note` already keeps it.
     """
-    cs = changes_for(files, quiet).changes
+    loud = changes_for(files, quiet)
+    cs = loud.changes
     remaining: dict[str, frozenset[str]] = {}
     role_files = {
         r: [p for p in files if p.startswith(f"ansible/roles/setup/{r}/")]
         for r in cs.setup_roles
     }
+    # Every loud path in no role's directory, offered to each changed role as a file it may
+    # ship from the checkout (`setup_repo_file_hosts`). Quiet paths are dropped here where
+    # `role_files` above keeps them, because a quiet path owes no host an apply at all.
+    repo_files = [p for p in loud.loud if not p.startswith("ansible/roles/")]
     for role in cs.setup_roles:
         # Per file, not per role: the gate that decides where a file lands is on the task
         # that ships it (`setup_file_hosts`), and a role-level read said every host for
@@ -357,7 +400,13 @@ def remaining_setup_hosts_note(
             *(
                 setup_file_hosts(role, p, playbook, all_vars, host_vars_dir, roles_dir)
                 for p in role_files[role] or [""]
-            )
+            ),
+            *(
+                setup_repo_file_hosts(
+                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                )
+                for p in repo_files
+            ),
         ) - {local_host}
         if hosts:
             remaining[role] = hosts
