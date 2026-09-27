@@ -120,6 +120,13 @@ def classify(ln: Landing) -> None:
         # landing takes. Leaving it unread keeps the override's meaning -- deploy exactly these
         # services -- and the broad half a `--tags` landing must not skip is caught earlier, by
         # `ci.preflight`'s blockers read over the incoming range.
+        #
+        # DECIDED: `--tags` leaves `k8s_only` empty, so a two-platform tag such as `wg-easy`
+        # routes to every declaring host (#2748). The operator's list carries no provenance,
+        # and narrowing it from the PR's paths would second-guess an explicit "deploy exactly
+        # these services". Staying wide costs one Pi Compose deploy that recreates nothing.
+        # Narrowing is the direction of issue #929: a tag that reached no host while the
+        # landing printed `settled` over a Pi still running the old container.
         return
     # WHICH TAGS EXIST is asked of the MERGE COMMIT, not of a checkout. A PR that adds a role
     # and its `containers_list` entry together is absent from every tree until the tick
