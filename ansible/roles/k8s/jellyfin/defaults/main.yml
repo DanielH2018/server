@@ -227,7 +227,8 @@ jellyfin_k8s_mergeversions_sha256: "79afd80219176cadccb05752971072a9fc74dc112232
 # failure. ansible/tests/services/test_mediacleaner_install.py re-derives that encoding from the
 # targetAbi rather than trusting the three values to have been copied consistently.
 jellyfin_k8s_mediacleaner_version: "3.4.0.101109"
-# The NEWEST ABI variant this release ships, and the newest the 10.11.11 image satisfies.
+# The newest ABI variant the 10.11.11 image satisfies. v3.4.0 also ships a 12.0 variant, which
+# this image would reject without logging a failure.
 jellyfin_k8s_mediacleaner_target_abi: "10.11.9.0"
 jellyfin_k8s_mediacleaner_url: "https://github.com/shemanaev/jellyfin-plugin-media-cleaner/releases/download/v3.4.0/MediaCleaner-10.11.9.zip"
 # sha256, the digest GitHub reports for the asset itself — verified by downloading the zip and
