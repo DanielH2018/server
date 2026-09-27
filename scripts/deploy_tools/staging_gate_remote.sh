@@ -68,10 +68,27 @@ main() {
 
   # A dirty tree is prep failure, not a verdict: deploy.sh renders from the working directory, so
   # an uncommitted edit here would make the gate measure something other than the SHA under test.
-  # Now that the gate owns this tree nothing should ever dirty it, which makes this check cheap
-  # insurance rather than a routine outcome — and a hit here means someone edited the gate's
-  # checkout by hand, which is worth the loud stop.
-  [ -z "$(git status --porcelain)" ] || fail_prep "working tree is dirty"
+  # Nothing but a hand edit should ever dirty the superproject, which makes this check cheap
+  # insurance rather than a routine outcome, and a hit here is worth the loud stop.
+  #
+  # `--ignore-submodules=all` is load-bearing and is not a relaxation. `git merge --ff-only`
+  # moves the gitlink in the index and NEVER touches the submodule's working tree, so the first
+  # commit that bumps `Email-to-RSS` leaves this checkout reporting ` M Email-to-RSS` — forever,
+  # because this check runs before the fetch and so nothing here can ever move past it. That is
+  # not a hypothetical: e5f2ef83 bumped the gitlink on 2026-09-21, the tick of 2026-09-22
+  # fast-forwarded across it, and `server-staging`'s HEAD reflog then stops dead — five days of
+  # every run answering PREP_FAILED, which the deployer reads as NO_VERDICT and deploys prod
+  # through (#2777). `--ignore-submodules=dirty` does NOT fix this: it suppresses changes INSIDE
+  # the submodule and still reports the gitlink difference, which is the line we are seeing.
+  #
+  # DECIDED: the gate ignores the submodule rather than syncing it. Deploying to stage renders
+  # `ansible/` and runs `scripts/`; nothing under `Email-to-RSS` is read by any of it — it is a
+  # Cloudflare Worker (docs/email-to-rss.md), deployed by wrangler and not by this repo. Adding
+  # `git submodule update` here would put a fetch of an unrelated GitHub remote in front of every
+  # verdict, so a network flake there would become PREP_FAILED, then NO_VERDICT, and prod would
+  # deploy unguarded — the exact failure this file exists to prevent. Full reasoning in
+  # ansible/roles/setup/hypervisor/CLAUDE.md.
+  [ -z "$(git status --porcelain --ignore-submodules=all)" ] || fail_prep "working tree is dirty"
 
   git fetch --quiet || fail_prep "git fetch failed"
 
