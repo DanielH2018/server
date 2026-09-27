@@ -240,8 +240,9 @@ so a check already down is not paged again.
   `/var/log/k3s.log` from 07:40:23Z with no success, one per issuer, so Headlamp login was
   dead for 5.5 hours. **The tell is which auth still works:** client certificates and every
   ServiceAccount are untouched, so kubectl, the controllers and every probe read green
-  throughout. To recover without restarting the control plane, close the two sockets
-  (`sudo ss -tnp | grep :443` names them as `k3s-server`) and let the next 10s tick redial.
+  throughout. To recover without restarting the control plane, close **both** sockets —
+  `sudo ss -tnp | grep k3s-server` on daniel-box names them, one per issuer, and healing only
+  the VIP one leaves the public issuer's errors running — then let the next 10s tick redial.
   The full sequence, the recovery caveat and the measured error chain are in that file's
   comment above the key. The same pin wedged the Pi's Alloy on the same reboot (#2747).
 - **The release-staleness check is the durable half of a one-shot Discord page.** When the
