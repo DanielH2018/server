@@ -10,7 +10,7 @@ Run: uv run pytest scripts/dev/tests/test_fanout_clean_convergence.py
 import json
 import subprocess
 
-from fanout_lib.clean import remote_clean_command
+from fanout_lib.clean import read_clean_result, remote_clean_command
 from fanout_lib.manifest import Batch, Manifest, path as manifest_path, save
 from fanout_place import main
 from _fanout_fakes import fake_tools, ok
@@ -133,6 +133,34 @@ def test_an_unreachable_host_is_a_failure_not_a_kept_tree(tmp_path, capsys):
     assert "2 on daniel-server: clean failed (exit 255): ssh: connect" in out
     assert "clean failed for 2 — see above" in out
     assert "re-run clean once merged" not in out
+
+
+def test_a_traceback_is_reported_by_its_exception_line_not_its_header():
+    """#2788: the header is the one traceback line that names nothing."""
+    stderr = (
+        "warning: `VIRTUAL_ENV` does not match the project environment\n"
+        "Traceback (most recent call last):\n"
+        '  File "/w2/scripts/dev/prune_worktrees.py", line 1, in <module>\n'
+        "    main()\n"
+        "subprocess.CalledProcessError: Command '['git', 'status']' returned 128.\n"
+        "\n"
+    )
+    died = subprocess.CompletedProcess([], 1, stdout="", stderr=stderr)
+    assert read_clean_result(died) == (
+        "failed",
+        "clean failed (exit 1): subprocess.CalledProcessError: "
+        "Command '['git', 'status']' returned 128.",
+    )
+
+
+def test_a_plain_multi_line_error_is_still_reported_by_its_first_line():
+    """Without a traceback header the first line is the cause, e.g. ssh's refusal."""
+    stderr = "ssh: connect to host daniel-server port 22: refused\nretrying later\n"
+    refused = subprocess.CompletedProcess([], 255, stdout="", stderr=stderr)
+    assert read_clean_result(refused) == (
+        "failed",
+        "clean failed (exit 255): ssh: connect to host daniel-server port 22: refused",
+    )
 
 
 def test_a_kept_verdict_stays_exit_zero(tmp_path):
