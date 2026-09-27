@@ -362,6 +362,55 @@ def test_a_prompt_missing_any_one_of_them_is_flagged(
     assert len(problems) == 1 and fragment in problems[0], problems
 
 
+# ── the manual hand-off: the prompt must hand its own superseding PR to a person ──
+#
+# A finished `manual —` bump ends as a PR the session opened itself, which LAND_REQUIRE_AUTHOR
+# refuses to arm. The operator chose to hand that PR off rather than land it (#2746), and the
+# refusal message used to suggest `--any-author`, so the prompt has to rule the override out.
+
+
+def prompt_handoff_problems(prompt: str) -> list[str]:
+    """Every way the prompt can fail to hand off its own superseding PR. Empty means it does."""
+    problems: list[str] = []
+    if "never pass `--any-author`" not in prompt:
+        problems.append(
+            "the prompt does not forbid --any-author, so the agent can override the author "
+            "gate and land the superseding PR it opened"
+        )
+    if "hand-off finding" not in prompt:
+        problems.append(
+            "the prompt does not ask for a hand-off finding, so a finished manual bump sits "
+            "open with nothing telling a person to land it"
+        )
+    return problems
+
+
+def test_the_prompt_hands_off_its_own_superseding_pr() -> None:
+    # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
+    problems = prompt_handoff_problems(PROMPT.read_text())
+    assert not problems, "\n".join(problems)
+
+
+_FORBID = "never pass `--any-author`"
+_HANDOFF = "file a hand-off finding"
+
+
+def test_a_prompt_forbidding_the_override_and_asking_for_a_handoff_is_clean() -> None:
+    assert prompt_handoff_problems(f"{_FORBID}; {_HANDOFF}") == []
+
+
+@pytest.mark.parametrize(
+    ("dropped", "fragment"),
+    [(_FORBID, "--any-author"), (_HANDOFF, "hand-off finding")],
+)
+def test_a_prompt_missing_either_handoff_rule_is_flagged(
+    dropped: str, fragment: str
+) -> None:
+    prompt = "; ".join(p for p in (_FORBID, _HANDOFF) if p != dropped)
+    problems = prompt_handoff_problems(prompt)
+    assert len(problems) == 1 and fragment in problems[0], problems
+
+
 def test_the_branch_slug_tell_is_the_marker_renovate_would_put_in_a_branch() -> None:
     """`: ` becomes `-`; the underscore and the word survive, as #2620's branch shows."""
     assert branch_slug_tell("k8s_autodeploy: false") == "k8s_autodeploy-false"

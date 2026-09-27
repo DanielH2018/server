@@ -81,7 +81,12 @@ the caps or the schedule cannot quietly widen it.
   unit sets `LAND_REQUIRE_AUTHOR=app/renovate`, and `land.sh --arm-merge` refuses any other
   author before its first merge call — `scripts/deploy_tools/land_lib/merge.py:_require_author`;
   `ansible/tests/setup/test_renovate_agent_unit.py::test_the_unit_pins_land_sh_to_renovates_prs`
-  pins the value to the wrapper's census), **never** a bare
+  pins the value to the wrapper's census). That includes the superseding PR the session opens
+  itself for a finished `manual —` bump: the operator chose to hand it off rather than let the
+  timer land it (#2746). The session leaves it open, never passes `--any-author`, and files a
+  hand-off finding carrying its `land.sh` command, as the `renovate-prs` skill's §4 says;
+  `ansible/tests/setup/test_renovate_agent_unit.py::test_the_prompt_hands_off_its_own_superseding_pr`
+  pins the prompt to it. **Never** a bare
   `gh pr merge`, **never** a session in the primary checkout, **never** a worktree that still
   holds unlanded work (the tick skips, posts the path and exits non-zero), and **never a PR whose
   title OR BRANCH carries `k8s_autodeploy: false`** (#1939). That phrase is renovate.json's

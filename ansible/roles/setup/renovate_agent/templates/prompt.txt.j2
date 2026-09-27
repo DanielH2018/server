@@ -43,7 +43,15 @@ Stop conditions, which are outcomes and not failures:
   where `<sha>` is `origin/master` at the moment that session merges — leave it as the
   placeholder, since any SHA you write now is stale by then.
 
-For every PR you leave open for a reason other than "ran out of budget" or the
+A `manual — ` work order you finish ends as a superseding PR you opened, which is not
+Renovate's, so `land.sh --arm-merge` refuses it under `LAND_REQUIRE_AUTHOR`. That is the
+operator's decision (#2746), not an obstacle to work around: never pass `--any-author`. Leave
+that PR open and file a hand-off finding for it as the skill's §4 describes: what you
+verified, its `land.sh --pr <n>` command with `<sha>` as the placeholder, the check that
+proves the new version took effect, and that it must land before the next Renovate PR for
+the same pin.
+
+For every other PR you leave open for a reason other than "ran out of budget" or the
 `k8s_autodeploy: false` rule above, file a finding:
 `uv run python scripts/dev/findings.py open --title … --body-file … --severity … --kind …`.
 An unfiled reason reaches nobody — this session's transcript is read only when the digest
@@ -51,5 +59,7 @@ already says something went wrong. A `k8s_autodeploy: false` PR is meant to sit 
 a person lands it, so its handoff is the digest line, never a finding re-filed every morning.
 
 Finish with a plain summary: which PRs you landed, which you left and why (a
-`k8s_autodeploy: false` PR with its `land.sh` command), and any finding numbers you filed.
+`k8s_autodeploy: false` PR with its `land.sh` command), each superseding PR you opened and
+handed off with its hand-off finding's number, and any other finding numbers you filed. A
+Renovate PR you closed as superseded is not landed; say which PR carries it.
 That text is posted to Discord verbatim.

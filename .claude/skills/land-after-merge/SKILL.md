@@ -32,6 +32,8 @@ the PR's own title is used otherwise. Under `LAND_REQUIRE_AUTHOR=<login>` the ar
 PR by any other author (renovate-agent.service sets it to `app/renovate`, so the unattended
 agent can only merge Renovate's PRs — #2170); `--any-author` lifts it for a session that is
 allowed to merge the PR. An interactive shell leaves the variable unset and never sees this.
+The unattended agent never passes `--any-author`: the superseding PR it opens for a
+`manual —` bump goes to a person through a hand-off finding (#2746).
 
 **The arm also refuses a body whose closing keyword is not its own `Closes #N` line.** GitHub
 closes an issue named after `close`/`fixes`/`resolved` however the sentence reads, so PR
