@@ -158,6 +158,7 @@ def test_discover_templates_finds_the_known_set():
         "crowdsec-update-home-allowlist.sh.j2",
         "crowdsec-update-remote-allowlist.sh.j2",
         "crowdsec-appsec-verify.sh.j2",
+        "crowdsec-prune-bouncers.sh.j2",
         "secret-rotate.sh.j2",
         "secret-rotation-audit.sh.j2",
         "ups-secondary-health.sh.j2",

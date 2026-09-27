@@ -56,8 +56,9 @@
       # BOUNCER_KEY_k8straefik. LAPI stamps `last_pull` on every successful stream pull, so a
       # value newer than this one means the plugin has fetched a stream that holds the ban.
       # The pulls land on an auto-created `k8straefik@<pod IP>` row, not on `k8straefik`:
-      # LAPI adds one per new Traefik pod IP (80 rows on 2026-09-27), and the base row last
-      # pulled on 2026-08-09. So the gate reads the newest `last_pull` across all of them.
+      # LAPI adds one per new Traefik pod IP, and the base row never pulls. The hourly
+      # bouncer-prune cron (#2762) removes rows idle for an hour, so the gate reads the
+      # newest `last_pull` across whichever rows are left.
       ansible.builtin.command:
         cmd: >-
           k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --

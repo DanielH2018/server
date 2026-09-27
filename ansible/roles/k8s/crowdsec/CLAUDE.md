@@ -105,7 +105,7 @@ The gate proves three hops in order, and its rescue names the hop that failed:
 1. The edge bouncer's newest `last_pull` in `cscli bouncers list` moves past its value
    read just after the ban. Only a stream pull after the ban can carry it to the edge.
    LAPI records those pulls on an auto-created `k8straefik@<pod IP>` row, one per Traefik
-   pod IP. The base `k8straefik` row stopped moving on 2026-08-09, so the gate reads every
+   pod IP (next section). The base `k8straefik` row never pulls, so the gate reads every
    `k8straefik` and `k8straefik@*` row. Reading only the base row failed the gate's first
    live run, after the pull it waited for had already happened.
 1. The edge answers 403 to the Pi.
@@ -123,6 +123,33 @@ means the stall is back, or the traefik pod cannot reach LAPI. The LAPI log's
 `GET /v1/decisions/stream` lines from the traefik pod tell those two apart.
 `ansible/tests/services/test_crowdsec_ban_gate.py` evaluates the hop-2 wait against sample
 `cscli` output and pins the order and the `always` lift.
+
+### LAPI adds a bouncer row per Traefik pod IP, and an hourly cron prunes them
+
+LAPI authenticates a bouncer by its API-key hash and its client IP. When a known key arrives
+from an IP with no row, LAPI creates `k8straefik@<ip>` and never touches the old row again.
+Each Traefik restart brings a new pod IP. By 2026-09-27 that had left 80 rows, each a valid
+identity for the one key (#2762).
+
+`crowdsec-prune-bouncers.sh` runs `files/bouncer_prune.py` hourly as root on daniel-box. The
+module runs `cscli bouncers prune -d 60m --force`, which deletes every bouncer row with no pull
+in the hour. That includes the base `k8straefik` row, and the image entrypoint re-adds it from
+`BOUNCER_KEY_k8straefik` at the next engine start. The module docstring has the rest:
+
+- `cscli bouncers delete k8straefik@<ip>` cannot do this. It exits 0 without deleting an
+  auto-created row, and deleting the parent deletes every row that holds the key.
+- Pruning the live row is harmless while another row holds the key: the next pull
+  re-creates it and gets a full resync.
+- Pruning the LAST row that holds the key makes LAPI answer 403 to the edge. The module
+  therefore refuses to prune unless a `k8straefik*` row pulled in the last 50 minutes.
+
+Each run logs one line under the `crowdsec-bouncer-prune` syslog tag. The line names the
+rows deleted and the row kept, or starts `status=down` for a refusal. A session reads it with
+`probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`, because `cscli bouncers
+list` needs `pods/exec`. There is no Kuma monitor: a failed run only lets rows accumulate
+until the next run succeeds. To stop pruning, remove the "Schedule the bouncer prune" task
+(and set its cron `state: absent` once); a hand delete of `/etc/cron.d/crowdsec-bouncer-prune`
+lasts only until the next crowdsec deploy.
 
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
 The agent sidecar in the traefik pod logs this against a Traefik access-log line cut at a
