@@ -35,9 +35,19 @@ trap 'rm -rf "$work"' EXIT
 verdict=up
 detail=
 
+# Per root, not just in total: a root that exists but holds no rotated log is the case the
+# combined floor below cannot see. /var/hdd.log survives as a plain directory when log2ram stops
+# syncing to it, and /var/log's own 72 files would then clear a floor of 40 on their own while the
+# SD-side tree — the one that carries the signal — went unswept. One extra `find` per root, 0.03s
+# measured, is the price of catching it.
 missing=
+empty=
 for root in ${ROOTS[@]+"${ROOTS[@]}"}; do
-  [ -d "$root" ] || missing="${missing}${missing:+ }${root}"
+  if [ ! -d "$root" ]; then
+    missing="${missing}${missing:+ }${root}"
+  elif [ "$(find "$root" -xdev -type f -name '*.gz' -readable 2>/dev/null | wc -l)" -eq 0 ]; then
+    empty="${empty}${empty:+ }${root}"
+  fi
 done
 
 if [ -z "${ROOTS[*]:-}" ] || [ -n "$missing" ]; then
@@ -45,6 +55,9 @@ if [ -z "${ROOTS[*]:-}" ] || [ -n "$missing" ]; then
   # and a glob over an absent tree reports success — the vacuity this check has to refuse.
   verdict=down
   detail="log tree(s) missing: ${missing:-<no roots configured>} — log2ram may not be mounted, so nothing was checked"
+elif [ -n "$empty" ]; then
+  verdict=down
+  detail="no rotated .gz at all under: ${empty} — that tree is unswept, whatever the other roots hold"
 else
   find "${ROOTS[@]}" -xdev -type f -name '*.gz' -readable -print0 2>/dev/null >"$work/files"
   # One NUL per path, so counting NULs counts files without re-walking the tree.

@@ -144,7 +144,26 @@ def test_an_empty_tree_reads_down_rather_than_passing_over_nothing(tmp_path):
     verdict, detail, _ = sweep(tmp_path, roots)
 
     assert verdict == "down", detail
-    assert "only 0 rotated .gz" in detail, detail
+    assert "unswept" in detail, detail
+
+
+def test_one_empty_root_reads_down_even_when_the_other_clears_the_floor(tmp_path):
+    """The floor is a TOTAL, so a healthy /var/log would otherwise cover an unswept SD tree.
+
+    /var/hdd.log survives as a plain directory when log2ram stops syncing to it, which is the
+    case a per-root count catches and the combined floor cannot.
+    """
+    roots = [tmp_path / "log", tmp_path / "hdd.log"]
+    good_gz(roots[0], FLOOR * 2)
+    roots[1].mkdir()
+
+    verdict, detail, _ = sweep(tmp_path, roots)
+
+    assert verdict == "down", detail
+    assert str(roots[1]) in detail, detail
+    assert str(roots[0]) not in detail, (
+        f"only the unswept root belongs in the message: {detail}"
+    )
 
 
 def test_a_missing_root_reads_down(tmp_path):
