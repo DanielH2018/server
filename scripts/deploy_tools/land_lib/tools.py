@@ -49,7 +49,13 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES
 # has to be on the path for the one constant this module reads from it.
 _sys.path.insert(2, str(GITOPS_DEPLOY_FILES))
 from deploy_locks import TREE_LOCK as LOCK
-from deploy_tools import await_ci, land_reach, land_tags, shared_role_reach
+from deploy_tools import (
+    await_ci,
+    land_platform,
+    land_reach,
+    land_tags,
+    shared_role_reach,
+)
 from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
 from deploy_tools.exit_codes import CI_DISARMED
@@ -538,5 +544,10 @@ class Classifier:
     # Reads the role-caller graph from this checkout's tree, as `plane_note` always has.
     shared_caller_tags: Callable[[list[str], set[str] | None], dict[str, set[str]]] = (
         land_tags.shared_caller_tags
+    )
+    # Which derived tags the PR's own paths prove are a k3s change (#2730). Beside
+    # `shared_caller_tags` because `deploy_by_host` routes the union of the two the same way.
+    k8s_only_tags: Callable[[list[str], set[str] | None], list[str]] = (
+        land_platform.k8s_only_tags
     )
     quiet_paths: Callable[[list[str], str], set[str]] = land_tags.quiet_paths

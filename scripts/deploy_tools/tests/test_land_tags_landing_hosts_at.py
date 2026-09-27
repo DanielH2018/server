@@ -14,6 +14,7 @@ import subprocess
 from pathlib import Path
 
 
+import land_platform
 import land_tags
 from lib.render_guard import HOST_VARS_IN_TREE
 
@@ -118,6 +119,34 @@ def test_restricting_one_tag_leaves_the_others_routed_as_before(tmp_path):
     assert land_tags.landing_hosts_at(
         ["newpi", "wg-easy"], shas[1], tmp_path, k8s_only=["wg-easy"]
     ) == {"daniel-box": ["wg-easy"], "daniel-pi": ["newpi"]}
+
+
+def test_the_path_derivation_feeds_this_routing_read(tmp_path):
+    """Issue #2730 end to end: the tags `land_platform` derives from a PR's own paths are the
+    argument this read takes, and a k8s-tree-only change routes to daniel-box alone."""
+    shas = _repo(tmp_path)
+    k8s_only = land_platform.k8s_only_tags(
+        ["ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2"], {"wg-easy"}
+    )
+    assert land_tags.landing_hosts_at(
+        ["wg-easy"], shas[1], tmp_path, k8s_only=k8s_only
+    ) == {"daniel-box": ["wg-easy"]}
+
+
+def test_a_change_to_both_wg_easy_services_still_routes_to_both_hosts(tmp_path):
+    """REJECTING half of the pair above, and the one issue #929 is about: a PR changing the
+    Pi's Compose wg-easy as well must keep deploying it."""
+    shas = _repo(tmp_path)
+    k8s_only = land_platform.k8s_only_tags(
+        [
+            "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2",
+            "ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2",
+        ],
+        {"wg-easy"},
+    )
+    assert land_tags.landing_hosts_at(
+        ["wg-easy"], shas[1], tmp_path, k8s_only=k8s_only
+    ) == {"daniel-box": ["wg-easy"], "daniel-pi": ["wg-easy"]}
 
 
 def test_restricting_a_tag_with_no_k8s_entry_leaves_it_routed(tmp_path):

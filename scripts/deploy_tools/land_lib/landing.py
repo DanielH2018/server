@@ -74,12 +74,15 @@ class Landing:
         self.self_applied_command = ""
         self.remaining_setup = ""
         self.needs_diff = False
-        # The tags in `resolved_tags` that no changed path named -- `shared_caller_tags`
-        # reached them by walking the k8s role-caller graph, so each is a k3s role's tag.
-        # `deploy.deploy_by_host` routes them to a `platform: k8s` entry alone, because a tag
-        # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's
-        # change is not in this PR (#2718).
-        self.caller_expanded: list[str] = []
+        # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
+        # `shared_caller_tags` reached them by walking the k8s role-caller graph (#2718), or
+        # every changed path naming them sits under `ansible/roles/k8s/` (#2730).
+        # `deploy.deploy_by_host` routes these to a `platform: k8s` entry alone, because a tag
+        # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's change
+        # is not in this PR. A tag neither provenance covers -- one `expand_build_couplings`
+        # added, or one whose paths span both role trees -- stays routed to every declaring
+        # host, which is the direction a wrong answer here must fall (issue #929).
+        self.k8s_only: list[str] = []
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
         # checkout's HEAD -- `deploy.sh --at <sha>`. Empty means the deploy came from the
