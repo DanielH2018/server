@@ -24,6 +24,7 @@ from pathlib import Path
 
 
 import land_reach
+import land_tags
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -32,6 +33,7 @@ _SHIPPED = "scripts/deploy_tools/staging_gate_remote.sh"
 _ALSO_SHIPPED = "scripts/backup/etcd_restore_drill.sh"
 _NOT_SHIPPED = "scripts/dev/pytest_shard_weights.json"
 _INSTALL = "ansible/roles/setup/hypervisor/tasks/install.yml"
+_PR_2792_SHA = "66ed500637abd09effe00c6bafde538c851914a9"
 # PR #2792's file list, verbatim (`gh pr view 2792 --json files`).
 _PR_2792_PATHS = [
     "ansible/roles/setup/hypervisor/CLAUDE.md",
@@ -96,3 +98,18 @@ def test_the_note_drops_daniel_server_without_the_shipped_script():
     )
     assert "daniel-server" not in note, note
     assert "daniel-pi" in note, note
+
+
+def test_the_note_survives_the_quiet_set_land_sh_passes():
+    """`land_tags.py` calls this with a computed `quiet`, and `repo_files` filters through it.
+
+    Every other case here leaves `quiet` empty, so a `quiet_paths` classification that
+    dropped the shipped script would leave them green and the landing unfixed. The quiet set
+    for PR #2792's own range is its `CLAUDE.md` alone.
+    """
+    quiet = land_tags.quiet_paths(_PR_2792_PATHS, f"{_PR_2792_SHA}~1..{_PR_2792_SHA}")
+    assert quiet == {"ansible/roles/setup/hypervisor/CLAUDE.md"}, quiet
+    note = land_reach.remaining_setup_hosts_note(
+        _PR_2792_PATHS, "daniel-box", quiet=quiet
+    )
+    assert "daniel-server" in note, note
