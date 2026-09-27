@@ -26,15 +26,16 @@ from lib.git import git
 from prune_worktrees import REMOVABLE, Worktree, classify, is_dirty, is_merged, remove
 
 
-def _first_line(proc) -> str:
-    """git's first non-empty stderr line, or a statement of its exit status.
+def _first_line(proc, what: str) -> str:
+    """git's first non-empty stderr line, or `what` and its exit status.
 
     `git()` captures text, so `.stderr` is a str on both a `CompletedProcess` and a
-    `CalledProcessError`. A git that failed silently still has to say something.
+    `CalledProcessError`. A git that failed silently still has to say something, and `what`
+    is what it says — the failing command, so the fallback names it.
     """
     return next(
         (ln.strip() for ln in (proc.stderr or "").splitlines() if ln.strip()),
-        f"git exited {proc.returncode}",
+        f"{what} exited {proc.returncode}",
     )
 
 
@@ -60,7 +61,7 @@ def delete_branch(repo: str, branch: str) -> tuple[bool, str]:
     deleted = git("branch", "-D", branch, cwd=repo, check=False)
     if deleted.returncode == 0:
         return True, ""
-    return False, _first_line(deleted)
+    return False, _first_line(deleted, "git branch -D")
 
 
 def _drop_merged_branch(repo: str, tree: Worktree, merged: bool, brancher) -> str:
@@ -129,7 +130,7 @@ def clean_one(
     except FileNotFoundError:
         return _clean_missing_tree(repo, tree, merged, remover, brancher)
     except subprocess.CalledProcessError as exc:
-        return "kept", f"— git status failed: {_first_line(exc)}"
+        return "kept", f"— git status failed: {_first_line(exc, 'git status')}"
     verdict, reason = classify(unlocked, merged=merged, dirty=tree_is_dirty)
     if verdict != REMOVABLE:
         return "kept", reason
