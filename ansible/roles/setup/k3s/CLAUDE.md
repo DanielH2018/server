@@ -245,6 +245,10 @@ so a check already down is not paged again.
   the VIP one leaves the public issuer's errors running — then let the next 10s tick redial.
   The full sequence, the recovery caveat and the measured error chain are in that file's
   comment above the key. The same pin wedged the Pi's Alloy on the same reboot (#2747).
+  The traefik role prevents the common case since #2758: its CRD provider keeps Authelia's
+  routers while Authelia has no ready pods, so the fetch gets a 503 it retries through
+  rather than a pinned 421. The traefik role's `## Notable` has the mechanism and what the
+  fix leaves uncovered.
 - **The release-staleness check is the durable half of a one-shot Discord page.** When the
   deployer defers a k8s change it cannot auto-apply (`deploy_alerts.alert_deferred`'s
   `cs.k8s` branch), it fast-forwards the tree and pages once per SHA; the ff-merge clears the

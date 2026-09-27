@@ -122,14 +122,26 @@ See repo-root `CLAUDE.md` for shared conventions.
 - **SNICheck pins the TLS-options name per CONNECTION, so a 421 outlives the misconfiguration
   that caused it** (#2747, #2749). Traefik records the options name once, at handshake time,
   and answers 421 to every later request on that connection whose router declares a different
-  name. A long-lived client that connects while Traefik is still reconciling routes — the
-  window after the weekly reboot — therefore gets 421 forever, whatever the routing table says
-  afterwards. On 2026-09-27 that wedged the Pi's Alloy (`loki.write` dropping every batch) and
+  name. A handshake whose SNI maps to no router records `default`, so a long-lived client that
+  connects while its host has no router gets 421 forever once the router returns naming
+  `modern`. On 2026-09-27 that wedged the Pi's Alloy (`loki.write` dropping every batch) and
   both of the kube-apiserver's OIDC discovery fetches, for 4h15m and 5h30m respectively, while
   a fresh `curl` to the same URLs answered 200 throughout. **The only recovery is to make the
   client redial**, which is why a restart fixes it and a config change does not. Nothing
   detects this state: the request never reaches a backend, so the per-service 5xx and latency
   checks are blind and `check_traefik_404_flood` counts a different code.
+- **The router-less window was a backend with no ready endpoints, and `allowEmptyServices`
+  closes it** (#2747, #2758). The CRD provider drops a route whose Service has no endpoints
+  (`no servers found for homelab/loki-homelab`, 07:49:00Z-07:49:35Z on the reboot, 16s before
+  the first 421). `static-config.yaml.j2` keeps the router instead, so the handshake records
+  the router's own option and the client retries through a 503; its `DECIDED: keep a router`
+  marker has the source trail. Traefik itself serves nothing before its first CRD sync,
+  because the startupProbe that gates readiness targets an IngressRoute. A 421 can still
+  arise when a router is rejected for another reason, such as a missing Middleware, so the
+  redial recovery above still applies. This is reasoned from Traefik's source; the next
+  weekly reboot is its measurement.
+  `ansible/tests/services/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
+  pins the flag.
 - An initContainer runs `chmod 600 /data/acme.json` on every start: kubelet's `fsGroup`
   handling ORs group bits into every file on the volume at mount time, which flips
   Traefik's own `0600` back to `0660` and makes it refuse to load the ACME account.
