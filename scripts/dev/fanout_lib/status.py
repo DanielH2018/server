@@ -16,9 +16,18 @@ from fanout_lib.manifest import Batch
 
 STATUS_TIMEOUT_S = 30.0
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
+# The line a session ends with when it cannot finish: the brief's *Finishing* section names
+# both prefixes. `.claude/hooks/fanout-stop.py` lets a session stop on either this or a PR URL,
+# and copies both patterns because the hooks stay stdlib-only; a test holds the copies equal.
+BLOCKER = re.compile(r"(?im)^(?:needs input|failed):")
 RESULT_TYPE = "result"
 # The state of a batch whose unit ended cleanly but left no report behind it.
 NO_REPORT = "no-report"
+# A clean finish whose final text names a blocker line instead of a PR.
+NEEDS_INPUT = "needs-input"
+# A clean finish whose final text names neither a PR nor a blocker: a progress report that
+# ended the turn, left after the Stop hook's continuations ran out (issue #2816).
+NO_PR = "no-pr"
 
 
 @dataclass(frozen=True)
@@ -27,7 +36,8 @@ class BatchStatus:
 
     Attributes:
         batch: the batch id.
-        state: running, done, no-report, or failed.
+        state: running, done, needs-input, no-pr, no-report, or failed. `done` means the
+            final text carries a PR URL.
         pr_url: the PR the final text names, or empty.
         final_text: the session's own `result` string, or empty.
         exit_code: the unit's ExecMainStatus, or None when it could not be read.
@@ -39,7 +49,7 @@ class BatchStatus:
     """
 
     batch: str
-    state: str  # running | done | no-report | failed
+    state: str  # running | done | needs-input | no-pr | no-report | failed
     pr_url: str
     final_text: str
     exit_code: int | None
@@ -142,11 +152,25 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         is_error = bool(result.get("is_error"))
         code_text = props.get("ExecMainStatus", "")
         code = int(code_text) if code_text.isdigit() else None
+        m = PR_URL.search(final)
         if props.get("ActiveState") in ("active", "activating"):
             state = "running"
         elif props.get("Result") == "success" and final and not is_error:
-            state = "done"
-        elif props and not is_error and not final and code in (0, None):
+            # A non-empty final text is not a finish: a turn that ends on "Next I will open
+            # the PR" exits the process just as cleanly as one that opened it (#2816).
+            if m:
+                state = "done"
+            elif BLOCKER.search(final):
+                state = NEEDS_INPUT
+            else:
+                state = NO_PR
+        elif (
+            props
+            and props.get("Result") == "success"
+            and not is_error
+            and not final
+            and code in (0, None)
+        ):
             # The unit ended cleanly and left no report. An agent that removes its own
             # worktree on exit takes .fanout/report.json with it, so this is what a
             # FINISHED batch looks like once it has tidied up — indistinguishable here
@@ -158,12 +182,14 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
             # all — a mangled read, a host that answered nothing for it — parses to the same
             # empty fields, and there the absence is the defect rather than a tidied-up
             # worktree. That case stays `failed`.
+            #
+            # `Result` must be `success` for the same reason: a unit that `RuntimeMaxSec=`
+            # stopped records `Result=timeout`, and its claude process wrote no report either.
             state = NO_REPORT
         else:
             state = (
                 "failed"  # the unit exited non-zero, or the session reported is_error
             )
-        m = PR_URL.search(final)
         out.append(
             BatchStatus(
                 b.batch,
@@ -203,7 +229,8 @@ def status_line(
 
     Returns:
         The line to print, and the exit tier: 0 for running/done/landed, 1 for an
-        unreconciled `no-report`, 5 for a genuine failure.
+        unreconciled `no-report` and for a clean finish with no PR (`needs-input`, `no-pr`),
+        5 for a genuine failure.
     """
     state = s.state
     landed_url = merged_pr(branch) if state == NO_REPORT else ""
@@ -214,7 +241,7 @@ def status_line(
         line += f" {s.pr_url or landed_url}"
     if s.permission_denials:
         line += f" permission_denials={s.permission_denials}"
-    if state == "done":
+    if state in ("done", NEEDS_INPUT, NO_PR):
         line += f" {one_line(s.final_text)}"
     if state in ("failed", NO_REPORT):
         exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
@@ -227,4 +254,8 @@ def status_line(
         # the forge can say what became of it. A 5 would send an operator to a stderr log
         # that a finished batch has already deleted along with its worktree.
         return line + f" no merged PR for {branch}", 1
+    if state in (NEEDS_INPUT, NO_PR):
+        # Tier 1, not 5: the session ended cleanly and its final text is the thing to read,
+        # not a stderr log. Not 0 either: no PR exists to land, so an operator has to act.
+        return line, 1
     return line, 5 if state == "failed" else 0

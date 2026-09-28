@@ -601,6 +601,22 @@ missing validator loudly instead (exit 2). Abstention is held honest by
 `test_the_repos_own_shims_name_the_siblings_this_parse_must_find`, which names the five
 siblings the parse must resolve and the three shims that resolve none.
 
+### `fanout-stop` (Stop)
+
+It keeps a headless fan-out batch working until the batch names a PR or a blocker. It acts only
+in a worktree holding `.fanout/brief.md`, the marker `fanout_lib/launch.py` writes, and prints
+nothing everywhere else. There it *blocks* a stop whose final message carries neither a PR URL
+nor a line starting `needs input:` or `failed:`, and its reason names the open item. A counter
+in `.fanout/stop-blocks` caps it at three blocks per batch.
+
+The cause is how `claude -p` ends. A turn that ends in text with no tool call ends the process,
+and Opus writes progress reports (for example, one announcing that the PR comes next) that
+sometimes end the turn (issue
+#2816). A probe on 2026-09-28 confirmed the mechanism under `claude -p`: the Stop hook fires, and
+a `block` continues the session. `fanout_place.py status` reads the same two patterns from the
+same final text. A batch reads `done` only with a PR URL, `needs-input` with a blocker line and
+`no-pr` otherwise.
+
 ## What an edit costs, by file type
 
 Six hooks match `Edit|Write`, and each is a ~7 ms no-op except on the paths it owns. Measured

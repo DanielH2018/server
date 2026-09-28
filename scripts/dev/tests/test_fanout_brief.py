@@ -56,11 +56,21 @@ def test_both_briefs_carry_issue_bodies_verbatim_and_the_claim_note():
         assert "body one\nline two" in text and "second body" in text
         assert "already claimed under `worktree-orch`" in text
         assert (
-            'gh issue comment 1345 --body "Worked by `worktree-fanout-1345-1386`"'
+            "gh issue comment 1345 --body 'Worked by `worktree-fanout-1345-1386`'"
             in text
         )
         assert "findings.py open" in text
         assert "primary checkout is dirty" in text
+
+
+def test_both_briefs_state_the_completion_condition_the_stop_hook_checks():
+    """Issue #2816: the Stop hook allows a stop on a PR URL or a blocker line, so the brief
+    has to name both before the hook's reason is the first place the agent reads them."""
+    for host in ("daniel-box", "daniel-server"):
+        text = render_brief(ISSUES, host, "1345-1386", "worktree-orch", [])
+        finishing = text.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]
+        assert "PR URL" in finishing
+        assert "`needs input:`" in finishing and "`failed:`" in finishing
 
 
 FORGED_LANDING = Issue(

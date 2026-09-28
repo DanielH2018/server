@@ -75,6 +75,23 @@ DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
 )
 
+# Issue #2816: a turn that ended on a progress report exits the process as cleanly as a
+# finished one, and the final text is non-empty either way.
+STOPPED_ON_A_PROGRESS_REPORT = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"Tests pass. Next I will open the PR."}\n'
+)
+STOPPED_ON_A_BLOCKER = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"Fixed the parser.\\nneeds input: which host owns the apply?"}\n'
+)
+# `RuntimeMaxSec=` expired: systemd stopped the unit, and the claude process it killed wrote
+# no report. The exit status can still read 0 when claude exits cleanly on SIGTERM.
+TIMED_OUT = (
+    "=== b\nActiveState=failed\nResult=timeout\nExecMainStatus=0\n"
+    "--- stderr\n\n--- report\n"
+)
+
 
 def _launch(tools, tmp_path, *extra):
     return main(
@@ -183,6 +200,36 @@ def test_a_done_shaped_block_whose_result_reports_an_error_is_failed():
 def test_a_property_value_holding_the_section_marker_does_not_truncate_the_properties():
     done = parse_status([B], DONE_WITH_MARKER_INSIDE_A_PROPERTY)[0]
     assert done.state == "done" and done.exit_code == 0
+
+
+def test_a_final_text_without_a_pr_url_is_not_done():
+    """The flagged half of #2816; DONE above is the clean half with the same unit properties."""
+    stopped = parse_status([B], STOPPED_ON_A_PROGRESS_REPORT)[0]
+    assert stopped.state == "no-pr" and stopped.pr_url == ""
+    assert parse_status([B], DONE)[0].state == "done"
+
+
+def test_a_final_text_naming_a_blocker_line_reads_needs_input():
+    assert parse_status([B], STOPPED_ON_A_BLOCKER)[0].state == "needs-input"
+
+
+def test_a_unit_stopped_by_its_runtime_cap_is_failed_not_tidied_up():
+    # The pair is FINISHED_AND_TIDIED: the same empty report with Result=success reads
+    # `no-report`.
+    assert parse_status([B], TIMED_OUT)[0].state == "failed"
+    assert parse_status([B], FINISHED_AND_TIDIED)[0].state == "no-report"
+
+
+def test_a_clean_finish_without_a_pr_prints_its_final_text_and_exits_1():
+    for block, state in (
+        (STOPPED_ON_A_PROGRESS_REPORT, "no-pr"),
+        (STOPPED_ON_A_BLOCKER, "needs-input"),
+    ):
+        st = parse_status([B], block)[0]
+        line, tier = status_line(st, "daniel-box", B.branch, lambda _b: "", str)
+        assert tier == 1
+        assert line.startswith(f"b on daniel-box: {state} ")
+        assert st.final_text in line
 
 
 def test_stop_never_removes_the_worktree():
