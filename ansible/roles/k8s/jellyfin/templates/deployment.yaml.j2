@@ -84,33 +84,40 @@ spec:
             - name: jellyfin-config
               mountPath: /config
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Plugin allowlist sweep (REPORT-ONLY until #2873 arms it) ─────────────────────────
-          # One sweep for every plugin this role does not install, replacing a named sweep per
-          # retired plugin (remove-trakt, remove-sso-auth below). A plugin is a top-level
-          # `<Name>_<Version>` directory under /config/data/plugins; the sweep keeps every name
-          # in KEEP and would remove every other directory. It matches the name, not the
-          # version: each installer below sweeps its own superseded versions, and Jellyfin's
-          # own `Update Plugins` task writes newer-version directories between restarts.
+          # ── Plugin allowlist sweep ──────────────────────────────────────────────────────────
+          # Removes every plugin this role does not install. Dropping an installer is not a
+          # removal: the install wrote `<Name>_<Version>` onto the jellyfin-config PVC, Jellyfin
+          # scans that directory on every start, and the read-only ServiceAccount cannot exec
+          # into the pod. An init container is the repo's only write path to the PVC, so the
+          # uninstall is one too. Trakt (#1617) and SSO-Auth (#1674) each had a named sweep of
+          # their own until #2873 replaced both with this one; a dashboard install of any
+          # plugin not in KEEP does not survive a restart, which is the intended state.
+          #
+          # A plugin is a top-level `<Name>_<Version>` directory under /config/data/plugins,
+          # and the sweep keeps it when `<Name>` is in KEEP. It matches the name, not the
+          # version: each installer below owns its own versions (#2905 records where that
+          # falls short).
           #
           # `configurations/` is not a plugin. It holds every plugin's settings — Media
           # Cleaner's deletion rules, Webhook's destination — and git holds none of them, so the
-          # sweep skips it by name and never reads inside it. Loose files are reported, not
-          # swept: Jellyfin loads plugins from directories only.
+          # sweep skips it by name and never reads inside it. That also means a retired
+          # plugin's settings file outlives it, configuring nothing. Loose files are reported,
+          # not swept: Jellyfin loads plugins from directories only.
           #
           # It runs BEFORE the installers, so a sixth installer added without a KEEP entry
           # costs a re-download on every start instead of losing the plugin on every start.
           # test_jellyfin_plugin_allowlist.py holds KEEP equal to the set the installers write.
           #
-          # REPORT-ONLY: the operator approved the allowlist on the condition that it is
-          # dry-run against the live directory before it can delete anything (#2873). This
-          # container prints `keep` / `would remove` per entry and deletes nothing; read its
-          # log, then arm it and retire the two named sweeps in the same change.
+          # Dry-run against the live directory before it was armed, as the operator's approval
+          # required (#2873): 0 unlisted plugins, all five installed ones and `configurations`
+          # kept.
         - name: sweep-unlisted-plugins
           image: {{ jellyfin_k8s_plugin_init_image }}
           command:
             - python3
             - -c
             - |
+              import shutil
               from pathlib import Path
 
               PLUGINS = Path("/config/data/plugins")
@@ -131,9 +138,10 @@ spec:
                   elif entry.name.rpartition("_")[0] in KEEP:
                       print("keep " + entry.name)
                   else:
-                      print("would remove " + entry.name)
+                      print("removing " + entry.name)
+                      shutil.rmtree(entry)
                       unlisted += 1
-              print("allowlist sweep (report-only): " + str(unlisted) + " unlisted plugin(s)")
+              print("allowlist sweep: " + str(unlisted) + " unlisted plugin(s) removed")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
@@ -634,102 +642,6 @@ spec:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
               print("installed media-cleaner " + VERSION)
-{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
-          volumeMounts:
-            - name: jellyfin-config
-              mountPath: /config
-{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── Trakt (REMOVED 2026-09-10) ──────────────────────────────────────────────────────
-          # Installed under #1617 as the sixth plugin and removed the same day at the operator's
-          # request, before the trakt.tv OAuth device authorisation (#1664) was ever completed.
-          # Dropping the install container alone is NOT a removal: the install wrote
-          # /config/data/plugins/Trakt_30.0.0.0 onto the jellyfin-config PVC, Jellyfin scans that
-          # directory on every start, and the read-only ServiceAccount cannot exec into the pod
-          # to delete it. An init container is the only write path this repo has to the PVC, so
-          # the uninstall is one too. It sweeps every `Trakt_*` directory and the plugin's own
-          # configuration file, which held no token — the authorisation was never done.
-          #
-          # Idempotent and cheap: a start with nothing to sweep prints one line and exits 0. It
-          # also means a dashboard reinstall of Trakt does not survive a restart, which is the
-          # intended state — the repo owns which plugins load, and this one is off the list.
-          # test_trakt_removed.py pins the sweep, so it cannot silently stop matching.
-        - name: remove-trakt
-          image: {{ jellyfin_k8s_plugin_init_image }}
-          command:
-            - python3
-            - -c
-            - |
-              import shutil
-              from pathlib import Path
-
-              PLUGINS = Path("/config/data/plugins")
-              # The directory takes the name the zip's meta.json declared ("Trakt"), the same
-              # name the dashboard installer writes, so one glob covers both origins.
-              swept = 0
-              for stale in sorted(PLUGINS.glob("Trakt_*")):
-                  print("removing " + stale.name)
-                  shutil.rmtree(stale)
-                  swept += 1
-              config = PLUGINS / "configurations" / "Trakt.xml"
-              if config.exists():
-                  print("removing " + str(config))
-                  config.unlink()
-                  swept += 1
-              print("trakt removed: " + str(swept) + " item(s) swept")
-{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
-          volumeMounts:
-            - name: jellyfin-config
-              mountPath: /config
-{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
-          # ── SSO-Auth removal (was OIDC sign-in against Authelia) ────────────────────────
-          # Installed under #1648 and removed at the operator's request on 2026-09-10, the same
-          # way Trakt was above. #1674 identified it as the blocker on any move to the Jellyfin
-          # 12 image line: upstream 9p4/jellyfin-plugin-sso publishes no 12 build, and its newest
-          # release (4.0.0.4) still declares targetAbi 10.11.0.0.
-          #
-          # WHAT THIS COSTS, recorded because the pod cannot show it. This role runs
-          # `use_authelia: false` and jellyfin.{{ domain }} is a PUBLIC route, so this plugin was
-          # the only authentication layer in front of it. With it gone the route falls back to
-          # Jellyfin's own local accounts: no OIDC, and no 2FA. That was the operator's explicit
-          # call on 2026-09-10 after the trade-off was put to them; the alternative on the table
-          # was `use_authelia: true`, which protects the route but breaks native clients that
-          # cannot complete Authelia's browser login.
-          #
-          # The authelia role's `jellyfin` OIDC client goes with it — an orphaned client whose
-          # redirect_uri points at a plugin that is no longer installed.
-          #
-          # Dropping the install container alone would not remove it: the install wrote
-          # `SSO Authentication_<version>` onto the jellyfin-config PVC, Jellyfin scans that
-          # directory on every start, and the read-only ServiceAccount cannot exec into the pod.
-          # An init container is the repo's only write path to the PVC.
-        - name: remove-sso-auth
-          image: {{ jellyfin_k8s_plugin_init_image }}
-          command:
-            - python3
-            - -c
-            - |
-              import shutil
-              from pathlib import Path
-
-              PLUGINS = Path("/config/data/plugins")
-              # `SSO*_*` rather than the exact manifest name, for the same reason the install
-              # container's sweep used it: this plugin is the one whose manifest name ("SSO
-              # Authentication") differs from the name it loads under ("SSO-Auth"), and a
-              # dashboard install may have written either.
-              swept = 0
-              for stale in sorted(PLUGINS.glob("SSO*_*")):
-                  print("removing " + stale.name)
-                  shutil.rmtree(stale)
-                  swept += 1
-              # Keyed by the plugin's CLASS name and outside every plugin directory, so the
-              # globs above cannot reach it. These are the OIDC provider settings that were
-              # never in git; with the plugin gone they configure nothing.
-              config = PLUGINS / "configurations" / "SSO-Auth.xml"
-              if config.exists():
-                  print("removing " + str(config))
-                  config.unlink()
-                  swept += 1
-              print("sso-auth removed: " + str(swept) + " item(s) swept")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config

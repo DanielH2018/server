@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """Jellyfin's plugin allowlist sweep keeps exactly what the role installs, and nothing else.
 
-`sweep-unlisted-plugins` replaces one named sweep per retired plugin (#2873). It walks the
-top-level entries of /config/data/plugins and keeps a `<Name>_<Version>` directory only when
+`sweep-unlisted-plugins` replaced one named sweep per retired plugin (#2873). It walks the
+top-level entries of /config/data/plugins and removes a `<Name>_<Version>` directory unless
 `<Name>` is in its KEEP tuple. Three things decide whether that is safe:
 
 - **KEEP equals the set the installers write.** A name missing from KEEP makes the sweep remove
@@ -12,9 +12,6 @@ top-level entries of /config/data/plugins and keeps a `<Name>_<Version>` directo
 - **`configurations/` is never swept.** It holds every plugin's settings, and git holds none of
   them.
 - **It runs before the installers**, so a KEEP gap costs a re-download, not the plugin.
-
-The sweep is REPORT-ONLY until the dry run against the live directory has been read; the
-behaviour test pins that it deletes nothing.
 
 Run: uv run pytest ansible/tests/services/test_jellyfin_plugin_allowlist.py
 """
@@ -136,6 +133,9 @@ def plugins(tmp_path):
     return tmp_path
 
 
+UNLISTED = ("Trakt_30.0.0.0", "SSO Authentication_4.0.0.4", "tmpk2j9x")
+
+
 def _assert_report(out: str) -> None:
     lines = set(out.splitlines())
     for kept in (
@@ -145,18 +145,23 @@ def _assert_report(out: str) -> None:
     ):
         assert "keep " + kept in lines, out
     assert "keep configurations (plugin settings, never swept)" in lines, out
-    for unlisted in ("Trakt_30.0.0.0", "SSO Authentication_4.0.0.4", "tmpk2j9x"):
-        assert "would remove " + unlisted in lines, out
+    for unlisted in UNLISTED:
+        assert "removing " + unlisted in lines, out
     assert "leave file stray.dll" in lines, out
-    assert "allowlist sweep (report-only): 3 unlisted plugin(s)" in lines, out
+    assert "allowlist sweep: 3 unlisted plugin(s) removed" in lines, out
 
 
-def test_the_report_names_what_the_sweep_would_remove_and_deletes_nothing(plugins):
-    before = sorted(p.relative_to(plugins) for p in plugins.rglob("*"))
+def test_the_sweep_removes_only_unlisted_plugin_directories(plugins):
     _assert_report(_run(_script(DEPLOYMENT.read_text()), plugins))
-    assert sorted(p.relative_to(plugins) for p in plugins.rglob("*")) == before, (
-        "the report-only sweep changed the plugins directory. It must not delete anything "
-        "until its report against the live directory has been read (#2873)."
+    assert sorted(p.name for p in plugins.iterdir()) == [
+        "Ani-Sync_4.4.0.0",
+        "Media Cleaner_3.4.0.101109",
+        "Media Cleaner_3.7.0.101109",
+        "configurations",
+        "stray.dll",
+    ]
+    assert (plugins / "configurations" / "Webhook.xml").exists(), (
+        "the sweep reached inside configurations/, which holds every plugin's settings."
     )
 
 

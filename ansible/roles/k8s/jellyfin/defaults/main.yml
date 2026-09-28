@@ -245,8 +245,8 @@ jellyfin_k8s_mediacleaner_sha256: "dc103b4728e0fbacad930c9f62f00869ae0fbcdcaf0ed
 
 # ── SSO-Auth: REMOVED 2026-09-10, not merely unpinned ───────────────────────────────────────
 # Installed under #1648, removed at the operator's request. There are no `jellyfin_k8s_sso_*`
-# variables any more; the deployment template carries a `remove-sso-auth` init container that
-# sweeps the plugin and its configuration off the PVC, the same shape Trakt's removal uses.
+# variables any more, and the deployment template's `sweep-unlisted-plugins` init container
+# removes the plugin directory from the PVC, as it does for every plugin not installed here.
 #
 # WHY: #1674 identified it as the blocker on any move to the Jellyfin 12 image line. Upstream
 # 9p4/jellyfin-plugin-sso publishes no 12 build — its newest release, 4.0.0.4, still declares
@@ -261,8 +261,8 @@ jellyfin_k8s_mediacleaner_sha256: "dc103b4728e0fbacad930c9f62f00869ae0fbcdcaf0ed
 # The authelia role's `jellyfin` OIDC client was retired in the same change rather than left
 # pointing at a redirect path nothing serves.
 
-# The image every plugin container runs on — the five installers, the allowlist sweep and the
-# two removal sweeps (Trakt, SSO-Auth) alike. Python, not the alpine:3.24 the sibling init
+# The image every plugin container runs on — the five installers and the allowlist sweep
+# alike. Python, not the alpine:3.24 the sibling init
 # container uses. See the deployment template for why: the releases are .zips and /config is
 # owned by uid {{ puid }}, so an alpine container would need `apk add unzip` as root — and root
 # there holds no DAC_OVERRIDE and so could not write what it had unpacked. Named here rather

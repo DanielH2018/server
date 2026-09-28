@@ -48,7 +48,8 @@ shared `media-data` library and owns its own config volume.
   and 2FA off this route with it; authelia's `jellyfin` OIDC client was retired in the same
   change. The alternative put to the operator was `use_authelia: true`, which protects the route
   but breaks native clients that cannot complete Authelia's browser login. Re-raising that is a
-  decision, not a fix — `test_sso_auth_removed.py` pins the removal on both sides.
+  decision, not a fix. A dashboard reinstall of the plugin is removed on the next start by
+  `sweep-unlisted-plugins`.
 - **Persists:** `jellyfin-config` (`longhorn`, backed up, 8Gi) — the library database, artwork
   and trickplay data. `media-data` (from `k8s/media-volume`) is mounted read-only, twice.
 - **GPU:** requests the `devic.es/dri` extended resource. `verify.yml` proves it is reachable
@@ -110,10 +111,8 @@ shared `media-data` library and owns its own config volume.
   which the repo never touches. Pinning changes what version runs, not what it is pointed at.
   The dashboard's Troubleshooting tab renders a dry-run report of what a real run would delete;
   read it before changing a rule. Same shape as bazarr's provider list.
-- **Trakt** was installed as the sixth (#1617) and is **removed** — a `remove-trakt` init container sweeps
-  it off the PVC on every start, because dropping the installer alone leaves the directory
-  Jellyfin loads. *Plugin analyses that outlive their decision* below has why, and where the
-  write-back analysis went.
+- **Trakt** was installed as the sixth (#1617) and is **removed**. *Plugin analyses that outlive
+  their decision* below has why, and where the write-back analysis went.
 - **SSO-Auth is REMOVED** (installed #1648, removed #1674 on 2026-09-10). It was the sixth
   plugin and the only auth layer in front of the public route beyond Jellyfin's own local
   accounts. #1674 identified it as a blocker on the Jellyfin 12 image line: upstream
@@ -121,22 +120,20 @@ shared `media-data` library and owns its own config volume.
   declares `targetAbi 10.11.0.0`. The operator's call was to remove it and accept local accounts
   on the route, with `use_authelia: true` — which protects the route but breaks native clients —
   declined explicitly.
-  Removing the installer alone would not have removed the plugin: the install wrote
-  `SSO Authentication_<version>` onto the `jellyfin-config` PVC, Jellyfin scans that directory
-  every start, and the read-only ServiceAccount cannot exec into the pod. So a `remove-sso-auth`
-  init container sweeps `SSO*_*` and `configurations/SSO-Auth.xml`, the same shape Trakt's
-  removal uses. The glob stays broad because this plugin's **manifest name
-  (`SSO Authentication`) differs from the name it loads under (`SSO-Auth`)**, so a dashboard
-  install may have written either. Authelia's `jellyfin` OIDC client went in the same change;
-  `authelia_client_password_hash` is left in SOPS, unreferenced by the k8s role, because the
-  archived Docker authelia role still names it. `test_sso_auth_removed.py` pins both sides.
-- **`sweep-unlisted-plugins` is REPORT-ONLY** (#2873). It runs before the installers and keeps a
-  top-level plugin directory only when its `<Name>` half is in its `KEEP` tuple, skipping
-  `configurations/` by name. It prints `keep` / `would remove` per entry and deletes nothing yet:
-  the operator approved replacing the named sweeps with it on condition of a dry run against the
-  live directory first. Arming it retires `remove-trakt` and `remove-sso-auth`.
-  `ansible/tests/services/test_jellyfin_plugin_allowlist.py` holds `KEEP` equal to the set the
-  installers write.
+  Authelia's `jellyfin` OIDC client went in the same change; `authelia_client_password_hash` is
+  left in SOPS, unreferenced by the k8s role, because the archived Docker authelia role still
+  names it.
+- **`sweep-unlisted-plugins` removes every plugin this role does not install** (#2873). Dropping
+  an installer is not a removal: the install wrote `<Name>_<Version>` onto the `jellyfin-config`
+  PVC, Jellyfin scans that directory every start, and the read-only ServiceAccount cannot exec
+  into the pod. The sweep runs before the installers and removes each top-level plugin directory
+  whose `<Name>` half is not in its `KEEP` tuple. It skips `configurations/` by name, so a
+  retired plugin's settings file outlives it and configures nothing. It replaced one named sweep
+  per retired plugin (`remove-trakt`, `remove-sso-auth`). Before it could delete anything it ran
+  report-only against the live directory, as the operator's approval required: 0 unlisted
+  plugins. `ansible/tests/services/test_jellyfin_plugin_allowlist.py` holds `KEEP` equal to the
+  set the installers write. **It matches names, not versions**, so it keeps a newer version that
+  Jellyfin's own `Update Plugins` task downloaded; #2905 records the live case.
 - The five installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
@@ -150,13 +147,15 @@ live census from the pod's own log, which needs no API key:
 kubectl -n homelab logs <pod> -c jellyfin | grep 'Loaded plugin:'
 ```
 
-Read 2026-09-10 (#1569), grouped by who owns the version:
+Read 2026-09-28 (#2873), grouped by who owns the version:
 
-- **Installed by this role**, version-pinned, checksum-pinned and each guarded by its own test
-  file: `Ani-Sync 4.4.0.0`, `Intro Skipper 1.10.11.23`, `Webhook 21.0.0.0`, `Merge Versions
-  10.11.0.1` (#1616) and `Media Cleaner 3.2.0.101109` (#1619). Two were installed and removed
-  the same day or soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674); `remove-trakt`
-  and `remove-sso-auth` keep both off.
+- **Installed by this role**, each guarded by its own test file: `Ani-Sync 4.4.0.0`,
+  `Intro Skipper 1.10.11.24`, `Webhook 21.0.0.0`, `Merge Versions 10.11.0.1` (#1616) and
+  `Media Cleaner 3.7.0.101109` (#1619). **Media Cleaner is not the pinned version**: the pin is
+  3.4.0.101109, and Jellyfin's `Update Plugins` task downloaded 3.7.0 between restarts, which
+  the installer's early exit leaves in place (#2905). Two plugins were installed and removed the
+  same day or soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674);
+  `sweep-unlisted-plugins` keeps both off.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here:
   `AudioDB`, `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server
   version.
@@ -164,11 +163,11 @@ Read 2026-09-10 (#1569), grouped by who owns the version:
   #1648's outcome rather than an omission. `SSO-Auth 4.0.0.4` was its last member: installed
   through the dashboard, with no pinned version, no checksum and no recorded `targetAbi`, so an
   image bump could silently drop it (Jellyfin's loader rejects a plugin built for a newer server
-  without logging a failure). #1648 brought it under an init container; #1674 then removed the
-  plugin outright, and `remove-sso-auth` sweeps the PVC copy so the group cannot refill itself.
-  Every plugin the pod loads is therefore described in git — but note that plugin
-  CONFIGURATION is not, and cannot be: OIDC provider settings, Media Cleaner's deletion rules,
-  and Webhook's destination all live under
+  without logging a failure). #1648 brought it under an init container, and #1674 then removed
+  the plugin outright. `sweep-unlisted-plugins` removes any plugin directory no installer
+  writes, so the group cannot refill itself. Every plugin the pod loads is therefore named in
+  git, though not always at its pinned version (#2905). Plugin CONFIGURATION is not in git and
+  cannot be: Media Cleaner's deletion rules and Webhook's destination live under
   `/config/data/plugins/configurations/` on this PVC. Same shape as bazarr's provider list.
 
 ## Plugin analyses that outlive their decision
@@ -184,11 +183,10 @@ things about the removal are not obvious from the diff:
 - **Dropping the install container is not a removal.** The install wrote
   `/config/data/plugins/Trakt_30.0.0.0` onto the `jellyfin-config` PVC, Jellyfin scans that
   directory on every start, and the read-only ServiceAccount cannot exec into the pod. An init
-  container is the repo's only write path to the PVC, so the uninstall is one too: `remove-trakt`
-  sweeps every `Trakt_*` directory and `configurations/Trakt.xml`, idempotently, on every start.
-  A dashboard reinstall therefore does not survive a restart, which is the intended state —
-  the repo owns which plugins load. `test_trakt_removed.py` pins the sweep and asserts nothing
-  reinstalls it.
+  container is the repo's only write path to the PVC, so the uninstall is one too. A
+  `remove-trakt` container swept `Trakt_*` and `configurations/Trakt.xml` on every start until
+  #2873 folded it into `sweep-unlisted-plugins`. A dashboard reinstall therefore does not
+  survive a restart, which is the intended state — the repo owns which plugins load.
 - **The write-back analysis that gated the install** — a live rating-write HTTP route with no
   automatic caller, and an import task that can clear watch state but ships with no trigger and
   `SkipUnwatchedImportFromTrakt = true` — is in git history at the commit that added this
