@@ -43,7 +43,7 @@ def run_once(
 ) -> None:
     """Runs one full check cycle: the reachability gates, then every enabled check.
 
-    Evaluates the Prometheus, Loki, B2, WAN and cluster-Prometheus gates first, so a single
+    Evaluates the Prometheus, Loki, B2 and WAN gates first, so a single
     outage in one of them suppresses its dependent checks (pushed `up` with a skip
     message) instead of paging each of them separately. Every enabled check in `checks` is
     then evaluated (unless suppressed by a gate or an exporter outage) and its result is
@@ -73,7 +73,7 @@ def run_once(
     # When it's down they're suppressed (pushed `up` with a skip msg, keeping each push monitor's
     # heartbeat alive) so only the Prometheus monitor pages; a real per-metric problem still alerts
     # whenever Prometheus is up.
-    prom_ok, prom_msg = gate_lib._gate(
+    prom_ok, _prom_msg = gate_lib._gate(
         cfg, "prometheus", gates.probe_prometheus, "KUMA_PUSH_PROMETHEUS", dry_run, only
     )
 
@@ -130,66 +130,13 @@ def run_once(
         cfg, "b2_reachable", gates.probe_b2, "KUMA_PUSH_B2_REACHABLE", dry_run, only
     )
 
-    # WAN-reachability gate (peer of the three above): an internet outage had no gate at all,
+    # WAN-reachability gate (peer of the two above): an internet outage had no gate at all,
     # so every check reaching the internet paged on its own — 11 tiles red inside 90 minutes on
     # 2026-09-18 (#2784). Two independent providers probed by hostname, down only when NEITHER
     # answers, so a single provider's outage does not silence a dependent reading the other.
     wan_ok, _wan_msg = gate_lib._gate(
         cfg, "wan_reachable", gates.probe_wan, "KUMA_PUSH_WAN_REACHABLE", dry_run, only
     )
-
-    # Cluster-Prometheus gate (peer of the Prometheus gate, for the OTHER instance): the cluster
-    # checks read daniel-box's Prometheus over the cluster ingress, a path none of the other gates
-    # covers. Without this, a cluster ingress/Traefik outage would page as a workload fault rather
-    # than as what it is.
-    #
-    # Since B5 that is usually the SAME instance the `prometheus` gate just probed — PROMETHEUS_URL
-    # and CLUSTER_PROMETHEUS_URL both point at the cluster. Re-probing would spend a second request
-    # on an answered question and, worse, light up two Kuma monitors for one fact, which reads as
-    # more coverage than exists. So the verdict is reused when the URLs match, and only genuinely
-    # separate endpoints get a separate probe and a separate page.
-    #
-    # DECIDED: this gate does NOT go through _gate() — the reuse branch below sits between the
-    # check_enabled() test and the log/push, which is exactly the span _gate() owns. Threading a
-    # precomputed verdict through would add a parameter for one caller and hide the reuse.
-    #
-    # DECIDED (#2780): in the reuse branch the GATING verdict and the PUSHED status part company.
-    # `cluster_ok` stays `prom_ok`, so CLUSTER_DEPENDENT is suppressed exactly as before; the tile
-    # is pushed `up` regardless, because reusing a DOWN verdict turned two tiles red for one fact
-    # — 2026-09-18 15:37, 2026-09-20 07:44, 2026-09-27 07:40. Lighting a second monitor is the one
-    # thing the reuse exists to avoid, so pushing the reused DOWN undid it. The LOG keeps the real
-    # verdict: a log line reading OK while Prometheus is down would be a second bug. A genuinely
-    # separate endpoint still probes and still pages on its own.
-    cluster_ok, cluster_msg = True, "disabled by check filter"
-    if gate_lib.check_enabled("cluster_prometheus", only, skip):
-        # The same-instance reuse only holds when the prometheus gate actually probed.
-        reused = (
-            bool(cfg.CLUSTER_PROM_URL)
-            and cfg.CLUSTER_PROM_URL == cfg.PROM_URL
-            and gate_lib.check_enabled("prometheus", only, skip)
-        )
-        if reused:
-            cluster_ok, cluster_msg = (
-                prom_ok,
-                "same instance as the Prometheus gate (%s)" % prom_msg,
-            )
-            push_ok = True
-            push_msg = "same instance, see Prometheus Reachable (%s)" % prom_msg
-        else:
-            cluster_ok, cluster_msg = gate_lib._evaluate(
-                cfg, "cluster_prometheus", gates.probe_cluster
-            )
-            push_ok, push_msg = cluster_ok, cluster_msg
-        bridge.common.log(
-            "OK  " if cluster_ok else "DOWN", "cluster_prometheus", "-", cluster_msg
-        )
-        if not dry_run:
-            bridge.net.push(
-                cfg,
-                bridge.common._env("KUMA_PUSH_CLUSTER_PROMETHEUS", ""),
-                push_ok,
-                push_msg,
-            )
 
     for entry in checks:
         name, token, fn = entry.name, entry.token, entry.fn
@@ -206,12 +153,6 @@ def run_once(
             bridge.common.log("SKIP", name, "-", msg)
         elif not wan_ok and name in gates.wan_dependent:
             ok, msg = True, "skipped — WAN unreachable (see WAN Reachable monitor)"
-            bridge.common.log("SKIP", name, "-", msg)
-        elif not cluster_ok and name in gates.cluster_dependent:
-            ok, msg = (
-                True,
-                "skipped — cluster Prometheus unreachable (see Cluster Prometheus monitor)",
-            )
             bridge.common.log("SKIP", name, "-", msg)
         elif name in suppressed:
             ok, msg = True, "skipped — exporter down (see Scrape Targets)"

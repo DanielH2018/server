@@ -39,7 +39,6 @@ def kcfg(cfg):
     """A cluster Prometheus, no extended resources and no Loki arm — the rollout arm alone."""
     return replace(
         cfg,
-        CLUSTER_PROM_URL="http://cluster-prometheus:9090",
         K8S_EXTENDED_RESOURCES=(),
         LOG_ERROR_SELECTOR="",
         K8S_ROLLOUT_STALL_CONSECUTIVE=3,

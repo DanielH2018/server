@@ -36,7 +36,8 @@ def origin_sel(cfg: Config, *matchers: str) -> str:
     """A `{...}` label-matcher block: the given matchers plus the origin pin, when one applies.
 
     Returns "" when there is nothing to select on, so `"up%s" % origin_sel(cfg)` is a bare `up`
-    against the Docker Prometheus and `up{origin="daniel-server"}` against the cluster copy.
+    against a Prometheus whose series carry no `origin` label, and `up{origin="daniel-server"}`
+    against the cluster instance every deployed check reads.
     """
     parts = [m for m in matchers if m]
     if cfg.PROM_ORIGIN:
@@ -84,10 +85,10 @@ def host_metric_sel(cfg: Config, *matchers: str) -> str:
     DECIDED: an EXCLUDE, never origin_sel(). cadvisor_sel's note points at "the node-exporter
     families behind check_disk and check_mem" as series that genuinely carry `origin`, which
     reads like an invitation to pin them with origin_sel() — do not. PROM_ORIGIN resolves to
-    `origin="daniel-server"` whenever PROM_URL equals CLUSTER_PROM_URL, which the deployed
-    env-secret makes true. Pinning these two checks to one host would hide daniel-box's disk
-    and memory behind two green tiles, which is precisely the fault HOST_ORIGINS_MIN was added
-    for on 2026-08-23. Naming who is OUT keeps every other host in by default.
+    `origin="daniel-server"` by default. Pinning these two checks to one host would hide
+    daniel-box's disk and memory behind two green tiles, which is precisely the fault
+    HOST_ORIGINS_MIN was added for on 2026-08-23. Naming who is OUT keeps every other host in
+    by default.
     """
     parts = [m for m in matchers if m]
     if cfg.HOST_METRIC_ORIGIN_EXCLUDE:
@@ -188,12 +189,11 @@ def prom_scalar(
 ) -> float | None:
     """Run an instant query; return the first result's value as float, or None if empty.
 
-    `base` selects which Prometheus. PROM_URL is the default and is what every PROM_DEPENDENT
-    check reads; CLUSTER_PROM_URL is what the CLUSTER_DEPENDENT ones read, under a reachability
-    gate of their own — see check_k8s_workloads. Since the Docker plane retired (2026-08-14)
-    both env vars render to the same cluster Service URL, so the two gates watch one instance;
-    the split is kept so a second Prometheus can be reintroduced without moving every caller.
-    Pick the base by which gate is meant to watch the check, not by which host answers.
+    `base` selects which Prometheus, and every caller in this tree leaves it unset: one
+    instance remains, and the `prometheus` gate watches it for every check. The parameter
+    survives the CLUSTER_PROMETHEUS_URL deletion (#2825) because it is the seam a second
+    Prometheus would be reintroduced through — a caller that passes one also needs a
+    reachability gate watching that instance, or it pages beside the gate that already did.
     """
     result = _instant_query(base or cfg.PROM_URL, "/api/v1/query", promql, source)
     if not result:

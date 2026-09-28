@@ -32,15 +32,11 @@ def _at(cfg, used, quota=QUOTA):
     )
 
 
-def test_the_check_is_cluster_dependent():
-    assert "etcd_db_size" in gates.CLUSTER_DEPENDENT, (
-        "prom_scalar raises on an unreachable cluster Prometheus and _evaluate turns that into "
-        "a down — without this gate a Prometheus outage pages this monitor a second time for "
-        "the one root cause the cluster_prometheus monitor already reports"
-    )
-    assert "etcd_db_size" not in gates.PROM_DEPENDENT, (
-        "the check reads CLUSTER_PROM_URL, so its gate is cluster_prometheus; a wrong entry "
-        "suppresses on the wrong outage"
+def test_the_check_is_prom_dependent():
+    assert "etcd_db_size" in gates.PROM_DEPENDENT, (
+        "prom_scalar raises on an unreachable Prometheus and _evaluate turns that into a down "
+        "— without this gate a Prometheus outage pages this monitor a second time for the one "
+        "root cause the Prometheus Reachable monitor already reports"
     )
 
 
@@ -99,7 +95,7 @@ def test_the_query_collapses_the_two_scrape_jobs_to_one_value(cfg):
     checks.cluster_etcd.check_etcd_db_size(cfg, fetch=_spy)
     assert seen["promql"] == "max(apiserver_storage_size_bytes)"
     assert "job=" not in seen["promql"]
-    assert seen["base"] == cfg.CLUSTER_PROM_URL
+    assert seen["base"] is None  # the one Prometheus, so prom_scalar's PROM_URL default
 
 
 def test_the_in_code_quota_default_is_etcds_own(cfg):

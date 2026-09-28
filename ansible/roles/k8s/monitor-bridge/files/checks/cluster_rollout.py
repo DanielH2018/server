@@ -25,8 +25,6 @@ def stalled_rollout_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         cfg,
         "kube_deployment_status_replicas_updated"
         " < on(namespace, deployment) kube_deployment_spec_replicas",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     if not stalled:
         return []
@@ -35,8 +33,6 @@ def stalled_rollout_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         for labels, value in fetch(
             cfg,
             "kube_deployment_spec_replicas",
-            base=cfg.CLUSTER_PROM_URL,
-            source="cluster prometheus",
         )
     }
     out = []

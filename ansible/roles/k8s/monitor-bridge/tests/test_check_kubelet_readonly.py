@@ -85,7 +85,7 @@ def test_the_query_scopes_to_the_plugins_subtree_and_is_not_origin_pinned(cfg):
     # in the deployed env (PROM_ORIGIN), which hides the exact same fault on daniel-box behind a
     # green tile — the mistake HOST_ORIGINS_MIN was added to stop for check_disk/check_mem.
     # host_metric_sel() must be what builds the selector, not origin_sel() — so the pin set
-    # here (matching the deployed env, where PROM_URL == CLUSTER_PROM_URL) must NOT reach it.
+    # here (matching the deployed env, whose PROM_ORIGIN default pins) must NOT reach it.
     cfg = replace(cfg, PROM_ORIGIN='origin="daniel-server"')
     queries = []
 

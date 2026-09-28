@@ -47,9 +47,8 @@ as a real value rather than as the absence of one.
 
 Prometheus earns tier 1 because tier 1 names alerting in its own description ("edge, auth,
 DNS, WAF, registry, alerting") and monitor-bridge, itself tier 1, reads it every cycle:
-`CLUSTER_PROMETHEUS_URL` and `PROMETHEUS_URL` in `monitor-bridge/templates/env-secret.yaml.j2`
-both point at this Prometheus, and the disk, memory, OOM, restart, PVC-fullness and
-scrape-target verdicts all read from it. Evicting Prometheus under pressure would degrade the
+`PROMETHEUS_URL` in `monitor-bridge/templates/env-secret.yaml.j2` points at this Prometheus,
+and the disk, memory, OOM, restart, PVC-fullness and scrape-target verdicts all read from it. Evicting Prometheus under pressure would degrade the
 bridge's verdicts at the moment pressure makes them matter. The exporters it scrapes
 (kube-state-metrics here, node-exporter and gpu-exporter in their own roles) stay tier 4: a
 lost exporter surfaces loudly as `up == 0` through the scrape-target check, so the exporter

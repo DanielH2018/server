@@ -41,13 +41,13 @@
 .claude/hooks/tests/test_session_health_master_moved.py 7
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
-ansible/roles/k8s/monitor-bridge/tests/_check_gate_helpers.py 7
+ansible/roles/k8s/monitor-bridge/tests/_check_gate_helpers.py 4
 ansible/roles/k8s/monitor-bridge/tests/test_b2_storage.py 4
 ansible/roles/k8s/monitor-bridge/tests/test_check.py 4
 ansible/roles/k8s/monitor-bridge/tests/test_check_b2_gate.py 8
 ansible/roles/k8s/monitor-bridge/tests/test_check_cadvisor_floor.py 9
 ansible/roles/k8s/monitor-bridge/tests/test_check_cli.py 6
-ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 7
+ansible/roles/k8s/monitor-bridge/tests/test_check_gates.py 6
 ansible/roles/k8s/monitor-bridge/tests/test_check_gates_exporters.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check_ha.py 5
 ansible/roles/k8s/monitor-bridge/tests/test_check_host.py 21

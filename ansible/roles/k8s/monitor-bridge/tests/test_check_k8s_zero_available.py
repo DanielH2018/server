@@ -36,7 +36,6 @@ AUTHELIA_UNAVAILABLE = [({"deployment": "authelia"}, 1.0)]
 def kcfg(cfg):
     return replace(
         cfg,
-        CLUSTER_PROM_URL="http://cluster-prometheus:9090",
         K8S_EXTENDED_RESOURCES=(),
         LOG_ERROR_SELECTOR="",
         K8S_WORKLOADS_CONSECUTIVE=3,

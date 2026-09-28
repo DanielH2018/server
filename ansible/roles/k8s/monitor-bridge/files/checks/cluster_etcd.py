@@ -20,7 +20,7 @@ def check_etcd_db_size(cfg: Config, fetch=bridge.net.prom_scalar) -> tuple[bool,
     """etcd's DB size as a percentage of ETCD_DB_QUOTA_BYTES, down over ETCD_DB_MAX_PCT.
 
     Args:
-      cfg: The bridge's configuration; reads CLUSTER_PROM_URL and the two ETCD_DB_* fields.
+      cfg: The bridge's configuration; reads PROM_URL and the two ETCD_DB_* fields.
       fetch: The instant-query seam, `bridge.net.prom_scalar`'s signature. A parameter rather
         than a module reference so a test states the reading it means instead of patching
         `bridge.net` process-wide — the same shape `check_k8s_workloads` threads to its arms.
@@ -51,8 +51,6 @@ def check_etcd_db_size(cfg: Config, fetch=bridge.net.prom_scalar) -> tuple[bool,
     used = fetch(
         cfg,
         "max(apiserver_storage_size_bytes)",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     if used is None:
         return True, "apiserver_storage_size_bytes absent — see Scrape Targets"

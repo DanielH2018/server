@@ -401,9 +401,10 @@ def check_traefik_404_flood(cfg: Config) -> tuple[bool, str]:
 def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str]:
     """Deployment readiness for every workload in the k3s cluster.
 
-    Gated by check_cluster_prometheus rather than the ordinary Prometheus gate: this is the one
-    check reading the CLUSTER Prometheus, so the `prom_ok` gate is not watching its source. See
-    CLUSTER_DEPENDENT.
+    In PROM_DEPENDENT: the `prometheus` gate watches the one Prometheus this reads, so an
+    unreachable Prometheus suppresses this check rather than paging it as a workload fault.
+    The check's own series-count floor covers the other half — Prometheus answering while
+    kube-state-metrics goes unscraped — which no reachability gate can see.
 
     `fetch`/`scalar` are the injectable Prometheus boundaries, the seam check_cluster_targets and
     checks/host_edge.py already use — six queries feed five arms here, and a test that wants one
@@ -412,19 +413,13 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
     """
     fetch = fetch or bridge.net.prom_vector
     scalar = scalar or bridge.net.prom_scalar
-    if not cfg.CLUSTER_PROM_URL:
-        return True, "k8s workload check disabled (no CLUSTER_PROMETHEUS_URL)"
     total = scalar(
         cfg,
         "count(kube_deployment_status_replicas_unavailable)",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     offenders = fetch(
         cfg,
         "kube_deployment_status_replicas_unavailable > 0",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     # The second clause is the recency gate (K8S_RESTART_RECENT_WINDOW): it keeps a recovered
     # pod from holding the tile red for the rest of the 1h evidence window. `and` is a vector
@@ -435,20 +430,14 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         "increase(kube_pod_container_status_restarts_total[%s]) > %d"
         " and increase(kube_pod_container_status_restarts_total[%s]) > 0"
         % (cfg.K8S_RESTART_WINDOW, cfg.K8S_RESTART_MAX, cfg.K8S_RESTART_RECENT_WINDOW),
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     ds_total = scalar(
         cfg,
         "count(kube_daemonset_status_number_unavailable)",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     ds_offenders = fetch(
         cfg,
         "kube_daemonset_status_number_unavailable > 0",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     stalled_offenders, stall_note = checks.cluster_rollout.held_stalled_offenders(
         cfg, checks.cluster_rollout.stalled_rollout_offenders(cfg, fetch)
@@ -480,8 +469,6 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
                 cfg,
                 'kube_node_status_allocatable{resource="%s"} > 0'
                 % ksm_resource_label(resource),
-                base=cfg.CLUSTER_PROM_URL,
-                source="cluster prometheus",
             )
         )
     res_ok, res_msg = extended_resource_verdict(
@@ -490,8 +477,6 @@ def check_k8s_workloads(cfg: Config, fetch=None, scalar=None) -> tuple[bool, str
         scalar(
             cfg,
             "count(kube_node_status_allocatable)",
-            base=cfg.CLUSTER_PROM_URL,
-            source="cluster prometheus",
         ),
     )
     notes = [n for n in (zero_note, replica_note, stall_note) if n]
@@ -511,7 +496,7 @@ def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
 
     B5 pinned check_targets_down to origin="daniel-server" so it kept meaning exactly what it
     always meant. The cost of that, unpaid until now, is that the cluster's own five targets were
-    watched by nothing: cluster_prometheus probes only reachability, and k8s_workloads reads
+    watched by nothing: the Prometheus gate probes only reachability, and k8s_workloads reads
     deployment replicas rather than scrape health. kube-state-metrics failing is covered by
     accident (its series vanish and the workload check fails closed on the floor), but
     otel-collector and otel-collector-internal going down was silent — and those two carry the
@@ -528,13 +513,9 @@ def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
     # Resolved here, not as the default: a default binds at import, which would capture
     # bridge.net.prom_vector before a test patches that module and silently bypass the patch.
     fetch = fetch or bridge.net.prom_vector
-    if not cfg.CLUSTER_PROM_URL:
-        return True, "cluster target check disabled (no CLUSTER_PROMETHEUS_URL)"
     vec = fetch(
         cfg,
         'up{origin!="daniel-server"}',
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     ok, msg = targets_verdict(vec, cfg.CLUSTER_TARGETS_MIN)
     # Hysteresis, because a rolling workload drops its own `up` series for a scrape or two and
@@ -552,21 +533,3 @@ def check_cluster_targets(cfg: Config, fetch=None) -> tuple[bool, str]:
         )
     )
     return ok, msg
-
-
-def check_cluster_prometheus(cfg: Config) -> tuple[bool, str]:
-    """Reachability gate for the cluster Prometheus — the peer of check_prometheus.
-
-    Kept separate from the Docker Prometheus gate on purpose. They are different instances on
-    different hosts reached by different paths, so one `prom_ok` cannot describe both: a gate
-    that is not watching a check's actual source is worse than no gate, because it reports
-    confidence it does not have.
-    """
-    if not cfg.CLUSTER_PROM_URL:
-        return True, "cluster Prometheus check disabled (no CLUSTER_PROMETHEUS_URL)"
-    value = bridge.net.prom_scalar(
-        cfg, "vector(1)", base=cfg.CLUSTER_PROM_URL, source="cluster prometheus"
-    )
-    if value is None:
-        return False, "cluster Prometheus returned no result for vector(1)"
-    return True, "cluster Prometheus reachable"

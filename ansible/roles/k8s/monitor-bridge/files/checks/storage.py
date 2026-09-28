@@ -136,8 +136,6 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
     change meaning the day one job's coverage moved. Grouping is also what makes the count
     below a claim census rather than a scrape-job artifact.
     """
-    if not cfg.CLUSTER_PROM_URL:
-        return True, "PVC fullness check disabled (no CLUSTER_PROMETHEUS_URL)"
     floors = parse_pvc_floors(cfg.PVC_MIN_FREE)
     if cfg.PVC_MIN_FREE.strip() and not floors:
         return False, (
@@ -148,16 +146,12 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
         cfg,
         "count(count by (namespace, persistentvolumeclaim)"
         " (kubelet_volume_stats_capacity_bytes))",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     vec = bridge.net.prom_vector(
         cfg,
         "max by (namespace, persistentvolumeclaim) (100 *"
         " (1 - kubelet_volume_stats_available_bytes"
         " / kubelet_volume_stats_capacity_bytes))",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     watched = [
         (labels.get("persistentvolumeclaim", "?"), labels.get("namespace", "?"), pct)
@@ -176,8 +170,6 @@ def check_pvc_fullness(cfg: Config) -> tuple[bool, str]:
                 cfg,
                 "max by (namespace, persistentvolumeclaim)"
                 " (kubelet_volume_stats_available_bytes)",
-                base=cfg.CLUSTER_PROM_URL,
-                source="cluster prometheus",
             )
             if labels.get("persistentvolumeclaim") not in cfg.PVC_EXCLUDE
         }

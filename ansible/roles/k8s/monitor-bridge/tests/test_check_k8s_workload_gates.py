@@ -1,15 +1,13 @@
-"""The two cluster-Prometheus checks' verdicts: k8s workloads and cluster scrape targets.
+"""Two cluster-facing checks' verdicts: k8s workloads and cluster scrape targets.
 
 Both fail CLOSED on an absent series, which is the property worth pinning: `unavailable > 0`
 returns an empty vector when everything is healthy AND when there are no series at all, so
 reading the healthy meaning onto both is how a monitor goes green while blind. The floors
 (`min_workloads`, `CLUSTER_TARGETS_MIN`) are what separate the two cases.
 
-The GATE above these — cluster Prometheus unreachable — is `test_check_gates.py`; membership of
-`CLUSTER_DEPENDENT` is `test_check_gate_dependents.py`.
+The GATE above these — Prometheus unreachable — is `test_check_gates.py`; membership of
+`PROM_DEPENDENT` is `test_check_gate_dependents.py`.
 """
-
-from dataclasses import replace
 
 import bridge.net
 import checks.cluster
@@ -104,13 +102,6 @@ def test_k8s_daemonsets_healthy_alongside_healthy_deployments():
     assert "18 k8s workloads healthy" == msg
 
 
-def test_k8s_workloads_disabled_without_cluster_url(monkeypatch, cfg):
-    cfg = replace(cfg, CLUSTER_PROM_URL="")
-    ok, msg = checks.cluster.check_k8s_workloads(cfg)
-    assert ok is True
-    assert "disabled" in msg
-
-
 def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg):
     """`origin!="daniel-server"` is the complement of check_targets_down's pin, so every `up`
     series belongs to exactly one of the two checks.
@@ -125,25 +116,17 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg
         seen["q"], seen["base"] = promql, base
         return [({"job": "j%d" % i}, 1.0) for i in range(5)]
 
-    cfg = replace(cfg, CLUSTER_PROM_URL="https://cluster")
     monkeypatch.setattr(bridge.net, "prom_vector", fake_vector)
     ok, _ = checks.cluster.check_cluster_targets(cfg)
     assert ok is True
     assert seen["q"] == 'up{origin!="daniel-server"}'
-    assert seen["base"] == "https://cluster"
+    assert seen["base"] is None  # the one Prometheus, so prom_vector's PROM_URL default
 
 
 def test_cluster_targets_empty_is_down(cfg):
     ok, msg = checks.cluster.targets_verdict([], cfg.CLUSTER_TARGETS_MIN)
     assert ok is False
     assert "UNKNOWN" in msg
-
-
-def test_cluster_targets_disabled_without_cluster_url(monkeypatch, cfg):
-    cfg = replace(cfg, CLUSTER_PROM_URL="")
-    ok, msg = checks.cluster.check_cluster_targets(cfg)
-    assert ok is True
-    assert "disabled" in msg
 
 
 def test_targets_empty_vector_is_down_not_all_clear():
