@@ -27,7 +27,8 @@ redeploys it; a full run is only slow.
 `show_at` and the YAML mapping parse, one copy each since #2419.
 
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
-range goes through the same `services_from_changed_paths` mapper. Where `changed` prints a
+range goes through the same `services_from_changed_paths` mapper, less the roles the range
+DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a
 tag list PLUS a note about a shared role a human must still apply, `narrow` refuses instead —
 the tick has no human to read the note.
 
@@ -458,7 +459,14 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
         raise CannotNarrow(
             f"structural change in {sorted(cs.tasks | cs.meta)}, which no tag captures"
         )
-    return _role_tags(expand_build_couplings(cs.k8s) | cs.services, ctx)
+    roles = expand_build_couplings(cs.k8s) | cs.services
+    # A range that RETIRES a role still lists every path it owned as changed, and a retired
+    # role has no entry and no caller — the shape `_role_tags` refuses (#2879).
+    for role in sorted(roles):
+        if narrow_paths.role_is_gone(role, ctx.ref, ctx.cwd, ROLE_TREES):
+            ctx.explain(f"narrow: the role {role} is deleted -> (nothing)")
+            roles.discard(role)
+    return _role_tags(roles, ctx)
 
 
 def narrow(
@@ -486,7 +494,9 @@ def narrow(
     """
     cwd = Path(cwd)
     ctx = context_for(new_ref, cwd, declared=declared, callers=callers, explain=explain)
-    broad_prefixes = _broad_deploy_prefixes()
+    # Through the deployer's own index, the way `_changed_half` reaches its mapper.
+    from deploy_logic import _BROAD_DEPLOY_PREFIXES as broad_prefixes
+
     paths = [
         p
         for p in git_stdout(
@@ -542,13 +552,6 @@ def context_for(
         # may not even have.
         callers = role_callers(cwd)
     return Context(cwd, ref, declared, callers, explain)
-
-
-def _broad_deploy_prefixes() -> tuple[str, ...]:
-    """`deploy_changes._BROAD_DEPLOY_PREFIXES`, through the deployer's own index."""
-    from deploy_logic import _BROAD_DEPLOY_PREFIXES
-
-    return _BROAD_DEPLOY_PREFIXES
 
 
 def narrow_cmd(

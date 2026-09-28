@@ -673,6 +673,7 @@
  "scripts/deploy_tools/tests/test_land_tools.py": 0.12,
  "scripts/deploy_tools/tests/test_longhorn_dr_gates.py": 0.04,
  "scripts/deploy_tools/tests/test_longhorn_upgrade_gates.py": 0.05,
+ "scripts/deploy_tools/tests/test_narrow_deletes_a_role.py": 0.07,
  "scripts/deploy_tools/tests/test_narrow_setup.py": 0.79,
  "scripts/deploy_tools/tests/test_narrow_setup_edges.py": 0.75,
  "scripts/deploy_tools/tests/test_narrow_setup_facts.py": 1.0,
