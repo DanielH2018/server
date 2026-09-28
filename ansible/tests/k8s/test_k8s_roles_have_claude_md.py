@@ -78,9 +78,10 @@ OVER_CEILING: dict[str, str] = {
         "rule govern code that deletes without a human; `## Notable` is the trim"
     ),
     "claude-otel": (
-        "21032 chars on 2026-09-28: the eviction tiers and the idle-vs-broken trap are "
-        "operating rules for a pipeline that fails silent; the dashboard inventory is the "
-        "next thing to move to docs/"
+        "24585 chars on 2026-09-28: the eviction tiers and the idle-vs-broken trap are "
+        "operating rules for a pipeline that fails silent, and `## One config change, one "
+        "restart` (#2858) is the rule a template edit must follow; the dashboard inventory is "
+        "the next thing to move to docs/"
     ),
     "configarr": (
         "8223 chars on 2026-09-28: `## Why the Anime local CFs exist` and the scope rule keep "
