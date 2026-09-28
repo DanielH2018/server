@@ -36,5 +36,5 @@ arr_notification_username: "{{ arr_notification_app | capitalize }}"
 
 # The *arr apps take up to 10 min to come up on a first boot that installs DOCKER_MODS (see
 # sonarr's manifests_rollout_timeout). The seed talks HTTP to the app, so it has to wait for
-# the same rollout the caller queued for k8s/rollout-drain at the end of the play.
+# the same rollout the caller queued for k8s/manifests/tasks/drain.yml at the end of the play.
 arr_notification_rollout_timeout: 660s

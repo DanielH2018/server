@@ -6,7 +6,7 @@
 # THIS WAS A READINESS WAIT AND THAT DID NOT GATE ANYTHING. `wait --for=condition=ready pod
 # -l app=janitorr` is satisfied by the OLD pod, which stays Ready until it stops — the pod-level
 # twin of the `condition=Available` trap this file's siblings already record. k8s/manifests
-# QUEUES the rollout for k8s/rollout-drain rather than waiting, so the verify below was running
+# QUEUES the rollout for k8s/manifests/tasks/drain.yml rather than waiting, so the verify below was running
 # against the outgoing pod and the wait returned instantly.
 #
 # For a service that deletes real media, "I proved the old pod was dry" is precisely the wrong

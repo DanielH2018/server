@@ -15,9 +15,9 @@ from `customManagers`: a manager with a `depNameTemplate` names its package outr
 file it matches owns the pin; one without derives the name from the file, so the file must
 carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
 reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
-its own hands the bump to the role that runs what it builds — `land.sh` widens `n8n-images`
-to `n8n-images,n8n` through `_BUILD_ROLL_COUPLINGS` in `deploy_changes.py` — so ownership
-follows that same coupling, and a pin no role owns fails rather than passing as "not denied".
+its own would hand the bump to the role that runs what it builds, through `_BUILD_ROLL_COUPLINGS`
+in `deploy_changes.py` (empty since #2813) — so ownership follows that same coupling, and a pin
+no role owns fails rather than passing as "not denied".
 `test_renovate_agent_unit.py` reads the marker out of every such groupName and pins that the
 prompt names the same phrase.
 
@@ -227,12 +227,12 @@ def test_a_named_package_manager_maps_the_pin_to_every_file_it_matches() -> None
     assert pin_owner_roles("vendor/other", managers, files, read=lambda _: "") == set()
 
 
-def test_a_build_role_pin_is_owned_by_the_role_it_rolls_onto_too() -> None:
-    """n8n-images renders no workload; land.sh deploys `n8n-images,n8n`, so n8n owns the pin."""
-    files = ["ansible/roles/k8s/n8n-images/templates/Dockerfile.j2"]
+def test_a_dockerfile_pin_is_owned_by_the_role_that_builds_and_runs_it() -> None:
+    """n8n builds the image it runs, so the Dockerfile pin is n8n's alone (#2813)."""
+    files = ["ansible/roles/k8s/n8n/templates/Dockerfile.j2"]
     assert pin_owner_roles(
         "n8nio/n8n", [], files, read=lambda _: "FROM n8nio/n8n:1.0\n"
-    ) == {"n8n-images", "n8n"}
+    ) == {"n8n"}
 
 
 def test_a_content_derived_manager_maps_the_pin_only_where_the_file_names_it() -> None:

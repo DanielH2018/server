@@ -1,10 +1,13 @@
 {#
   nodeAffinity preference block for a pod that prefers one node but must still schedule if it
-  is cordoned or full — the shape every "Preference, never a pin" deployment shares. 30
-  deployment templates carry this exact 10-line block (`affinity:` through the single
-  `values:` entry), varying only in which node they prefer; the WHY comment above the call
-  (daniel-box's storage/VIP pinning vs a role's own CPU-bound reasoning) stays at the call
-  site, not swallowed here, because that reasoning differs role to role.
+  is cordoned or full. Preference, never a pin: the weighted `preferred…` rule, unlike a
+  `required…` one, lets the scheduler place the pod on the other node when the preferred one
+  is cordoned or out of room.
+
+  Why most callers prefer daniel-server: daniel-box carries the storage- and VIP-pinned
+  workloads and runs the hotter of the two nodes, so latency-insensitive services default to
+  daniel-server. A caller that prefers daniel-box, or whose placement has a reason of its own,
+  says why in a comment at its call site.
 
   Arguments:
     hostname  the preferred node's `kubernetes.io/hostname` value (daniel-server or daniel-box)

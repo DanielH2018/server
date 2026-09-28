@@ -184,11 +184,9 @@ def test_a_missing_roles_directory_raises(tmp_path: Path) -> None:
 
 
 def test_a_shared_role_that_does_not_exist_raises(tmp_path: Path) -> None:
-    """Only seed one of the two SHARED_ROLES members — the missing one must raise, not
-    silently exclude nothing."""
+    """Seed no SHARED_ROLES member — the missing one must raise, not silently exclude
+    nothing."""
     (tmp_path / "roles" / "k8s").mkdir(parents=True)
-    present = next(iter(SHARED_ROLES))
-    _role(tmp_path, present, None)
     _role(tmp_path, "denied", _OK)
     with pytest.raises(
         AnsibleFilterError, match="SHARED_ROLES member.*is not a directory"

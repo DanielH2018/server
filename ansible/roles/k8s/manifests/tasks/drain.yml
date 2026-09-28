@@ -83,7 +83,7 @@
   loop: "{{ _k8s_drain_watch }}"
   loop_control:
     label: "{{ item.name }}"
-  register: _k8s_drain_restarts
+  register: _manifests_drain_restarts
   vars:
     _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
 
@@ -105,7 +105,7 @@
   loop: "{{ _k8s_drain_watch }}"
   loop_control:
     label: "{{ item.name }}"
-  register: _k8s_drain_desired
+  register: _manifests_drain_desired
   vars:
     _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
 
@@ -132,13 +132,15 @@
       `app: {{ item.0.item.name }}`.
     quiet: true
   loop: >-
-    {{ (_k8s_drain_restarts.results | default([]))
-       | zip(_k8s_drain_desired.results | default([])) | list }}
+    {{ (_manifests_drain_restarts.results | default([]))
+       | zip(_manifests_drain_desired.results | default([])) | list }}
   loop_control:
     label: "{{ item.0.item.name }}"
 
 - name: Carry the snapshot into the end-of-play stabilisation gate
   tags: [always]
+  # noqa var-naming[no-role-prefix] — k8s_stabilise_watch is play-scoped: the end-of-play
+  # post_tasks/k8s_stabilise_gate.yml reads it, long after this role has returned.
   # Same guard as the assert above, which this one was missing: the snapshot task is skipped
   # under --check, so its results carry no `stdout` and building the fact off item.stdout
   # fails while resolving its own args. There is nothing to gate on in check mode anyway —
@@ -148,11 +150,12 @@
     k8s_stabilise_watch: >-
       {{ (k8s_stabilise_watch | default([]))
          + [item.item | combine({'restarts_before': item.stdout})] }}
-  loop: "{{ _k8s_drain_restarts.results | default([]) }}"
+  loop: "{{ _manifests_drain_restarts.results | default([]) }}"
   loop_control:
     label: "{{ item.item.name }}"
 
 - name: Clear the pending-rollout queue
   tags: [always]
+  # noqa var-naming[no-role-prefix] — the play-scoped accumulator; see the queue task in main.yml.
   ansible.builtin.set_fact:
     k8s_pending_rollouts: []

@@ -45,8 +45,8 @@ script, config or units change, so provisioning stays fully IaC.
 
 ## Health gate + rollback
 
-The health gate is in the play, not in the deployer: a k8s deploy fails when `rollout-drain`
-or `post_tasks/k8s_stabilise_gate.yml` fails. On a failed k8s deploy the deployer writes the
+The health gate is in the play, not in the deployer: a k8s deploy fails when the batch drain
+(`roles/k8s/manifests/tasks/drain.yml`) or `post_tasks/k8s_stabilise_gate.yml` fails. On a failed k8s deploy the deployer writes the
 bad SHA to `/var/lib/gitops-deploy/hold_sha` first, then `git reset --hard`es to the previous
 HEAD, redeploys the prior pin, and alerts the dedicated Discord webhook
 (`deploy_handlers.py:_rollback_k8s`). The marker (and the red **GitOps Deploy — Status** tile)
@@ -211,7 +211,7 @@ Each arm below is a rule and the function that holds it. The record page has the
     gitops_deploy`, once per checkout SHA, ending the tick — the `DECIDED:` markers in
     `deploy_phases.py`. Any origin-side mismatch disarms auto-deploy for that tick and pages
     once (`stale_denylist_alerted`). The record page has the guards on the re-render.
-  - **The gate is in the play, not here**: `roles/k8s/manifests` applies, `rollout-drain`
+  - **The gate is in the play, not here**: `roles/k8s/manifests` applies, its `drain.yml`
     waits, `post_tasks/k8s_stabilise_gate.yml` soaks.
   - **A k8s rollback is local-only, and not sufficient on its own**: `skip_hold` matches only
     while `origin_head == hold_sha`, so the bad pin is still on master. Revert on the remote.

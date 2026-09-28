@@ -111,7 +111,7 @@ pin. A title reading `Update n8n (manual — append
 each resolved version to base-pin-history.tsv; lockstep: app + task runners; k8s_autodeploy: false)` names its group,
 and the group name is the work order — here, resolve each new digest to its
 `org.opencontainers.image.version` label and append a row to
-`ansible/roles/k8s/n8n-images/base-pin-history.tsv`, whose header carries the commands. A digest
+`ansible/roles/k8s/n8n/base-pin-history.tsv`, whose header carries the commands. A digest
 bump changes no version string, so the diff alone cannot tell an upgrade from a downgrade: PR
 #1440 proposed a lockstep downgrade through nine green checks (issue #1493).
 

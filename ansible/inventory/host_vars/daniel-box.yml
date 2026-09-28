@@ -355,28 +355,11 @@ containers_list:
   # the LAN.
   - name: registry
     platform: k8s
-  # Not a service — a deploy-time image build, entered here because that is how a k8s role
-  # gets invoked and tagged. It produces the two images n8n runs and exits. Separate from
-  # k8s/n8n because a BuildKit rebuild is minutes every n8n redeploy would otherwise pay.
-  - name: n8n-images
-    platform: k8s
-    # Also tagged `n8n`, so `--tags n8n` runs the builder too. n8n's two pins read
-    # `k8s_built_image_tags`, which only this role publishes — deployed alone, n8n would render
-    # `:latest`, change the Deployment spec away from the hash, and stop-start a Recreate pod
-    # onto the same digest. The next full deploy would flip it back. The build itself is gated
-    # on the rendered context changing, so the added cost of the pairing is two registry HEADs.
-    tags: [n8n-images, n8n]
   # two_factor even on the LAN (decided 2026-08-13): arbitrary workflow execution on a stolen
   # password alone. /webhook/ below is unaffected — that route carries no forward-auth at all,
   # and monitor-bridge's check_n8n rides the API-key route.
   - name: n8n
     platform: k8s
-    # n8n is the one role whose images another role builds, and since its two pins read
-    # `k8s_built_image_tags` that ordering is no longer just a cost question: n8n-images has to
-    # publish the fact before n8n renders its manifests, or the pins fall back to `:latest` and
-    # the Deployment stops naming the bytes the pod runs. No template carries the edge, so it is
-    # declared here — see the repo-root CLAUDE.md on containers_list position.
-    depends_on: [n8n-images]
     hostname: "n8n"
     port: 5678
     use_authelia: true
@@ -493,10 +476,10 @@ containers_list:
     hostname: "loki-homelab"
     port: 3100
     use_authelia: false
-  # MUST follow loki-homelab: it tails the terraria pod's console lines from that Loki.
-  # No web UI — its :9420 exporter is scraped in-cluster (claude-otel prometheus job
-  # terraria-stats), so no port/route derives.
-  - name: terraria-stats
+  # MUST follow loki-homelab: both exporters tail their game pod's console lines from that
+  # Loki. No web UI — each :9420 exporter is scraped in-cluster (claude-otel prometheus jobs
+  # terraria-stats and valheim-stats), so no port/route derives.
+  - name: game-stats
     platform: k8s
     depends_on: [loki-homelab]
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
@@ -527,11 +510,6 @@ containers_list:
   # have an operator expect a same-day restore point that does not exist.
   - name: pi-peer-backup
     platform: k8s
-  # Same ordering constraint as terraria-stats — it tails the valheim pod's console out of
-  # loki-homelab, so it MUST follow it.
-  - name: valheim-stats
-    platform: k8s
-    depends_on: [loki-homelab]
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny

@@ -10,7 +10,7 @@ console (verified Phase 0, 2026-06-15) and are out of scope.
 
 The Loki fetch, cursor handling, metric rendering/escaping, the HTTP handler, the run loop
 and the env reader are shared with valheim-stats via `stats_lib` (see that module's
-docstring and `roles/k8s/game-stats-lib/tasks/stage.yml` for how it gets here). What stays
+docstring and `roles/k8s/game-stats/tasks/stage.yml` for how it gets here). What stays
 here — the line parser, the state machine and the SQLite schema — is genuinely per-game:
 Terraria names the player on both join and leave and has no death/SteamID bookkeeping,
 where Valheim names a player only on spawn, resolves a disconnect by SteamID, and tracks

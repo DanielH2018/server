@@ -68,7 +68,7 @@ def _producers(tasks: list[dict]) -> dict[str, list[str]]:
 
     A condition that references the producer's own `loop:` source is excluded: when it is
     false the loop is empty, so the register's `results` is an empty list and every consumer
-    iterates zero times. That is safe, and it is how k8s/rollout-drain is written. Only a
+    iterates zero times. That is safe, and it is how k8s/manifests/tasks/drain.yml is written. Only a
     condition orthogonal to the loop (a `changed` check, `not ansible_check_mode`) leaves
     skip entries behind for a consumer to trip over.
     """

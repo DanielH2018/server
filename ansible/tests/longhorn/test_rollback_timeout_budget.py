@@ -47,7 +47,7 @@ additive across services while this budget covers one. The claims-only arithmeti
 green throughout, which is exactly why the gap survived. `test_batch_of_claim_services_fits_the_
 rollback_budget` below closes it by reading the per-tick cap, and it takes the rollout term as a
 `max()` over promoted roles rather than a `sum()` — a `sum()` would demand a budget larger than
-reality, since only one service's rollout wait is ever the binding one (k8s/rollout-drain
+reality, since only one service's rollout wait is ever the binding one (k8s/manifests/tasks/drain.yml
 batches them).
 
 IN-ROLE WAITS ARE A THIRD TERM (#2399). What a role waits for in its own `tasks/` — prowlarr's
@@ -159,7 +159,7 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
 
     `deploy_k8s` joins the whole promoted set into ONE ansible-playbook run under one
     `K8S_ROLLBACK_TIMEOUT_S`, and each claim-declaring service pays its own snapshot+revert
-    phase serially inside it. Only the rollout WAIT is deduped, by k8s/rollout-drain — hence
+    phase serially inside it. Only the rollout WAIT is deduped, by k8s/manifests/tasks/drain.yml — hence
     `max()` on that term and `sum()` on the rest.
 
     Reverting `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` to 3 (or removing the
@@ -208,7 +208,7 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     batch_revert = sum(claims * per_claim for _, claims in by_cost)
     # Each role waits for its own Jobs and addresses before the drain runs, so sum() here.
     batch_in_role = sum(in_role_wait_s(role) for role, _ in by_cost)
-    # Deduped across the batch by k8s/rollout-drain, so max() not sum().
+    # Deduped across the batch by k8s/manifests/tasks/drain.yml, so max() not sum().
     batch_rollout = max(_rollout_timeout_s(role) for role, _ in by_cost)
     worst_batch = batch_revert + batch_in_role + batch_rollout + stabilise
 

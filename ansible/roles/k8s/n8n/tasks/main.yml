@@ -5,6 +5,30 @@
 # their own scheduler. Coexistence would double-fire every schedule and double-write to TickTick.
 # See docs/archive/k3s-migration/slice-2-leaf-apps.md.
 
+# Both builds come first and are ordered rather than parallel, because n8n and its task runners
+# are version-coupled the way karakeep and Meilisearch are. Building them back to back keeps a
+# release boundary from landing between the two. They also have to come before the render: the
+# two image pins read the `k8s_built_image_tags` fact image-builder publishes, and without it they
+# fall back to `:latest`. Each build is gated on its rendered context changing, so an n8n deploy
+# with no Dockerfile change pays two registry HEADs, not a BuildKit run.
+- name: Build the n8n image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: n8n
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
+
+- name: Build the n8n task-runners image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: n8n-runners
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile-runners.j2"
+    # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
+    # since the ConfigMap mount puts each key at the context root under that name.
+    image_builder_context:
+      "{{ playbook_dir }}/roles/k8s/n8n/templates/config/n8n-task-runners.json.j2": n8n-task-runners.json
+
 - name: Create the n8n data volume claim
   tags: [deploy]
   ansible.builtin.include_role:
@@ -91,11 +115,11 @@
 # same race read the other way — a red deploy on a service that was not up yet. Observed
 # 2026-08-16: n8n's pod started 14:52, the probe ran 14:53:04 and failed 4s later with "CONTROL
 # FAILED: cannot reach n8n:5678 either". roles/k8s/manifests no longer waits inline; it queues
-# the rollout for k8s/rollout-drain, which drains at the END of the play.)
+# the rollout for k8s/manifests/tasks/drain.yml, which drains at the END of the play.)
 #
 # `rollout status`, NOT `kubectl wait --for=condition=Available`: n8n is single-replica, so the OLD
 # pod satisfies Available for the whole rolling update and the wait returns before the new pod is
-# even scheduled. Same reasoning, and the same measurement, as rollout-drain/tasks/main.yml:32.
+# even scheduled. Same reasoning, and the same measurement, as manifests/tasks/drain.yml:32.
 - name: Wait for n8n to finish rolling before probing it
   when: not k8s_no_mutate
   tags: [deploy]

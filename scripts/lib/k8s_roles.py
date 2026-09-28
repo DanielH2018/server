@@ -45,9 +45,7 @@ HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # containers_list entry because they are not services, so the platform check below would always
 # fail for them.
 #
-# rollout-drain is pure tasks, waiting on the rollouts a batch of roles queued into
-# k8s_pending_rollouts; it lives under roles/k8s/ only so that both deploy.yml and configarr can
-# include it by name. cronjob-gate creates a one-off Job from the CALLER's CronJob with `kubectl
+# cronjob-gate creates a one-off Job from the CALLER's CronJob with `kubectl
 # create job --from=cronjob/<name>`, so the pod spec it runs is the caller's rendered manifest.
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
@@ -61,12 +59,10 @@ HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
     "manifests",
-    "rollout-drain",
     "cronjob-gate",
     "volume-snapshot",
     "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
-    "game-stats-lib",  # ships stats_lib.py into valheim-stats/terraria-stats' ConfigMaps
     # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
     # the app's database, which no manifest can express
     "arr-notification",
@@ -155,9 +151,10 @@ def k8s_entries() -> dict[str, dict]:
 
 
 # The two ways one k8s role reaches another's tasks. `include_role`/`import_role` name it as
-# `k8s/<role>`; the game-stats-lib consumers instead `import_tasks` a sibling role's file by
-# path (`{{ role_path }}/../game-stats-lib/tasks/stage.yml`), which names no role at all. Both
-# are real edges: whoever deploys the caller runs the callee's tasks.
+# `k8s/<role>`; an `import_tasks` of a sibling role's file by path
+# (`{{ role_path }}/../<role>/tasks/<file>.yml`) names no role at all. Both are real edges:
+# whoever deploys the caller runs the callee's tasks. No live role uses the path form since
+# #2813 folded game-stats-lib into its two consumers; test_k8s_role_callers.py drives it.
 _ROLE_KEYS = (
     "ansible.builtin.include_role",
     "include_role",

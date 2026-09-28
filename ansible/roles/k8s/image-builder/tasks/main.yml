@@ -75,9 +75,8 @@
       sha-{{ ((lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data']
               | dictsort | to_json | hash('sha256'))[:12] }}
 
-# Published for the roles that DEPLOY these images, which are not always the role that builds
-# them: n8n-images builds `n8n` and `n8n-runners` in one batch and the n8n role deploys both in a
-# later one. A consumer reads `k8s_built_image_tags.get('<name>', 'latest')` in its own image pin,
+# Published for the roles that DEPLOY these images. Every one builds its own since #2813, but a
+# consumer reads `k8s_built_image_tags.get('<name>', 'latest')` in its own image pin,
 # so a deploy that skips the building role falls back to the mutable alias rather than naming a
 # tag nothing pushed.
 - name: Publish the content tag to the play for {{ image_builder_name }}

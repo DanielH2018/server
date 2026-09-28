@@ -29,7 +29,6 @@ _ROLES_WITH_NO_WORKLOAD = {
     "deploy-ui": "a selector-less Service, its EndpointSlice and an IngressRoute onto deploy-ui.service on daniel-box",
     "longhorn-ui": "an IngressRoute, Middleware and TLSOption onto longhorn-system's own UI",
     "media-volume": "a StorageClass, PV, PVC and a one-shot Job — storage, not a workload",
-    "n8n-images": "only Dockerfiles — it delegates to image-builder and owns no manifest",
     "netpol-baseline": "NetworkPolicies plus the Job that probes them",
     "pi-peer-backup": "a CronJob, its PVC and its Secret",
 }
@@ -386,8 +385,8 @@ def test_cronjob_only_census_finds_exactly_the_known_roles():
 
 
 def test_the_no_rollout_checkable_workload_set_still_matches_outside_the_cronjob_roles():
-    """The other five roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui, longhorn-ui,
-    media-volume, n8n-images, netpol-baseline) still reach the unchanged skip message
+    """The other four roles in `_ROLES_WITH_NO_WORKLOAD` (deploy-ui, longhorn-ui,
+    media-volume, netpol-baseline) still reach the unchanged skip message
     run_health prints --
     only configarr and pi-peer-backup were pulled onto the new CronJob path."""
     resolved = _resolved()

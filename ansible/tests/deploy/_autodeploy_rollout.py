@@ -65,9 +65,10 @@ def _rollout_gate_offender(role: Path) -> bool:
     tasks. A role that does not write it returns False at the top and is never judged here —
     including a role that renders no workload at all, which is the part this docstring used to
     overstate. It claimed a role rendering nothing is "still an offender"; that holds only when
-    the role ALSO sets `manifests_rollout: ''`. `n8n-images` is the counterexample: it renders
-    no Deployment and no batch template, and it is not an offender, because it never includes
-    `k8s/manifests` and so never passes a `manifests_rollout` for `_sets_empty_rollout` to find.
+    the role ALSO sets `manifests_rollout: ''`. The retired `n8n-images` role (folded into n8n
+    by #2813) was the counterexample: it rendered no Deployment and no batch template, and it
+    was not an offender, because it never included `k8s/manifests` and so never passed a
+    `manifests_rollout` for `_sets_empty_rollout` to find.
 
     So the true statement is narrower, in two parts:
 

@@ -8,7 +8,7 @@ deps). The Valheim container is never touched.
 
 The Loki fetch, cursor handling, metric rendering/escaping, the HTTP handler, the run loop
 and the env reader are shared with terraria-stats via `stats_lib` (see that module's
-docstring and `roles/k8s/game-stats-lib/tasks/stage.yml` for how it gets here). What stays
+docstring and `roles/k8s/game-stats/tasks/stage.yml` for how it gets here). What stays
 here is the part that is genuinely per-game:
 
 Why it is a fork rather than a shared library for the REST: Valheim's console is a

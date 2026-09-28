@@ -8,7 +8,7 @@
 
 # WAIT FOR THE NEW POD BEFORE READING ANYTHING FROM IT.
 #
-# k8s/manifests does NOT wait — it QUEUES the rollout for k8s/rollout-drain, which drains the
+# k8s/manifests does NOT wait — it QUEUES the rollout for k8s/manifests/tasks/drain.yml, which drains the
 # whole batch at the end of the play (5eea64e6, 2026-08-15). This file runs straight after the
 # manifests include, so without this gate the reads below race a pod that is still rolling, and
 # `Recreate` means there is a window with no pod at all where they fail by connection refused.

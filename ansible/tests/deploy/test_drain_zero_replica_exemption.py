@@ -1,4 +1,4 @@
-"""The no-pods assert in `k8s/rollout-drain` must tell a label typo from a deliberate zero.
+"""The no-pods assert in `k8s/manifests/tasks/drain.yml` must tell a label typo from a deliberate zero.
 
 A workload scaled to zero has no pods on purpose. Before 2026-09-02 the assert read only the
 restart snapshot, so an empty snapshot was indistinguishable from a mislabelled workload and it
@@ -13,7 +13,7 @@ everything and one that fires on nothing look identical from the passing side.
 from lib import yaml_fast
 from _helpers import REPO, render_expr
 
-DRAIN = REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
+DRAIN = REPO / "ansible/roles/k8s/manifests/tasks/drain.yml"
 
 
 def _no_pods_assert() -> dict:

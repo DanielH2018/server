@@ -15,7 +15,7 @@
     quiet: true
 
 # The seed talks HTTP to the app, so it needs a pod that is actually serving. k8s/manifests
-# deliberately does NOT wait — it queues the wait for k8s/rollout-drain at the end of the
+# deliberately does NOT wait — it queues the wait for k8s/manifests/tasks/drain.yml at the end of the
 # play — so this role waits itself. The timeout matches sonarr's manifests_rollout_timeout: a
 # first boot installing DOCKER_MODS takes up to 10 minutes. The wait costs nothing on an
 # unchanged deploy, where the rollout is already complete.

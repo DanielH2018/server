@@ -1,6 +1,6 @@
 """Every rendered Deployment's `progressDeadlineSeconds` covers its role's rollout budget.
 
-WHY THIS EXISTS. k8s/rollout-drain runs `kubectl rollout status --timeout=<budget>`, with the
+WHY THIS EXISTS. k8s/manifests/tasks/drain.yml runs `kubectl rollout status --timeout=<budget>`, with the
 budget taken from the role's `manifests_rollout_timeout`. `rollout status` also exits non-zero
 as soon as the Deployment is marked `ProgressDeadlineExceeded`, which Kubernetes does after
 `progressDeadlineSeconds` (default 600) without progress. A pod stuck `Pulling` makes no

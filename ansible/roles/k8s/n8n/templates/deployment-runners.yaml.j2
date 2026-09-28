@@ -43,8 +43,7 @@ spec:
             - until nc -z n8n {{ n8n_k8s_broker_port }}; do sleep 5; done
 {{ hardened_security_context() }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-      # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
-      # Weighted so the pod still schedules if daniel-box is cordoned or full.
+      # Prefers daniel-box: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
 {{ node_affinity_preference(k8s_primary_node) }}
       containers:
         - name: n8n-runners

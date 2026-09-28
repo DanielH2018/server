@@ -30,7 +30,8 @@
 # instead of sonarr + radarr serially.
 - name: Wait for the *arrs to finish rolling out before reconciling against them
   ansible.builtin.include_role:
-    name: k8s/rollout-drain
+    name: k8s/manifests
+    tasks_from: drain.yml
 
 # A CronJob has no rollout to wait on, so an image bump would otherwise deploy unobserved: the
 # apply reports success and the first thing to actually run the new image is the 04:30 firing,

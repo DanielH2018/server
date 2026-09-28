@@ -43,7 +43,6 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "autofix-bridge",
             "healthchecks",
             "speedtest",
-            "rollout-drain",
         ),
     ),
     (
@@ -55,7 +54,6 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "bento-pdf",
             "homepage",
             "n8n",
-            "n8n-images",
             "code-server",
             "livesync",
             "homelab-mcp",
@@ -63,7 +61,7 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "image-builder",
         ),
     ),
-    ("Games", ("terraria", "terraria-stats", "valheim", "valheim-stats")),
+    ("Games", ("terraria", "valheim", "game-stats")),
     (
         "Storage & backup",
         ("longhorn-ui", "pi-peer-backup", "dri-device-plugin"),

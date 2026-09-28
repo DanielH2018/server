@@ -33,10 +33,7 @@ spec:
     spec:
       # Metrics, not power protection — the UPS keeps working when this pod does not.
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs
-      # the hotter of the two nodes, so latency-insensitive services default to daniel-server.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full. Reaching upsd
-      # costs one ClusterIP hop from either node, so neither placement is privileged here.
+      # Reaching upsd costs one ClusterIP hop from either node, so neither placement is privileged here.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: nut-exporter

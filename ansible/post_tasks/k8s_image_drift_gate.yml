@@ -26,7 +26,7 @@
 #
 # WHY IT IS A POST_TASK. The comparison is only meaningful after the rollouts have drained: at the
 # point k8s/image-builder finishes, the workload legitimately still runs the OLD pod, because
-# k8s/manifests and k8s/rollout-drain have not run yet. Putting this in the builder's own role would
+# k8s/manifests and k8s/manifests/tasks/drain.yml have not run yet. Putting this in the builder's own role would
 # false-positive on every deploy that changes an image.
 #
 # WHY IT READS PODS RATHER THAN DEPLOYMENTS. In both surviving paths the Deployment NAMES the same
@@ -34,7 +34,7 @@
 # nothing. Only a running container reports the digest it actually resolved, as
 # `.status.containerStatuses[].imageID`.
 #
-# IMAGE NAME IS NOT WORKLOAD NAME. n8n-images builds `n8n-runners`; the n8n role deploys it. So
+# IMAGE NAME IS NOT WORKLOAD NAME. the n8n role builds `n8n-runners` and deploys it as a second Deployment. So
 # candidates are found by matching the imageID against the registry pull host and image name, never
 # by assuming a workload called after the image. That is the same trap
 # ansible/tests/deploy/test_inline_rollout_gates.py records for rollout gates.

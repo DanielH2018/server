@@ -44,7 +44,7 @@ same resources.
 
 - **`manifests_rollout_kind` rejects kubectl's own aliases.** `ds` and `DaemonSet` are refused
   by an assert, because three consumers match the literal string `daemonset`: the apply-output
-  ternary here, the queued kind `roles/k8s/rollout-drain` runs `rollout status` with, and the
+  ternary here, the queued kind `roles/k8s/manifests/tasks/drain.yml` runs `rollout status` with, and the
   jsonpath branch in `ansible/post_tasks/k8s_stabilise_gate.yml`. An alias gets a green deploy
   with the gate reading a Deployment's jsonpath off a DaemonSet — `0 == 0`, passing vacuously.
 - **Dropping a name from `manifests_files` is only half a retirement, for the ~63 roles that
@@ -84,13 +84,13 @@ same resources.
   `kubectl delete`. `manifest-prune-check.sh` keeps watching every role, armed or not, until a
   real deploy has been seen pruning a real orphan.
 - **This role does not wait for the rollout.** It appends to the play-scoped
-  `k8s_pending_rollouts` accumulator, and `roles/k8s/rollout-drain` — invoked once per batch from
+  `k8s_pending_rollouts` accumulator, and `roles/k8s/manifests/tasks/drain.yml` — invoked once per batch from
   `ansible/tasks/k8s_batch.yml` — watches every rollout the batch started at once — `max()` per batch instead of `sum()`. 1386s of serial
   waiting across 31 services became a batch wait on 2026-08-15. So a role that returns is a role
   whose manifests were *accepted*, not one whose pods are up.
 - **A rebuilt image rolls only if its name matches the role.** `k8s_rebuilt_images` is keyed on
   `manifests_service`, and that holds for six of the seven built images. It does not hold for
-  `n8n-runners`, which `n8n-images` builds under its own name while the `n8n` role deploys it —
+  `n8n-runners`, which the `n8n` role builds under its own name and deploys as a second Deployment —
   a runners-only rebuild reached the registry and never reached a pod, green throughout. A role
   deploying more than one Deployment names the rest in `manifests_extra_rollouts` as
   `{name, image}` pairs (`freshrss`, `prowlarr`, `karakeep`, `n8n` today), where `image` is the
@@ -268,12 +268,45 @@ modules) on `not k8s_dry_run | bool`. Without that guard, an hourly dry run woul
 origin/master's host half ahead of its landing. `render_records_enabled` switches it off.
 
 Every stamped service can be dry-run since #2588. Each role that includes this one guards its
-own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` holds only `n8n-images`,
-which renders no manifests. n8n's image-checksum annotation reads the registry digest a deploy
+own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` is empty. Its last entry,
+`n8n-images`, folded into n8n (#2813). n8n's image-checksum annotation reads the registry digest a deploy
 would stamp, where it used to render `unstaged` under a dry run.
 
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
 carries the same conclusion at the line that writes the digest.
+
+## The batch drain (`tasks/drain.yml`)
+
+`ansible/tasks/k8s_batch.yml` includes `tasks_from: drain.yml` at the end of every batch. The
+drain waits, concurrently, on every rollout the batch's roles queued into
+`k8s_pending_rollouts`, then snapshots restart counts for the deferred stabilisation gate.
+configarr includes the same file by name to wait for sonarr and radarr before it reconciles.
+It lived in its own `rollout-drain` role until #2813 folded it in here.
+
+**Every task in it is `tags: [always]`, not `[deploy]`, and that tagging is load-bearing.**
+`[deploy]` tasks are filtered out of every gitops-deploy run. When this logic was tagged
+`[deploy]`, it waited on nothing while the play reported `failed=0`. That was measured on a
+real `--tags littlelink` deploy: `ok=94, failed=0`, and the drain executed zero times.
+
+`k8s/manifests` used to run `kubectl rollout status` inline, serially, right after its own
+apply. Measured over a full deploy, that was 1386s across 31 waits against 435s of actual work.
+The waits were serial because Ansible is serial. The cluster did not need them to be: `kubectl
+apply` is asynchronous, and k3s reconciles every workload concurrently. The drain runs the same
+waits as background shell jobs instead, one per queued rollout, each with its own per-role
+timeout.
+
+The drain is not `kubectl wait --for=condition=Available`. Every Deployment here is
+single-replica with `maxUnavailable` down to 0, so the OLD pod satisfies `Available` for the
+whole rolling update. That wait would return before the new pod is even scheduled. Only
+`rollout status` gates on the new ReplicaSet.
+
+The tasks are guarded on an empty queue (`k8s_pending_rollouts | length > 0`). So `--skip-tags
+deploy`, which skips the queueing task above, leaves the drain a no-op rather than an error.
+
+An edit to `drain.yml` changes how a deploy runs, never what it applies. `probe.py releases`
+therefore exempts this one file from the release-staleness census
+(`scripts/diagnostics/probe_lib/releases.py:_is_real_change`); the rest of
+`tasks/` is the render and still counts.
 
 ## Guards
 

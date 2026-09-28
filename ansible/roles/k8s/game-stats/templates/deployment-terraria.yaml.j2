@@ -7,7 +7,7 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: valheim-stats
+  name: terraria-stats
   namespace: {{ k8s_namespace }}
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
@@ -15,34 +15,26 @@ spec:
   replicas: 1
   selector:
     matchLabels:
-      app: valheim-stats
+      app: terraria-stats
   template:
     metadata:
       labels:
-        app: valheim-stats
+        app: terraria-stats
         netpol-baseline: enforced
       annotations:
         # Recreate the pod when the script ConfigMap's source changes — the manifests role
         # only restarts on manifest changes, and neither staged script is a manifest. The
-        # fact is a hash over BOTH staged modules (tasks/main.yml), the same "value=" shape
-        # monitor-bridge's and autofix-bridge's checksum/check-script use, since valheim_stats.py
+        # fact is a hash over BOTH staged modules (tasks/terraria.yml), the same "value=" shape
+        # monitor-bridge's and autofix-bridge's checksum/check-script use, since stats.py
         # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
-        {{ checksum_annotation('stats-script', value=valheim_stats_script_checksum) }}
+        {{ checksum_annotation('stats-script', value=game_stats_terraria_script_checksum) }}
     spec:
-      # Needed here even though terraria-stats has no fsGroup, and the difference is the
-      # seed: that claim arrived pre-populated by `tar -p --numeric-owner`, so its files
-      # were ALREADY uid 1000 and the mountpoint was writable. This claim starts empty,
-      # and an empty Longhorn volume mounts root:root — so the very first
-      # sqlite3.connect() died with "unable to open database file" and crash-looped.
-      # fsGroup makes the kubelet chown the volume to this group at mount.
-{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, fs_group=pgid, non_root=true) }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
+{{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
 {{ node_affinity_preference('daniel-server') }}
       containers:
-        - name: valheim-stats
-          image: {{ valheim_stats_k8s_image }}
-          command: ["python", "/app/valheim_stats.py"]
+        - name: terraria-stats
+          image: {{ game_stats_k8s_image }}
+          command: ["python", "/app/stats.py"]
 {{ hardened_security_context(read_only=true) }}
           env:
             - name: TZ
@@ -51,26 +43,25 @@ spec:
               value: "1"
             - name: PYTHONDONTWRITEBYTECODE
               value: "1"
+            # In-cluster now — no VIP route, no ClientIP gate in the path.
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
             - name: LOKI_QUERY
-              value: '{container="valheim"}'
+              value: '{container="terraria"}'
             - name: POLL_INTERVAL
               value: "20"
             - name: METRICS_PORT
               value: "9420"
             - name: DB_PATH
               value: /data/stats.db
-            # Keeps the first-run query under Loki's ~30d max_query_length. There is no
-            # Valheim history to find in that window — the server was archived in January
-            # and only came back on 2026-08-13 — so this is a ceiling, not a expectation.
+            # 28d keeps the first-run/backfill query under Loki's ~30d max_query_length.
             - name: BACKFILL_DAYS
               value: "28"
           ports:
             - containerPort: 9420
           # /healthz is 503 until the first successful poll and whenever the last one is
-          # older than HEALTH_MAX_AGE; a failing liveness recreates the pod (and feeds the
-          # crash-loop alert arm).
+          # older than HEALTH_MAX_AGE — the same contract the Docker healthcheck used;
+          # a failing liveness recreates the pod (and feeds the crash-loop alert arm).
           livenessProbe:
             httpGet:
               path: /healthz
@@ -85,20 +76,20 @@ spec:
             initialDelaySeconds: 5
             periodSeconds: 10
           volumeMounts:
-            - name: valheim-stats-data
+            - name: terraria-stats-data
               mountPath: /data
-            - name: valheim-stats-script
+            - name: terraria-stats-script
               mountPath: /app
               readOnly: true
-            - name: valheim-stats-tmp
+            - name: terraria-stats-tmp
               mountPath: /tmp
 {{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='50m', mem_request='32Mi') }}
       volumes:
-        - name: valheim-stats-data
+        - name: terraria-stats-data
           persistentVolumeClaim:
-            claimName: {{ valheim_stats_k8s_claim }}
-        - name: valheim-stats-script
+            claimName: terraria-stats-data
+        - name: terraria-stats-script
           configMap:
-            name: valheim-stats-script
-        - name: valheim-stats-tmp
+            name: terraria-stats-script
+        - name: terraria-stats-tmp
           emptyDir: {}

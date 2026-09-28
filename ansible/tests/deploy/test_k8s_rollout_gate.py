@@ -2,7 +2,7 @@
 
 `roles/k8s/manifests` used to wait on its own rollout inline and then run `assert_stable.yml`
 inline too. Both are now hoisted out: the role QUEUES into `k8s_pending_rollouts`,
-`roles/k8s/rollout-drain` waits for a whole batch at once, and one stabilisation window runs in
+`roles/k8s/manifests/tasks/drain.yml` waits for a whole batch at once, and one stabilisation window runs in
 `deploy.yml`'s post_tasks for the entire play.
 
 That refactor moved a crashloop gate away from the role it protects, which makes it quietly
@@ -15,7 +15,7 @@ simply never ran:
   * `deploy.yml` loses the post_tasks gate -> rollouts are waited on but never soaked, which is
     exactly the kube-state-metrics failure of 2026-08-07 (clean logs, ok=41 failed=0, pod
     crashlooping on a liveness 404);
-  * `rollout-drain` stops clearing the queue -> later batches re-wait earlier workloads, and the
+  * the drain stops clearing the queue -> later batches re-wait earlier workloads, and the
     restart snapshot is taken twice for the same service;
   * `configarr` loses its drain -> its reconcile Job fires into sonarr's ~5-minute startup and
     reconciles against a dead API.
@@ -28,7 +28,7 @@ from _helpers import command_of as _cmd
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
-_DRAIN = _REPO / "ansible/roles/k8s/rollout-drain/tasks/main.yml"
+_DRAIN = _REPO / "ansible/roles/k8s/manifests/tasks/drain.yml"
 _CONFIGARR = _REPO / "ansible/roles/k8s/configarr/tasks/main.yml"
 _GATE = _REPO / "ansible/post_tasks/k8s_stabilise_gate.yml"
 _DEPLOY = _REPO / "ansible/deploy.yml"
@@ -65,7 +65,7 @@ def test_manifests_does_not_wait_on_its_own_rollout() -> None:
     assert not inline, (
         "roles/k8s/manifests waits on `rollout status` inline again. That serialises the whole "
         "play — 1386s across 31 services measured 2026-08-15 — and makes "
-        "k8s_rollout_batch_width a no-op. The wait belongs in roles/k8s/rollout-drain."
+        "k8s_rollout_batch_width a no-op. The wait belongs in roles/k8s/manifests/tasks/drain.yml."
     )
 
 
@@ -83,7 +83,7 @@ def test_manifests_records_whether_the_render_changed() -> None:
 def test_drain_waits_then_clears_the_queue() -> None:
     tasks = _tasks(_DRAIN)
     assert any("rollout status" in _cmd(t) for t in tasks), (
-        "roles/k8s/rollout-drain no longer runs `rollout status`, so queued rollouts are never "
+        "roles/k8s/manifests/tasks/drain.yml no longer runs `rollout status`, so queued rollouts are never "
         "waited on."
     )
     cleared = [
@@ -92,7 +92,7 @@ def test_drain_waits_then_clears_the_queue() -> None:
         if t.get("ansible.builtin.set_fact", {}).get("k8s_pending_rollouts") == []
     ]
     assert cleared, (
-        "roles/k8s/rollout-drain must reset k8s_pending_rollouts to [], or every later batch "
+        "roles/k8s/manifests/tasks/drain.yml must reset k8s_pending_rollouts to [], or every later batch "
         "re-waits the earlier ones and snapshots their restart counts twice."
     )
 
@@ -110,7 +110,7 @@ def test_drain_does_not_use_kubectl_wait_for_available() -> None:
         if "condition=Available" in line and not line.strip().startswith("#")
     ]
     assert not offending, (
-        "roles/k8s/rollout-drain uses `kubectl wait --for=condition=Available`, which does not "
+        "roles/k8s/manifests/tasks/drain.yml uses `kubectl wait --for=condition=Available`, which does not "
         "gate on the new ReplicaSet here and reports success on a rollout that never started. "
         "Use `kubectl rollout status`."
     )
@@ -143,12 +143,19 @@ def test_deploy_batches_the_k8s_roles() -> None:
     )
 
 
+def _is_drain(include: dict) -> bool:
+    return (
+        include.get("name") == "k8s/manifests"
+        and include.get("tasks_from") == "drain.yml"
+    )
+
+
 def test_batch_drains_after_applying() -> None:
     """Applying without draining would let every batch pile onto the previous one's rollouts."""
     tasks = _tasks(_BATCH)
-    roles = [str(t.get("ansible.builtin.include_role", "")) for t in tasks]
-    assert any("k8s/rollout-drain" in r for r in roles)
-    assert "k8s/rollout-drain" in roles[-1], (
+    includes = [t.get("ansible.builtin.include_role") or {} for t in tasks]
+    assert any(_is_drain(i) for i in includes)
+    assert _is_drain(includes[-1]), (
         "the drain must be the LAST task in a batch, after every role in it has applied — "
         "draining earlier waits on a partially-queued batch."
     )
@@ -194,7 +201,7 @@ def test_configarr_drains_before_reconciling() -> None:
         (
             i
             for i, t in enumerate(tasks)
-            if "k8s/rollout-drain" in str(t.get("ansible.builtin.include_role", ""))
+            if _is_drain(t.get("ansible.builtin.include_role") or {})
         ),
         None,
     )
@@ -282,8 +289,9 @@ def test_every_built_image_reaches_a_running_pod() -> None:
     fires. That trigger keys on `manifests_service`, which assumes one built image per role,
     named after the role that deploys it.
 
-    `n8n-runners` broke both halves of that assumption: it is built under its own name by the
-    n8n-images role and deployed by the n8n role as a SECOND Deployment. So the trigger never
+    `n8n-runners` broke both halves of that assumption: it is built under its own name (then by
+    a separate n8n-images role, folded into n8n by #2813) and deployed by the n8n role as a
+    SECOND Deployment. So the trigger never
     matched, and even if it had, the rollout targets a single name. The rebuilt image reached the
     registry and never reached a pod, with the deploy reporting green. This is the executable
     form of that finding: it fails until every built image is either rolled or opted out.

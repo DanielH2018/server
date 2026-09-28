@@ -1,32 +1,26 @@
 ---
-# Built in-cluster by the n8n-images role and pulled from the node-local registry — unlike every
-# other k8s role here, which pulls a published image. The Docker side builds these two from
-# templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS package, the runners config
-# file); no upstream tag carries either, so the cluster has to build them too.
-#
-# ORDERING: deploy the `n8n-images` tag before this one on a fresh cluster, or both pods sit in
-# ImagePullBackOff. Not an include_role here on purpose — a rebuild is minutes of BuildKit work
-# and every redeploy of n8n would pay it.
+# Built in-cluster by this role's two image-builder includes (tasks/main.yml) and pulled from the
+# node-local registry, from templates/Dockerfile.j2 and Dockerfile-runners.j2 (an extra JS
+# package, the runners config file); no upstream tag carries either, so the cluster builds them.
 #
 # `:latest` on the LOCAL registry tag is correct rather than lazy: the tag is mutable by design and
 # a rebuild pushes over it. That is unrelated to the UPSTREAM base, which is pinned — see the
-# Dockerfile headers in roles/k8s/n8n-images/templates for why a floating FROM has no updater.
+# Dockerfile headers in templates/ for why a floating FROM has no updater.
 #
-# BUILD AND ROLL IN ONE PLAY:
-#     ./scripts/deploy.sh --tags "n8n-images,n8n"
+# BUILD AND ROLL IN ONE PLAY — which `./scripts/deploy.sh --tags n8n` is, since #2813 folded the
+# builds into this role:
 #
 # A rebuild under an unchanged tag changes no manifest, and `imagePullPolicy: Always` is consulted
 # only when a pod is CREATED — so nothing about the rebuild alone would roll the Deployment. The
 # image-builder role closes that: it reads the tag's digest before and after the build and appends
 # the image to `k8s_rebuilt_images`, which roles/k8s/manifests turns into `manifests_image_changed`
-# and rolls on. (Before that wiring, `--tags n8n-images` then `--tags n8n` both reported green while
+# and rolls on. (Before that wiring, a build run and a separate n8n run both reported green while
 # the old pods kept running the old image — which is how the 2026-08-08 `@n8n/di` fix looked
 # deployed and was not.)
 #
 # The constraint that remains is SCOPE: `k8s_rebuilt_images` is a play-scoped fact, so the rebuild
 # and the rollout must happen in the SAME ansible-playbook run. Two separate runs lose the fact and
-# leave the old pods up — the original failure, by a different route. Hence the single command
-# above. Rolling by hand is the fallback if they ever do get separated:
+# leave the old pods up — the original failure, by a different route. Hence one role. Rolling by hand is the fallback if they ever do get separated:
 #     k3s kubectl -n homelab rollout restart deploy/n8n deploy/n8n-runners
 #
 # Renovate cannot track the two vars below (they are local registry refs, not upstream ones) — the

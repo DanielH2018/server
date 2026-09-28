@@ -219,7 +219,7 @@ def test_service_present_in_records_is_not_missing(tmp_path):
 
 
 def test_a_role_that_never_applies_manifests_is_never_missing(tmp_path):
-    """The n8n-images shape: a `containers_list` k8s entry whose role only builds an image
+    """The retired n8n-images shape: a `containers_list` k8s entry whose role only builds an image
     (`k8s/image-builder`) and never includes `k8s/manifests`, so it is never release-stamped and
     must not read as permanently missing -- 'a monitor nobody trusts is worse than none'."""
     roles_dir = tmp_path / "roles"
@@ -240,11 +240,9 @@ def test_shared_k8s_roles_matches_the_known_set():
     assert pr.shared_k8s_roles() == {
         "arr-notification",
         "cronjob-gate",
-        "game-stats-lib",
         "image-builder",
         "longhorn-api",
         "manifests",
-        "rollout-drain",
         "volume-claim",
         "volume-revert",
         "volume-snapshot",
@@ -252,10 +250,9 @@ def test_shared_k8s_roles_matches_the_known_set():
 
 
 def test_consumes_manifests_agrees_with_the_real_tree():
-    """sonarr applies manifests; n8n-images (image-builder only) does not -- the exact pair this
-    repo hit live while building this feature."""
+    """sonarr applies manifests; volume-snapshot, whose tasks drive kubectl directly, does not."""
     assert pr._consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
-    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/n8n-images") is False
+    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/volume-snapshot") is False
 
 
 def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
@@ -264,11 +261,10 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
     Named rather than counted: a role that moves directories or loses its `templates/` fails
     here by name, where a count would only slide by one. `manifests` renders everyone's
     templates, `volume-claim` and `image-builder` render their own, and `arr-notification`
-    and `game-stats-lib` ship `files/` a consumer's manifest embeds.
+    ships `files/` a consumer's manifest embeds.
     """
     assert pr.manifest_affecting_shared_roles() == {
         "arr-notification",
-        "game-stats-lib",
         "image-builder",
         "manifests",
         "volume-claim",
@@ -276,7 +272,7 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
 
 
 def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
-    """The five roles holding only `tasks/` and `defaults/` must stay out (#1636).
+    """The roles holding only `tasks/` and `defaults/` must stay out (#1636).
 
     Each changes how a deploy runs, never what it applies, so a change to one invalidates no
     release stamp. `volume-snapshot` is the one that marked all 53 services stale.
@@ -285,7 +281,6 @@ def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
         {
             "cronjob-gate",
             "longhorn-api",
-            "rollout-drain",
             "volume-revert",
             "volume-snapshot",
         }
@@ -294,7 +289,7 @@ def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
 
 def test_supplies_manifest_bytes_is_clean_for_a_deploy_time_role(tmp_path):
     """A role holding only `tasks/` and `defaults/` supplies no bytes."""
-    role = tmp_path / "rollout-drain"
+    role = tmp_path / "volume-snapshot"
     (role / "tasks").mkdir(parents=True)
     (role / "defaults").mkdir()
     assert pr._supplies_manifest_bytes(role) is False
@@ -304,7 +299,7 @@ def test_supplies_manifest_bytes_is_flagged_for_a_templates_or_files_role(tmp_pa
     """`templates/`, `files/` and the renderer itself each supply bytes."""
     with_templates = tmp_path / "volume-claim"
     (with_templates / "templates").mkdir(parents=True)
-    with_files = tmp_path / "game-stats-lib"
+    with_files = tmp_path / "arr-notification"
     (with_files / "files").mkdir(parents=True)
     renderer = tmp_path / "manifests"
     (renderer / "tasks").mkdir(parents=True)

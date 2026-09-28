@@ -25,8 +25,6 @@ spec:
       # No fsGroup: volume-claim restores the source's ownership with `tar -p --numeric-owner`,
       # and this LSIO image chowns /config to PUID/PGID itself on startup.
 {{ pod_shell('homelab-standard') }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: freshrss

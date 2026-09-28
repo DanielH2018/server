@@ -23,9 +23,10 @@
   tags: always
 
 - name: Drain the rollouts queued by this batch
-  # A role rather than a task file so configarr can include the same drain by name — a cross-role
-  # include_tasks would need a {{ playbook_dir }}-qualified path, which ansible-lint resolves
-  # statically and reports as a missing file.
+  # include_role with tasks_from rather than a task file so configarr can include the same drain by
+  # name — a cross-role include_tasks would need a {{ playbook_dir }}-qualified path, which
+  # ansible-lint resolves statically and reports as a missing file.
   ansible.builtin.include_role:
-    name: k8s/rollout-drain
+    name: k8s/manifests
+    tasks_from: drain.yml
   tags: always

@@ -75,6 +75,7 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
 
 # A render record that proves the applied bytes current clears a path hit (#2586).
 from diagnostics.probe_lib.releases_render import apply_renders  # noqa: E402
+from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
 
 
 def _git(*args, cwd, **kwargs):
@@ -142,18 +143,16 @@ def merged_commits(commits, repo_root=REPO_ROOT):
 def _deploy_tags():
     """Import `scripts/deploy_tools/deploy_tags` lazily.
 
-    Every other `probe.py` subcommand loads this module through `run_releases`'s import at the
-    top of `probe.py`, so a module-level import here would pay `deploy_tags`'s host_vars YAML
-    parse on every invocation, not just `releases`. `scripts/` is already on `sys.path` from the
-    bootstrap at the top of this file, which is the same directory `deploy_tags.py` itself
-    inserts, so the import needs nothing further.
+    Every `probe.py` subcommand loads this module, so a module-level import would pay
+    `deploy_tags`'s host_vars YAML parse on every invocation, not just `releases`. `scripts/`
+    is already on `sys.path` from the bootstrap at the top of this file.
     """
     from deploy_tools import deploy_tags
 
     return deploy_tags
 
 
-# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, rollout-drain and
+# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, volume-claim and
 # the rest render or gate the applied bytes for EVERY k8s service, not just their own. Read at
 # call time rather than pinned as a frozenset here: split_shared_roles derives it from the tree
 # rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deploy_k8s.py already
@@ -188,7 +187,7 @@ def _supplies_manifest_bytes(role_dir):
     A shared role does that in exactly two ways: it renders templates that are applied
     alongside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
     `image-builder/templates/build-job.yaml.j2`), or it ships `files/` a consumer's manifest
-    embeds with `lookup('file')` (`arr-notification`, `game-stats-lib`). A role with only
+    embeds with `lookup('file')` (`arr-notification`). A role with only
     `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
 
     That distinction is the whole point (#1636). A deploy-time role's change is live for the
@@ -241,7 +240,7 @@ def _deploy_time_shared_roles(shared_roles):
     `manifests` is excluded because it ships no templates of its own -- its `tasks/` IS the
     render, prune and apply logic that produces every service's bytes, so a change there is
     exactly the false-GREEN issue #947 exists to catch. Every other byte-supplying shared role
-    (`volume-claim`, `image-builder`, `arr-notification`, `game-stats-lib`) is in the census for
+    (`volume-claim`, `image-builder`, `arr-notification`) is in the census for
     its `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
     """
     return frozenset(shared_roles) - {MANIFEST_RENDERER}
@@ -263,7 +262,7 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
     (0b86a7d7) marked all 53 services stale and parked `Release Staleness Drift` DOWN with no
     deploy tag able to clear it (#1672). The narrowing is scoped to shared roles: a SERVICE's
     own `tasks/main.yml` names its `manifests_files`, so a change there does move its bytes and
-    must still count.
+    must still count. The renderer's rollout wait (`drain.yml`, #2813) runs, renders nothing.
     """
     if path.endswith(".md"):
         return False
@@ -277,7 +276,7 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
         and parts[4] in _DEPLOY_TIME_SUBDIRS
     ):
         return False
-    return True
+    return path != "ansible/roles/k8s/manifests/tasks/drain.yml"
 
 
 def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset()):
@@ -528,8 +527,8 @@ def compute_stale(
 def _consumes_manifests(role_dir):
     """Whether `role_dir`'s tasks include `k8s/manifests`, the contract that ends in a stamp.
 
-    Not every `containers_list` k8s entry does: `n8n-images` only calls `k8s/image-builder` to
-    build n8n's images into the registry and applies no manifests of its own, so it can never
+    Not every `containers_list` k8s entry has to: the retired `n8n-images` only called
+    `k8s/image-builder` and applied no manifests of its own, so it could never
     be stamped and would otherwise read as permanently missing -- the exact "monitor nobody
     trusts" failure `manifest-prune-check.sh.j2`'s header warns against. Same one-level grep the
     repo CLAUDE.md names for this question (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/`).
@@ -567,6 +566,7 @@ def run_releases(ns):
         ns: The parsed argparse namespace for the `releases` subcommand.
     """
     records = load_records(previous=getattr(ns, "previous", False))
+    records = drop_retired(records, _deploy_tags().service_tags())
     if getattr(ns, "json", False):
         print(json.dumps(records, indent=2))
         return 0

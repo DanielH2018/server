@@ -9,7 +9,7 @@ onto a name the node has never cached. That is the path this guard no longer has
 
 WHAT IS LEFT, and why the line still has to be there. A rebuild whose INPUTS are unchanged
 keeps the same content tag, and `:latest` is still pushed and still the fallback a deploy
-takes when it skips the building role (`--tags n8n` without `n8n-images`). Both leave a pod
+takes when a deploy skips the build. Both leave a pod
 asking the node for a name it already holds, and under `IfNotPresent` the node answers from
 its cache: the pod rolls, reads Ready, and runs the OLD bytes. Only the drift gate in
 post_tasks/k8s_image_drift_gate.yml notices, and it notices after the rollout, as a failed

@@ -1,0 +1,36 @@
+---
+# game-stats: the playtime exporters for the two hand-run game servers, terraria-stats and
+# valheim-stats. Each reads its game pod's console lines from loki-homelab, folds them into
+# all-time per-player stats (SQLite on a Longhorn PVC) and serves Prometheus metrics on :9420.
+# The scrape jobs live in claude-otel's prometheus.yaml.j2 (job_name: terraria-stats and
+# valheim-stats).
+#
+# One role since #2813, where it had been three: one per game plus game-stats-lib for the
+# stats_lib.py both import. Every cluster object keeps the name it had as its own role — the
+# Deployments, their `app:` labels, the Services, the ConfigMaps and both claims — so the scrape
+# jobs and netpol-baseline's Loki policy read them unchanged.
+#
+# ONE k8s/manifests include for both games, not one each. The include prunes every staged file
+# its caller does not name, so a second include under the same `manifests_service` would delete
+# the first one's manifests. The consequence: a render change to either game restarts both pods.
+
+- name: Stage terraria-stats' scripts and apply its ConfigMap
+  ansible.builtin.import_tasks: terraria.yml
+
+- name: Stage valheim-stats' scripts and apply its ConfigMap
+  ansible.builtin.import_tasks: valheim.yml
+
+- name: Deploy terraria-stats and valheim-stats to the cluster
+  ansible.builtin.include_role:
+    name: k8s/manifests
+  vars:
+    manifests_service: game-stats
+    manifests_rollout: terraria-stats
+    manifests_extra_rollouts:
+      - name: valheim-stats
+    manifests_files:
+      - pvc-valheim.yaml
+      - deployment-terraria.yaml
+      - service-terraria.yaml
+      - deployment-valheim.yaml
+      - service-valheim.yaml

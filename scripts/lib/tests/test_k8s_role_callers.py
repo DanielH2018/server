@@ -21,11 +21,9 @@ _HELPERS = frozenset(
     {
         "arr-notification",
         "cronjob-gate",
-        "game-stats-lib",
         "image-builder",
         "longhorn-api",
         "manifests",
-        "rollout-drain",
         "volume-claim",
         "volume-revert",
         "volume-snapshot",
@@ -44,14 +42,27 @@ def test_every_named_helper_has_at_least_one_caller(callers):
     assert not missing, f"no caller derived for {missing} -- the include form changed?"
 
 
-def test_the_two_include_forms_both_resolve(callers):
-    """`include_role: name: k8s/<x>` and a sibling `import_tasks` are both real edges.
-
-    game-stats-lib is reached ONLY by `import_tasks: {{ role_path }}/../game-stats-lib/...`,
-    so a walk reading include_role alone finds it uncalled and every change to it reports.
-    """
+def test_the_include_role_form_resolves(callers):
     assert callers["arr-notification"] == {"radarr", "sonarr"}
-    assert callers["game-stats-lib"] == {"terraria-stats", "valheim-stats"}
+
+
+def test_a_sibling_import_tasks_resolves_and_an_own_file_does_not(tmp_path):
+    """`import_tasks: {{ role_path }}/../<x>/tasks/...` is a real edge; an import of the role's
+    own task file is not. No live role uses the path form since #2813 folded game-stats-lib
+    into game-stats, so a walk that lost it would otherwise go unnoticed."""
+    roles = tmp_path / "ansible" / "roles" / "k8s"
+    for role, body in {
+        "lib": "- name: Stage\n  ansible.builtin.debug:\n",
+        "game": (
+            "- name: Stage the shared module\n"
+            '  ansible.builtin.import_tasks: "{{ role_path }}/../lib/tasks/main.yml"\n'
+            "- name: Stage its own half\n"
+            "  ansible.builtin.import_tasks: own.yml\n"
+        ),
+    }.items():
+        (roles / role / "tasks").mkdir(parents=True)
+        (roles / role / "tasks" / "main.yml").write_text(body)
+    assert role_callers(tmp_path) == {"lib": {"game"}}
 
 
 def test_a_service_role_is_not_a_callee(callers):

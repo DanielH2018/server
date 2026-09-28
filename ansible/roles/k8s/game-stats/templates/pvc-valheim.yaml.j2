@@ -3,4 +3,4 @@
 # Declared here rather than by k8s/volume-claim (which is what creates terraria-stats'
 # claim): that role exists to copy an existing Docker directory in, and there is nothing
 # to copy — this service has no predecessor.
-{{ pvc(valheim_stats_k8s_claim, valheim_stats_k8s_storage_class, valheim_stats_k8s_pvc_size) }}
+{{ pvc(game_stats_valheim_claim, game_stats_valheim_storage_class, game_stats_valheim_pvc_size) }}

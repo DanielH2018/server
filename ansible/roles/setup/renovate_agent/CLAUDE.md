@@ -97,8 +97,8 @@ the caps or the schedule cannot quietly widen it.
   `ansible/tests/setup/test_renovate_agent_unit.py` pins that the prompt names the same
   marker the rule's `groupName` carries. The denylist rule leads its parenthetical with the
   marker; a per-package rule whose pin a denied role owns ends its own with it (the crowdsec
-  bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n through the
-  n8n-images build coupling, #1963), because
+  bouncer plugin in traefik, meilisearch and the time-tagger deps in karakeep, n8n's Dockerfile pins,
+  #1963), because
   those rules override the denylist rule's groupName.
   **Read the branch as well as the title** (#2641). Renovate titles a single-dependency group
   `Update <dep> …` and drops the group name, so the marker can survive in the branch alone,
@@ -177,7 +177,7 @@ drift, empty output — reads as not contained by `merge-tree`. That conflict ca
 pruner's fourth layer and is ported too (`branch_tip_was_merged`): `gh pr list --state
 merged --head <branch> --json headRefOid` must name the branch's exact tip. Ported rather
 than left to the page because the very tree #2014 found was already past `merge-tree` —
-master had drifted into a conflict on `n8n-images/base-pin-history.tsv` — so without it the
+master had drifted into a conflict on `n8n/base-pin-history.tsv` — so without it the
 fix would have paged daily and still needed the operator's `reset --hard`. The match is on
 the head SHA, never the branch name: the name is reused every tick.
 

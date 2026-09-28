@@ -44,7 +44,7 @@ manifests_render_record_dir: /var/lib/homelab/k8s-renders.d
 manifests_prune: false
 manifests_prune_kinds: []
 
-# The rollout budget `k8s/rollout-drain` waits for a workload whose role passes no
+# The rollout budget `k8s/manifests/tasks/drain.yml` waits for a workload whose role passes no
 # `manifests_rollout_timeout` of its own — the ONE place that number is written, so a role that
 # needs more overrides it rather than the shared value drifting per call site.
 #

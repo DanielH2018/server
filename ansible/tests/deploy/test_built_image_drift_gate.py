@@ -265,7 +265,7 @@ def test_the_gate_ignores_a_terminating_pod():
 
 
 def test_the_gate_ignores_another_images_pod():
-    """Image name is matched, not workload name — n8n-images builds what the n8n role deploys."""
+    """Image name is matched, not workload name — n8n builds `n8n-runners` for a second Deployment."""
     assert _evaluate_gate({"items": [_pod("localhost:5000/other@sha256:bbb")]}, _NUT)
 
 

@@ -86,10 +86,10 @@ def test_every_role_declares_its_autodeploy_stance() -> None:
     """Eligibility is declared where the justifying knowledge lives, not in a central list.
 
     Omission must not read as consent. This used to be scoped to roles pinning an `_image:`
-    var, which left a mirror gap: a role with no defaults/main.yml at all — longhorn-ui and
-    n8n-images, both live containers_list entries, both on the CSV denylist today — has no
+    var, which left a mirror gap: a role with no defaults/main.yml at all — longhorn-ui, a
+    live containers_list entry on the CSV denylist at the time — has no
     `_image:` var either, so it skipped the check entirely. If 1b treats an undeclared role as
-    eligible, the way the CSV era treated denylist-absence as eligible, both flip from
+    eligible, the way the CSV era treated denylist-absence as eligible, it flips from
     protected to auto-deployable with nobody reviewing it. Every role _roles() yields must
     declare, whether or not it pins an image.
     """
@@ -211,7 +211,7 @@ def test_daemonset_alias_matcher_flags_kubectl_args_but_not_manifest_kind_fields
 
 def test_no_kubectl_invocation_spells_the_daemonset_kind_by_alias() -> None:
     """One spelling of the kind, across every file that actually issues a kubectl command
-    against it — manifests/ and rollout-drain/ (both excluded from _roles()/_SHARED on
+    against it — manifests/ (excluded from _roles()/_SHARED on
     purpose, see _kubectl_consumer_paths), every other role under roles/k8s/, and the
     post_tasks/ and tasks/ playbooks that consume a queued `kind`.
 

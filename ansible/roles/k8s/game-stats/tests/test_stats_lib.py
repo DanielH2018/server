@@ -1,5 +1,5 @@
 """Behavioural tests for stats_lib — the shared skeleton valheim_stats.py and stats.py stage
-beside themselves (see the module's own docstring and roles/k8s/game-stats-lib/tasks/stage.yml
+beside themselves (see the module's own docstring and roles/k8s/game-stats/tasks/stage.yml
 for the shipping mechanism). Each per-game role's own tests still cover its parser, state
 machine and SQLite schema; this file covers the parts that moved here.
 """

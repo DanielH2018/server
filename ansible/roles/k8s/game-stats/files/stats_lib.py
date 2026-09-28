@@ -6,7 +6,7 @@ mechanism `host_lib.py` uses from `roles/setup/common`: a directly-invoked scrip
 its own directory on `sys.path`, so a shared module has to be copied in rather than imported
 across the tree (see the repo-root CLAUDE.md). This one ships into a ConfigMap and runs
 inside a python:3.14-alpine pod rather than on a host, so it is staged by
-`roles/k8s/game-stats-lib/tasks/stage.yml`, not `install_host_lib.yml` — see that file's
+`roles/k8s/game-stats/tasks/stage.yml`, not `install_host_lib.yml` — see that file's
 header for why a new role owns it instead of extending host_lib.py or having one game role
 own it for the other.
 

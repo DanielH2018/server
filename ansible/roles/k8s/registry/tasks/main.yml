@@ -20,7 +20,7 @@
       - networking.k8s.io/v1/NetworkPolicy
 
 # THE SECOND ROLE THAT MUST WAIT INLINE (crowdsec is the other; see its header). k8s/manifests
-# deliberately does NOT wait — it queues the rollout for k8s/rollout-drain at the end of the
+# deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the
 # batch. Most roles tolerate that because nothing else in them touches the workload they just
 # rolled. This one does: every self-test below dials registry over its Service, and the batch
 # drain runs long after them.

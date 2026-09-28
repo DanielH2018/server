@@ -52,7 +52,7 @@ def is_image_only_diff(diff_text: str) -> bool:
 # and carry no defaults/main.yml, so they declare nothing. Mirrors SHARED_ROLES in
 # ansible/filter_plugins/k8s_autodeploy.py; ansible/tests/deploy/test_denylist_parsers_agree.py asserts
 # the two stay in step.
-SHARED_K8S_ROLES = frozenset({"manifests", "rollout-drain"})
+SHARED_K8S_ROLES = frozenset({"manifests"})
 
 # A top-level `k8s_autodeploy:` assignment, with an optional trailing comment. Anchored at column
 # zero deliberately: an indented key of the same name belongs to some other mapping and does not
@@ -291,7 +291,7 @@ def split_k8s_auto_deploy(
     # The rollback budget K8S_ROLLBACK_TIMEOUT_S is derived for the worst SINGLE promoted service that
     # declares k8s_autodeploy_snapshot_pvcs — but deploy_k8s joins the whole batch into one
     # playbook run, and each such service pays its own snapshot + revert phase serially inside
-    # it (only the rollout WAIT is deduped, by k8s/rollout-drain). Measured from role sources:
+    # it (only the rollout WAIT is deduped, by k8s/manifests/tasks/drain.yml). Measured from role sources:
     # one radarr/sonarr-shaped service is ~1200s against a 1320s budget, two co-batched ~1680s,
     # three ~2160s. Past the budget `run()`'s killpg fires MID-REVERT — after volume-revert has
     # scaled the workload to zero replicas and attached the volume with disableFrontend: true —

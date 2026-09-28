@@ -8,9 +8,9 @@ for it. Nothing reported the omission, and a role copied from the wrong sibling 
 green.
 
 The population is derived, not listed: a role is in scope when `templates/` holds at least one
-file `is_manifest_template` accepts, the same predicate the manifest validator renders by, so
-`n8n-images` (two Dockerfiles, no manifest) drops out on the shape of its templates rather than
-by name. The two `CALLER_RENDERED_ROLES` are exempt: `image-builder` and `volume-claim` render
+file `is_manifest_template` accepts, the same predicate the manifest validator renders by, so a
+role with only Dockerfiles, as the retired `n8n-images` was, drops out on the shape of its
+templates rather than by name. The two `CALLER_RENDERED_ROLES` are exempt: `image-builder` and `volume-claim` render
 for a CALLING role, inside its deploy, and apply what they render themselves — a release record
 of their own would be the caller's under another name.
 

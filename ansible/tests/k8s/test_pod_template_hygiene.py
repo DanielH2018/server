@@ -77,7 +77,7 @@ _MUST_CONTAIN = frozenset(
     {
         "claude-otel",
         "valheim",
-        "valheim-stats",
+        "game-stats",
         "dri-device-plugin",
         "traefik",
         "authelia",

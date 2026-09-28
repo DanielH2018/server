@@ -258,7 +258,7 @@ def test_a_short_lock_waiter_is_flagged():
 #
 # Deliberately a PER-SERVICE bound, not a per-batch one: co-batched claim-declaring services
 # stack their snapshot+revert phases (only the rollout WAIT is deduped across a batch, via
-# roles/k8s/rollout-drain), so a multi-service batch is NOT covered here — that gap is recorded
+# roles/k8s/manifests/tasks/drain.yml), so a multi-service batch is NOT covered here — that gap is recorded
 # at the DECIDED marker on the claim cap in deploy_k8s.py (the batch-abort blast radius) and in this same defaults/main.yml
 # comment, deliberately not modeled by this test.
 #

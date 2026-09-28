@@ -22,7 +22,7 @@ DECLARATION = "k8s_autodeploy"
 REASON = "k8s_autodeploy_reason"
 
 # Roles under roles/k8s/ that deploy no service of their own — they are *included* by other
-# roles (manifests renders and applies; rollout-drain waits on the rollout). They carry no
+# roles (manifests renders and applies; its drain.yml waits on the rollout). They carry no
 # defaults/main.yml and declare no stance. Every other role must declare one: a missing
 # declaration is an error, never an implicit "eligible".
 #
@@ -33,7 +33,7 @@ REASON = "k8s_autodeploy_reason"
 # question outright. That pin went with the seeding. It still does NOT belong here, for the
 # other half of the rule above — it carries a defaults/main.yml and declares a stance, where a
 # role named here carries neither.
-SHARED_ROLES = frozenset({"manifests", "rollout-drain"})
+SHARED_ROLES = frozenset({"manifests"})
 
 
 def _check_shared_roles(roles_dir):

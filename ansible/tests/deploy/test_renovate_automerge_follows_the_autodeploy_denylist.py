@@ -29,8 +29,8 @@ a `FROM` pin in `templates/Dockerfile*.j2` — Renovate's built-in dockerfile ma
 those, and nut's debian digest bump (#2115) arrived with a bare title. Its `matchFileNames` is
 the denylist restricted to the roles that carry a Dockerfile, derived here the same way, with a
 named-member floor so a glob that finds nothing fails rather than agreeing with an empty rule.
-`n8n-images` is absent by design: it is eligible, and the n8n per-package rule carries the
-marker through the build coupling onto n8n.
+n8n is on it since #2813 folded its Dockerfiles in from the eligible `n8n-images` role; its
+per-package rules override the groupName and carry the marker themselves.
 
 Run: uv run pytest ansible/tests/deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py
 """

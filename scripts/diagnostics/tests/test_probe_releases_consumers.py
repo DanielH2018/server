@@ -23,8 +23,9 @@ from _release_fixtures import (
 
 _SHARED = frozenset({"game-stats-lib", "manifests"})
 
-# terraria-stats reaches game-stats-lib the way the live role does: an `import_tasks` of the
-# sibling role's file by path, which names no role at all. sonarr reaches only the renderer.
+# terraria-stats reaches game-stats-lib the way it did before #2813 merged the three roles: an
+# `import_tasks` of the sibling role's file by path, which names no role at all. sonarr reaches
+# only the renderer.
 _CONSUMER_TASKS = """\
 - name: Stage the shared stats module
   ansible.builtin.import_tasks: "{{ role_path }}/../game-stats-lib/tasks/stage.yml"
@@ -157,10 +158,10 @@ def test_the_live_tree_attributes_the_shared_roles_to_named_members():
 
     A caller graph read by pattern returns an EMPTY mapping the moment the roles move or the
     task keys change, and every narrowing then widens back to the fleet with nothing saying
-    so. These four names are what a silently empty graph fails on.
+    so. These names are what a silently empty graph fails on.
     """
     consumers = rc.consumers_for(pr.manifest_affecting_shared_roles())
-    assert consumers["game-stats-lib"] == frozenset({"terraria-stats", "valheim-stats"})
     assert consumers["arr-notification"] == frozenset({"radarr", "sonarr"})
-    assert "sonarr" not in consumers["game-stats-lib"]
+    assert "n8n" in consumers["image-builder"]
+    assert "sonarr" not in consumers["image-builder"]
     assert "sonarr" in consumers["volume-claim"]

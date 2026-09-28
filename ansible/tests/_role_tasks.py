@@ -209,7 +209,7 @@ _WAIT_TIMEOUT = re.compile(r"--timeout=(\S+)")
 def in_role_wait_s(role: str) -> int:
     """Seconds this role waits in its OWN tasks, ON TOP OF the batch drain's rollout wait.
 
-    `k8s/rollout-drain` runs once at the end of a batch, so everything a role waits for in its
+    `k8s/manifests/tasks/drain.yml` runs once at the end of a batch, so everything a role waits for in its
     own `tasks/` is spent before the drain starts and adds to it. Two budget derivations size
     themselves against a role's cost and both used to count the drain alone, which scored
     prowlarr 300s short: its flaresolverr isolation probe waits `--timeout=300s` for a Job that

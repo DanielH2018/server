@@ -1,13 +1,11 @@
 ---
-# valheim-stats (2026-08-13): reads the valheim pod's console lines from loki-homelab,
-# folds them into all-time per-player playtime/sessions/DEATHS (SQLite on a Longhorn PVC),
-# serves Prometheus metrics on :9420. Sibling of terraria-stats; the scrape job lives in
-# claude-otel's prometheus.yaml.j2 (job_name: valheim-stats).
+# valheim-stats' half of game-stats (2026-08-13): its script ConfigMap. The manifests apply is
+# main.yml's.
 #
-# No volume-claim include, unlike terraria-stats: there is no Docker predecessor to import
-# from. The PVC is declared in templates/pvc.yaml.j2 and starts empty.
+# No volume-claim include, unlike terraria.yml: there is no Docker predecessor to import from.
+# The PVC is declared in templates/pvc-valheim.yaml.j2 and started empty.
 
-- name: Create the staging directory
+- name: Create the staging directory for valheim-stats
   tags: [config]
   ansible.builtin.file:
     path: /etc/rancher/k3s/valheim-stats
@@ -18,7 +16,7 @@
   become: true
   when: not k8s_dry_run | bool
 
-- name: Stage the stats script on the node
+- name: Stage the stats script on the node for valheim-stats
   tags: [config]
   ansible.builtin.copy:
     src: valheim_stats.py
@@ -27,16 +25,16 @@
     owner: root
     group: root
   become: true
-  register: valheim_stats_script
+  register: game_stats_valheim_script
   when: not k8s_dry_run | bool
 
 # valheim_stats.py does `import stats_lib` for the skeleton it shares with terraria-stats
 # (Loki fetch, cursor handling, metric rendering, the HTTP handler, the run loop). Staged
 # before the ConfigMap render, same as the entry script: a window in which the ConfigMap
 # exists without this sibling is a pod that dies at import on its next roll.
-- name: Install the shared stats_lib module beside the stats script
+- name: Install the shared stats_lib module beside the valheim stats script
   tags: [config]
-  ansible.builtin.import_tasks: "{{ role_path }}/../game-stats-lib/tasks/stage.yml"
+  ansible.builtin.import_tasks: stage.yml
   vars:
     game_stats_lib_dest_dir: /etc/rancher/k3s/valheim-stats
 
@@ -48,17 +46,17 @@
 # Hashed off the SOURCE files, not off the two stage registers: both stages are skipped on a dry
 # run (#2614), and `.checksum` on a skipped result is Undefined, which would raise here rather
 # than fall back. `rstrip=False` makes these the bytes `copy` hashed, so the value is unchanged.
-- name: Combine the staged module checksums into one pod-roll trigger
+- name: Combine the staged module checksums into one pod-roll trigger for valheim-stats
   tags: [config]
   ansible.builtin.set_fact:
-    valheim_stats_script_checksum: >-
+    game_stats_valheim_script_checksum: >-
       {{ [lookup('ansible.builtin.file', role_path ~ '/files/valheim_stats.py', rstrip=False) | hash('sha1'),
           game_stats_lib_checksum] | sort | join(',') | hash('sha1') }}
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so it
 # becomes a ConfigMap via kubectl --from-file, never via a template — the same reasoning
 # as terraria-stats, claude-otel's dashboards, and image-builder's context files.
-- name: Render the script ConfigMap manifest
+- name: Render the script ConfigMap manifest for valheim-stats
   tags: [config]
   ansible.builtin.shell:
     cmd: >-
@@ -69,7 +67,7 @@
       --dry-run=client -o yaml > /etc/rancher/k3s/valheim-stats/configmap.yaml
     executable: /bin/bash
   become: true
-  changed_when: valheim_stats_script is changed or game_stats_lib_stage is changed
+  changed_when: game_stats_valheim_script is changed or game_stats_lib_stage is changed
   when: not k8s_dry_run | bool
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
@@ -79,7 +77,7 @@
 # before the switch. Server-side apply prints the same line whether or not anything changed,
 # so the changed signal is the staged files. ENFORCED by
 # ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
-- name: Apply the script ConfigMap
+- name: Apply the script ConfigMap for valheim-stats
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -89,16 +87,5 @@
   # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
   # guard a dry run would really write this ConfigMap (#2588).
   when: not k8s_no_mutate
-  register: valheim_stats_cm_apply
-  changed_when: valheim_stats_script is changed or game_stats_lib_stage is changed
-
-- name: Deploy valheim-stats to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_service: valheim-stats
-    manifests_rollout: valheim-stats
-    manifests_files:
-      - pvc.yaml
-      - deployment.yaml
-      - service.yaml
+  register: game_stats_valheim_cm_apply
+  changed_when: game_stats_valheim_script is changed or game_stats_lib_stage is changed

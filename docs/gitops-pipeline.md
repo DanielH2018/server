@@ -967,7 +967,7 @@ stay).
     `ansible/tests/deploy/test_denylist_parsers_agree.py` runs the filter against the live tree and
     fails on exactly that shape, and `REQUIRE_CI` refuses to promote a red tip.
   - **The gate is in the play, not here.** `roles/k8s/manifests` applies,
-    `roles/k8s/rollout-drain` runs `rollout status --timeout`, and
+    `roles/k8s/manifests/tasks/drain.yml` runs `rollout status --timeout`, and
     `ansible/post_tasks/k8s_stabilise_gate.yml` holds the post-Available soak that hard-fails
     on a restart-count delta or a readiness shortfall. (All three lived in
     `roles/k8s/manifests` until 5eea64e6 batched the rollouts and deferred the soak to
@@ -1012,11 +1012,13 @@ stay).
     releases --stale-only`: it compares each service's release record (the applied commit
     `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
     `origin/master` under that service's own role AND the shared roles that supply bytes to
-    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`,
-    `game-stats-lib` — `scripts/diagnostics/probe_lib/releases.py`'s
-    `manifest_affecting_shared_roles()`), and pushes the "Release Staleness Drift" Kuma monitor
-    down when any service is stale or missing a record entirely. The five entry-less roles that
-    hold only `tasks/` and `defaults/` (`rollout-drain`, `volume-snapshot`, `volume-revert`,
+    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`
+    — `scripts/diagnostics/probe_lib/releases.py`'s `manifest_affecting_shared_roles()`), and
+    pushes the "Release Staleness Drift" Kuma monitor down when any service is stale or missing
+    a record entirely. A record whose service no `containers_list` entry declares is dropped
+    first (`releases_retired.py`): a retired role's record outlives the role, and the commit
+    that deleted it would otherwise read as drift no deploy tag can clear (#2813). The entry-less roles that
+    hold only `tasks/` and `defaults/` (`volume-snapshot`, `volume-revert`,
     `cronjob-gate`, `longhorn-api`) are deliberately OUT of that set: they change how a deploy
     runs, never what it applies, and their change is live for the next deploy the moment this
     deployer fast-forwards the primary checkout, so no stamp goes stale. Sweeping them in marked
@@ -1184,7 +1186,7 @@ what it recorded.
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
   which the deployer cannot see; without it the marker would hold a permanent line per routine
   landing. A record that is absent or carries no date KEEPS the line. A shared role (`manifests`,
-  `image-builder`, `game-stats-lib`) has no record of its own, so its line drops when every
+  `image-builder`, `volume-claim`) has no record of its own, so its line drops when every
   tag that applies it and writes a record carries the change, as
   `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
 - Any tick that deploys the service clears its `k8s_deferred` line
@@ -1193,9 +1195,9 @@ what it recorded.
   with `gitops_state.py clear-k8s-deferred <svc>`.
 - `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
   for a change that was reverted rather than applied, or for a shared role whose
-  `recorded_callers` answer is empty. A role that only LOOKED like the second case —
-  `n8n-images`, whose entry declares `tags: [n8n-images, n8n]` — discharges itself since
-  #2666, because the derivation reads the entry's other tag.
+  `recorded_callers` answer is empty. A role that only LOOKS like the second case —
+  an entry that declares a second tag, as the retired `n8n-images` did — discharges itself
+  since #2666, because the derivation reads the entry's other tag.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
@@ -1517,7 +1519,7 @@ and so the most visible case. `tdarr` (2 claims, the shared rollout default) was
 (`k8s_autodeploy: false`, 2026-08-22) and left the promoted set.
 
 **The in-role term arrived with #2399, and it moved the worst case again.** A role's own
-`tasks/` all run before `k8s/rollout-drain`, so anything they wait for adds to the drain rather
+`tasks/` all run before `k8s/manifests/tasks/drain.yml`, so anything they wait for adds to the drain rather
 than overlapping it, and the derivation counted the drain alone. prowlarr waits
 `--timeout=300s` for its flaresolverr isolation probe Job on top of its 780s rollout, which
 makes it the worst promoted service at 480 + 300 + 780 + 60 = **1620s**.
@@ -1532,7 +1534,7 @@ or a new promoted claim-declaring role fails it instead of silently under-sizing
 **NOT covered by this number: two or more claim-declaring services landing in the SAME batch.**
 One tick can promote up to `gitops_deploy_k8s_autodeploy_max_per_tick` (3) services into a single
 `ansible-playbook` run. Inside that run, each role's snapshot+revert phase runs in sequence — only
-the rollout WAIT is deduped/batched across services, via `roles/k8s/rollout-drain`'s
+the rollout WAIT is deduped/batched across services, via `roles/k8s/manifests/tasks/drain.yml`'s
 `max()`-not-`sum()` drain — so a batch with two claim-declaring services stacks their
 snapshot+revert costs additively. Two `radarr`/`sonarr`-shaped services batched together would
 need roughly 2x480 + 660 + 60 = 1680s, already past 1620s. This is the same mechanism as "The
