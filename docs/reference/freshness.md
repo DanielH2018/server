@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-28 23:50 UTC
-generated_sha: 5a50426ab
+generated_at: 2026-09-28 23:52 UTC
+generated_sha: f1c4b8c76
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 5a50426ab
 
 # Doc freshness
 
-46 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+47 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
@@ -53,6 +53,7 @@ generated_sha: 5a50426ab
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-28 | 3 | 0 | — |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 0 | — |
+| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-09-28 | 4 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-09-28 | 1 | 0 | — |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-28 | 46 | 0 | — |
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-28 | 80 | 0 | — |
