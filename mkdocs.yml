@@ -108,7 +108,9 @@ exclude_docs: |
 # live pages. Its README is the one exception: the nav's History section names it, as the
 # index a reader browses the archive from. Declaring it here is what separates "decided to
 # leave unlinked" from "nobody noticed", which is the distinction the nav coverage test now
-# enforces.
+# enforces. Deleting the archive in favour of PR numbers was re-examined on 2026-09-28 (#2808)
+# and kept: size was never the concern, and a PR number is not greppable offline the way the
+# linked record is.
 # `reference/backlog.md` is the same case for a different reason: `findings.py list` is the
 # open register, this page is only its rendering, and `issue-claiming-and-fanout.md` and
 # CLAUDE.md link INTO it directly — so it stays built and reachable, just off the nav.
