@@ -322,8 +322,10 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
 # Every one of these is also patched by `test_check_cli.py`, which is why a census taken over
 # the whole suite cannot anchor this: the map stays populated on the sibling's strength while
 # the helper contributes nothing. Extraction from the helper alone is what proves it.
+# `bridge.common.log` left this map on 2026-09-28: its only patch site was
+# `run_once_with_gates`, which existed for the Cluster Prometheus gate and went with it
+# (#2825). One module still anchors the extraction, which is what the test needs.
 HELPER_PATCHES = {
-    "bridge.common": frozenset({"log"}),
     "bridge.net": frozenset({"prom_vector", "push"}),
 }
 

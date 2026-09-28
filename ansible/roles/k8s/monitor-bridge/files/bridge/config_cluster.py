@@ -1,8 +1,7 @@
 """The cluster-facing half of monitor-bridge's configuration.
 
-The second Prometheus, the origin pin derived from whether the two Prometheus URLs name one
-instance, the scrape-target and cAdvisor coverage floors, the kube-state-metrics workload
-floors, Longhorn and the PVC fullness arm.
+The origin pin, the scrape-target and cAdvisor coverage floors, the kube-state-metrics
+workload floors, Longhorn and the PVC fullness arm.
 
 Most of these are FLOORS rather than limits, and the comments beside them say what an absent
 series would otherwise read as. Field justifications sit beside the declarations, env var names
@@ -16,7 +15,7 @@ from dataclasses import dataclass
 
 @dataclass(frozen=True)
 class ClusterConfig:
-    """The second Prometheus, the origin pin, the coverage floors, Longhorn and the PVC arm."""
+    """The origin pin, the coverage floors, Longhorn and the PVC arm."""
 
     OOM_WINDOW: str
     CPU_WINDOW: str
@@ -25,7 +24,6 @@ class ClusterConfig:
     CPU_CONSECUTIVE: int
     RESTART_WINDOW: str
     RESTART_MAX: float
-    CLUSTER_PROM_URL: str
     PROM_ORIGIN: str
     TARGETS_MIN: int
     CLUSTER_TARGETS_MIN: int
@@ -56,15 +54,9 @@ def cluster_config(
     _env: Callable[..., str],
     _int: Callable[[str, str], int],
     _num: Callable[[str, str], float],
-    prom_url: str,
 ) -> ClusterConfig:
     """The cluster fields, read through the parsers `load_config` built over its environment."""
-    # PROM_ORIGIN is derived from whether the two Prometheus URLs name one
-    # instance, so this is read ahead of the dict rather than inside it.
-    CLUSTER_PROM_URL = _env("CLUSTER_PROMETHEUS_URL", "").rstrip("/")
-
     return ClusterConfig(
-        CLUSTER_PROM_URL=CLUSTER_PROM_URL,
         OOM_WINDOW=_env("OOM_WINDOW", "1h"),
         CPU_WINDOW=_env("CPU_WINDOW", "15m"),
         CPU_THROTTLE_PCT=_num("CPU_THROTTLE_PCT", "25"),
@@ -93,19 +85,21 @@ def cluster_config(
         # one: the kubelet's cAdvisor emits `name` too, so 99 cluster-native series survive that
         # filter.
         #
-        # DERIVED, not configured. The pin is required when reading the cluster copy and WRONG
-        # when reading the Docker instance — whose own storage has no `origin` label at all,
-        # because external_labels are applied on remote-write and never to local queries. A
-        # compose variable that had to be flipped in lockstep with PROMETHEUS_URL is precisely
-        # the drift this avoids: pointing one at the cluster and forgetting the other would
-        # silently select nothing and read as healthy. The _env override stays so a third estate
-        # is not blocked by the derivation.
-        PROM_ORIGIN=_env(
-            "PROM_ORIGIN",
-            'origin="daniel-server"'
-            if prom_url and prom_url == CLUSTER_PROM_URL
-            else "",
-        ),
+        # A CONSTANT with an override, since 2026-09-28 (#2825). It used to be derived from
+        # whether PROMETHEUS_URL and CLUSTER_PROMETHEUS_URL named one instance, because the pin
+        # is required when reading the cluster copy and WRONG when reading the Docker instance
+        # — whose own storage had no `origin` label at all, external_labels being applied on
+        # remote-write and never to local queries. That Docker instance retired 2026-08-14, so
+        # there is one Prometheus left and it is the one that carries the label. A derivation
+        # with one reachable branch is a derivation in name only.
+        #
+        # It is NOT re-derived from the URL's shape. `probe.py` already reaches this same
+        # Prometheus over an IngressRoute rather than the Service name, so a hostname test
+        # would answer "does this URL look in-cluster" when the question is "does this
+        # Prometheus carry `origin`" — and the wrong answer selects the empty vector, which
+        # every check reading it decodes as healthy. The default therefore pins, and a third
+        # estate whose series carry no `origin` sets PROM_ORIGIN="" explicitly.
+        PROM_ORIGIN=_env("PROM_ORIGIN", 'origin="daniel-server"'),
         # Floor below which the `up` vector is treated as missing rather than clean — see
         # targets_verdict.
         # CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node,

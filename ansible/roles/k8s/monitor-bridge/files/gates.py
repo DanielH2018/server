@@ -1,18 +1,18 @@
 """The reachability gates: which checks a single outage suppresses, and how one gate is run.
 
 A gate differs from an ordinary check only in what its verdict is used for. `run_once` in
-`check.py` evaluates the five gates first and uses each verdict to suppress that gate's
+`check.py` evaluates the four gates first and uses each verdict to suppress that gate's
 dependents, so one root cause pages once instead of storming across every monitor reading the
 same source. This module owns the membership sets, the filter rules that keep a gate from being
 disabled underneath its dependents, and the `Gates` seam that lets a test STATE a gate
 configuration instead of patching module globals.
 
-It is a leaf: it imports `bridge.*` and the five gate probe bodies out of `checks.*`, and never
+It is a leaf: it imports `bridge.*` and the four gate probe bodies out of `checks.*`, and never
 `check`, `registry` or `cli`.
 
 `apply_startup_grace` and `_grace_streaks` are NOT here — they live in `bridge/streaks.py`
 beside the `down_streak` hysteresis they are built on, and `Gates.grace_streaks` defaults to
-that module's dict. The startup grace is a gate in the same sense the other five are (it holds
+that module's dict. The startup grace is a gate in the same sense the other four are (it holds
 a verdict back rather than reporting it), which is why the membership set `STARTUP_GRACE` is
 here and the mechanism is there.
 """
@@ -27,7 +27,7 @@ from bridge.common import _env
 from bridge.config import Config
 from bridge.types import Check, CheckFn, CheckResult
 from checks.b2 import check_b2_reachable
-from checks.cluster import check_cluster_prometheus, check_prometheus
+from checks.cluster import check_prometheus
 from checks.logs import check_loki_reachable
 from checks.wan import check_wan_reachable
 
@@ -76,6 +76,32 @@ PROM_DEPENDENT = frozenset(
         # `node-pi` job since 2026-09-18 (#2004, glances retired). Its absent-series branch
         # pages, so a Prometheus outage must suppress it for the same reason as host_temp.
         "pi_pressure",
+        # The four below read the same Prometheus as everything above and used to sit in a
+        # CLUSTER_DEPENDENT set behind a second gate, back when PROMETHEUS_URL and
+        # CLUSTER_PROMETHEUS_URL named two instances on two hosts. The Docker plane retired
+        # 2026-08-14 and both URLs rendered to one cluster Service after it, so the second
+        # gate's tile could not go red on its own and read as coverage that did not exist.
+        # Folded here and the gate deleted on 2026-09-28 (#2825); `git revert` restores the
+        # split if a second Prometheus is ever reintroduced.
+        #
+        # Each keeps its OWN fail-closed arm, and the division of labour is why they are not
+        # interchangeable with this gate. The gate covers "Prometheus is unreachable".
+        # k8s_workloads' series-count floor and pvc_fullness' claim-count floor cover
+        # "Prometheus answers but kube-state-metrics / the kubelet volume stats are not being
+        # scraped", which a gate structurally cannot see — the Prometheus answering `vector(1)`
+        # is perfectly healthy. Suppression is right for the first and would turn a blind
+        # monitor green for the second.
+        "k8s_workloads",
+        "cluster_targets",
+        # pvc_fullness gets NO EXPORTER_DEPENDENT entry keyed on job="kubernetes-kubelet",
+        # which is the nearest-looking wiring and would be wrong: those claims are scraped
+        # under two jobs, so a dead kubelet job still leaves the apiserver job answering for
+        # 27 of the 43 claims — a PARTIAL blindness PVC_MIN_CLAIMS is sized to page on.
+        "pvc_fullness",
+        # etcd_db_size joined 2026-09-25. Its one series is carried by both the apiserver and
+        # the kubelet job, so there is no partial-coverage case to keep visible, and its own
+        # fail-open arm covers total scrape loss.
+        "etcd_db_size",
     }
 )
 
@@ -133,48 +159,7 @@ LOKI_DEPENDENT = frozenset(
 # must not light two monitors.
 B2_DEPENDENT = frozenset({"b2_storage"})
 
-# Checks that read CLUSTER_PROM_URL rather than PROM_URL. Its own gate, not an arm of
-# PROM_DEPENDENT, because a gate that is not watching a check's real source reports confidence it
-# does not have.
-#
-# The two URLs used to name two instances on two hosts reached by two paths, and the Docker
-# Prometheus being up said nothing about whether the cluster one was. Since the Docker plane
-# retired (2026-08-14) PROMETHEUS_URL and CLUSTER_PROMETHEUS_URL render to the SAME cluster
-# Service URL, so today both gates observe one instance and run_once reuses the prometheus gate's
-# verdict here rather than probing twice. The split survives anyway, because it is what lets a
-# second Prometheus be reintroduced without re-deciding which gate watches which check. So
-# membership follows the URL a check reads, not which host happens to answer it.
-#
-# The division of labour with check_k8s_workloads' own fail-closed logic is deliberate and the two
-# halves are not interchangeable. THIS gate covers "the cluster Prometheus is unreachable", which
-# is a root cause that would otherwise page as a workload fault. The check's series-count floor
-# covers "the cluster Prometheus is reachable but kube-state-metrics is not being scraped" — which
-# this gate structurally cannot see, because the Prometheus answering `vector(1)` is perfectly
-# healthy. Suppression is right for the first and would be dangerous for the second: it would turn
-# a blind monitor green.
-# pvc_fullness joins for the same reason and with the same division of labour: this gate covers
-# "the cluster Prometheus is unreachable", while the check's own claim-count floor covers "the
-# cluster Prometheus is answering but the kubelet volume stats are not being scraped". Its
-# fail-closed arm pages on an empty vector, so a Prometheus outage must suppress it or one root
-# cause lights two monitors.
-#
-# It is NOT given an EXPORTER_DEPENDENT entry keyed on job="kubernetes-kubelet", which is the
-# nearest-looking wiring and would be wrong. Those claims are scraped under two jobs, so a dead
-# kubelet job still leaves the apiserver job answering for 27 of the 43 claims — a PARTIAL
-# blindness PVC_MIN_CLAIMS is sized to page on, and a job-keyed suppression would turn that page
-# green. Same mistake as the `node`-only entry that suppressed two hosts of three for host_temp,
-# not a fix for it.
-#
-# etcd_db_size joined 2026-09-25: it reads apiserver_storage_size_bytes through
-# CLUSTER_PROM_URL, so an unreachable cluster Prometheus raises in its fetch and _evaluate
-# turns that into a down. It needs no job-keyed EXPORTER_DEPENDENT entry either — its one
-# series is carried by both the apiserver and the kubelet job, so there is no partial-coverage
-# case to keep visible, and its own fail-open arm covers total scrape loss.
-CLUSTER_DEPENDENT = frozenset(
-    {"k8s_workloads", "cluster_targets", "pvc_fullness", "etcd_db_size"}
-)
-
-# WAN-reachability gate — the fifth peer, and the one whose absence cost the most. An internet
+# WAN-reachability gate — the fourth peer, and the one whose absence cost the most. An internet
 # outage had no gate at all, so every check reaching the internet paged on its own: on
 # 2026-09-18 from 05:05 a single WAN outage turned 11 tiles red inside 90 minutes (#2784).
 # run_once probes two independent providers by hostname (checks/wan.py) and, when NEITHER
@@ -236,7 +221,6 @@ GATE_DEPENDENTS = {
     "prometheus": PROM_DEPENDENT,
     "loki_reachable": LOKI_DEPENDENT,
     "b2_reachable": B2_DEPENDENT,
-    "cluster_prometheus": CLUSTER_DEPENDENT,
     "wan_reachable": WAN_DEPENDENT,
 }
 
@@ -245,7 +229,7 @@ GATE_DEPENDENTS = {
 class Gates:
     """Everything `run_once` needs to know about suppression, as one injectable value.
 
-    The membership sets and the five probe bodies used to be module globals `run_once` read
+    The membership sets and the four probe bodies used to be module globals `run_once` read
     directly, so a test that wanted a two-entry PROM_DEPENDENT or a stubbed Prometheus probe had
     to `monkeypatch.setattr` this module — ~25 sites in the gates suite alone, each one a
     process-wide mutation that a typo turns into a silent no-op. A test now STATES the gate
@@ -264,7 +248,6 @@ class Gates:
         process. A test that wants its own map states one; nothing may mutate this one.
       loki_dependent: Checks suppressed when the Loki gate is down.
       b2_dependent: Checks suppressed when the B2 gate is down.
-      cluster_dependent: Checks suppressed when the cluster-Prometheus gate is down.
       wan_dependent: Checks suppressed when neither WAN endpoint answers.
       startup_grace: Reach-out checks held `up` through their first consecutive down cycles.
       grace_streaks: The name -> consecutive-down count the startup grace mutates in place.
@@ -278,7 +261,6 @@ class Gates:
       probe_prometheus: The Prometheus gate's body.
       probe_loki: The Loki gate's body.
       probe_b2: The B2 gate's body.
-      probe_cluster: The cluster-Prometheus gate's body.
       probe_wan: The WAN gate's body.
     """
 
@@ -290,7 +272,6 @@ class Gates:
     )
     loki_dependent: frozenset[str] = LOKI_DEPENDENT
     b2_dependent: frozenset[str] = B2_DEPENDENT
-    cluster_dependent: frozenset[str] = CLUSTER_DEPENDENT
     wan_dependent: frozenset[str] = WAN_DEPENDENT
     startup_grace: frozenset[str] = STARTUP_GRACE
     grace_streaks: dict[str, int] = field(
@@ -299,13 +280,12 @@ class Gates:
     probe_prometheus: CheckFn = check_prometheus
     probe_loki: CheckFn = check_loki_reachable
     probe_b2: CheckFn = check_b2_reachable
-    probe_cluster: CheckFn = check_cluster_prometheus
     probe_wan: CheckFn = check_wan_reachable
 
     def gate_dependents(self) -> dict[str, frozenset[str]]:
         """This value's own gate -> dependents map, in GATE_DEPENDENTS' shape.
 
-        `run_once` reads the five dependent sets through this instance, so the startup filter
+        `run_once` reads the four dependent sets through this instance, so the startup filter
         validation must read them from the same place. Reading the module table there instead
         would validate a stated `Gates` against rules the run loop does not use — the asymmetry
         would only show up as a filter accepted at startup and then behaving differently.
@@ -314,7 +294,6 @@ class Gates:
             "prometheus": self.prom_dependent,
             "loki_reachable": self.loki_dependent,
             "b2_reachable": self.b2_dependent,
-            "cluster_prometheus": self.cluster_dependent,
             "wan_reachable": self.wan_dependent,
         }
 

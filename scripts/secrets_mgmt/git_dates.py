@@ -126,6 +126,10 @@ RETIRED: frozenset[str] = frozenset(
         # 2026-09-28 — the remember log-rotation check's Kuma push token, retired with the
         # remember plugin (#2852).
         "remember_logs_push_token",
+        # 2026-09-28 — the Cluster Prometheus gate's Kuma push token, retired with the gate
+        # (#2825). Both Prometheus URLs had named one Service since 2026-08-14, so the tile
+        # could not go red on its own.
+        "monitor_bridge_cluster_prometheus_push_token",
     }
 )
 

@@ -843,18 +843,15 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   disjoint so a graced check reaches the evaluation path every cycle, and the gate covers the
   post-reboot transient the grace covered plus the outage it never could.
   Empty `WAN_PROBE_URLS` = disabled.)
-- **Cluster Prometheus Reachable** (a `vector(1)` probe against the **k3s cluster's** Prometheus
-  over its in-cluster Service DNS name. Its own gate rather than an arm of `PROM_DEPENDENT`,
-  because a gate that isn't watching a check's real source reports confidence it doesn't have.
-  `PROMETHEUS_URL` and `CLUSTER_PROMETHEUS_URL` used to name two instances on two hosts reached
-  by two paths; since the Docker plane retired (2026-08-14) both render to the same cluster
-  Service URL, so the two gates observe ONE instance and `run_once` reuses the `prometheus`
-  gate's verdict here rather than probing twice. Do not read the pair as independent coverage.
-  The split survives because it is what lets a second Prometheus be reintroduced without
-  re-deciding which gate watches which check — so membership follows the URL a check reads.
-  Gates `CLUSTER_DEPENDENT`. Empty `CLUSTER_PROMETHEUS_URL` = disabled.)
-- **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics
-  via the cluster Prometheus — the only monitor the seven routeless k8s workloads have, and the
+- **Cluster Prometheus Reachable — RETIRED 2026-09-28** (#2825). A second `vector(1)` gate
+  against `CLUSTER_PROMETHEUS_URL`, kept separate while that URL and `PROMETHEUS_URL` named two
+  instances on two hosts. The Docker plane retired 2026-08-14 and both rendered to one cluster
+  Service after it, so the tile could not go red on its own: `run_once` reused the `prometheus`
+  gate's verdict and pushed the tile `up` regardless (#2780). Its four members —
+  `k8s_workloads`, `cluster_targets`, `pvc_fullness`, `etcd_db_size` — are in `PROM_DEPENDENT`
+  now, and the URL, push token, gate and tile are gone. A `git revert` restores the split; a
+  check reading a second Prometheus needs a gate watching that instance.
+- **k3s Workload Health** (`kube_deployment_status_replicas_unavailable` from kube-state-metrics — the only monitor the seven routeless k8s workloads have, and the
   reason the metric exists at all: `registry`, both `cloudflare-ddns` copies, karakeep's
   `chrome`/`meilisearch`/`time-tagger`, and `n8n-runners`, which executes every workflow's code.
   Three expose only a ClusterIP (unreachable from daniel-server), four expose **no Service at
@@ -951,9 +948,9 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   push token in SOPS and this arm answers the DaemonSet arm's question. A resource fault wins
   the message and keeps the workload arm's text after it. Pure
   `k8s_workloads_verdict()` and `extended_resource_verdict()` are unit-tested;
-  `CLUSTER_DEPENDENT` is guarded against the live
-  `CHECKS` and asserted disjoint from the other three skip sets.)
-- **Cluster Scrape Targets** (`up{origin!="daniel-server"}` against the cluster Prometheus — the
+  `PROM_DEPENDENT` is guarded against the live
+  `CHECKS` and asserted disjoint from the other skip sets.)
+- **Cluster Scrape Targets** (`up{origin!="daniel-server"}` — the
   complement of Scrape Targets' `origin="daniel-server"` pin, so every `up` series belongs to
   exactly one of the two. Same fail-closed floor (`CLUSTER_TARGETS_MIN`, 3): an emptied `up`
   reads as UNKNOWN rather than as nothing being wrong.

@@ -1,8 +1,8 @@
 ---
 # prometheus is one of two observability workloads (with loki) that need a per-workload grant
 # for an in-cluster, cross-namespace caller: monitor-bridge, homelab-mcp and homepage all run in
-# {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL / CLUSTER_PROMETHEUS_URL on
-# monitor-bridge, PROMETHEUS_URL on homelab-mcp, and the Headlamp tile's customapi widget URL on
+# {{ k8s_namespace }} and reach it over the network (PROMETHEUS_URL on monitor-bridge and on
+# homelab-mcp, and the Headlamp tile's customapi widget URL on
 # homepage — roles/k8s/homepage/templates/config/services.yaml.j2). prometheus itself is ALSO read on host loopback
 # by `otelq` (a workstation host process — see claude-otel/CLAUDE.md), covered the same way as
 # tempo/otel-collector below, not by this file. Headlamp's Prometheus plugin is a fourth

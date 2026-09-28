@@ -42,7 +42,6 @@ def _arm(cfg, monkeypatch, pcts, frees, floors="valheim-server=%d" % VALHEIM_FLO
     monkeypatch.setattr(bridge.net, "prom_vector", _vector)
     return replace(
         cfg,
-        CLUSTER_PROM_URL="http://prometheus:9090",
         PVC_MAX_PCT=85.0,
         PVC_MIN_CLAIMS=32,
         PVC_EXCLUDE=["media-data"],
@@ -121,9 +120,7 @@ def test_the_check_reads_free_bytes_only_when_a_floor_is_declared(monkeypatch, c
 
     monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: 43.0)
     monkeypatch.setattr(bridge.net, "prom_vector", _vector)
-    ok, _ = checks.storage.check_pvc_fullness(
-        replace(cfg, CLUSTER_PROM_URL="http://prometheus:9090", PVC_MIN_FREE="")
-    )
+    ok, _ = checks.storage.check_pvc_fullness(replace(cfg, PVC_MIN_FREE=""))
     assert ok
     assert not any("available_bytes)" in q for q in asked)
 

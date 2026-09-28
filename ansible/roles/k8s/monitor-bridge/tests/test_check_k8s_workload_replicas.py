@@ -30,7 +30,6 @@ def kcfg(cfg):
     """A cluster Prometheus, no extended resources and no Loki arm — the replica arm alone."""
     return replace(
         cfg,
-        CLUSTER_PROM_URL="http://cluster-prometheus:9090",
         K8S_EXTENDED_RESOURCES=(),
         LOG_ERROR_SELECTOR="",
     )

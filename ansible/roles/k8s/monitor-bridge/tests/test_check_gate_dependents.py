@@ -43,12 +43,6 @@ def test_b2_dependent_set_matches_real_checks():
 # test_check_streaks.py::test_startup_grace_disjoint_from_run_once_skip_sets.
 
 
-def test_cluster_dependent_set_matches_real_checks():
-    # Guard (mirrors PROM_DEPENDENT/LOKI_DEPENDENT/B2_DEPENDENT): every name is a real check.
-    names = {c.name for c in registry.build_checks()}
-    assert gates.CLUSTER_DEPENDENT <= names
-
-
 def _dependents_are_real_checks(dependents_map: dict, names: set) -> bool:
     """True when every check named across `dependents_map`'s values is a real registry name.
 
@@ -76,7 +70,6 @@ def test_gate_dependents_maps_real_gates_to_real_checks():
         "prometheus",
         "loki_reachable",
         "b2_reachable",
-        "cluster_prometheus",
         "wan_reachable",
     }
     assert set(gates.GATE_DEPENDENTS).isdisjoint(names)
@@ -103,15 +96,6 @@ def test_exporter_dependent_union_is_real_checks_and_not_empty():
     assert {"disk", "memory", "host_temp"} <= dependents
 
 
-def test_cluster_dependent_disjoint_from_prom_dependent():
-    # The whole point of a second gate: k8s_workloads reads the CLUSTER Prometheus, so it must not
-    # also be suppressed by the DOCKER Prometheus gate. Being in both would mean a Docker-side
-    # outage silences a check whose source is fine, and vice versa.
-    assert gates.CLUSTER_DEPENDENT.isdisjoint(gates.PROM_DEPENDENT)
-    assert gates.CLUSTER_DEPENDENT.isdisjoint(gates.LOKI_DEPENDENT)
-    assert gates.CLUSTER_DEPENDENT.isdisjoint(gates.B2_DEPENDENT)
-
-
 def test_a_gates_value_validates_against_its_own_dependent_sets():
     """`Gates.gate_dependents()` is what the filter is validated against, not the module table.
 
@@ -129,11 +113,11 @@ def test_a_gates_value_validates_against_its_own_dependent_sets():
     )  # the module table still does
 
 
-def test_cluster_targets_is_cluster_dependent_not_prom_dependent():
-    # It reads the CLUSTER Prometheus, so a Docker-side outage must not suppress it and vice
-    # versa — the same separation k8s_workloads has.
-    assert "cluster_targets" in gates.CLUSTER_DEPENDENT
-    assert "cluster_targets" not in gates.PROM_DEPENDENT
+def test_cluster_targets_is_prom_dependent():
+    # It reads the one Prometheus, so the `prometheus` gate watches its source. Its own floor
+    # stays the arm for "Prometheus answers but the targets went away", which the gate cannot
+    # see — the reason it is gated and not merely floored.
+    assert "cluster_targets" in gates.PROM_DEPENDENT
 
 
 # ── The COMPLETENESS axis: a Prometheus reader missing from every gate set ──────────────────
@@ -172,18 +156,13 @@ def test_prom_readers_are_derivable_from_the_registry():
 def test_every_prometheus_reader_is_gated():
     """Every check reading Prometheus is suppressed by the gate that watches its instance.
 
-    PROM_DEPENDENT covers the checks reading PROM_URL, CLUSTER_DEPENDENT those reading
-    CLUSTER_PROM_URL; membership follows the URL a check reads. A reader in neither pages on
-    its own during a Prometheus outage, alongside the gate that already reported it.
+    One Prometheus remains, so PROM_DEPENDENT is the whole membership. A reader outside it
+    pages on its own during a Prometheus outage, alongside the gate that already reported it.
     """
-    ungated = prom_readers(registry.build_checks()) - (
-        gates.PROM_DEPENDENT | gates.CLUSTER_DEPENDENT
-    )
+    ungated = prom_readers(registry.build_checks()) - gates.PROM_DEPENDENT
     assert not ungated, (
-        f"check(s) {sorted(ungated)} query Prometheus but are in neither PROM_DEPENDENT nor "
-        "CLUSTER_DEPENDENT, so a Prometheus outage pages them alongside the gate. Add each to "
-        "the set for the URL it reads — PROM_URL -> PROM_DEPENDENT, CLUSTER_PROM_URL -> "
-        "CLUSTER_DEPENDENT."
+        f"check(s) {sorted(ungated)} query Prometheus but are not in PROM_DEPENDENT, so a "
+        "Prometheus outage pages them alongside the gate. Add each to PROM_DEPENDENT."
     )
 
 
@@ -191,4 +170,4 @@ def test_a_reader_dropped_from_the_gate_sets_is_flagged():
     """The reject half: the exact state #2778 describes must not read as clean."""
     readers = prom_readers(registry.build_checks())
     without_latency = gates.PROM_DEPENDENT - {"traefik_latency"}
-    assert readers - (without_latency | gates.CLUSTER_DEPENDENT) == {"traefik_latency"}
+    assert readers - without_latency == {"traefik_latency"}

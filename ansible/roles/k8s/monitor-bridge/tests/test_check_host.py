@@ -242,7 +242,6 @@ def test_crash_loop_arm_gates_on_a_recent_restart_not_just_the_hour_window(
         queries.append(promql)
         return []
 
-    cfg = replace(cfg, CLUSTER_PROM_URL="http://cluster-prom:9090")
     monkeypatch.setattr(bridge.net, "prom_vector", record)
     monkeypatch.setattr(bridge.net, "prom_scalar", lambda _cfg, *a, **k: 66.0)
     checks.cluster.check_k8s_workloads(cfg)

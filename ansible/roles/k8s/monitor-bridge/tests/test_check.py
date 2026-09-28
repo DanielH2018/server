@@ -204,7 +204,6 @@ def _pvc_series(pvc, pct, namespace="homelab"):
 def _arm_pvc(cfg, monkeypatch, vector, claims=43.0):
     cfg = replace(
         cfg,
-        CLUSTER_PROM_URL="http://prometheus:9090",
         PVC_MAX_PCT=85.0,
         PVC_MIN_CLAIMS=32,
         PVC_CLAIMS_CONSECUTIVE=3,
@@ -327,20 +326,12 @@ def test_pvc_recovery_resets_the_census_streak(monkeypatch, cfg):
     assert bridge.streaks._down_streaks.get("pvc_fullness", 0) == 0
 
 
-def test_pvc_fullness_is_gated_by_the_cluster_prometheus():
-    # It reads CLUSTER_PROM_URL, so the gate watching its source is cluster_prometheus.
-    # Membership in PROM_DEPENDENT would gate it on an instance it does not query (mirrors the
-    # cluster_targets guard in test_check_gates.py).
-    assert "pvc_fullness" in gates.CLUSTER_DEPENDENT
-    assert "pvc_fullness" not in gates.PROM_DEPENDENT
+def test_pvc_fullness_is_gated_by_the_prometheus_gate():
+    # It reads PROM_URL, and the `prometheus` gate watches that instance. Its own claim-count
+    # floor is the other half: a Prometheus that answers while the kubelet volume stats go
+    # unscraped is invisible to any reachability gate, so the floor must stay able to page.
+    assert "pvc_fullness" in gates.PROM_DEPENDENT
     # A job-keyed suppression would turn the claim-count floor green on exactly the partial
     # kubelet outage it exists to catch — those claims are scraped under two jobs.
     for deps in gates.EXPORTER_DEPENDENT.values():
         assert "pvc_fullness" not in deps
-
-
-def test_pvc_fullness_is_disabled_without_a_cluster_prometheus(monkeypatch, cfg):
-    cfg = replace(cfg, CLUSTER_PROM_URL="")
-    ok, msg = checks.storage.check_pvc_fullness(cfg)
-    assert ok
-    assert "disabled" in msg

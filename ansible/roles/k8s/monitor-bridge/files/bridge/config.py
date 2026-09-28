@@ -151,16 +151,14 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         """A comma-separated check-name list as a set, tolerating spaces and empty entries."""
         return frozenset(n for n in value.replace(" ", "").split(",") if n)
 
-    # Read ahead of the Config() call because another field derives from them:
-    # B2_TRANSPORT_RETRY_S defaults to INTERVAL, and PROM_ORIGIN is derived from whether the
-    # two Prometheus URLs name the same instance.
+    # Read ahead of the Config() call because B2_TRANSPORT_RETRY_S defaults to INTERVAL.
     INTERVAL = _int("INTERVAL", "300")
     PROM_URL = _env("PROMETHEUS_URL", "http://prometheus:9090").rstrip("/")
 
     return Config(
         **vars(host_config(_env, _int, _num, _env_file, problems)),
         **vars(service_config(_env, _int, _num, _env_file)),
-        **vars(cluster_config(_env, _int, _num, PROM_URL)),
+        **vars(cluster_config(_env, _int, _num)),
         **vars(io_config(_env, _int, _num, _env_file, INTERVAL, problems)),
         INTERVAL=INTERVAL,
         # Startup/redeploy grace for the reach-out checks (STARTUP_GRACE, applied in run_once).
@@ -213,7 +211,7 @@ def load_config(env: Mapping[str, str], problems: list[str] | None = None) -> Co
         # CHECKS_ONLY (comma-separated names) enables exactly that set; CHECKS_SKIP drops names
         # from whatever is otherwise enabled. The four reachability gates participate under the
         # names their monitors push as (prometheus, loki_reachable, b2_reachable,
-        # cluster_prometheus). A filter that enables a gated check while disabling its gate would
+        # wan_reachable). A filter that enables a gated check while disabling its gate would
         # reintroduce the alert storm the gate exists to prevent, so check.py's main() refuses to
         # start on one (validate_check_filter) — a crash-looping bridge is loud, a mis-gated one
         # lies quietly.

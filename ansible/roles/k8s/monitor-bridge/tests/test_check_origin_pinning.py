@@ -2,8 +2,9 @@
 
 `origin` is set by ONE Prometheus relabel rule, on the `node` job. So `up` carries it and
 cAdvisor series never do: pinning a cAdvisor query selects the empty vector, which every check
-reading it decodes as healthy. `PROM_ORIGIN` is DERIVED from `PROMETHEUS_URL` for the same
-reason — a configured pin can drift out of lockstep with the URL it is meant to describe.
+reading it decodes as healthy. `PROM_ORIGIN` therefore defaults to the pin and is turned off
+only by stating `PROM_ORIGIN=""`, which is the escape hatch a Prometheus whose series carry no
+`origin` would need.
 
 These are source-level and selector-level guards rather than run-loop ones; the suppression
 behaviour is `test_check_gates.py`.
@@ -34,29 +35,39 @@ def test_origin_sel_appends_the_pin(monkeypatch, cfg):
     )
 
 
-def test_origin_pin_derives_from_the_prometheus_url():
-    # THE regression this guards. PROM_ORIGIN is derived rather than configured precisely so it
-    # cannot drift out of lockstep with PROMETHEUS_URL: pointing one at the cluster and forgetting
-    # the other selects nothing, which every one of these checks decodes as healthy.
-    #
-    # The derivation is stated to load_config as an environment, not reached by reloading the
-    # module: a reload re-runs one module against the real os.environ, so the test had to mutate
-    # the process to ask its question and undo the mutation afterwards.
-    derived = load_config(
-        {
-            "PROMETHEUS_URL": "https://prom-k8s.example",
-            "CLUSTER_PROMETHEUS_URL": "https://prom-k8s.example",
-        }
+def test_the_pin_is_on_by_default():
+    """THE default this guards. Every deployed check reads the cluster Prometheus, whose `node`
+    job carries `origin` — so an unpinned disk/memory/targets query silently widens past the
+    host it is meant to describe.
+
+    Until #2825 this was derived from PROMETHEUS_URL and CLUSTER_PROMETHEUS_URL naming one
+    instance. The second URL is gone, and a derivation with one reachable branch is a constant.
+    Re-deriving it from the URL's SHAPE instead would answer "does this look in-cluster" when
+    the question is "does this Prometheus carry `origin`".
+
+    Stated to load_config as an environment rather than reached by reloading the module: a
+    reload re-runs one module against the real os.environ, so the test would have to mutate the
+    process to ask its question and undo the mutation afterwards.
+    """
+    assert (
+        load_config({"PROMETHEUS_URL": "https://prom-k8s.example"}).PROM_ORIGIN
+        == 'origin="daniel-server"'
     )
-    assert derived.PROM_ORIGIN == 'origin="daniel-server"'
+    # An unset PROMETHEUS_URL pins too: the code default names a Prometheus, so leaving the pin
+    # off here would make "configured nothing" the one silently-unpinned configuration.
+    assert load_config({}).PROM_ORIGIN == 'origin="daniel-server"'
 
 
-def test_origin_pin_absent_when_reading_the_docker_prometheus():
+def test_an_explicit_empty_pin_wins():
+    """The escape hatch, and the half that can go red on its own.
+
+    A Prometheus whose series carry no `origin` label needs the pin OFF — pinning there selects
+    the empty vector and every check reading it reports green forever. With the derivation gone
+    this override is the only way to reach that state, so it is the branch that must keep
+    working.
+    """
     derived = load_config(
-        {
-            "PROMETHEUS_URL": "http://prometheus:9090",
-            "CLUSTER_PROMETHEUS_URL": "https://prom-k8s.example",
-        }
+        {"PROMETHEUS_URL": "http://prometheus:9090", "PROM_ORIGIN": ""}
     )
     assert derived.PROM_ORIGIN == ""
 

@@ -21,8 +21,8 @@ from checks.cluster import check_cluster_targets
 
 @pytest.fixture
 def ccfg(cfg):
-    """cfg with a cluster Prometheus configured — without one the check short-circuits."""
-    return replace(cfg, CLUSTER_PROM_URL="http://cluster-prometheus:9090")
+    """The bare config: one Prometheus, so the check has nothing extra to be handed."""
+    return cfg
 
 
 def up_vector(*values):
@@ -92,12 +92,3 @@ def test_too_few_targets_still_fails_closed(ccfg):
     ok, msg = check_cluster_targets(ccfg, fetch=fetch)
     assert not ok
     assert "below the floor" in msg
-
-
-def test_no_cluster_prometheus_disables_the_check(cfg):
-    # The empty-URL short circuit runs ahead of the streak, so a disabled check never accumulates
-    # one — otherwise enabling it later would page on its first real down cycle.
-    ok, msg = check_cluster_targets(cfg, fetch=up_vector(0, 0, 0))
-    assert ok, msg
-    assert "disabled" in msg
-    assert "cluster_targets" not in bridge.streaks._down_streaks

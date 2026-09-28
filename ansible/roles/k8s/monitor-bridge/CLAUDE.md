@@ -31,13 +31,14 @@ is, and this file when you need to know what the rule is.
 
 ## Gates and hysteresis
 
-Five reachability gates run first each cycle; each suppresses its dependents so one outage
+Four reachability gates run first each cycle; each suppresses its dependents so one outage
 pages once. A suppressed check pushes `up` with a `skipped — <source> unreachable` message so
 its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the registry.
 
 - **Prometheus Reachable** (`vector(1)`): when Prometheus is unreachable, every
   prom-dependent check (disk/cert/memory/restarts/oom/cpu/targets/traefik5xx/traefik_latency/traefik_404/traefik_421/ups/
-  host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure) is
+  host_temp/shipper_dropped/longhorn_volumes/snapshot_headroom/kubelet_plugin_readonly/pi_pressure/
+  k8s_workloads/cluster_targets/pvc_fullness/etcd_db_size) is
   **suppressed**. `tests/test_claude_md_prom_dependent_enumeration.py` pins that list to
   `PROM_DEPENDENT`; edit the set and the sentence together.
 - **Loki Reachable** (`/loki/api/v1/labels`): gates `LOKI_DEPENDENT` — `loki_ingestion`,
@@ -51,13 +52,12 @@ its heartbeat stays alive. The sets live in `files/gates.py`, each pinned to the
   one provider's outage cannot silence a dependent reading the other. Never an anycast IP: the
   2026-09-18 outage included DNS failure. `b2_reachable` is the tile's PEER, not a member — it
   is a gate itself, and this loop has no gate-of-a-gate.
-- **Cluster Prometheus Reachable**: gates `CLUSTER_DEPENDENT` (`k8s_workloads`,
-  `cluster_targets`, `pvc_fullness`, `etcd_db_size`). Both URLs render to the same cluster
-  Service, so `run_once` reuses the first gate's verdict; the split survives so a second
-  Prometheus can be reintroduced. Do not read the pair as independent coverage. On the reuse
-  path the tile is pushed `up` with `same instance, see Prometheus Reachable` while the reused
-  verdict still suppresses `CLUSTER_DEPENDENT` — pushing the reused DOWN turned two tiles red
-  for one fact (#2780).
+- **There is no second Prometheus gate.** `Cluster Prometheus Reachable` gated a
+  `CLUSTER_DEPENDENT` set reading `CLUSTER_PROMETHEUS_URL` until 2026-09-28. Both URLs named
+  one cluster Service after the Docker plane retired (2026-08-14), so its tile could not go
+  red on its own and read as coverage that did not exist; #2825 folded its four members into
+  `PROM_DEPENDENT` and deleted the gate, the URL, the push token and the tile. Reintroducing a
+  second Prometheus is a `git revert`, and a check reading one needs a gate watching it.
 - **`EXPORTER_DEPENDENT`** maps a node-exporter scrape job to the checks a dead exporter would
   otherwise page twice: `node` → disk, memory, host_temp; `node-pi` → host_temp, pi_pressure.
   `pvc_fullness` gets NO entry keyed on the kubelet job on purpose — its claim-count floor

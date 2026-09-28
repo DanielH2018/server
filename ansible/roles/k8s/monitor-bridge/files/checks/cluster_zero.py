@@ -29,8 +29,6 @@ def zero_available_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         cfg,
         "kube_deployment_status_replicas_available == 0"
         " and on(namespace, deployment) kube_deployment_spec_replicas > 0",
-        base=cfg.CLUSTER_PROM_URL,
-        source="cluster prometheus",
     )
     if not zero:
         return []
@@ -39,8 +37,6 @@ def zero_available_offenders(cfg: Config, fetch) -> list[tuple[dict, float]]:
         for labels, value in fetch(
             cfg,
             "kube_deployment_spec_replicas",
-            base=cfg.CLUSTER_PROM_URL,
-            source="cluster prometheus",
         )
     }
     out = []
