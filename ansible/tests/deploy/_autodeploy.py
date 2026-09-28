@@ -22,7 +22,7 @@ import re
 from pathlib import Path
 
 from lib import yaml_fast
-from k8s_autodeploy import k8s_autodeploy_denylist
+from k8s_autodeploy import is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO
 
 _REPO = REPO
@@ -60,8 +60,16 @@ def _denylist() -> set[str]:
 
 
 def _roles() -> list[Path]:
+    """Every deployable role directory under roles/k8s/, shared roles excluded.
+
+    `is_leftover_dir` skips a retired role's `__pycache__`-only debris, which the filter
+    itself skips (#2882). Without it these guards fail naming a "role" that no longer exists
+    in git, which is a harder failure to read than the raise the filter used to produce.
+    """
     return sorted(
-        p for p in _K8S_ROLES.iterdir() if p.is_dir() and p.name not in _SHARED
+        p
+        for p in _K8S_ROLES.iterdir()
+        if p.is_dir() and p.name not in _SHARED and not is_leftover_dir(str(p))
     )
 
 
