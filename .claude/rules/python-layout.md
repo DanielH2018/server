@@ -11,12 +11,8 @@ paths:
 
 The long form, with the measurements and the options not taken, is
 `docs/python-code-organization.md`. This file is the part you need while placing a file, plus
-the three rules every new check meets (the last three sections).
-
-Those three rules stay in this file rather than the long form. This file loads under
-`scripts/**`, `.claude/hooks/**` and the test trees, which is where a new check and its test
-land, while a `docs/` page reaches an agent only through a pointer. Moving them was
-re-examined on 2026-09-28 (#2811) and rejected.
+the three rules every new check meets (the last three sections). They stay here because this
+file loads where a new check lands (#2811).
 
 ## Cross-directory imports need a `sys.path` bootstrap
 

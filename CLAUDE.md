@@ -189,15 +189,6 @@ denies prints its own reason.
   <id-or-alias>` resolves the alias-slug≠id trap.
 - **`homelab-ui` MCP server** — a headless Chromium, driven through Traefik, that can *see* a
   service's UI — the half `probe.py health` structurally cannot cover.
-- **Shell `$` in a Compose `command`/`entrypoint`/`healthcheck.test` must be doubled `$$`.**
-  The validate-compose hook re-renders the templates after an edit and fails on a single `$`.
-- **session-health** — the SessionStart banner. It names unhealthy workloads, a dirty primary
-  checkout, a GitOps deployer parked behind origin, a setup role the tick merged but cannot
-  apply, and a hook script this session registers that the primary checkout lacks — the `.sh`
-  shim, or the `.py` sibling that shim runs. The first two stop every deploy in the fleet, and
-  the banner is the only place a worktree session sees them. A missing shim exits 127; a missing
-  `.py` sibling lets the shim run and report nothing. The guarded tool call runs either way, so
-  that line reads first.
 
 ## Review & Memory Hygiene (making judgment cumulative)
 The rules for promoting a review learning into memory live in the `memory-consolidation` and

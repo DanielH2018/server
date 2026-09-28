@@ -507,6 +507,15 @@ than mid-section, and the trailer names up to 40 headings it did not reach. Both
 the payload's, not one doc's, so a head that fills the payload defers the next doc to the
 next command.
 
+An editing rule arrives with a write, not a read (#2811). Every rule outside `READ_RULES`
+(`secrets.md` and `facts.md`, which a read needs) is injected only for a path the command
+writes, as `block-protected-bash`'s `written_paths` finds it, or for every named path when the
+command runs an inline interpreter such as `python3 -`. Rules were 1.30 MB of the hook's 2.36 MB
+in the 7 days to 2026-09-28, spent mostly on reads. They are not dropped from Bash entirely,
+because 23% of writes to rule-scoped paths went through Bash that week, and in 5 of 33
+session×rule pairs nothing else would have delivered the rule. A rule skipped on a read is not
+recorded as injected, so the first write still gets it.
+
 A subagent gets each doc once more. Its payload carries the parent's `session_id`, so the hook
 keys its once-only state on the `agent_id` as well. It also tags that subagent's log rows
 `agent=<id>`, so a row the subagent caused never suppresses the parent. A small doc that no
