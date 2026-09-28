@@ -40,4 +40,3 @@ when both paths share one mount.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`
-- Deploy: `./scripts/deploy.sh --tags "radarr"`

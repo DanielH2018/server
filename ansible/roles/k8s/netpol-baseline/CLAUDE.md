@@ -60,6 +60,3 @@ here.** When a change needs a policy change and a workload change together, depl
 tags, workload role first and netpol-baseline last. `docs/networkpolicy-slice-answers.md`
 records why that order matters. A new backend the pod waits on goes in the workload's role
 instead, so one tag carries both.
-
-## Editing
-Deploy: `./scripts/deploy.sh --tags "netpol-baseline"`.

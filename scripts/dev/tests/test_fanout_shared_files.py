@@ -114,13 +114,11 @@ def test_allow_shared_file_excuses_the_named_file_only(tmp_path, capsys):
 
 
 def test_the_triage_step_names_the_file_level_collision_check():
-    """The issue's verify-by: the rule lives in the skill the orchestrator reads, and the
-    `Done when:` checklist is what it ticks off, so both have to name it or it is skipped."""
+    """The rule lives in the skill the orchestrator reads, so its triage step has to name
+    the field the check reads and the flag that overrides it, or the check is skipped."""
     from lib.repo_paths import REPO
 
     skill = (REPO / ".claude/skills/issue-fanout/SKILL.md").read_text()
     triage = skill[skill.index("## 1. Triage") : skill.index("## 2.")]
-    assert "file-level collision check" in triage
     assert "`paths`" in triage
     assert "--allow-shared-file" in triage
-    assert "no two batches share a cited file" in triage

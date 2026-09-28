@@ -35,4 +35,3 @@ conventions.
 ## Editing
 - Manifests: `templates/deployment-direct.yaml.j2`, `templates/deployment-proxied.yaml.j2`,
   `templates/secret.yaml.j2`.
-- Deploy: `./scripts/deploy.sh --tags "cloudflare-ddns"`.

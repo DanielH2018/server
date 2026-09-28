@@ -55,4 +55,3 @@ irreplaceable data kopia still uniquely protected; the Docker role is in git his
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: `./scripts/deploy.sh --tags "terraria"`

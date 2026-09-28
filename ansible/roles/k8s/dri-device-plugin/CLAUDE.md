@@ -32,4 +32,3 @@ without either pod running privileged. See repo-root `CLAUDE.md` for shared conv
 
 ## Editing
 - Manifest: `templates/daemonset.yaml.j2`.
-- Deploy: `./scripts/deploy.sh --tags "dri-device-plugin"`.

@@ -70,4 +70,3 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Z2M cfg: `templates/config/configuration.yaml.j2` (rendered into the k8s Secret by `roles/k8s/zigbee2mqtt`)
-- Deploy (from daniel-box): `./scripts/deploy.sh --tags "zigbee2mqtt"`

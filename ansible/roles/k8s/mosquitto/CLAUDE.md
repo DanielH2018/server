@@ -29,4 +29,3 @@ web UI, no route — infra role.
 
 ## Editing
 - Broker/password config: `templates/config-secret.yaml.j2`.
-- Deploy: `./scripts/deploy.sh --tags "mosquitto"`.

@@ -132,4 +132,3 @@ so a withdrawn release has to be followable; what the guard forbids is a silent 
 
 ## Editing
 - Images: `templates/Dockerfile*.j2` + `templates/config/n8n-task-runners.json.j2`
-- Deploy (from daniel-box): `./scripts/deploy.sh --tags "n8n"`
