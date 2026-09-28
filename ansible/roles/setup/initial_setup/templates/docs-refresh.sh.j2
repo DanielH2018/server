@@ -374,18 +374,14 @@ fi
 # path rather than an early exit.
 #
 # WHAT THAT ACTUALLY BUYS IS NARROWER THAN IT LOOKS. `measure_weights` exits non-zero when its
-# sub-run does not pass, but a genuinely red suite stops this cron further down anyway: the prek
-# `pytest` hook is `always_run` and takes no filenames, so the commit below needs the whole suite
-# green. The cases this path saves are the ones where the suite is fine and the measurement alone
+# sub-run does not pass, but a genuinely red suite stops this cron further down anyway: the
+# explicit `pytest` run below gates the commit on the whole suite being green. The cases this path saves are the ones where the suite is fine and the measurement alone
 # is not — the `timeout` firing, or a durations report that parses to nothing. There the pages are
 # still worth publishing, and the run still reports DOWN with the reason named.
 #
 # `timeout` bounds it because this script holds /var/lock/server-git-tree.lock for its whole life,
 # so a wedged sub-run would hold gitops-deploy off the tree until flock's own wait expires.
 #
-# No PYTEST_ADDOPTS here. `measure_weights` passes `--deselect RATCHET_NODE_ID` to its own
-# pytest, and a second assignment would break the one-commit-line rule
-# `test_crons_deselect_the_weights_ratchet.py` enforces.
 WEIGHTS_MSG="$(timeout 900 "$UV" run --frozen python scripts/dev/pytest_shard.py \
   --record-missing 2>&1)"
 WEIGHTS_RC=$?
@@ -429,9 +425,10 @@ if git diff --cached --quiet; then
   exit 0
 fi
 
-# Hooks run. Unlike secret-rotate, this commit has no live-but-uncommitted state to
-# strand: if a hook rejects it, nothing has been deployed and the right outcome is a clean
-# abort.
+# Commit-stage hooks run. Unlike secret-rotate, this commit has no live-but-uncommitted state
+# to strand: if a hook rejects it, nothing has been deployed and the right outcome is a clean
+# abort. The `pytest` hook is NOT among them since #2827 -- it runs at pre-push, and this
+# script runs the suite itself below.
 #
 # A hook that can fail on GENERATED content wedges this cron permanently -- it would abort,
 # alert and exit 1 on every run until someone fixed the generator. Two already tried:
@@ -448,18 +445,38 @@ LOG="$(mktemp)"
 # --no-renames so a rename never arrives as the three-field line the restore would misread.
 STAGED_STATUS="$(git diff --cached --name-status --no-renames)"
 
+# The suite, run explicitly and BEFORE the commit. It used to arrive as the prek `pytest` hook
+# on the commit line; that hook moved to the pre-push stage (#2827), and this cron must not
+# publish generated pages the suite rejects. Run here rather than left to the push because a
+# rejected commit is a state this script can undo -- restore_generated_tree -- where a rejected
+# push would leave a commit on the local master for the deployer to trip over.
+#
+# AFTER `git add`, because pytest_shard's census reads `git ls-files` and several guards read
+# the regenerated pages off disk. AFTER STAGED_STATUS for the same reason the commit is: the
+# restore needs to know which paths were newly added. `timeout` for the reason the weights
+# measurement has one -- this script holds /var/lock/server-git-tree.lock for its whole life,
+# so a wedged run would hold gitops-deploy off the tree until flock's own wait expires.
+timeout 900 "$UV" run --frozen python -m pytest >"$LOG" 2>&1
+SUITE_RC=$?
+if [ "$SUITE_RC" -ne 0 ]; then
+  keep_failure_log "$LOG"
+  keep_tree_evidence
+  if restore_generated_tree "$STAGED_STATUS"; then
+    RESTORE_NOTE="tree restored"
+  else
+    RESTORE_NOTE="TREE STILL DIRTY - gitops-deploy is parked until it is cleaned"
+  fi
+  mark_commit_failed "suite failed $(date -u '+%Y-%m-%dT%H:%M:%SZ') (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}; full log: ${COMMIT_FAILED_LOG}"
+  say_failure "docs-refresh: the test suite failed (pytest exit ${SUITE_RC}); ${RESTORE_NOTE}, nothing published" "$LOG"
+  exit 1
+fi
+
 # NOT `if ! git commit`: inside that branch `$?` is the status of the negation, which is always 0,
 # so the exit code has to be captured from the plain command first. It is reported because
 # "hook rejection?" was only ever this script's guess -- the 2026-09-05 06:18 failure was filed
 # undiagnosed (#1155) precisely because the alert named no cause, and git's own code separates a
 # rejected hook (1) from a signing or ref failure.
-# The shard-weights coverage ratchet is deselected for THIS commit only. The prek pytest hook
-# runs the whole suite, and that ratchet goes red when enough test files land unweighted --
-# a state only a manual `pytest_shard.py --record` repairs, so while red it failed every one
-# of this cron's commits (#1899). CI's sharded pytest job sets no PYTEST_ADDOPTS and still
-# enforces it. The node id is pytest_shard.RATCHET_NODE_ID; a test pins the two to each other.
-PYTEST_ADDOPTS="--deselect ansible/tests/repo/test_pytest_shards_partition_the_suite.py::test_the_recorded_weights_still_cover_most_of_the_suite" \
-  git commit -m "docs: refresh generated reference pages and test shard weights" >"$LOG" 2>&1
+git commit -m "docs: refresh generated reference pages and test shard weights" >"$LOG" 2>&1
 COMMIT_RC=$?
 if [ "$COMMIT_RC" -ne 0 ]; then
   keep_failure_log "$LOG"
@@ -480,7 +497,11 @@ fi
 # eval-run and secret-rotate. Its header carries the ordering and the HEAD~1 reasoning. It
 # prints one line to alert with, and its exit code says where the commit is: 1 while it is
 # still local on master, 2 once the branch is on origin without a PR.
-PUB_MSG="$("$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
+# SKIP=pytest: the publisher pushes a branch, and prek's `pytest` hook runs at the pre-push
+# stage since #2827. The suite already ran above, where a failure is recoverable; paying it a
+# second time here would double this cron's cost inside the git-tree lock and move the verdict
+# to a point with no undo. prek honours SKIP the way pre-commit does (verified 2026-09-28).
+PUB_MSG="$(SKIP=pytest "$UV" run --frozen python scripts/deploy_tools/publish_pr.py publish \
   --prefix "$PR_BRANCH_PREFIX" --title "docs: refresh generated reference pages and test shard weights" \
   --body "Derived output only, from the twice-daily docs-refresh cron: the pages under docs/reference/, the infra map, and the pytest shard-weights table. The first two are reproducible by scripts/docs/build_docs.py and the third by scripts/dev/pytest_shard.py. Opened as a PR because a repository ruleset rejects direct writes to master." \
   2>&1)"

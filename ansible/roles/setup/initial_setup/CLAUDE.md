@@ -274,9 +274,9 @@ quietly.
 - **Mode:** degrade, never abort. A failing generator and a failing measurement both set
   `GENERATORS_OK=0` and let the run publish what did succeed, then report the push DOWN with
   the reason named — the same "act, but don't launder the result" split the eval sweep uses
-  below. **A red suite is not one of the cases that degradation saves**, because the prek
-  `pytest` hook is `always_run` and takes no filenames, so the commit needs the whole suite
-  green regardless. What it saves is the suite being fine and the measurement alone failing: the
+  below. **A red suite is not a case degradation saves**: the script runs the
+  suite before its commit and exits 1 on a failure. The prek `pytest` hook that
+  did this fires at pre-push (#2827). What it saves is the suite being fine and the measurement alone failing: the
   `timeout` firing, or a durations report that parses to nothing. The `timeout` is there because
   this script holds the git-tree lock for its whole life.
 - **Abort valves:** the shared `/var/lock/server-git-tree.lock`; the dirty-tree gate at the top

@@ -259,7 +259,12 @@ Several sessions work this repo at once, each in its own `.claude/worktrees/<nam
 
 ## Pre-commit Hooks
 The repo uses [prek](https://prek.j178.dev) (config: `prek.toml`) with YAML linting, Ansible linting, and gitleaks (secret scanning).
-Run `prek run --all-files` to check before committing. The `pytest` and
+Run `prek run --all-files` to check before committing. **That does not run the tests.** The
+`pytest` hook carries `stages = ["pre-push"]`, so it fires on `git push` and neither a commit
+nor a default `prek run` selects it — the suite measured 235s on daniel-server on 2026-09-28,
+which is too long to pay per commit (#2827). To run it by hand, use `uv run pytest` or
+`prek run --hook-stage pre-push pytest`. `prek install` writes both shims, because prek.toml
+sets `default_install_hook_types`. The `pytest` and
 `validate-compose-templates` hooks shell out to `uv` (see **Python & Tests**), so uv must be
 installed for a full `prek run`. `mkdocs-strict` builds the docs site the way the cron does
 and fails on a broken `--8<--` include or a dead internal link; its site directory is covered

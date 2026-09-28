@@ -46,3 +46,21 @@ def test_pytest_hook_takes_no_filenames() -> None:
     # The premise both tests above rest on: the hook runs the full suite rather than the files
     # prek hands it, which is why gating it can only ever subtract coverage.
     assert _pytest_hook().get("pass_filenames") is False
+
+
+def test_pytest_hook_runs_at_the_pre_push_stage() -> None:
+    """The stage decides WHEN, where `always_run` decides WHETHER. #2827 moved the hook off the
+    commit — the suite measured 235s on daniel-server on 2026-09-28 — and two crons now run it
+    themselves, so a silent move back to pre-commit would make them pay it twice."""
+    assert _pytest_hook().get("stages") == ["pre-push"], (
+        'the prek `pytest` hook must carry stages = ["pre-push"] (#2827)'
+    )
+
+
+def test_prek_installs_the_pre_push_shim() -> None:
+    """The stage above is inert without the shim. `prek install` writes one hook type per entry
+    here, so dropping `pre-push` would leave the suite running nowhere locally."""
+    data = tomllib.loads((REPO_ROOT / "prek.toml").read_text())
+    assert "pre-push" in data.get("default_install_hook_types", []), (
+        "prek.toml must ask `prek install` for a pre-push shim, or the `pytest` hook never fires"
+    )
