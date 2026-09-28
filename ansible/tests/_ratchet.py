@@ -31,9 +31,14 @@ that reads git:
 - A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
   the `importlib` fix did) finds patches that were always there, in files that already have an
   entry as well as in files that do not, so both moves have to be possible in the branch that
-  widens. The trigger is narrow on purpose: the whole of `_ratchet.py`, `_ratchet_census.py`
-  and the test module, but only the text of `_helpers.is_test_file` — 198 modules import `_helpers`, so any edit to
-  it would otherwise wave through a change that has nothing to do with the guard.
+  widens. The trigger is three files and one function: the whole of `_ratchet.py`, the whole
+  of `_ratchet_census.py` — a widened census finds files that were always over, the same way
+  a widened heuristic does — the whole of the test module, and only the text of
+  `_helpers.is_test_file`. The census module is the loosest of the three, because a comment
+  edit there also exempts every raise; it is in the set because nothing else records what the
+  lists are allowed to contain, and it is 121 lines nobody edits in passing. `_helpers.py` is
+  the counter-example that fixes the width: 198 modules import it, so comparing all of it
+  would wave through a change that has nothing to do with the guard.
 
 What the monkeypatch heuristic counts, and what it misses:
 
