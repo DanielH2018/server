@@ -26,36 +26,79 @@ Two guards, one subject:
 Red-proof pairs use fixture roles under `tmp_path`; non-vacuity pins named members the live
 census must contain, so a renamed `tasks/` layout fails loudly rather than checking nothing.
 
-3. A size ceiling (issue #2126). `gitops_deploy/CLAUDE.md` had grown to 1315 lines (~27k
-   tokens) of postmortem before its record moved to `docs/gitops-pipeline.md`, and a role doc is
-   loaded whole on every touch of the role. A doc over `MAX_LINES` (`wc -l` lines, the issue's
-   verify-by) fails unless `OVER_CEILING` names the role with the reason, and an entry there for
-   a doc that has since shrunk fails too. Same shape as the k8s test's ceiling.
+3. A size ceiling (issues #2126, #2826). `gitops_deploy/CLAUDE.md` had grown to 1315 lines
+   (~27k tokens) of postmortem before its record moved to `docs/gitops-pipeline.md`, and a role
+   doc is loaded whole on every touch of the role. A doc over `MAX_CHARS` fails unless
+   `OVER_CEILING` names the role with the reason, and an entry there for a doc that has since
+   shrunk fails too. Same shape as the k8s test's ceiling.
 
-   Each reason opens with the line count it was written against, and a doc that grows past that
-   count fails (#2679). Before that check, `gitops_deploy`'s entry said "404 lines" while the doc
-   grew to 488, because a listed role passed at any length.
+   The unit is characters: `MAX_CHARS` is the payload budget of the hook that injects a role
+   doc into a Bash session (`_doc_size.MAX_CHARS`), so a doc over it is one a session reads
+   truncated to its head. The ceiling counted lines until #2826, which measured 30 of 93 role
+   docs past the hook's budget while the line ceiling passed them all.
+
+   Each reason opens with the character count it was written against, and a doc that grows past
+   that count fails (#2679). Before that check, `gitops_deploy`'s entry said "404 lines" while
+   the doc grew to 488, because a listed role passed at any length.
 """
 
 from pathlib import Path
 
-from _doc_size import recorded_count_problems
+from _doc_size import MAX_CHARS, char_count, recorded_count_problems
 from _helpers import SETUP_ROLES, load_tasks, walk_tasks
 
 CONTRACT_HEADING = "## Autonomous-role contract"
 MIN_NON_BLANK_LINES = 8
-MAX_LINES = 400
 
-# Roles whose CLAUDE.md is allowed over MAX_LINES, each with the reason. An entry is a
-# justification, not a waiver: name what in the doc is an operating rule that cannot move to a
-# docs/ page, or split the file instead.
+# Roles whose CLAUDE.md is allowed over MAX_CHARS, each with the reason. An entry is a
+# justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
+# and the section to move out next. A doc that grows past its recorded count fails (#2679),
+# so the list shrinks rather than settling. Recorded 2026-09-28 when the unit became
+# characters (#2826); trimming them is follow-on work, gitops_deploy's `## Safety` first.
 OVER_CEILING: dict[str, str] = {
+    "claude_code": (
+        "17338 chars on 2026-09-28: the two Remote Control modes and the `user.slice` fleet "
+        "bound are operating rules; `## Traps already paid for` is history with a docs/ home"
+    ),
+    "docker_install": (
+        "17522 chars on 2026-09-28: the engine hold and the teardown arm are operating rules "
+        "for the last Docker host; `## What it does` can thin to a pointer at "
+        "`tasks/install.yml`"
+    ),
+    "gitops_deploy": (
+        "31672 chars on 2026-09-28: `## Safety` is the path-rule table root CLAUDE.md routes "
+        "to, and the contract governs a deployer that ships to production unattended; `## "
+        "Traps` and the error-string ledger move to docs/gitops-pipeline.md next"
+    ),
     "hypervisor": (
-        "420 lines on 2026-09-28, up from 411: the gate's edge-reconcile leg and its "
-        "PREP_FAILED semantics are an operating rule an operator needs before touching the "
-        "gate (#2797). The staging-guest lifecycle it documents still has no docs/ page of "
-        "its own. The M-2 history under 'The staging gate's checkout' is the next thing to "
-        "move to docs/staging-cluster.md; trim or split before adding to it again."
+        "28532 chars on 2026-09-28: the gate's edge-reconcile leg and its PREP_FAILED "
+        "semantics are an operating rule an operator needs before touching the gate (#2797), "
+        "and the staging-guest lifecycle has no docs/ page of its own; the M-2 history under "
+        "`## The staging gate's checkout` moves to docs/staging-cluster.md next"
+    ),
+    "initial_setup": (
+        "30677 chars on 2026-09-28: the granular-tag list and the two autonomous-role "
+        "contracts are operating rules for the setup plane; `## What it does` can thin to a "
+        "pointer at `tasks/main.yml`"
+    ),
+    "k3s": (
+        "21391 chars on 2026-09-28: the crons' autonomous-role contract and the layout map "
+        "are what a session needs before touching the node plane; `## Notable` is the trim"
+    ),
+    "optimize_pi": (
+        "28728 chars on 2026-09-28: the container-recovery contract governs a cron that "
+        "restarts what it finds dead; `## Notable` carries the Pi's measured incidents and is "
+        "the trim"
+    ),
+    "renovate_agent": (
+        "18913 chars on 2026-09-28: the arming procedure and the merge-and-deploy contract "
+        "govern an agent that merges unattended; `## The digest measures effect, not "
+        "completion` can move to docs/"
+    ),
+    "renovate_notify": (
+        "10704 chars on 2026-09-28: the fingerprint gate and the two ways the stuck-pending "
+        "clock goes inert are operating rules for a notifier that fails silent; the sandbox "
+        "surprises can move to docs/"
     ),
 }
 
@@ -108,11 +151,6 @@ def _non_blank_lines(text: str) -> list[str]:
     return [line for line in text.splitlines() if line.strip()]
 
 
-def _line_count(text: str) -> int:
-    """What `wc -l` reports: newline characters, so a trailing newline is not a line."""
-    return text.count("\n")
-
-
 def _doc_problems(
     role_dir: Path, over_ceiling: dict[str, str] = OVER_CEILING
 ) -> list[str]:
@@ -124,16 +162,16 @@ def _doc_problems(
         return [
             f"{role_dir.name}: CLAUDE.md has fewer than {MIN_NON_BLANK_LINES} non-blank lines"
         ]
-    lines = _line_count(text)
-    if lines > MAX_LINES and role_dir.name not in over_ceiling:
+    chars = char_count(text)
+    if chars > MAX_CHARS and role_dir.name not in over_ceiling:
         return [
-            f"{role_dir.name}: CLAUDE.md is {lines} lines (wc -l), over the {MAX_LINES}-line "
-            f"ceiling — move history and measurements to a docs/ page, or add the role to "
-            f"OVER_CEILING with the reason (issue #2126)"
+            f"{role_dir.name}: CLAUDE.md is {chars} chars, over the {MAX_CHARS}-char ceiling "
+            f"(the inject hook's payload budget) — move history and measurements to a docs/ "
+            f"page, or add the role to OVER_CEILING with the reason (issues #2126, #2826)"
         ]
     if role_dir.name in over_ceiling:
         return recorded_count_problems(
-            role_dir.name, lines, over_ceiling[role_dir.name]
+            role_dir.name, chars, over_ceiling[role_dir.name]
         )
     return []
 
@@ -278,45 +316,46 @@ def test_fixture_exempt_cron_role_passes_without_the_heading(tmp_path):
     assert _contract_problems(role, exempt={"widget": "pushes a heartbeat only"}) == []
 
 
-def _sized_doc(lines: int) -> str:
-    """A widget doc padded to exactly `lines` lines (wc -l)."""
-    return "# widget\n\n" + "".join(f"- line {i}\n" for i in range(lines - 2))
+def _sized_doc(chars: int) -> str:
+    """A widget doc of exactly `chars` characters."""
+    padded = "# widget\n\n" + "".join(f"- line {i}\n" for i in range(chars))
+    return padded[:chars]
 
 
 def test_fixture_role_over_the_ceiling_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
     problems = _doc_problems(role, over_ceiling={})
     assert len(problems) == 1 and problems[0].startswith(
-        f"widget: CLAUDE.md is {MAX_LINES + 1} lines (wc -l), over the {MAX_LINES}-line ceiling"
+        f"widget: CLAUDE.md is {MAX_CHARS + 1} chars, over the {MAX_CHARS}-char ceiling"
     ), problems
 
 
 def test_fixture_role_at_the_ceiling_passes(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES))
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS))
     assert _doc_problems(role, over_ceiling={}) == []
 
 
 def test_fixture_role_over_the_ceiling_passes_when_justified(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
-    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
+    reason = f"{MAX_CHARS + 1} chars on 2026-09-26, a reason"
     assert _doc_problems(role, over_ceiling={"widget": reason}) == []
 
 
 def test_fixture_role_grown_past_its_recorded_count_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 2))
-    reason = f"{MAX_LINES + 1} lines on 2026-09-26, a reason"
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 2))
+    reason = f"{MAX_CHARS + 1} chars on 2026-09-26, a reason"
     problems = _doc_problems(role, over_ceiling={"widget": reason})
     assert (
         len(problems) == 1
-        and "past the 401 its OVER_CEILING reason records" in problems[0]
+        and f"past the {MAX_CHARS + 1} its OVER_CEILING reason records" in problems[0]
     )
 
 
 def test_fixture_reason_without_a_recorded_count_is_flagged(tmp_path):
-    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_LINES + 1))
+    role = _fixture_role(tmp_path, "widget", cron=False, doc=_sized_doc(MAX_CHARS + 1))
     problems = _doc_problems(role, over_ceiling={"widget": "a reason"})
     assert problems == [
-        "widget: OVER_CEILING reason must open with '<N> lines on <date>'"
+        "widget: OVER_CEILING reason must open with '<N> chars on <date>'"
     ]
 
 
@@ -328,10 +367,10 @@ def test_over_ceiling_entries_are_still_over_the_ceiling():
         name
         for name in OVER_CEILING
         if not (SETUP_ROLES / name / "CLAUDE.md").is_file()
-        or _line_count((SETUP_ROLES / name / "CLAUDE.md").read_text()) <= MAX_LINES
+        or char_count((SETUP_ROLES / name / "CLAUDE.md").read_text()) <= MAX_CHARS
     ]
     assert not stale, (
-        f"OVER_CEILING names docs no longer over {MAX_LINES} lines: {stale}"
+        f"OVER_CEILING names docs no longer over {MAX_CHARS} chars: {stale}"
     )
 
 
