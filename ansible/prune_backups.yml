@@ -14,7 +14,7 @@
 # transactions per stored block (`probe.py b2-budget` prints the per-volume figure). The
 # b2-drain mode goes through the B2 API instead: one listing for the entire store (5 Class C,
 # measured 2026-08-19) plus Class A deletes, which are unmetered. It reaches B2 only, never R2.
-# Scoping and measurements: docs/b2-api-drain-scoping.md.
+# Scoping and measurements: docs/archive/b2-api-drain-scoping.md.
 #
 # Usage:
 #   uv run ansible-playbook ansible/prune_backups.yml -i ansible/inventory/hosts.ini \

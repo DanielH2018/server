@@ -5,7 +5,7 @@
 > versions purged, and `kopia_password` removed from SOPS — this procedure can no longer
 > be executed. The still-live content that used to live only here — the off-site recovery
 > kit (git bundle + age key) and the UptimeRobot dead-man's-switch record — is re-homed in
-> [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md), the successor. Nothing
+> [`longhorn-disaster-recovery.md`](../longhorn-disaster-recovery.md), the successor. Nothing
 > below is current; kept for the era it describes.
 
 Recover the homelab's container state when **the server is gone** (dead disk, lost host,
@@ -22,7 +22,7 @@ survives a total loss; this runbook is the procedure.
 ## What you need
 1. **The SOPS age key** for at least one recipient in `ansible/.sops.yaml` (from your
    out-of-band backup, restored to `~/.config/sops/age/keys.txt` on the new host — see
-   [secret-rotation.md](secret-rotation.md) and the bootstrap flow in
+   [secret-rotation.md](../secret-rotation.md) and the bootstrap flow in
    `ansible/bootstrap.yml`).
 2. A checkout of this repo (`git clone`), so you can `sops -d ansible/vars/secrets.yml`.
    **GitHub is the third independent leg of recovery** (alongside B2 for the data and the

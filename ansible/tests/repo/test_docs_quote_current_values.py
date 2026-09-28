@@ -46,6 +46,11 @@ reworded and the guard is no longer reading anything -- that is flagged, not ski
 because a guard that silently stops matching is the shape this repo has paid for before
 (`volume-claim`'s short-circuit, `image-smoke`'s bare boot). `mismatches()` is the pure
 core, and the paired `_is_clean` / `_is_flagged` tests below prove it can go red.
+
+A page under `docs/archive/` gets no row. It records the tree as it stood when its work
+shipped, so a value it quotes is meant to go stale. The `TimeoutStartSec` row left with
+`post-merge-automation.md` when that page was archived; `gitops-pipeline.md` names the unit
+template as the source instead of quoting the span.
 """
 
 import re
@@ -60,9 +65,6 @@ K3S_DEFAULTS = REPO / "ansible/roles/setup/k3s/defaults/main.yml"
 GITOPS_DEFAULTS = REPO / "ansible/roles/setup/gitops_deploy/defaults/main.yml"
 PROBE_HEALTH = REPO / "scripts/diagnostics/probe_lib/health_rollout.py"
 SECRET_ROTATION = REPO / "scripts/secrets_mgmt/secret_rotation.py"
-GITOPS_UNIT = (
-    REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
-)
 
 
 def _k3s_default(name: str) -> Callable[[], str]:
@@ -75,18 +77,6 @@ def _gitops_tick_minutes() -> str:
     match = re.fullmatch(r"(\d+)min", value)
     assert match, (
         f"gitops_deploy_tick_interval is {value!r}, not a whole number of minutes"
-    )
-    return match.group(1)
-
-
-def _unit_timeout_start_minutes() -> str:
-    # systemd span, `60min`. Six prose copies quoted 25 or 45 minutes against this line on
-    # 2026-09-17 (#1855); the unit template is the only source, and the doc quotes the span
-    # verbatim, so this reads the whole `<n>min` token rather than a bare number.
-    match = re.search(r"^TimeoutStartSec=(\S+)$", GITOPS_UNIT.read_text(), re.MULTILINE)
-    assert match, f"{GITOPS_UNIT.relative_to(REPO)}: no `TimeoutStartSec=` line"
-    assert re.fullmatch(r"\d+min", match.group(1)), (
-        f"TimeoutStartSec is {match.group(1)!r}, not a whole number of minutes"
     )
     return match.group(1)
 
@@ -139,12 +129,6 @@ ROWS: list[Row] = [
         r"`ROTATE_LEAD_DAYS` = (\d+)",
         "secret_rotation.ROTATE_LEAD_DAYS",
         _python_constant(SECRET_ROTATION, "ROTATE_LEAD_DAYS"),
-    ),
-    Row(
-        "docs/post-merge-automation.md",
-        r"The unit sets `TimeoutStartSec=(\d+min)`",
-        "gitops-deploy.service.j2 TimeoutStartSec",
-        _unit_timeout_start_minutes,
     ),
 ]
 

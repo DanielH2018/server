@@ -1,7 +1,7 @@
 # Longhorn Disaster Recovery — restore from B2 (and R2)
 
 Recover the cluster's PVC state when **daniel-box is gone** (dead disk, lost host,
-total-loss event). Successor to [`kopia-disaster-recovery.md`](kopia-disaster-recovery.md)
+total-loss event). Successor to [`kopia-disaster-recovery.md`](archive/kopia-disaster-recovery.md)
 (retired 2026-08-13 — the kopia repo was deleted; that doc is kept for the era it
 describes). The backupstore lives off-site in B2 under
 `s3://daniel-server-kopia@us-east-005/longhorn`, and every credential needed to reach it is
@@ -78,7 +78,7 @@ accepted residual: the target is an Authelia-gated 302, so it back-stops host/ed
 death but NOT a Kuma-only container death) predates the migration — the alert brain now
 lives on daniel-box (cluster Kuma) and homepage has a cluster identity, so the *shape* of
 the residual has moved even if the acceptance likely still holds. Re-validate the target
-choice in the final `/homelab-review` pass; history: `kopia-disaster-recovery.md`.
+choice in the final `/homelab-review` pass; history: `docs/archive/kopia-disaster-recovery.md`.
 
 ## What is and isn't in the backupstore
 

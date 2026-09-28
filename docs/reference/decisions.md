@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-09-28 06:17 UTC
-generated_sha: 180a57cbc
+generated_at: 2026-09-28 12:14 UTC
+generated_sha: cf8d86ce5
 ---
 
 !!! warning "Generated file — do not edit"
@@ -101,18 +101,18 @@ generated_sha: 180a57cbc
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:449`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/tests/test_probe_health.py:324`
-    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/post-merge-automation.md:268`
+    * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:324`
-    * `docs/gitops-pipeline.md:449` and `docs/post-merge-automation.md:268`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:449`
+    * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:324`
     * `docs/gitops-pipeline.md:449` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/gitops-pipeline.md:449` and `scripts/diagnostics/tests/test_probe_health.py:324`
     * `docs/gitops-pipeline.md:1627` and `docs/monitor-bridge-checks.md:480`
-    * `docs/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:324`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/diagnostics/probe_lib/health_kubectl.py:12` and `scripts/diagnostics/tests/test_probe_health.py:324`
     * `scripts/lib/tests/test_facts_atoms.py:203` and `scripts/lib/tests/test_facts_atoms.py:210`
@@ -394,15 +394,15 @@ generated_sha: 180a57cbc
 |---|---|---|
 | the stamp is read, and both halves are shipped. `--list-only` weekly under the `etcd-snapshot` tag (k3s_etcd_restore_drill_cron, Monday 10:20), run in place from the primary checkout, since 2026-08-28 (PR #531). The fail-closed staleness reader is `check_etcd_restore_drill` in monitor-bridge/check.py, since PR #535: it reads `last-success-list-only` from this STAMP_DIR and pushes the `etcd Restore Drill` Kuma monitor. | `scripts/backup/etcd_restore_drill.sh:165` | 2026-09-02 |
 | the two halves of this gate come from different trees, and that is accepted. | `scripts/deploy_tools/deploy_detach.py:83` | 2026-09-24 |
-| this preflight fails OPEN. clear the cache, the deploy proceeds and dies at Gathering Facts exactly as it does today, except now with this script's stderr naming the cache directly above the misleading module error. Blocking every deploy on a bug in a cache-cleaner would be a worse failure than the one it prevents. | `scripts/deploy_tools/deploy_run.py:170` | 2026-09-24 |
+| this preflight fails OPEN. clear the cache, the deploy proceeds and dies at Gathering Facts exactly as it does today, except now with this script's stderr naming the cache directly above the misleading module error. Blocking every deploy on a bug in a cache-cleaner would be a worse failure than the one it prevents. | `scripts/deploy_tools/deploy_run.py:171` | 2026-09-24 |
 | the `k8s_deferred` marker is NOT printed here, unlike on the SessionStart banner (#2470). This addendum exists to correct one wrong repair — exit 4 points at a rebase of this tree when the primary checkout is what has to converge. A deferred image bump is not a park: the tree converged, and the reader's own `--tags` are unaffected by a bump to some other service. Printing it here would attach an unrelated to-do to a refusal, which is how an addendum stops being read. | `scripts/deploy_tools/deploy_staleness.py:392` | 2026-09-25 |
 | ownership is this lock, never the pid in the directory name. playbook in a process whose pid is not the one in the name, and the name's pid is dead for the whole life of a detached deploy -- a pid-based reaper deleted the worktree out from under the running playbook. A process cannot lie about holding a flock. (ADR-0017) | `scripts/deploy_tools/deploy_under_locks.py:222` | 2026-09-24 |
 | the lock order is whatever `deploy_locks.plan` returns, taken top to bottom, and this module neither names a lock nor sorts a tag. The deployer walks the same `plan()` for its own locks, so the two orders are one function rather than two agreeing ones. This run takes the tree lock, snapshots, RELEASES the tree lock and only then takes service locks, while the GitOps deployer holds the tree lock across its service locks; there is no cycle because this run never re-takes the tree lock after releasing it. (ADR-0017) | `scripts/deploy_tools/deploy_under_locks.py:430` | 2026-09-24 |
 | a usage error is not a landing, so it annotates nothing. SystemExit(2) before a Landing or a Ledger exists, so the only line this could write is `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same stream the Landings board counts. The bash original annotated it because its EXIT trap was installed before the arg loop, and this port reproduced that until issue #1304 measured 592 such rows in Loki's 744h window. `--help` (exit 0) never annotated. Nothing wraps parse_args now: its SystemExit propagates untouched. | `scripts/deploy_tools/land.py:102` | 2026-09-06 |
 | `--tags` leaves `k8s_only` empty, so a two-platform tag such as `wg-easy` routes to every declaring host (#2748). The operator's list carries no provenance, and narrowing it from the PR's paths would second-guess an explicit "deploy exactly these services". Staying wide costs one Pi Compose deploy that recreates nothing. Narrowing is the direction of issue #929: a tag that reached no host while the landing printed `settled` over a Pi still running the old container. | `scripts/deploy_tools/land_lib/classify.py:124` | 2026-09-27 |
-| exit 4 under `--at` means a commit MERGED AFTER this one reaches the same tags, and that newer landing owns the service. Deploying the merge commit anyway would revert their change; deploying the primary's HEAD would deploy a tree this landing never CI-gated. So this one falls back to the path it had before `--at` existed -- wait for the tick to fast-forward the primary onto the newest green commit, then deploy from there -- and the retry loop below is that path, unchanged. | `scripts/deploy_tools/land_lib/deploy.py:459` | 2026-09-16 |
-| the tick is kicked HERE, after deploy.sh has returned, not in step 4. `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked before the deploy is one deploy.sh then queues behind inside its own `flock -w 3840` -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges the primary while this landing gates, and the gate's own snapshot needs no lock. Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests for the same work is one more than the path had before `--at`. | `scripts/deploy_tools/land_lib/deploy.py:476` | 2026-09-16 |
-| a failing retick here ENDS the landing (deploy-failed, cause=tick-failed) rather than carrying on to deploy_by_host the way bash's stale-retry loop did -- bash discarded the tick's own exit code and kept going regardless. Deliberate per tick.py's module docstring and #1013: this shares tick.py's one retry implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not re-derived as a parity bug. | `scripts/deploy_tools/land_lib/deploy.py:532` | 2026-09-04 |
+| exit 4 under `--at` means a commit MERGED AFTER this one reaches the same tags, and that newer landing owns the service. Deploying the merge commit anyway would revert their change; deploying the primary's HEAD would deploy a tree this landing never CI-gated. So this one falls back to the path it had before `--at` existed -- wait for the tick to fast-forward the primary onto the newest green commit, then deploy from there -- and the retry loop below is that path, unchanged. | `scripts/deploy_tools/land_lib/deploy.py:473` | 2026-09-16 |
+| the tick is kicked HERE, after deploy.sh has returned, not in step 4. `gitops-deploy.service` wraps its whole unit run in the tree lock, so a tick kicked before the deploy is one deploy.sh then queues behind inside its own `flock -w 3840` -- the same wait, moved out of `tick=` and into `lock=`. Kicked after, it converges the primary while this landing gates, and the gate's own snapshot needs no lock. Not on the fallback arm: the retry loop runs a tick WITH its wait, and two requests for the same work is one more than the path had before `--at`. | `scripts/deploy_tools/land_lib/deploy.py:490` | 2026-09-16 |
+| a failing retick here ENDS the landing (deploy-failed, cause=tick-failed) rather than carrying on to deploy_by_host the way bash's stale-retry loop did -- bash discarded the tick's own exit code and kept going regardless. Deliberate per tick.py's module docstring and #1013: this shares tick.py's one retry implementation with step 4 rather than land.sh's un-retried, un-accounted copy, and that implementation's failure mode is to raise. Listed as #1085 item 8 so it is not re-derived as a parity bug. | `scripts/deploy_tools/land_lib/deploy.py:546` | 2026-09-04 |
 | this REPORTS the tick's state, it does not re-verdict the landing. | `scripts/deploy_tools/land_lib/landing.py:307` | 2026-09-25 |
 | this reads the tag slot, which | `scripts/deploy_tools/land_lib/landing.py:368` | 2026-09-19 |
 | this samples on every attempt, including an uncontended first one, where bash's `note_lock_contention` only ran fuser+ps after an attempt had already lost the lock. That is a real parity delta (#1085 item 4) and it stays: reverting to bash's post-failure sample reintroduces the #1031 race this pre-sample exists to close, and `test_the_lock_holder_is_sampled_before_the_attempt` (tests/test_land_tick.py) plus its deploy.py sibling would go red on the revert. The cost is two short-lived processes per attempt against a 10-15 minute landing. | `scripts/deploy_tools/land_lib/landing.py:414` | 2026-09-04 |
@@ -422,7 +422,7 @@ generated_sha: 180a57cbc
 | a caller that never runs `manifests` is dropped rather than required. no record, so requiring it keeps the line forever. `n8n-images` is the one live instance, and it is the whole of it: of the declared entries, its role is the only one that renders no manifest, so `image-builder`'s set drops it. That means an `image-builder` line can discharge while `n8n-images` alone is behind. That line is a banner entry that never pages, and a permanent one is the always-red surface #2570 refused, so the gap is taken. A role left with no recording caller at all still keeps its line. | `scripts/deploy_tools/shared_role_callers.py:144` | 2026-09-26 |
 | ` comment to | `scripts/deploy_tools/shared_role_reach.py:22` | 2026-09-25 |
 | per KEY, not per role and not per subdirectory. | `scripts/deploy_tools/shared_role_reach.py:26` | 2026-09-25 |
-| the gate ignores the submodule rather than syncing it. `ansible/` and runs `scripts/`; nothing under `Email-to-RSS` is read by any of it — it is a Cloudflare Worker (docs/email-to-rss.md), deployed by wrangler and not by this repo. Adding `git submodule update` here would put a fetch of an unrelated GitHub remote in front of every verdict, so a network flake there would become PREP_FAILED, then NO_VERDICT, and prod would deploy unguarded — the exact failure this file exists to prevent. Full reasoning in ansible/roles/setup/hypervisor/CLAUDE.md. | `scripts/deploy_tools/staging_gate_remote.sh:84` | 2026-09-27 |
+| the gate ignores the submodule rather than syncing it. `ansible/` and runs `scripts/`; nothing under `Email-to-RSS` is read by any of it — it is a Cloudflare Worker (docs/email-to-rss.md), deployed by wrangler and not by this repo. Adding `git submodule update` here would put a fetch of an unrelated GitHub remote in front of every verdict, so a network flake there would become PREP_FAILED, then NO_VERDICT, and prod would deploy unguarded — the exact failure this file exists to prevent. Full reasoning in ansible/roles/setup/hypervisor/CLAUDE.md. | `scripts/deploy_tools/staging_gate_remote.sh:120` | 2026-09-27 |
 | `sidecar=` is the seam that makes the CLI testable, not scaffolding a better test would avoid (#2363). Pre-#2324 `main(argv)` read no `manual_plane_tags` marker and consulted no narrowing at all (`land_tags.py` at `d2ef719b~1`), so no input separates the CLI defect from the signature — the check and its seam landed together. What the test has to hold is today's behaviour, and it does: replacing the `confirmed_narrow_tags` call in `land_tags.main` with a bare `parse_manual_plane_tags` fails `test_the_plane_cli_does_not_print_a_stale_row` on its own assertion, measured 2026-09-24. | `scripts/deploy_tools/tests/test_land_quotes_the_deployers_narrowing.py:117` | 2026-09-24 |
 | these two drive `narrow_setup.main` with the argv `deploy_narrow.narrow_setup_argv` builds, and that function is the capability — there is no earlier signature to separate the defect from (#2363). The defect they name is a flag mismatch across the subprocess boundary, and they catch it: spelling `--role-tag` as `--role-tags` in the builder fails both with argparse's `unrecognized arguments`, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup.py:314` | 2026-09-24 |
 | `role_tags`' `playbook` argument IS the capability under test, so no input separates this rule from the signature (#2363). `foreign_tags` needs the playbook to know which other roles are in scope; a `role_tags` without it cannot refuse a shared tag at all. Today's behaviour is what the pair below holds, and it does: making `role_tags` intersect against an empty set instead of `foreign_tags(...)` fails `test_a_tag_another_role_in_the_playbook_declares_is_flagged` with DID NOT RAISE and leaves its accepting half green, measured 2026-09-24. | `scripts/deploy_tools/tests/test_narrow_setup_edges.py:333` | 2026-09-24 |
@@ -515,6 +515,10 @@ generated_sha: 180a57cbc
 | '` before flagging anything in a role, and that grep is literal — moving | `docs/adr/template.md:56` | 2026-08-24 |
 | the `slice-` prefix in `k3s-migration/` stays, against the rule above.** Those | `docs/archive/README.md:12` | 2026-09-02 |
 | ` marker at the line it governs. | `docs/archive/README.md:26` | 2026-08-24 |
+| the lock order is` note exists only because bash cannot import | `docs/archive/deploy-sh-python-port.md:23` | 2026-09-24 |
+| this preflight fails OPEN` note requires. | `docs/archive/deploy-sh-python-port.md:147` | 2026-09-24 |
+| the two halves of this gate come from different trees` split holds either way. | `docs/archive/deploy-sh-python-port.md:148` | 2026-09-24 |
+| ` markers and regenerates on | `docs/archive/deploy-sh-python-port.md:259` | 2026-09-24 |
 | ` markers already in the code, a scoped Vale style gate, and D2 for hand-authored diagrams. | `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:5` | 2026-08-24 |
 | ` marker whose reasoning outgrew its line gains an `ADR-NNNN` reference, and `ansible/tests/repo/test_adr_links.py` enforces both directions. | `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:7` | 2026-09-02 |
 | ` marker convention is defined in the repo-root `CLAUDE.md`** under *Review & Memory Hygiene*, and `.claude/skills/homelab-review/SKILL.md` step 3 greps for it. | `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:19` | 2026-08-24 |
@@ -532,11 +536,8 @@ generated_sha: 180a57cbc
 | ` | `docs/archive/docs-ui-and-adrs/design.md:27` | 2026-08-24 |
 | ` markers | `docs/archive/docs-ui-and-adrs/design.md:137` | 2026-08-24 |
 | ` markers sit across 20 files at the lines | `docs/archive/docs-ui-and-adrs/design.md:139` | 2026-08-24 |
+| ` marker | `docs/archive/post-merge-automation.md:268` | 2026-09-17 |
 | ` marker sits | `docs/claude-shell-permissions.md:98` | 2026-09-18 |
-| the lock order is` note exists only because bash cannot import | `docs/deploy-sh-python-port.md:23` | 2026-09-24 |
-| this preflight fails OPEN` note requires. | `docs/deploy-sh-python-port.md:147` | 2026-09-24 |
-| the two halves of this gate come from different trees` split holds either way. | `docs/deploy-sh-python-port.md:148` | 2026-09-24 |
-| ` markers and regenerates on | `docs/deploy-sh-python-port.md:259` | 2026-09-24 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py` carries the evidence. | `docs/gitops-pipeline.md:113` | 2026-09-01 |
 | ` marker. | `docs/gitops-pipeline.md:449` | 2026-09-21 |
 | ` says it has to run. | `docs/gitops-pipeline.md:579` | 2026-09-24 |
@@ -553,7 +554,6 @@ generated_sha: 180a57cbc
 | 12 cycles` marker | `docs/monitor-bridge-checks.md:507` | 2026-09-21 |
 | ` marker at that switch in `group_vars/all.yml` records why it stays off — arming it | `docs/monitor-bridge-checks.md:1068` | 2026-09-25 |
 | ` marker in `bridge/config_io.py`) over the window; the message names which reason fired when the | `docs/monitor-bridge-checks.md:1137` | 2026-09-21 |
-| ` marker | `docs/post-merge-automation.md:268` | 2026-09-17 |
 | ` marker in the tree. | `docs/reference/scripts.md:42` | 2026-09-03 |
 | ` block records that with the remote-control unit | `docs/self-hosted-runner-spike.md:179` | 2026-09-22 |
 | ` block has to be redone: | `docs/self-hosted-runner-spike.md:190` | 2026-09-22 |

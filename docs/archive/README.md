@@ -42,10 +42,14 @@ recording rather than that nobody looked.
 | `docs-ui-and-adrs/3-subsystem-docs.md` | complete — generated scripts reference, GitOps and deploy operator pages, PR #418 | `docs/deploying.md`, `docs/gitops-pipeline.md` | [ADR-0001](../adr/0001-mkdocs-site-with-generated-reference.md) |
 | `host-python-314-plan.md` | complete — all 7 tasks executed and verified 2026-08-16, PR #239 (the plan's own status line) | `CLAUDE.md` → *Python & Tests* | — |
 | `daniel-box-handoff.md` | historical — superseded 2026-08-14 by the k3s migration (marked in the file itself) | repo-root `README.md` | [ADR-0002](../adr/0002-k3s-over-docker-compose-for-the-cluster-nodes.md) |
-| `happy-selfhost-spec.md` | mothballed 2026-07-19, no longer executable as written as of 2026-08-14 (marked in the file itself) | none — abandoned, not shipped | — |
+| `happy-selfhost-spec.md` | mothballed 2026-07-19, no longer executable as written since 2026-08-14 (marked in the file itself) | none — abandoned, not shipped | — |
 | `docs-ui-and-adrs/diagrams-plan.md` | never started — Task 5 of the docs-UI programme, extracted live and left there. The tool choice it rested on is now a record; the six implementation steps are not | none — the pipeline does not exist | [ADR-0015](../adr/0015-d2-for-hand-authored-diagrams.md) |
 | `ubuntu-24.04-upgrade.md` | both hosts upgraded 2026-06-05; the file's own header says not to follow it as instructions | — | — |
 | `parallel-session-git-ci-design.md` | design approved for planning; the practice it describes is now documented directly | `CLAUDE.md` → *Parallel Claude Sessions* | — |
+| `deploy-sh-python-port.md` | all four slices landed 2026-09-24, issue #2412 (the page's own status line) | the `scripts/deploy_tools/deploy_run.py` docstring, which points back here for the consumer contract the port kept; `docs/deploying.md` | the markers at the lines they govern in `deploy_under_locks.py` (lock order), `deploy_run.py` (the fact-cache preflight fails open) and `deploy_detach.py` (the gate's two trees) |
+| `post-merge-automation.md` | slices 1–3 shipped: `await_ci.py` and `land.sh` exist, and the deployer applies broad setup- and deploy-plane changes itself | repo-root `CLAUDE.md` → *After a PR Merges*; the `land-after-merge` skill; `docs/gitops-pipeline.md` | the marker in `deploy_remediation.py` that keeps the broad deploy-plane arm forward-only |
+| `kopia-disaster-recovery.md` | retired 2026-08-13 and fully historical since 2026-08-14 (marked in the file itself) | `docs/longhorn-disaster-recovery.md`, its successor | [ADR-0014](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) |
+| `b2-api-drain-scoping.md` | built as `scripts/backup/b2_drain.py`, run by `ansible/prune_backups.yml`'s `b2-drain` mode | the `b2_drain.py` docstring and the playbook's header | — |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
@@ -56,3 +60,25 @@ files as GitHub Issues via `scripts/dev/findings.py`.
 `docs/networkpolicy-default-deny.md` stays live: its slices shipped, but the document
 describes the enforced end state rather than the plan to reach it, so it reads as current
 documentation and not as history.
+
+## History outside this directory
+
+Two pages are history and still sit directly under `docs/`. The site lists them under
+*History*, beside this index, so the Operations section holds only pages that describe the
+lab as it runs.
+
+- `docs/b2-transaction-cap-monitoring-gaps.md` is the record of the 2026-08-02 B2 cap
+  incident. Comments in monitor-bridge's `files/gates.py` and `files/bridge/config_io.py`
+  cite it by path, and so do the defaults of eight k8s media roles and the `setup/k3s` role.
+  Moving it rewrites those comments. The monitor-bridge files feed the pod's `check-script`
+  checksum, so the edit restarts monitor-bridge on its next deploy, and the eight media roles
+  join the deployer's changed set for a comment. That is the same trade the `slice-` decision
+  above records.
+- `docs/self-hosted-runner-spike.md` is the concluded #2245 spike. Its issue is closed, but
+  its verdict turns on a repository-visibility decision the operator has not made, and no
+  ADR records one. Once that decision has a record, the page can move here.
+
+Two specs stay in Operations and are not history: `docs/staging-cluster.md` and
+`docs/staging-phase-c.md`. They are written as plans, but what they plan is built. They
+describe the live staging cluster and its gate, and inventory, role defaults and shipped role
+files cite them by path, among them the four `gitops_markers.py` copies.

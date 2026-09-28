@@ -72,7 +72,7 @@ checks passed rather than that something returned a status code.
 
 ### The recorded disaster-recovery backstop is gone
 
-`docs/kopia-disaster-recovery.md` and `docs/longhorn-disaster-recovery.md` both named monitor
+`docs/archive/kopia-disaster-recovery.md` and `docs/longhorn-disaster-recovery.md` both named monitor
 `803270234`, probing `https://homepage.daniel-hunter.com`, as the ONE backstop for a total
 in-house monitoring death. **It no longer exists.** The two live ids are `803868101` and
 `803868270`, neither of which is it, and it was not among the four monitors that preceded them
@@ -137,7 +137,7 @@ survived. From `containers_list` in `ansible/inventory/host_vars/daniel-box.yml`
 The service that *is* behind Authelia is `homepage` — the one the DR docs name and which is not
 live. An Uptime Robot probe there counts Authelia's 302 as up, so it proves the edge is routing
 and nothing beyond it: the weakest possible check, and the trap already recorded in
-`docs/kopia-disaster-recovery.md`. If the backstop is restored, do not restore it there.
+`docs/archive/kopia-disaster-recovery.md`. If the backstop is restored, do not restore it there.
 
 ## What was collapsed, and why
 

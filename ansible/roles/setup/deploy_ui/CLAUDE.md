@@ -59,7 +59,7 @@ waiter from `/proc/locks`. Measured on daniel-box: fuser over the 31 lock files 
 `deploy.sh` with its playbook — to one row carrying `locks` (held) and `waiting_on`. The run
 pattern also matches `deploy_run.py`: the `deploy.sh` shim execs `uv run … deploy_run.py`,
 which stays the family root while its python child takes the locks and runs the playbook
-(`docs/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
+(`docs/archive/deploy-sh-python-port.md`), so no process names `deploy.sh`. A `--detach` run's
 forked child is reparented to 1 and is its own root, still matching `deploy_run.py`. A
 holder that matches no run pattern (the GitOps tick on the tree lock) is a `lock` row rather
 than nothing. `deploy.sh --list-services`, which the daemon itself runs on every deploy

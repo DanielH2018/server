@@ -5,7 +5,7 @@ WHY THIS EXISTS. Deleting a backup chain through Longhorn costs on the order of 
 Class C transactions, because a prune walks the whole block tree once per deleted backup, and
 B2's free tier allows 2,500 Class C a day. Doing it through the API costs one listing for the
 whole store (5 Class C, measured 2026-08-19) plus deletes, which are Class A and unmetered.
-Scoping: docs/b2-api-drain-scoping.md.
+Scoping: docs/archive/b2-api-drain-scoping.md.
 
 WHY IT IS SAFE TO DELETE A WHOLE PREFIX. Longhorn namespaces blocks under each volume's own
 prefix — `volumes/<xx>/<yy>/<volume>/blocks/<aa>/<bb>/<sha256>.blk`. The same content hash

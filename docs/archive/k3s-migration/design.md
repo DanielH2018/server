@@ -182,7 +182,7 @@ Two caveats inside that list:
 
 The `kopia` role mounts `/home/ubuntu/server/containers` read-only and pushes to **Backblaze B2**. When a service's config moves into a Longhorn PV, that host path still exists — it just no longer holds the live data. Kopia keeps reporting success while backing up nothing. This is a silent failure, and it lands on `backup_controller_host`, one of the four flags being flipped.
 
-**Decided:** point **Longhorn's backup target at the same B2 bucket** (B2 exposes an S3-compatible API) for everything on a PV, and keep Kopia for what stays on host paths — the media library on local-path, plus host-level config. `docs/kopia-disaster-recovery.md` and the pinned kopia-password rotation procedure both need updating.
+**Decided:** point **Longhorn's backup target at the same B2 bucket** (B2 exposes an S3-compatible API) for everything on a PV, and keep Kopia for what stays on host paths — the media library on local-path, plus host-level config. `docs/archive/kopia-disaster-recovery.md` and the pinned kopia-password rotation procedure both need updating.
 
 **Gate, applied to every slice:** a service's data must be visible in its *new* backup path before the Docker copy is decommissioned. No exceptions — this is the check that keeps a silent-backup failure from surviving the migration.
 
@@ -255,7 +255,7 @@ The first five closed on 2026-08-01; #6 closed 2026-08-14 after the drain surfac
 
 | # | Decision | Chosen | Commits us to |
 |---|---|---|---|
-| 1 | Backup | Longhorn backup target → B2 | Kopia's role shrinks to host paths; `docs/kopia-disaster-recovery.md` and the pinned password-rotation procedure need rewriting |
+| 1 | Backup | Longhorn backup target → B2 | Kopia's role shrinks to host paths; `docs/archive/kopia-disaster-recovery.md` and the pinned password-rotation procedure need rewriting |
 | 2 | Pi-hole | In-cluster, behind the VIP | The upstream `resolv.conf` rule and the cold-boot gate in §7 become mandatory work, not contingency |
 | 3 | UPS / `peanut` | ~~Stays on daniel-server~~ **REVERSED 2026-08-14** (drain log "D6 REVERSED"): nut runs in-cluster, pinned to daniel-server for the USB | daniel-server fully drains — no residual Docker role; the host keeps only the k3s agent + the `nut_host` shutdown chain |
 | 4 | Portainer | Replaced | Homepage widget removed; the Pi's agent, `portainer_manager_host`, and the Pi's `DOCKER-USER` rule retire together |

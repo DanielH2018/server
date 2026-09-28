@@ -304,7 +304,7 @@ router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for the Lo
 backup plane (kopia retired 2026-08-13), and the off-box UptimeRobot dead-man's-switch.
 Rebuilding rather than bringing up a new host? Follow
 [`docs/longhorn-disaster-recovery.md`](../docs/longhorn-disaster-recovery.md), the current
-runbook. `docs/kopia-disaster-recovery.md` describes the RETIRED plane and survives only as
+runbook. `docs/archive/kopia-disaster-recovery.md` describes the RETIRED plane and survives only as
 history — do not follow it.
 
 ## Not bring-up, moved out of this file

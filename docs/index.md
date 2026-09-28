@@ -17,6 +17,9 @@ the inventory and is not one of these — it is the staging cluster, and the
   deploying, rotating a secret, then upgrading or restoring a subsystem after something broke.
   [Break glass](break-glass.md) is the last one — the single entry point for rebuilding or
   recovering the lab when the author is unavailable or daniel-box is gone.
+- **History** is the record of work that shipped, spikes that concluded and incidents that
+  closed. None of it is instructions. The [archive index](archive/README.md) lists each
+  archived plan and names the page that documents its result.
 - **Artifacts** is not a page. It is a link off this site to the artifact browser.
 
 ## What generates what
