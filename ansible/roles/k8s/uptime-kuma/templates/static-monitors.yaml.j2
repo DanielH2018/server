@@ -342,13 +342,6 @@ stringData:
   loki-read-route-daniel-server.json: |
     {"type": "push", "name": "Loki Read Route (daniel-server)", "description": "The hourly kuma-check-loki-read-route timer on daniel-server runs probe.py loki-labels through the loki-homelab IngressRoute and judges the body, not the exit code; it reruns every 15 min while red. DOWN means the route answered 404 or an error from this host, usually the ClientIP guard rejecting its source address. Run systemctl status kuma-check-loki-read-route on daniel-server; check traefik pod placement.", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  # DECIDED: 5400s, not the 1200 its host-cron siblings use — the deadline must exceed the
-  # PRODUCER'S PERIOD, and this producer is an hourly cron (k3s_remember_logs_cron_minute), not a
-  # */10 one. 3600s plus the run leaves 5400 with 30 min of margin. At 1200 it would fire DOWN
-  # every hour with nothing wrong, which is the failure the Cloudflare DDNS entries above record.
-  # Move this and the cron minute together or neither.
-  remember-logs-health.json: |
-    {"type": "push", "name": "Remember Log Rotation", "description": "The hourly kuma-check-remember-logs timer on daniel-box counts remember-plugin log files older than 14 days under each store .remember/logs directory, which the plugin should have archived at 7 days; it reruns every 15 min while red. DOWN means rotation has stopped, whether tar failed or consolidation no longer runs; the message names the stores. Run /remember:doctor first, then systemctl status kuma-check-remember-logs on daniel-box.", "interval": 5400, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ remember_logs_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   claude-otel-health.json: |
     {"type": "push", "name": "k3s Telemetry Stack", "description": "A daniel-box cron runs every 10 min: loki, prometheus, tempo and grafana Deployments ready, the otel-collector DaemonSet ready, the OTLP hostPort reachable, and no collector send failures in 15 min. DOWN lists which failed. Check the named workload with kubectl -n homelab, then the collector export metrics.", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 600s against a */5 cron (#2516): the deadline must exceed the period plus the work, and a run

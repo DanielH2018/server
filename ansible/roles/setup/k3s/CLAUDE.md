@@ -43,8 +43,7 @@ command it suggests, from
   - `Release staleness drift check` — `*/30 * * * *`
   - `Off-box etcd snapshot` — `45 2 * * *`
   - `etcd restore drill` — `20 10 * * 1`
-- **Timers (3):** `kuma-check-remember-logs.timer` (`OnCalendar=*-*-* *:17:00`),
-  `kuma-check-manifest-prune.timer` (`OnCalendar=*-*-* 05:15:00`),
+- **Timers (2):** `kuma-check-manifest-prune.timer` (`OnCalendar=*-*-* 05:15:00`),
   `kuma-check-live-drift.timer` (`OnCalendar=*-*-* 05:45:00`)
 <!-- /generated_from -->
 
@@ -189,19 +188,20 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
   `/var/log` records for what the last week actually cost and what actually failed.
 
 The read-only crons in the same file — `Longhorn backup health`, `daniel-box disk health`,
-`remember log rotation health`, `Manifest prune drift check`, `Release staleness drift
-check`, `Live object drift check`, `B2 deletion accounting`, `B2 backup budget listing`, and
-the `--list-only` etcd drill — read the cluster or the bucket and write nothing to either.
+`Manifest prune drift check`, `Release staleness drift check`, `Live object drift check`,
+`B2 deletion accounting`, `B2 backup budget listing`, and the `--list-only` etcd drill — read the cluster or the bucket and write nothing to either.
 The heartbeats push a Kuma tile through `kuma-push-lib.sh`; the B2 accounting pair appends to
 the local ledger, which is bookkeeping, not state.
 
-Three of those heartbeats are kuma-check timers rather than crons since 2026-09-19:
-`remember log rotation health`, `Manifest prune drift check` and `Live object drift check`
-import [[common]]'s `kuma_check_timer.yml`. Each script exits 1 after it pushes `down`, and
-the service's `Restart=on-failure` reruns it (15 min for the hourly check, 30 min for the
-daily ones) until it exits 0, so a red tile clears when the fault does rather than at the
-next slot. The timers are `Persistent=true`; the two daily checks carry the boot grace so a
-catch-up run at boot exits 1 without a verdict and the restart carries the real one.
+Two of those heartbeats are kuma-check timers rather than crons since 2026-09-19: `Manifest
+prune drift check` and `Live object drift check` import [[common]]'s `kuma_check_timer.yml`.
+Each script exits 1 after it pushes `down`, and the service's `Restart=on-failure` reruns it
+every 30 min until it exits 0, so a red tile clears when the fault does rather than at the
+next slot. The timers are `Persistent=true`, and both checks carry the boot grace so a
+catch-up run at boot exits 1 without a verdict and the restart carries the real one. A third,
+`remember log rotation health`, was retired on 2026-09-28 with the remember plugin (#2852).
+Its teardown tasks stay in `tasks/health-crons.yml` until `--tags remember-logs` has run on
+daniel-box.
 `systemctl status kuma-check-<name>` shows `auto-restart` while red. Manifest prune's
 healthchecks.io `/fail` ping repeats on every rerun; healthchecks notifies on a status change,
 so a check already down is not paged again.

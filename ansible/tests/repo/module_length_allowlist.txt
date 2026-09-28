@@ -21,10 +21,10 @@ ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py 537
 ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py 701
 ansible/roles/setup/renovate_notify/tests/test_notify_logic.py 559
 ansible/tests/deploy/test_cronjob_gate_decision.py 555
-ansible/tests/deploy/test_setup_render_manifest.py 513
+ansible/tests/deploy/test_setup_render_manifest.py 512
 ansible/tests/longhorn/test_longhorn_restore_drill.py 516
 ansible/tests/repo/test_documented_paths_exist.py 553
-ansible/tests/setup/test_cron_scripts_publish_via_pr.py 684
+ansible/tests/setup/test_cron_scripts_publish_via_pr.py 683
 ansible/tests/staging/test_staging_manifests_have_their_variables.py 586
 scripts/deploy_tools/tests/test_deploy_detach_notify.py 508
 scripts/deploy_tools/tests/test_publish_pr.py 511

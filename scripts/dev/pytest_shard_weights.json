@@ -574,7 +574,6 @@
  "ansible/tests/setup/test_registry_selftest_single_node.py": 0.03,
  "ansible/tests/setup/test_release_bin_groups_have_no_secrets.py": 0.52,
  "ansible/tests/setup/test_release_staleness_push_grouped.py": 0.02,
- "ansible/tests/setup/test_remember_logs_health.py": 0.0,
  "ansible/tests/setup/test_render_records_role.py": 0.0,
  "ansible/tests/setup/test_renovate_agent_unit.py": 0.0,
  "ansible/tests/setup/test_repo_checkout_gate.py": 0.11,

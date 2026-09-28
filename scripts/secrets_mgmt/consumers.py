@@ -38,7 +38,6 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         "release_staleness_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "live_drift_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         "etcd_snapshot_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
-        "remember_logs_push_token",  # daniel-box cron (k3s role) + k8s/uptime-kuma static tile
         # daniel-box cron (setup/gitops_deploy) + k8s/uptime-kuma static tile. Declines for the
         # same reason the setup-plane tokens below do rather than naming a role: gitops_deploy has
         # no `containers_list` entry, so `deploy.yml --tags gitops_deploy` matches nothing and
