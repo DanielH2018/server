@@ -63,7 +63,7 @@ and records `behind_since`.
 and it is accepted because the logic is what encodes the incidents.
 
 **The evaluation is not a plan of record.** Its recommendation to add Flux stands unexecuted.
-Anyone reading `docs/gitops-argo-flux-evaluation.md` should treat it as an evaluation whose
+Anyone reading `docs/archive/gitops-argo-flux-evaluation.md` should treat it as an evaluation whose
 recommendation was consciously deferred, not as a description of what runs.
 
 ## Governs

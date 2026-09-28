@@ -360,7 +360,7 @@ The target set, in a sensible reading order. Each names its primary source:
 | 0007 | Backup tiering: R2 daily, B2 weekly shards | `docs/longhorn-backup-tiering.md` |
 | 0008 | 16 MiB Longhorn blocks, and why the field is immutable | `docs/longhorn-backup-tiering.md` |
 | 0009 | NetworkPolicy default-deny, and why egress is not enforced | `docs/networkpolicy-default-deny.md`, `docs/archive/networkpolicy-slice*.md` |
-| 0010 | Pull-based GitOps over Argo CD and Flux | `docs/gitops-argo-flux-evaluation.md` |
+| 0010 | Pull-based GitOps over Argo CD and Flux | `docs/archive/gitops-argo-flux-evaluation.md` |
 | 0011 | One git-tree lock serializing every deploy path | `scripts/deploy.sh`, `ansible/roles/setup/gitops_deploy/CLAUDE.md` |
 | 0012 | Zero-downtime deploys: the rollout gate design | `docs/archive/zero-downtime/design.md` |
 | 0013 | daniel-pi stays on Docker | repo-root `CLAUDE.md`, `ansible/roles/containers/` |
