@@ -66,6 +66,10 @@ extra_css:
 
 extra_javascript:
   - assets/fqdn-links.js
+  # A filter bar and sortable headers on the long tables. It runs in the browser because the
+  # filter is the reader's choice, not a fact the build knows. The file's own header says
+  # which tables get one; it sits after fqdn-links.js so a filter matches the resolved links.
+  - assets/table-filter.js
 
 # Turns a repo path written as a code span -- `scripts/docs/service_catalog.py`,
 # `docs/secret-rotation.md` -- into a link to where this site documents it. Unlike the FQDN

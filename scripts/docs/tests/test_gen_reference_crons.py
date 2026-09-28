@@ -5,6 +5,7 @@ Fixture-driven: synthetic roles under tmp_path, never the real tree, which chang
 Run: uv run pytest scripts/docs/tests/test_gen_reference_crons.py
 """
 
+import re
 import textwrap
 
 from docs.reference import crons as g
@@ -144,6 +145,29 @@ def test_markdown_says_the_state_column_is_a_heuristic(tmp_path):
     """An inferred column presented as authoritative is worse than none."""
     out = g.render_markdown(g.build_rows(_basic(tmp_path)))
     assert "heuristic" in out.lower()
+
+
+def test_a_filter_pipe_in_the_when_clause_stays_in_its_cell(tmp_path):
+    """`not k8s_dry_run | bool` split ten live rows one column to the right."""
+    _role(
+        tmp_path,
+        "gamma",
+        """\
+        ---
+        - name: Schedule a guarded job
+          when: not k8s_dry_run | bool
+          ansible.builtin.cron:
+            name: "Guarded"
+            minute: "5"
+            user: root
+            job: "/usr/local/bin/probe"
+        """,
+    )
+    out = g.render_markdown(g.build_rows(tmp_path))
+    row = next(line for line in out.splitlines() if line.startswith("| Guarded "))
+    cells = re.split(r"(?<!\\)\|", row)[1:-1]
+    assert len(cells) == 6
+    assert cells[2].strip() == r"conditional (not k8s_dry_run \| bool)"
 
 
 def test_markdown_ends_with_exactly_one_newline(tmp_path):

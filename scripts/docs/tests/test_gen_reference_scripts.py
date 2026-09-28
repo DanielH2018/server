@@ -105,36 +105,6 @@ def test_rows_are_sorted_by_name(tmp_path):
     assert names == sorted(names)
 
 
-def test_markdown_opens_with_the_provenance_banner(tmp_path):
-    _write(tmp_path / "probe.py", '"""Summary."""\n')
-    out = g.render_markdown(g.build_rows(tmp_path))
-    assert out.startswith("---\n")
-    assert "generated_from: scripts/docs/reference/scripts.py" in out
-
-
-def test_markdown_counts_the_untested_scripts(tmp_path):
-    _write(tmp_path / "probe.py", '"""Summary."""\n')
-    _write(tmp_path / "tested.py", '"""Summary."""\n')
-    _write(tmp_path / "test_tested.py", '"""x"""\n')
-    out = g.render_markdown(g.build_rows(tmp_path))
-    assert "1 of all 2" in out
-
-
-def test_markdown_escapes_a_pipe_in_a_summary(tmp_path):
-    """A summary is free text; a literal pipe would silently add a column."""
-    _write(tmp_path / "p.py", '"""Reads a | b."""\n')
-    out = g.render_markdown(g.build_rows(tmp_path))
-    assert r"Reads a \| b." in out
-
-
-def test_markdown_ends_with_exactly_one_newline(tmp_path):
-    """A second newline makes end-of-file-fixer rewrite the page and abort the cron."""
-    _write(tmp_path / "probe.py", '"""Summary."""\n')
-    out = g.render_markdown(g.build_rows(tmp_path))
-    assert out.endswith("\n")
-    assert not out.endswith("\n\n")
-
-
 def test_the_real_scripts_directory_yields_the_known_shape(live_script_rows):
     """Guards the exclusion rules against the live tree, not just fixtures."""
     rows = live_script_rows

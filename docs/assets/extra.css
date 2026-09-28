@@ -96,6 +96,14 @@
   font-weight: 700;
 }
 
+/* A fragment scrolls its target to the top of the viewport, under the sticky header and the
+ * table-filter bar below it (styled further down). The margin clears both, plus the cell's own
+ * top padding so the whole highlighted row shows. table-filter.js sets the bar's height as it
+ * wraps; a page with no bar leaves it unset. */
+.md-typeset table:not([class]) td code[id] {
+  scroll-margin-top: calc(2.4rem + var(--table-filter-height, 0px) + 1.6rem);
+}
+
 .md-typeset table:not([class]) tr:has(code:target) {
   background-color: var(--md-typeset-mark-color);
 }
@@ -105,4 +113,108 @@
 .md-typeset .doc-freshness {
   font-size: 0.7rem;
   color: var(--md-default-fg-color--light);
+}
+
+/* The filter bar docs/assets/table-filter.js puts above a long table, or above the first of a
+ * page's tables that share a header row. The script's own header says which tables get one. */
+.md-typeset .table-filter {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem 0.8rem;
+  margin: 1em 0;
+  padding: 0.4rem 0.6rem;
+  font-size: 0.7rem;
+  background-color: var(--md-default-bg-color);
+  border: 0.05rem solid var(--md-default-fg-color--lightest);
+  border-radius: 0.1rem;
+}
+
+.md-typeset .table-filter input,
+.md-typeset .table-filter select,
+.md-typeset .table-filter button {
+  font: inherit;
+  color: inherit;
+  background-color: var(--md-default-bg-color);
+  border: 0.05rem solid var(--md-default-fg-color--lighter);
+  border-radius: 0.1rem;
+  padding: 0.2rem 0.4rem;
+}
+
+.md-typeset .table-filter__text {
+  flex: 1 1 8rem;
+  min-width: 0;
+}
+
+.md-typeset .table-filter__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+}
+
+/* A select is as wide as its longest option, and one Scripts section heading runs to 58
+ * characters. The cap truncates the closed control only; the open list shows each option in
+ * full. */
+.md-typeset .table-filter select {
+  max-width: 10rem;
+}
+
+/* The cells of a column the bar offers as a dropdown. See table-filter.js. */
+.md-typeset table:not([class]) td.table-filter__category {
+  overflow-wrap: normal;
+}
+
+.md-typeset .table-filter__choice span,
+.md-typeset .table-filter__count {
+  color: var(--md-default-fg-color--light);
+}
+
+.md-typeset .table-filter__clear {
+  cursor: pointer;
+}
+
+.md-typeset .table-filter__clear:disabled {
+  cursor: default;
+  opacity: 0.4;
+}
+
+/* On a 200-row page the bar would otherwise scroll out of reach of the rows it filters, so it
+ * sticks just below Material's 2.4rem header. Desktop only: on a phone the bar wraps to three
+ * or four lines, and pinning that would cover most of the screen. */
+@media screen and (min-width: 60em) {
+  .md-typeset .table-filter {
+    position: sticky;
+    top: 2.4rem;
+    z-index: 2;
+  }
+}
+
+/* The `hidden` attribute alone loses to any rule that sets `display`, and Material sets one on
+ * admonitions, which a hidden section can contain. */
+.md-typeset [data-table-filter-hidden] {
+  display: none !important;
+}
+
+/* A header cell's text moves into a button so it sorts from the keyboard as well. The button
+ * reads as the header it replaced, plus an arrow once it sorts. */
+.md-typeset .table-filter__sort {
+  font: inherit;
+  color: inherit;
+  text-align: inherit;
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+}
+
+.md-typeset .table-filter__sort:hover {
+  text-decoration: underline;
+}
+
+.md-typeset th[aria-sort="ascending"] .table-filter__sort::after {
+  content: " \25B2";
+}
+
+.md-typeset th[aria-sort="descending"] .table-filter__sort::after {
+  content: " \25BC";
 }
