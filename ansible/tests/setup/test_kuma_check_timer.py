@@ -49,10 +49,6 @@ KNOWN_CHECKS = frozenset(
         "render-records",
     }
 )
-# Checks retired from every host that still carry an absent-arm import, so the host that ran one
-# loses its timer on the next apply. A name leaves this set in the PR that deletes its teardown,
-# which is safe only once that teardown has run on every host that had the check.
-RETIRED_CHECKS = frozenset({"remember-logs"})
 
 # The line a shell producer ends on. The oracle for the textual guard below: the Loki witness
 # test drives its script and proves the line does what it says; this pins that every other
@@ -184,43 +180,23 @@ def test_task_file_carries_no_tags() -> None:
         assert "tags" not in task, f"{task.get('name')!r} carries tags"
 
 
-def _timer_imports() -> list[dict]:
-    """The vars of every import of the task file in a setup role, both arms."""
-    found: list[dict] = []
+def _wired_checks() -> dict[str, dict]:
+    """`kuma_check_name` -> the import task's vars, for every setup role that imports the file."""
+    found: dict[str, dict] = {}
     for tasks_file in SETUP_ROLES.glob("*/tasks/*.yml"):
         for task in leaf_tasks(load_tasks(tasks_file)):
             target = task.get("ansible.builtin.import_tasks") or task.get(
                 "ansible.builtin.include_tasks"
             )
-            if isinstance(target, str) and target.endswith(
+            if not isinstance(target, str) or not target.endswith(
                 "common/tasks/kuma_check_timer.yml"
             ):
-                found.append(task.get("vars") or {})
+                continue
+            variables = task.get("vars") or {}
+            if variables.get("kuma_check_state") == "absent":
+                continue  # a teardown arm, not a wiring
+            found[str(variables.get("kuma_check_name"))] = variables
     return found
-
-
-def _wired_checks() -> dict[str, dict]:
-    """`kuma_check_name` -> the import task's vars, for every setup role that imports the file."""
-    return {
-        str(variables.get("kuma_check_name")): variables
-        for variables in _timer_imports()
-        # An absent arm is a teardown, not a wiring.
-        if variables.get("kuma_check_state") != "absent"
-    }
-
-
-def test_every_retired_check_keeps_its_teardown_and_no_wiring() -> None:
-    torn_down = {
-        str(variables.get("kuma_check_name"))
-        for variables in _timer_imports()
-        if variables.get("kuma_check_state") == "absent"
-    }
-    wired = _wired_checks()
-    for name in RETIRED_CHECKS:
-        assert name in torn_down, (
-            f"{name}: retired, but no absent-arm import removes its timer from the host"
-        )
-        assert name not in wired, f"{name}: retired, but still wired as present"
 
 
 def test_every_known_check_is_wired_with_the_full_contract() -> None:

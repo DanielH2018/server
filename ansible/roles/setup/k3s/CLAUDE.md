@@ -189,8 +189,8 @@ here so a later edit cannot quietly widen it — the same reason `k8s/autofix-br
 
 The read-only crons in the same file — `Longhorn backup health`, `daniel-box disk health`,
 `Manifest prune drift check`, `Release staleness drift check`, `Live object drift check`,
-`B2 deletion accounting`, `B2 backup budget listing`, and the `--list-only` etcd drill — read the cluster or the bucket and write nothing to either.
-The heartbeats push a Kuma tile through `kuma-push-lib.sh`; the B2 accounting pair appends to
+`B2 deletion accounting`, `B2 backup budget listing`, and the `--list-only` etcd drill — read
+the cluster or the bucket and write nothing to either. The heartbeats push a Kuma tile through `kuma-push-lib.sh`; the B2 accounting pair appends to
 the local ledger, which is bookkeeping, not state.
 
 Two of those heartbeats are kuma-check timers rather than crons since 2026-09-19: `Manifest
@@ -200,8 +200,6 @@ every 30 min until it exits 0, so a red tile clears when the fault does rather t
 next slot. The timers are `Persistent=true`, and both checks carry the boot grace so a
 catch-up run at boot exits 1 without a verdict and the restart carries the real one. A third,
 `remember log rotation health`, was retired on 2026-09-28 with the remember plugin (#2852).
-Its teardown tasks stay in `tasks/health-crons.yml` until `--tags remember-logs` has run on
-daniel-box.
 `systemctl status kuma-check-<name>` shows `auto-restart` while red. Manifest prune's
 healthchecks.io `/fail` ping repeats on every rerun; healthchecks notifies on a status change,
 so a check already down is not paged again.
