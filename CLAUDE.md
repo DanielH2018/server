@@ -106,9 +106,13 @@ run less than it looks are in the **`deploy` skill**.
 ## After a PR Merges — Pull, Deploy, Verify
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
-without asking.** Merging is not shipping here: the GitOps deployer auto-deploys a k8s role
-**only** for an image-pin bump to a non-denylisted service, so an ordinary manifest or template
-change is fast-forwarded onto the primary checkout and never applied. Left there it sits
+without asking.** Merging is not shipping here. The GitOps deployer applies three planes on its
+own: an image-pin bump to a non-denylisted k8s service; a setup-role change, as
+`initial_setup.yml --tags <role>`; and a deploy-plane change (shared templates, inventory,
+`deploy.yml`), as a narrowed or full `deploy.yml` that also applies denylisted roles. An
+ordinary manifest or template change to one k8s role is in none of the three, so it is
+fast-forwarded onto the primary checkout and never applied. The *Safety* section of
+`ansible/roles/setup/gitops_deploy/CLAUDE.md` has the path rules for each plane. Left there it sits
 undeployed behind a green master until someone notices, and the next session to deploy that
 service ships it as a side effect of unrelated work.
 

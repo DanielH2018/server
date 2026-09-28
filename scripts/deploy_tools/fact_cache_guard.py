@@ -37,8 +37,12 @@ refusal would only tell the operator to run the `rm` themselves. `deploy_run.py`
 this with --clear in its preflight. Run without --clear it reports and exits 1, which is what
 the tests and an interactive check use.
 
-NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook from the primary
-checkout, whose `.venv` is never pruned, so it cannot pin a doomed path.
+NOT THE AUTOMATED PIPELINE, WHICH HAS A CACHE OF ITS OWN. gitops_deploy.py invokes
+ansible-playbook from the primary checkout, whose `.venv` is never pruned, so it cannot PIN a
+doomed path. It could READ one: it shared this cache until the 2026-09-03 12:36 broad apply
+died on a pruned worktree's interpreter (#2862). Its unit now sets
+ANSIBLE_CACHE_PLUGIN_CONNECTION to a directory under /var/lib/gitops-deploy/, so no worktree
+writes the cache it reads, and this guard stays a deploy.sh preflight.
 
 Usage:
     uv run python scripts/deploy_tools/fact_cache_guard.py            # report, exit 1 if stale

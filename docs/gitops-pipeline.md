@@ -1361,6 +1361,26 @@ recap plus twenty timing rows filled the whole window (issue #907). stderr, and 
 no `fatal:` line in it, still get `_tail` — what ansible prints last is the diagnostic part
 there, and a head slice would pass every short-output test and carry nothing on a real run.
 
+A run killed by `BROAD_DEPLOY_TIMEOUT_S` still carries nothing. `run()` re-raises
+`TimeoutExpired` without reading the pipes, so the 2026-09-01 17:47 timeout logged only the
+argv and the 1800 s. That gap is filed as #2914.
+
+### The deployer reads a fact cache of its own
+
+`gitops-deploy.service` sets `ANSIBLE_CACHE_PLUGIN_CONNECTION` to
+`/var/lib/gitops-deploy/ansible-facts`. `ansible.cfg`'s cache is one file per host in
+`~/.cache/ansible/facts`, shared by every checkout on the machine, and it stores
+`discovered_interpreter_python`: under `uv run`, the `.venv` of whichever checkout gathered
+facts last. The deployer never pins a doomed interpreter, because it runs from the primary
+checkout. It did read one. The 2026-09-03 12:36 broad apply of `initial_setup.yml --tags
+renovate_agent` died at fact gathering on
+`.claude/worktrees/arm-renovate-agent/.venv/bin/python3.14`, pinned by a session in that
+worktree and left behind when the worktree was pruned. `deploy.sh` clears such an entry in its
+preflight (`scripts/deploy_tools/fact_cache_guard.py`); the deployer never runs that preflight,
+so it reads a cache no worktree writes instead (#2862).
+`ansible/tests/deploy/test_gitops_deploy_fact_cache.py` asks `ansible-config` which directory
+the unit's environment resolves, so a misspelled variable fails there rather than silently.
+
 ### Trap: deploying this role under the shared tree lock self-deadlocks
 
 Do not wrap `initial_setup.yml --tags gitops_deploy` in
