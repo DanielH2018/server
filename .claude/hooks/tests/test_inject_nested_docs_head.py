@@ -25,6 +25,23 @@ def _big_doc():
     )
 
 
+def test_a_doc_under_the_cap_but_over_what_the_preamble_leaves_is_a_head(repo):
+    """The gap between the payload left and INLINE_MAX_CHARS used to defer a doc forever."""
+    line = ("gap filler words here " * 5).rstrip() + "\n"
+    text = "# Gap doc\n\nthe opening rule\n\n## More\n\n" + line * 67
+    # Few lines and many chars, so only the char budget decides between whole and head.
+    assert text.count("\n") < _mod.INLINE_MAX_LINES // 2
+    assert (
+        _mod.INLINE_MAX_CHARS - len(_mod._PREAMBLE) < len(text) < _mod.INLINE_MAX_CHARS
+    )
+    (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(text)
+    context, chosen = _build(
+        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    )
+    assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
+    assert "the opening rule" in context
+
+
 def test_a_doc_over_the_budget_is_injected_as_its_head(repo):
     """#2650: the headings alone were read after only 23% of injections, so ship text."""
     (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
@@ -68,7 +85,7 @@ def test_a_rule_beside_an_over_budget_role_doc_is_flagged(repo):
     command that 9 of 23 measured contexts never ran."""
     (repo / "ansible" / "roles" / "k8s" / "foo" / "CLAUDE.md").write_text(_big_doc())
     context, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
     )
     assert sorted(d for d, _ in chosen) == [
         ".claude/rules/ansible.md",
@@ -87,7 +104,7 @@ def test_a_rule_too_big_to_leave_the_head_its_floor_is_deferred(repo):
     )
     assert _mod.head_floor(str(repo), ".claude/rules/ansible.md", "x") is None
     context, chosen = _build(
-        repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
     )
     assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
     assert "the opening rule" in context

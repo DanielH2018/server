@@ -37,6 +37,12 @@ under `INLINE_MAX_CHARS` / `INLINE_MAX_LINES` is inlined; a larger one is inject
 up to the budget, then the headings of the sections the head cut off, then a read pointer.
 111 of 141 nested docs fit inline on 2026-09-21.
 
+EDITING RULES ARRIVE WITH A WRITE (#2811). A rule outside `READ_RULES` is injected only for a
+path the command writes (`block-protected-bash.written_paths`), or for every named path under
+an inline interpreter. Rules were 1.30 MB of 2.36 MB injected in a week, mostly on reads, but
+23% of rule-scoped writes go through Bash, so they are not dropped from Bash outright. The
+measurements are in `docs/claude-tooling.md`.
+
 THE HEAD, NOT THE HEADINGS. The over-budget form was the heading outline alone until #2650.
 Sessions read the full doc after 61 of 262 outline injections over 2026-09-21..26 (23%),
 against 69 of 425 Bash-only pairs (16%) before the hook existed, so the headings bought
@@ -70,14 +76,24 @@ MIN_HEAD_CHARS = 1500
 # The wrapper text, charged to both payload budgets before any doc is rendered.
 _PREAMBLE = (
     "[inject-nested-docs] Project instructions for paths this command names. Claude Code "
-    "loads them for Read/Edit/Write but not for a Bash read, so this hook supplies each "
-    "once per session or subagent.\n\n"
+    "loads them for Read/Edit/Write but not for Bash, so this hook supplies each once per "
+    "session or subagent (an editing rule on the first write).\n\n"
 )
 
 # How many headings the trailer names. The whole outline of the busiest role docs fits.
 TRAILER_MAX_HEADINGS = 40
 
 REASON = "bash_path_match"
+
+# The rules a READ needs: `secrets.md` warns before a content grep prints a credential, and
+# `facts.md` governs the citations a CLAUDE.md read leans on. Every other rule waits for a write.
+READ_RULES = frozenset({"secrets.md", "facts.md"})
+
+# An inline interpreter (`python3 - <<'EOF'`) writes through code the command text cannot show,
+# so every path such a command names counts as written.
+_INLINE_INTERPRETER = re.compile(
+    r"\b(?:python3?|perl|ruby|node)\s+(?:-\s|-c\b|-e\b|-$)", re.M
+)
 
 # Tags a log row written for a subagent; `loaded_by_harness` reads it back.
 AGENT_FIELD = "agent="
@@ -110,6 +126,21 @@ def _load_logger():
 
 
 _logger = _load_logger()
+
+
+def _load_written_paths():
+    """`written_paths` from block-protected-bash.py, loaded by path: one detector, two hooks."""
+    here = os.path.dirname(os.path.abspath(__file__))
+    spec = importlib.util.spec_from_file_location(
+        "block_protected_bash", os.path.join(here, "block-protected-bash.py")
+    )
+    assert spec and spec.loader, "spec_from_file_location found no loader"
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module.written_paths
+
+
+written_paths = _load_written_paths()
 
 
 # ── which paths the command names ────────────────────────────────────────────────────
@@ -172,6 +203,19 @@ def named_paths(command, cwd):
         if (root, rel) not in seen:
             seen.add((root, rel))
             yield root, rel
+
+
+def written_targets(command, cwd):
+    """Written (root, rel) pairs as `named_paths` resolves them; None under an interpreter."""
+    if _INLINE_INTERPRETER.search(command):
+        return None
+    return set(named_paths(" ".join(written_paths(command)), cwd))
+
+
+def _is_edit_rule(doc):
+    """True for a `.claude/rules` file that governs editing rather than reading."""
+    head, name = os.path.split(doc)
+    return head == os.path.join(".claude", "rules") and name not in READ_RULES
 
 
 # ── which docs the harness would have loaded for them ────────────────────────────────
@@ -393,8 +437,16 @@ def _header(doc, trigger):
     return f"===== {doc} (applies to `{trigger}`) ====="
 
 
-def _fits_inline(text):
-    return len(text) <= INLINE_MAX_CHARS and text.count("\n") + 1 <= INLINE_MAX_LINES
+def _fits_inline(text, header):
+    """True when `render`'s whole-doc block fits the payload after the preamble.
+
+    Measured on the block: a doc between that and `INLINE_MAX_CHARS` fit no command and was
+    deferred forever (`python-layout.md` at 7,271 chars, 2026-09-28).
+    """
+    block = f"{header}\n{text.rstrip()}\n"
+    return len(block) <= INLINE_MAX_CHARS - len(_PREAMBLE) and block.count(
+        "\n"
+    ) <= INLINE_MAX_LINES - _PREAMBLE.count("\n")
 
 
 def head_floor(root, doc, trigger):
@@ -404,10 +456,11 @@ def head_floor(root, doc, trigger):
     `_head_block` is the binding one, since it reserves the doc's whole outline.
     """
     text = _read(root, doc)
-    if _fits_inline(text):
+    header = _header(doc, trigger)
+    if _fits_inline(text, header):
         return None
     trailer = _outline(text.splitlines())[:TRAILER_MAX_HEADINGS]
-    chars, lines = _head_overhead(doc, text, _header(doc, trigger), trailer)
+    chars, lines = _head_overhead(doc, text, header, trailer)
     return chars + MIN_HEAD_CHARS, lines + _MIN_HEAD_LINES
 
 
@@ -428,7 +481,7 @@ def render(root, doc, trigger, budget_chars, budget_lines):
     """
     text = _read(root, doc)
     header = _header(doc, trigger)
-    if _fits_inline(text):
+    if _fits_inline(text, header):
         block = f"{header}\n{text.rstrip()}\n"
         if len(block) > budget_chars or block.count("\n") > budget_lines:
             return None
@@ -449,10 +502,14 @@ def build_context(command, cwd, session_id, log_path=None, agent_id=None):
     """
     key = context_key(session_id, agent_id)
     already = injected_this_session(key)
+    written = written_targets(command, cwd)
     candidates = []
     for root, rel in named_paths(command, cwd):
+        writes = written is None or (root, rel) in written
         for doc in docs_for(root, rel):
             if doc in already or any(doc == c[1] for c in candidates):
+                continue
+            if not writes and _is_edit_rule(doc):
                 continue
             if loaded_by_harness(session_id, doc, log_path, agent_id):
                 already.add(doc)

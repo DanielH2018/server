@@ -75,12 +75,8 @@ def test_first_command_naming_a_role_file_is_flagged(repo):
     context, chosen = _build(
         repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
     )
-    assert [d for d, _ in chosen] == [
-        "ansible/roles/k8s/foo/CLAUDE.md",
-        ".claude/rules/ansible.md",
-    ]
+    assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
     assert ROLE_DOC.strip() in context
-    assert "# Rule body" in context
     assert "root" not in [d for d, _ in chosen]
 
 
@@ -96,10 +92,38 @@ def test_a_different_session_is_flagged_again(repo):
     _, chosen = _build(
         repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2", "s2"
     )
-    assert [d for d, _ in chosen] == [
-        "ansible/roles/k8s/foo/CLAUDE.md",
-        ".claude/rules/ansible.md",
-    ]
+    assert [d for d, _ in chosen] == ["ansible/roles/k8s/foo/CLAUDE.md"]
+
+
+# ── an editing rule waits for a write; a reading rule does not (#2811) ───────────────
+
+
+def test_a_write_to_a_rule_scoped_path_is_flagged_with_its_rule(repo):
+    """The read gets the role doc alone; the first write to the same path gets the rule."""
+    _, read = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    assert ".claude/rules/ansible.md" not in [d for d, _ in read]
+    context, write = _build(
+        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    )
+    assert [d for d, _ in write] == [".claude/rules/ansible.md"]
+    assert "# Rule body" in context
+
+
+def test_a_reading_rule_is_flagged_on_a_read(repo):
+    (repo / ".claude" / "rules" / "secrets.md").write_text(
+        '---\npaths:\n  - "ansible/vars/**"\n---\n\n# Secrets body\n'
+    )
+    _, chosen = _build(repo, "grep -c sops ansible/vars/secrets.yml")
+    assert [d for d, _ in chosen] == [".claude/rules/secrets.md"]
+
+
+def test_an_inline_interpreter_counts_as_a_write(repo):
+    """`python3 -c` writes through code the command text cannot show."""
+    _, chosen = _build(
+        repo,
+        "python3 -c 'import sys' ansible/roles/k8s/foo/templates/deployment.yaml.j2",
+    )
+    assert ".claude/rules/ansible.md" in [d for d, _ in chosen]
 
 
 # ── what selects a doc ───────────────────────────────────────────────────────────────
@@ -127,7 +151,7 @@ def test_the_root_claude_md_is_never_injected(repo):
 
 
 def test_a_rule_glob_selects_its_rule_and_not_another_path(repo):
-    _, chosen = _build(repo, "sops ansible/vars/secrets.yml")
+    _, chosen = _build(repo, "sed -i s/a/b/ ansible/vars/secrets.yml")
     assert [d for d, _ in chosen] == [".claude/rules/ansible.md"]
     assert _build(repo, "cat ansible/plain.txt", session="other") == ("", [])
 
@@ -185,7 +209,9 @@ def test_a_doc_the_harness_already_loaded_is_clean(repo, tmp_path):
         "2026-09-21T00:00:00Z [sess-a  ] nested_traversal Project  "
         "ansible/roles/k8s/foo/CLAUDE.md trigger=ansible/roles/k8s/foo/tasks/main.yml\n"
     )
-    _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
+    _, chosen = _build(
+        repo, "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    )
     assert [d for d, _ in chosen] == [".claude/rules/ansible.md"]
 
 
@@ -245,7 +271,7 @@ def test_a_subagents_log_row_does_not_suppress_the_parent(repo, tmp_path, monkey
     monkeypatch.setattr(sys, "stdin", io.StringIO(json.dumps(loaded)))
     _mod._logger.main()
     rows = (tmp_path / "instructions.log").read_text().splitlines()
-    assert len(rows) == 3 and all("agent=a1b2c3" in r for r in rows), rows
+    assert len(rows) == 2 and all("agent=a1b2c3" in r for r in rows), rows
     _, chosen = _build(repo, "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2")
     assert "ansible/roles/k8s/foo/CLAUDE.md" in [d for d, _ in chosen]
 
@@ -261,7 +287,7 @@ def test_a_doc_that_fits_alone_but_not_the_remaining_budget_is_deferred(repo):
     (repo / ".claude" / "rules" / "ansible.md").write_text(
         RULE + "rule line of text here\n" * 150
     )
-    command = "cat ansible/roles/k8s/foo/templates/deployment.yaml.j2"
+    command = "sed -i s/a/b/ ansible/roles/k8s/foo/templates/deployment.yaml.j2"
     _, first = _build(repo, command)
     assert [d for d, _ in first] == ["ansible/roles/k8s/foo/CLAUDE.md"]
     context, second = _build(repo, command)
@@ -353,6 +379,14 @@ def test_the_real_tree_resolves_a_known_role_to_its_doc():
     docs = _mod.docs_for(root, os.path.join(KNOWN_ROLE, "files", "registry.py"))
     assert f"{KNOWN_ROLE}/CLAUDE.md" in docs
     assert ".claude/rules/ansible.md" not in docs  # a .py matches no rule glob
+
+
+def test_every_reading_rule_names_a_real_rule_file():
+    """A renamed rule would drop out of READ_RULES silently and start waiting for a write."""
+    rules = os.path.join(_REPO, ".claude", "rules")
+    assert _mod.READ_RULES == {"secrets.md", "facts.md"}
+    for name in _mod.READ_RULES:
+        assert os.path.isfile(os.path.join(rules, name)), name
 
 
 def test_the_real_rules_globs_match_their_own_examples():
