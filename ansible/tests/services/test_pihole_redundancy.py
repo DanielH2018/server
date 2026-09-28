@@ -1,4 +1,4 @@
-"""LAN DNS survives a Pi-hole deploy only while three properties hold.
+"""LAN DNS survives a Pi-hole deploy only while four properties hold.
 
 Each of them fails green — the deploy succeeds and DNS goes down anyway:
 
@@ -7,6 +7,12 @@ Each of them fails green — the deploy succeeds and DNS goes down anyway:
   * both restarted at once: the shared manifests role fires restarts back to back and defers
     waiting to the end-of-batch drain, so a reintroduced `manifests_rollout` would take both
     down within a second of each other and the redundancy would be decorative;
+  * both APPLIED at once, which is how it actually broke on 2026-09-28 (#2884): `kubectl apply -f
+    <dir>/` applies every file in a directory in one request, both Deployments rendered into one
+    file, and a `pihole/pihole` image-pin bump changed both pod templates in the same second. The
+    controller Recreate-cycled both instances before any restart task ran, LAN DNS was down 52s,
+    and both new pods failed their image pull against the resolver they had just replaced. The
+    play reported failed=0. Sequencing the restarts cannot help, so the apply is sequenced too;
   * split across nodes: every VIP is announced from daniel-box only (marked PERMANENT in
     setup/k3s metallb-pool.yaml.j2), and with externalTrafficPolicy: Local a pod on the other
     node receives nothing, so half the capacity would silently serve no traffic.
@@ -16,7 +22,7 @@ from lib import yaml_fast
 
 from _k8s_render import rendered_docs
 from _helpers import REPO as _REPO
-from _helpers import load_tasks
+from _helpers import load_tasks, render_expr, task_named
 from _helpers import walk_tasks as _flatten_tasks
 
 
@@ -237,3 +243,118 @@ def test_roll_one_skips_an_instance_this_run_just_created():
         "roll_one.yml must skip the restart+wait for a Deployment this run just created — "
         "restarting it races the initial rollout"
     )
+
+
+# ── #2884: the APPLY is sequenced, not only the restart ──────────────────────────────────────
+
+MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
+
+
+def _deployment_source() -> dict[str, str]:
+    """Deployment name -> the template it is rendered from."""
+    return {
+        doc["metadata"]["name"]: tpl
+        for _role, tpl, doc in rendered_docs()
+        if _role == "pihole" and doc.get("kind") == "Deployment"
+    }
+
+
+def test_each_instance_is_rendered_from_its_own_template():
+    """One file per instance is what lets the two be applied separately.
+
+    Asserting the mapping rather than just "two distinct files" is deliberate: a change that
+    rendered both Deployments back into `deployment.yaml` — the state that caused the outage —
+    would satisfy a count-only check on documents while failing this one, and so would swapping
+    which file carries which instance (`manifests_files` names `deployment.yaml`, so the swap
+    would put instance 2 in the shared apply and instance 1 in the sequenced one)."""
+    assert _deployment_source() == {
+        "pihole": "deployment.yaml.j2",
+        "pihole-2": "deployment-2.yaml.j2",
+    }
+
+
+def test_the_shared_apply_carries_instance_one_only():
+    """`manifests_files` is the directory the shared role applies in one request. Naming
+    `deployment-2.yaml` there would put both Deployments back in that request and re-open #2884
+    with every other guard in this file still green."""
+    for task in load_tasks(_TASKS):
+        if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests":
+            files = task.get("vars", {}).get("manifests_files", [])
+            assert "deployment.yaml" in files, files
+            assert "deployment-2.yaml" not in files, (
+                "instance 2 must not be staged in the directory the shared role applies — "
+                "`kubectl apply -f <dir>/` would roll both instances in one request again"
+            )
+            return
+    raise AssertionError("pihole no longer includes k8s/manifests")
+
+
+def test_instance_two_is_staged_outside_the_pruned_directory():
+    """Its own directory, not a subdirectory of the one the shared prune owns.
+
+    The shared role deletes every file in `<root>/pihole/` that `manifests_files` does not name,
+    so staging there would make instance 2's Deployment a permanently `changed` prune item on an
+    otherwise idempotent run."""
+    select = task_named(
+        load_tasks(_TASKS), "Select the second Pi-hole instance's manifest"
+    )
+    staged = str(
+        select["ansible.builtin.set_fact"]["pihole_k8s_instance_2_dir"]
+    ).strip()
+    assert staged.startswith(MANIFEST_ROOT + "/"), staged
+    assert staged != f"{MANIFEST_ROOT}/pihole", staged
+    assert not staged.startswith(f"{MANIFEST_ROOT}/pihole/"), staged
+
+    render = task_named(
+        load_tasks(_TASKS), "Render the second Pi-hole instance's Deployment"
+    )
+    dest = str(render["ansible.builtin.template"]["dest"])
+    assert "pihole_k8s_instance_2_dir" in dest, dest
+
+
+def _roll_one_index(fragment: str) -> int:
+    for i, task in enumerate(_roll_one_tasks()):
+        if fragment in str(task.get("name", "")):
+            return i
+    raise AssertionError(f"no task in roll_one.yml named like {fragment!r}")
+
+
+def test_instance_two_is_applied_only_after_its_sibling_is_verified_serving():
+    """The apply that rolls instance 2 sits between the sibling checks and the rollout wait.
+
+    Ahead of the checks it is the 2026-09-28 outage again — instance 2's pod template changing
+    while instance 1 may not be serving. After the wait it would roll instance 2 with nothing
+    left to block on, so the play would report success before the second resolver came back.
+    The `when` matters as much as the position: without it the include fires on the `pihole`
+    iteration too and applies instance 2 first, before instance 1 has rolled at all."""
+    apply_idx = _roll_one_index("Apply the second Pi-hole instance's Deployment")
+    assert _roll_one_index("Verify the sibling instance is ready") < apply_idx
+    assert _roll_one_index("is terminating") < apply_idx
+    assert apply_idx < _roll_one_index("Wait for serving Pi-hole instance")
+
+    task = _roll_one_tasks()[apply_idx]
+    assert str(task["ansible.builtin.include_tasks"]).endswith("apply_instance_2.yml")
+    assert str(task["when"]) == "pihole_instance == 'pihole-2'", task["when"]
+
+
+def test_the_sibling_check_refuses_a_terminating_pod():
+    """A terminating pod keeps phase `Running` and condition `Ready` for its whole grace period,
+    so the readiness wait passed against a `pihole-2` pod that was already going away and the play
+    restarted `pihole` into a full DNS outage (#2884).
+
+    The accept/reject pair is over the real `failed_when`: an empty read (no pod carries a
+    `deletionTimestamp`) must pass, and any timestamp at all must fail. A check that only ran the
+    kubectl read without judging its output would satisfy the position assertion above and nothing
+    else."""
+    task = _roll_one_tasks()[_roll_one_index("is terminating")]
+    cmd = str(task["ansible.builtin.command"]["cmd"])
+    assert "pihole_sibling_instance" in cmd, cmd
+    assert "deletionTimestamp" in cmd, cmd
+
+    when = "{{ " + str(task["failed_when"]) + " }}"
+    assert not render_expr(when, pihole_sibling_terminating={"stdout": ""}), (
+        "a sibling with no terminating pod must pass"
+    )
+    assert render_expr(
+        when, pihole_sibling_terminating={"stdout": "2026-09-28T17:35:59Z"}
+    ), "a terminating sibling must fail the play, not be restarted around"

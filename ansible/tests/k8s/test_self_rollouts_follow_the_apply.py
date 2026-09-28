@@ -21,6 +21,12 @@ fails on both sides and reads as "not rolled", which is the double roll the issu
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
+Issue #2884 narrowed pihole's declaration to instance 1. The shared apply carries
+`deployment.yaml`, which holds `pihole` alone; `pihole-2` is applied later, by
+tasks/apply_instance_2.yml, and the record is written before that task runs -- so a `pihole-2`
+entry here would name a `restart: true` no `restartedAt` ever satisfies. What covers the second
+instance instead is pinned in ansible/tests/services/test_pihole_redundancy.py.
+
 Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 """
 
@@ -84,7 +90,10 @@ def test_a_self_rolling_role_records_only_what_it_declares():
         manifests_extra_rollouts=[],
         manifests_self_rollouts=include_role_vars(PIHOLE)["manifests_self_rollouts"],
     )
-    assert {e["name"] for e in fingerprinted} == {"pihole", "pihole-2"}, fingerprinted
+    # Instance 1 only (#2884): the shared apply no longer touches pihole-2's pod template, so
+    # fingerprinting it across that apply could only ever read "not rolled". apply_instance_2.yml
+    # fingerprints it across its OWN apply and writes the answer to the same fact.
+    assert {e["name"] for e in fingerprinted} == {"pihole"}, fingerprinted
     assert "manifests_self_rollouts" not in str(
         task_named(MAIN, "Roll the extra deployments after")
     )
@@ -202,10 +211,13 @@ def test_claude_otel_skips_its_private_restart_of_a_workload_the_apply_rolled():
     assert rollouts["loki"]["restart"] is True
 
 
-def test_pihole_an_image_bump_expects_both_instances_to_roll():
+def test_pihole_an_image_bump_expects_instance_one_to_roll():
     """roll_one.yml fires on `manifests_image_changed`, which is `manifests_service in
-    k8s_rebuilt_images`; the record keys on each entry's `image`, so both instances carry
-    `image: pihole` or pihole-2 reads as a miss."""
+    k8s_rebuilt_images`; the record keys on the entry's `image`, so dropping `image: pihole`
+    makes the rebuilt-image trigger read as a miss and the record expect no roll.
+
+    The unchanged half is the reject: with nothing rebuilt and no changed render the record must
+    expect no restart at all, or every idempotent re-run fails `probe.py health`."""
     declared = include_role_vars(PIHOLE)["manifests_self_rollouts"]
     rollouts = _rollouts(
         manifests_service="pihole",
@@ -215,10 +227,7 @@ def test_pihole_an_image_bump_expects_both_instances_to_roll():
         manifests_render={"changed": False},
         k8s_rebuilt_images=["pihole"],
     )
-    assert {n: r["restart"] for n, r in rollouts.items()} == {
-        "pihole": True,
-        "pihole-2": True,
-    }
+    assert {n: r["restart"] for n, r in rollouts.items()} == {"pihole": True}
     unchanged = _rollouts(
         manifests_service="pihole",
         manifests_rollout="",
@@ -229,10 +238,18 @@ def test_pihole_an_image_bump_expects_both_instances_to_roll():
     assert not any(r["restart"] for r in unchanged.values()), unchanged
 
 
-def test_pihole_declares_the_same_instances_roll_one_restarts():
+def test_pihole_declares_the_instance_the_shared_apply_carries():
+    """The declaration is the instances the SHARED apply rolls, which since #2884 is instance 1.
+
+    The loop still covers both, so the two sets deliberately differ by exactly `pihole-2` — and
+    the difference has to be that one name, not an arbitrary gap: a third instance added to the
+    loop and to neither the declaration nor `manifests_files` would otherwise pass here.
+    `ansible/tests/services/test_pihole_redundancy.py` pins what rolls pihole-2 instead."""
     declared = include_role_vars(PIHOLE)["manifests_self_rollouts"]
     restart = _pihole_private_restart()
-    assert {e["name"] for e in declared} == set(restart["loop"])
+    declared_names = {e["name"] for e in declared}
+    assert declared_names == {"pihole"}, declared
+    assert set(restart["loop"]) - declared_names == {"pihole-2"}, restart["loop"]
     assert {e["kind"] for e in declared} == {"deploy"}
     roll_one = (PIHOLE / "tasks/roll_one.yml").read_text()
     assert "rollout restart deploy/{{ pihole_instance }}" in roll_one
@@ -241,14 +258,19 @@ def test_pihole_declares_the_same_instances_roll_one_restarts():
         "manifests_render is changed",
         "manifests_secret_render is changed",
         "manifests_image_changed",
+        # The fourth trigger (#2884): instance 2's Deployment is rendered outside the shared role,
+        # so a change to it alone moves none of the three facts above and the apply that carries
+        # it would never run.
+        "pihole_k8s_instance_2_render",
     ):
         assert ingredient in when, ingredient
     # The fourth ingredient (#1994) gates the restart task inside roll_one.yml, not the
     # include: the sibling check and the rollout wait still follow a roll the apply started.
     assert "manifests_rolled_by_apply" not in when
-    assert _pihole_restart_task()["when"] == (
-        "not manifests_rolled_by_apply.get(pihole_instance, false)"
-    )
+    gate = str(_pihole_restart_task()["when"])
+    assert "manifests_rolled_by_apply.get(pihole_instance, false)" in gate, gate
+    # The second apply's verdict (#2884), keyed the same way.
+    assert "pihole_k8s_rolled_by_own_apply" in gate, gate
 
 
 def _pihole_restart_task():
@@ -267,14 +289,39 @@ def test_pihole_skips_its_restart_of_an_instance_the_apply_rolled_but_still_wait
         "{{ " + when + " }}",
         pihole_instance="pihole",
         manifests_rolled_by_apply={"pihole": True, "pihole-2": False},
+        pihole_k8s_rolled_by_own_apply={},
     )
     assert render_expr(
         "{{ " + when + " }}",
         pihole_instance="pihole-2",
         manifests_rolled_by_apply={"pihole": True, "pihole-2": False},
+        pihole_k8s_rolled_by_own_apply={},
     )
     assert render_expr(
-        "{{ " + when + " }}", pihole_instance="pihole", manifests_rolled_by_apply={}
+        "{{ " + when + " }}",
+        pihole_instance="pihole",
+        manifests_rolled_by_apply={},
+        pihole_k8s_rolled_by_own_apply={},
+    )
+    # The same pair over the second apply's own verdict (#2884): instance 2 is not restarted on
+    # top of the apply that just rolled it, and instance 1's restart is untouched by that answer.
+    assert not render_expr(
+        "{{ " + when + " }}",
+        pihole_instance="pihole-2",
+        manifests_rolled_by_apply={},
+        pihole_k8s_rolled_by_own_apply={"pihole-2": True},
+    )
+    assert render_expr(
+        "{{ " + when + " }}",
+        pihole_instance="pihole",
+        manifests_rolled_by_apply={},
+        pihole_k8s_rolled_by_own_apply={"pihole-2": True},
+    )
+    assert render_expr(
+        "{{ " + when + " }}",
+        pihole_instance="pihole-2",
+        manifests_rolled_by_apply={},
+        pihole_k8s_rolled_by_own_apply={"pihole-2": False},
     )
     wait = task_named(load_tasks(PIHOLE / "tasks/roll_one.yml"), "Wait for serving")
     assert "when" not in wait, wait

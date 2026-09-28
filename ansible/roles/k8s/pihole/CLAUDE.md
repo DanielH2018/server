@@ -10,8 +10,8 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   (`pihole_k8s_unbound_image`)
 - **Route:** `pihole.<domain>` · `pihole.local.<domain>`, Authelia one_factor
 - **Claims:** `pihole-etc` (no backup (StorageClass longhorn-nobackup)), `pihole-etc-2` (no
-  backup (StorageClass longhorn-nobackup)), plus the claims a template loop declares (`{{
-  inst.claim }}`)
+  backup (StorageClass longhorn-nobackup)), plus the claims a template loop declares (`{{ claim
+  }}`)
 - **Auto-deploy:** denylisted (`k8s_autodeploy: false`) — platform — LAN DNS resolver; a failed
   deploy breaks name resolution fleet-wide, and host probes stay green through that kind of
   outage
@@ -31,9 +31,25 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   `pihole_k8s_adlists`/`pihole_k8s_regex_deny` into `gravity.db` with idempotent
   INSERT/UPDATE, then rebuilds gravity only on a change — `pihole-FTL.db` moves on every DNS
   query, so a coexistence seed could never pass a quiescent-state verification.
-- **Restarts are sequenced by hand, not the shared batch drain** — the two pods are restarted
-  one at a time (`manifests_rollout: ''` plus explicit restart tasks) so a rollout never takes
-  both Pi-holes down together, which is the whole reason a second instance exists.
+- **Both the apply and the restart are sequenced by hand, not left to the shared batch drain.**
+  The two pods are restarted one at a time (`manifests_rollout: ''` plus `tasks/roll_one.yml`)
+  so a rollout never takes both Pi-holes down together, which is the whole reason a second
+  instance exists.
+- **Instance 2's Deployment is applied separately, from `/etc/rancher/k3s/manifests/pihole-instance-2/`.**
+  Sequencing the restarts was not enough: `kubectl apply -f <dir>/` applies every file in a
+  directory in one request, so while both Deployments rendered into one `deployment.yaml` an
+  image-pin bump changed both pod templates in the same second and the controller Recreate-cycled
+  both instances before any restart task ran (2026-09-28, issue #2884 — 52s of LAN DNS
+  downtime, and both new pods failed their image pull against the resolver they had just
+  replaced). `templates/deployment.yaml.j2` now carries instance 1 and
+  `templates/deployment-2.yaml.j2` instance 2, both from one macro body in
+  `templates/pihole-deployment.yaml.j2`, and `tasks/apply_instance_2.yml` applies the second only
+  after `roll_one.yml` has proved the first is serving. Two costs, both deliberate: instance 2's
+  bytes are outside `manifests_digest`, and a dry run never reaches its manifest — read the
+  comments above each in `tasks/main.yml`.
+- **`roll_one.yml` refuses a sibling that is terminating.** A pod keeps phase `Running` and
+  condition `Ready` for its whole grace period, so `kubectl wait` alone reported a
+  half-gone sibling as a serving one. The check reads `deletionTimestamp` and fails the play.
 - **LAN reverse-DNS is forwarded to the router, with `server=` rather than `rev-server=`.**
   `templates/config/pihole-dnsmasq.conf.j2` forwards the zone `lan_subnet` implies to
   `lan_router_ip`, so PTR lookups for DHCP clients return the names the router leased them.
