@@ -1,10 +1,13 @@
 """The register fetch carries its own timeout, because it outgrew `lib.gh`'s default.
 
-`load_issues` asks gh for `body` and `comments` on every `claude` issue in every state. On
-2026-09-28 that was 4.19 MB across about 900 issues and took 67.5s wall, past `lib.gh.gh`'s 60s
-default — so every findings.py subcommand died with `gh failed: ... timed out after 60.0
-seconds`, `open` included. A session could neither file a finding nor read the register, and the
-failure looked like a GitHub outage rather than a fetch that had grown.
+`load_issues` asks gh for `body` and `comments` on every `claude` issue in the state it is
+given. On 2026-09-28 `--state all` was 4.19 MB across about 900 issues and took 67.5s wall,
+past `lib.gh.gh`'s 60s default — so every findings.py subcommand died with `gh failed: ...
+timed out after 60.0 seconds`, `open` included. A session could neither file a finding nor
+read the register, and the failure looked like a GitHub outage rather than a fetch that had
+grown. `open` left this path in #2846 and searches for its one fingerprint instead
+(`gh_calls.fingerprint_match`); the docs-refresh cron behind
+`scripts/docs/reference/backlog.py` is what the override now covers.
 
 The kwarg is the whole fix, so it is what these assert. `_findings_fakes` records argv only, so
 these tests stub `gh_json` themselves to see the keyword.
