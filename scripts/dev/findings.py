@@ -135,6 +135,7 @@ from dev.findings_lib.gh_calls import (
     _create_with_optional_project,
     _existing_labels,
     _load_issue,
+    fingerprint_match,
     load_issues,
     open_pr_refs,
     run,
@@ -144,7 +145,6 @@ from dev.findings_lib.issue_model import (
     current_claim,
     deferred,
     now_iso,
-    find_by_fingerprint,
     fingerprint,
     issue_rows,
     label_names,
@@ -240,7 +240,7 @@ def cmd_open(args: argparse.Namespace, tools: FindingsTools) -> int:
             args.dry_run,
             tools,
         )
-    existing = find_by_fingerprint(load_issues("all", tools), fp)
+    existing = fingerprint_match(fp, tools)
     outcome, code, plans = plan_open(
         existing,
         title=args.title,
