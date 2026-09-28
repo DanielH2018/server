@@ -204,7 +204,7 @@ gitops_deploy_k8s_timeout_s: 1440
 #             + manifests_rollout_timeout + k8s_rollout_stabilise_seconds (60)
 #
 # The in-role term arrived with #2399, and it moved the worst case. A role's own `tasks/` run
-# before k8s/rollout-drain, so what they wait for adds to the drain rather than overlapping it:
+# before k8s/manifests/tasks/drain.yml, so what they wait for adds to the drain rather than overlapping it:
 # prowlarr waits `--timeout=300s` for its flaresolverr isolation probe Job, on top of its 780s
 # rollout. That makes prowlarr the worst promoted service at 480 + 300 + 780 + 60 = 1620s, where
 # the derivation that counted the drain alone read it as 1320. An inline `rollout status` gate is
@@ -218,7 +218,7 @@ gitops_deploy_k8s_timeout_s: 1440
 #
 # The multi-service case is NOT covered by this constant and is not meant to be. Every role in a
 # batch runs its own snapshot+revert phase and its own in-role waits in sequence inside the one
-# playbook run (only the rollout WAIT is batched/deduped via roles/k8s/rollout-drain), so a
+# playbook run (only the rollout WAIT is batched/deduped via roles/k8s/manifests/tasks/drain.yml), so a
 # batch's cost is additive — radarr and sonarr together come to 2x(120+360) + 660 + 60 = 1680s,
 # and three such services to ~2160s. Past this budget `run()`'s killpg fires MID-REVERT, after
 # k8s/volume-revert has scaled the workload to zero replicas and attached its volume with

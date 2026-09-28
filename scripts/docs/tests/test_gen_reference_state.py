@@ -70,11 +70,11 @@ def test_gitops_deploy_with_no_hold_is_a_plain_tick(tmp_path):
 def test_gitops_deploy_with_a_hold_surfaces_the_sha_and_plane(tmp_path):
     (tmp_path / "last_run").write_text(str(NOW.timestamp()))
     (tmp_path / "hold_sha").write_text("deadbeefcafe1234\n")
-    (tmp_path / "hold_plane").write_text("k8s/rollout-drain\n")
+    (tmp_path / "hold_plane").write_text("k8s/manifests/tasks/drain.yml\n")
     run = g.gitops_deploy_run(tmp_path)
     assert "HOLD" in run.outcome
     assert "deadbeef" in run.outcome
-    assert "k8s/rollout-drain" in run.outcome
+    assert "k8s/manifests/tasks/drain.yml" in run.outcome
 
 
 # --- renovate_notify_run(): notified vs. checked-and-quiet ----------------------------------

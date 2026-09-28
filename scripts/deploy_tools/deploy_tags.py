@@ -190,9 +190,9 @@ def split_shared_roles(
     """Split derived role names into (deployable, shared).
 
     A path-to-tag derivation reads a role DIRECTORY name, but only a role with a
-    `containers_list` entry has a deploy tag. Eight roles under ansible/roles/k8s/ have no
-    entry — manifests, rollout-drain, volume-claim, volume-snapshot, volume-revert,
-    image-builder, longhorn-api, cronjob-gate — because other roles include them by literal
+    `containers_list` entry has a deploy tag. Seven roles under ansible/roles/k8s/ have no
+    entry — manifests, volume-claim, volume-snapshot, volume-revert, image-builder,
+    longhorn-api, cronjob-gate — because other roles include them by literal
     name. Handing one to `--tags` poisons the WHOLE list: deploy.sh validates every tag and
     exits 2 on the first unknown one, so the valid services beside it are refused too.
 

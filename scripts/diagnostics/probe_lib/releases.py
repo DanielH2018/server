@@ -153,7 +153,7 @@ def _deploy_tags():
     return deploy_tags
 
 
-# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, rollout-drain and
+# Roles under ansible/roles/k8s/ with no containers_list entry -- manifests, volume-claim and
 # the rest render or gate the applied bytes for EVERY k8s service, not just their own. Read at
 # call time rather than pinned as a frozenset here: split_shared_roles derives it from the tree
 # rather than repeating the SHARED_K8S_ROLES list gitops_deploy/files/deploy_k8s.py already
@@ -263,7 +263,7 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
     (0b86a7d7) marked all 53 services stale and parked `Release Staleness Drift` DOWN with no
     deploy tag able to clear it (#1672). The narrowing is scoped to shared roles: a SERVICE's
     own `tasks/main.yml` names its `manifests_files`, so a change there does move its bytes and
-    must still count.
+    must still count. The renderer's rollout wait (`drain.yml`, #2813) runs, renders nothing.
     """
     if path.endswith(".md"):
         return False
@@ -277,7 +277,7 @@ def _is_real_change(path, deploy_time_roles=frozenset()):
         and parts[4] in _DEPLOY_TIME_SUBDIRS
     ):
         return False
-    return True
+    return path != "ansible/roles/k8s/manifests/tasks/drain.yml"
 
 
 def _changed_files(commit, paths, repo_root, ref, deploy_time_roles=frozenset()):

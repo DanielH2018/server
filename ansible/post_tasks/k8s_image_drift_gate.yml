@@ -26,7 +26,7 @@
 #
 # WHY IT IS A POST_TASK. The comparison is only meaningful after the rollouts have drained: at the
 # point k8s/image-builder finishes, the workload legitimately still runs the OLD pod, because
-# k8s/manifests and k8s/rollout-drain have not run yet. Putting this in the builder's own role would
+# k8s/manifests and k8s/manifests/tasks/drain.yml have not run yet. Putting this in the builder's own role would
 # false-positive on every deploy that changes an image.
 #
 # WHY IT READS PODS RATHER THAN DEPLOYMENTS. In both surviving paths the Deployment NAMES the same

@@ -32,7 +32,7 @@
   when: not k8s_no_mutate
   tags: [deploy]
   # ONE OF TWO ROLES THAT MUST WAIT INLINE (k8s/registry is the other). k8s/manifests
-  # deliberately does NOT wait — it queues the rollout for k8s/rollout-drain at the end of the
+  # deliberately does NOT wait — it queues the rollout for k8s/manifests/tasks/drain.yml at the end of the
   # batch (see that role's header for the 1386s-to-max() rationale). Most roles tolerate that,
   # because nothing else in them touches the workload they just rolled. This role does: the
   # tasks below `exec` into deploy/crowdsec to reach the LAPI, and the batch drain runs long

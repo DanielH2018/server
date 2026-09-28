@@ -48,7 +48,7 @@
 - name: Check that manifests_rollout_kind is a kind every consumer understands
   tags: [deploy]
   # Three places key on the exact literal 'daemonset': the apply-output ternary below, the
-  # queued kind that roles/k8s/rollout-drain runs `rollout status` with, and the jsonpath
+  # queued kind that roles/k8s/manifests/tasks/drain.yml runs `rollout status` with, and the jsonpath
   # branch in post_tasks/k8s_stabilise_gate.yml. kubectl accepts 'ds' and 'DaemonSet' as
   # aliases, so a caller using one of those gets a green deploy with the stabilisation gate
   # reading a Deployment's jsonpath off a DaemonSet — 0 == 0, passing vacuously. Fail loudly
@@ -495,9 +495,9 @@
   tags: [deploy]
   # noqa var-naming[no-role-prefix] — k8s_pending_rollouts is deliberately play-scoped, not
   # manifests_-scoped: it is an accumulator every role in a batch appends to and
-  # roles/k8s/rollout-drain consumes. A role prefix would make it look role-local, which is
+  # roles/k8s/manifests/tasks/drain.yml consumes. A role prefix would make it look role-local, which is
   # exactly the wrong mental model for a fact that outlives this role.
-  # DOES NOT WAIT. The rollout is watched by roles/k8s/rollout-drain, invoked from
+  # DOES NOT WAIT. The rollout is watched by roles/k8s/manifests/tasks/drain.yml, invoked from
   # ansible/tasks/k8s_batch.yml at the end of this role's batch, together with every other
   # rollout the batch started — 1386s of serial waiting
   # across 31 services on 2026-08-15 becomes max() per batch instead of sum().
@@ -515,7 +515,7 @@
            'changed': (manifests_render is changed) or (manifests_secret_render is changed)
                       or manifests_image_changed,
          }] }}
-  # Leaving the queue empty under dry-run is what makes roles/k8s/rollout-drain and the
+  # Leaving the queue empty under dry-run is what makes roles/k8s/manifests/tasks/drain.yml and the
   # post_tasks stabilisation gate no-op — neither needs a k8s_dry_run condition of its own.
   when:
     - not k8s_dry_run | bool

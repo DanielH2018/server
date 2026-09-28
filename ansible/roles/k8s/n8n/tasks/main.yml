@@ -91,11 +91,11 @@
 # same race read the other way — a red deploy on a service that was not up yet. Observed
 # 2026-08-16: n8n's pod started 14:52, the probe ran 14:53:04 and failed 4s later with "CONTROL
 # FAILED: cannot reach n8n:5678 either". roles/k8s/manifests no longer waits inline; it queues
-# the rollout for k8s/rollout-drain, which drains at the END of the play.)
+# the rollout for k8s/manifests/tasks/drain.yml, which drains at the END of the play.)
 #
 # `rollout status`, NOT `kubectl wait --for=condition=Available`: n8n is single-replica, so the OLD
 # pod satisfies Available for the whole rolling update and the wait returns before the new pod is
-# even scheduled. Same reasoning, and the same measurement, as rollout-drain/tasks/main.yml:32.
+# even scheduled. Same reasoning, and the same measurement, as manifests/tasks/drain.yml:32.
 - name: Wait for n8n to finish rolling before probing it
   when: not k8s_no_mutate
   tags: [deploy]

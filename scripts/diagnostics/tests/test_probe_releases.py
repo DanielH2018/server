@@ -244,7 +244,6 @@ def test_shared_k8s_roles_matches_the_known_set():
         "image-builder",
         "longhorn-api",
         "manifests",
-        "rollout-drain",
         "volume-claim",
         "volume-revert",
         "volume-snapshot",
@@ -276,7 +275,7 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
 
 
 def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
-    """The five roles holding only `tasks/` and `defaults/` must stay out (#1636).
+    """The roles holding only `tasks/` and `defaults/` must stay out (#1636).
 
     Each changes how a deploy runs, never what it applies, so a change to one invalidates no
     release stamp. `volume-snapshot` is the one that marked all 53 services stale.
@@ -285,7 +284,6 @@ def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
         {
             "cronjob-gate",
             "longhorn-api",
-            "rollout-drain",
             "volume-revert",
             "volume-snapshot",
         }
@@ -294,7 +292,7 @@ def test_manifest_affecting_shared_roles_drops_the_deploy_time_roles():
 
 def test_supplies_manifest_bytes_is_clean_for_a_deploy_time_role(tmp_path):
     """A role holding only `tasks/` and `defaults/` supplies no bytes."""
-    role = tmp_path / "rollout-drain"
+    role = tmp_path / "volume-snapshot"
     (role / "tasks").mkdir(parents=True)
     (role / "defaults").mkdir()
     assert pr._supplies_manifest_bytes(role) is False

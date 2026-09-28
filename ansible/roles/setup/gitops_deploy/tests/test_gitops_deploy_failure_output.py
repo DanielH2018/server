@@ -37,7 +37,7 @@ def test_a_failure_reported_only_on_stdout_names_the_failing_task(
     assert "-> 2" in message
 
 
-TASK_HEADER = "TASK [k8s/rollout-drain : Wait for the queued rollouts to finish] ****"
+TASK_HEADER = "TASK [k8s/manifests : Wait for the queued rollouts to finish] ****"
 RECAP = (
     "PLAY RECAP ****\n"
     "daniel-box : ok=1950 changed=254 unreachable=0 failed=1 skipped=1032 rescued=0 ignored=0"

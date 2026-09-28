@@ -19,7 +19,7 @@ Three things can silently break that, and none of them fails a deploy:
     first two and forget the third and the gate watches six of seven, reporting green for the
     one that crashloops.
   * **The inline wait gets queued into the drain.** It looks like the obvious next speedup —
-    it is 54s of serial waiting that `k8s/rollout-drain` would collapse to a max(). It cannot
+    it is 54s of serial waiting that `k8s/manifests/tasks/drain.yml` would collapse to a max(). It cannot
     move: "Sync the live Grafana admin password" `kubectl exec`s into `deploy/grafana`, and the
     drain does not run until the end of the batch. Same shape as the two roles guarded in
     test_inline_rollout_gates.py, but keyed on a templated loop rather than a literal target.
@@ -92,7 +92,7 @@ def test_the_role_still_waits_inline_before_exec_ing_into_grafana() -> None:
 
     assert wait >= 0, (
         "claude-otel no longer waits on its own rollout. It cannot be queued into "
-        "k8s/rollout-drain: the drain runs at the end of the batch, and the Grafana admin "
+        "k8s/manifests/tasks/drain.yml: the drain runs at the end of the batch, and the Grafana admin "
         "password sync execs into deploy/grafana before then."
     )
     assert exec_grafana >= 0, (

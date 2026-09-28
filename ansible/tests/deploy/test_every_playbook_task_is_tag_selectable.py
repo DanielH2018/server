@@ -14,7 +14,7 @@ THE MODEL, measured on ansible-core against a probe playbook on 2026-09-26:
     included from a caller's `apply`-tagged role ran its untagged tasks under the caller's tag.
 
 So the walk only descends where nothing is inherited: into an `include_*` without `apply`,
-whose target must then tag every task itself. `k8s/rollout-drain` is the live instance, and
+whose target must then tag every task itself. `k8s/manifests/tasks/drain.yml` is the live instance, and
 its CLAUDE.md records why its `tags: [always]` are load-bearing.
 
 A shared role inside a workload role is covered by this model, but its tag is the caller's:
@@ -136,7 +136,7 @@ MUST_VISIT = frozenset(
         "tasks/k8s_batch.yml",
         "post_tasks/k8s_stabilise_gate.yml",
         "post_tasks/k8s_image_drift_gate.yml",
-        "roles/k8s/rollout-drain/tasks/main.yml",
+        "roles/k8s/manifests/tasks/drain.yml",
     }
 )
 

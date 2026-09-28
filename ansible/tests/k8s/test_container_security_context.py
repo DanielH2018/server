@@ -70,7 +70,6 @@ _UNCOVERED_ROLES = {
     # test_image_builder_security_context.py owns those (2026-08-23b review M17).
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
-    "rollout-drain",
     "cronjob-gate",
     "volume-snapshot",
     "longhorn-api",

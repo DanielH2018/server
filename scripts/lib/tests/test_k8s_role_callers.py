@@ -25,7 +25,6 @@ _HELPERS = frozenset(
         "image-builder",
         "longhorn-api",
         "manifests",
-        "rollout-drain",
         "volume-claim",
         "volume-revert",
         "volume-snapshot",

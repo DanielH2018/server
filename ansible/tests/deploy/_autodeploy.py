@@ -33,7 +33,7 @@ _K8S_ROLES = _REPO / "ansible/roles/k8s"
 # neither pins one — that's the supporting fact, not the rule. volume-claim pins
 # seed_volume_image and does NOT belong here; it's denylisted instead and evaluated by every
 # guard below like any other role.
-_SHARED = {"manifests", "rollout-drain"}
+_SHARED = {"manifests"}
 
 # Shared roles other roles rely on to block until a batch workload is terminal. Membership
 # exempts nobody from the batch guard below; the set exists so
@@ -66,13 +66,13 @@ def _roles() -> list[Path]:
 
 
 # The DaemonSet-alias sweep below deliberately does NOT reuse _roles() or _SHARED: those exist
-# to enumerate *deployable* roles for the auto-deploy guards above, and excluding manifests +
-# rollout-drain is correct for that job. The sweep's job is different — it must see the shared
-# roles too, since manifests/tasks/main.yml and rollout-drain/tasks/main.yml are two of the
+# to enumerate *deployable* roles for the auto-deploy guards above, and excluding manifests
+# is correct for that job. The sweep's job is different — it must see the shared
+# roles too, since manifests/tasks/main.yml and manifests/tasks/drain.yml are two of the
 # three consumers that key on the literal 'daemonset'. Kept as an independent file list so the
 # two concerns can't drift into each other.
 _KUBECTL_CONSUMER_ROOTS = (
-    _K8S_ROLES,  # includes manifests/ and rollout-drain/, unlike _roles()
+    _K8S_ROLES,  # includes manifests/, unlike _roles()
     _REPO / "ansible/post_tasks",
     _REPO / "ansible/tasks",
 )
@@ -101,7 +101,7 @@ def _kubectl_consumer_paths() -> list[Path]:
     """Every file under the roots that actually issue kubectl commands against a kind.
 
     Not repo-wide in the literal sense (READMEs, CI workflows, etc. are out of scope — they
-    don't run kubectl), but wide enough to cover manifests/, rollout-drain/, and the post_tasks/
+    don't run kubectl), but wide enough to cover manifests/ and the post_tasks/
     and tasks/ playbooks that read a queued `kind` — the three consumers the F1 assert names.
     """
     paths = []

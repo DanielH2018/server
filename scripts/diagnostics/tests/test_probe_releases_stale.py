@@ -293,6 +293,11 @@ def test_is_real_change_is_clean_for_a_shared_roles_tasks_file():
     )
 
 
+def test_is_real_change_is_clean_for_the_renderers_drain():
+    """The rollout wait lives in `manifests/tasks/` but applies nothing (#2813)."""
+    assert pr._is_real_change("ansible/roles/k8s/manifests/tasks/drain.yml") is False
+
+
 def test_is_real_change_is_flagged_for_the_paths_the_narrowing_must_not_touch():
     """Four paths a too-wide exclusion would swallow, each still a real change."""
     deploy_time = frozenset({"volume-claim"})

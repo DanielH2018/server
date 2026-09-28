@@ -45,9 +45,7 @@ HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # containers_list entry because they are not services, so the platform check below would always
 # fail for them.
 #
-# rollout-drain is pure tasks, waiting on the rollouts a batch of roles queued into
-# k8s_pending_rollouts; it lives under roles/k8s/ only so that both deploy.yml and configarr can
-# include it by name. cronjob-gate creates a one-off Job from the CALLER's CronJob with `kubectl
+# cronjob-gate creates a one-off Job from the CALLER's CronJob with `kubectl
 # create job --from=cronjob/<name>`, so the pod spec it runs is the caller's rendered manifest.
 # volume-snapshot applies one Longhorn Snapshot CR per claim, built inline and piped to `kubectl
 # apply -f -` — per-deploy state rather than part of a service's manifest set, and
@@ -61,7 +59,6 @@ HOST_VARS = HOST_VARS_DIR / "daniel-box.yml"
 # stale exemption rather than left as a name nobody can justify.
 NO_MANIFEST_ROLES = {
     "manifests",
-    "rollout-drain",
     "cronjob-gate",
     "volume-snapshot",
     "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot

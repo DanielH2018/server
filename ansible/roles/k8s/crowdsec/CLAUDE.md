@@ -72,7 +72,7 @@ is a rollout race. Easy to misread as a credential or RBAC problem.
 **FIXED** 2026-08-16 in PR #229: a `rollout status` gate now precedes the LAPI tasks, proven
 by the deploy that shipped it (the gate blocked 61.83s, registration then succeeded,
 `failed=0` on the first run). The signature above is kept because it is what makes a
-regression recognisable if the gate is ever removed as apparent drift from `rollout-drain`'s
+regression recognisable if the gate is ever removed as apparent drift from the drain's
 "never wait inline" rule — which is why the gate carries a comment naming itself the
 deliberate exception. A naive `kubectl wait --for=condition=Available` would not help: the pod
 is single-replica, so the old pod satisfies the condition.

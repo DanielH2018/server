@@ -88,7 +88,7 @@ mean anything. Both are properties of the host the command runs on, not of the d
 
 **Start with: the playbook exited zero.** That is a stronger signal than it sounds, because
 `deploy_k8s` deliberately has no health-poll phase of its own — the gate lives inside the play.
-`roles/k8s/manifests` applies, `roles/k8s/rollout-drain` waits on `rollout status`, and
+`roles/k8s/manifests` applies, `roles/k8s/manifests/tasks/drain.yml` waits on `rollout status`, and
 `post_tasks/k8s_stabilise_gate.yml` hard-fails on a restart-count delta or a readiness
 shortfall. A non-zero exit already means the workload did not come up.
 

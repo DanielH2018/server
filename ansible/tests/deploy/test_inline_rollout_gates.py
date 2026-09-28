@@ -1,6 +1,6 @@
 """A role that talks to a workload it just rolled must wait for that rollout first.
 
-`k8s/manifests` does not wait. It queues the rollout for `k8s/rollout-drain`, which drains the
+`k8s/manifests` does not wait. It queues the rollout for `k8s/manifests/tasks/drain.yml`, which drains the
 whole batch at the end — the change that turned 1386s of serial waiting into one max(). Almost
 every role tolerates that, because nothing in them touches the workload they just rolled. The
 ones that do read the OUTGOING pod, and every assertion they make describes it.
@@ -54,7 +54,7 @@ in `_UNRESOLVED_TARGETS` with the reason, and that set is checked for staleness 
 WHAT IT DOES NOT COVER, deliberately:
 
   * Roles that render no Deployment/DaemonSet/StatefulSet (volume-claim, netpol-baseline,
-    rollout-drain, media-volume, ...). They have no rollout of their own to gate on, and every
+    media-volume, ...). They have no rollout of their own to gate on, and every
     pod they touch belongs to someone else.
   * `logs job/<name>` and other Job targets. A Job has no rollout for `rollout status` to gate.
   * Reaching a workload over its Service instead of `kubectl` — registry dials `deploy/registry`
@@ -251,7 +251,7 @@ def test_every_role_that_inspects_its_own_pod_gates_on_its_rollout() -> None:
                 assert gate is not None, (
                     f"{role}: task {index} ({task.raw_name!r}) inspects the pod of workload "
                     f"{workload!r} without ever waiting for its rollout. k8s/manifests QUEUES "
-                    "the rollout for k8s/rollout-drain, so this reads the pod being replaced, "
+                    "the rollout for k8s/manifests/tasks/drain.yml, so this reads the pod being replaced, "
                     "and every assertion after it describes the outgoing pod. The gate must "
                     f"name that same workload: `rollout status "
                     f"{_owned(role)[workload].lower()}/{workload}`."

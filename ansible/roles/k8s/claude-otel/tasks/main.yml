@@ -132,7 +132,7 @@
 # and is STRICTER, not weaker — these six are deployed in batch 4 of 11, so the gate observes
 # them for the remainder of the run rather than for exactly 60s.
 #
-# Roles on the normal path get this snapshot from roles/k8s/rollout-drain, which never sees these
+# Roles on the normal path get this snapshot from roles/k8s/manifests/tasks/drain.yml, which never sees these
 # six because nothing queued them into k8s_pending_rollouts. Queueing them there instead is not
 # an option: the drain runs at the END of the batch, and "Sync the live Grafana admin password"
 # below `kubectl exec`s into deploy/grafana, so it needs the rollout above to have already
@@ -142,7 +142,7 @@
   # AFTER the wait above, never before. Reading restart counts while the old pod is still
   # terminating captures the OUTGOING pod's counts, and its replacement starts at zero — so the
   # gate's `after <= before` comparison would pass no matter what happened. Same reasoning, and
-  # the same trap, as the snapshot task in roles/k8s/rollout-drain.
+  # the same trap, as the snapshot task in roles/k8s/manifests/tasks/drain.yml.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }} get pods

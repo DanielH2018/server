@@ -431,7 +431,7 @@ def deploy_k8s(
     """Deploy k8s services by tag. The rollout gate lives INSIDE the role.
 
     No health-poll phase here on purpose: the play already runs apply (roles/k8s/manifests)
-    -> `rollout status --timeout` (roles/k8s/rollout-drain) -> a post-Available soak
+    -> `rollout status --timeout` (roles/k8s/manifests/tasks/drain.yml) -> a post-Available soak
     (post_tasks/k8s_stabilise_gate.yml) that hard-fails on a restart-count delta or a
     readiness shortfall. Polling again would duplicate it.
 
