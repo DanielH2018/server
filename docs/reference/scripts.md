@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-27 18:17 UTC
-generated_sha: 79c866a24
+generated_at: 2026-09-28 06:17 UTC
+generated_sha: 180a57cbc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -90,7 +90,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/staging_egress_probe.py` | Acceptance gate for the staging guest's egress fence. | deploy: ansible/roles/setup/hypervisor/templates/staging-nwfilter.xml.j2 | `test_staging_egress_fence.py` *(indirect)* |
 | `scripts/deploy_tools/staging_expectations.py` | Check that staging's services ANSWER the way they are supposed to, not just that they start. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_io.py | `test_staging_expectations.py` |
 | `scripts/deploy_tools/staging_gate.py` | Ask the staging cluster whether it accepts a commit, from daniel-box. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_io.py | `test_staging_gate.py` |
-| `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Two arguments: the SHA under test, and the | deploy: ansible/roles/setup/hypervisor/tasks/install.yml | `test_staging_gate_paths_agree.py` *(indirect)* |
+| `scripts/deploy_tools/staging_gate_remote.sh` | The daniel-server half of the staging gate. Two arguments: the SHA under test, and the | deploy: ansible/roles/setup/hypervisor/tasks/install.yml | `test_land_reach_repo_shipped_files.py` *(indirect)* |
 | `scripts/validate/unit_templates.py` | Render every systemd unit template under ansible/roles/ and verify the output. | prek hook (every commit) | `test_validate_unit_templates.py` *(indirect)* |
 | `scripts/validate/vale.sh` | Provision the pinned Google style package, then run Vale over the files prek hands us. | prek hook (every commit) | `test_vale_sync_guard.py` *(indirect)* |
 | `scripts/home_assistant/validate_ha_config.py` | Lightweight structural validation of the Home Assistant config — no Docker, no HA dependency. | prek hook (every commit) | `test_validate_ha_config.py` |
