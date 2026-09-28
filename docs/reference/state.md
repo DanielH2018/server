@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-28 06:17 UTC
-generated_sha: 180a57cbc
+generated_at: 2026-09-28 12:57 UTC
+generated_sha: 022174825
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: 180a57cbc
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-28T06:15:35+0000 | 1m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-27T11:11:00+0000 | 19h6m | 1d | ok | session completed |
-| renovate-notify | 2026-09-27T13:02:22+0000 | 17h15m | 1d | ok | notified |
-| docs-refresh | 2026-09-27T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-27T20:09:47+0000 | 10h7m | 7d | ok | last touched by: Gate three prom readers and add a WAN gate so one outage pages once |
-| longhorn-restore-drill | 2026-09-28T04:10:48+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-21T10:20:03+0000 | 6d19h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1789958702.zip) |
+| gitops-deploy | 2026-09-28T12:57:29+0000 | 0m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-28T11:23:11+0000 | 1h35m | 1d | ok | session completed |
+| renovate-notify | 2026-09-27T13:02:22+0000 | 23h55m | 1d | ok | notified |
+| docs-refresh | 2026-09-28T12:43:00+0000 | 15m | 12h | ok | generators: skipped |
+| secret-rotate | 2026-09-27T20:09:47+0000 | 16h48m | 7d | ok | last touched by: Gate three prom readers and add a WAN gate so one outage pages once |
+| longhorn-restore-drill | 2026-09-28T04:10:48+0000 | 8h47m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-28T10:20:04+0000 | 2h38m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1790563503.zip) |
