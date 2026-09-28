@@ -198,99 +198,10 @@ def test_the_scan_is_not_empty():
     assert len(total) >= 15, total
 
 
-# --- composed paths -------------------------------------------------------------------
-# The literal-token scan above cannot see a path a shell BUILDS at runtime. That is not
-# hypothetical: the retired `validate-compose.sh` hook ran `"$repo_root/scripts/${script}.py"`
-# from #443 until 2026-08-27, invoking three validators at a path none of them had lived at
-# for weeks, and it stayed invisible because there is no literal `scripts/<name>.py` token to
-# resolve. This is the recorded "textual guard checks break on an indirection" shape, sitting
-# inside the guard written to catch this very class -- so the composed form gets its own arm.
-#
-# NO SHIM composes a path this way today, so the arm below currently resolves zero hits and is
-# a guard for the next one rather than a live check. Issue #2909 decides whether it keeps its
-# place or goes.
-#
-# Resolution is deliberately narrow: one shell idiom (a `for VAR in "a:b" ...` list feeding a
-# `${VAR#*:}` / `${VAR%%:*}` split). Anything it cannot resolve FAILS as unresolvable rather
-# than being skipped, because a composed path this cannot read is exactly the case that hid
-# the bug. Widen the resolver when a new idiom appears; never widen the skip.
-_COMPOSED = re.compile(
-    r"(scripts/[A-Za-z0-9_./-]*)\$\{(\w+)(?:[#%][^}]*)?\}([A-Za-z0-9_./-]*)"
-)
-_FOR_LIST = re.compile(r"^\s*for\s+(\w+)\s+in\s+(.+?)(?:;|\s*\\?\s*)$")
-_SPLIT_ASSIGN = re.compile(r"""(\w+)="\$\{(\w+)([#%]{1,2})([^}]*)\}\"""")
-
-
-def _candidate_values(path: Path, var: str) -> list[str] | None:
-    """Possible literal values of `var` in `path`, or None if the idiom isn't understood."""
-    text = path.read_text()
-    src, op = None, None
-    for name, base, operator, _pat in _SPLIT_ASSIGN.findall(text):
-        if name == var:
-            src, op = base, operator
-            break
-    if src is None:
-        return None
-    # Join backslash-continuations into logical lines FIRST: a `for` list routinely spans
-    # several physical lines, and sweeping forward "until the quotes stop" instead swallows
-    # every quoted string in the rest of the file.
-    logical: list[str] = []
-    buf = ""
-    for _lineno, line in _non_comment_lines(path):
-        stripped = line.rstrip()
-        if stripped.endswith("\\"):
-            buf += stripped[:-1] + " "
-            continue
-        logical.append(buf + stripped)
-        buf = ""
-    if buf:
-        logical.append(buf)
-
-    words: list[str] = []
-    for line in logical:
-        m = _FOR_LIST.match(line)
-        if m and m.group(1) == src:
-            words += re.findall(r'"([^"]+)"', m.group(2))
-            break
-    if not words:
-        return None
-    out = []
-    for w in words:
-        if op.startswith("#"):
-            out.append(w.split(":", 1)[1] if ":" in w else w)
-        else:
-            out.append(w.split(":", 1)[0])
-    return out
-
-
-def composed_hook_invocations() -> list[tuple[str, str | None]]:
-    """(location, resolved path or None-if-unresolvable) for composed `scripts/...` paths."""
-    out: list[tuple[str, str | None]] = []
-    hooks_dir = REPO / ".claude/hooks"
-    for f in sorted(hooks_dir.glob("*.sh")):
-        if f.name.startswith("test_"):
-            continue
-        for lineno, line in _non_comment_lines(f):
-            for prefix, var, suffix in _COMPOSED.findall(line):
-                loc = f"{f.relative_to(REPO)}:{lineno}"
-                values = _candidate_values(f, var)
-                if values is None:
-                    out.append((f"{loc} (${{{var}}} unresolvable)", None))
-                    continue
-                for v in values:
-                    out.append((loc, f"{prefix}{v}{suffix}"))
-    return out
-
-
-def test_every_composed_script_path_resolves():
-    hits = composed_hook_invocations()
-    broken = [
-        (loc, token)
-        for loc, token in hits
-        if token is None or not (REPO / token).is_file()
-    ]
-    assert not broken, (
-        "a hook builds a scripts/ path that does not exist (or that this test cannot "
-        "resolve -- see the note above; an unresolvable composition is a failure, not a "
-        "skip):\n" + "\n".join(f"  {loc}: {token}" for loc, token in broken)
-    )
+# The literal-token scan above cannot see a path a shell BUILDS at runtime, such as
+# `"$repo_root/scripts/${script}.py"`. The retired `validate-compose.sh` hook did exactly that
+# and invoked three validators at stale paths for weeks. A composed-path arm guarded that shape
+# until #2909 removed it: after #2856 deleted that hook, no file here composes a `scripts/` path,
+# so the arm checked an empty list. When a shim first composes one, restore the arm from git
+# history (`git log -S composed_hook_invocations`) and pin that shim by name, so the arm cannot
+# pass on an empty census.
