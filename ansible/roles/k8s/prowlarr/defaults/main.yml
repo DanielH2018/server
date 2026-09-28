@@ -71,16 +71,39 @@ prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
 # busybox nc is all the isolation probe needs.
 prowlarr_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
-# Mirrors resources('1.0', '1024M', '0.10', '128M') for prowlarr and
-# resources('2.0', '1024M', '0.10', '128M') for flaresolverr.
+# prowlarr's own four mirror the Compose-era resources('1.0', '1024M', '0.10', '128M').
 prowlarr_k8s_cpu_limit: "1"
 prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
+
+# flaresolverr's memory pair is sized from measurement, not from the Compose defaults it started
+# at (1024Mi / 128Mi). It launches a fresh headless Chromium per solve, so its footprint tracks
+# how many solves overlap, and a full deploy restarts most of the *arr stack at once: prowlarr
+# then re-syncs its indexers and a cold flaresolverr pod takes that whole burst.
+#
+# On 2026-09-28 the burst OOM-killed it at the 1024Mi limit, 10 minutes after a rollout restarted
+# it (exit 137, #2883), which failed the whole deploy.yml run at the post-deploy stabilisation
+# gate. `max_over_time(container_memory_working_set_bytes{container="flaresolverr"}[30d])` on the
+# same day put the highest SURVIVING pod at 934Mi, against 74-676Mi for the nine others — so
+# 1024Mi was not a comfortable cap that one burst overshot, it was a cap the steady fleet was
+# already brushing. 934Mi is a sampled figure and therefore a lower bound on real demand: the
+# scrapes never caught the burst that actually died. 2048Mi is one doubling over the highest
+# observation, and daniel-server carries it — 31Gi allocatable against 2.6Gi of requests and
+# 16.8Gi of limits when this was measured.
+#
+# Upstream exposes NO concurrency cap to fix this at the source: FlareSolverr's README documents
+# no env var for concurrent sessions or browser-pool size, and tells the operator to size RAM
+# instead ("With each request a new browser is launched").
+#
+# The REQUEST deliberately stops well short of the peak. It reserves node memory permanently,
+# and 2048Mi held out of a scheduler that only sees 128Mi used steady-state would hoard a
+# gigabyte to cover minutes per deploy. 512Mi covers the observed steady range so the scheduler
+# stops placing this pod as if it were 128Mi, and the pod stays Burstable either way.
 prowlarr_k8s_fs_cpu_limit: "2"
-prowlarr_k8s_fs_mem_limit: 1024Mi
+prowlarr_k8s_fs_mem_limit: 2048Mi
 prowlarr_k8s_fs_cpu_request: "100m"
-prowlarr_k8s_fs_mem_request: 128Mi
+prowlarr_k8s_fs_mem_request: 512Mi
 
 # See roles/k8s/sonarr/defaults/main.yml for the full rationale: upstream defaults are
 # LogLevel=debug / Rotate=50 / SizeLimit=1MB, and the churn that produces is what inflates the
