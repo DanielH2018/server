@@ -178,7 +178,6 @@ def test_discover_templates_finds_the_known_set():
         "longhorn-reap-orphan-snapshots.sh.j2",
         "longhorn-trim-volumes.sh.j2",
         "disk-health.sh.j2",
-        "remember-logs-health.sh.j2",
         "manifest-prune-check.sh.j2",
         "release-staleness-check.sh.j2",
         "loki-read-route-health.sh.j2",

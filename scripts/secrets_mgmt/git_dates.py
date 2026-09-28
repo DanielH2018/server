@@ -123,6 +123,9 @@ RETIRED: frozenset[str] = frozenset(
         # 2026-09-24 — the staging-backfill ratchet's Kuma push token, retired with the
         # ratchet (#2414).
         "monitor_bridge_staging_backfill_push_token",
+        # 2026-09-28 — the remember log-rotation check's Kuma push token, retired with the
+        # remember plugin (#2852).
+        "remember_logs_push_token",
     }
 )
 

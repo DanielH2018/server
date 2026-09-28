@@ -33,8 +33,8 @@ ROTATION = (ANSIBLE / "secret_rotation.yml").read_text()
 def _monitor_entity() -> dict:
     """The rendered Docs Refresh entity, read out of the template by filename key.
 
-    Parsed from the raw template rather than a Jinja render, matching
-    test_remember_logs_health.py: every field asserted here is a literal.
+    Parsed from the raw template rather than a Jinja render: every field asserted here is a
+    literal.
     """
     m = re.search(r"^  docs-refresh\.json: \|\n\s+(\{.*\})$", MONITORS, re.M)
     assert m, "docs-refresh.json entity missing from static-monitors.yaml.j2"

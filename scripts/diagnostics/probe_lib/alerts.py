@@ -233,8 +233,8 @@ def keep_alert_row(check, pi, logql, line, name):
 #
 # The clamp is what makes a SPARSE check behave. A check that fires once a day has a median
 # delta of a day, and an unclamped threshold would swallow a week of separate incidents into
-# one episode. The ceiling is 90 minutes because the slowest emitter here is an hourly cron
-# (remember-logs-health) — 3600s * 1.5 is exactly 5400s, so hourly runs still merge while
+# one episode. The ceiling is 90 minutes because the slowest emitter here is hourly (the
+# loki-read-route timer) — 3600s * 1.5 is exactly 5400s, so hourly runs still merge while
 # anything sparser splits.
 _GAP_CADENCE_FACTOR = 1.5
 _GAP_FLOOR_S = 120

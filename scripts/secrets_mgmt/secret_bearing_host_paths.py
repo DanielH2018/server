@@ -65,8 +65,8 @@ GENERIC_NAMES = frozenset()
 
 # The registry's own word for "tracked, but not a value anyone rotates". `domain` carries it,
 # and reading the tier is what keeps this derivation honest: matching on `domain` flagged five
-# more host scripts (disk-health, etcd-snapshot-offbox, registry-gc, remember-logs-health,
-# fake-remux-health) that embed no credential at all. A guard that fires on those is one that
+# more host scripts (disk-health, etcd-snapshot-offbox, registry-gc, fake-remux-health, and
+# remember-logs-health, retired since) that embed no credential at all. A guard that fires on those is one that
 # gets switched off. Derived from the registry rather than hand-listed in GENERIC_NAMES,
 # because the registry already states the fact.
 NON_SECRET_TIERS = frozenset({"ignore"})
