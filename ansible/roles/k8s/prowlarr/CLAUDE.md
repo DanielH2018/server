@@ -35,6 +35,14 @@ rendering attacker-supplied pages in a headless browser.
   292 MB flaresolverr image and 3m41s for prowlarr's own (#2369). `prowlarr_k8s_rollout_timeout`
   sets the drain's wait and each template's `progressDeadlineSeconds`. The deadline has to move
   with the wait, or `rollout status` fails at the 600s default anyway.
+- **flaresolverr's memory limit is sized from a burst, not from steady state.** It launches a
+  fresh headless Chromium per solve, so a full deploy that restarts the *arr stack hands a cold
+  pod prowlarr's whole indexer re-sync at once. That burst OOM-killed it at the old 1024Mi cap on
+  2026-09-28 (#2883) and failed the deploy at the stabilisation gate.
+  `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_limit` carries the
+  measurements, and why
+  `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_request` deliberately stays
+  far below it. Upstream exposes no concurrency cap, so sizing is the only lever.
 - **Log churn, not log size, drives PVC growth.** `prowlarr_k8s_log_level`/`_log_rotate`
   override upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the full
   rationale, shared across the *arr roles.
