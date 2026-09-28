@@ -37,14 +37,64 @@ automations do.
 
 - **`logger:` silences `pychromecast.controllers` at `critical` (2026-09-27, issue #2781).**
   pychromecast's homeassistant controller hands the Nest Hub Max HA's `external_url`, the
-  receiver cannot reach it, and `_connect_hass failed` raises `PyChromecastError` on every
-  cast-status callback. Casting a dashboard still works, so the fault is cosmetic to HA and
-  expensive to monitoring: each exception logs a traceback, and over the 7 days to 2026-09-27
-  all 197 lines matching monitor-bridge's fatal-log pattern in this container were those
-  tracebacks. The bursts reach 21-30/hour against `LOG_ERROR_MAX=20`, which held the composite
-  `k8s_workloads` tile red 11 times in 14 days and masked real workload failures while red.
-  The underlying reach-back failure is unfixed — the operator-visible symptom is none, and the
-  candidate fix changes the instance URLs that casting depends on.
+  receiver does not acknowledge the `connect` message, and `_connect_hass failed` raises
+  `PyChromecastError` at the cast-status listener. Casting a dashboard still works, so the fault
+  is cosmetic to HA and expensive to monitoring: each exception logs a traceback, and over the 7
+  days to 2026-09-27 all 197 lines matching monitor-bridge's fatal-log pattern in this container
+  were those tracebacks. The bursts reach 21-30/hour against `LOG_ERROR_MAX=20`, which held the
+  composite `k8s_workloads` tile red 11 times in 14 days and masked real workload failures while
+  red. The connect-back itself is unfixed.
+
+### The cast connect-back failure is episodic, and the receiver does reach HA (issue #2800)
+
+Measured 2026-09-28 from Loki over the 7 days to 2026-09-27. Every date below is the
+container's `America/Chicago` clock, which is what the log line prints; HA's API and `git %ci`
+are UTC, so do not compare the two without converting.
+
+- **Episodic, not per-callback.** The 197 `_connect_hass failed` warnings fall in 11
+  hour-buckets across 4 of the 7 days — 09-21, 09-22, 09-23, 09-26 — and 3 days have none. The
+  longest clean gap inside the window is about 56h, so a quiet day or two is not evidence the
+  fault has cleared.
+- **One warning costs exactly one exception.** 197 `Exception thrown when calling cast status
+  listener` records land in exactly those 11 buckets, one per warning.
+- **The receiver reaches HA.** Those same 11 buckets, and no others, carry 1570
+  `frontend.js.modern.<build>` `Uncaught error from Chrome 150.0.0.0 on unknown OS` records.
+  That is the Hub Max's cast receiver posting its own JS exceptions back to HA over its
+  connection to `external_url` — `unknown OS` is what the receiver reports where a desktop
+  browser names its platform.
+- **Three candidate causes are refuted by that.** The LAN hairpin through Cloudflare, the
+  receiver rejecting the served certificate, and CrowdSec or the CF-only-origin allowlist
+  refusing the device would each fail on *every* cast rather than in bursts, and none of them
+  would deliver receiver-side JS errors into HA's log. The mechanism is receiver-state- or
+  session-scoped, in the receiver's JS or in pychromecast's ack wait, and it is not a
+  network, TLS or WAF refusal. The root cause is still unidentified.
+- **The mechanism on HA's side.** `_connect_hass` sends `connect`, then waits
+  `DEFAULT_HASS_CONNECT_TIMEOUT = 30` seconds for `_hass_connecting_event`.
+  `receive_message` sets that event only on a `receiver_status` where the controller was NOT
+  already connected; every other path returns early and leaves it clear, so the wait runs to
+  the full timeout. Consecutive warnings sit 30.05s apart, which is the timeout rather than a
+  poll interval.
+- **`external_url` is not the thing to change.** HA's cast integration resolves the URL itself:
+  `hass_url = get_url(hass, require_ssl=True, prefer_external=True)` in
+  `homeassistant/components/cast/home_assistant_cast.py`, read from core `dev` on 2026-09-28.
+  `prefer_external=True` takes `external_url` whenever it is https, and ours is, so the only
+  way to hand the receiver `internal_url` is to remove or downgrade `external_url` — which the
+  working cast path, the companion app and the Cloudflare route all depend on. There is no
+  per-integration override.
+
+**Verify with the `frontend.js` channel, never with `_connect_hass failed`.** #2781 silenced
+both records the fault emits, because `Exception thrown when calling cast status listener` is
+logged on `pychromecast.controllers` too. A query for `_connect_hass failed` therefore returns
+nothing on a cluster where the fault is firing, which is why issue #2800's own verify-by was
+unfalsifiable. The query that still works:
+
+```logql
+{job="k8s", container="home-assistant"} |= "Uncaught error from Chrome"
+```
+
+Nothing in `files/configuration.yaml` silences `frontend.js`, and
+`ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py` fails if a future
+`logger:` entry takes that channel away as quietly as #2781 took the first one.
 
 ### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
 
