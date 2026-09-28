@@ -55,6 +55,16 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
 # the table a reviewer reads before flagging -- the harm the register exists to prevent.
 ISSUE_LIST_CAP = 1000
 
+# `lib.gh.gh`'s default timeout is 60s, which this one call outgrew. The register fetch asks for
+# `body` and `comments` on every `claude` issue in every state, and on 2026-09-28 that was 4.19 MB
+# across ~900 issues and took 67.5s wall — so EVERY findings.py subcommand failed, `open`
+# included, with a bare "gh failed: ... timed out after 60.0 seconds" (#2800's session could not
+# file its own follow-ups). The cost grows with the register and nothing else here does, so the
+# timeout is set at this call site rather than raised for every `gh` caller. 300s is 4x the
+# measurement; if a future session sees this time out again, the fix is to narrow `_LIST_FIELDS`
+# per subcommand rather than to keep multiplying the constant.
+REGISTER_FETCH_TIMEOUT = 300.0
+
 
 def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[dict]:
     """Fetches every ``claude``-labeled issue from gh, warning when it hits the list cap.
@@ -66,7 +76,11 @@ def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[
     """
     argv = ("issue", "list", "--label", "claude", "--state", state, "--limit")
     issues = (tools or FindingsTools()).gh_json(
-        *argv, str(ISSUE_LIST_CAP), "--json", _LIST_FIELDS
+        *argv,
+        str(ISSUE_LIST_CAP),
+        "--json",
+        _LIST_FIELDS,
+        timeout=REGISTER_FETCH_TIMEOUT,
     ) or []
     if len(issues) >= ISSUE_LIST_CAP:
         sys.stderr.write(
