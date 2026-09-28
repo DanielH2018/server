@@ -43,17 +43,13 @@ _ACTIVE_META = re.compile(r"^ansible/roles/containers/([^/]+)/meta/")
 # and meta/ have already claimed their paths; only the structural remainder reaches it. CLAUDE.md /
 # *.md are docs and keep the silent path (the caller excludes them).
 _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/([^/]+)/")
-# A change under a k8s-platform role's dir (ansible/roles/k8s/<role>/...). This deployer only ever
-# auto-deploys DOCKER-platform services (deploy(cs.services) runs the same --tags path _ACTIVE_CONFIG
-# feeds), so unlike _ACTIVE_TASKS/_ACTIVE_META there is no "rode the scoped redeploy" case to
-# subtract — a k8s role change is NEVER applied by this pipeline and must always defer-and-alert.
-# Before this, every path under ansible/roles/k8s/** matched NONE of the regexes above (they're all
-# containers/-scoped) and fell through to services_from_changed_paths returning an EMPTY ChangeSet,
-# which main()'s `if not cs.services:` branch takes as a plain docs-only ff-merge — silent, on EVERY
-# host with has_gitops (daniel-box, all 47 services platform: k8s). Matches the WHOLE role dir (not
-# split into templates/tasks/meta like containers/) since a k8s role has no separate auto-deploy path
-# for any of its subdirs to be scoped against — the alert just needs to name the role. *.md (role
-# CLAUDE.md) stays a silent ff-merge, same as the containers/ catch-all.
+# A change under a k8s-platform role's dir (ansible/roles/k8s/<role>/...). The deployer applies
+# one of these only as a promoted image-pin bump (`split_k8s_auto_deploy`, `cs.k8s_deploy`);
+# every other k8s role change defer-and-alerts. Without this regex a path under
+# ansible/roles/k8s/** matched none of the containers/-scoped regexes above and fell through
+# to a silent docs-only ff-merge. Matches the WHOLE role dir (not split into templates/tasks/meta
+# like containers/), since the alert just needs to name the role. *.md (role CLAUDE.md) stays a
+# silent ff-merge, same as the containers/ catch-all.
 _ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 
 # Build roles that render no workload of their own, mapped to the roles that run what they
@@ -99,6 +95,10 @@ def expand_build_couplings(tags):
     return widened
 
 
+# The Pi's shared Compose deploy path, which daniel-box's play never reads: Pi work
+# (`ChangeSet.pi_shared`), not a broad change buying a full `deploy.yml` run here (#2805).
+_PI_SHARED_PREFIX = "ansible/roles/containers/common/"
+
 # Changes whose blast radius we don't try to scope automatically. Split by which manual playbook
 # actually applies them, so the defer-and-alert can name the RIGHT one (2026-07-16 review M1):
 # `deploy.yml` is a pure containers_list loop, so a setup-plane change deployed via deploy.yml is a
@@ -106,7 +106,6 @@ def expand_build_couplings(tags):
 _BROAD_DEPLOY_PREFIXES = (
     "ansible/templates/",  # shared macros (traefik/networks/resources/...)
     "ansible/inventory/",  # host_vars / group_vars
-    "ansible/roles/containers/common/",  # shared deploy path
     "ansible/deploy.yml",
     # The task files deploy.yml imports. deploy.yml itself was already broad, but its three
     # sibling task dirs matched nothing: every _ACTIVE_* regex is anchored to ansible/roles/, so a
@@ -311,8 +310,8 @@ class ChangeSet:
 
     services: set[str] = field(default_factory=set)
     broad: bool = False
-    # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory/
-    # common) vs initial_setup.yml's (roles/setup/, requirements.yml, bring-up playbooks). `broad`
+    # Which manual playbook a broad change needs — deploy.yml's plane (shared templates/inventory)
+    # vs initial_setup.yml's (roles/setup/, requirements.yml, bring-up playbooks). `broad`
     # stays the OR so the existing defer branch is unchanged; these drive the alert's remediation
     # command so a setup-plane change isn't sent to deploy.yml (a no-op). A push can set both.
     broad_deploy: bool = False
@@ -325,15 +324,14 @@ class ChangeSet:
     # change is exactly the state the defer-and-alert arm exists to prevent.
     broad_manual: bool = False
     secrets: bool = False
+    pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
     # tasks/ plus the _ACTIVE_ROLE catch-all (defaults/, vars/, handlers/, …). The alert names all
     # of them, so the field keeps its name for continuity even though it's no longer tasks/-only.
     tasks: set[str] = field(default_factory=set)
     meta: set[str] = field(default_factory=set)
-    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...). Distinct from `tasks`/`meta`:
-    # this deployer has no mechanism that EVER applies a k8s role change (deploy(cs.services) only
-    # ever tags Docker-platform roles matched by _ACTIVE_CONFIG), so it always defer-and-alerts —
-    # there's no "rode a scoped redeploy of the same service" case to subtract deployed against.
+    # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
+    # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
     k8s: set[str] = field(default_factory=set)
     # k8s service(s) whose change is an image-pin bump ELIGIBLE for auto-deploy, split out of
     # `k8s` by split_k8s_auto_deploy. `k8s` keeps its "defer-and-alert, never applied" meaning,
@@ -459,8 +457,8 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # container catch-all carried their own `and not p.endswith(".md")`; the setup and
         # broad-deploy arms above them did not, so `roles/setup/<role>/CLAUDE.md` matched
         # _BROAD_SETUP_PREFIXES and routed prose to an `initial_setup.yml --tags <role>` apply
-        # or a defer-and-alert, and `roles/containers/common/CLAUDE.md` matched
-        # _BROAD_DEPLOY_PREFIXES and routed prose to a full `ansible/deploy.yml` (issue #1714).
+        # or a defer-and-alert, and `roles/containers/common/CLAUDE.md` matched what was then a
+        # broad-deploy prefix and routed prose to a full `ansible/deploy.yml` (issue #1714).
         # A `.md` under a role is never role content a playbook applies: the three under a
         # `files/` directory are shipped by no task, because both roles copy a NAMED list of
         # files rather than the directory (issue #1715). _BROAD_MANUAL_PREFIXES is three exact
@@ -483,6 +481,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             cs.broad = True
             cs.broad_setup = True
             _note_setup_role(cs, p)
+            continue
+        if p.startswith(_PI_SHARED_PREFIX):
+            cs.pi_shared = True
             continue
         if any(p.startswith(prefix) for prefix in _BROAD_DEPLOY_PREFIXES):
             cs.broad = True

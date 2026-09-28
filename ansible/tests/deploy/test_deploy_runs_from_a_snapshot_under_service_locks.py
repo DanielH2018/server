@@ -32,11 +32,11 @@ _DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_detach.py"
 _DEPLOY_IO = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_io.py"
 _DEPLOY_LOCKS = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_locks.py"
 
-# The deployer's playbook call sites. Named rather than discovered so that a fourth one added
+# The deployer's playbook call sites. Named rather than discovered so that a third one added
 # without a lock fails this file instead of joining a vacuously-true census.
-_LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy", "deploy_k8s", "deploy_broad"})
-# The helper that shares one deadline between the lock wait and the run, and the two call sites
-# that carry a phase budget to share. `deploy` is out because its run is unbounded.
+_LOCKED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})
+# The helper that shares one deadline between the lock wait and the run, and the call sites
+# that carry a phase budget to share.
 _BUDGET_HELPER = "locked_budget"
 _LOCK_HELPERS = frozenset({"service_locks", _BUDGET_HELPER})
 _BUDGETED_DEPLOY_FUNCTIONS = frozenset({"deploy_k8s", "deploy_broad"})

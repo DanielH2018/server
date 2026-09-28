@@ -390,7 +390,12 @@ refers to its original neighbours in that file.
 
 ### Health gate and rollback: the phantom-container hold
 
-After deploy it polls each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
+The Docker health gate this section describes, and the stale-compose watchdog added after it,
+were removed with the deployer's Docker apply arm in #2805: no `has_gitops` host runs Docker.
+The hold rules in the second and third paragraphs still govern a failed k8s deploy, whose
+rollback lives in `deploy_handlers._rollback_k8s`. The rest is kept as the record.
+
+After a Docker deploy it polled each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
 On failure it `git reset --hard`es to the previous HEAD, redeploys the prior version,
 writes the bad SHA to `/var/lib/gitops-deploy/hold_sha` (so the next tick won't redeploy it),
 and alerts the dedicated Discord webhook. Reverting the offending PR advances `origin` past
@@ -402,7 +407,7 @@ before reaching it. If everything after the held SHA maps to no service here, di
 hold, then delete `/var/lib/gitops-deploy/hold_sha` by hand.
 
 **A BROAD hold clears only when its own plane is applied** — see *Which apply clears a hold*
-below. `clear_service_hold()` is the service half of that rule: a k8s or Docker deploy is
+below. `clear_service_hold()` is the service half of that rule: a k8s deploy is
 `ansible/deploy.yml --tags <services>`, so it clears a hold naming that playbook at a subset of
 those tags (a failed bump on a broad tick writes one) and leaves any other broad hold standing
 rather than clearing `hold_sha` out from under an unapplied plane.
@@ -1050,11 +1055,10 @@ stay).
     Deployment by name via `manifests_extra_rollouts` is fine; a name that can't be resolved
     statically counts as ungated), `manifests_rollout: ''`, and a gated Deployment with no
     `readinessProbe`.
-  - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`.** The latter feeds
-    `gate_services()` — the Docker gate — and is inert here, so without an explicit timeout the
+  - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
-  - Promotion is refused when the tick also carries Docker services: the k8s branch returns before
-    the Docker deploy would run. No host is mixed today.
+  - Promotion is refused when the tick also carries a Pi Docker role change, so the tick stays
+    one-plane.
 
   The original rationale, still accurate for every non-eligible k8s change:
   This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
@@ -1098,16 +1102,13 @@ stay).
   ticking, no hold), so each tick writes the diverged SHA to `/var/lib/gitops-deploy/diverged_sha`
   (cleared once resolved) and `monitor-bridge`'s **GitOps Deploy — Status** monitor pages on it.
   A merely unpushed local commit (`local_ahead`) is NOT flagged — that's the plain no-op above.
-- Health-gates **only services deployed on THIS host** — each `has_gitops` host runs its own
-  independent instance of this deployer, own git clone, own state dir, own lock, gating only its
-  own `containers_list`. A changed template for a service deployed on a DIFFERENT host renders no
-  compose here, so `containers_for()` returns `[]` and it's skipped — without this the gate polls
-  a phantom container until `HEALTH_TIMEOUT_S` and false-rollbacks (`deploy_logic.containers_to_gate`).
+- Each `has_gitops` host runs its own independent instance of this deployer, with its own git
+  clone, state dir and lock. Only daniel-box has one.
   - **By design: Pi-only services are NOT auto-deployed by GitOps (accepted, 2026-06-30).** The Pi
     has `has_gitops: false`; there is deliberately **no GitOps/CI deploy path to daniel-pi**. A
-    change to a Pi-only service (for example `wg-easy`/`glances` on the Pi) ff-merges and
-    "deploys" as a local no-op, then skips the health gate per the rule above — so the tick reports
-    success while the Pi never actually redeploys ("cross-host phantom-success," review CI-L2). This
+    change under `roles/containers/` ff-merges and the tick logs the role it did not deploy. Until
+    #2805 the tick ran a local no-op `deploy.yml --tags <svc>` and skipped the health gate, so it
+    reported success while the Pi never redeployed ("cross-host phantom-success," review CI-L2). This
     is intentional, not a gap: the Pi is a memory-constrained Zero 2 W driven manually over SSH (see
     [[daniel-pi-zero2w-memory-constrained]]), and a Renovate image bump to a Pi service is rare. Push
     deploys to the Pi by hand: `./scripts/deploy.sh --tags <svc> -e target=daniel-pi`.

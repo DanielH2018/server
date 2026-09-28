@@ -157,8 +157,7 @@ gitops_deploy_k8s_autodeploy_max_claim_services_per_tick: 1
 gitops_deploy_k8s_autodeploy_denylist: "{{ playbook_dir | k8s_autodeploy_denylist }}"
 
 # Wall-clock cap for one `ansible-playbook` invocation on the k8s path, in seconds — the FORWARD
-# deploy only; the rollback redeploy has its own budget below. RUN_BUDGET_S does NOT cover this
-# path — it bounds only the Docker health gate (gate_services), which is inert on an all-k8s host.
+# deploy only; the rollback redeploy has its own budget below.
 #
 # DERIVED from the worst promoted role (#2397). The same terms the rollback budget below sums,
 # minus the revert ones, run inside this one budget in sequence: claims x volume_snapshot_timeout

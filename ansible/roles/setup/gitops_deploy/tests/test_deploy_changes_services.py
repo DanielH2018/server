@@ -8,6 +8,8 @@ Each Docker role has separate channels (the compose or a config template deploys
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_services.py
 
+import pytest
+
 from deploy_changes import services_from_changed_paths
 
 
@@ -104,14 +106,22 @@ def test_files_asset_change_maps_to_service():
     assert cs.broad is False
 
 
-def test_common_role_change_stays_broad_not_scoped():
-    # common/ is the shared deploy path — it must remain BROAD (manual full deploy), so the
-    # broad-prefix check must win over the new service-scoped config match.
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/common/templates/healthcheck.yml.j2"]
-    )
-    assert cs.broad is True
-    assert cs.services == set()
+@pytest.mark.parametrize(
+    "path",
+    [
+        "ansible/roles/containers/common/templates/healthcheck.yml.j2",
+        "ansible/roles/containers/common/tasks/docker_deploy.yml",
+        "ansible/roles/containers/common/defaults/main.yml",
+        "ansible/roles/containers/common/meta/main.yml",
+    ],
+)
+def test_a_common_change_is_pi_work_not_broad_and_not_a_service(path):
+    # common/ is the Pi's shared Compose deploy path, which daniel-box's play never reads. It
+    # must not buy a full deploy.yml run there (#2805), and it is not a service named `common`.
+    cs = services_from_changed_paths([path])
+    assert cs.pi_shared is True
+    assert cs.broad is False
+    assert cs.services == cs.tasks == cs.meta == set()
 
 
 def test_role_tasks_change_flags_tasks_not_deploy():
@@ -134,17 +144,6 @@ def test_role_docs_do_not_trigger_deploy_or_flag():
     assert cs.services == set()
     assert cs.tasks == set()
     assert cs.broad is False
-
-
-def test_common_tasks_change_stays_broad_not_tasks():
-    # common/ is the shared deploy path — a tasks change there is BROAD (manual full deploy); the
-    # broad-prefix check must win over the new tasks match.
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
-    )
-    assert cs.broad is True
-    assert cs.tasks == set()
-    assert cs.services == set()
 
 
 def test_template_and_tasks_same_service_deploys_and_flags_tasks():
@@ -250,26 +249,6 @@ def test_role_readme_md_stays_silent_like_claude_md():
     assert cs.tasks == set()
     assert cs.services == set()
     assert cs.broad is False
-
-
-def test_common_defaults_change_stays_broad_not_tasks():
-    # common/ is the shared deploy path — a defaults change there is BROAD (manual full deploy);
-    # the broad-prefix check must win over the catch-all.
-    cs = services_from_changed_paths(
-        ["ansible/roles/containers/common/defaults/main.yml"]
-    )
-    assert cs.broad is True
-    assert cs.tasks == set()
-    assert cs.services == set()
-
-
-def test_common_meta_change_stays_broad_not_meta():
-    # common/ is the shared deploy path — a meta change there is BROAD (manual full deploy); the
-    # broad-prefix check must win over the new meta match.
-    cs = services_from_changed_paths(["ansible/roles/containers/common/meta/main.yml"])
-    assert cs.broad is True
-    assert cs.meta == set()
-    assert cs.services == set()
 
 
 def test_template_and_meta_same_service_deploys_and_flags_meta():

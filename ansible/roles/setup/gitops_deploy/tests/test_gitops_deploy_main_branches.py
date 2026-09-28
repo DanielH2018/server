@@ -15,7 +15,6 @@ call in order, so each guard is now an assertion on what main() did.
 import json
 from collections.abc import Sequence
 
-import pytest
 
 import deploy_alerts
 from _deploy_fakes import fits_budget
@@ -31,15 +30,6 @@ DOCKER_TEMPLATE = "ansible/roles/containers/wg-easy/templates/docker-compose.yml
 K8S_DEFAULTS = "ansible/roles/k8s/sonarr/defaults/main.yml"
 DECLARES_WG_EASY = "containers_list:\n  - name: wg-easy\n    platform: docker\n"
 DECLARES_SONARR = "containers_list:\n  - name: sonarr\n    platform: k8s\n"
-DEPLOY_WG_EASY = [
-    "uv",
-    "run",
-    "--frozen",
-    "ansible-playbook",
-    "ansible/deploy.yml",
-    "--tags",
-    "wg-easy",
-]
 
 
 def _marker(state_dir, name: str) -> str | None:
@@ -155,82 +145,33 @@ def test_a_docs_only_push_ff_merges_the_pinned_sha_and_deploys_nothing(
     assert tick.head == ORIGIN
 
 
-# ── the Docker deploy path ────────────────────────────────────────────────────────────────────
-def _docker_push(tick) -> None:
-    tick.declare(DECLARES_WG_EASY)
-    tick.render("wg-easy")
-    tick.paths = [DOCKER_TEMPLATE]
-
-
-def test_a_template_push_merges_then_deploys_then_clears_the_hold(
-    gitops_deploy, tick, state_dir
+# ── a Docker role change ──────────────────────────────────────────────────────────────────────
+def test_a_docker_template_push_merges_deploys_nothing_and_says_so(
+    gitops_deploy, tick, state_dir, capsys
 ):
+    """No has_gitops host runs Docker, so a Pi role change is merged and left to a hand deploy.
+
+    The hold stays: nothing was deployed, so nothing proved the held SHA fixed.
+    """
     (state_dir / "hold_sha").write_text("f" * 40)
-    _docker_push(tick)
+    tick.declare(DECLARES_WG_EASY)
+    tick.paths = [DOCKER_TEMPLATE]
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [DEPLOY_WG_EASY]
-    assert tick.index("git", "merge") < tick.index("playbook", "ansible/deploy.yml"), (
-        "the deploy renders from the working tree, so it must follow the merge"
-    )
-    assert _marker(state_dir, "hold_sha") is None
-    assert tick.posts == []
+    assert tick.playbooks == [] and tick.posts == []
+    assert _marker(state_dir, "hold_sha") == "f" * 40
+    assert "does not deploy: ['wg-easy']" in capsys.readouterr().out
 
 
-def test_a_failed_health_gate_holds_then_resets_then_redeploys_the_prior_tree(
-    gitops_deploy, tick, state_dir
+def test_a_containers_common_push_merges_without_the_full_play(
+    gitops_deploy, tick, capsys
 ):
-    _docker_push(tick)
-    tick.healthy["wg-easy"] = False
+    """The Pi's shared deploy path used to read as broad and buy a full deploy.yml here (#2805)."""
+    tick.paths = ["ansible/roles/containers/common/tasks/docker_deploy.yml"]
     assert gitops_deploy.main(tick.tools) == 0
-    assert _marker(state_dir, "hold_sha") == ORIGIN
-    reset = tick.index("git", "reset", "--hard", LOCAL)
-    assert tick.playbooks == [DEPLOY_WG_EASY, DEPLOY_WG_EASY]
-    redeploy = [i for i, e in enumerate(tick.log) if e[0] == "playbook"][1]
-    assert tick.index("git", "merge") < reset < redeploy
-    assert tick.head == LOCAL
-    (post,) = tick.posts
-    assert "rollback" in post and ORIGIN[:8] in post and LOCAL[:8] in post
-
-
-def test_the_hold_is_on_disk_before_the_rollback_reset(gitops_deploy, tick, state_dir):
-    # A death between the reset and the hold write would leave the next tick redeploying the
-    # same bad commit, so the order is hold, then reset. Observed through the reset itself.
-    _docker_push(tick)
-    tick.healthy["wg-easy"] = False
-    seen_at_reset: list[str | None] = []
-    real_git = tick._git
-
-    def git_with_a_look(argv):
-        if argv[1] == "reset":
-            seen_at_reset.append(_marker(state_dir, "hold_sha"))
-        return real_git(argv)
-
-    tick._git = git_with_a_look
-    gitops_deploy.main(tick.tools)
-    assert seen_at_reset == [ORIGIN]
-
-
-@pytest.mark.parametrize(("discord_ok", "rc"), [(True, 0), (False, 1)])
-def test_a_rollbacks_exit_code_follows_its_post(gitops_deploy, tick, discord_ok, rc):
-    # exit 1 only when the detailed post failed, leaving OnFailure as the backstop.
-    _docker_push(tick)
-    tick.healthy["wg-easy"] = False
-    tick.discord_ok = discord_ok
-    assert gitops_deploy.main(tick.tools) == rc
-
-
-def test_a_deploy_execution_failure_takes_the_same_rollback(
-    gitops_deploy, tick, state_dir
-):
-    _docker_push(tick)
-    tick.playbook_outcomes = [RuntimeError("ansible-playbook -> 2")]
-    assert gitops_deploy.main(tick.tools) == 0
-    assert _marker(state_dir, "hold_sha") == ORIGIN
-    assert tick.playbooks == [DEPLOY_WG_EASY, DEPLOY_WG_EASY]
-    assert tick.head == LOCAL
-    (post,) = tick.posts
-    assert "deploy failed" in post and "ansible-playbook -> 2" in post
+    assert tick.merges == [ORIGIN]
+    assert tick.playbooks == [] and tick.posts == []
+    assert "-e target=daniel-pi" in capsys.readouterr().out
 
 
 # ── the broad planes ──────────────────────────────────────────────────────────────────────────
@@ -312,16 +253,6 @@ def test_applying_the_held_plane_clears_the_hold(gitops_deploy, tick, state_dir)
     assert gitops_deploy.main(tick.tools) == 0
     assert _marker(state_dir, "hold_sha") is None
     assert _marker(state_dir, "hold_plane") is None
-
-
-def test_a_service_deploy_does_not_clear_a_broad_hold(gitops_deploy, tick, state_dir):
-    """A tagged service deploy applies part of the held whole-playbook plane, not all of it."""
-    _hold_the_deploy_plane(state_dir)
-    _docker_push(tick)
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.playbooks == [DEPLOY_WG_EASY], "the service still deploys"
-    assert _marker(state_dir, "hold_sha") == "f" * 40
-    assert _marker(state_dir, "hold_plane") == "ansible/deploy.yml"
 
 
 # ── the k8s auto-deploy path ──────────────────────────────────────────────────────────────────

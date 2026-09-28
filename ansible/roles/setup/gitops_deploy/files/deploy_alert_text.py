@@ -5,7 +5,7 @@ The seam `deploy_alerts.py`'s docstring already named. **What to say** is here �
 state, no config — so `tests/test_gitops_deploy_failure_output.py` can assert an assembled
 post stays inside host_lib.discord_post's 1900-character cut with its remediation line
 intact, without driving a tick. **When to say it** stayed in `deploy_alerts.py`: `alert_once`,
-`deliver`, `drain_pending`, `alert_deferred` and `check_stale_composes`.
+`deliver`, `drain_pending` and `alert_deferred`.
 
 The split is also what keeps either half under the 600-line module cap
 (`ansible/tests/repo/test_module_length_ratchet.py`). `deploy_alerts.py` sat exactly at it, so
@@ -171,17 +171,6 @@ def k8s_deferred_alert(
     ) + k8s_remediation(k8s, declared_k8s, consumers)
 
 
-def stale_composes_alert(hostname: str, stale: list[str]) -> str:
-    """The post for a rendered compose with no containers_list entry."""
-    return (
-        f"⚠️ gitops-deploy: stale rendered compose(s) on {hostname} with no "
-        f"containers_list entry: `{', '.join(stale)}` — a retired/migrated service "
-        f"left its render behind, and its phantom containers will fail the health "
-        f"gate on that service's next deploy (false rollback + hold). Clean up: "
-        f"`docker rm -f <its containers>` then `rm -rf containers/<svc>`."
-    )
-
-
 def dirty_tree_alert(hostname: str) -> str:
     """The twice-daily reminder that an operator's edit is parking this host."""
     return (
@@ -298,27 +287,4 @@ def broad_k8s_failure_alert(
         f'`./scripts/deploy.sh --tags "{",".join(sorted(services))}"`. A later tick that '
         f"deploys these services clears their `{hold_plane_file}` entry; run "
         f"`rm {hold_file} {hold_plane_file}` only once every entry there is applied."
-    )
-
-
-def deploy_failure_alert(
-    hostname: str, local: str, origin: str, services: set[str], exc: BaseException
-) -> str:
-    """The post for an `ansible-playbook` that errored deploying Docker services."""
-    return (
-        f"🚨 gitops-deploy: **deploy failed** on {hostname}.\n"
-        f"`ansible-playbook` errored deploying `{', '.join(sorted(services))}` from "
-        f"`{origin[:8]}`:\n```\n{alert_excerpt(exc)}\n```\n"
-        f"Rolled back to `{local[:8]}`; the bad commit is held until origin advances past it.\n"
-        f"**Action:** fix or revert the offending commit."
-    )
-
-
-def rollback_alert(hostname: str, local: str, origin: str, failed: list[str]) -> str:
-    """The post for a Docker health gate that failed and rolled the host back."""
-    return (
-        f"🚨 gitops-deploy: **rollback** on {hostname}.\n"
-        f"Service(s) `{', '.join(failed)}` from commit `{origin[:8]}` failed the health "
-        f"gate and were rolled back to `{local[:8]}`.\n"
-        f"**Action:** revert the offending Renovate PR — the bad commit is held until you do."
     )

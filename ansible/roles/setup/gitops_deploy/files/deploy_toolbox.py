@@ -127,7 +127,7 @@ class DeployTools:
     """Every boundary one tick crosses, so a test replaces a field and not a module.
 
     The defaults are production. `run` is the one that also reaches subprocess indirectly:
-    `deploy_io.deploy`, `deploy_k8s` and `deploy_broad` build their own argv and call
+    `deploy_io.deploy_k8s` and `deploy_broad` build their own argv and call
     `deploy_io.run` qualified, so they are not fields here — the argv they build is what the
     suite asserts on, and a field would replace the builder rather than the process.
     """
@@ -149,7 +149,6 @@ class DeployTools:
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated
     discord_post: Callable[[str, str], bool] = post
-    service_healthy: Callable[..., bool] = deploy_io.service_healthy
     run_staging_scripts: Callable[..., tuple[int, int]] = deploy_io.run_staging_scripts
     # The deploy-plane narrowing, which is a subprocess because the derivation parses YAML
     # and this unit runs under `uv run --no-project`. A field rather than a qualified call,
@@ -168,11 +167,9 @@ class DeployTools:
     # function receives.
     now: Callable[..., datetime] = datetime.now
     # When this process started, in `time.time()` terms — the only non-callable here, and a
-    # boundary all the same: it is what the OS did, not what the config said. `handle_docker`
-    # measures the health gate's deadline from `tools.run_start`, so the flock wait counts
-    # against the budget (see the unit's TimeoutStartSec arithmetic in gitops_deploy.py's
-    # RUN_BUDGET_S comment). This field is the ONLY start-of-run clock: the entry module used to
-    # carry a `RUN_START` module constant beside RUN_BUDGET_S, and it is gone.
+    # boundary all the same: it is what the OS did, not what the config said. Nothing reads it
+    # since the Docker health gate that measured its deadline from it was removed (#2805); it
+    # goes with RUN_BUDGET_S, which is filed for removal separately.
     # A default_factory rather than a literal: every `DeployTools()` a test builds gets its own
     # start, so a deadline never lands in the past.
     run_start: float = field(default_factory=time.time)

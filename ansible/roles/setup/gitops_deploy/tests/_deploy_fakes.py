@@ -1,15 +1,15 @@
 """Fakes for every `DeployTools` boundary, so the deployer's suite patches almost nothing.
 
 `ScriptedTick` is the whole scenario for one `main()` call: what git, ansible-playbook, GitHub,
-the staging scripts, the health gate and Discord answer, and what the tick did to them. Set the
+the staging scripts and Discord answer, and what the tick did to them. Set the
 attributes before the call, then read `log` (every call, oldest first) afterwards. `build_tools`
 turns one into the `DeployTools` `main(tools)` takes.
 
-WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy`, `deploy_k8s` and `deploy_broad` build the
+WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy_k8s` and `deploy_broad` build the
 `ansible-playbook` argv the suite asserts on and reach `deploy_io.run` qualified, so replacing
 them here would retire the assertion rather than fake the process. The `tick` fixture patches
 `deploy_io.run` — one module attribute, the last one — and conftest.py says why threading a
-runner into those three is deferred.
+runner into those two is deferred.
 
 `staging_verdict` is a word, not a return value: `run_staging_scripts` maps it to the exit-code
 pair `deploy_staging.staging_verdict` reads, so the real `consult_staging` produces the verdict
@@ -40,8 +40,8 @@ class ScriptedTick:
 
     The scenario is set on the attributes before `main()` runs: the two HEADs and how they
     relate, whether the tree is dirty, the CI verdict, the paths origin adds, the file
-    contents and diffs git would show, the outcome of each playbook run in order, whether the
-    health gate passes and whether Discord accepts a post. `log` then holds every call in the
+    contents and diffs git would show, the outcome of each playbook run in order, and whether
+    Discord accepts a post. `log` then holds every call in the
     order main() made it, so a test asserts ordering (hold before reset, staging before merge)
     by reading it, not the source.
 
@@ -61,9 +61,6 @@ class ScriptedTick:
             clean, and the list running out means every later run is clean.
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
-        healthy: what the Docker health gate reports, PER SERVICE. `render()` seeds a service
-            as healthy, so a test flips one name. A name nobody rendered is vacuously healthy,
-            exactly as production is; a RENDERED service with no entry is an AssertionError.
         staging_verdict: the word the staging scripts' exit codes stand for — "pass",
             "rejected" or "no_verdict". "skipped" is not settable here; it is what the real
             `consult_staging` returns when the gate is off or nothing is in scope.
@@ -100,7 +97,6 @@ class ScriptedTick:
         self.diffs: dict[str, str] = {}
         self.playbook_outcomes: list[Exception | None] = []
         self.run_error: Exception | None = None
-        self.healthy: dict[str, bool] = {}
         self.staging_verdict = "pass"
         # What `deploy_tags.py narrow` answers: (exit code, stdout). The production
         # default is a refusal, so a test that does not script it gets today's full
@@ -128,17 +124,6 @@ class ScriptedTick:
         path = self.repo / "ansible" / "inventory" / "host_vars" / "test-host.yml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(hostvars)
-
-    def render(self, service: str) -> None:
-        """A rendered compose for `service`, which makes the health gate apply to it here.
-
-        Rendering is also what scripts the health gate's answer for that service — healthy
-        unless the test flips `healthy[service]` afterwards.
-        """
-        path = self.repo / "containers" / service / "docker-compose.yml"
-        path.parent.mkdir(parents=True, exist_ok=True)
-        path.write_text("services: {}\n")
-        self.healthy.setdefault(service, True)
 
     @property
     def staging_override(self) -> bool:
@@ -253,39 +238,6 @@ class ScriptedTick:
         )
         return self.ancestor_ci[sha]
 
-    def service_healthy(
-        self, repo: str, service: str, _timeout: float, deadline: float | None = None
-    ) -> bool:
-        """What production reports for `service`, INCLUDING its vacuously-healthy case.
-
-        `deploy_io.service_healthy` is `all(health_ok(c) for c in containers_for(...))`, and
-        `containers_for` returns [] for a service whose compose was never rendered on this
-        host (dozzle is daniel-pi-only). `all([])` is True, so that service passes the gate
-        without a container ever being polled. This fake reproduces that: no rendered compose
-        means True, which is what makes the vacuous path testable at all.
-
-        Everything else here is a scripting error rather than an answer. A RENDERED service
-        the test never scripted raises, as before. So does a `healthy[svc] = False` for a
-        service nobody rendered — production cannot report that, so a test leaning on it
-        would be asserting against a state the deployer never sees.
-        """
-        rendered = (
-            pathlib.Path(repo) / "containers" / service / "docker-compose.yml"
-        ).is_file()
-        if not rendered:
-            assert self.healthy.get(service, True), (
-                f"the test scripted {service!r} UNHEALTHY but never rendered its compose; "
-                f"production gates the containers of a rendered compose and reports a "
-                f"service with none as healthy (all([]) is True). Call render({service!r}) "
-                f"first if the gate is meant to see it."
-            )
-            return True
-        assert service in self.healthy, (
-            f"the health gate asked about {service!r}, which no test scripted "
-            f"(scripted: {sorted(self.healthy)})"
-        )
-        return self.healthy[service]
-
     def narrow_deploy_plane(
         self, _repo: str, old: str, new: str, _timeout: float
     ) -> tuple[int, str]:
@@ -397,7 +349,6 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         fetch_ci_verdict=scripted.fetch_ci_verdict,
         github_authenticated=lambda: scripted.authenticated,
         discord_post=scripted.discord_post,
-        service_healthy=scripted.service_healthy,
         run_staging_scripts=scripted.run_staging_scripts,
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
