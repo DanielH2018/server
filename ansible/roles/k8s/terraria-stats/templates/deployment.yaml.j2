@@ -30,8 +30,6 @@ spec:
         {{ checksum_annotation('stats-script', value=terraria_stats_script_checksum) }}
     spec:
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: terraria-stats

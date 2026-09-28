@@ -30,8 +30,6 @@ spec:
       # calls rest.InClusterConfig(), which reads the API server address and the cluster CA
       # from this same projected mount and ERRORS without it — the pod would not start at all.
 {{ pod_shell('homelab-best-effort', service_account='headlamp', automount=true, run_as_user=headlamp_k8s_uid, run_as_group=headlamp_k8s_gid, non_root=true) }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
 {% if headlamp_k8s_plugins %}
       initContainers:

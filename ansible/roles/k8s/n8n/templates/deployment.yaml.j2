@@ -54,8 +54,7 @@ spec:
         {{ checksum_annotation('image', value=(k8s_built_images | default([]) | selectattr('name', 'equalto', 'n8n') | map(attribute='digest') | first)) }}
     spec:
 {{ pod_shell('homelab-best-effort') }}
-      # Preference, never a pin: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
-      # Weighted so the pod still schedules if daniel-box is cordoned or full.
+      # Prefers daniel-box: CPU-bound workflow execution — daniel-box has 16 threads to daniel-server's 8.
 {{ node_affinity_preference(k8s_primary_node) }}
       containers:
         - name: n8n

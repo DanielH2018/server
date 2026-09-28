@@ -59,8 +59,6 @@ spec:
           # because the stock uv image could not be run any other way.
 {{ hardened_security_context(read_only=true, non_root=true, run_as_user=1000, run_as_group=1000) }}
 {{ container_resources(cpu_limit='250m', mem_limit='128Mi', cpu_request='10m', mem_request='16Mi') }}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: karakeep

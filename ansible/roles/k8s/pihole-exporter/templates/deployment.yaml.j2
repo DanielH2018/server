@@ -31,8 +31,8 @@ spec:
     spec:
       # Dashboards, not resolution. DNS keeps working when this pod does not.
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
-      # Preference, never a pin. Both Pi-holes are pinned to the primary node, but this pod
-      # reaches them over ClusterIPs, so either node costs the same one hop.
+      # Both Pi-holes are pinned to the primary node, but this pod reaches them over ClusterIPs,
+      # so either node costs the same one hop.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: pihole-exporter

@@ -47,8 +47,6 @@ spec:
             - "{{ extra }}.local.{{ domain }}"
 {% endfor %}
 {% endfor %}
-      # Preference, never a pin: daniel-box carries the storage- and VIP-pinned workloads and runs the hotter of the two nodes, so latency-insensitive services default here.
-      # Weighted so the pod still schedules if daniel-server is cordoned or full.
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: uptime-kuma
