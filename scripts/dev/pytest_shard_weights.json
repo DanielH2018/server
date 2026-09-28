@@ -594,6 +594,7 @@
  "ansible/tests/staging/test_staging_gate_dispatch.py": 0.01,
  "ansible/tests/staging/test_staging_gate_ignores_submodule_gitlink.py": 0.1,
  "ansible/tests/staging/test_staging_gate_paths_agree.py": 0.0,
+ "ansible/tests/staging/test_staging_gate_reconciles_the_edge.py": 0.0,
  "ansible/tests/staging/test_staging_gate_retired_keys.py": 0.19,
  "ansible/tests/staging/test_staging_manifests_have_their_variables.py": 0.64,
  "ansible/tests/staging/test_staging_network.py": 0.0,
