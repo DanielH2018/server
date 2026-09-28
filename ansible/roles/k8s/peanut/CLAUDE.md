@@ -18,8 +18,9 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 - **No PVC** — `/config` and `/app/config` are `emptyDir`, seeded at boot.
 - **Auto-deploy-eligible because** it is a stateless RollingUpdate with a readinessProbe and
   a digest-pinned image.
-- **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_monitor_password`
-  (upsmon credential PeaNUT uses to poll `upsd`) — see `templates/secret.yaml.j2`.
+- **Secrets:** `peanut_username`, `peanut_password` (web UI login), `nut_ha_password`
+  (upsd's read-only login, shared with Home Assistant, which PeaNUT uses to poll `upsd`) —
+  see `templates/secret.yaml.j2`.
 
 ## Notable
 - **`alpine` init container, not the app image**, seeds `/config/settings.yml` from the
