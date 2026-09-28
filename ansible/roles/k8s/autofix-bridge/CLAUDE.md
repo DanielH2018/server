@@ -29,7 +29,7 @@ sidecar per fix. See repo-root `CLAUDE.md`.
 - **Reaches:** `sonarr:8989` / `radarr:7878` (queue read + blocklist/search writes),
   `uptime-kuma:3001` (push), and the *arr Discord webhook (egress)
 - **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
-- **Spec:** `docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md`
+- **Shipped in:** commit `6661c4129`
   (historical — its disk-autoprune half retired 2026-08-14, see the host plane below)
 
 ## Autonomous-role contract (it changes state with no human in the loop)
@@ -117,8 +117,8 @@ elsewhere in this doc; this is the governed summary a change here must satisfy.
      daniel-server until 2026-08-16, which is a file that does not contain the key at all.) This line claimed it shipped as `shadow` until 2026-08-08; the template default is
      `shadow`, but the inventory has overridden it to `live` and that is the intended setting,
      confirmed by the operator. Don't "restore" it to shadow.
-     Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. See
-     `docs/superpowers/specs/2026-07-17-fake-remux-auto-replacer-design.md` for the full design.
+     Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. Commit
+     `f99404c31` wired the reconciler.
 
 ## Notable
 - **Two Kuma monitors, on purpose:**

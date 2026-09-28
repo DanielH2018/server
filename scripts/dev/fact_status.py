@@ -9,7 +9,7 @@ heading is a new unit, and the old row cannot be hand-deleted without tripping t
 own checksum. ``lint`` reports citations that cannot be support. Repo store only until
 slice 4 adds ``--store memory``.
 
-Spec: docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md
+The design is in PR #2138.
 """
 
 import sys as _sys

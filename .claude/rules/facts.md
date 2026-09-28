@@ -63,6 +63,5 @@ yet in the lock: it runs `lint --changed-since` over the sections a commit edits
 A section that cites atoms but has no lock row is UNVERIFIED and never fails anything. A
 section that cites nothing is a convention and is never graded. A `probe.py` citation reads
 UNKNOWN rather than IN: nothing in this slice runs a probe, so its shape hash waits on the
-reconcile timer. The memory store, the reconcile timer and the re-verifier are the spec's
-later slices:
-`docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md`.
+reconcile timer. The memory store, the reconcile timer and the re-verifier are the design's
+later slices; PR #2138 carries the design.

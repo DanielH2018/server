@@ -3,7 +3,7 @@
 A human-readable guide to the bedroom automation suite: what it does, how to set it up from
 scratch, how to operate it day-to-day, and where to tune it. For implementation gotchas while
 *editing* the config, see [`CLAUDE.md`](CLAUDE.md). Per-feature design rationale lives in
-`docs/superpowers/specs/2026-06-18-ha-*`.
+the commits that shipped each feature; this guide arrived in `81232dca7`.
 
 Everything is Ansible-managed — **git is the source of truth; HA UI edits are overwritten on
 deploy.** Apply changes with:

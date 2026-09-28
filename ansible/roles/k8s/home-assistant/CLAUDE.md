@@ -112,8 +112,8 @@ every task in this directory whether or not it is needed.
   entity state). Inert until you press Run; the test-only direct light writers (`bedroom_preview_wake`,
   `bedroom_run_scenario` via the nightlight `scene.turn_on`) are declared in
   `state/sanctioned_writers.yml`. Phase 2 also extracted the away/arrive selection into tested macros
-  (`away_items_label`/`arrive_relight_allowed`). Spec:
-  `docs/superpowers/specs/2026-06-23-ha-scenario-test-harness-design.md`.
+  (`away_items_label`/`arrive_relight_allowed`). It shipped in
+  commit `d4b6b6e8e`.
 
 ## Claude tooling for this role
 - **`home-assistant-engineer` agent** (`.claude/agents/`) — read+write HA engineer that knows
@@ -141,7 +141,7 @@ every task in this directory whether or not it is needed.
   `ha_state_model.py refresh`) catches a mistyped/renamed entity before it becomes a silent no-op.
   Live view: `scripts/diagnostics/probe.py ha-state` (current cell values + anomalies; `--inventory` for the
   full catalog). This file (CLAUDE.md) remains the home of the runtime/physical *why* the model
-  can't derive. Design + Phase-2 plan: `docs/superpowers/specs/2026-06-21-ha-state-model-phase*`.
+  can't derive. Phases 1 and 2 shipped in commits `fd343cc31` and `d87841da7`.
 
 ## Editing
 - HA cfg: `files/` (shipped into the cluster by `roles/k8s/home-assistant`; only

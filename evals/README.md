@@ -4,7 +4,7 @@ Regression cases for the homelab-local reviewer **agents** (`.claude/agents/`) a
 `/homelab-review` orchestration **skill** (`.claude/skills/homelab-review/`). They are run by the
 **chezmoi** eval engine — this repo only hosts the cases; the engine stays a single source of truth.
 
-Design: `docs/superpowers/specs/2026-07-10-homelab-agent-skill-evals-design.md`.
+The eval scaffold shipped in commit `469bcf533`.
 
 ## Running (needs the chezmoi checkout)
 
