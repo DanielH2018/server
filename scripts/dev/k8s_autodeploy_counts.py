@@ -23,7 +23,7 @@ from lib.repo_paths import FILTER_PLUGINS, REPO as _REPO
 sys.path.insert(0, str(FILTER_PLUGINS))
 
 from lib import yaml_fast
-from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 
 _ROLES_DIR = _REPO / "ansible/roles/k8s"
 
@@ -33,6 +33,8 @@ def eligible_roles() -> list[str]:
     names = []
     for entry in sorted(_ROLES_DIR.iterdir()):
         if not entry.is_dir() or entry.name in SHARED_ROLES:
+            continue
+        if is_leftover_dir(str(entry)):
             continue
         defaults = entry / "defaults" / "main.yml"
         if not defaults.is_file():
@@ -44,8 +46,16 @@ def eligible_roles() -> list[str]:
 
 
 def all_role_names() -> list[str]:
-    """Every directory under `ansible/roles/k8s/`, sorted."""
-    return sorted(entry.name for entry in _ROLES_DIR.iterdir() if entry.is_dir())
+    """Every role directory under `ansible/roles/k8s/`, sorted.
+
+    A retired role's `__pycache__`-only leftover is not a role — it would otherwise be
+    counted as one that declares no stance (#2882).
+    """
+    return sorted(
+        entry.name
+        for entry in _ROLES_DIR.iterdir()
+        if entry.is_dir() and not is_leftover_dir(str(entry))
+    )
 
 
 def autodeploy_stances() -> tuple[list[str], list[str], list[str]]:

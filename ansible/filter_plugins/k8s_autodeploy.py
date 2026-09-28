@@ -36,6 +36,42 @@ REASON = "k8s_autodeploy_reason"
 SHARED_ROLES = frozenset({"manifests"})
 
 
+def is_leftover_dir(path):
+    """Whether `path` holds no file git could be tracking — only compiled-Python debris.
+
+    Retiring a role is what makes this load-bearing. The deployer's fast-forward removes the
+    role's TRACKED files, but a gitignored `__pycache__/` left by any pytest run in the
+    primary checkout keeps `roles/k8s/<role>/` on disk, and this filter then read the empty
+    shell as a role with no declaration and raised — failing `Write deployer config` and
+    parking the tick (#2882).
+
+    The predicate is "nothing real is left", not "it looks like a role" (no `tasks/`, no
+    `defaults/`). That direction matters, because a role absent from the returned denylist is
+    AUTO-DEPLOYABLE: a shape test would silently skip a genuine role that happened to carry
+    neither directory, where this one skips only a directory with no content at all. A real
+    role always holds at least one non-`.pyc` file, so it still raises as loudly as before.
+
+    It also moves this filter TOWARD the deployer's own reader, which builds its role census
+    from `git ls-tree` (`deploy_io.k8s_declarations_at`) and so never sees an untracked
+    directory in the first place.
+
+    An EMPTY directory is not leftover debris and still raises. git cannot leave one behind —
+    it removes a directory the moment its last tracked file goes — so one exists only because
+    a person or a script made it, which is worth failing on rather than skipping.
+    """
+    found_debris = False
+    for dirpath, dirnames, filenames in os.walk(path):
+        if os.path.basename(dirpath) == "__pycache__":
+            dirnames[:] = []
+            found_debris = found_debris or bool(filenames)
+            continue
+        for name in filenames:
+            if not name.endswith(".pyc"):
+                return False
+            found_debris = True
+    return found_debris
+
+
 def _check_shared_roles(roles_dir):
     """Enforce the SHARED_ROLES invariant instead of just documenting it.
 
@@ -107,6 +143,8 @@ def k8s_autodeploy_denylist(playbook_dir):
                 f"a dangling symlink is one likely cause. Remove it or fix the symlink "
                 f"rather than let it silently drop out of the denylist."
             )
+        if is_leftover_dir(entry_path):
+            continue
         if role in SHARED_ROLES:
             continue
 

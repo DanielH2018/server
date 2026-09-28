@@ -76,6 +76,7 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
 # A render record that proves the applied bytes current clears a path hit (#2586).
 from diagnostics.probe_lib.releases_render import apply_renders  # noqa: E402
 from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
+from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
 
 
 def _git(*args, cwd, **kwargs):
@@ -169,9 +170,7 @@ def shared_k8s_roles(k8s_roles_dir=None, host_vars=None):
     deploy_tags = _deploy_tags()
     k8s_roles_dir = k8s_roles_dir or (REPO_ROOT / "ansible/roles/k8s")
     host_vars = host_vars or deploy_tags.HOST_VARS
-    if not k8s_roles_dir.is_dir():
-        return frozenset()
-    all_dirs = {p.name for p in k8s_roles_dir.iterdir() if p.is_dir()}
+    all_dirs = role_dir_names(k8s_roles_dir)
     _, shared = deploy_tags.split_shared_roles(all_dirs, host_vars)
     return frozenset(shared)
 

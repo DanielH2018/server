@@ -13,7 +13,7 @@ import pytest
 from lib import yaml_fast
 from ansible.errors import AnsibleFilterError
 
-from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO as _REPO
 
 
@@ -60,6 +60,41 @@ def test_shared_roles_are_skipped_without_declaring(tmp_path: Path) -> None:
     _seed_shared_roles(tmp_path)
     _role(tmp_path, "denied", _OK)
     assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
+
+
+def test_a_directory_holding_only_pycache_is_not_a_role(tmp_path: Path) -> None:
+    """A retired role's gitignored `__pycache__/` must not read as an undeclared role.
+
+    The fast-forward that retires a role removes its tracked files; a `__pycache__/` left by
+    a pytest run in the primary checkout keeps the directory itself alive. Reading that shell
+    as a role raised, which failed the deployer's `Write deployer config` task (#2882).
+    """
+    _seed_shared_roles(tmp_path)
+    _role(tmp_path, "denied", _OK)
+    ghost = _role(tmp_path, "retired", None)
+    pycache = ghost / "files" / "__pycache__"
+    pycache.mkdir(parents=True)
+    (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
+    assert k8s_autodeploy_denylist(str(tmp_path)) == ["denied"]
+
+
+def test_a_directory_holding_a_real_file_is_still_a_role(tmp_path: Path) -> None:
+    """The other half of the pair: only an all-debris directory is skipped.
+
+    A role that carries any tracked file still has to declare a stance, so the skip above
+    cannot quietly widen what may auto-deploy.
+    """
+    _seed_shared_roles(tmp_path)
+    _role(tmp_path, "denied", _OK)
+    undeclared = _role(tmp_path, "half-retired", None)
+    pycache = undeclared / "files" / "__pycache__"
+    pycache.mkdir(parents=True)
+    (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
+    (undeclared / "files" / "check.py").write_text("x = 1\n")
+    with pytest.raises(
+        AnsibleFilterError, match="half-retired.*has no defaults/main.yml"
+    ):
+        k8s_autodeploy_denylist(str(tmp_path))
 
 
 def test_a_role_with_no_defaults_file_raises(tmp_path: Path) -> None:
@@ -283,6 +318,7 @@ def test_the_real_repo_derives_a_plausible_denylist() -> None:
         if role_dir.is_dir()
         and not role_dir.name.startswith(".")
         and role_dir.name != "__pycache__"
+        and not is_leftover_dir(str(role_dir))
         and role_dir.name not in SHARED_ROLES
         and (role_dir / "defaults" / "main.yml").is_file()
         and (

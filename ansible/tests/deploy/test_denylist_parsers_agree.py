@@ -9,7 +9,7 @@ import tempfile
 from pathlib import Path
 
 from deploy_logic import SHARED_K8S_ROLES, declared_denylist
-from k8s_autodeploy import SHARED_ROLES, k8s_autodeploy_denylist
+from k8s_autodeploy import SHARED_ROLES, is_leftover_dir, k8s_autodeploy_denylist
 from _helpers import REPO as _REPO
 
 
@@ -20,11 +20,14 @@ _K8S_ROLES = _ANSIBLE / "roles/k8s"
 def _sources() -> dict[str, str | None]:
     sources: dict[str, str | None] = {}
     for role in sorted(p for p in _K8S_ROLES.iterdir() if p.is_dir()):
-        # Mirror the filter's own skips (k8s_autodeploy.py:99) — a stray dotdir or
-        # __pycache__ under roles/k8s/ would otherwise be denied by the regex reader and
-        # silently skipped by the filter, failing this test on an input that has nothing
-        # to do with production.
+        # Mirror the filter's own skips — a stray dotdir, a `__pycache__` or a retired
+        # role's leftover debris under roles/k8s/ would otherwise be denied by the regex
+        # reader and silently skipped by the filter, failing this test on an input that has
+        # nothing to do with production. The deployer's live reader never sees any of the
+        # three: it builds its census from `git ls-tree`, which lists tracked paths only.
         if role.name.startswith(".") or role.name == "__pycache__":
+            continue
+        if is_leftover_dir(str(role)):
             continue
         defaults = role / "defaults/main.yml"
         sources[role.name] = defaults.read_text() if defaults.is_file() else None
