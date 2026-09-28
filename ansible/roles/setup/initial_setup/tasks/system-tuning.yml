@@ -226,7 +226,12 @@
     # Only run this if the hook doesn't exist yet. NB: .git lives at the REPO root,
     # one level above playbook_dir (ansible/) — the old `{{ playbook_dir }}/.git/...`
     # path never existed, so prek install re-ran on every play.
-    creates: "{{ playbook_dir }}/../.git/hooks/pre-commit"
+    #
+    # The guard names pre-push, not pre-commit. prek.toml's `default_install_hook_types` asks
+    # for both shims, and every host already carrying a pre-commit shim from before #2827
+    # would otherwise skip the install and never get the pre-push one. prek overwrites its own
+    # shims, so the one re-run this causes is idempotent.
+    creates: "{{ playbook_dir }}/../.git/hooks/pre-push"
   # Run as the connecting user (not the play's become: true) so the hooks are owned
   # by the repo owner, and pick up the user's uv-managed ~/.local/bin where prek lives.
   become: false

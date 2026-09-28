@@ -21,31 +21,31 @@ STALENESS IS GRACEFUL, WHICH IS WHY THE RECORDED FILE IS SAFE TO COMMIT. A path 
 recorded weight is given the median of the recorded ones, and a recorded path that no longer
 exists is ignored. Both cases cost balance and nothing else: every collected file still lands
 in exactly one shard, so a stale table makes CI slower, never wrong.
-`test_pytest_shards_partition_the_suite.py` fails when the recorded table has drifted far
-enough that the balance is guesswork.
 
 THE MEDIAN IS A BAD GUESS FOR A HEAVY FILE, AND THE TABLE CANNOT KNOW WHICH FILES ARE HEAVY.
 The suite's median is 0.0s, so an unweighted file is packed as the lightest thing in the
 suite and placed last, into whichever shard happened to be least loaded. One unrecorded 30s
 module landed that way on 2026-09-17 and skewed the four CI shards to 65/99/99/68s against
-a 43s projection for every one (#2225). `--record-missing` measures only the unweighted files
--- seconds, not the four-minute full run -- so the ratchet can afford to demand it as soon
-as an unweighted file appears beside a recorded pole.
+a 43s projection for every one (#2225).
 
-AND THE NEIGHBOURS CANNOT KNOW EITHER, WHEN THERE ARE NO NEIGHBOURS. That ratchet arm reads a
-directory that already holds a recorded pole. A heavy module landing where every recorded
-sibling is light is invisible to it, and every static proxy tried on the 2026-09-17 module --
-`def test_` count, byte size, directory mean -- failed to separate it from an ordinary file
-(#2238). `--check-durations` closes that: CI's own test step measures the module as a side
-effect of running it, and the gate rejects an unweighted file that cost `RUNNER_HEAVY_SECONDS`
-or more. It is a CI step rather than a pytest test on purpose -- see RATCHET_NODE_ID.
-
-AND A RECORDED NUMBER CAN GO WRONG IN THE OTHER DIRECTION. All three arms above ask whether a
-file is MISSING from the table; none asks whether a number still matches what the file costs.
+ONE GATE GUARDS THE TABLE, AND IT IS A CI STEP: `--check-durations`. It reads the durations
+report CI's own test step already wrote, so it measures each module by running it. That is what
+lets it see the two shapes nothing static can. A heavy module landing where every recorded
+sibling is light is invisible to a neighbour heuristic, and `def test_` count, byte size and
+directory mean all failed to separate the 2026-09-17 module from an ordinary file (#2238); the
+gate rejects it on `RUNNER_HEAVY_SECONDS`. And a recorded number can go wrong in the other
+direction, which no arm asking "is this file MISSING" ever sees:
 `ansible/tests/k8s/test_secret_consumer_census.py` stood at 17.31s against 0.09s measured, and
-the greedy split placed it first, so one shard carried 17s of phantom weight (#2514). The same
-`--check-durations` report answers that too, as a RATIO -- see STALE_WEIGHT_RATIO -- and
-`--record-files` is its repair, since `--record-missing` only fills gaps.
+the greedy split placed it first, so one shard carried 17s of phantom weight (#2514). The gate
+answers that as a RATIO — see STALE_WEIGHT_RATIO — and `--record-files` is its repair, since
+`--record-missing` only fills gaps.
+
+TWO STATIC ARMS USED TO SIT IN THE SUITE AND NO LONGER DO (#2830). An unweighted-fraction count
+and an unweighted-file-beside-a-recorded-pole neighbour test both asked whether a file was
+MISSING from the table. Since #2274 the docs-refresh cron runs `--record-missing` itself, so
+those gaps fill without a human, and the two arms bought 39 hand-run record commits in the 30
+days to 2026-09-28. Removing them also removed the only pytest test over this table, which is
+why nothing here deselects a node id any more.
 
 Usage:
     uv run python scripts/dev/pytest_shard.py --of 4 --shard 1        # this shard's files
@@ -74,25 +74,6 @@ from lib.git import git
 
 REPO = Path(__file__).resolve().parents[2]
 WEIGHTS_PATH = Path(__file__).resolve().with_name("pytest_shard_weights.json")
-# The coverage ratchet over this table. `record_weights` deselects it; see the reason there.
-RATCHET_TEST = "ansible/tests/repo/test_pytest_shards_partition_the_suite.py"
-# The ratchet's node id, spelled once. `record_weights` passes it to `--deselect`, and the two
-# crons that commit with the prek chain on (docs-refresh, eval-run) put the same `--deselect`
-# in PYTEST_ADDOPTS around their commit: while the ratchet is red, only a manual `--record`
-# clears it, and until then it failed both crons' commits -- the docs stopped publishing and
-# the failure path parked the deployer (#1899). CI's sharded job sets no PYTEST_ADDOPTS, so
-# the ratchet stays enforced there. `test_the_crons_deselect_the_ratchet_they_cannot_repair`
-# pins the templates to this string.
-#
-# ONE NODE ID, AND THAT IS WHY `--check-durations` IS A CI STEP. Both crons deselect exactly
-# this one id. A second pytest test that went red on an unweighted file -- which is what a
-# measured gate expressed as a test would be -- would fail those crons' commits again the way
-# #1899 did, and neither cron can run the repair. So the measured verdict lives in `ci.yml` as
-# a `run:` step instead, where no cron's commit passes through it (#2238).
-RATCHET_NODE_ID = (
-    f"{RATCHET_TEST}::test_the_recorded_weights_still_cover_most_of_the_suite"
-)
-
 # pytest's default `python_files`, both forms — the same pair
 # `ansible/tests/repo/test_testpaths_covers_every_test_file.py` derives its census from, and for
 # the same reason: a single hand-kept glob would miss a `foo_test.py` that pytest collects.
@@ -112,9 +93,9 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 
 # What an unweighted module may measure on the CI runner before the shard gate rejects it.
 #
-# WHY A CI MEASUREMENT AND NOT ANOTHER STATIC ARM. The ratchet's neighbour arm sees an
-# unweighted file only where a recorded pole already sits in its directory. A heavy module
-# landing in a quiet directory is invisible to it, and no static proxy separates the two:
+# WHY A CI MEASUREMENT AND NOT A STATIC ARM. The neighbour heuristic this replaced saw an
+# unweighted file only where a recorded pole already sat in its directory. A heavy module
+# landing in a quiet directory was invisible to it, and no static proxy separates the two:
 # `def test_` count, byte size and directory mean were all checked against the 2026-09-17
 # module (6 tests, 248 lines, a directory averaging 0.19s) and none discriminates (#2238).
 # Only running the file says what it costs, and CI already runs it.
@@ -125,7 +106,7 @@ _DURATION_LINE = re.compile(r"^([0-9.]+)s\s+(call|setup|teardown)\s+(\S+?)::")
 # so an unweighted module worth 10s is a quarter of a shard placed by a 0.0s guess, which is
 # the #2225 shape. The 2026-09-17 module that prompted all of this measured about 30s. The
 # runner is slower per test than the workstation, so 10 runner seconds is FEWER than 10
-# recorded seconds: the gate sits at or below the neighbour arm's own pole cutoff, which was
+# recorded seconds: the gate sits at or below the pole cutoff that heuristic used, which was
 # 5.22s on 2026-09-22.
 RUNNER_HEAVY_SECONDS = 10.0
 
@@ -169,9 +150,8 @@ STALE_WEIGHT_FLOOR_SECONDS = 3.0
 # Used as the divisor's floor, which cannot then be zero.
 _DURATIONS_MIN_SECONDS = 0.005
 
-# The repair for every arm that finds a MISSING entry, spelled once and read by the ratchet test
-# too, so the two can never offer different instructions. `census()` reads
-# `git ls-files`, so the file has to be staged before the measurement can see it.
+# The repair for the gate arm that finds a MISSING entry. `census()` reads `git ls-files`, so
+# the file has to be staged before the measurement can see it.
 RECORD_MISSING_HINT = (
     "stage the new file, then `uv run python scripts/dev/pytest_shard.py "
     "--record-missing` and commit scripts/dev/pytest_shard_weights.json"
@@ -180,7 +160,7 @@ RECORD_MISSING_HINT = (
 # The repair for the stale arm, which `--record-missing` cannot do: it only fills gaps, and a
 # present-but-wrong entry is not a gap. A full `--record` re-measures the whole suite in
 # minutes; `--record-files` re-measures the named files in seconds, so the gate has a repair
-# cheap enough that nobody reaches for the deselect instead.
+# cheap enough that nobody reaches for a stale entry as the lesser evil.
 RECORD_FILES_HINT = (
     "re-measure just those files with `uv run python scripts/dev/pytest_shard.py "
     "--record-files <path>...` and commit scripts/dev/pytest_shard_weights.json"
@@ -268,11 +248,11 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
     every duration rather than hiding the ones under 5ms — a file whose tests are all fast
     still costs its import, and leaving it unrecorded would hand it the median instead.
 
-    The coverage ratchet is DESELECTED because it is the thing this run repairs. It fails
-    exactly when the weights have drifted far enough to need re-recording, and the refusal
-    below treats any failure as "not a baseline" — so the suite could never go green and
-    `--record` could never write. Measured 2026-09-11: 126 of 629 files unweighted, the
-    ratchet red, and two consecutive `--record` runs wrote nothing.
+    Nothing is deselected. The refusal below treats any failure as "not a baseline", which was
+    the #1799 deadlock for as long as a coverage ratchet read the weights this run had not
+    written yet — measured 2026-09-11, 126 of 629 files unweighted and two consecutive
+    `--record` runs wrote nothing. No test reads the table for staleness since #2830, so the
+    precondition can no longer refuse to clear itself.
 
     A file whose every test addopts deselects (`-m 'not ui'`, which CI runs under too) has no
     durations line and is absent from the result; the callers record it at 0.0, since in the
@@ -289,8 +269,6 @@ def measure_weights(files: list[str] | None = None) -> dict[str, float]:
             "--durations=0",
             "-p",
             "no:cacheprovider",
-            "--deselect",
-            RATCHET_NODE_ID,
             *(files or []),
         ],
         cwd=REPO,
@@ -439,10 +417,9 @@ def record_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
 def record_missing_weights(path: Path = WEIGHTS_PATH) -> dict[str, float]:
     """Measure only the census files the table lacks, and write the merged table.
 
-    Seconds rather than the full run's minutes, which is what lets the coverage ratchet
-    demand a record as soon as one unweighted file could matter. A recorded path no longer in
-    the census is dropped on the way through, so the table does not keep a directory looking
-    heavy on the strength of a module that was deleted.
+    Seconds rather than the full run's minutes, which is what lets the docs-refresh cron run
+    this on every tick (#2274). A recorded path no longer in the census is dropped on the way
+    through, so the table does not keep a weight for a module that was deleted.
     """
     files = census()
     known = load_weights(path)

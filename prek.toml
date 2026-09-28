@@ -2,6 +2,11 @@
 # See https://prek.j178.dev for more information.
 #:schema https://www.schemastore.org/prek.json
 
+# `prek install` installs a shim per hook type named here. The `pytest` hook runs at the
+# pre-push stage (see its own comment), and without this line `prek install` would write only
+# the pre-commit shim and that hook would never fire on this machine.
+default_install_hook_types = ["pre-commit", "pre-push"]
+
 # Standard cleanup hooks
 [[repos]]
 repo = "https://github.com/pre-commit/pre-commit-hooks"
@@ -361,9 +366,9 @@ files = "^(pyproject\\.toml|uv\\.lock)$"
 # whose recorded atom MOVED -- that is content drift, and re-reading the prose is a human's
 # call. Without it every such edit landed behind a green master and cost a second commit
 # after CI named it: 29 commits touched docs/facts.lock in the lock's first 9 days.
-# It sits ABOVE `pytest` rather than beside `facts-lint-changed`: the suite's
-# test_every_recorded_atom_hashes_as_recorded reads the lock off disk, so running this first
-# means the author's failed commit reports one thing to fix instead of two.
+# It sits beside the other commit-stage hooks rather than beside `facts-lint-changed`: the
+# suite's test_every_recorded_atom_hashes_as_recorded reads the lock off disk, and `pytest`
+# runs at pre-push, so this has already rewritten the lock by the time that test reads it.
 [[repos.hooks]]
 id = "facts-reverify-changed"
 name = "re-hash edited CLAUDE.md sections whose citations changed"
@@ -380,10 +385,11 @@ files = "(^|/)CLAUDE\\.md$"
 # it -- and it writes unconditionally, never running the suite first, which is what keeps it out
 # of the #1799 repair deadlock.
 #
-# It sits ABOVE `pytest` for the reason `facts-reverify-changed` does: the suite's
-# test_no_module_is_longer_than_its_cap_or_its_allowlist_entry reads the lists off disk, so
-# running the fixer first means a failed commit reports one thing to fix instead of two. Like a
-# formatter, it exits non-zero when it rewrote a list, so the author stages what it wrote.
+# The ordering against `pytest` that this comment used to argue is no longer a question:
+# `pytest` runs at pre-push, so by the time
+# test_no_module_is_longer_than_its_cap_or_its_allowlist_entry reads the lists off disk this
+# hook has already rewritten them at commit time. Like a formatter, it exits non-zero when it
+# rewrote a list, so the author stages what it wrote.
 #
 # Cost, measured 2026-09-28: 4.0s wall for a full run, almost all of it the monkeypatch
 # census AST-parsing every test module. The `files` gate keeps it off a docs-only commit,
@@ -433,10 +439,23 @@ pass_filenames = false
 # an entry every time something escapes is the wrong mechanism, not a list needing one more entry.
 # Git history has the full text if the per-path rationale is ever needed again.
 #
-# Cost of always running: the suite is ~3s locally (-n auto) and ~8-10s on the runner, against a
-# CI job that already takes 24-44s. Residual gap, stated honestly: this covers tests under
-# [tool.pytest.ini_options] testpaths only — a whole-tree scanner added outside those entries
-# still escapes, but that is a short explicit list in pyproject.toml rather than a regex.
+# Cost, and why the stage. Measured 2026-09-28 on daniel-server: 235s wall for the whole suite
+# at load average 15, with three other Claude sessions on the box. That is more than 10x the
+# figure this comment carried for months ("~3s locally"), and paying it on every `git commit`
+# made an ordinary one-line commit a two-minute wait. Moving it to pre-push charges it once per
+# branch instead of once per commit, which is also where CI's own verdict arrives.
+#
+# The `always_run` rationale above does not depend on the stage: CI skips this hook entirely
+# (`ci.yml` runs `prek … --skip pytest` and runs pytest unscoped in its own matrix job), so the
+# coverage argument is about what a LOCAL run covers and the stage only decides when.
+#
+# What the stage costs: a commit no longer tells you the suite is green, so a local branch can
+# hold a red commit until you push. CI still gates the merge, and `land.sh` waits on it.
+#
+# Residual gap, stated honestly: this covers tests under [tool.pytest.ini_options] testpaths
+# only — a whole-tree scanner added outside those entries still escapes, but that is a short
+# explicit list in pyproject.toml rather than a regex.
+stages = ["pre-push"]
 always_run = true
 
 # Lint the fact citations in any CLAUDE.md section this branch touched, against origin/master
