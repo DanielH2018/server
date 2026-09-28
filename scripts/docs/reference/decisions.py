@@ -80,11 +80,17 @@ _SKIP_PATH_PARTS = (".claude/worktrees",)
 # always finds one more marker than the first. Excluded by exact path rather than a pattern,
 # so a rename breaks this loudly (an unrecognised path just re-appears in the output) instead
 # of silently widening what else gets skipped.
+#
+# `docs/facts.lock` is the one entry that is not this generator's own: it keys each cited
+# marker by its text and records a hash beside it, so every marker a CLAUDE.md cites re-appears
+# there as a row whose "decision" is a 64-hex digest. gitleaks reads such a row as a generic API
+# key, so a regenerated page carrying one fails the commit (#2812).
 _SELF_PATHS = frozenset(
     {
         "scripts/docs/reference/decisions.py",
         "scripts/docs/tests/test_gen_reference_decisions.py",
         "docs/reference/decisions.md",
+        "docs/facts.lock",
     }
 )
 

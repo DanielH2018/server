@@ -15,9 +15,9 @@ overrides that path. Import this module before anything from `claude_worktree`.
 # `fanout_place.py clean` — is a removal, so an ImportError is the KEEP direction: with
 # the package absent nothing is reported and nothing is removed. The SessionStart banner
 # is the one importer that must not crash, and `session-health.py` already catches the
-# ImportError and prints it. CI, which has no dotfiles deploy, gets the readers from the
-# `claude_worktree_stand_in` pytest plugin (`ansible/tests/`), a byte-identical copy a
-# deployed-host test diffs against the real one.
+# ImportError and prints it. CI gets the real module the way a host does: the `pytest`
+# job in `.github/workflows/ci.yml` checks out the dotfiles repo at a pinned SHA and links
+# the package into `~/.local/share/` (#2812).
 """
 
 import os

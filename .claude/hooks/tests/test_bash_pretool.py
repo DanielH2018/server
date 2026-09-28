@@ -41,8 +41,6 @@ def _load(name):
 
 _mod = _load("bash-pretool")
 
-pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
-
 # The arms this dispatcher must be running. Asserted by name rather than by count: the census
 # is a tuple of filenames, and a renamed arm would otherwise leave every test below passing
 # against four arms while the fifth judged nothing (`.claude/rules/python-layout.md`).

@@ -528,6 +528,11 @@ jobs:
       # never finish faster than its largest member, so the floor rises as the matrix grows.
       matrix:
         shard: [1, 2, 3, 4, 5, 6]
+    # The dotfiles commit the suite imports claude_guard and claude_worktree from (#2812). A pin,
+    # not `main`: tracking the branch would turn this job red on an unrelated dotfiles commit.
+    # The `git-refs` custom manager in renovate.json proposes each bump as its own PR.
+    env:
+      DOTFILES_SHA: e7084e764929015c72d37a37a1f437b489d35c6e
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
         with:
@@ -550,6 +555,24 @@ jobs:
           key: galaxy-${{ runner.os }}-${{ hashFiles('ansible/requirements.yml') }}
       - name: Install Ansible collections
         run: uv run ansible-galaxy collection install -r ansible/requirements.yml -p ansible/collections
+      # The Bash hooks split commands with the dotfiles repo's `claude_guard` package, and the
+      # worktree pruner reads `claude_worktree` from it. A host gets both from `chezmoi apply`;
+      # this step lays the same two directories out where a host has them, so the bootstraps
+      # (`.claude/hooks/_claude_guard.py`, `scripts/dev/_claude_worktree.py`) import them
+      # unchanged. Both packages are plain files under `home/dot_local/share/` in that repo,
+      # so no chezmoi render is needed. The fetch lands in $RUNNER_TEMP rather than in the
+      # workspace, where an untracked tree would show up in the git-status tests. The repo is
+      # public, so the fetch needs no token.
+      - name: Deploy the dotfiles packages the hooks and the pruner import
+        run: |
+          set -euo pipefail
+          src="$RUNNER_TEMP/dotfiles"
+          git init --quiet "$src"
+          git -C "$src" fetch --quiet --depth 1 https://github.com/DanielH2018/dotfiles "$DOTFILES_SHA"
+          git -C "$src" checkout --quiet FETCH_HEAD
+          mkdir -p "$HOME/.local/share"
+          ln -s "$src/home/dot_local/share/claude-guard" "$HOME/.local/share/claude-guard"
+          ln -s "$src/home/dot_local/share/claude-worktree" "$HOME/.local/share/claude-worktree"
       # `--of "$SHARDS"` reads `strategy.job-total`, so the split follows the matrix above and
       # cannot drift from it: changing the `shard:` list is the whole edit. The helper assigns
       # whole test modules by greedy bin packing over recorded per-file durations — never part of

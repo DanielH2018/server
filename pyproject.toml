@@ -83,9 +83,6 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # -p leakguard fails any test that reaches the network, the cluster or the host. It is
 # registered here rather than from a conftest so it covers every `testpaths` entry at once;
 # ansible/tests is on `pythonpath` below, which is what makes the bare module name resolve.
-# -p claude_worktree_stand_in feeds `prune_worktrees.py` a `claude_worktree` when the dotfiles
-# deploy is absent (CI), through the same CLAUDE_WORKTREE_HOME seam the real bootstrap reads,
-# so a subprocess a test spawns imports the same copy. Same plugin-not-conftest reason.
 #
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
@@ -95,7 +92,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # run that collected nothing read exactly like one that passed. Three reviewers in the
 # module-split plan overrode addopts to get a count back (issue #1203). The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
-addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard -p claude_worktree_stand_in"
+addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard"
 # Every warning is a failure. Measured before enabling (2026-09-02): the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
@@ -116,7 +113,6 @@ filterwarnings = [
 # Run them with `uv run pytest -m ui`, which overrides the default -m.
 markers = [
   "ui: live checks against the homelab's own routes — browser smoke (scripts/diagnostics/tests/test_ui_smoke.py) and the Uptime Robot keyword rules (ansible/tests/repo/test_uptime_robot_keywords.py)",
-  "without_segmenter: runs where the dotfiles claude_guard segmenter is absent (CI); the rest of a module under the segmenter_or_skip fixture skips there (.claude/hooks/tests/conftest.py)",
 ]
 # filter_plugins: lets test_toposort import toposort. setup/common/files: host_lib is a cross-role
 # shared module (deployed INTO each setup script's /opt dir as a sibling) — on pythonpath so the
@@ -175,14 +171,9 @@ pythonpath = [
 # Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so
 # don't restate one here. `ansible/collections` is the vendored third-party tree, never
 # linted or formatted.
-# DECIDED: the claude_worktree stand-in is out of scope too. It is a byte-identical copy of
-# a dotfiles module that the dotfiles repo lints at its own 3.10 floor, and a deployed-host
-# test diffs the two. This repo's 3.14 target rewrites `except (A, B):` into PEP 758's
-# unparenthesized form, which is a SyntaxError on 3.10 and breaks the byte match.
 extend-exclude = [
   "ansible/collections",
   "*.md",
-  "ansible/tests/_claude_worktree_stand_in/claude_worktree.py",
 ]
 
 [tool.ruff.lint]
@@ -330,10 +321,6 @@ extra-paths = [
   "ansible/roles/k8s/home-assistant/files",
   "scripts/deploy_tools/tests",
   "scripts/docs/tests",
-  # `claude_worktree` is deployed by the dotfiles repo outside this checkout (#2133); the
-  # byte-identical CI stand-in is in-tree, so ty reads the real signatures from it rather
-  # than needing an unresolved-import override like `claude_guard` below.
-  "ansible/tests/_claude_worktree_stand_in",
 ]
 
 [tool.ty.src]
@@ -454,6 +441,22 @@ include = [
   ".claude/hooks/_claude_guard.py",
   ".claude/hooks/_hook_common.py",
   ".claude/hooks/tests/test_claude_guard_import.py",
+]
+[tool.ty.overrides.rules]
+unresolved-import = "ignore"
+
+[[tool.ty.overrides]]
+# `claude_worktree` is the same kind of import as `claude_guard` above: the dotfiles repo
+# deploys it to `~/.local/share/claude-worktree` (#2133), and `scripts/dev/_claude_worktree.py`
+# bootstraps it at runtime. ty read its signatures from an in-tree CI stand-in until #2812
+# replaced that copy with a CI checkout of the dotfiles repo. The pruner's reader calls lost
+# their type check with it, and the import test lost the check on `import _claude_worktree`.
+# `test_claude_worktree_import.py` and `test_prune_worktrees.py` run against the real module
+# in CI and on every host, and that is what catches a renamed reader.
+include = [
+  "scripts/dev/_claude_worktree.py",
+  "scripts/dev/prune_worktrees.py",
+  "scripts/dev/tests/test_claude_worktree_import.py",
 ]
 [tool.ty.overrides.rules]
 unresolved-import = "ignore"

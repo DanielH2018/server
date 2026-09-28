@@ -9,8 +9,8 @@ ALLOWED and applied another session's 25-file work-in-progress into this tree.
 
 Since #2134 the splitter is the dotfiles package's segmenter, so the `;` cases below pin
 what that package must keep doing for this repo, and the newline and heredoc cases pin what
-the hand-rolled splitter never did. The module runs under `segmenter_or_skip` (conftest.py):
-the deployed package is the thing under test, and CI does not have it.
+the hand-rolled splitter never did. The deployed package is the thing under test; CI links
+a pinned dotfiles checkout into the deployed path (#2812), so these run there too.
 
 Every case below is an accept/reject pair: a `;`-joined command that must still split into
 stages a rule can see, and a quoted `;` that must NOT split. Run:
@@ -26,7 +26,20 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from _hook_common import Unsplittable, split_stages
 
-pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
+
+def test_the_deployed_segmenter_is_present():
+    """Every case below splits through the deployed package, so a missing one fails here by name.
+
+    Without this, a runner that lost the dotfiles checkout would fail the rule tests one by one,
+    each reading as a rule bug. `segmenter_or_skip` used to skip them instead, which is how CI
+    ran none of them until #2812.
+    """
+    import _hook_common
+
+    assert _hook_common._parse is not None, (
+        "claude_guard is not deployed: run chezmoi apply here, or check the dotfiles "
+        "checkout step of the pytest job in .github/workflows/ci.yml"
+    )
 
 
 # --- the bug: `;` must split like `&&` does -----------------------------------------------
@@ -142,7 +155,6 @@ def test_an_unclosed_substitution_is_refused():
     assert caught.value.status == "unreadable:substitution"
 
 
-@pytest.mark.without_segmenter
 def test_a_missing_segmenter_is_refused_as_missing():
     """The half-deployed host: hook code present, `claude_guard` not yet applied. The
     consumer decides what to do with it; the splitter's job is to say which cause it was."""
