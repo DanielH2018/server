@@ -57,6 +57,9 @@ from lib.script_coverage import candidate_test_files, indirect_test
 # that follows it.
 _USAGE_RE = re.compile(r"^Usage::\s*$", re.MULTILINE)
 
+# The Directory cell of a script that sits directly in scripts/ rather than in a subdirectory.
+TOP_LEVEL = "(top level)"
+
 
 def _python_docstring(path: Path) -> str | None:
     """The module docstring, or None if the file does not parse."""
@@ -138,10 +141,14 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
         run, evidence = verdicts.get(
             path.name, ("adhoc", "no automated caller in the tree")
         )
+        # The top-level subdirectory only: `docs/reference/x.py` files under `docs`, which is
+        # the grouping the Directory filter on the page offers.
+        within = path.relative_to(scripts).parts
         rows.append(
             {
                 "name": path.name,
                 "path": str(path.relative_to(scripts.parent)),
+                "directory": within[0] if len(within) > 1 else TOP_LEVEL,
                 "summary": summary,
                 "usage": usage,
                 "tests": test,
@@ -187,7 +194,9 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         "The sections below split them by **how each one is run**, which is derived from the "
         "tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a "
         "Claude hook, an Ansible task, or an import edge. The *Reached by* column is the "
-        "evidence, so a wrong answer is a wrong answer about a real file.\n"
+        "evidence, so a wrong answer is a wrong answer about a real file. The filter bar "
+        "above the first table narrows all four at once: by section, by directory, or by any "
+        "text in a row. A header click sorts by that column.\n"
     )
     parts.append(
         '!!! note "What this page does not tell you"\n'
@@ -227,8 +236,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         if not section:
             parts.append("None.\n")
             continue
-        parts.append("| Script | What it does | Reached by | Tests |")
-        parts.append("|---|---|---|---|")
+        # Script stays the first cell: _mkdocs_repo_links.py finds each row's anchor target
+        # there. Directory repeats a prefix of the path so the page's table filter
+        # (docs/assets/table-filter.js) can offer it as a choice.
+        parts.append("| Script | Directory | What it does | Reached by | Tests |")
+        parts.append("|---|---|---|---|---|")
         for row in section:
             if row["tests"]:
                 test = f"`{row['tests']}`"
@@ -237,7 +249,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
             else:
                 test = "—"
             parts.append(
-                f"| `{row['path']}` | {_md_cell(row['summary'])} | "
+                f"| `{row['path']}` | {row['directory']} | {_md_cell(row['summary'])} | "
                 f"{_md_cell(row['evidence'])} | {test} |"
             )
 
