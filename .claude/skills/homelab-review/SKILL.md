@@ -47,7 +47,10 @@ order:
    refutations, verified-clean list, and the recurring-open register. This is the bulk of the
    priming and it is one file by design: the dated ledgers grow by one per run, and reading all of
    them at the most expensive moment (immediately before a 4–6 way fan-out that each get a slice)
-   is what this file replaces.
+   is what this file replaces. It holds what has no code site; a trade-off governed by one line
+   lives in a `# DECIDED:` marker there (step 7). Collapsing the file into markers and issues
+   was re-examined on 2026-09-28 (#2808) and rejected, because operator rulings and
+   cross-cutting stances would have nowhere to go.
 2. **The newest two dated `review-*-state` memories** — for recency only: what shipped since the
    standing list was last distilled, and this week's refutations with their evidence. Same-day runs
    carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the later is not a superset.
@@ -333,7 +336,18 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   Use `null` for any count the ledger prose does not state as a number — never a guess.
 - **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
-  Open and recurring items belong in `findings.py`'s register, not there. Promote a trade-off or
+  Open and recurring items belong in `findings.py`'s register, not there.
+  - **A trade-off governed by one code line goes in a `# DECIDED:` marker at that line**, not in
+    the standing list. The marker is where a reviewer trips over it, and a `file:line` citation
+    in memory drifts. The standing list keeps what has no code site: `[operator]` rulings,
+    cross-cutting stances, refutations of upstream behaviour and recurring failure shapes.
+  - **File a refuted lead as an issue closed `--refuted`** (`findings.py open`, then
+    `findings.py close <n> --refuted --reason`), so the register holds it and `open` refuses to
+    re-file it. A finding held from the public tracker for disclosure reasons stays in the
+    ledger only.
+  - **Move the ledger two runs back to the memory `archive/`** once its durable rows are folded,
+    and say so in the standing list's fold history and in `archive/README.md`. Step 2 reads only
+    the newest two, so an older ledger is indexed and never read. Promote a trade-off or
   refutation only on a **second** independent occurrence or against real evidence (a diff, a log,
   a passing test, live `probe.py` state). One run's say-so is a candidate: written into memory, it
   is injected every session and reinforces itself even when it is wrong.

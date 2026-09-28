@@ -110,7 +110,7 @@ which Ansible skips for an `activating` unit, so a self-apply from inside a tick
 the unit and the new code runs from the next tick. The park it imposed was real, though — every
 other session's landing stopped behind it until an operator hand-ran the role and ff-merged,
 three times that day. The role now applies itself as `initial_setup.yml --tags gitops_deploy`;
-the `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_logic.py` carries the evidence.
+the `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_changes.py` carries the evidence.
 
 ### A deploy-plane change is narrowed before it is applied
 
@@ -770,7 +770,7 @@ stay).
     on one day) until someone hand-ran `initial_setup.yml --tags gitops_deploy` in the primary
     checkout and ff-merged. A self-apply that fails takes the same hold + `hold_plane` + alert
     path as any setup role. The `DECIDED:` marker above `_BROAD_MANUAL_PREFIXES` in
-    `deploy_logic.py` is the long form.
+    `deploy_changes.py` is the long form.
   - `BROAD_DEPLOY_TIMEOUT_S` (1800, `gitops_deploy_broad_timeout_s`) bounds one apply. Without it
     a wedged run is SIGTERMed at `TimeoutStartSec` with no hold written and no alert sent.
 - **Behind-origin watchdog** (`deploy_logic.behind_marker`): every PARK above leaves the host
