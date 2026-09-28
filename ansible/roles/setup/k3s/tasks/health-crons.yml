@@ -35,7 +35,7 @@
 # every script current.
 
 - name: Deploy the Kuma push credentials for the heartbeat scripts
-  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, remember-logs, release-staleness]
+  tags: [backup-health, disk-health, manifest-prune, etcd-snapshot, release-staleness]
   # 0640 root:{{ sys_user }}, for the same reason as live-drift-check.env below: the scripts that
   # consume these land 0755, so a token rendered inline is readable by every local account — and
   # a Kuma push token is enough to forge or suppress a heartbeat, which hides a real outage. The
@@ -361,40 +361,6 @@
     user: "{{ sys_user }}"
     job: "/usr/local/bin/disk-health.sh"
     cron_file: disk-health
-  become: true
-
-# The remember log-rotation heartbeat, retired 2026-09-28 with the remember plugin whose logs it
-# watched (#2852, dotfiles #693). The shared task file's absent arm stops the timer, removes its
-# units and removes the cron the timer replaced. It does not own what release_bin.yml and
-# stamp_render.yml installed, so the file task below removes those. A leftover render stamp is
-# not harmless: setup-drift-lib.sh reports it as "template gone from the repo". The
-# `remember-logs` tag stays on the kuma-push.env task above so this tag also re-renders that
-# file without the retired token. Delete both tasks, and the tag, once `--tags remember-logs`
-# has run on daniel-box.
-- name: Remove the remember log-rotation heartbeat timer
-  tags: [remember-logs]
-  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
-  vars:
-    kuma_check_state: absent
-    kuma_check_name: remember-logs
-    kuma_check_description: remember log rotation health (Kuma push)
-    kuma_check_exec: /usr/local/bin/remember-logs-health.sh
-    kuma_check_user: "{{ sys_user }}"
-    kuma_check_on_calendar: "*-*-* *:17:00"
-    kuma_check_restart_sec: 15min
-    kuma_check_cron_name: "remember log rotation health"
-    kuma_check_cron_file: remember-logs-health
-
-- name: Remove the remember log-rotation script, its releases and its render stamp
-  tags: [remember-logs]
-  ansible.builtin.file:
-    path: "{{ item }}"
-    state: absent
-  loop:
-    - /usr/local/bin/remember-logs-health.sh
-    - /opt/homelab/current/k3s-remember-logs
-    - /opt/homelab/releases/k3s-remember-logs
-    - /var/lib/homelab/setup-render-manifest.d/k3s-remember-logs
   become: true
 
 - name: Deploy the manifest-prune drift check as a versioned release
