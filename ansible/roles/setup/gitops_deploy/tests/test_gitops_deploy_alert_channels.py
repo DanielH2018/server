@@ -1,11 +1,10 @@
-"""The per-channel alert helpers and the two disk watchdogs, exercised by calling them.
+"""The per-channel alert helpers and the behind-origin watchdog, exercised by calling them.
 
 alert_once() advances its per-SHA marker on DETECTION, not delivery, and hands the post to
 deliver(): a webhook blip is redelivered by the queue, and an ff-merged path that noops on
 the next tick does not re-page. alert_deferred() and alert_secrets_deferred() choose the
 channel and the text; the tasks and meta channels subtract what this tick deployed, the k8s
-channel never does. check_stale_composes(), the other disk watchdog, is in
-test_gitops_deploy_stale_composes.py. DeployerState.record_behind() stamps the behind-origin marker
+channel never does. DeployerState.record_behind() stamps the behind-origin marker
 once and keeps the first-seen time across later pushes, and the entrypoint() that feeds it
 never lets a git failure page. Every test runs
 against the canned config and the tmp state dir from conftest.py; main()'s own branches
