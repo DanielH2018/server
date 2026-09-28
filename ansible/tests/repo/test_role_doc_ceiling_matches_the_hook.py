@@ -22,9 +22,14 @@ def test_the_ceiling_equals_the_hooks_inline_budget():
     )
 
 
-def test_the_live_hook_still_carries_the_literal():
-    """Non-vacuity: the reader finds its subject by pattern, so it must find the real one."""
-    assert hook_inline_max_chars() > 0
+def test_the_live_hooks_budget_is_the_number_this_repo_was_measured_against():
+    """Non-vacuity, and a second failure the equality test above cannot give on its own.
+
+    The pin passes when both numbers move together, which is the edit that changes what every
+    session reads without anyone re-reading the measurement behind it. Spelling 7,500 out here
+    means moving the budget fails until someone writes the new number down deliberately.
+    """
+    assert hook_inline_max_chars() == 7500
 
 
 def test_a_hook_without_the_literal_is_flagged(tmp_path):
