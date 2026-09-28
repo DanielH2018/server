@@ -1,94 +1,19 @@
-{% from 'container-resources.yml.j2' import container_resources with context %}
-{% from 'security-context.yml.j2' import hardened_security_context with context %}
-{% from 'exportarr.yml.j2' import exportarr with context %}
-{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
----
-apiVersion: apps/v1
-kind: Deployment
-metadata:
-  name: sonarr
-  namespace: {{ k8s_namespace }}
-spec:
-  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
-  # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
-  # not have this problem — this is about /config.)
-{{ spec_shell('Recreate') }}
-  replicas: 1
-  # The same budget as the drain's rollout wait. See sonarr_k8s_rollout_timeout in
-  # defaults/main.yml.
-  progressDeadlineSeconds: {{ sonarr_k8s_rollout_timeout[:-1] | int }}
-  selector:
-    matchLabels:
-      app: sonarr
-  template:
-    metadata:
-      labels:
-        app: sonarr
-        netpol-baseline: enforced
-    spec:
-      # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner`, the LSIO image
-      # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
-      # chown the 19 G media volume on every mount.
-{{ pod_shell('homelab-standard') }}
-      containers:
-        - name: sonarr
-          image: {{ sonarr_k8s_image }}
-          ports:
-            - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
-          # NET_BIND_SERVICE: sonarr listens on 8989, which needs no privilege.
-{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
-          env:
-            - name: PUID
-              value: "{{ puid }}"
-            - name: PGID
-              value: "{{ pgid }}"
-            - name: TZ
-              value: "{{ tz }}"
-            # Sonarr:Log, reached through the unprefixed environment-variable provider.
-            # Upstream defaults are debug / 50 files; see defaults/main.yml.
-            - name: SONARR__LOG__LEVEL
-              value: "{{ sonarr_k8s_log_level }}"
-            - name: SONARR__LOG__ROTATE
-              value: "{{ sonarr_k8s_log_rotate }}"
-            - name: DOCKER_MODS
-              value: "{{ sonarr_k8s_docker_mods }}"
-          volumeMounts:
-            - name: sonarr-config
-              mountPath: /config
-            # THE PATH CONTRACT (D4). sonarr.db stores absolute in-container paths — the seeded
-            # database's root folder is `/data/media/tv`. Mount this anywhere else and the
-            # library still loads, the UI still works, and every import silently fails.
-            - name: media
-              mountPath: /data
-          startupProbe:
-            # Same unpinned striptracks DOCKER_MODS as radarr, same failure mode: on
-            # 2026-08-09 the mod's apk payload grew past the liveness window and radarr
-            # crash-looped re-installing it on every restart. 10-minute first-boot gate;
-            # liveness only starts once it passes.
-            httpGet:
-              path: /ping
-              port: {{ container_item.port }}
-            periodSeconds: 10
-            failureThreshold: 60
-          readinessProbe:
-            httpGet:
-              path: /ping
-              port: {{ container_item.port }}
-            initialDelaySeconds: 15
-            periodSeconds: 10
-          livenessProbe:
-            httpGet:
-              path: /ping
-              port: {{ container_item.port }}
-            initialDelaySeconds: 60
-            periodSeconds: 30
-{{ container_resources(cpu_limit=sonarr_k8s_cpu_limit, mem_limit=sonarr_k8s_mem_limit, cpu_request=sonarr_k8s_cpu_request, mem_request=sonarr_k8s_mem_request) }}
-        {{ exportarr('sonarr', sonarr_exportarr_image, container_item.port, additional_metrics=true) }}
-      volumes:
-        - name: sonarr-config
-          persistentVolumeClaim:
-            claimName: {{ sonarr_k8s_claim }}
-        - name: media
-          persistentVolumeClaim:
-            claimName: {{ sonarr_k8s_media_claim }}
+{% from 'arr-deployment.yml.j2' import arr_deployment with context %}
+{# additional_metrics is sonarr's alone: the episode collector it gates publishes series
+   nothing on radarr or prowlarr has a block behind. See ansible/templates/exportarr.yml.j2. #}
+{{ arr_deployment('sonarr',
+                  image=sonarr_k8s_image,
+                  port=container_item.port,
+                  rollout_timeout=sonarr_k8s_rollout_timeout,
+                  log_level=sonarr_k8s_log_level,
+                  log_rotate=sonarr_k8s_log_rotate,
+                  docker_mods=sonarr_k8s_docker_mods,
+                  config_claim=sonarr_k8s_claim,
+                  media_claim=sonarr_k8s_media_claim,
+                  exportarr_image=sonarr_exportarr_image,
+                  cpu_limit=sonarr_k8s_cpu_limit,
+                  mem_limit=sonarr_k8s_mem_limit,
+                  cpu_request=sonarr_k8s_cpu_request,
+                  mem_request=sonarr_k8s_mem_request,
+                  root_folder='/data/media/tv',
+                  additional_metrics=true) }}

@@ -35,6 +35,9 @@ conventions.
   `_quality_total`. It costs two extra Sonarr API calls per series per scrape, so the
   parameter exists to keep it off radarr and prowlarr, whose collectors have no block behind
   it. `test_only_sonarr_enables_the_additional_metrics_collector` asserts both halves.
+- **`templates/deployment.yaml.j2` is one call to a shared macro.** The body sonarr and
+  radarr share lives in `ansible/templates/arr-deployment.yml.j2` (#2871); the two roles
+  differ only in the arguments they pass. `additional_metrics=true` is sonarr's alone.
 - `tasks/verify.yml` reads the Sonarr API through the Service ClusterIP (not the
   ingress, which Authelia would intercept) to check the library actually loaded — a
   running pod alone proves nothing about a broken import.
