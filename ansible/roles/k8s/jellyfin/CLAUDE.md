@@ -37,8 +37,9 @@ shared `media-data` library and owns its own config volume.
   Four of the five installed plugins have a 12 build ready (read 2026-09-10): ani-sync `4.6.0.0`
   in the `v4.6b` release, Intro Skipper `12.0/v12.0.3.0`, Webhook `22.0.0.0` declaring
   `targetAbi 12.0.0.0` in the official manifest, Merge Versions `12.0.0`. **Media Cleaner was the
-  blocker and no longer is.** `v3.2.0` shipped only 10.x assets, and `v3.4.0` (pinned 2026-09-27,
-  #2720) adds `MediaCleaner-12.0.zip`, published as `3.4.0.120000` with `targetAbi 12.0.0.0`.
+  blocker and no longer is.** `v3.2.0` shipped only 10.x assets, and `v3.4.0` (#2720) adds
+  `MediaCleaner-12.0.zip`; `v3.7.0`, pinned 2026-09-28 (#2905), publishes that asset as
+  `3.7.0.120000` with `targetAbi 12.0.0.0`.
   A move to 12 must switch this pin to that asset in the same PR. Leaving it on the 10.11.9
   asset stops the automated cleanup rules silently: Jellyfin's loader rejects an ABI-mismatched
   plugin **without logging a failure**, so the pod stays healthy and the rollout stays green (the
@@ -111,6 +112,9 @@ shared `media-data` library and owns its own config volume.
   which the repo never touches. Pinning changes what version runs, not what it is pointed at.
   The dashboard's Troubleshooting tab renders a dry-run report of what a real run would delete;
   read it before changing a rule. Same shape as bazarr's provider list.
+  The pin moved to `3.7.0.101109` on 2026-09-28 (#2905): `Update Plugins` had already fetched
+  that build unpinned, and pinning UP to it beat downgrading a media-deleting plugin onto the
+  `configurations/` XML 3.7 last wrote.
 - **Trakt** was installed as the sixth (#1617) and is **removed**. *Plugin analyses that outlive
   their decision* below has why, and where the write-back analysis went.
 - **SSO-Auth is REMOVED** (installed #1648, removed #1674 on 2026-09-10). It was the sixth
@@ -132,8 +136,19 @@ shared `media-data` library and owns its own config volume.
   per retired plugin (`remove-trakt`, `remove-sso-auth`). Before it could delete anything it ran
   report-only against the live directory, as the operator's approval required: 0 unlisted
   plugins. `ansible/tests/services/test_jellyfin_plugin_allowlist.py` holds `KEEP` equal to the
-  set the installers write. **It matches names, not versions**, so it keeps a newer version that
-  Jellyfin's own `Update Plugins` task downloaded; #2905 records the live case.
+  set the installers write. **It matches names, not versions** by design, so a newer directory
+  Jellyfin's own `Update Plugins` task downloaded survives it — the bullet below is what removes
+  that one.
+- **Each installer holds its own version on every start** (#2905). Two steps do it, and both
+  sit OUTSIDE the `already installed` branch, because that branch is the one a restart takes:
+  the superseded sweep removes every `<Name>_*` directory the pin does not name, and
+  `autoUpdate: false` goes into the plugin's `meta.json`. The flag is what stops the fetch
+  recurring — `InstallationManager.GetAvailablePluginUpdates` skips a plugin whose manifest
+  carries it (Jellyfin `v10.11.11`), and it defaults to TRUE. The sweep still runs AFTER the
+  download, so a failed install leaves the working version in place. Before #2905 the early
+  exit came first, and an unpinned Media Cleaner 3.7.0 survived every restart.
+  `ansible/tests/services/test_jellyfin_plugin_pins_hold_across_a_restart.py` runs all five
+  installers against a seeded directory.
 - The five installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
@@ -151,10 +166,8 @@ Read 2026-09-28 (#2873), grouped by who owns the version:
 
 - **Installed by this role**, each guarded by its own test file: `Ani-Sync 4.4.0.0`,
   `Intro Skipper 1.10.11.24`, `Webhook 21.0.0.0`, `Merge Versions 10.11.0.1` (#1616) and
-  `Media Cleaner 3.7.0.101109` (#1619). **Media Cleaner is not the pinned version**: the pin is
-  3.4.0.101109, and Jellyfin's `Update Plugins` task downloaded 3.7.0 between restarts, which
-  the installer's early exit leaves in place (#2905). Two plugins were installed and removed the
-  same day or soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674);
+  `Media Cleaner 3.7.0.101109` (#1619, pinned at that version by #2905). Two plugins were
+  installed and removed the same day or soon after — Trakt (#1617) and SSO-Auth (#1648, removed #1674);
   `sweep-unlisted-plugins` keeps both off.
 - **Bundled with the image**, so they move with `jellyfin_k8s_image` and need no pin here:
   `AudioDB`, `MusicBrainz`, `OMDb`, `Studio Images`, `TMDb` — all `10.11.11.0`, the server
@@ -165,8 +178,9 @@ Read 2026-09-28 (#2873), grouped by who owns the version:
   image bump could silently drop it (Jellyfin's loader rejects a plugin built for a newer server
   without logging a failure). #1648 brought it under an init container, and #1674 then removed
   the plugin outright. `sweep-unlisted-plugins` removes any plugin directory no installer
-  writes, so the group cannot refill itself. Every plugin the pod loads is therefore named in
-  git, though not always at its pinned version (#2905). Plugin CONFIGURATION is not in git and
+  writes, so the group cannot refill itself, and each installer removes any version of its own
+  plugin the pin does not name (#2905). Every plugin the pod loads is therefore named in git, at
+  the version git names. Plugin CONFIGURATION is not in git and
   cannot be: Media Cleaner's deletion rules and Webhook's destination live under
   `/config/data/plugins/configurations/` on this PVC. Same shape as bazarr's provider list.
 
