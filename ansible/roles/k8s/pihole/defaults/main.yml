@@ -4,7 +4,7 @@
 
 # Same pin as the Docker role's compose (Renovate-managed); the two copies coexist through
 # the lease drain, so keep them on one version until the Docker role is retired.
-pihole_k8s_image: pihole/pihole:2026.07.2
+pihole_k8s_image: pihole/pihole:2026.09.0
 # The Docker side runs klutchell/unbound:latest with watchtower disabled; k8s images are
 # pinned (Renovate k8s-defaults manager). v-prefixed tags track upstream unbound releases.
 pihole_k8s_unbound_image: klutchell/unbound:1.26.1
