@@ -14,7 +14,7 @@ down".
 """
 
 from lib import yaml_fast
-from _helpers import K8S_ROLES
+from _helpers import ALL_VARS, K8S_ROLES
 
 ROLE = K8S_ROLES / "netpol-baseline"
 TASKS = (ROLE / "tasks" / "main.yml").read_text()
@@ -77,10 +77,10 @@ def test_terraria_is_absent_while_it_is_scaled_to_zero() -> None:
     Paired with the probe check below: the list and the rendered leg have to agree, or the gate
     passes and the probe fails on the same fact.
     """
-    terraria = yaml_fast.safe_load(
-        (K8S_ROLES / "terraria" / "defaults" / "main.yml").read_text()
-    )
-    if int(terraria["terraria_k8s_replicas"]) == 0:
+    # In inventory, not terraria's defaults, since #2877 — k8s/game-stats renders the exporter
+    # at the same count and a role default does not cross a role boundary.
+    all_vars = yaml_fast.safe_load(ALL_VARS.read_text())
+    if int(all_vars["terraria_k8s_replicas"]) == 0:
         assert "terraria" not in TARGETS, (
             "terraria is scaled to zero but is still a slice-4.5 target, so every full "
             "deploy.yml fails its readiness gate"

@@ -97,9 +97,10 @@ OVER_CEILING: dict[str, str] = {
         "operating rules; the 2026-08-22 Metabase removal is dead history to cut"
     ),
     "game-stats": (
-        "10581 chars on 2026-09-28: the per-game sections and the shared `stats_lib.py` "
+        "11160 chars on 2026-09-28: the per-game sections and the shared `stats_lib.py` "
         "skeleton are editing rules for code the role ships; the two games' duplicated prose "
-        "is the trim"
+        "is the trim. Grew by the terraria-stats replica rule (#2877), which names the one "
+        "value three renders read"
     ),
     "headlamp": (
         "10358 chars on 2026-09-28: the two-identities grant and the OIDC login rules are "

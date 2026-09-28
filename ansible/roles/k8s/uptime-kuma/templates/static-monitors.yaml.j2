@@ -144,7 +144,8 @@ stringData:
   # `ObjectDisposedException` on a stream the peer already closed, unhandled, on the server
   # thread. It crashed terraria 8 times in 51 minutes, every crash on this tile's probe tick.
   # 1.4.5.6 had no such property in the binary and took the same probe for weeks without a
-  # crash. The workload is scaled to zero for now (terraria/defaults/main.yml), which would make
+  # crash. The workload is scaled to zero for now (terraria_k8s_replicas in group_vars/all.yml),
+  # which would make
   # this tile permanently red regardless — but the crash, not the scale-down, is why it must not
   # come back with the server. Restoring it needs an image past 1.4.5.7; #822 carries the check.
   # wg-easy's VIP is WireGuard-over-UDP — Kuma port monitors are TCP-only, so it cannot get

@@ -1,10 +1,9 @@
 # `setup/github_cli` — the GitHub CLI and its git credential helper
 
 Installs `gh` from GitHub's APT repository (keyring under `/etc/apt/keyrings`, the deprecated
-one-line source removed) and points git at `!gh auth git-credential`, so a host can clone the
-PRIVATE dotfiles repo and the deployer can call the GitHub API authenticated. Applied by
-`initial_setup.yml` (`--tags github_cli`) where `has_github_cli` is set, before
-`chezmoi_setup`.
+one-line source removed) and points git at `!gh auth git-credential`, so the deployer can call
+the GitHub API authenticated. Applied by `initial_setup.yml` (`--tags github_cli`) where
+`has_github_cli` is set, before `chezmoi_setup`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -15,8 +14,13 @@ PRIVATE dotfiles repo and the deployer can call the GitHub API authenticated. Ap
 
 - **The login itself is interactive and stays a hand step.** The role checks `gh auth status`
   at the end and reports when a login is still required; it cannot perform one. Until it is
-  done, `chezmoi_setup` fails at the clone and `gitops_deploy`'s CI gate runs anonymous
-  (60 requests/hour, shared with every landing's `await_ci.py` poll on the host).
+  done, `gitops_deploy`'s CI gate runs anonymous (60 requests/hour, shared with every
+  landing's `await_ci.py` poll on the host).
+- **`chezmoi_setup` does not depend on the login.** DanielH2018/dotfiles is public, so the
+  clone is anonymous and #2838 dropped the precheck that said otherwise. The ordering in
+  `initial_setup.yml` survives for a narrower reason, stated there: the dotfiles' own
+  `.gitconfig` template selects this credential helper only when `gh` is on PATH as chezmoi
+  renders it.
 - **The credential helper is per-user git config**, so it lives with the connecting user and
   the deploy user reads the same token through `gh auth token` — the one identity behind the
   deployer's CI gate, the two GitHub crons in `gitops_deploy`, and `renovate_agent`'s session.

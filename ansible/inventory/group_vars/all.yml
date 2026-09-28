@@ -173,6 +173,35 @@ dns_k8s_cluster_ip: 10.43.252.187
 # ingress VIP. Global for the same cross-role reason: roles/k8s/jellyfin's service-lan
 # claims it, and roles/k8s/uptime-kuma's VIP port tile probes it.
 jellyfin_k8s_lan_ip: 10.0.0.241
+# The terraria server's replica count. Global because two roles render it and neither owns
+# the other: roles/k8s/terraria's Deployment IS the server, and roles/k8s/game-stats'
+# terraria-stats exporter only has a console to tail while the server is up. Role defaults
+# are invisible across roles, so a `terraria_k8s_replicas | default(1)` written in game-stats
+# would have rendered 1 forever and never said so (#2877).
+#
+# Scaled to zero on 2026-09-02, on operator request — the server is not wanted up right now,
+# and on 1.4.5.7 it cannot stay up while anything opens a TCP connection to it (issue #822).
+#
+# Declarative rather than a live `kubectl scale`, for two reasons. The next
+# `./scripts/deploy.sh --tags terraria` re-applies that Deployment and would reset a live scale
+# back to 1; and the read-only ServiceAccount cannot scale anything anyway, so Ansible is the
+# only write path. `session-health.py`'s `_is_scaled_to_zero` already reads a deliberate
+# `spec.replicas: 0` as intentional rather than as an outage, so the SessionStart banner stays
+# quiet without a suppression list.
+#
+# This is NOT covered by test_every_snapshot_role_restores_its_own_replicas, which requires
+# `replicas >= 1`: that guard reads roles declaring `k8s_autodeploy_snapshot_pvcs`, and terraria
+# declares none. If terraria ever opts into pre-deploy snapshots, this zero and that guard
+# collide, and the guard is the one that is right.
+#
+# Three renders follow this value, and all three must move together — the server Deployment,
+# the terraria-stats Deployment, and claude-otel's `terraria-stats` Prometheus scrape job,
+# which is gated on it because a job whose target has no pod pages the scrape-target check.
+#
+# To bring it back, see the restore checklist on issue #822. Setting this to 1 is the first of
+# two steps and the port monitor is deliberately NOT the second — do not restore the Kuma tile
+# until the image is past 1.4.5.7.
+terraria_k8s_replicas: 0
 # Shared between roles/k8s/crowdsec (the engine that runs LAPI+AppSec) and roles/k8s/traefik
 # (the bouncer plugin middleware + the log-tailing agent sidecar). Cross-role, and role
 # defaults are invisible across roles.
@@ -717,8 +746,10 @@ etcd_drill_full_kuma_interval_s: 3024000
 # Per-user developer environment: the chezmoi-managed dotfiles (DanielH2018/dotfiles) and
 # Claude Code. Both default OFF and are opted into per host — daniel-server already has both
 # installed by hand and shouldn't have them re-provisioned underneath it, and the Pi
-# (512 MB Zero 2 W) can carry neither. has_github_cli brings the git credential helper that
-# lets a host clone private repos, which has_chezmoi requires.
+# (512 MB Zero 2 W) can carry neither. has_chezmoi needs no credential of its own: the
+# dotfiles repo is public, so chezmoi clones it anonymously (#2805 — PR #2838 dropped
+# chezmoi_setup's `gh auth status` precheck along with the claim). has_github_cli still runs
+# first where a host sets both, for the reason initial_setup.yml gives at its entry.
 has_github_cli: false
 has_chezmoi: false
 has_claude_code: false
