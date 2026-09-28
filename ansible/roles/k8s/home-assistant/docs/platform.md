@@ -13,9 +13,15 @@ automations do.
   and the webhook paths.
   - **`ip_ban_enabled: true` + `login_attempts_threshold: 5`** (in `configuration.yaml`'s
     `http:`) auto-ban an IP after 5 failed logins (→ `config/ip_bans.yaml`; delete a line to
-    unban). Bans the REAL client IP because the CF→Traefik→HA chain forwards X-Forwarded-For
-    (Traefik `forwardedHeaders.trustedIPs=cloudflare_ips` + HA `use_x_forwarded_for`). Only
-    failed PASSWORD logins count — tokens/app/webhooks unaffected.
+    unban). HA bans the client it resolves from X-Forwarded-For, which is the real client on
+    both routes. On the Cloudflare-proxied route Traefik's `cloudflare-realip` Middleware sets
+    XFF to CF-Connecting-IP and Traefik appends the Cloudflare edge, so HA receives
+    `client, edge`. HA skips the edge because `http.trusted_proxies` lists the Cloudflare ranges
+    beside the pod CIDR. Until 2026-09-28 it listed the pod CIDR alone, so HA resolved the EDGE
+    as the client and a ban could lock out everyone behind that edge.
+    `ansible/tests/services/test_ha_trusted_proxies_cover_cloudflare.py` keeps the literal list
+    equal to `cloudflare_ips`. Only failed PASSWORD logins count — tokens/app/webhooks
+    unaffected.
     **The ban applies to every request, not just logins, and that reaches infrastructure.** HA's
     ban middleware keys on the peer address, so an unauthenticated burst from inside the cluster
     bans an INTERNAL ip. On 2026-08-23 five ad-hoc `curl` calls from daniel-box banned
@@ -125,10 +131,11 @@ interactive. Rejected, and the reasons are worth keeping because the proposal re
 - **`configuration.yaml` ships verbatim** from `files/configuration.yaml` — the ConfigMap
   (`roles/k8s/home-assistant`) carries it with `lookup('file')`, and an init container
   installs it into `/config` at pod start. It sets `use_x_forwarded_for: true` +
-  `trusted_proxies` covering every hop of the bridge chain (`172.16.0.0/12`, the pod CIDR
-  `10.42.0.0/16`, and daniel-server's LAN IP — the bridge egresses as it) so HA honors
-  Traefik's `X-Forwarded-For` (without it HA rejects the proxied request with
-  "400 Bad Request"). The manifests task rollout-restarts HA when the rendered config changes,
+  `trusted_proxies` holding the pod CIDR `10.42.0.0/16` and the Cloudflare ranges, so HA
+  honors Traefik's `X-Forwarded-For` (without the pod CIDR HA rejects the proxied request with
+  "400 Bad Request") and skips the Cloudflare edge in it. The whole pod CIDR stays trusted
+  because Traefik's pod IP changes on every restart; `configuration.yaml`'s `DECIDED: the whole
+  pod CIDR` comment has the trade-off. The manifests task rollout-restarts HA when the rendered config changes,
   so an edit takes effect on the next deploy. **Note:** HA may rewrite parts of its
   own config via the UI, but this file is the Ansible source of truth and is
   overwritten on deploy — keep UI-managed config (integrations, etc.) in the areas HA
