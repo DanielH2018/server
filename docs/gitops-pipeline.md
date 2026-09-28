@@ -78,7 +78,27 @@ for the tick to fast-forward to that commit and deploy it.
 
 **A held SHA.** `hold_sha` is set, so the deployer does not move forward until it is cleared.
 
-**The tree is dirty.** Someone left uncommitted changes in the primary checkout.
+**The tree is dirty.** The primary checkout holds an uncommitted change or an untracked file.
+`git status --porcelain` counts untracked files, so one stray output file from a tool parks the
+deployer with nothing modified. The tick logs `working tree dirty — skipping` with the paths on
+every run and pages Discord at most twice a day (`should_alert_dirty`). Every other signal stays
+green. On 2026-08-30 one untracked file held the checkout 7 commits behind for about 40 minutes.
+
+A `.gitignore` rule does not clear an untracked file that is already there. The merged rule
+reaches the primary checkout only through a fast-forward, and the file it would ignore is what
+blocks the fast-forward. To clear it without losing the file or the deploys, move the file
+aside, tick, then move it back once the rule has arrived:
+
+```bash
+mv <file> /var/tmp/<name>.hold
+./scripts/deploy_tools/gitops_tick.sh
+mv /var/tmp/<name>.hold <file>
+```
+
+Do not run `git pull --ff-only` in the primary checkout instead. The deployer derives its work
+from `local..origin`, so a hand fast-forward empties the range and cancels the deploys those
+commits were due. A tool that writes into the repo gets its output path into `.gitignore` in
+the same PR that adds the tool.
 
 **A broad change the deployer must not apply itself.** This is the one that surprises people,
 so it has its own section.

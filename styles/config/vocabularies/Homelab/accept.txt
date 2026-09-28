@@ -114,6 +114,7 @@ GitOps
 [Uu]ndeployed
 [Uu]nprobeable
 [Uu]nexecuted
+[Uu]ntracked
 [Ww]orktree
 [Ww]orktrees
 [Uu]nsnooze
