@@ -1,4 +1,4 @@
-"""The SessionStart banner's service sections: unhealthy containers and down scrape targets.
+"""The SessionStart banner's service sections: down scrape targets and stale releases.
 
 Split out of session-health.py, which sat at exactly its 600-line cap with no headroom
 (ansible/tests/_ratchet.py), the same reason `worktree_lines` was split before it. Package
@@ -14,63 +14,6 @@ import json
 import os
 import re
 import subprocess
-
-
-def docker_problems(run):
-    """One line per unhealthy or restarting container, as (lines, docker_ok).
-
-    docker_ok is False, with a warning line, when dockerd is unreachable.
-
-    Args:
-        run: `session-health.py`'s `_run` — takes (argv, timeout), raises on timeout or a
-            missing binary.
-    """
-    try:
-        unhealthy = run(
-            [
-                "docker",
-                "ps",
-                "--filter",
-                "health=unhealthy",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-        restarting = run(
-            [
-                "docker",
-                "ps",
-                "-a",
-                "--filter",
-                "status=restarting",
-                "--format",
-                "{{.Names}}\t{{.Status}}",
-            ],
-            5,
-        )
-    # Two clauses, not `except (A, B, C)`: ruff (3.14 target) rewrites a parenthesized tuple
-    # into the unparenthesized `except A, B:` form. That is now harmless — session-health.sh
-    # runs this on the pinned 3.14 via uv — but the split is kept because session-health.py is
-    # where that bug actually shipped: its wrapper sends stderr to /dev/null and exits 0, so
-    # the SyntaxError was invisible until someone noticed the banner had stopped appearing.
-    except subprocess.TimeoutExpired:
-        return ["  ✗ docker unreachable (dockerd wedged)"], False
-    except OSError:
-        # FileNotFoundError (docker binary absent) is an OSError subclass. No docker binary
-        # means this host is not a Docker host at all — daniel-box runs k3s and sets
-        # has_docker: false — not that a Docker host is broken. Staying silent is the whole
-        # point of the all-green contract; warning here would fire on every session open
-        # forever.
-        return [], False
-    lines = []
-    for label, res in (("unhealthy", unhealthy), ("restarting", restarting)):
-        for row in res.stdout.splitlines():
-            if not row.strip():
-                continue
-            name, _, status = row.partition("\t")
-            lines.append("  ✗ {} — {} ({})".format(name, label, status.strip()))
-    return lines, True
 
 
 def k8s_namespace(repo):
@@ -132,7 +75,8 @@ def target_problems(run, repo, namespace=None, scaled_to_zero=is_scaled_to_zero)
     block or spam session start.
 
     Args:
-        run: the subprocess runner, as in `docker_problems`.
+        run: `session-health.py`'s `_run` — takes (argv, timeout), raises on timeout or a
+            missing binary.
         repo: the checkout to read `k8s_namespace` from.
         namespace: the namespace to ask about, read from `repo` when not given.
         scaled_to_zero: `is_scaled_to_zero`-shaped — a seam, so a test can decide which job
@@ -229,7 +173,7 @@ def stale_release_problems(run):
     release records here instead would re-run the git derivation the cron just paid for, and
     the banner must not (#1993). `--since -2h` keeps a dead cron's last verdict off the
     banner — the Kuma tile pages for the dead cron itself. A host that never runs the cron
-    (an agent node, a laptop) has no such entry and stays silent, like a host with no docker.
+    (an agent node, a laptop) has no such entry and stays silent.
 
     The verdict is `probe.py releases --stale-only --kuma`'s output, one line in one of
     `bridge.msgfmt`'s three DOWN shapes. Three branches read it: the headline makes it a
@@ -241,7 +185,8 @@ def stale_release_problems(run):
     between them; the text shape is the only thing that tells them apart.
 
     Args:
-        run: the subprocess runner, as in `docker_problems`.
+        run: `session-health.py`'s `_run` — takes (argv, timeout), raises on timeout or a
+            missing binary.
     """
     argv = ["journalctl", "-t", "release-staleness-check", "-n", "1", "-o", "cat"]
     try:

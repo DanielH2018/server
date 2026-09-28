@@ -5,8 +5,9 @@ Every rule is a `..._is_flagged` / `..._is_clean` pair. A guard that fires on ev
 one that fires on nothing are indistinguishable from the passing side alone, so each arm here
 carries the input it must act on AND the near miss it must leave alone.
 
-The four flagged write cases are the exact commands measured on 2026-08-29 against both
-existing PreToolUse Bash hooks, each of which returned no decision.
+The flagged write cases are the shapes measured on 2026-08-29 against both existing PreToolUse
+Bash hooks, each of which returned no decision: an in-place `sed`, a heredoc redirect and a
+`tee`.
 
 Run: uv run pytest .claude/hooks/tests/test_block_protected_bash.py
 """
@@ -51,7 +52,7 @@ _ORDINARY = tempfile.gettempdir()
 # CONTENT (its SOPS integrity MAC), docs/reference/ by the generated_from: banner.
 FLAGGED_WRITES = [
     "sed -i s/a/b/ ansible/vars/secrets.yml",
-    "cat > containers/glances/docker-compose.yml <<EOF",
+    "cat > docs/assets/generated/infra-map.svg <<EOF",
     "tee docs/reference/services.md",
     "echo x >> ansible/vars/secrets.yml",
     "perl -pi -e s/a/b/ ansible/vars/secrets.yml",

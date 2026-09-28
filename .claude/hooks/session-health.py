@@ -5,7 +5,6 @@
 
 When a Claude Code session opens in this repo, this prints anything already broken so
 work doesn't start blind:
-  * containers that are unhealthy or stuck restarting (fast, local `docker ps`)
   * Prometheus scrape targets that are down (fleet-wide, via scripts/diagnostics/probe.py)
   * services the release-staleness cron last found running manifests behind origin/master
   * this branch sitting behind origin/master's last-fetched ref (local-only, no `git fetch`)
@@ -17,13 +16,8 @@ Design contract (mirrors the other hooks here):
   - SILENT when all-green: prints nothing, so it adds zero context noise on a
     healthy day. Set SESSION_HEALTH_VERBOSE=1 to force an all-clear line (demo/test).
   - READ-ONLY and NEVER BLOCKS: every external call is timeout-bounded and wrapped;
-    any failure degrades to a quiet skip (or, for a wedged dockerd, a one-line
-    warning — a dockerd that hangs IS the signal). Always exits 0.
-  - A host with no docker binary is not a broken Docker host: daniel-box runs k3s
-    and sets has_docker: false. The docker check skips silently there; the Prometheus
-    check does NOT depend on docker (it goes through probe.py's cluster route, not
-    `docker inspect`) and always runs regardless.
-  - The docker check is local + sub-second and always runs. The Prometheus check
+    any failure degrades to a quiet skip. Always exits 0.
+  - The Prometheus check
     goes through `uv run probe.py` (one subprocess, bounded) — SessionStart fires
     once per session, so the small cost is paid rarely; it's skipped on any error so
     a down monitoring stack can never stall session start. A down target whose
@@ -41,8 +35,8 @@ import sys
 
 REPO = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
-# Four sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
-# `hooklib`-not-`lib`): the worktree, docker, scrape-target and stale-release lines. This file
+# Three sections of the banner live in `.claude/hooks/hooklib/` (its own docstrings cover
+# `hooklib`-not-`lib`): the worktree, scrape-target and stale-release lines. This file
 # sat at its 600-line cap with no headroom for any split. Wrapped like `lib.deployer_park`
 # below (issue #1566), in its own try so a failure names the package that broke rather than
 # deployer_park's unrelated line. `SyntaxError` is caught alongside `ImportError` because
@@ -81,7 +75,7 @@ except (ImportError, SyntaxError) as exc:
 #
 # Wrapped, because NOTHING at module scope may be able to stop the banner (issue #1566). This
 # file is run by `session-health.sh`, which sends stderr to /dev/null and exits 0, so an
-# ImportError here would take out the docker, scrape-target, live-session and stale-worktree
+# ImportError here would take out the scrape-target, live-session and stale-worktree
 # sections as well — silently, and for a reason no session could see. The failure is reported
 # in `parked_deployer_problems` instead, the same way its deferred `lib.git` import already is.
 sys.path.insert(0, os.path.join(REPO, "scripts"))
@@ -350,17 +344,6 @@ def _run(cmd, timeout):
     )
 
 
-def docker_problems():
-    """`hooklib.service_lines.docker_problems`, bound to this file's repo-rooted `_run`.
-
-    A broken hooklib reports no container problems rather than raising; the `⚠` line naming
-    the import failure is printed once, by `remote_fanout_lines`.
-    """
-    if service_lines is None:
-        return [], False
-    return service_lines.docker_problems(_run)
-
-
 def target_problems():
     """hooklib's scrape-target and stale-release lines, bound to this file's `_run` and REPO."""
     if service_lines is None:
@@ -496,7 +479,7 @@ def format_banner(problems):
     out.extend(problems)
     out.append(
         "  → triage: uv run python scripts/diagnostics/probe.py targets | "
-        "probe.py health <svc> | docker ps --filter health=unhealthy"
+        "probe.py health <svc>"
     )
     return "\n".join(out)
 
@@ -534,7 +517,6 @@ def main(
     if payload.get("source") == "compact":
         return 0
 
-    dock, _docker_ok = docker_problems()
     targets = target_problems()
     master_moved = master_moved_problems()
     # First of everything, ahead of the unhealthy workloads: "the guards this session registers
@@ -549,17 +531,13 @@ def main(
         hooks_missing = []
     # master_moved last deliberately: "this branch is behind origin/master" is the SYMPTOM of a
     # parked deployer, so the cause reads first.
-    problems = (
-        hooks_missing + dock + targets + parked_deployer_problems() + master_moved
-    )
+    problems = hooks_missing + targets + parked_deployer_problems() + master_moved
 
     banner = format_banner(problems)
     if banner:
         print(banner)
     elif os.environ.get("SESSION_HEALTH_VERBOSE"):
-        print(
-            "\U0001f3e0 Homelab health: all containers healthy, all scrape targets up."
-        )
+        print("\U0001f3e0 Homelab health: all scrape targets up.")
 
     # Printed independently of health: another session's open work is information this
     # session needs even when everything is green.

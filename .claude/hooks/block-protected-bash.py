@@ -3,14 +3,14 @@
 #   reason: an arm of bash-pretool.py, which bash-pretool.sh runs through `uv run python`
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
-WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to the generated `containers/`
-tree, to generated docs pages, and to SOPS-encrypted files — but it is wired at matcher
+WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to generated docs pages and to
+SOPS-encrypted files — but it is wired at matcher
 `Edit|Write|MultiEdit|NotebookEdit`, and auto mode injects a standing instruction telling the
 model to make file changes "with sed, heredocs, or short scripts, rather than using the
 dedicated Read, Edit, or Write tools". The instructed path was the unguarded one. Measured
-2026-08-29: `sed -i s/a/b/ ansible/vars/secrets.yml`, `cat > containers/glances/
-docker-compose.yml` and `tee docs/reference/services.md` each returned NO decision from both
-PreToolUse Bash hooks. `bash-write-fanout.sh` already closes this gap for the four PostToolUse
+2026-08-29: an in-place `sed` of `ansible/vars/secrets.yml`, a heredoc into a rendered compose
+file and `tee docs/reference/services.md` each returned NO decision from both PreToolUse Bash
+hooks. `bash-write-fanout.sh` already closes this gap for the four PostToolUse
 Edit|Write hooks; it does not re-drive a PreToolUse deny, so this does.
 
 THREE ARMS, TWO DECISIONS, ON PURPOSE.

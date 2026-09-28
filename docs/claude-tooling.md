@@ -448,10 +448,9 @@ bypass.
 
 ### `block-protected-edits` (PreToolUse, `Edit|Write`)
 
-It *denies* direct edits to (a) anything under `containers/` (edit the
-`ansible/roles/containers/<svc>/templates/` source instead) and (b) SOPS-encrypted files like
-`ansible/vars/secrets.yml` (use `sops` / the `/add-secret` skill). It also denies a write to a
-generated page, meaning any file carrying a `generated_from:` banner.
+It *denies* direct edits to SOPS-encrypted files like `ansible/vars/secrets.yml` (use `sops` /
+the `/add-secret` skill) and to a generated page, meaning any file carrying a
+`generated_from:` banner.
 
 ### `block-protected-bash` (a `bash-pretool` arm)
 
@@ -554,19 +553,10 @@ Four rules that key on a host tool or on GitHub rather than on this repo moved t
 every repo: `grep -Z`/`-z` where grep is `ugrep`, a bare `git stash pop`/`apply`, a
 self-matching `pgrep -f` and a partial `security_and_analysis` PATCH.
 
-### `validate-compose` (PostToolUse)
-
-It re-renders all compose templates after you edit a `docker-compose.yml.j2`, an
-`ansible/templates/*.j2` macro, or `host_vars`/`group_vars/all.yml`. It fails on malformed YAML,
-which catches Jinja indent bugs `ansible-lint` misses. It also fails on an un-escaped `$` in a
-`command`/`entrypoint`/`healthcheck.test`: Compose interpolates a lone `$VAR`/`$(…)` at parse
-time, so shell `$` must be doubled `$$`. A legitimate `${VAR-…}` in `environment:` is not
-flagged.
-
 ### `session-health` (SessionStart)
 
-On opening a session here, it prints a banner of any unhealthy or restarting containers and down
-Prometheus targets. It is silent when all-green, read-only and timeout-bounded. It also names a
+On opening a session here, it prints a banner of any down Prometheus targets. It is silent when
+all-green, read-only and timeout-bounded. It also names a
 **dirty primary checkout**, a **GitOps deployer parked behind origin**, and a **setup role the
 tick merged but cannot apply** (the `manual_plane` marker). The first two states stop every
 deploy in the fleet, and a worktree session cannot look at either for itself: the isolation
@@ -596,10 +586,9 @@ present `.sh` beside a missing `.py`, so the shim runs, `uv run` cannot find the
 banner line, because handing the operator the 127 diagnosis for a shim that ran is a false one.
 `sibling_py_paths` matches the one idiom five shims share —
 `"$(dirname "$(readlink -f "$0")")/<name>.py"` — as text, and abstains on anything else rather
-than parsing shell: `validate-compose.sh` composes its path from a variable and reports its own
-missing validator loudly instead (exit 2). Abstention is held honest by
+than parsing shell, such as a path composed from a variable. Abstention is held honest by
 `test_the_repos_own_shims_name_the_siblings_this_parse_must_find`, which names the five
-siblings the parse must resolve and the three shims that resolve none.
+siblings the parse must resolve and the one shim that resolves none.
 
 ### `fanout-stop` (Stop)
 
@@ -619,16 +608,12 @@ same final text. A batch reads `done` only with a PR URL, `needs-input` with a b
 
 ## What an edit costs, by file type
 
-Six hooks match `Edit|Write`, and each is a ~7 ms no-op except on the paths it owns. Measured
-directly 2026-08-23, one payload per hook: `ansible-lint` takes **1,642 ms** on
-`roles/*/tasks/main.yml` and 7 ms on a `.j2` manifest, a Compose template or a Markdown file;
-`validate-compose` takes **177 ms** on `docker-compose.yml.j2` and 7 ms on everything else.
-
-Over the same 24h the OTEL telemetry put `PostToolUse:Edit` at a 559 ms average and
-`PostToolUse:Write` at 234 ms — the two populations differ in which file types they touch, not in
-which hooks run. So editing a tasks file is the slow case by an order of magnitude, and that is
-the price of the coverage rather than overhead to trim. Recorded so a slow-feeling edit isn't
-mistaken for a stuck hook.
+An edit now runs one hook: `block-protected-edits`, a ~7 ms no-op except on the paths it owns.
+The two PostToolUse linters that carried the cost here — `ansible-lint` at **1,642 ms** on
+`roles/*/tasks/main.yml` and `validate-compose` at **177 ms** on `docker-compose.yml.j2`,
+measured 2026-08-23 — were deleted in #2856 as duplicates of the prek hooks that run the same
+checks at commit time. The OTEL figures they explain (`PostToolUse:Edit` averaging 559 ms over
+the same 24h) are history, kept so the drop is not mistaken for a measurement error.
 
 ## `auto-mode-bridge` internals
 

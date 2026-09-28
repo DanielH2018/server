@@ -1,11 +1,9 @@
 #!/usr/bin/env python3
 """Tests for the SessionStart health-banner hook.
 
-The hook must: stay silent when all-green, surface unhealthy/restarting
-containers and down scrape targets when they exist, treat a wedged dockerd as a
-(reported) signal rather than a crash, treat a host with no docker binary as
-expected rather than broken, and never raise. We exercise the pure helpers
-directly and stub `_run` so the suite needs no live docker/Prometheus.
+The hook must: stay silent when all-green, surface down scrape targets when they exist, and
+never raise. We exercise the pure helpers directly and stub `_run` so the suite needs no live
+Prometheus.
 
 Run: uv run pytest .claude/hooks
 """
@@ -44,7 +42,7 @@ def test_banner_lists_problems_and_triage():
     assert "triage" in out  # always points the reader at the probe commands
 
 
-# The docker and scrape-target sections moved to hooklib/service_lines.py — their tests
+# The scrape-target and stale-release sections moved to hooklib/service_lines.py — their tests
 # are in the sibling test_hooklib_service_lines.py, driven through that module's seams.
 
 
@@ -54,8 +52,6 @@ def _run_main(
     monkeypatch,
     stdin,
     *,
-    dock=None,
-    ok=True,
     targets=None,
     master_moved=None,
     parked=None,
@@ -67,7 +63,6 @@ def _run_main(
     """Wire up main()'s dependencies; returns a zero-arg callable, `_run_main(...)()`,
     rather than calling main() itself."""
     monkeypatch.setattr(_mod.sys, "stdin", io.StringIO(stdin))
-    monkeypatch.setattr(_mod, "docker_problems", lambda: (dock or [], ok))
     monkeypatch.setattr(_mod, "target_problems", lambda: targets or [])
     # stubbed by default: the real one reads this checkout's actual relationship to
     # origin/master, which would make every main() assertion depend on the branch state
@@ -102,7 +97,7 @@ def test_main_silent_on_compact(monkeypatch, capsys):
     run_main = _run_main(
         monkeypatch,
         '{"source":"compact"}',
-        dock=["  ✗ x — unhealthy (y)"],
+        targets=["  ✗ target loki [loki:3100] down"],
         env={"SESSION_HEALTH_VERBOSE": "1"},
     )
     assert run_main() == 0
@@ -168,37 +163,28 @@ def test_main_survives_a_broken_session_scan(monkeypatch, capsys):
 
 def test_main_prints_banner_on_problem(monkeypatch, capsys):
     run_main = _run_main(
-        monkeypatch, '{"source":"startup"}', dock=["  ✗ jellyfin — unhealthy (x)"]
+        monkeypatch,
+        '{"source":"startup"}',
+        targets=["  ✗ target loki [loki:3100] down"],
     )
     assert run_main() == 0
-    assert "jellyfin" in capsys.readouterr().out
+    assert "loki" in capsys.readouterr().out
 
 
-def test_main_runs_targets_even_when_docker_down(monkeypatch, capsys):
-    # docker_ok=False must no longer short-circuit the Prometheus probe: target_problems()
-    # doesn't touch docker (it goes through probe.py's cluster route), so daniel-box (no
-    # docker binary at all) used to get a false all-clear on scrape targets — the whole
-    # Prometheus check never ran. See the module docstring.
+def test_main_actually_calls_the_target_check(monkeypatch, capsys):
+    # `_run_main` stubs target_problems to a fixed-return lambda, which a main() that never
+    # called it would pass anyway. Override it here so the assertion proves the call happened.
     called = {"targets": False}
 
     def tp():
         called["targets"] = True
         return ["  ✗ target loki [loki:3100] down"]
 
-    run_main = _run_main(
-        monkeypatch,
-        '{"source":"startup"}',
-        dock=["  ✗ docker unreachable"],
-        ok=False,
-    )
-    # _run_main stubs target_problems to a fixed-return lambda; override it here so the
-    # assertion below proves main() actually CALLED it rather than just not crashing.
+    run_main = _run_main(monkeypatch, '{"source":"startup"}')
     monkeypatch.setattr(_mod, "target_problems", tp)
     assert run_main() == 0
     assert called["targets"] is True
-    out = capsys.readouterr().out
-    assert "docker unreachable" in out
-    assert "loki" in out
+    assert "loki" in capsys.readouterr().out
 
 
 def test_main_prints_master_moved_line(monkeypatch, capsys):
@@ -296,11 +282,11 @@ def test_main_flushes_the_banner_before_the_worktree_read(monkeypatch):
     run_main = _run_main(
         monkeypatch,
         '{"source":"startup"}',
-        dock=["  ✗ jellyfin — unhealthy (x)"],
+        targets=["  ✗ target loki [loki:3100] down"],
         worktrees=["  old-thing — worktree-old-thing merged"],
     )
     assert run_main() == 0
-    assert any("jellyfin" in s and "old-thing" not in s for s in out.flushed)
+    assert any("loki" in s and "old-thing" not in s for s in out.flushed)
 
 
 # `other_live_sessions` imports prune_worktrees off a hand-built sys.path. That path pointed at
@@ -317,10 +303,10 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_cal
     such path, which is the only condition under which the insert is load-bearing. This is the
     repo rule about verifying a moved entry point by RUNNING it rather than by running the suite.
 
-    Deliberately a real subprocess reaching real external binaries: `docker`, `sops` and
-    `curl` (via `uv run probe.py targets`), and `gh` (via `uv run prune_worktrees.py`, once
-    per worktree on disk). The `_fence_external_binaries` conftest fixture stubs all four so
-    this runs neither slow nor side-effecting — see fenced_calls below for the proof it held.
+    Deliberately a real subprocess reaching real external binaries: `sops` and `curl` (via
+    `uv run probe.py targets`), and `gh` (via `uv run prune_worktrees.py`, once per worktree on
+    disk). The `_fence_external_binaries` conftest fixture stubs them so this runs neither slow
+    nor side-effecting — see fenced_calls below for the proof it held.
     """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
     proc = subprocess.run(
@@ -338,13 +324,13 @@ def test_the_hook_can_import_prune_worktrees_when_run_as_a_subprocess(fenced_cal
         "other_live_sessions or master_moved_problems (both report through this string).\n"
         + proc.stdout
     )
-    # docker_problems() and target_problems() run unconditionally on every call to main(),
-    # so docker/sops/curl/journalctl are always exercised — unlike gh, which only fires per
-    # worktree on disk and so isn't asserted here. A stub silently dropped from PATH is
+    # target_problems() runs unconditionally on every call to main(), so sops/curl/journalctl
+    # are always exercised — unlike gh, which only fires per worktree on disk and so isn't
+    # asserted here. A stub silently dropped from PATH is
     # indistinguishable from a passing run without this: the real binaries would just run
     # underneath it.
     recorded = fenced_calls.read_text()
-    for binary in ("docker", "sops", "curl", "journalctl"):
+    for binary in ("sops", "curl", "journalctl"):
         assert binary in recorded, (
             f"the real `{binary}` ran instead of the stub — the PATH fence did not hold.\n"
             f"recorded calls:\n{recorded}"

@@ -28,9 +28,12 @@ place while the model still needs telling.
 
 Current examples, as a calibration and not a verdict:
 
-- `block-protected-edits`, `validate-compose`, the SOPS handling rules → compound. Nothing in the
-  model's training says `containers/` is rendered onto a host, or that `.gitattributes` makes
-  `git diff` print plaintext.
+- `block-protected-edits` and the SOPS handling rules → compound. Nothing in the model's
+  training says which pages a cron generates, or that `.gitattributes` makes `git diff` print
+  plaintext.
+- A hook re-running a check prek already runs at commit time → compensates, and #2856 deleted
+  two of those (`ansible-lint`, `validate-compose`). A duplicate is worth keeping only when it
+  catches something the committed gate does not.
 - `auto-mode-bridge`'s retry-on-classifier-denial, the CLAUDE.md prose choosing `jsonq` over
   `python3` and `gron` before `jq` → compensate. Re-test these against the new model.
 

@@ -20,7 +20,7 @@ Two limits, stated rather than implied:
   * **It rules on the `.py` sibling only where the shim names it by the shared idiom.** Five
     shims run their sibling as `"$(dirname "$(readlink -f "$0")")/<name>.py"`, and that form is
     matched literally rather than parsed as shell (issue #2709). A shim naming its `.py` some
-    other way, or composing the path from a variable the way `validate-compose.sh` does, gets
+    other way, or composing the path from a variable, gets
     no verdict — abstaining is the posture `script_path` already takes for a path it cannot
     resolve, and `test_the_repos_own_shims_name_the_siblings_this_parse_must_find` is what
     keeps abstention from quietly becoming the whole answer.

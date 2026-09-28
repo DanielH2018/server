@@ -200,11 +200,15 @@ def test_the_scan_is_not_empty():
 
 # --- composed paths -------------------------------------------------------------------
 # The literal-token scan above cannot see a path a shell BUILDS at runtime. That is not
-# hypothetical: `.claude/hooks/validate-compose.sh` ran `"$repo_root/scripts/${script}.py"`
+# hypothetical: the retired `validate-compose.sh` hook ran `"$repo_root/scripts/${script}.py"`
 # from #443 until 2026-08-27, invoking three validators at a path none of them had lived at
 # for weeks, and it stayed invisible because there is no literal `scripts/<name>.py` token to
 # resolve. This is the recorded "textual guard checks break on an indirection" shape, sitting
 # inside the guard written to catch this very class -- so the composed form gets its own arm.
+#
+# NO SHIM composes a path this way today, so the arm below currently resolves zero hits and is
+# a guard for the next one rather than a live check. Issue #2909 decides whether it keeps its
+# place or goes.
 #
 # Resolution is deliberately narrow: one shell idiom (a `for VAR in "a:b" ...` list feeding a
 # `${VAR#*:}` / `${VAR%%:*}` split). Anything it cannot resolve FAILS as unresolvable rather
@@ -290,13 +294,3 @@ def test_every_composed_script_path_resolves():
         "resolve -- see the note above; an unresolvable composition is a failure, not a "
         "skip):\n" + "\n".join(f"  {loc}: {token}" for loc, token in broken)
     )
-
-
-def test_the_composed_scan_still_finds_its_known_site():
-    """validate-compose.sh is the only composed-path site today.
-
-    If it stops matching -- the hook is rewritten, the regex drifts -- this arm would silently
-    assert nothing, so pin it.
-    """
-    locs = {loc.split(":")[0] for loc, _ in composed_hook_invocations()}
-    assert ".claude/hooks/validate-compose.sh" in locs, locs

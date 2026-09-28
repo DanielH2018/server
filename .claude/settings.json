@@ -48,23 +48,6 @@
         ]
       }
     ],
-    "PostToolUse": [
-      {
-        "matcher": "Edit|Write",
-        "hooks": [
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/ansible-lint.sh",
-            "timeout": 30
-          },
-          {
-            "type": "command",
-            "command": "~/server/.claude/hooks/validate-compose.sh",
-            "timeout": 30
-          }
-        ]
-      }
-    ],
     "PostToolUseFailure": [
       {
         "matcher": "Bash",

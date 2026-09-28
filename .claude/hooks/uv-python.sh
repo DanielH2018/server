@@ -28,7 +28,7 @@ set -u
 input=$(cat)
 
 # jq, not python: this sits on the hot path of every Bash call, and the interpreter start
-# is the whole cost. Same reasoning as validate-compose.sh's header.
+# is the whole cost.
 command -v jq >/dev/null 2>&1 || exit 0
 
 cmd=$(printf '%s' "$input" | jq -r '

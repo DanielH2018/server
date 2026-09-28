@@ -16,10 +16,7 @@ Both halves are guarded, because either one alone re-opens a failure:
   * losing the absolute entry brings the worktree breakage back;
   * losing the relative entry, or putting the absolute one first, makes every checkout load
     the PRIMARY checkout's collections — a `requirements.yml` bump would then be deployed
-    against the old versions, from the branch that changed them. This governs DEPLOYS only:
-    `.claude/hooks/ansible-lint.sh` exports `ANSIBLE_COLLECTIONS_PATH`, and an env var
-    overrides ansible.cfg outright, so lint in a worktree already reads the primary
-    checkout's collections whatever this value says.
+    against the old versions, from the branch that changed them.
 """
 
 import configparser

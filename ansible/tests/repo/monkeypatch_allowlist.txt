@@ -37,7 +37,7 @@
 .claude/hooks/tests/test_auto_mode_bridge.py 1
 .claude/hooks/tests/test_block_footguns.py 2
 .claude/hooks/tests/test_nudge_land_sh.py 8
-.claude/hooks/tests/test_session_health.py 15
+.claude/hooks/tests/test_session_health.py 14
 .claude/hooks/tests/test_session_health_master_moved.py 7
 ansible/roles/k8s/artifacts/tests/test_artifact_server.py 1
 ansible/roles/k8s/autofix-bridge/tests/test_autofix.py 13
