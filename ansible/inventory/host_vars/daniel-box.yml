@@ -476,10 +476,10 @@ containers_list:
     hostname: "loki-homelab"
     port: 3100
     use_authelia: false
-  # MUST follow loki-homelab: it tails the terraria pod's console lines from that Loki.
-  # No web UI — its :9420 exporter is scraped in-cluster (claude-otel prometheus job
-  # terraria-stats), so no port/route derives.
-  - name: terraria-stats
+  # MUST follow loki-homelab: both exporters tail their game pod's console lines from that
+  # Loki. No web UI — each :9420 exporter is scraped in-cluster (claude-otel prometheus jobs
+  # terraria-stats and valheim-stats), so no port/route derives.
+  - name: game-stats
     platform: k8s
     depends_on: [loki-homelab]
   # The bridge twins, neither of which has a route — both are pushers. monitor-bridge runs
@@ -510,11 +510,6 @@ containers_list:
   # have an operator expect a same-day restore point that does not exist.
   - name: pi-peer-backup
     platform: k8s
-  # Same ordering constraint as terraria-stats — it tails the valheim pod's console out of
-  # loki-homelab, so it MUST follow it.
-  - name: valheim-stats
-    platform: k8s
-    depends_on: [loki-homelab]
   # SMART monitoring. UI behind Authelia; /api/* is bypassed for LAN machine traffic (the
   # collector's POSTs and monitor-bridge's summary reads) in the authelia role's config.
   - name: scrutiny

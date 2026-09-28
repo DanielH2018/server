@@ -277,7 +277,6 @@ def test_deploy_time_shared_roles_spares_the_manifest_renderer():
     assert pr.MANIFEST_RENDERER not in deploy_time
     assert deploy_time == {
         "arr-notification",
-        "game-stats-lib",
         "image-builder",
         "volume-claim",
     }
@@ -291,6 +290,17 @@ def test_is_real_change_is_clean_for_a_shared_roles_tasks_file():
         )
         is False
     )
+
+
+def test_drop_retired_keeps_a_declared_service_and_an_unreadable_record():
+    records = [{"service": "sonarr", "commit": "a"}, {"error": "truncated"}]
+    assert pr.drop_retired(records, {"sonarr"}) == records
+
+
+def test_drop_retired_drops_a_service_no_entry_declares():
+    """terraria-stats' record outlived its role (#2813); judged, it read stale for good."""
+    records = [{"service": "sonarr"}, {"service": "terraria-stats"}]
+    assert pr.drop_retired(records, {"sonarr", "game-stats"}) == [{"service": "sonarr"}]
 
 
 def test_is_real_change_is_clean_for_the_renderers_drain():

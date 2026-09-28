@@ -249,11 +249,7 @@ DOCUMENTED_ORDERINGS = {
     ("media-volume", "jellyfin"): "roles/k8s/media-volume/CLAUDE.md",
     ("media-volume", "tdarr"): "roles/k8s/media-volume/CLAUDE.md",
     ("media-volume", "janitorr"): "roles/k8s/media-volume/CLAUDE.md",
-    ("loki-homelab", "valheim-stats"): "roles/k8s/valheim-stats/CLAUDE.md",
-    (
-        "loki-homelab",
-        "terraria-stats",
-    ): "host_vars/daniel-box.yml (terraria-stats comment)",
+    ("loki-homelab", "game-stats"): "roles/k8s/game-stats/CLAUDE.md",
     ("sonarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("radarr", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
     ("jellyfin", "janitorr"): "host_vars/daniel-box.yml (janitorr comment)",
@@ -272,7 +268,7 @@ def test_documented_pairwise_ordering_survives_an_adversarial_list(host, before,
     """
     # fact: ansible/roles/k8s/mosquitto/CLAUDE.md#At a glance
     # fact: ansible/roles/k8s/media-volume/CLAUDE.md#At a glance
-    # fact: ansible/roles/k8s/valheim-stats/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/game-stats/CLAUDE.md#At a glance
     _path, entries, idx = host
     if before not in idx or after not in idx:
         pytest.skip(f"host does not deploy both {before} and {after}")

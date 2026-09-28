@@ -75,6 +75,7 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
 
 # A render record that proves the applied bytes current clears a path hit (#2586).
 from diagnostics.probe_lib.releases_render import apply_renders  # noqa: E402
+from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
 
 
 def _git(*args, cwd, **kwargs):
@@ -142,11 +143,9 @@ def merged_commits(commits, repo_root=REPO_ROOT):
 def _deploy_tags():
     """Import `scripts/deploy_tools/deploy_tags` lazily.
 
-    Every other `probe.py` subcommand loads this module through `run_releases`'s import at the
-    top of `probe.py`, so a module-level import here would pay `deploy_tags`'s host_vars YAML
-    parse on every invocation, not just `releases`. `scripts/` is already on `sys.path` from the
-    bootstrap at the top of this file, which is the same directory `deploy_tags.py` itself
-    inserts, so the import needs nothing further.
+    Every `probe.py` subcommand loads this module, so a module-level import would pay
+    `deploy_tags`'s host_vars YAML parse on every invocation, not just `releases`. `scripts/`
+    is already on `sys.path` from the bootstrap at the top of this file.
     """
     from deploy_tools import deploy_tags
 
@@ -188,7 +187,7 @@ def _supplies_manifest_bytes(role_dir):
     A shared role does that in exactly two ways: it renders templates that are applied
     alongside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
     `image-builder/templates/build-job.yaml.j2`), or it ships `files/` a consumer's manifest
-    embeds with `lookup('file')` (`arr-notification`, `game-stats-lib`). A role with only
+    embeds with `lookup('file')` (`arr-notification`). A role with only
     `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
 
     That distinction is the whole point (#1636). A deploy-time role's change is live for the
@@ -241,7 +240,7 @@ def _deploy_time_shared_roles(shared_roles):
     `manifests` is excluded because it ships no templates of its own -- its `tasks/` IS the
     render, prune and apply logic that produces every service's bytes, so a change there is
     exactly the false-GREEN issue #947 exists to catch. Every other byte-supplying shared role
-    (`volume-claim`, `image-builder`, `arr-notification`, `game-stats-lib`) is in the census for
+    (`volume-claim`, `image-builder`, `arr-notification`) is in the census for
     its `templates/` or `files/`, and its `tasks/` is deploy-time behaviour.
     """
     return frozenset(shared_roles) - {MANIFEST_RENDERER}
@@ -567,6 +566,7 @@ def run_releases(ns):
         ns: The parsed argparse namespace for the `releases` subcommand.
     """
     records = load_records(previous=getattr(ns, "previous", False))
+    records = drop_retired(records, _deploy_tags().service_tags())
     if getattr(ns, "json", False):
         print(json.dumps(records, indent=2))
         return 0

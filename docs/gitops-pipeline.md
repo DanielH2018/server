@@ -1012,10 +1012,12 @@ stay).
     releases --stale-only`: it compares each service's release record (the applied commit
     `roles/k8s/manifests/tasks/release_stamp.yml` stamps on every real apply) against
     `origin/master` under that service's own role AND the shared roles that supply bytes to
-    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`,
-    `game-stats-lib` — `scripts/diagnostics/probe_lib/releases.py`'s
-    `manifest_affecting_shared_roles()`), and pushes the "Release Staleness Drift" Kuma monitor
-    down when any service is stale or missing a record entirely. The entry-less roles that
+    every service's manifests (`manifests`, `volume-claim`, `image-builder`, `arr-notification`
+    — `scripts/diagnostics/probe_lib/releases.py`'s `manifest_affecting_shared_roles()`), and
+    pushes the "Release Staleness Drift" Kuma monitor down when any service is stale or missing
+    a record entirely. A record whose service no `containers_list` entry declares is dropped
+    first (`releases_retired.py`): a retired role's record outlives the role, and the commit
+    that deleted it would otherwise read as drift no deploy tag can clear (#2813). The entry-less roles that
     hold only `tasks/` and `defaults/` (`volume-snapshot`, `volume-revert`,
     `cronjob-gate`, `longhorn-api`) are deliberately OUT of that set: they change how a deploy
     runs, never what it applies, and their change is live for the next deploy the moment this
@@ -1184,7 +1186,7 @@ what it recorded.
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
   which the deployer cannot see; without it the marker would hold a permanent line per routine
   landing. A record that is absent or carries no date KEEPS the line. A shared role (`manifests`,
-  `image-builder`, `game-stats-lib`) has no record of its own, so its line drops when every
+  `image-builder`, `volume-claim`) has no record of its own, so its line drops when every
   tag that applies it and writes a record carries the change, as
   `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
 - Any tick that deploys the service clears its `k8s_deferred` line

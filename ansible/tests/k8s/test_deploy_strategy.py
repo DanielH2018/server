@@ -97,8 +97,8 @@ _RECREATE = {
     ): "grace-cycle and hysteresis streaks are in-process",
     ("autofix-bridge", "autofix-bridge"): "candidate-grace streaks are in-process",
     ("janitorr", "janitorr"): "two instances would both walk the library",
-    ("valheim-stats", "valheim-stats"): "in-process aggregation state on an RWO PVC",
-    ("terraria-stats", "terraria-stats"): "in-process aggregation state on an RWO PVC",
+    ("game-stats", "valheim-stats"): "in-process aggregation state on an RWO PVC",
+    ("game-stats", "terraria-stats"): "in-process aggregation state on an RWO PVC",
     # ── ingress / DNS topology ──
     ("traefik", "traefik"): (
         "acme.json is RWO and two Traefiks racing to write it corrupt the account "

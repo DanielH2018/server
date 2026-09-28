@@ -154,6 +154,22 @@ def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
 # that `_co_applied` added the `n8n` its entry also declared, so an `n8n-images` line of its
 # own discharged on `n8n.json`. `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml`
 # against the declared entries is how to re-derive whether a second instance has appeared.
+def _writer_tags(ctx: Context) -> set[str]:
+    """The tags whose deploy runs `manifests`, and so writes a release record.
+
+    Expanded caller by caller rather than in one `_tags(RECORD_WRITER)` call. A caller no tag
+    applies — a role committed ahead of its `containers_list` entry, or read from a tree ahead
+    of `ctx.ref` — applies nothing, and must not empty every other caller's tags with it. In
+    one call it raised `CannotNarrow` for the whole set, and every shared role read as having
+    no recording caller at all (#2813).
+    """
+    return {
+        tag
+        for caller in ctx.callers.get(RECORD_WRITER) or ()
+        for tag in _tags(caller, ctx)
+    }
+
+
 def recorded_callers(
     roles, ctx: Context, entry_tags: dict[str, set[str]]
 ) -> dict[str, list[str]]:
@@ -164,7 +180,7 @@ def recorded_callers(
     the #2666 answer back. `discharge_k8s_unapplied` requires a record from EVERY tag here,
     so a union only ever makes a line harder to drop.
     """
-    writers = _tags(RECORD_WRITER, ctx)
+    writers = _writer_tags(ctx)
     out = {}
     for role in roles:
         tags = _tags(role, ctx)

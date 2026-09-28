@@ -69,7 +69,7 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "claude-otel",
         "configarr",
         "crowdsec",
-        "game-stats-lib",
+        "game-stats",
         "headlamp",
         "image-builder",
         "janitorr",
@@ -81,9 +81,7 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
         "prowlarr",
         "qbittorrent",
         "registry",
-        "terraria-stats",
         "traefik",
-        "valheim-stats",
         "volume-claim",
     }
 )

@@ -240,7 +240,6 @@ def test_shared_k8s_roles_matches_the_known_set():
     assert pr.shared_k8s_roles() == {
         "arr-notification",
         "cronjob-gate",
-        "game-stats-lib",
         "image-builder",
         "longhorn-api",
         "manifests",
@@ -262,11 +261,10 @@ def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():
     Named rather than counted: a role that moves directories or loses its `templates/` fails
     here by name, where a count would only slide by one. `manifests` renders everyone's
     templates, `volume-claim` and `image-builder` render their own, and `arr-notification`
-    and `game-stats-lib` ship `files/` a consumer's manifest embeds.
+    ships `files/` a consumer's manifest embeds.
     """
     assert pr.manifest_affecting_shared_roles() == {
         "arr-notification",
-        "game-stats-lib",
         "image-builder",
         "manifests",
         "volume-claim",
@@ -301,7 +299,7 @@ def test_supplies_manifest_bytes_is_flagged_for_a_templates_or_files_role(tmp_pa
     """`templates/`, `files/` and the renderer itself each supply bytes."""
     with_templates = tmp_path / "volume-claim"
     (with_templates / "templates").mkdir(parents=True)
-    with_files = tmp_path / "game-stats-lib"
+    with_files = tmp_path / "arr-notification"
     (with_files / "files").mkdir(parents=True)
     renderer = tmp_path / "manifests"
     (renderer / "tasks").mkdir(parents=True)

@@ -61,7 +61,7 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "image-builder",
         ),
     ),
-    ("Games", ("terraria", "terraria-stats", "valheim", "valheim-stats")),
+    ("Games", ("terraria", "valheim", "game-stats")),
     (
         "Storage & backup",
         ("longhorn-ui", "pi-peer-backup", "dri-device-plugin"),

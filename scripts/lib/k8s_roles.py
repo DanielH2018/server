@@ -63,7 +63,6 @@ NO_MANIFEST_ROLES = {
     "volume-snapshot",
     "longhorn-api",  # resolves a fact only, same as cronjob-gate/volume-snapshot
     "volume-revert",  # reverts a volume through kubectl and the Longhorn API
-    "game-stats-lib",  # ships stats_lib.py into valheim-stats/terraria-stats' ConfigMaps
     # declares sonarr's/radarr's Discord Connect notification over the app's own API — a row in
     # the app's database, which no manifest can express
     "arr-notification",
@@ -152,9 +151,10 @@ def k8s_entries() -> dict[str, dict]:
 
 
 # The two ways one k8s role reaches another's tasks. `include_role`/`import_role` name it as
-# `k8s/<role>`; the game-stats-lib consumers instead `import_tasks` a sibling role's file by
-# path (`{{ role_path }}/../game-stats-lib/tasks/stage.yml`), which names no role at all. Both
-# are real edges: whoever deploys the caller runs the callee's tasks.
+# `k8s/<role>`; an `import_tasks` of a sibling role's file by path
+# (`{{ role_path }}/../<role>/tasks/<file>.yml`) names no role at all. Both are real edges:
+# whoever deploys the caller runs the callee's tasks. No live role uses the path form since
+# #2813 folded game-stats-lib into its two consumers; test_k8s_role_callers.py drives it.
 _ROLE_KEYS = (
     "ansible.builtin.include_role",
     "include_role",

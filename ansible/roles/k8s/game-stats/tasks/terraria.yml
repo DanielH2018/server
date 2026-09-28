@@ -1,8 +1,6 @@
 ---
-# terraria-stats on k8s (Phase F drain, 2026-08-13): reads the terraria pod's console
-# lines from loki-homelab, folds them into all-time per-player stats (SQLite on a
-# Longhorn PVC, seeded from the Docker copy), serves Prometheus metrics on :9420.
-# The scrape job lives in claude-otel's prometheus.yaml.j2 (job_name: terraria-stats).
+# terraria-stats' half of game-stats (on k8s since the Phase F drain, 2026-08-13): its claim,
+# seeded from the Docker copy, and its script ConfigMap. The manifests apply is main.yml's.
 
 - name: Seed the stats DB from the Docker copy
   ansible.builtin.include_role:
@@ -10,9 +8,9 @@
   vars:
     volume_claim_service: terraria-stats
     volume_claim_name: terraria-stats-data
-    volume_claim_size: "{{ terraria_stats_k8s_pvc_size }}"
+    volume_claim_size: "{{ game_stats_terraria_pvc_size }}"
 
-- name: Create the staging directory
+- name: Create the staging directory for terraria-stats
   tags: [config]
   ansible.builtin.file:
     path: /etc/rancher/k3s/terraria-stats
@@ -23,7 +21,7 @@
   become: true
   when: not k8s_dry_run | bool
 
-- name: Stage the stats script on the node
+- name: Stage the stats script on the node for terraria-stats
   tags: [config]
   ansible.builtin.copy:
     src: stats.py
@@ -32,16 +30,16 @@
     owner: root
     group: root
   become: true
-  register: terraria_stats_script
+  register: game_stats_terraria_script
   when: not k8s_dry_run | bool
 
 # stats.py does `import stats_lib` for the skeleton it shares with valheim-stats (Loki
 # fetch, cursor handling, metric rendering, the HTTP handler, the run loop). Staged before
 # the ConfigMap render, same as the entry script: a window in which the ConfigMap exists
 # without this sibling is a pod that dies at import on its next roll.
-- name: Install the shared stats_lib module beside the stats script
+- name: Install the shared stats_lib module beside the terraria stats script
   tags: [config]
-  ansible.builtin.import_tasks: "{{ role_path }}/../game-stats-lib/tasks/stage.yml"
+  ansible.builtin.import_tasks: stage.yml
   vars:
     game_stats_lib_dest_dir: /etc/rancher/k3s/terraria-stats
 
@@ -53,17 +51,17 @@
 # Hashed off the SOURCE files, not off the two stage registers: both stages are skipped on a dry
 # run (#2614), and `.checksum` on a skipped result is Undefined, which would raise here rather
 # than fall back. `rstrip=False` makes these the bytes `copy` hashed, so the value is unchanged.
-- name: Combine the staged module checksums into one pod-roll trigger
+- name: Combine the staged module checksums into one pod-roll trigger for terraria-stats
   tags: [config]
   ansible.builtin.set_fact:
-    terraria_stats_script_checksum: >-
+    game_stats_terraria_script_checksum: >-
       {{ [lookup('ansible.builtin.file', role_path ~ '/files/stats.py', rstrip=False) | hash('sha1'),
           game_stats_lib_checksum] | sort | join(',') | hash('sha1') }}
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so
 # it becomes a ConfigMap via kubectl --from-file, never via a template — the same
 # reasoning as claude-otel's dashboards and image-builder's context files.
-- name: Render the script ConfigMap manifest
+- name: Render the script ConfigMap manifest for terraria-stats
   tags: [config]
   ansible.builtin.shell:
     cmd: >-
@@ -74,7 +72,7 @@
       --dry-run=client -o yaml > /etc/rancher/k3s/terraria-stats/configmap.yaml
     executable: /bin/bash
   become: true
-  changed_when: terraria_stats_script is changed or game_stats_lib_stage is changed
+  changed_when: game_stats_terraria_script is changed or game_stats_lib_stage is changed
   when: not k8s_dry_run | bool
 
 # Server-side, like monitor-bridge's: client-side apply re-stores the whole object in an
@@ -84,7 +82,7 @@
 # before the switch. Server-side apply prints the same line whether or not anything changed,
 # so the changed signal is the staged files. ENFORCED by
 # ansible/tests/k8s/test_script_configmaps_apply_server_side.py.
-- name: Apply the script ConfigMap
+- name: Apply the script ConfigMap for terraria-stats
   tags: [deploy]
   ansible.builtin.command:
     cmd: >-
@@ -94,15 +92,5 @@
   # Skipped on a dry run or --check. k8s/manifests only dry-runs its own apply, so without this
   # guard a dry run would really write this ConfigMap (#2588).
   when: not k8s_no_mutate
-  register: terraria_stats_cm_apply
-  changed_when: terraria_stats_script is changed or game_stats_lib_stage is changed
-
-- name: Deploy terraria-stats to the cluster
-  ansible.builtin.include_role:
-    name: k8s/manifests
-  vars:
-    manifests_service: terraria-stats
-    manifests_rollout: terraria-stats
-    manifests_files:
-      - deployment.yaml
-      - service.yaml
+  register: game_stats_terraria_cm_apply
+  changed_when: game_stats_terraria_script is changed or game_stats_lib_stage is changed

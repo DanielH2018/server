@@ -7,7 +7,7 @@ they crossed the cap on 2026-09-01 (PR #725's deploy), and the apply was refused
 `metadata.annotations: Too long` while the pod kept running the previous code. Server-side
 apply writes no such annotation, so the cap does not apply.
 
-The rule covers every role with an `Apply the script ConfigMap` task, not just the one that
+The rule covers every role with an `Apply the script ConfigMap` task in any of its task files, not just the one that
 hit the cap: the other three ship one small script each today, and a guard scoped to the
 instance that failed is the guard-scope shape this repo has paid for before. The roles are
 derived from the tree, so a fifth script ConfigMap joins the rule the day it appears.
@@ -30,7 +30,25 @@ ANNOTATION_CAP = 262144
 
 
 def _apply_tasks(tasks):
-    return [t for t in tasks if isinstance(t, dict) and t.get("name") == TASK_NAME]
+    """The apply tasks in one task file, including game-stats' per-game `... for <game>`."""
+    return [
+        t
+        for t in tasks or []
+        if isinstance(t, dict)
+        and (
+            t.get("name") == TASK_NAME
+            or str(t.get("name")).startswith(f"{TASK_NAME} for ")
+        )
+    ]
+
+
+def _role_apply_tasks(role):
+    """Every apply task across the role's task files: game-stats keeps one per game file."""
+    return [
+        task
+        for tasks_file in sorted((role / "tasks").glob("*.yml"))
+        for task in _apply_tasks(yaml_fast.safe_load(tasks_file.read_text()))
+    ]
 
 
 def _apply_cmd(task):
@@ -40,16 +58,12 @@ def _apply_cmd(task):
 
 
 def _roles_with_script_configmaps():
-    """Every k8s role whose tasks/main.yml carries the apply task — derived, not listed."""
-    found = []
-    for role in sorted(K8S.iterdir()):
-        tasks_file = role / "tasks" / "main.yml"
-        if not tasks_file.is_file():
-            continue
-        tasks = yaml_fast.safe_load(tasks_file.read_text()) or []
-        if _apply_tasks(tasks):
-            found.append(role.name)
-    return found
+    """Every k8s role whose task files carry the apply task — derived, not listed."""
+    return [
+        role.name
+        for role in sorted(K8S.iterdir())
+        if (role / "tasks").is_dir() and _role_apply_tasks(role)
+    ]
 
 
 ROLES = _roles_with_script_configmaps()
@@ -60,27 +74,24 @@ def test_the_derivation_finds_the_known_roles():
     assert {
         "monitor-bridge",
         "autofix-bridge",
-        "valheim-stats",
-        "terraria-stats",
+        "game-stats",
     } <= set(ROLES), ROLES
 
 
 @pytest.mark.parametrize("role", ROLES)
 def test_the_script_configmap_is_applied_server_side(role):
-    tasks = yaml_fast.safe_load((K8S / role / "tasks" / "main.yml").read_text())
-    matches = _apply_tasks(tasks)
-    assert len(matches) == 1, (
-        f"{role}: expected one {TASK_NAME!r} task, found {len(matches)}"
-    )
-    cmd = _apply_cmd(matches[0])
-    assert "--server-side" in cmd, (
-        f"{role}: {TASK_NAME!r} runs `{cmd}` — client-side apply re-stores the object in an "
-        "annotation capped at 262144 bytes"
-    )
-    assert "--force-conflicts" in cmd, (
-        f"{role}: the data keys were owned by the client-side field manager before the "
-        "switch; without --force-conflicts the first server-side apply is rejected"
-    )
+    matches = _role_apply_tasks(K8S / role)
+    assert matches, f"{role}: expected a {TASK_NAME!r} task, found none"
+    for task in matches:
+        cmd = _apply_cmd(task)
+        assert "--server-side" in cmd, (
+            f"{role}: {task['name']!r} runs `{cmd}` — client-side apply re-stores the object "
+            "in an annotation capped at 262144 bytes"
+        )
+        assert "--force-conflicts" in cmd, (
+            f"{role}: the data keys were owned by the client-side field manager before the "
+            "switch; without --force-conflicts the first server-side apply is rejected"
+        )
 
 
 def test_monitor_bridge_still_needs_it():

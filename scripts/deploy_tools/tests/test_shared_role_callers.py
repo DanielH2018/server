@@ -51,6 +51,14 @@ def test_a_role_nobody_calls_reaches_no_tag():
     ) == {"orphan": []}
 
 
+def test_a_manifests_caller_no_tag_applies_leaves_the_other_writers_standing():
+    """A role committed ahead of its entry calls `manifests` with no tag to apply it."""
+    ctx = _ctx({"manifests": {"web", "new-role"}, "arr": {"web"}}, {"web"})
+    assert shared_role_callers.recorded_callers(["arr"], ctx, _entry_tags({"web"})) == {
+        "arr": ["web"]
+    }
+
+
 # ── an entry's other declared tag is a recording caller the role graph cannot see (#2666) ──
 def test_a_builder_entrys_other_tag_is_the_caller_whose_record_stands_in():
     """GREEN half. `images` renders no manifest, but its entry is also tagged `web`, so a
@@ -83,14 +91,14 @@ def test_a_merely_overlapping_entry_is_not_a_record_that_stands_in():
 
 
 # DECIDED: this drives the real tree through the argv the deployer builds. The tick's fakes
-# replace the subprocess, so only this sees a flag the CLI does not take, and game-stats-lib's
+# replace the subprocess, so only this sees a flag the CLI does not take, and arr-notification's
 # two callers are the named members a broken caller walk would lose.
 def test_the_deployers_argv_is_one_main_accepts(capsys):
-    argv = deploy_narrow.shared_callers_argv({"game-stats-lib"})
+    argv = deploy_narrow.shared_callers_argv({"arr-notification"})
     assert argv[4] == deploy_narrow.SHARED_CALLERS_SCRIPT
     assert shared_role_callers.main([*argv[5:], "--repo", str(REPO)]) == 0
     assert json.loads(capsys.readouterr().out) == {
-        "game-stats-lib": ["terraria-stats", "valheim-stats"],
+        "arr-notification": ["radarr", "sonarr"],
     }
 
 

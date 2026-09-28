@@ -24,16 +24,16 @@ spec:
       annotations:
         # Recreate the pod when the script ConfigMap's source changes — the manifests role
         # only restarts on manifest changes, and neither staged script is a manifest. The
-        # fact is a hash over BOTH staged modules (tasks/main.yml), the same "value=" shape
+        # fact is a hash over BOTH staged modules (tasks/terraria.yml), the same "value=" shape
         # monitor-bridge's and autofix-bridge's checksum/check-script use, since stats.py
         # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
-        {{ checksum_annotation('stats-script', value=terraria_stats_script_checksum) }}
+        {{ checksum_annotation('stats-script', value=game_stats_terraria_script_checksum) }}
     spec:
 {{ pod_shell('homelab-best-effort', run_as_user=puid, run_as_group=pgid, non_root=true) }}
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: terraria-stats
-          image: {{ terraria_stats_k8s_image }}
+          image: {{ game_stats_k8s_image }}
           command: ["python", "/app/stats.py"]
 {{ hardened_security_context(read_only=true) }}
           env:

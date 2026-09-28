@@ -24,10 +24,10 @@ spec:
       annotations:
         # Recreate the pod when the script ConfigMap's source changes — the manifests role
         # only restarts on manifest changes, and neither staged script is a manifest. The
-        # fact is a hash over BOTH staged modules (tasks/main.yml), the same "value=" shape
+        # fact is a hash over BOTH staged modules (tasks/valheim.yml), the same "value=" shape
         # monitor-bridge's and autofix-bridge's checksum/check-script use, since valheim_stats.py
         # imports stats_lib.py and an edit confined to that sibling must also roll the pod.
-        {{ checksum_annotation('stats-script', value=valheim_stats_script_checksum) }}
+        {{ checksum_annotation('stats-script', value=game_stats_valheim_script_checksum) }}
     spec:
       # Needed here even though terraria-stats has no fsGroup, and the difference is the
       # seed: that claim arrived pre-populated by `tar -p --numeric-owner`, so its files
@@ -39,7 +39,7 @@ spec:
 {{ node_affinity_preference('daniel-server') }}
       containers:
         - name: valheim-stats
-          image: {{ valheim_stats_k8s_image }}
+          image: {{ game_stats_k8s_image }}
           command: ["python", "/app/valheim_stats.py"]
 {{ hardened_security_context(read_only=true) }}
           env:
@@ -94,7 +94,7 @@ spec:
       volumes:
         - name: valheim-stats-data
           persistentVolumeClaim:
-            claimName: {{ valheim_stats_k8s_claim }}
+            claimName: {{ game_stats_valheim_claim }}
         - name: valheim-stats-script
           configMap:
             name: valheim-stats-script

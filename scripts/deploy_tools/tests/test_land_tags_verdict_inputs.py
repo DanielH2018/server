@@ -30,7 +30,9 @@ from deploy_tools.land_lib import tools
 # tree, and a deleted role is indistinguishable from the reader dropping an entry, so an
 # explicit list is the only honest signal. An entry earns its place for one PR: once the
 # retiring commit is HEAD, the tag is gone from both sides and the line can go.
-RETIRED_TAGS: frozenset[str] = frozenset({"n8n-images"})
+RETIRED_TAGS: frozenset[str] = frozenset(
+    {"n8n-images", "terraria-stats", "valheim-stats"}
+)
 
 
 # ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
