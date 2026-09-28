@@ -409,6 +409,19 @@ language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$"
 
+# Re-hashes a verified section whose citation SET an edit changed, in the commit making the
+# edit, and fails like a formatter so the author stages what it wrote. It refuses any section
+# whose recorded atom MOVED -- that is content drift, and re-reading the prose is a human's
+# call. Without it every such edit landed behind a green master and cost a second commit
+# after CI named it: 28 commits touched docs/facts.lock in the lock's first 9 days.
+[[repos.hooks]]
+id = "facts-reverify-changed"
+name = "re-hash edited CLAUDE.md sections whose citations changed"
+entry = "uv run --frozen python scripts/dev/fact_status.py reverify --changed-since origin/master"
+language = "system"
+pass_filenames = false
+files = "(^|/)CLAUDE\\.md$"
+
 # The `hooks` key of .claude/settings.json is rendered from the `# gen-hooks:` block each file
 # under .claude/hooks/ carries (scripts/dev/gen_hook_settings.py). `--check` fails on a hook
 # file that declares nothing -- the exists-but-unregistered gap the two tests beside it cannot

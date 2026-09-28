@@ -43,6 +43,17 @@ and renaming that test fails the guard here.
 A `file:line` citation is rejected: a line number moves under every edit above it. Cite the
 symbol or the marker instead.
 
+## What each form's hash is over
+
+A path atom hashes **existence**, not content. A bare path says where something lives, so the
+claim it supports breaks when the file or directory goes away — a delete or a rename reads
+`missing` — and not when someone edits the file. The finer claim has a form of its own: cite
+the symbol, the YAML key, the `DECIDED:` marker or the test node, and those four content-hash.
+This is why a Renovate pin bump under a cited role directory no longer arrives red. Hashing a
+cited file's bytes instead made an edit anywhere in it a finding about a sentence that only
+said where the file lives, on 687 of the 1,253 commits in the 30 days to 2026-09-28, and
+corrected no documented claim in the lock's first 9 days.
+
 A citation is support only when it names a **tracked** file, or a directory holding a
 tracked file — so an untracked or gitignored path is prose, not broken support, the same as
 a doc-relative `defaults/main.yml` or a slashed token that names nothing here at all. A
@@ -60,8 +71,26 @@ gone — a rename makes a new unit, and the old row cannot be hand-deleted witho
 the lock's checksum. The `facts-lint-changed` prek hook is the ratchet for everything not
 yet in the lock: it runs `lint --changed-since` over the sections a commit edits.
 
+`verify --unverified` records every section that has no lock row yet. It never touches a row
+the lock already holds, so it cannot launder a section whose atom moved — that stays the
+named `verify`.
+
 A section that cites atoms but has no lock row is UNVERIFIED and never fails anything. A
 section that cites nothing is a convention and is never graded. A `probe.py` citation reads
 UNKNOWN rather than IN: nothing in this slice runs a probe, so its shape hash waits on the
 reconcile timer. The memory store, the reconcile timer and the re-verifier are the design's
 later slices; PR #2138 carries the design.
+
+## A prose edit re-hashes itself; content drift does not
+
+The `facts-reverify-changed` prek hook runs `reverify --changed-since origin/master` after
+the lint. It re-hashes a section under exactly one condition: the commit edits the section's
+text **and** no recorded atom of that section moved. `scripts/lib/facts/lock.py:BENIGN_KINDS`
+is the pair that qualifies — `unrecorded-atom` and `atom-no-longer-cited`, both of them the
+author adding or dropping a citation in the diff they are already looking at.
+
+A `moved` or `missing` atom is refused and left red, whatever else the commit did. That is the
+contract: a documented claim whose support drifted is re-read by a person, and the hook exists
+to remove the second commit, not the reading. It fails like a formatter — it writes the lock
+and exits non-zero, so `git add docs/facts.lock` and commit again.
+

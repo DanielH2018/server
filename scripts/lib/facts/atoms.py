@@ -5,6 +5,14 @@ docstrings stripped (a reword must not invalidate a claim about a value), a YAML
 (a comment must not either), a marker line's text (moving it must not). ``None`` means the
 atom does not resolve; a probe atom is never hashed here — its shape hash needs a live run.
 
+A **path** atom is about location, not content, so its hash is over the path itself: the atom
+resolves while the file or directory is there and reads ``None`` once it is gone, which is
+what makes a delete or a rename a ``missing`` finding. The finer claim — a value, a key, a
+decision, a test's body — has a form of its own, and those are the forms that content-hash.
+Hashing a cited file's bytes instead made every edit anywhere in it a finding about a
+sentence that only said where the file lives: 687 of the 1,253 commits in the 30 days to
+2026-09-28 touched a cited file that way, and none of them corrected a documented claim.
+
 A Python node is hashed through ``ast.unparse``, never ``ast.dump``. A dump names every AST
 field, so a CPython release that adds one (``type_params`` in 3.12) moves every recorded
 symbol and test hash at once, and the whole lock reads OUT after an interpreter upgrade that
@@ -17,7 +25,6 @@ import ast
 import hashlib
 import json
 import re
-import subprocess
 from pathlib import Path
 
 import sys as _sys
@@ -26,7 +33,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from lib.yaml_fast import safe_load
 
-from .citations import Citation, git_env
+from .citations import Citation
 
 HASHED_FORMS = frozenset({"path", "symbol", "yaml", "test", "marker"})
 _BACKREF = re.compile(r"^\s*#\s*fact:\s*(\S.*?)\s*$", re.MULTILINE)
@@ -38,18 +45,6 @@ class Ambiguous(Exception):
 
 def _sha(data: bytes) -> str:
     return hashlib.sha256(data).hexdigest()
-
-
-def _tracked_under(repo: Path, rel: str) -> list[str]:
-    out = subprocess.run(
-        ["git", "ls-files", "-z", "--", rel],
-        cwd=repo,
-        env=git_env(),
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return sorted(p for p in out.split("\0") if p)
 
 
 def _strip_docstrings(node: ast.AST) -> ast.AST:
@@ -149,19 +144,11 @@ def hash_atom(c: Citation, repo: Path) -> str | None:
     if _outside_repo(target, repo):
         return None
     if c.form == "path":
+        # DECIDED: a path atom hashes EXISTENCE, not content. See this module's docstring
+        # for the rule and `.claude/rules/facts.md` for the measurement behind it.
         if c.path.endswith("/"):
-            if not target.is_dir():
-                return None
-            # A symlink is skipped rather than followed: `read_bytes` on one hashes the
-            # TARGET, so a link out of the tree pulls a file the citation does not name
-            # into the directory's hash, and a link to a sibling hashes that sibling twice.
-            parts = [
-                (rel, _sha((repo / rel).read_bytes()))
-                for rel in _tracked_under(repo, c.path)
-                if not (repo / rel).is_symlink()
-            ]
-            return _sha(json.dumps(parts).encode())
-        return _sha(target.read_bytes()) if target.is_file() else None
+            return _sha(c.path.encode()) if target.is_dir() else None
+        return _sha(c.path.encode()) if target.is_file() else None
     if not target.is_file():
         return None
     if c.form == "symbol":
