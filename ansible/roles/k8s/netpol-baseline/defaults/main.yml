@@ -30,7 +30,7 @@ netpol_baseline_exempt_workloads:
   - headlamp        # roles/k8s/headlamp/templates/networkpolicy.yaml.j2
   - n8n             # roles/k8s/n8n/templates/networkpolicy.yaml.j2 (live name `n8n-broker`)
   - registry        # roles/k8s/registry/templates/networkpolicy.yaml.j2
-  # netpol-baseline/templates/networkpolicy-karakeep-chrome.yaml.j2 (app=karakeep, :9222).
+  # roles/k8s/karakeep/templates/networkpolicy-chrome.yaml.j2 (app=karakeep, :9222).
   # Exempt because the baseline admits every port and this one is unauthenticated DevTools.
   - karakeep-chrome
 

@@ -37,6 +37,29 @@ tighter or looser allow-list than the baseline. Deploys no workload of its own.
 - **`netpol_baseline_node_cidrs` are `/32` host addresses on purpose** — a `/16` here would
   silently cancel the whole policy.
 
+## Where a per-workload policy lives
+
+A per-workload policy has two homes. What the policy reads, and what the workload's deploy
+needs, decides which one.
+
+- **In this role**, when the policy reads one of this role's variables: the
+  `netpol_baseline_enforced` lever or `netpol_baseline_node_cidrs`. Role defaults are
+  role-scoped, so neither resolves in another role. Every `templates/networkpolicy-*.yaml.j2`
+  file here reads one of them.
+- **In the workload's own role**, when the workload's deploy depends on the policy:
+  - A workload in `netpol_baseline_exempt_workloads` keeps its complete fence beside it:
+    headlamp, n8n, registry, prowlarr's flaresolverr and karakeep's chrome. Exempt, it is
+    fenced by nothing else.
+  - A backend that the pod's startup waits on ships with the pod. The precedents are
+    authelia's session store (#1609) and the scrutiny and karakeep backends (#1620).
+  - The additive caller rules of the *arr stack and qbittorrent live with the workload they
+    admit callers to.
+
+**A hand `--tags <svc>` deploy does not apply that service's policy when the policy lives
+here.** When a change needs a policy change and a workload change together, deploy both
+tags, workload role first and netpol-baseline last. `docs/networkpolicy-slice-answers.md`
+records why that order matters. A new backend the pod waits on goes in the workload's role
+instead, so one tag carries both.
+
 ## Editing
-Per-workload policy: `templates/networkpolicy-<name>.yaml.j2`. Deploy:
-`./scripts/deploy.sh --tags "netpol-baseline"`.
+Deploy: `./scripts/deploy.sh --tags "netpol-baseline"`.

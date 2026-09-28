@@ -20,6 +20,10 @@ rendered routes behind a non-vacuity assertion:
   route (homepage's widget; ClientIP-gated to the bridge IP and the pod CIDR, no Authelia)
   carried `/api/` after #1929 closed the public name, so the password form stayed open to
   every pod (#2018). The first invariant reads the public routes only and never saw it.
+- **The public tRPC procedures are closed and throttled.** `/api/trpc/` also reaches the app's
+  public procedures: `users.create` (signup) and `apiKeys.exchange` (password in, API key out).
+  The Deployment set `DISABLE_NEW_USERS_REGISTRATION` until 2026-09-28, a name the app never
+  reads, so signup was open on the internet, and nothing enabled the app's rate limiter.
 
 Run: uv run pytest ansible/tests/services/test_karakeep_public_bypass.py
 """
@@ -62,6 +66,27 @@ def test_a_key_gated_prefix_is_clean():
 def test_the_issue_prescribed_narrowing_loses_the_clients():
     """`/api/v1/` alone is what #1929 asked for; the extension and mobile app never call it."""
     assert not any(prefix_covers("/api/v1/", p) for p in CLIENT_PATHS[:3])
+
+
+# The names the app reads, from packages/shared/config.ts upstream. RATE_LIMITING_ENABLED
+# defaults to false there, which switches off apiKeys.exchange's own 10-per-15-minutes limit.
+REQUIRED_ENV = {"DISABLE_SIGNUPS": "true", "RATE_LIMITING_ENABLED": "true"}
+
+
+def missing_controls(env: dict[str, str]) -> set[str]:
+    """The REQUIRED_ENV names that `env` does not set to "true"."""
+    return {name for name, value in REQUIRED_ENV.items() if env.get(name) != value}
+
+
+def test_the_ignored_signup_variable_is_flagged():
+    """The state before 2026-09-28: a name the app ignores, and no rate limiter."""
+    assert missing_controls({"DISABLE_NEW_USERS_REGISTRATION": "true"}) == set(
+        REQUIRED_ENV
+    )
+
+
+def test_both_controls_set_is_clean():
+    assert missing_controls(dict(REQUIRED_ENV)) == set()
 
 
 # --- applied to the tree ------------------------------------------------------------
@@ -131,3 +156,19 @@ def test_the_bypass_still_covers_every_client_path(bypass_prefixes):
         if not any(prefix_covers(p, path) for p in bypass_prefixes.values())
     ]
     assert not uncovered, f"session-less client paths now behind Authelia: {uncovered}"
+
+
+def _karakeep_container_env() -> dict[str, str]:
+    """The karakeep container's env, name -> value, from the rendered Deployment."""
+    for role, _tpl, doc in rendered_docs():
+        if role != "karakeep" or doc.get("kind") != "Deployment":
+            continue
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            if container["name"] == "karakeep":
+                return {e["name"]: e.get("value") for e in container.get("env", [])}
+    raise AssertionError("the karakeep container did not render")
+
+
+def test_the_public_procedures_are_closed_and_throttled():
+    missing = missing_controls(_karakeep_container_env())
+    assert not missing, f"karakeep's public tRPC procedures lack: {sorted(missing)}"

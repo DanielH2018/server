@@ -108,7 +108,16 @@ spec:
             # for them. Same treatment as speedtest's APP_URL.
             - name: NEXTAUTH_URL
               value: "https://{{ container_item.hostname | default(container_item.name) }}.{{ domain }}"
-            - name: DISABLE_NEW_USERS_REGISTRATION
+            # These two are what make the public /api/trpc/ bypass safe, because that prefix also
+            # reaches the app's public procedures: users.create (signup) and apiKeys.exchange
+            # (email and password in, API key out). Both names are the ones the app reads
+            # (packages/shared/config.ts upstream). The first line here was
+            # DISABLE_NEW_USERS_REGISTRATION until 2026-09-28, which the app ignores, so signup
+            # stayed open on the internet. RATE_LIMITING_ENABLED defaults to false upstream, and
+            # without it apiKeys.exchange's own 10-per-15-minutes limit never runs.
+            - name: DISABLE_SIGNUPS
+              value: "true"
+            - name: RATE_LIMITING_ENABLED
               value: "true"
             - name: OPENAI_BASE_URL
               value: https://generativelanguage.googleapis.com/v1beta

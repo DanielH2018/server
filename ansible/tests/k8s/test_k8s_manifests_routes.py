@@ -142,7 +142,8 @@ AUTHELIA_BYPASS_ROUTES = {
         "without a key. The public procedures are the account flows (apiKeys.exchange — the "
         "extension's password login — signup, invite, email verify, password reset) and the "
         "public-list reads; every account flow carries the app's own rate limit (3-10 per "
-        "window) and signup is closed by DISABLE_NEW_USERS_REGISTRATION."
+        "window, live only with RATE_LIMITING_ENABLED) and signup is closed by "
+        "DISABLE_SIGNUPS. test_karakeep_public_bypass.py requires both."
     ),
     "karakeep-public-api-assets": (
         "Asset upload and download for the mobile app, behind the app's authMiddleware. No "
