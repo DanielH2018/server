@@ -1,9 +1,9 @@
 """The two allowlist ratchets: the caps, the comparisons and the monkeypatch counter.
 
 Everything here is a function over mappings and strings, with one exception:
-`Ratchet.allowlist()` reads the list file the dataclass points at. The census of the tree and
-the reads of `origin/master` are the caller's, in
-`ansible/tests/repo/test_module_length_ratchet.py`.
+`Ratchet.allowlist()` reads the list file the dataclass points at. The census of the tree is
+`ansible/tests/_ratchet_census.py` and the reads of `origin/master` are in
+`ansible/tests/repo/test_module_length_ratchet.py`, which also holds the tests for all three.
 
 Module length and `monkeypatch` on a first-party module are ratcheted the same way. A cap says
 what a new file may do, an allowlist records what the files that already exceed it do today,
@@ -31,9 +31,14 @@ that reads git:
 - A changed guard lets any path be added AND lets an entry rise. Widening the heuristic (as
   the `importlib` fix did) finds patches that were always there, in files that already have an
   entry as well as in files that do not, so both moves have to be possible in the branch that
-  widens. The trigger is narrow on purpose: the whole of `_ratchet.py` and the test module,
-  but only the text of `_helpers.is_test_file` — 198 modules import `_helpers`, so any edit to
-  it would otherwise wave through a change that has nothing to do with the guard.
+  widens. The trigger is three files and one function: the whole of `_ratchet.py`, the whole
+  of `_ratchet_census.py` — a widened census finds files that were always over, the same way
+  a widened heuristic does — the whole of the test module, and only the text of
+  `_helpers.is_test_file`. The census module is the loosest of the three, because a comment
+  edit there also exempts every raise; it is in the set because nothing else records what the
+  lists are allowed to contain, and it is 121 lines nobody edits in passing. `_helpers.py` is
+  the counter-example that fixes the width: 198 modules import it, so comparing all of it
+  would wave through a change that has nothing to do with the guard.
 
 What the monkeypatch heuristic counts, and what it misses:
 
@@ -82,10 +87,15 @@ module-split plan (PRs #1108-#1191) and every one was caught by a reviewer count
 `Ratchet.violations` now flags `count < listed` too, naming the number to write. The cost is
 the one the old stance avoided -- a PR that shrinks a listed file edits its line -- and that is
 one line, in a sorted file, in the same PR that moved the number. Two PRs colliding there are
-two PRs already colliding in the file itself.
+two PRs already colliding in the file itself. Re-examined on 2026-09-28 (#2809) and kept: 70
+commits touched a list in the 30 days to that date, 49 of them only lowering or deleting an
+entry, and bound semantics would have left every one of those 49 a silent regrowth headroom.
+What changed instead is that nobody writes the edit by hand -- `tighten` below is the fixer,
+`scripts/dev/tighten_ratchets.py --tighten` is the writer that runs it, and the
+`tighten-ratchet-allowlists` prek hook runs that on every commit touching Python.
 
-The census that feeds these functions, and the tests for them, are in
-`ansible/tests/repo/test_module_length_ratchet.py`.
+The census that feeds these functions is `ansible/tests/_ratchet_census.py`, and the tests
+for both are in `ansible/tests/repo/test_module_length_ratchet.py`.
 """
 
 import ast
@@ -394,3 +404,37 @@ class Ratchet:
                 f"has that path — delete the line, or fix the path if the file moved."
             )
         return found
+
+
+def tighten(text: str, counts: Mapping[str, int], cap_of: Callable[[str], int]) -> str:
+    """`text` with every entry lowered to what its file is today, leaving the rest verbatim.
+
+    The three edits a shrink needs, and nothing else:
+
+    - an entry over its file's count falls to that count;
+    - an entry for a path no tracked file has is deleted;
+    - an entry for a file back at or under its cap is deleted, because the list records
+      remaining work only.
+
+    An entry at or UNDER its file's count is left exactly as written, so a file that grew
+    still fails `Ratchet.violations` — a fixer that raised a bar would be the ratchet's
+    opposite. Comments, blank lines and anything this grammar does not recognise pass
+    through unchanged, which keeps the header block and the sort order intact.
+    """
+    kept: list[str] = []
+    for raw in text.splitlines():
+        match raw.split("#", 1)[0].strip().split():
+            case [path, number] if number.isdigit():
+                count = counts.get(path)
+                if count is None or count <= cap_of(path):
+                    continue
+                # Rewriting the number inside the line, rather than reconstructing the line,
+                # is what leaves a trailing comment and its spacing alone.
+                kept.append(
+                    raw
+                    if count >= int(number)
+                    else raw.replace(f"{path} {number}", f"{path} {count}", 1)
+                )
+            case _:
+                kept.append(raw)
+    return "".join(f"{line}\n" for line in kept)

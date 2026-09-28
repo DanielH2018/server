@@ -372,6 +372,33 @@ language = "system"
 pass_filenames = false
 files = "(^|/)CLAUDE\\.md$"
 
+# Lower each ratchet allowlist entry to what its file is today, so a PR that SHRINKS a listed
+# module needs no hand edit. An entry has to MATCH its file (the `DECIDED:` marker in
+# ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched
+# one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting.
+# It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on
+# it -- and it writes unconditionally, never running the suite first, which is what keeps it out
+# of the #1799 repair deadlock.
+#
+# It sits ABOVE `pytest` for the reason `facts-reverify-changed` does: the suite's
+# test_no_module_is_longer_than_its_cap_or_its_allowlist_entry reads the lists off disk, so
+# running the fixer first means a failed commit reports one thing to fix instead of two. Like a
+# formatter, it exits non-zero when it rewrote a list, so the author stages what it wrote.
+#
+# Cost, measured 2026-09-28: 4.0s wall for a full run, almost all of it the monkeypatch
+# census AST-parsing every test module. The `files` gate keeps it off a docs-only commit,
+# and prek SKIPS a hook whose gate matches nothing even with pass_filenames = false
+# (verified), so the docs-refresh and eval-run crons never pay it.
+[[repos.hooks]]
+id = "tighten-ratchet-allowlists"
+name = "Ratchet allowlist entries match their files"
+entry = "uv run --frozen python scripts/dev/tighten_ratchets.py --tighten"
+language = "system"
+pass_filenames = false
+# Any Python file can be the one that shrank, and the lists themselves so a hand edit that
+# raises an entry is pulled back down in the commit that writes it.
+files = "(\\.py|^ansible/tests/repo/(module_length|monkeypatch)_allowlist\\.txt)$"
+
 # Run the repo's Python unit tests via uv: the toposort dependency-resolution filters
 # (gate every deploy's ordering/scope), the monitor-bridge check logic, the
 # PreToolUse Bash guards (a permission security boundary), and the

@@ -2,8 +2,10 @@
 
 `ansible/tests/_ratchet.py` holds the pure half — the caps, the allowlist parser, the two
 comparisons and the patch counter — and its docstring is where the model and the heuristic's
-blind spots are written down. This module reads the tree and `origin/master` and feeds them
-in.
+blind spots are written down. `ansible/tests/_ratchet_census.py` holds the two ratchets and
+the census of the tree that feeds them, so the `--tighten` writer can import the same census
+this module asserts on. What is left here is the reads of `origin/master`, and the tests for
+all three.
 
 The comparison against `origin/master` needs that ref. It skips, naming which reason, when the
 ref is not fetched or when a list is not on master yet; a `git show` that fails for a path
@@ -14,28 +16,31 @@ lenient, never wrong in the failing direction.
 Run: uv run pytest ansible/tests/repo/test_module_length_ratchet.py
 """
 
-import subprocess
 from collections.abc import Iterable, Mapping
-from pathlib import Path
 
 import pytest
 
-from _helpers import REPO, is_test_file
+from _helpers import REPO
+from _ratchet_census import (
+    LENGTHS,
+    PATCHES,
+    line_counts,
+    monkeypatch_counts,
+    module_fixtures_by_dir,
+    module_fixtures_for,
+    run_git,
+    tracked_python_files,
+)
 from _ratchet import (
     NON_TEST_CAP,
     TEST_CAP,
     Ratchet,
     cap_for,
-    count_module_patches,
-    first_party_module_names,
     function_differs,
     function_source,
-    module_fixture_names,
     parse_allowlist,
     raised_entries,
 )
-
-HERE = REPO / "ansible" / "tests" / "repo"
 
 # One file per top-level tree that holds Python, asserted by name so the census cannot go
 # quiet. A bare size floor would still pass if a whole tree stopped being enumerated.
@@ -60,6 +65,7 @@ MODULE_FIXTURE_MEMBERS = frozenset(
 # widened heuristic add the files it newly sees.
 WHOLE_FILE_GUARDS = (
     "ansible/tests/_ratchet.py",
+    "ansible/tests/_ratchet_census.py",
     "ansible/tests/repo/test_module_length_ratchet.py",
 )
 
@@ -71,42 +77,18 @@ CAP_DECIDER = "is_test_file"
 
 GUARD_SOURCES = (*WHOLE_FILE_GUARDS, HELPERS)
 
-LENGTHS = Ratchet(
-    path=HERE / "module_length_allowlist.txt",
-    unit="lines",
-    remedy="Split it: docs/python-code-organization.md says where the pieces go.",
-    cap_of=cap_for,
-)
-
-PATCHES = Ratchet(
-    path=HERE / "monkeypatch_allowlist.txt",
-    unit="monkeypatch.setattr calls on a first-party module",
-    remedy=(
-        "Give the module under test a seam instead — a frozen dataclass of injectable "
-        "boundaries, as in scripts/deploy_tools/land_lib/tools.py with its fakes in "
-        "scripts/deploy_tools/tests/_land_fakes.py."
-    ),
-    cap_of=lambda rel: 0,
-)
-
-
-def _git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=REPO, capture_output=True, text=True, check=False
-    )
-
 
 def master_is_fetched() -> bool:
-    return _git("rev-parse", "--verify", "origin/master").returncode == 0
+    return run_git("rev-parse", "--verify", "origin/master").returncode == 0
 
 
 def tracked_on_master(rel: str) -> bool:
-    return _git("cat-file", "-e", f"origin/master:{rel}").returncode == 0
+    return run_git("cat-file", "-e", f"origin/master:{rel}").returncode == 0
 
 
 def text_on_master(rel: str) -> str:
     """The file's content on `origin/master`. Raises when git cannot produce it."""
-    shown = _git("show", f"origin/master:{rel}")
+    shown = run_git("show", f"origin/master:{rel}")
     if shown.returncode:
         raise RuntimeError(
             f"git show origin/master:{rel} failed: {shown.stderr.strip()}"
@@ -115,7 +97,7 @@ def text_on_master(rel: str) -> str:
 
 
 def differs_from_master(rel: str) -> bool:
-    return _git("diff", "--quiet", "origin/master", "--", rel).returncode != 0
+    return run_git("diff", "--quiet", "origin/master", "--", rel).returncode != 0
 
 
 def guard_differs_from_master() -> bool:
@@ -127,74 +109,6 @@ def guard_differs_from_master() -> bool:
     return function_differs(
         text_on_master(HELPERS), (REPO / HELPERS).read_text(), CAP_DECIDER
     )
-
-
-def tracked_python_files() -> list[str]:
-    """Every tracked first-party `.py` path, repo-relative.
-
-    `git ls-files` rather than a walk, which from the repo root descends into
-    `.claude/worktrees/<name>/` — see test_no_root_anchored_rglob.py for that incident.
-    """
-    listed = _git("ls-files", "-z", "--", "*.py").stdout
-    return [
-        rel
-        for rel in listed.split("\0")
-        if rel and not rel.startswith("ansible/collections/")
-    ]
-
-
-def line_counts() -> dict[str, int]:
-    """Repo-relative path -> line count, counting newlines the way `wc -l` does."""
-    return {
-        rel: (REPO / rel).read_bytes().count(b"\n") for rel in tracked_python_files()
-    }
-
-
-def module_fixtures_by_dir(tracked: Iterable[str]) -> dict[str, frozenset[str]]:
-    """Directory (repo-relative, posix; "" is the repo root) -> its conftest's module fixtures."""
-    return {
-        rel.rpartition("/")[0]: module_fixture_names((REPO / rel).read_text())
-        for rel in tracked
-        if rel.rpartition("/")[2] == "conftest.py"
-    }
-
-
-def module_fixtures_for(
-    rel: str, by_dir: Mapping[str, frozenset[str]]
-) -> frozenset[str]:
-    """The module fixtures visible to `rel`, unioned over its directory chain.
-
-    pytest resolves a fixture from the test's own directory upwards, so a conftest anywhere
-    above the test contributes. Shadowing does not matter here: both definitions would have to
-    return a module for the name to count at all.
-    """
-    parts = rel.split("/")[:-1]
-    return frozenset().union(
-        *(
-            by_dir.get("/".join(parts[:depth]), frozenset())
-            for depth in range(len(parts) + 1)
-        )
-    )
-
-
-def monkeypatch_counts() -> dict[str, int]:
-    """Repo-relative test-module path -> its module-patch count, zeros included.
-
-    Zeros are in the mapping so a listed file whose patches are all gone reads as "remove it"
-    rather than as a path that no longer exists.
-    """
-    tracked = tracked_python_files()
-    first_party = first_party_module_names(tracked)
-    by_dir = module_fixtures_by_dir(tracked)
-    return {
-        rel: count_module_patches(
-            (REPO / rel).read_text(errors="replace"),
-            first_party,
-            module_fixtures_for(rel, by_dir),
-        )
-        for rel in tracked
-        if is_test_file(Path(rel))
-    }
 
 
 # ---------------------------------------------------------------- red-proof pairs
