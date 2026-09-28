@@ -1,8 +1,8 @@
 """Guards on where a test file lives: under a `testpaths` entry, and in a `tests/` directory.
 
-`testpaths` is hand-enumerated — 21 entries covering `ansible/tests`, `scripts`,
-`.claude/hooks`, `evals` and a dozen per-role `tests/` directories. Nothing derives it, so a
-role that ships tests in a directory nobody added falls outside it silently. The tests
+`testpaths` is hand-enumerated — a handful of roots such as `ansible/tests`, `scripts`,
+`.claude/hooks` and `evals`, plus the `ansible/roles/*/*/tests` glob. Nothing derives it, so a
+test in a directory none of them reaches falls outside it silently. The tests
 are written, reviewed and committed; they pass when invoked directly; and `uv run pytest` never
 collects them. There is no error to read, because the suite reports the count it always
 reported.
@@ -29,6 +29,7 @@ import subprocess
 import tomllib
 from pathlib import PurePosixPath
 
+import pytest_shard
 from _helpers import REPO
 
 # pytest's default `python_files`, both forms. Deriving the notion of "a test file" from a
@@ -70,14 +71,12 @@ def orphaned_test_files(test_files, testpaths) -> list[str]:
     """The test files lying under no `testpaths` entry, and so never collected.
 
     Matching is by path component rather than string prefix: a `scripts` entry must not be read
-    as covering `scripts_extra/test_x.py`. `is_relative_to` gives that for free, where a
-    `str.startswith` would silently pass the exact file this guard exists to catch.
+    as covering `scripts_extra/test_x.py`. `pytest_shard.under_testpaths` gives that, and also
+    expands a glob entry such as `ansible/roles/*/*/tests`, where a `str.startswith` would
+    silently pass the exact file this guard exists to catch.
     """
-    roots = [PurePosixPath(p) for p in testpaths]
     return [
-        path
-        for path in test_files
-        if not any(PurePosixPath(path).is_relative_to(root) for root in roots)
+        path for path in test_files if not pytest_shard.under_testpaths(path, testpaths)
     ]
 
 
@@ -110,6 +109,17 @@ def test_a_sibling_sharing_a_name_prefix_is_flagged() -> None:
 
 def test_a_test_file_under_a_testpath_is_clean() -> None:
     assert orphaned_test_files(["scripts/dev/test_a.py"], ["scripts"]) == []
+
+
+def test_a_glob_testpath_covers_role_tests_and_not_role_files() -> None:
+    orphans = orphaned_test_files(
+        [
+            "ansible/roles/k8s/newthing/tests/test_a.py",
+            "ansible/roles/k8s/newthing/files/test_b.py",
+        ],
+        ["ansible/roles/*/*/tests"],
+    )
+    assert orphans == ["ansible/roles/k8s/newthing/files/test_b.py"]
 
 
 # Test-suite files that may sit outside a `tests/` directory, and why.

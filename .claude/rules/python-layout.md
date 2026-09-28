@@ -57,7 +57,7 @@ reaches its module through a `sys.path` bootstrap pointing at the sibling `files
 session a full run shares, so a top-level `files/*.py` needs a basename no other role's
 `files/` or `pythonpath` root uses. Two roles' `app.py` failed six tests only in a full run
 (#2608). `ansible/tests/repo/test_pythonpath_module_basenames.py` enforces it. A role that ships a `files/*.py` with
-logic adds its `tests/` directory to `testpaths`.
+logic gets a `tests/` directory, which the `ansible/roles/*/*/tests` glob in `testpaths` collects.
 
 `ansible/tests/` is grouped by what a guard reads: `deploy/` (the deploy play, gitops_deploy
 and the rollout gates), `k8s/` (manifest render and workload hygiene across roles),
