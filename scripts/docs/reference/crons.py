@@ -33,6 +33,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib import yaml_fast
+from lib.docs_provenance import md_cell
 
 from lib.repo_paths import REPO, ROLES
 
@@ -229,7 +230,7 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
     parts.append("|---|---|---|---|---|---|")
     for row in sorted(rows, key=lambda r: r["name"]):
         parts.append(
-            f"| {row['name']} | `{row['schedule']}` | {row['host']} | "
+            f"| {md_cell(row['name'])} | `{row['schedule']}` | {md_cell(row['host'])} | "
             f"`{row['user']}` | {row['changes_state']} | `{row['source']}` |"
         )
 
