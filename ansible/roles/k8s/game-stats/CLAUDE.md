@@ -168,4 +168,3 @@ the ones that stage a script importing `stats_lib`, and every one interpolates t
 - Logic: `files/stats.py`, `files/valheim_stats.py`, `files/stats_lib.py`. Tests:
   `tests/` (`uv run pytest ansible/roles/k8s/game-stats/tests`). A behaviour change in
   `stats_lib.py` affects both games.
-- Deploy: `./scripts/deploy.sh --tags "game-stats"`

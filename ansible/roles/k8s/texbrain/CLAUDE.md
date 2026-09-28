@@ -61,6 +61,5 @@ symptom shows up in this cluster, not in that repo:
 
 ## Editing
 - Manifests: `templates/` · Image pin and resources: `defaults/main.yml`
-- Deploy: `./scripts/deploy.sh --tags "texbrain"`
 - Verify: `uv run python scripts/diagnostics/probe.py health texbrain`, then open the page and
   compile a document — a 1/1 pod says nothing about whether the WebAssembly engine ran.

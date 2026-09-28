@@ -190,4 +190,3 @@ per-player deaths and playtime across worlds by design.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
-- Deploy: `./scripts/deploy.sh --tags "valheim"`

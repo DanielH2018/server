@@ -30,4 +30,3 @@ conventions.
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
   `templates/service.yaml.j2`.
-- Deploy: `./scripts/deploy.sh --tags "bento-pdf"`.

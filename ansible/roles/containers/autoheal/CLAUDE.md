@@ -54,4 +54,3 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Compose: `templates/docker-compose.yml.j2`
-- Deploy: `./scripts/deploy.sh --tags "autoheal"`

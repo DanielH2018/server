@@ -74,4 +74,3 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - Rules: `templates/config/application.yml.j2` (rendered into the k8s Secret by `roles/k8s/janitorr`)
-- Deploy (from daniel-box): `./scripts/deploy.sh --tags "janitorr"`

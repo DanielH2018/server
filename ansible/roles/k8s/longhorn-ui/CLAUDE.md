@@ -21,4 +21,3 @@ middlewares it references, nothing else.
 
 ## Editing
 - Route/middlewares: `templates/ingressroute.yaml.j2`, `templates/middlewares.yaml.j2`.
-- Deploy: `./scripts/deploy.sh --tags "longhorn-ui"`.

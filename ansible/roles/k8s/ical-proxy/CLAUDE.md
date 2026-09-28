@@ -24,4 +24,3 @@ calendar widget. See repo-root `CLAUDE.md` for shared conventions.
 
 ## Editing
 - App: `files/ical_proxy.py` (tests in `tests/test_app.py`) · Image: `templates/Dockerfile.j2`
-- Deploy: `./scripts/deploy.sh --tags "ical-proxy"`

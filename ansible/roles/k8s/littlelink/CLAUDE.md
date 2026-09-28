@@ -19,4 +19,3 @@
 
 ## Editing
 - Image bump: `defaults/main.yml` (`littlelink_k8s_image`).
-- Deploy: `./scripts/deploy.sh --tags "littlelink"`.

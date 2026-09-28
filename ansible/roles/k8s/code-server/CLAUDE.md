@@ -67,4 +67,3 @@ it is built from (`templates/Dockerfile.j2` + `files/extensions.sh`); the invent
 
 ## Editing
 - Image: `templates/Dockerfile.j2`, `files/extensions.sh` · Workload: `ansible/roles/k8s/code-server/`
-- Deploy: `./scripts/deploy.sh --tags "code-server"`
