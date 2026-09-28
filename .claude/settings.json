@@ -113,7 +113,7 @@
     ]
   },
   "enabledPlugins": {
-    "superpowers@claude-plugins-official": true,
+    "superpowers@claude-plugins-official": false,
     "claude-permission-audit@daniel-tools": false
   }
 }
