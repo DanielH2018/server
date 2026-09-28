@@ -17,6 +17,9 @@ PIHOLE = ANSIBLE / "roles/k8s/pihole"
 EXPECT = task_named(STAMP, "Work out which workloads this apply must roll")
 LOOP_EXPR = EXPECT["loop"]
 FACT_EXPR = EXPECT["ansible.builtin.set_fact"]["manifests_release_rollouts"]
+# Rendered per target below, not merged into BASE: `manifests_target_triggers` reads the
+# target's own `restart_on`, so it has a different value for each entry in one loop.
+TASK_VARS = EXPECT.get("vars", {})
 
 BASE = dict(
     manifests_service="prowlarr",
@@ -31,6 +34,11 @@ BASE = dict(
     manifests_apply={"stdout": "deployment.apps/prowlarr configured"},
     k8s_rebuilt_images=[],
     manifests_rolled_by_apply={},
+    # Read rather than repeated: this is what an entry with no `restart_on` falls back to, and
+    # a test that hardcoded it would keep passing after the default dropped a signal.
+    manifests_restart_triggers_default=load_yaml(
+        MANIFESTS_TASKS.parent / "defaults/main.yml"
+    )["manifests_restart_triggers_default"],
 )
 
 
@@ -39,10 +47,15 @@ def rollouts(**over):
     ctx = {**BASE, **over}
     acc = []
     for target in render_expr(LOOP_EXPR, **ctx):
+        task_vars = {
+            name: render_expr(expr, manifests_release_target=target, **ctx)
+            for name, expr in TASK_VARS.items()
+        }
         acc = render_expr(
             FACT_EXPR,
             manifests_release_rollouts=acc,
             manifests_release_target=target,
+            **task_vars,
             **ctx,
         )
     return {r["name"]: r for r in acc}

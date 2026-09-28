@@ -18,6 +18,9 @@ This script adapts each export so it renders on first load with no manual clicks
        * single-select query vars  -> first value resolved live from Prometheus
          (``label_values(...)``), with chained vars resolved in order.
 
+Each board is pinned to a grafana.com REVISION (see ``DASHBOARDS``), so a re-run
+reproduces the committed JSON rather than picking up whatever upstream published since.
+
 Re-run to regenerate (e.g. after a Grafana upgrade or to refresh defaults):
 
     python3 scripts/grafana/fetch_grafana_dashboards.py
@@ -47,7 +50,15 @@ UID_BY_PLUGIN = {
     "prometheus": ("EGdsQqhVk", "Prometheus"),
     "loki": ("bf4q19tuivta8e", "Loki"),
 }
-DASHBOARDS = {"node-exporter-full": 1860, "cadvisor": 14282}
+# gnetId -> the PINNED grafana.com revision, never `latest`. A vendored board is a
+# dependency like any other: `revisions/latest` made a re-fetch return whatever upstream had
+# published since, so the 13,746-line node-exporter-full.json could change under an unrelated
+# re-run and the diff had no commit to explain it. Revision 45 of 1860 and revision 1 of 14282
+# are the ones the committed JSON was adapted from (verified 2026-09-28: revision 45 carries
+# the same dashboard `version: 101` the committed file does), so re-running this script
+# reproduces the committed bytes. Bump a revision deliberately, in its own commit, and read
+# the diff.
+DASHBOARDS = {"node-exporter-full": (1860, 45), "cadvisor": (14282, 1)}
 OUTDIR = Path("ansible/roles/k8s/claude-otel/files/dashboards")
 
 # Grafana folder (subdir) each community board is provisioned into; default is the General
@@ -87,8 +98,16 @@ DROP_PANELS = {
 }
 
 
-def fetch(gnet_id):
-    url = "https://grafana.com/api/dashboards/%d/revisions/latest/download" % gnet_id
+def fetch(gnet_id, revision):
+    """Download one grafana.com dashboard at a pinned revision.
+
+    `revision` is never `latest`: the caller names the exact revision so a re-run returns the
+    same bytes it returned last time. See the DASHBOARDS comment.
+    """
+    url = "https://grafana.com/api/dashboards/%d/revisions/%d/download" % (
+        gnet_id,
+        revision,
+    )
     with urllib.request.urlopen(url, timeout=30) as r:
         return json.load(r)
 
@@ -208,8 +227,8 @@ def adapt(name, d):
 
 
 def main():
-    for name, gnet_id in DASHBOARDS.items():
-        s, resolved = adapt(name, fetch(gnet_id))
+    for name, (gnet_id, revision) in DASHBOARDS.items():
+        s, resolved = adapt(name, fetch(gnet_id, revision))
         dest = OUTDIR / SUBDIR.get(name, "") / ("%s.json" % name)
         dest.parent.mkdir(parents=True, exist_ok=True)
         dest.write_text(s + "\n", encoding="utf-8")

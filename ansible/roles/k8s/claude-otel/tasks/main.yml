@@ -55,12 +55,22 @@
       {{ claude_otel_stabilise_workloads
          | map('combine', {'namespace': k8s_observability_namespace}) | list }}
 
-- name: Restart the telemetry workloads after a config change
+- name: Restart the telemetry workloads whose secret changed
   tags: [deploy]
-  # `manifests_rollout: ''` above skips the shared role's WAIT, and skipping it also skips
-  # its rollout-restart — so without this a ConfigMap edit applies to the object, reports
-  # changed, and never reaches the running pod. Caught on the first config edit: the
-  # collector kept serving the previous config with the deploy fully green.
+  # `manifests_rollout: ''` above skips the shared role's WAIT, and skipping it also skips its
+  # rollout-restart — so without a restart here a config edit applies to the object, reports
+  # changed, and never reaches the running pod. Caught on the first config edit: the collector
+  # kept serving the previous config with the deploy fully green.
+  #
+  # This used to restart ALL SIX on `manifests_render is changed`, which is a per-ROLE signal —
+  # it fires when any of this role's eight manifests changed. prometheus.yaml.j2 alone changed
+  # in 49 commits in 90 days, and each of those restarted Loki, Tempo, kube-state-metrics, the
+  # collector and Grafana for an edit none of them read. Each ConfigMap is now hashed into its
+  # OWN pod template (`checksum/config`), so a ConfigMap edit moves that one pod template and
+  # the apply rolls that one pod. What the annotation cannot cover is a Secret — hashing one
+  # into a world-readable annotation would open a read path over it — so this task survives for
+  # exactly the two workloads that read one, selected by `restart_on` rather than by a second
+  # hand-written list. Issue #2858.
   #
   # Skipped for a Deployment this run created — its pods are already on the new config, and
   # `rollout restart` races the initial rollout. Skipped too for a workload the apply itself
@@ -72,23 +82,17 @@
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }}
       rollout restart {{ item.kind }}/{{ item.name }}
-  loop:
-    # otel-collector is a DaemonSet since the Phase F drain (per-node loopback OTLP).
-    - { kind: deploy, name: loki }
-    - { kind: deploy, name: prometheus }
-    - { kind: deploy, name: kube-state-metrics }
-    - { kind: deploy, name: tempo }
-    - { kind: daemonset, name: otel-collector }
-    - { kind: deploy, name: grafana }
+  loop: "{{ claude_otel_stabilise_workloads }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
   changed_when: true
   when:
     # A dry-run render is always `changed` and its apply rolled nothing, so without this every
-    # dry run would restart all six live workloads (#2588).
+    # dry run would restart the live workloads (#2588).
     - not k8s_no_mutate
-    - manifests_render is changed or manifests_secret_render is changed
+    - "'secret' in item.restart_on"
+    - manifests_secret_render is changed
     # `| default('')`: if the apply's stdout cannot be read, fall through to "not created" and
     # restart. Read the two failure directions before changing it — they are not symmetric. A
     # spurious restart races only a first-ever creation, which happens once per workload and

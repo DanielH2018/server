@@ -57,6 +57,47 @@ collector are dashboards and Claude Code telemetry, which is tier 4 by the class
 description. `ansible/tests/k8s/test_pod_template_hygiene.py` enforces that every
 long-running pod template names one of the four classes.
 
+## One config change, one restart
+
+This role sets `manifests_rollout: ''`, so `k8s/manifests` neither waits nor restarts for it
+and the role does both itself. Until 2026-09-28 its restart task looped over all six workloads
+gated on `manifests_render is changed`. That is a per-ROLE signal: it fires when ANY of the
+role's eight manifests changed, and `templates/prometheus.yaml.j2` alone changed in 49 commits
+in 90 days — each of which restarted Loki, Tempo, kube-state-metrics, the collector and Grafana
+for an edit none of them reads (#2858).
+
+Each workload now carries its own trigger, and there are two kinds:
+
+- **A ConfigMap edit rolls its own pod.** Each template captures its ConfigMap body into a
+  Jinja variable and hashes it into that workload's pod template as `checksum/config`
+  (`ansible/templates/checksum-annotation.yml.j2`). The apply then changes one pod template,
+  rolls one pod, and reports it through `manifests_rolled_by_apply`. kube-state-metrics renders
+  no ConfigMap and needs no annotation — every input it has is already in its pod template.
+- **A Secret edit still needs the restart task**, for prometheus and grafana only. Hashing a
+  Secret's bytes into a world-readable annotation would open a read path over it, so those two
+  declare `restart_on: [secret]` in
+  `ansible/roles/k8s/claude-otel/defaults/main.yml:claude_otel_stabilise_workloads` and the
+  other four declare `restart_on: []`. `manifests_secret_render` is one register over all three
+  secret manifests, so rotating Grafana's admin password also restarts Prometheus.
+
+`restart_on` is read twice, and both readers must agree or the deploy fails loudly:
+the restart task here, and the release record's `rollouts[].restart`
+(`manifests_restart_triggers_default` in `ansible/roles/k8s/manifests/defaults/main.yml`).
+`probe.py health claude-otel` reads a `restart: true` with no newer `restartedAt` as NOT ROLLED,
+which is what turns a wrong `restart_on` into a red deploy rather than a silent one.
+
+**Widen the capture when you add a `data:` key.** Four of the five templates capture ONE key's
+body — grafana's captures the whole `data:` block — so a second key added to `prometheus.yaml.j2`
+(recording rules, an alerts file) would land outside the hash. The ConfigMap would change, the
+pod template would not, and the annotation would be present throughout: the original bug with
+the gate blinded.
+
+The three ways this goes QUIET are guarded by
+`ansible/tests/services/test_claude_otel_config_rolls_one_workload.py::test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation`,
+`ansible/tests/services/test_claude_otel_config_rolls_one_workload.py::test_every_workload_reading_a_role_secret_declares_restart_on_secret`
+and
+`ansible/tests/services/test_claude_otel_config_rolls_one_workload.py::test_no_role_configmap_grew_a_key_the_annotation_does_not_hash`.
+
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 
 Grafana is an OIDC client of the Authelia portal — client `grafana` in
@@ -116,7 +157,15 @@ ConfigMap per folder.
 To change a board: edit the JSON here (or edit in the Grafana UI and round-trip with
 `scripts/grafana/export_grafana_dashboards.py`, which execs into the observability/grafana pod via
 `sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
-`scripts/grafana/fetch_grafana_dashboards.py` refreshes the two community boards (1860, 14282).
+`scripts/grafana/fetch_grafana_dashboards.py` refreshes the two community boards, each pinned
+to a grafana.com REVISION in `scripts/grafana/fetch_grafana_dashboards.py:DASHBOARDS` (1860 at
+revision 45, 14282 at revision 1). The script asked for `revisions/latest` until 2026-09-28,
+which made a refresh return whatever upstream had published since — `node-exporter-full.json`
+is 13,746 lines, and an unrelated re-run could rewrite all of them with no commit explaining
+it. Bump a revision in its own commit and read the diff. A refresh is still not a no-op: both
+boards carry post-fetch hand edits the script does not reproduce, and the query variables'
+defaults resolve against the live Prometheus, so `git checkout` the two files unless you meant
+to take the upstream form.
 A hand-edited board must stay in the writers' form — keys sorted at every depth, 2-space
 indent, non-ASCII literal — or the next export rewrites it and the drift read (`git diff
 --stat` after an export) shows a change that is not one. ENFORCED by

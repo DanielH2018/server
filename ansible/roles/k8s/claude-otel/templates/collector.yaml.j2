@@ -1,3 +1,4 @@
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'workload-shell.yml.j2' import pod_shell with context %}
@@ -9,6 +10,8 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 data:
   config.yaml: |
+{# Captured so the Deployment below can hash it into checksum/config. #}
+{% set claude_otel_collector_config %}
     receivers:
       otlp:
         protocols:
@@ -70,6 +73,8 @@ data:
           receivers: [otlp]
           processors: [batch]
           exporters: [otlp/tempo]
+{% endset %}
+{{ claude_otel_collector_config -}}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -87,6 +92,12 @@ spec:
       app: otel-collector
   template:
     metadata:
+      annotations:
+        # Rolls THIS workload alone when its own ConfigMap changes. The role skips the
+        # shared rollout-restart, so without this the edit reaches the ConfigMap and never
+        # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
+        # under `## One config change, one restart`.
+        {{ checksum_annotation('config', value=claude_otel_collector_config | hash('sha1')) }}
       labels:
         app: otel-collector
         netpol-baseline: enforced
