@@ -83,6 +83,62 @@ spec:
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
+          # ── Plugin allowlist sweep (REPORT-ONLY until #2873 arms it) ─────────────────────────
+          # One sweep for every plugin this role does not install, replacing a named sweep per
+          # retired plugin (remove-trakt, remove-sso-auth below). A plugin is a top-level
+          # `<Name>_<Version>` directory under /config/data/plugins; the sweep keeps every name
+          # in KEEP and would remove every other directory. It matches the name, not the
+          # version: each installer below sweeps its own superseded versions, and Jellyfin's
+          # own `Update Plugins` task writes newer-version directories between restarts.
+          #
+          # `configurations/` is not a plugin. It holds every plugin's settings — Media
+          # Cleaner's deletion rules, Webhook's destination — and git holds none of them, so the
+          # sweep skips it by name and never reads inside it. Loose files are reported, not
+          # swept: Jellyfin loads plugins from directories only.
+          #
+          # It runs BEFORE the installers, so a sixth installer added without a KEEP entry
+          # costs a re-download on every start instead of losing the plugin on every start.
+          # test_jellyfin_plugin_allowlist.py holds KEEP equal to the set the installers write.
+          #
+          # REPORT-ONLY: the operator approved the allowlist on the condition that it is
+          # dry-run against the live directory before it can delete anything (#2873). This
+          # container prints `keep` / `would remove` per entry and deletes nothing; read its
+          # log, then arm it and retire the two named sweeps in the same change.
+        - name: sweep-unlisted-plugins
+          image: {{ jellyfin_k8s_plugin_init_image }}
+          command:
+            - python3
+            - -c
+            - |
+              from pathlib import Path
+
+              PLUGINS = Path("/config/data/plugins")
+              # The `<Name>` half of the directory each installer below writes, which is the
+              # name its meta.json declares.
+              KEEP = ("Ani-Sync", "Intro Skipper", "Webhook", "Merge Versions", "Media Cleaner")
+              SETTINGS = "configurations"
+
+              if not PLUGINS.is_dir():
+                  print("no " + str(PLUGINS) + " yet, nothing to sweep")
+                  raise SystemExit(0)
+              unlisted = 0
+              for entry in sorted(PLUGINS.iterdir()):
+                  if entry.name == SETTINGS:
+                      print("keep " + entry.name + " (plugin settings, never swept)")
+                  elif not entry.is_dir():
+                      print("leave file " + entry.name)
+                  elif entry.name.rpartition("_")[0] in KEEP:
+                      print("keep " + entry.name)
+                  else:
+                      print("would remove " + entry.name)
+                      unlisted += 1
+              print("allowlist sweep (report-only): " + str(unlisted) + " unlisted plugin(s)")
+{{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
+          volumeMounts:
+            - name: jellyfin-config
+              mountPath: /config
+{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
           # ── jellyfin-ani-sync (D: AniList watch-status sync) ─────────────────────────────────
           # Installs the plugin from its published release instead of leaving it to a click in the
           # admin dashboard, so a config PVC restored from nothing comes back with it. The
@@ -96,7 +152,6 @@ spec:
           # here holds no DAC_OVERRIDE (see the comment above), so it could not then write the
           # files it had just unpacked. urllib, hashlib and zipfile are stdlib, so the whole
           # install runs as the owning uid and installs nothing at runtime.
-{{ container_resources(cpu_limit='500m', mem_limit='128Mi', cpu_request='10m', mem_request='32Mi') }}
         - name: install-ani-sync
           image: {{ jellyfin_k8s_plugin_init_image }}
           command:

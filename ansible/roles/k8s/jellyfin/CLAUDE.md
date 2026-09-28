@@ -130,6 +130,13 @@ shared `media-data` library and owns its own config volume.
   install may have written either. Authelia's `jellyfin` OIDC client went in the same change;
   `authelia_client_password_hash` is left in SOPS, unreferenced by the k8s role, because the
   archived Docker authelia role still names it. `test_sso_auth_removed.py` pins both sides.
+- **`sweep-unlisted-plugins` is REPORT-ONLY** (#2873). It runs before the installers and keeps a
+  top-level plugin directory only when its `<Name>` half is in its `KEEP` tuple, skipping
+  `configurations/` by name. It prints `keep` / `would remove` per entry and deletes nothing yet:
+  the operator approved replacing the named sweeps with it on condition of a dry run against the
+  live directory first. Arming it retires `remove-trakt` and `remove-sso-auth`.
+  `ansible/tests/services/test_jellyfin_plugin_allowlist.py` holds `KEEP` equal to the set the
+  installers write.
 - The five installers duplicate rather than share a loop, deliberately — each is pinned by
   literal string assertions in its own test, and a textual guard stops seeing what it guards
   once the thing moves behind an indirection.
