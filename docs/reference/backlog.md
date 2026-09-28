@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-27 18:18 UTC
-generated_sha: 79c866a24
+generated_at: 2026-09-28 06:17 UTC
+generated_sha: 180a57cbc
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,14 +16,26 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
+| [#2783](https://github.com/DanielH2018/server/issues/2783) | medium | improvement | backup-observability | Weekly Sunday reboot pages about 15 Kuma tiles; declare a maintenance window | 2026-09-27 | 0 | - | ✓ |
+| [#2798](https://github.com/DanielH2018/server/issues/2798) | medium | gap | - | A PR touching only a repo file a setup role ships gets no remaining-hosts line | 2026-09-27 | 0 | worktree-bridge-cse_019hYZV9YqYaH3ScQytyfPBf | ✓ |
+| [#2802](https://github.com/DanielH2018/server/issues/2802) | medium | improvement | backup-observability | Declare a Kuma maintenance window for the weekly reboot, via an API reconcile | 2026-09-27 | 0 | - | ✓ |
+| [#2805](https://github.com/DanielH2018/server/issues/2805) | medium | improvement | cicd | Delete deploy and repo scaffolding no live path reaches: the tick's Docker arm, the finished block-size migration, stale commands | 2026-09-28 | 0 | - | ✓ |
+| [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | monitor-bridge rebuilds alert management by hand; move its PromQL and LogQL checks to alert rules | 2026-09-28 | 0 | - | ✓ |
+| [#2808](https://github.com/DanielH2018/server/issues/2808) | medium | improvement | docs | Sixteen stores hold what the next session needs; consolidate to seven and retire facts.lock | 2026-09-28 | 0 | - | ✓ |
+| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 0 | - | ✓ |
+| [#2810](https://github.com/DanielH2018/server/issues/2810) | medium | improvement | cicd | Path narrowing stands in for rendered bytes; narrow broad deploys by render digest instead | 2026-09-28 | 0 | - | ✓ |
+| [#2811](https://github.com/DanielH2018/server/issues/2811) | medium | improvement | cicd | inject-nested-docs spends most of its bytes on edit-time rules during reads | 2026-09-28 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
 | [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
 | [#2759](https://github.com/DanielH2018/server/issues/2759) | low | gap | network | Confirm the Traefik bouncer's stream-pull stalls stopped after disabling its metrics ticker | 2026-09-27 | 0 | - | ✓ |
-| [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | worktree-fanout-orch-2026-09-27-deferred | ✓ |
-| [#2774](https://github.com/DanielH2018/server/issues/2774) | low | gap | cicd | fanout_place.py clean crashes on a worktree whose submodule gitdir is broken | 2026-09-27 | 0 | - | ✓ |
-| [#2775](https://github.com/DanielH2018/server/issues/2775) | low | gap | docs | inject-nested-docs head form starves a short matching rules file of the payload | 2026-09-27 | 0 | - | ✓ |
+| [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | - | ✓ |
+| [#2797](https://github.com/DanielH2018/server/issues/2797) | low | gap | cicd | Stage's gated services drift from prod between gated changes to the same tag | 2026-09-27 | 0 | worktree-bridge-cse_019hYZV9YqYaH3ScQytyfPBf | ✓ |
+| [#2800](https://github.com/DanielH2018/server/issues/2800) | low | gap | home-assistant | Home Assistant's cast receiver cannot reach external_url — pychromecast _connect_hass fails on every callback | 2026-09-27 | 0 | - | ✓ |
+| [#2807](https://github.com/DanielH2018/server/issues/2807) | low | improvement | container | The Pi's four Docker services carry 5,374 lines of Docker platform; consider native systemd units | 2026-09-28 | 0 | - | ✓ |
+| [#2812](https://github.com/DanielH2018/server/issues/2812) | low | improvement | cicd | Server CI never checks out dotfiles, so it keeps a stand-in and skips the segmenter tests | 2026-09-28 | 0 | - | ✓ |
+| [#2813](https://github.com/DanielH2018/server/issues/2813) | low | improvement | container | Five small k8s role merges: game-stats, n8n-images, rollout-drain, the arr deployment, a default Service | 2026-09-28 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
