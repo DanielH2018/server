@@ -7,11 +7,10 @@ digests instead of trusting the path (#2587). The record format and the reader's
 render_records`, which the GitOps tick runs itself; it is not in `containers_list`.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "render_records"` when `inventory_hostname ==
   render_records_host`
-- **Timer:** `kuma-check-render-records.timer` (`OnCalendar=*-*-* *:{{ '%02d' |
-  format(render_records_minute | int) }}:00`)
+- **Timer:** `kuma-check-render-records.timer` (`OnCalendar=*-*-* *:17:00`)
 <!-- /generated_from -->
 
 ## How one run works

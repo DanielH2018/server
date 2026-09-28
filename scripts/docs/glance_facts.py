@@ -7,7 +7,8 @@ image pins, `containers_list` facts, `meta/deps.yml` ordering and `common_config
 wiring — and `image_repository`, which every plane's image line goes through.
 
 STATIC PARSING ONLY: tasks and playbooks through `yaml.safe_load`, templates by line with
-a regex. Jinja is printed as written.
+a regex. A cron schedule or timer key's Jinja resolves to its fleet-wide value where no host
+overrides it (`lib.jinja_defaults`), and is printed as written everywhere else.
 """
 
 import re
@@ -24,6 +25,7 @@ from typing import Any
 
 from lib import yaml_fast
 from lib.render_guard import containers_entries, entry_tags, load_yaml
+from lib.jinja_defaults import resolve
 from lib.repo_paths import ANSIBLE, REPO, ROLES
 from reference.crons import schedule_text
 
@@ -181,7 +183,7 @@ def cron_jobs(role_dir: Path) -> list[tuple[str, str]]:
             if not isinstance(spec, dict) or spec.get("state") == "absent":
                 continue
             name = str(spec.get("name", task.get("name", "unnamed")))
-            jobs.append((name, schedule_text(spec)))
+            jobs.append((name, resolve(schedule_text(spec), role_dir)))
     return jobs
 
 
@@ -199,7 +201,7 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
         for line in tmpl.read_text().splitlines():
             m = _TIMER_KEY_RE.match(line)
             if m:
-                keys.append(f"{m.group(1)}={m.group(2)}")
+                keys.append(f"{m.group(1)}={resolve(m.group(2), role_dir)}")
         keys.sort(key=lambda k: _TIMER_KEYS.index(k.split("=", 1)[0]))
         units.append((tmpl.name.removesuffix(".j2"), keys))
     for tasks_file in sorted((role_dir / "tasks").glob("*.yml")):
@@ -217,7 +219,9 @@ def timer_units(role_dir: Path) -> list[tuple[str, list[str]]]:
             units.append(
                 (
                     f"kuma-check-{name}.timer",
-                    [f"OnCalendar={cadence}"] if cadence is not None else [],
+                    [f"OnCalendar={resolve(str(cadence), role_dir)}"]
+                    if cadence is not None
+                    else [],
                 )
             )
     return units

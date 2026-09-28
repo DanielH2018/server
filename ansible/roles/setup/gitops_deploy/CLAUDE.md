@@ -12,15 +12,11 @@ budget was sized from, and the accepted trade-offs are in `docs/gitops-pipeline.
 *The deployer's record*; read that before re-deriving any of them.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "gitops_deploy"`
-- **Timers (3):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec={{
-  gitops_deploy_tick_interval }}`), `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-*
-  {{ '%02d' | format(gitops_deploy_ruleset_drift_cron_hour | int) }}:{{ '%02d' |
-  format(gitops_deploy_ruleset_drift_cron_minute | int) }}:00`),
-  `kuma-check-github-interaction-limit.timer` (`OnCalendar=*-*-* {{ '%02d' |
-  format(gitops_deploy_interaction_limit_cron_hour | int) }}:{{ '%02d' |
-  format(gitops_deploy_interaction_limit_cron_minute | int) }}:00`)
+- **Timers (3):** `gitops-deploy.timer` (`OnBootSec=10min`, `OnUnitActiveSec=10min`),
+  `kuma-check-github-ruleset-drift.timer` (`OnCalendar=*-*-* 06:40:00`),
+  `kuma-check-github-interaction-limit.timer` (`OnCalendar=*-*-* 06:50:00`)
 <!-- /generated_from -->
 
 ## A host with `has_gitops: false` is reaped, and the code refuses on its own
