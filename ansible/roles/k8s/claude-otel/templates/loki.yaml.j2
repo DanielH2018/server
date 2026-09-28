@@ -1,3 +1,4 @@
+{% from 'checksum-annotation.yml.j2' import checksum_annotation with context %}
 {% from 'container-resources.yml.j2' import container_resources with context %}
 {% from 'security-context.yml.j2' import hardened_security_context with context %}
 {% from 'pvc.yml.j2' import pvc with context %}
@@ -10,6 +11,8 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 data:
   loki.yaml: |
+{# Captured so the Deployment below can hash it into checksum/config. #}
+{% set claude_otel_loki_config %}
     auth_enabled: false
     # Loki's usage reporter defaults to on and POSTs to stats.grafana.org, which Pi-hole
     # blocks. Every 4h cycle then burns its whole 5-retry budget (an A plus an AAAA lookup
@@ -61,6 +64,8 @@ data:
         type: local
         local:
           directory: /loki/rules
+{% endset %}
+{{ claude_otel_loki_config -}}
 ---
 {{ pvc('loki-data', claude_otel_storage_class, claude_otel_loki_storage, namespace=k8s_observability_namespace) }}
 ---
@@ -79,6 +84,12 @@ spec:
       app: loki
   template:
     metadata:
+      annotations:
+        # Rolls THIS workload alone when its own ConfigMap changes. The role skips the
+        # shared rollout-restart, so without this the edit reaches the ConfigMap and never
+        # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
+        # under `## One config change, one restart`.
+        {{ checksum_annotation('config', value=claude_otel_loki_config | hash('sha1')) }}
       labels:
         app: loki
         netpol-baseline: enforced

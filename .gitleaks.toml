@@ -19,3 +19,16 @@ useDefault = true
 [[allowlists]]
 description = "ansible/vars/secrets.yml is wholly SOPS (AES256-GCM) ciphertext — not plaintext secrets"
 paths = ['''ansible/vars/secrets\.yml''']
+
+# docs/facts.lock records one SHA per cited atom, keyed by the atom's own name — a repo path, a
+# Python symbol or a pytest node id. `generic-api-key` fires on a high-entropy value next to a
+# suggestive key name, and an atom named for a test ABOUT secrets supplies both halves:
+# `...::test_every_workload_reading_a_role_secret_declares_restart_on_secret": "<sha>"` tripped it
+# at entropy 3.89 (2026-09-28). The value is a digest of tracked repo content, so a hit here is a
+# false positive by construction, and a real secret cannot reach the file — `fact_status.py`
+# writes it, and `ansible/tests/repo/test_facts_lock_matches_tree.py` refuses a hand edit as
+# tampered. Scoped to this one rule on this one path, so every other rule still scans it.
+[[allowlists]]
+description = "docs/facts.lock holds content digests keyed by atom name, never a credential"
+targetRules = ["generic-api-key"]
+paths = ['''docs/facts\.lock''']

@@ -84,6 +84,13 @@
   # drain and the rollout-complete half of the gate still cover the roll the apply started. An
   # extra entry's own `kind` and `image` win over the defaults, as in the extra restart task.
   #
+  # An entry may narrow WHICH of the three signals queues a restart for it, with `restart_on`
+  # (`manifests_restart_triggers_default`, defaults/main.yml). `manifests_render is changed` is a
+  # per-ROLE signal: it fires when ANY of the role's manifests changed, which for a six-workload
+  # role meant every workload expected a restart for one workload's edit. An entry whose
+  # ConfigMap is hashed into its own pod template needs none of the three — the apply rolls it
+  # and `manifests_rolled_by_apply` already zeroes the expectation. Issue #2858.
+  #
   # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
   # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
   # (claude-otel's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
@@ -97,9 +104,11 @@
            'name': manifests_release_target.name,
            'kind': manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')),
            'restart': (
-             (manifests_render is changed) or (manifests_secret_render is changed)
-             or ((manifests_release_target.image | default(manifests_release_target.name))
-                 in (k8s_rebuilt_images | default([])))
+             ('config' in manifests_target_triggers and manifests_render is changed)
+             or ('secret' in manifests_target_triggers and manifests_secret_render is changed)
+             or ('image' in manifests_target_triggers
+                 and (manifests_release_target.image | default(manifests_release_target.name))
+                     in (k8s_rebuilt_images | default([])))
            ) and not (manifests_apply.stdout | default('')) is search(
              (manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset')
              | ternary('daemonset.apps/', 'deployment.apps/')
@@ -116,6 +125,11 @@
   loop_control:
     loop_var: manifests_release_target
     label: "{{ manifests_release_target.name }}"
+  vars:
+    # Templated per iteration, so it reads this entry's own `restart_on` — see
+    # `manifests_restart_triggers_default` in defaults/main.yml for what narrowing one means.
+    manifests_target_triggers: >-
+      {{ manifests_release_target.get('restart_on', manifests_restart_triggers_default) }}
 
 - name: Look for an existing release record for {{ manifests_service }}
   tags: [deploy]

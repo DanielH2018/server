@@ -14,10 +14,10 @@ else.
 
 Three things can silently break that, and none of them fails a deploy:
 
-  * **The lists drift.** The role spells its workloads out three times — the restart loop, the
-    wait loop, and `claude_otel_stabilise_workloads` in defaults. Add a seventh workload to the
-    first two and forget the third and the gate watches six of seven, reporting green for the
-    one that crashloops.
+  * **The lists drift.** The role spells its workloads out twice — the wait loop, and
+    `claude_otel_stabilise_workloads` in defaults, which the restart loop and the stabilisation
+    tasks read. Add a seventh workload to the wait loop and forget the variable and the gate
+    watches six of seven, reporting green for the one that crashloops.
   * **The inline wait gets queued into the drain.** It looks like the obvious next speedup —
     it is 54s of serial waiting that `k8s/manifests/tasks/drain.yml` would collapse to a max(). It cannot
     move: "Sync the live Grafana admin password" `kubectl exec`s into `deploy/grafana`, and the
@@ -74,10 +74,11 @@ def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
         "snapshot iterates it; without it the play gate watches nothing for this role."
     )
 
-    # Deliberately not a count. The role spells the workloads out twice today (the restart loop
-    # and the wait loop), but pointing either at claude_otel_stabilise_workloads is a correct
-    # consolidation — a test that pinned the number would fail for that improvement. What must
-    # hold is that every literal copy still standing agrees with the declared list.
+    # Deliberately not a count. The role spells the workloads out once today (the wait loop;
+    # the restart loop was pointed at claude_otel_stabilise_workloads in #2858), and pointing
+    # the last one at the variable too is a correct consolidation — a test that pinned the
+    # number would fail for that improvement. What must hold is that every literal copy still
+    # standing agrees with the declared list.
     for loop in _literal_workload_loops():
         assert loop == declared, (
             "claude-otel rolls a different set of workloads than it hands to the stabilisation "

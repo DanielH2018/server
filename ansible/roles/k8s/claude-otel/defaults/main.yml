@@ -168,14 +168,30 @@ claude_otel_tempo_retention: 720h
 claude_otel_health_cron_minute: "*/10"
 
 # The six telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
-# A variable rather than a third inline copy of the list: tasks/main.yml already spells it out
-# twice (the restart loop and the wait loop), and the stabilisation tasks that consume it must
-# iterate the SAME set or the gate silently watches fewer workloads than rolled.
+# A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
+# once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that
+# consume it must iterate the SAME set or the gate silently watches fewer workloads than rolled.
 # ansible/tests/services/test_claude_otel_stabilise_coverage.py holds the three in step.
+#
+# `restart_on` names which of roles/k8s/manifests's three change signals queues a
+# `rollout restart` for that workload, and so which makes the release record expect a fresh
+# `restartedAt` from it (`manifests_restart_triggers_default`, that role's defaults/main.yml).
+# All six read `[config, secret, image]` until 2026-09-28, which is where restarting all six for
+# one workload's edit came from: `manifests_render is changed` fires when ANY of this role's
+# eight manifests changed, and prometheus.yaml.j2 alone changed in 49 commits in 90 days.
+#
+# `[]` means nothing this role renders needs a restart TASK for that workload. Its ConfigMap is
+# hashed into its own pod template (`checksum/config`), so the apply moves the pod template and
+# rolls the pod by itself; kube-state-metrics renders no ConfigMap at all, and every input it
+# does have already lives in the pod template. `[secret]` is the one case the annotation cannot
+# cover: prometheus file-mounts `prometheus-scrape-credentials` and grafana reads `grafana-admin`
+# through `env.valueFrom`, and hashing a Secret's bytes into a world-readable annotation would
+# open a read path over it. Those two restart on a secret render, which is one register over all
+# three secret manifests — so rotating grafana's password also restarts prometheus. Issue #2858.
 claude_otel_stabilise_workloads:
-  - { kind: deploy, name: loki }
-  - { kind: deploy, name: prometheus }
-  - { kind: deploy, name: kube-state-metrics }
-  - { kind: deploy, name: tempo }
-  - { kind: daemonset, name: otel-collector }
-  - { kind: deploy, name: grafana }
+  - { kind: deploy, name: loki, restart_on: [] }
+  - { kind: deploy, name: prometheus, restart_on: [secret] }
+  - { kind: deploy, name: kube-state-metrics, restart_on: [] }
+  - { kind: deploy, name: tempo, restart_on: [] }
+  - { kind: daemonset, name: otel-collector, restart_on: [] }
+  - { kind: deploy, name: grafana, restart_on: [secret] }

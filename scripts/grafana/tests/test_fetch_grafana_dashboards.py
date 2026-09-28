@@ -91,3 +91,45 @@ def test_adapt_writes_the_same_form_as_the_exporter():
         '{\n  "id": null,\n  "panels": [\n    {\n      "id": 1,\n      "title": "é"\n    }\n  ],\n'
         '  "templating": {\n    "list": []\n  },\n  "uid": "x"\n}'
     )
+
+
+# Revision pinning (#2858). `revisions/latest` made a re-fetch return whatever grafana.com had
+# published since, so an unrelated re-run could rewrite 13,746 lines of node-exporter-full.json.
+# The named members keep the census non-vacuous: a renamed key would otherwise leave the
+# `all(...)` below iterating an empty dict and passing.
+PINNED_BOARDS = frozenset({"node-exporter-full", "cadvisor"})
+
+
+def test_every_vendored_dashboard_pins_a_revision():
+    assert PINNED_BOARDS <= set(fg.DASHBOARDS)
+    for name, pin in fg.DASHBOARDS.items():
+        gnet_id, revision = pin
+        assert isinstance(gnet_id, int), name
+        assert isinstance(revision, int), name
+
+
+def test_the_download_url_names_the_pinned_revision_and_never_latest():
+    seen = []
+
+    class _Response:
+        def read(self):
+            return b"{}"
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *exc):
+            return False
+
+    def urlopen(url, timeout=None):
+        seen.append(url)
+        return _Response()
+
+    original = fg.urllib.request.urlopen
+    fg.urllib.request.urlopen = urlopen
+    try:
+        fg.fetch(1860, 45)
+    finally:
+        fg.urllib.request.urlopen = original
+    assert seen == ["https://grafana.com/api/dashboards/1860/revisions/45/download"]
+    assert "latest" not in seen[0]

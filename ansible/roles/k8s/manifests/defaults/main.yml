@@ -73,3 +73,17 @@ manifests_prune_kinds: []
 # Read by `ansible/tests/_helpers.py:MANIFESTS_ROLLOUT_DEFAULT_S`, which is what the two budget
 # guards and the inline-gate census size themselves against — so raising this re-derives them.
 manifests_rollout_timeout_default: 600s
+
+# Which of this role's three change signals queues a `rollout restart` for a rollout entry, and
+# so which of them makes the release record expect a fresh `restartedAt` from that workload.
+# Every entry gets all three unless it names its own `restart_on:`, which is the behaviour every
+# role had before the key existed.
+#
+# A role with `manifests_rollout: ''` restarts its own workloads, and `manifests_render is
+# changed` is a per-ROLE signal, not a per-workload one: claude-otel renders six workloads from
+# eight manifests, so one changed manifest read as "all six changed" and restarted all six.
+# Such a role narrows each `manifests_self_rollouts` entry — `restart_on: [secret]` for a
+# workload whose only un-hashable input is a Secret, `restart_on: []` for one whose ConfigMap is
+# hashed into its own pod template (`ansible/templates/checksum-annotation.yml.j2`), where the
+# apply itself does the rolling and `manifests_rolled_by_apply` reports it. Issue #2858.
+manifests_restart_triggers_default: [config, secret, image]
