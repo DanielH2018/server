@@ -1,8 +1,11 @@
 ---
-# The GitHub CLI, plus the git credential helper that lets this host clone PRIVATE repos.
-# Needed because DanielH2018/dotfiles is private: without a credential, `chezmoi init`
-# fails with "could not read Username for 'https://github.com'". daniel-server solves it
-# the same way — credential.helper = !gh auth git-credential.
+# The GitHub CLI, plus the git credential helper that authenticates this host to GitHub.
+# The readers are gitops_deploy's CI gate, its two GitHub crons, and renovate_agent — each
+# reaches the token through `gh auth token`. daniel-server carries the same config by hand:
+# credential.helper = !gh auth git-credential.
+#
+# chezmoi_setup is NOT one of the readers. DanielH2018/dotfiles is public and clones
+# anonymously (#2805), so the dotfiles land whether or not this host has logged in.
 
 - name: Ensure the APT keyring directory exists
   tags: [github_cli]
@@ -93,7 +96,8 @@
   # Reported rather than failed so the play can still finish the tasks that don't need it.
   ansible.builtin.debug:
     msg: >-
-      gh is installed but this host is not authenticated to GitHub, so cloning the private
-      dotfiles repo will fail. Run `gh auth login` once, by hand, on {{ inventory_hostname }},
-      then re-run this play.
+      gh is installed but this host is not authenticated to GitHub, so everything that reads
+      `gh auth token` runs anonymous at 60 requests/hour — gitops_deploy's CI gate, its two
+      GitHub crons, and renovate_agent. Run `gh auth login` once, by hand, on
+      {{ inventory_hostname }}, then re-run this play.
   when: github_cli_auth.rc != 0

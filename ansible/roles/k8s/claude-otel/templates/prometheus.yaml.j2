@@ -145,9 +145,15 @@ data:
       # job is what re-lit the Apps/player-stats board — the exporter had been scraped
       # by NOTHING since the Docker prometheus retired. Single replica behind the
       # Service, so a static target is unambiguous (unlike the otel DaemonSet jobs).
+      #
+      # Gated on the game server's replica count (#2877). terraria-stats renders the same
+      # count, so while terraria is parked at zero this job would have no endpoint behind its
+      # Service and the scrape-target check would page for a workload nobody wants running.
+{% if terraria_k8s_replicas | int > 0 %}
       - job_name: terraria-stats
         static_configs:
           - targets: ['terraria-stats.{{ k8s_namespace }}.svc:9420']
+{% endif %}
       # Same shape for Valheim (2026-08-13), added with that server's reactivation. Its
       # exporter additionally carries per-player DEATHS, which the Terraria console cannot
       # emit — see roles/k8s/valheim-stats/CLAUDE.md.

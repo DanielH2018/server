@@ -56,6 +56,13 @@ and the claims read them unchanged.
   SQLite DB — irreplaceable, since Loki's ~28-day backfill window can't fully reconstruct it.
 - **What is Terraria's own** is `parse_line`, `StatsState`, and `Store`'s schema half — the
   `players` schema, `load_state` and `save`, over a `stats_lib.SqliteStore` subclass.
+- **It runs as many pods as the game server does**, reading `terraria_k8s_replicas` from
+  `ansible/inventory/group_vars/all.yml`. Not from terraria's defaults: a role default does
+  not cross a role boundary, so `| default(1)` here would have rendered 1 forever (#2877).
+  claude-otel's `terraria-stats` scrape job is gated on the same value, because a Service
+  with no endpoint reads `up == 0` and pages the scrape-target check.
+  `ansible/tests/services/test_terraria_stats_follows_the_server.py` holds the three renders
+  together. valheim-stats has no such knob to follow.
 
 ## valheim-stats
 

@@ -12,7 +12,10 @@ metadata:
 spec:
   # ReadWriteOnce PVC — two pods can't both mount /data during a rolling update.
 {{ spec_shell('Recreate') }}
-  replicas: 1
+  # Follows the game server, from inventory (#2877): this exporter tails terraria's console
+  # out of Loki, so at `terraria_k8s_replicas: 0` it polls for a server that cannot log.
+  # claude-otel's `terraria-stats` scrape job is gated on the same value.
+  replicas: {{ terraria_k8s_replicas }}
   selector:
     matchLabels:
       app: terraria-stats

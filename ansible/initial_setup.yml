@@ -40,8 +40,11 @@
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles
     # land on top of it.
-    # Before chezmoi_setup: the dotfiles repo is private, so the clone needs the gh
-    # credential helper this role configures.
+    # Before chezmoi_setup, but no longer as a credential dependency: the dotfiles repo is
+    # public and clones anonymously (#2805). What the order still buys is the rendered
+    # ~/.gitconfig. The dotfiles template writes the `gh auth git-credential` helper only when
+    # `gh` is already on PATH at the moment chezmoi renders it, and falls back to a timed
+    # credential cache otherwise — a fallback that then stands until the next apply.
     - { role: github_cli, tags: ["github_cli"], when: has_github_cli }
     - { role: chezmoi_setup, tags: ["chezmoi"], when: has_chezmoi }
     - { role: claude_code, tags: ["claude_code"], when: has_claude_code }
