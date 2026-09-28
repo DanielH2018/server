@@ -1,22 +1,19 @@
-"""Longhorn's B2 backup objects: what the estate holds, what it costs, and what block size it's on.
+"""Longhorn's B2 backup objects: what the estate holds and what it costs.
 
-Backs the `b2-longhorn`, `b2-budget` and `longhorn-blocks` subcommands. B2 publishes no usage
-API, so most of this is reconstruction — from a listing of the backup store and from live
-Volume CRs. See b2_ledger for the transaction ledger these commands record into.
+Backs the `b2-longhorn` and `b2-budget` subcommands. B2 publishes no usage API, so most of
+this is reconstruction — from a listing of the backup store and from live Volume CRs. See
+b2_ledger for the transaction ledger these commands record into.
 
-Split again at 630 lines into four helper modules this one drives:
+Split again at 630 lines into three helper modules this one drives:
 
   - `b2_api.py`          — the B2 calls, the paged listing and its parser
   - `longhorn_budget.py` — the Class C price of a retention prune, per weekly shard
   - `longhorn_cluster.py`— the live Volume/Backup/PV/BackupTarget reads
-  - `longhorn_blocks.py` — the block-size census and its verdict
 
-What stays here is the part that needs several of them at once: the three `run_*` subcommand
+What stays here is the part that needs several of them at once: the two `run_*` subcommand
 entry points, which decrypt the B2 credentials, record the spend into `b2_ledger`, and print.
 b2_ledger imports this module back by module object, so no helper module may import it.
 """
-
-import json
 
 # `probe_lib` is a namespace package under `scripts/`, so reaching a sibling by package name
 # needs `scripts/` on sys.path — a module gets only its importer's path otherwise, and
@@ -38,10 +35,6 @@ from diagnostics.probe_lib.b2_api import (
     format_longhorn_summary,
     parse_longhorn_listing,
 )
-from diagnostics.probe_lib.longhorn_blocks import (
-    format_block_census,
-    volume_tier_census,
-)
 from diagnostics.probe_lib.longhorn_budget import (
     format_backup_budget,
     parse_backup_budget,
@@ -58,7 +51,7 @@ from diagnostics.probe_lib.longhorn_cluster import (
     volume_shard_labels,
 )
 
-from lib.kubectl import DEFAULT_CLUSTER, kubectl, kubectl_argv
+from lib.kubectl import DEFAULT_CLUSTER
 
 
 def run_b2_budget(ns):
@@ -140,27 +133,5 @@ def run_b2_longhorn(ns):
         note=f"{stats.get('pages', 0)} pages",
     )
     text, code = format_longhorn_summary(parse_longhorn_listing(lines))
-    print(text)
-    return code
-
-
-def run_longhorn_blocks(ns):
-    """Census live Volume CRs by tier and backup block size (read-only, spends no B2)."""
-    args = [
-        "-n",
-        "longhorn-system",
-        "get",
-        "volumes.longhorn.io",
-        "-o",
-        "json",
-    ]
-    if getattr(ns, "dry_run", False):
-        print(" ".join(kubectl_argv(*args)))
-        return 0
-    proc = kubectl(getattr(ns, "cluster", DEFAULT_CLUSTER), *args)
-    if proc.returncode != 0:
-        print(f"cannot list Longhorn volumes: {proc.stderr.strip()}")
-        return 2
-    text, code = format_block_census(volume_tier_census(json.loads(proc.stdout)))
     print(text)
     return code

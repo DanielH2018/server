@@ -87,22 +87,6 @@ def test_a_busy_service_lock_defers_a_k8s_deploy(
     _deferred(tick, state_dir)
 
 
-def test_a_busy_service_lock_defers_a_docker_deploy(
-    gitops_deploy, tick, settings, state_dir
-):
-    """CLEAN half for handle_docker: the health gate is never reached either."""
-    _busy(tick)
-    tick.declare("containers_list:\n  - name: wg-easy\n    platform: docker\n")
-    tick.render("wg-easy")
-    plan = _plan(ChangeSet(services={"wg-easy"}))
-    code = deploy_handlers.handle_docker(
-        tick.tools, gitops_deploy.STATE, settings, _target(), plan
-    )
-    assert code == 0
-    assert len(tick.playbooks) == 1, "the prior version was redeployed over nothing"
-    _deferred(tick, state_dir)
-
-
 def test_a_busy_service_lock_defers_a_broad_apply(
     gitops_deploy, tick, settings, state_dir
 ):

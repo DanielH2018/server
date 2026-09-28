@@ -207,19 +207,18 @@ def test_plan_tick_maps_a_template_push_to_its_service(gitops_deploy, tick, sett
     assert plan.paths == tick.paths
 
 
-def test_plan_tick_reroutes_a_service_this_host_runs_under_k8s(
+def test_plan_tick_keeps_a_containers_path_off_the_same_named_k8s_role(
     gitops_deploy, tick, settings
 ):
-    """A containers/ path maps to <svc> by name alone and cannot see the platform; the host's
-    own containers_list is what decides."""
+    """wg-easy is a Pi Docker role and a k8s role at once. A containers/ template edit is Pi
+    work, so it must not page as a deferred change to the k8s role of the same name."""
     tick.declare("containers_list:\n  - name: wg-easy\n    platform: k8s\n")
     tick.paths = ["ansible/roles/containers/wg-easy/templates/docker-compose.yml.j2"]
     plan = deploy_phases.plan_tick(
         tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
     )
-    assert plan.cs.services == set()
-    assert "wg-easy" in plan.cs.k8s
-    assert plan.k8s_services == {"wg-easy"}
+    assert plan.cs.services == {"wg-easy"}
+    assert plan.cs.k8s == set()
 
 
 def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
@@ -434,39 +433,3 @@ def test_handle_no_services_merges_and_flags_a_rotated_secret(
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == []
     assert "changed in" in tick.posts[0]
-
-
-# ── handle_docker() ───────────────────────────────────────────────────────────────────────
-def test_handle_docker_merges_deploys_and_clears_the_hold(
-    gitops_deploy, tick, state_dir, settings
-):
-    gitops_deploy.STATE.write("hold", "0" * 40)
-    tick.render("sonarr")
-    plan = _plan(gitops_deploy, ChangeSet(services={"sonarr"}))
-    assert (
-        deploy_handlers.handle_docker(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
-        )
-        == 0
-    )
-    assert tick.merges == [ORIGIN]
-    assert gitops_deploy.STATE.hold_sha is None
-
-
-def test_handle_docker_holds_before_it_resets_when_the_gate_fails(
-    gitops_deploy, tick, state_dir, settings
-):
-    """A hung rollback redeploy is SIGTERMed at TimeoutStartSec, so a hold written afterwards is
-    a hold that never lands and a bad commit that redeploys every tick."""
-    tick.render("sonarr")
-    tick.healthy["sonarr"] = False
-    plan = _plan(gitops_deploy, ChangeSet(services={"sonarr"}))
-    assert (
-        deploy_handlers.handle_docker(
-            tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy), plan
-        )
-        == 0
-    )
-    assert gitops_deploy.STATE.hold_sha == ORIGIN
-    assert [argv for argv in tick.git if argv[1] == "reset"]
-    assert "rollback" in tick.posts[-1]

@@ -10,7 +10,7 @@ This module is the index: every decision the deployer makes is defined in one of
 | `deploy_changes` | which services and planes a pushed path list reaches (`ChangeSet`) |
 | `deploy_remediation` | the text a deferred change's alert prescribes |
 | `deploy_git` | what a tick does given the two HEADs, the hold and the CI verdict |
-| `deploy_health` | the Docker health gate and the Discord delivery queue |
+| `deploy_health` | the Discord delivery queue's pure half |
 | `deploy_inventory` | what this host declares, parsed from host_vars text |
 | `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
 | `deploy_staging` | the staging subset and its verdict summary |
@@ -66,26 +66,16 @@ from deploy_git import (  # noqa: F401
     should_alert_dirty,
 )
 from deploy_health import (  # noqa: F401
-    _CONTAINER_NAME,
     PENDING_ALERTS_MAX,
-    HealthSample,
     apply_drain_result,
     apply_send_result,
     cap_pending,
-    container_names,
-    containers_to_gate,
-    gate_services,
-    health_decision,
-    health_settles,
 )
 from deploy_inventory import (  # noqa: F401
     _DECLARED_ENTRY,
     _ENTRY_PLATFORM,
     declared_k8s_services,
-    declared_services,
     declares_no_gitops,
-    reroute_k8s_services,
-    stale_rendered_services,
 )
 from deploy_k8s import (  # noqa: F401
     _DECLARATION_RE,

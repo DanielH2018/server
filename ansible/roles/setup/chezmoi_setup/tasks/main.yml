@@ -49,31 +49,6 @@
     creates: /home/{{ sys_user }}/.local/bin/chezmoi
   become: false
 
-- name: Check GitHub authentication before cloning
-  tags: [chezmoi]
-  # DanielH2018/dotfiles is PRIVATE. Without a credential, chezmoi fails with
-  # "fatal: could not read Username for 'https://github.com'" — a git-level error that
-  # says nothing about what to do. Check first so the failure names the fix.
-  ansible.builtin.command:
-    cmd: gh auth status
-  register: chezmoi_setup_gh_auth
-  become: false
-  changed_when: false
-  failed_when: false
-  # A read of gh's stored credential, so it runs under --check too: skipped, it leaves no rc
-  # and the assert below errors on the attribute (#2323).
-  check_mode: false
-
-- name: Fail with a usable message if GitHub authentication is missing
-  tags: [chezmoi]
-  ansible.builtin.assert:
-    that: chezmoi_setup_gh_auth.rc == 0
-    fail_msg: >-
-      Cannot reach {{ chezmoi_setup_repo }} — it is private and this host has no GitHub
-      credential. Run `gh auth login` once, by hand, on {{ inventory_hostname }}, then
-      re-run this play. (The github_cli role installs gh and sets the credential helper,
-      but the login itself is interactive.)
-
 - name: Install the distro packages the dotfiles scripts cannot install themselves
   tags: [chezmoi]
   # become: true is the exception in this role. install-cli-tools.sh shells out to sudo for

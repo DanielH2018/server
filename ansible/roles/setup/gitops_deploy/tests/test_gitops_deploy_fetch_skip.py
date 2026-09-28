@@ -35,9 +35,8 @@ def _completed(returncode: int, stderr: str = "") -> subprocess.CompletedProcess
 def _tools(**overrides) -> DeployTools:
     """A DeployTools whose git reads succeed and whose posts go nowhere, plus `overrides`.
 
-    The two disk-only steps ahead of the first git call — drain_pending() and
-    check_stale_composes() — need no fake: `state_dir` repoints the queue file, and REPO names
-    a checkout that does not exist, so `stale_composes` reads None and the watchdog is silent.
+    The disk-only step ahead of the first git call, drain_pending(), needs no fake:
+    `state_dir` repoints the queue file.
     """
     base = DeployTools(
         git_status=lambda _repo: _completed(0),

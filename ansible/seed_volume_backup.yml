@@ -1,11 +1,11 @@
 ---
 # Give one Longhorn volume its first backup, now, instead of waiting for its recurring job.
 #
-# WHY THIS EXISTS. A volume recreated by `migrate_volume_block_size.yml` comes back with no backup
-# history and no tier label. `k3s-bringup.yml --tags longhorn` restores the label, which puts the
-# volume back in a weekly shard — and a weekly shard runs on ONE weekday, so the replacement waits
-# up to 6 days for its first recovery point. On 2026-08-20 fourteen volumes sat in exactly that
-# state at once: no backup in either store, and the longest wait was 5.4 days.
+# WHY THIS EXISTS. When the block-size migration rebuilt a volume, it came back with no
+# backup history and no tier label. `k3s-bringup.yml --tags longhorn` restores the label, which
+# puts the volume back in a weekly shard — and a weekly shard runs on ONE weekday, so the
+# replacement waits up to 6 days for its first recovery point. On 2026-08-20 fourteen volumes
+# sat in exactly that state at once: no backup in either store, and the longest wait was 5.4 days.
 #
 # The backup-health check does not page for this, correctly: its first-run grace excuses a volume
 # until its first scheduled run, because a service deployed this afternoon must not redden the
@@ -22,7 +22,7 @@
 # larger than the day's remaining headroom turns the backup-health monitor red for 24 hours. Check
 # the budget line in `journalctl -t longhorn-backup-health` before seeding more than a few.
 #
-# Usage (one volume at a time, deliberately — same reasoning as the migrate playbook):
+# Usage (one volume at a time, deliberately — to avoid exceeding the B2 transaction cap):
 #   uv run ansible-playbook ansible/seed_volume_backup.yml \
 #     -i ansible/inventory/hosts.ini -e seed_claim=healthchecks-config
 #

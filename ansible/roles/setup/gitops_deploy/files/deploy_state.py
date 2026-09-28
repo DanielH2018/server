@@ -474,7 +474,7 @@ class DeployerState(K8sLineMarkers):
     def clear_service_hold(self, services: set[str]) -> None:
         """Clear a hold after a successful service deploy, unless it leaves a plane unapplied.
 
-        A k8s or Docker deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
+        A k8s deploy is `ansible/deploy.yml --tags <services>`, so it drops a held
         entry naming that playbook at a subset of those tags — a failed bump on a broad tick
         writes exactly that, and the fix-forward deploy of the same service is its way out.
         Any other entry stays held: without this, an unrelated service deploy clears

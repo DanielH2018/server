@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """Guards on the seed-backup playbook — the one that writes a first recovery point to B2.
 
-It exists because `migrate_volume_block_size.yml` returns a volume with no backup history, and
-`k3s-bringup.yml --tags longhorn` then puts it back in a weekly shard that runs on one weekday. On
-2026-08-20 fourteen volumes were in that state at once, none of them overdue and none of them
+It exists because the block-size migration rebuilt volumes with no backup history, and
+`k3s-bringup.yml --tags longhorn` then puts them back in a weekly shard that runs on one weekday.
+On 2026-08-20 fourteen volumes were in that state at once, none of them overdue and none of them
 holding a recovery point anywhere: the backup-health check's first-run grace excuses a volume until
 its first scheduled run, so the exposure is invisible by design rather than by defect.
 
@@ -106,24 +106,6 @@ def test_every_refusal_runs_before_anything_is_created():
         assert idx < first_write, (
             "'%s' must be asserted before the snapshot is created" % fragment
         )
-
-
-MIGRATE = (ANSIBLE / "migrate_volume_block_size.yml").read_text()
-
-
-def test_the_migrate_playbook_points_at_the_seed_step():
-    """Restoring the tier label is not the same as being covered.
-
-    `k3s-bringup.yml --tags longhorn` puts a rebuilt volume back in a weekly shard, and a weekly
-    shard runs on one weekday. The backup-health check's first-run grace then excuses the volume
-    until that day arrives, so it can hold no recovery point in either store for up to 6 days while
-    every monitor reads green. The migrate playbook has to name the seed step, or the operator
-    following its instructions stops one step short of coverage.
-    """
-    assert "seed_volume_backup.yml" in MIGRATE, (
-        "migrate_volume_block_size.yml must tell the operator to seed a first backup after "
-        "restoring the tier label - relabelling alone leaves a multi-day uncovered window"
-    )
 
 
 def test_both_seed_crs_carry_the_owning_jobs_label():

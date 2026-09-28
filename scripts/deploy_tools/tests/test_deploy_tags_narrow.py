@@ -341,7 +341,7 @@ def test_a_doc_under_a_play_prefix_narrows_to_nothing(tree: Tree):
 
 def test_a_doc_under_a_play_prefix_templates_dir_is_still_flagged(tree: Tree):
     """FLAGGED half: a `.md` under `templates/` is rendered onto a host, not prose."""
-    tree.write("ansible/roles/containers/common/templates/motd.md", "hello\n")
+    tree.write("ansible/tasks/templates/motd.md", "hello\n")
     with pytest.raises(narrow_broad.CannotNarrow, match="read by every deploy"):
         tree.narrow(*_refs(tree))
 

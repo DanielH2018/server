@@ -106,7 +106,6 @@ from diagnostics.probe_lib.health import (
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
     run_b2_longhorn,
-    run_longhorn_blocks,
 )
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
@@ -178,7 +177,6 @@ def main(argv=None):
         "b2-longhorn": run_b2_longhorn,
         "b2-budget": run_b2_budget,
         "b2-spend": run_b2_spend,
-        "longhorn-blocks": run_longhorn_blocks,
         "readonly-rbac": run_readonly_rbac,
         "vip-placement": run_vip_placement,
         "b2-deletions": run_b2_deletions,

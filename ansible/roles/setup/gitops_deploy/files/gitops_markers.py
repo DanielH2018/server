@@ -124,9 +124,6 @@ MARKERS: dict[str, str] = {
     # newest green ancestor is behind the tip on nearly every tick, and only one that stops
     # moving ages this. See `parse_behind` and `DeployerState.record_behind`.
     "behind": "behind_since",
-    # The sorted stale-compose set last alerted on, so a lingering stale dir doesn't re-page
-    # every tick — only a CHANGED set (new stale dir, or one cleaned up) re-alerts.
-    "stale_composes": "stale_composes_alerted",
     # Per-SHA dedupe markers, one per alert channel: the operator is paged ONCE per origin SHA
     # about a deferred broad change, a secrets-only push (a rotated value with no service
     # template change), a tasks-only push (a role tasks/ change, not auto-deployed), a

@@ -89,17 +89,9 @@ REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
 TIMEOUT = CONFIG.health_timeout_s
-# Wall-clock budget (measured from process start, `DeployTools.run_start`) for the whole run's
-# health-gating phase. Once spent, the gate stops and rolls back so the rollback (git reset +
-# one redeploy) still finishes inside the unit's TimeoutStartSec — otherwise systemd SIGTERMs
-# the deployer mid-gate, before write_hold()/rollback, and the bad commit is left live.
-# `run_start` is measured AFTER `flock -w 180` acquires, but TimeoutStartSec counts the flock
-# wait too, so the budget is sized 180 (max flock wait) + 1020 (this gate) + 300
-# (HEALTH_TIMEOUT_S) = 1500s, which must fit inside the unit's TimeoutStartSec, keeping the
-# rollback intact even under max lock contention with the weekly secret-rotate. Read
-# gitops-deploy.service.j2 for the live ceiling rather than a number restated here: this
-# comment called 1500s "the 25min timeout" through two raises of that ceiling, and
-# test_gitops_deploy_timeout_budgets.py is what holds the sum inside it.
+# The Docker health gate's wall-clock budget. Nothing reads RUN_BUDGET_S or TIMEOUT since #2805
+# removed that gate. Both still feed the unit's TimeoutStartSec arithmetic, which
+# test_gitops_deploy_timeout_budgets.py holds, so their removal is #2834.
 RUN_BUDGET_S = CONFIG.run_budget_s
 
 # ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
@@ -140,9 +132,8 @@ if K8S_AUTODEPLOY_ENABLED and not K8S_AUTODEPLOY_DENYLIST:
         "K8S_AUTODEPLOY_ENABLED is set but the denylist is empty — disabling k8s auto-deploy"
     )
     K8S_AUTODEPLOY_ENABLED = False
-# Bounds ONE ansible-playbook invocation on the k8s path. RUN_BUDGET_S does not reach here: it
-# feeds gate_services(), the Docker health gate, which is inert on an all-k8s host — so without
-# this the only bound is systemd's TimeoutStartSec SIGTERM, which can land mid-rollback.
+# Bounds ONE ansible-playbook invocation on the k8s path. Without it the only bound is systemd's
+# TimeoutStartSec SIGTERM, which can land mid-rollback.
 K8S_DEPLOY_TIMEOUT_S = CONFIG.k8s_deploy_timeout_s
 # Bounds the ROLLBACK redeploy specifically — the run that also reverts each claimed volume to
 # its pre-deploy snapshot (k8s/volume-revert), which is strictly more work than a forward deploy.
@@ -277,7 +268,7 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
 
     `assess()` reads git and classifies the tick; `plan_tick()` turns the incoming range into a
     ChangeSet; one `handle_*` phase owns each terminal branch and returns the exit code. The
-    branch order is load-bearing — broad before k8s before Docker — because a broad change and a
+    branch order is load-bearing — broad before k8s — because a broad change and a
     promoted image bump can arrive in the same range and the broad plane has to win.
 
     Almost always returns 0 — a failed tick pages via Discord and the hold marker rather than a
@@ -303,10 +294,6 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
     # secrets/tasks/meta/combined paths never re-reach their alert code (local==origin -> noop), so a
     # transient webhook failure is only recoverable here, not by discord()'s per-tick re-eval.
     deploy_alerts.drain_pending(tools, STATE, config)
-    # Disk-only, independent of git state, so it runs before any branch can short-circuit the
-    # tick: page (once per distinct set) when a rendered compose has no containers_list entry —
-    # the stale-compose trap, twice now the cause of a phantom health gate + false rollback + hold.
-    deploy_alerts.check_stale_composes(tools, STATE, config)
     # Disk-only too, and likewise ahead of every branch that can return. A role in the
     # `manual_plane` marker is owed to a hand on EVERY later tick, and the tick that recorded
     # it fast-forwarded — so from the next tick on this deployer is converged and re-enters
@@ -366,9 +353,7 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         return deploy_handlers.handle_broad(tools, STATE, config, target, plan)
     if plan.cs.k8s_deploy:
         return deploy_handlers.handle_k8s(tools, STATE, config, target, plan)
-    if not plan.cs.services:
-        return deploy_handlers.handle_no_services(tools, STATE, config, target, plan)
-    return deploy_handlers.handle_docker(tools, STATE, config, target, plan)
+    return deploy_handlers.handle_no_services(tools, STATE, config, target, plan)
 
 
 def entrypoint(tools: DeployTools | None = None) -> int:

@@ -194,6 +194,15 @@ def testpaths() -> list[str]:
     return paths
 
 
+def under_testpaths(rel: str, paths) -> bool:
+    """Whether `rel` lies under a `testpaths` entry, where an entry may be a glob.
+
+    `full_match` against `<entry>/**` matches by path component, so a `scripts` entry does not
+    cover `scripts_extra/test_x.py`, and `ansible/roles/*/*/tests` covers every role's suite.
+    """
+    return any(PurePosixPath(rel).full_match(f"{entry}/**") for entry in paths)
+
+
 def census(repo: Path = REPO) -> list[str]:
     """Every test file this commit's `testpaths` reach, as repo-relative posix paths.
 
@@ -205,13 +214,13 @@ def census(repo: Path = REPO) -> list[str]:
     bites in a local `--summary` and never on the runner.
     """
     listed = git("ls-files", "-z", cwd=repo).stdout
-    roots = [PurePosixPath(p) for p in testpaths()]
+    paths = testpaths()
     return sorted(
         rel
         for rel in listed.split("\0")
         if rel
         and any(PurePosixPath(rel).match(g) for g in _TEST_FILE_GLOBS)
-        and any(PurePosixPath(rel).is_relative_to(root) for root in roots)
+        and under_testpaths(rel, paths)
     )
 
 

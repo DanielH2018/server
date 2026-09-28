@@ -27,11 +27,7 @@ from deploy_changes import (
 )
 from deploy_config import Config, log
 from deploy_git import ci_walk_candidates, is_diverged, next_action
-from deploy_inventory import (
-    declared_k8s_services,
-    declares_no_gitops,
-    reroute_k8s_services,
-)
+from deploy_inventory import declared_k8s_services, declares_no_gitops
 from deploy_k8s import (
     declared_denylist,
     declares_snapshot_claims,
@@ -241,14 +237,8 @@ def plan_tick(
         paths = [p for p in paths if p not in quiet]
     cs = services_from_changed_paths(paths)
     cs.k8s_consumers = shared_module_consumers(paths, config.repo)
-    # A path under ansible/roles/containers/<svc>/ maps to <svc> by NAME ALONE — it doesn't know
-    # this host might run that same-named service under k8s (wg-easy: a Docker role, but
-    # platform: k8s on daniel-box). Route those into the k8s defer-and-alert set instead of
-    # deploying a tag that resolves to deploy.yml's K8S play (an idempotent no-op whose health
-    # gate silently no-ops too, since containers_for() renders nothing for a k8s entry).
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
-    cs = reroute_k8s_services(cs, k8s_services)
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
 

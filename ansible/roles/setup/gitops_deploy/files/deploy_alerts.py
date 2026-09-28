@@ -22,7 +22,6 @@ see `deploy_io.py`'s docstring for why.
 import json
 
 import deploy_alert_text
-import deploy_io
 from deploy_changes import ChangeSet
 from deploy_config import Config, log
 from deploy_health import (
@@ -176,13 +175,9 @@ def alert_secrets_deferred(
     ChangeSet and the rotated secret goes silently stale — and because the merge already happened,
     no later tick re-evaluates it.
 
-    Why it is safe to fire on the k8s path but NOT on the Docker deploy path: a k8s service is
-    promoted to auto-deploy only when its sole changed path is defaults/main.yml — image-bump-only
-    by construction (see split_k8s_auto_deploy) — so a promoted service can never itself be the
-    secret's consumer. The Docker path is the opposite case: the /add-secret flow ships secrets.yml
-    WITH its consuming template, so the consumer IS in cs.services and alerting there would
-    false-fire on the happy path. That asymmetry is why this is a separate helper rather than a
-    line inside alert_deferred(), which runs on both.
+    Why it is safe to fire on the k8s path: a k8s service is promoted to auto-deploy only when
+    its sole changed path is defaults/main.yml — image-bump-only by construction (see
+    split_k8s_auto_deploy) — so a promoted service can never itself be the secret's consumer.
     """
     if not cs.secrets:
         return
@@ -266,31 +261,4 @@ def alert_deferred(
             deploy_alert_text.k8s_deferred_alert(
                 origin, cs.k8s, declared_k8s, cs.k8s_consumers
             ),
-        )
-
-
-def check_stale_composes(
-    tools: DeployTools, state: DeployerState, config: Config
-) -> None:
-    """Page (once per distinct set) when a rendered compose has no matching containers_list entry.
-
-    containers/<svc>/docker-compose.yml exists on disk but <svc> has no containers_list entry —
-    the stale-compose trap (see deploy_inventory.stale_rendered_services for the incident
-    history). Detection only, never cleanup: the remedy removes containers and directories, which
-    stays an operator action.
-    """
-    stale = deploy_io.stale_composes(config.repo, config.hostname)
-    if stale is None:
-        return  # unreadable inventory/tree — not this watchdog's failure to page about
-    marker = ",".join(stale)
-    if state.read("stale_composes") == (marker or None):
-        return
-    state.write("stale_composes", marker or None)
-    if stale:
-        deliver(
-            tools,
-            state,
-            config,
-            f"stale-composes:{marker}",
-            deploy_alert_text.stale_composes_alert(config.hostname, stale),
         )

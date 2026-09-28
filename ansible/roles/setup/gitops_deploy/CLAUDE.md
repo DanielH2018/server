@@ -49,15 +49,14 @@ script, config or units change, so provisioning stays fully IaC.
 
 ## Health gate + rollback
 
-After a Docker deploy it polls each container's health (`HEALTH_TIMEOUT_S`). On failure it
-`git reset --hard`es to the previous HEAD, redeploys the prior version, writes the bad SHA to
-`/var/lib/gitops-deploy/hold_sha`, and alerts the dedicated Discord webhook. The marker (and
-the red **GitOps Deploy — Status** tile) clears only when a later tick completes a successful
-service deploy on this host — `clear_service_hold()` — or by hand, `rm` of the marker. A
-BROAD hold clears only when its own plane is applied (*Which apply clears a hold*).
-**A service migrated off this host must take its rendered compose with it**: `containers_for()`
-treats a present `containers/<svc>/docker-compose.yml` as proof the service is deployed here,
-so a stale one health-gates a phantom container to the run budget and false-rollbacks.
+The health gate is in the play, not in the deployer: a k8s deploy fails when `rollout-drain`
+or `post_tasks/k8s_stabilise_gate.yml` fails. On a failed k8s deploy the deployer writes the
+bad SHA to `/var/lib/gitops-deploy/hold_sha` first, then `git reset --hard`es to the previous
+HEAD, redeploys the prior pin, and alerts the dedicated Discord webhook
+(`deploy_handlers.py:_rollback_k8s`). The marker (and the red **GitOps Deploy — Status** tile)
+clears only when a later tick completes a successful service deploy on this host —
+`clear_service_hold()` — or by hand, `rm` of the marker. A BROAD hold clears only when its own
+plane is applied (*Which apply clears a hold*).
 
 ## Autonomous-role contract (it deploys to production with no human in the loop)
 
@@ -66,9 +65,9 @@ primary checkout, run `deploy.yml` against the cluster, and on a failed health g
 tree and the service back. Its authority is written down here so a later edit cannot quietly
 widen it. Each line is a summary; the section it names carries the detail.
 
-- **Scope / exclusions:** a Docker service whose template or bind-mounted config changed; a
-  k8s role ONLY for an image-pin bump to a non-denylisted service; every setup-plane change
-  the role can apply itself, and its own role. **Never** the bring-up playbooks
+- **Scope / exclusions:** a k8s role ONLY for an image-pin bump to a non-denylisted service;
+  every setup-plane change the role can apply itself, and its own role. **Never** a Pi Docker
+  role change under `roles/containers/`, **never** the bring-up playbooks
   (`_BROAD_MANUAL_PREFIXES`: `bootstrap.yml`, `k3s-bringup.yml`, `initial_setup.yml`),
   **never** a `tasks/`- or docs-only change, **never** a red or unfinished CI verdict, and
   **never** a SHA a previous tick held. The two daily GitHub crons act on one setting each:
@@ -84,7 +83,7 @@ widen it. Each line is a summary; the section it names carries the detail.
 - **Abort valves:** the CI gate (a non-green tip deploys the newest green ancestor or
   nothing — *Safety*); `hold_sha` / `hold_plane`, which park a failed SHA until a later
   successful apply of the same plane clears it (*Health gate + rollback*, *Which apply clears
-  a hold*); `RUN_BUDGET_S` and the rollback budget, which bound one tick's wall clock; the
+  a hold*); `K8S_DEPLOY_TIMEOUT_S` and the rollback budget, which bound one tick's wall clock; the
   staging gate, which asks `daniel-stage` about every commit that would auto-deploy a k8s
   service and, when `STAGING_GATE_BLOCKING` is on, stops the prod deploy on a rejection.
 - **Required evidence:** every tick writes `last_run` (the GitOps-Alive tile expires without
@@ -217,7 +216,7 @@ Each arm below is a rule and the function that holds it. The record page has the
     `deploy_phases.py`. Any origin-side mismatch disarms auto-deploy for that tick and pages
     once (`stale_denylist_alerted`). The record page has the guards on the re-render.
   - **The gate is in the play, not here**: `roles/k8s/manifests` applies, `rollout-drain`
-    waits, `post_tasks/k8s_stabilise_gate.yml` soaks. `containers_for()` returns `[]` for k8s.
+    waits, `post_tasks/k8s_stabilise_gate.yml` soaks.
   - **A k8s rollback is local-only, and not sufficient on its own**: `skip_hold` matches only
     while `origin_head == hold_sha`, so the bad pin is still on master. Revert on the remote.
     **A clean k8s tick is the second place `hold_sha` clears**; a BROAD hold survives it.
@@ -236,8 +235,8 @@ Each arm below is a rule and the function that holds it. The record page has the
   - **The pilot list is empty, so the denylist alone decides** — an empty pilot means every
     non-denylisted service, the opposite of the empty-denylist guard. The
     `ansible/tests/test_k8s_autodeploy_*.py` family enforces the role shapes that must never
-    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`, not `RUN_BUDGET_S`;
-    promotion is refused when the tick also carries Docker services.
+    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`; promotion is refused when
+    the tick also carries a Pi Docker role change.
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and
   `meta/deps.yml`** are ff-merged but NOT auto-deployed; the deployer defers-and-alerts once
   per SHA (`tasks_alerted_sha` / `meta_alerted_sha`, `deploy_logic.deferred_service_alerts`).
@@ -246,9 +245,10 @@ Each arm below is a rule and the function that holds it. The record page has the
   un-pushed local commits are a no-op. **Divergence watchdog** (`deploy_logic.is_diverged`):
   neither an ancestor of the other → `diverged_sha` written each tick and **GitOps Deploy —
   Status** pages.
-- Health-gates **only services deployed on THIS host** (`deploy_logic.containers_to_gate`).
-  **Pi-only services are NOT auto-deployed by GitOps** (accepted, 2026-06-30): the Pi has
-  `has_gitops: false`; deploy by hand with `-e target=daniel-pi`.
+- **Pi Docker changes are NOT auto-deployed by GitOps** (accepted, 2026-06-30): the Pi has
+  `has_gitops: false`. A `roles/containers/<svc>/` change (`cs.services`) and a
+  `roles/containers/common/` change (`cs.pi_shared`) are ff-merged with a journal line naming
+  them; deploy by hand with `-e target=daniel-pi`.
 
 ## The two GitHub settings this role watches
 
@@ -274,9 +274,9 @@ Three layers, and which one a function belongs in is decided by what it touches.
 
 | layer | modules | holds |
 |---|---|---|
-| decisions (pure) | `deploy_changes` (which services and planes a path list reaches), `deploy_git` (what a tick does given the two HEADs, the hold and the CI verdict), `deploy_health` (the Docker gate and the delivery queue), `deploy_inventory` (what this host declares), `deploy_k8s` (auto-deploy eligibility, the denylist, the revert note), `deploy_remediation` (the text a deferred alert prescribes), `deploy_staging` (the staging subset, its verdict, whether it blocks) | every branch the tick takes, as functions over plain values |
+| decisions (pure) | `deploy_changes` (which services and planes a path list reaches), `deploy_git` (what a tick does given the two HEADs, the hold and the CI verdict), `deploy_health` (the delivery queue's pure half), `deploy_inventory` (what this host declares), `deploy_k8s` (auto-deploy eligibility, the denylist, the revert note), `deploy_remediation` (the text a deferred alert prescribes), `deploy_staging` (the staging subset, its verdict, whether it blocks) | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
-| transport | `deploy_io`, `deploy_alerts` | subprocess, docker, when an alert is sent, and the alert queue's own I/O |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS, split from `deploy_alerts` at the seam its docstring named (#2600) |
 | transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families as a mixin `DeployerState` inherits, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
@@ -286,10 +286,10 @@ Three layers, and which one a function belongs in is decided by what it touches.
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,
   `plan_tick()` a frozen `TickPlan`, and one `handle_*` owns each terminal branch. No leaf
   imports `gitops_deploy` (ENFORCED by `test_no_leaf_imports_the_entry_module`). The branch
-  order — broad before k8s before Docker — is load-bearing: the broad plane has to win.
+  order — broad before k8s — is load-bearing: the broad plane has to win.
 - **Every process boundary is injected, not patched.** `main(tools)` threads one frozen
   `DeployTools` through every phase; a test builds one from `tests/_deploy_fakes.py`.
-  `deploy_io.deploy`, `deploy_k8s` and `deploy_broad` stay outside it because the suite
+  `deploy_io.deploy_k8s` and `deploy_broad` stay outside it because the suite
   asserts on the argv they build, so `tests/conftest.py` keeps ONE patch, `deploy_io.run`.
 - **`deploy_io`, `deploy_alerts` and `deploy_alert_text` are reached QUALIFIED** — never
   `from deploy_io import`.

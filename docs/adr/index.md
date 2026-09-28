@@ -54,4 +54,4 @@ decision and the document holds the evidence for it:
 |---|---|
 | [Longhorn backup tiering](../longhorn-backup-tiering.md) | [ADR-0007](0007-backup-tiering-r2-daily-b2-weekly.md), [ADR-0008](0008-16-mib-longhorn-blocks.md) |
 | [NetworkPolicy default-deny](../networkpolicy-default-deny.md) | [ADR-0009](0009-networkpolicy-default-deny-ingress.md) |
-| [Argo and Flux evaluation](../gitops-argo-flux-evaluation.md) | [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md) |
+| [Argo and Flux evaluation](../archive/gitops-argo-flux-evaluation.md) | [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md) |

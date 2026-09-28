@@ -66,17 +66,16 @@ def roles_with_tests(tracked_files) -> set[str]:
     return _roles_with(tracked_files, "tests")
 
 
-def roles_in_testpaths(testpaths) -> set[str]:
-    found = set()
-    for entry in testpaths:
-        parts = PurePosixPath(entry).parts
-        if (
-            len(parts) == 5
-            and parts[:2] == ("ansible", "roles")
-            and parts[4] == "tests"
-        ):
-            found.add(f"{parts[2]}/{parts[3]}")
-    return found
+def roles_in_testpaths(testpaths, roles) -> set[str]:
+    """The `roles` whose `tests/` directory a `testpaths` entry names, literally or by glob."""
+    return {
+        role
+        for role in roles
+        if any(
+            PurePosixPath(f"ansible/roles/{role}/tests").full_match(e)
+            for e in testpaths
+        )
+    }
 
 
 def roles_missing_tests(shipping, with_tests, in_testpaths) -> dict[str, str]:
@@ -98,7 +97,7 @@ def test_every_role_shipping_python_has_a_collected_tests_dir() -> None:
     with_tests = roles_with_tests(_tracked("ansible/roles/*/*/tests/*.py"))
     data = tomllib.loads((REPO / "pyproject.toml").read_text())
     in_testpaths = roles_in_testpaths(
-        data["tool"]["pytest"]["ini_options"]["testpaths"]
+        data["tool"]["pytest"]["ini_options"]["testpaths"], with_tests
     )
     missing = roles_missing_tests(shipping, with_tests, in_testpaths)
     assert not missing, (
@@ -111,7 +110,9 @@ def test_every_role_shipping_python_has_a_collected_tests_dir() -> None:
 def test_a_role_with_code_and_no_tests_dir_is_flagged() -> None:
     files = ["ansible/roles/k8s/newthing/files/thing.py"]
     missing = roles_missing_tests(
-        roles_shipping_python(files), roles_with_tests([]), roles_in_testpaths([])
+        roles_shipping_python(files),
+        roles_with_tests([]),
+        roles_in_testpaths([], set()),
     )
     assert missing == {"k8s/newthing": "no tests/ directory"}
 
@@ -122,7 +123,7 @@ def test_a_tests_dir_absent_from_testpaths_is_flagged() -> None:
     missing = roles_missing_tests(
         roles_shipping_python(files),
         roles_with_tests(tests),
-        roles_in_testpaths(["scripts"]),
+        roles_in_testpaths(["scripts"], roles_with_tests(tests)),
     )
     assert missing == {
         "k8s/newthing": "tests/ exists but is not in pyproject.toml testpaths"
@@ -135,6 +136,9 @@ def test_a_role_with_a_collected_tests_dir_is_clean() -> None:
     missing = roles_missing_tests(
         roles_shipping_python(files),
         roles_with_tests(tests),
-        roles_in_testpaths(["ansible/tests", "ansible/roles/setup/thing/tests"]),
+        roles_in_testpaths(
+            ["ansible/tests", "ansible/roles/setup/thing/tests"],
+            roles_with_tests(tests),
+        ),
     )
     assert missing == {}

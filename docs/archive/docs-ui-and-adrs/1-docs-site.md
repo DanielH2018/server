@@ -187,7 +187,7 @@ nav:
       - Zero-downtime deploys: zero-downtime-deploys-design.md
       - Zero-downtime baseline: zero-downtime-baseline.md
       - Zero-downtime plan 2: zero-downtime-deploys-plan-2.md
-      - GitOps — Argo and Flux evaluation: gitops-argo-flux-evaluation.md
+      - GitOps — Argo and Flux evaluation: ../gitops-argo-flux-evaluation.md
       - Docs UI and ADRs: docs-ui-and-adrs-design.md
       - Docs UI and ADRs — plan 1: docs-ui-and-adrs-plan-1.md
       - Docs UI and ADRs — plan 2: docs-ui-and-adrs-plan-2.md

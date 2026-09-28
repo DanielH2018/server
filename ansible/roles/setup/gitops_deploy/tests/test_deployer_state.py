@@ -51,7 +51,6 @@ EXPECTED_MARKERS = frozenset(
         ("last_run", "last_run"),
         ("diverged", "diverged_sha"),
         ("behind", "behind_since"),
-        ("stale_composes", "stale_composes_alerted"),
         ("broad_alerted", "broad_alerted_sha"),
         ("secrets_alerted", "secrets_alerted_sha"),
         ("tasks_alerted", "tasks_alerted_sha"),

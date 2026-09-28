@@ -2,7 +2,7 @@
 """One function per terminal branch of a tick, each returning the process exit code.
 
 `gitops_deploy.main()` picks exactly one of these after `deploy_phases.plan_tick`, in a
-load-bearing order — broad before k8s before Docker, because a broad change and a promoted
+load-bearing order — broad before k8s, because a broad change and a promoted
 image bump can arrive in the same range and the broad plane has to win. Everything a handler
 needs is a parameter: the tick's `tools`, `state` and `config`, plus the `TickTarget` and
 `TickPlan` the phases produced.
@@ -36,7 +36,6 @@ from deploy_git import (
     dirty_summary,
     should_alert_dirty,
 )
-from deploy_health import gate_services
 from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
 from deploy_staging import staging_blocks
 from deploy_staging_io import consult_staging, consume_staging_override
@@ -328,10 +327,8 @@ def handle_k8s(
         return deploy_defer.for_contention(tools, state, config, target, exc)
     except Exception as exc:
         return _rollback_k8s(tools, state, config, target, plan, exc)
-    # The ONLY place a hold can clear on an all-k8s host. state.write_hold(None) otherwise lives
-    # solely in the Docker health-gate branch below, which such a host never reaches — so
-    # without this the first rollback would leave GitOps Deploy — Status red forever and
-    # need a manual rm (the trap this role's CLAUDE.md documents).
+    # One of the two places a service hold clears (the broad arm's bump path is the other).
+    # Without it the first rollback would leave GitOps Deploy — Status red until a manual rm.
     state.clear_service_hold(cs.k8s_deploy)
     # A bump an earlier broad tick deferred for budget is applied by its own later deploy,
     # which is the ordinary way out of the marker (#2449).
@@ -358,7 +355,7 @@ def _rollback_k8s(
 ) -> int:
     """Undo a failed k8s deploy: hold, reset, redeploy the prior pin, revert claimed volumes."""
     cs, local, origin = plan.cs, target.local, target.origin
-    # Hold BEFORE the reset, same as the Docker paths: a hung rollback redeploy would otherwise
+    # Hold BEFORE the reset: a hung rollback redeploy would otherwise
     # be SIGTERMed before the marker is written, stranding the bad commit into a per-tick
     # redeploy loop.
     log(f"k8s deploy failed for {sorted(cs.k8s_deploy)}: {exc}; rolling back")
@@ -417,9 +414,22 @@ def handle_no_services(
     target: TickTarget,
     plan: TickPlan,
 ) -> int:
-    """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied."""
+    """Nothing maps to a deploy here: ff-merge, then flag what rode along unapplied.
+
+    A Pi Docker role change (`cs.services`, `cs.pi_shared`) lands here too. No has_gitops host runs Docker, so
+    the deployer never applied one; it is deployed by hand with `-e target=daniel-pi`.
+    """
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)  # docs-only etc.
+    if cs.services:
+        log(
+            f"merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
+        )
+    if cs.pi_shared:
+        log(
+            "merged a roles/containers/common change this host does not deploy; "
+            "apply it with `./scripts/deploy.sh -e target=daniel-pi`"
+        )
     # A secrets-only push (rotated value, no service template changed) maps to nothing, so the
     # ff-merge above is all we can do automatically — but the new value only reaches a container
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the
@@ -432,117 +442,3 @@ def handle_no_services(
         tools, state, config, origin, set(), cs, plan.k8s_services
     )
     return 0
-
-
-def handle_docker(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    target: TickTarget,
-    plan: TickPlan,
-) -> int:
-    """Deploy this host's Docker services, health-gate them, and roll back if the gate fails."""
-    cs, local, origin = plan.cs, target.local, target.origin
-    tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
-    try:
-        deploy_io.deploy(config.repo, cs.services)
-    except deploy_locks.ServiceLockBusy as exc:
-        # Before the rollback arm, for handle_k8s's reason: there is nothing to repair.
-        return deploy_defer.for_contention(tools, state, config, target, exc)
-    except Exception as exc:
-        # Deploy-EXECUTION failure (ansible-playbook itself errored: bad image manifest, a failed
-        # task) — distinct from the health gate below. Without this the exception propagates to
-        # entrypoint(), which alerts but re-raises WITHOUT writing last_run AND leaves the repo
-        # ff-merged at the bad commit with no hold + no rollback — so the next tick (local==origin)
-        # noops and the deployer silently parks on the broken commit. Mirror the health-gate
-        # rollback: reset to the prior HEAD, redeploy the prior (known-good) version (ansible is
-        # idempotent, so re-applying old after a partial run is safe), hold the bad SHA, and alert.
-        log(
-            f"deploy execution failed for {sorted(cs.services)}: {exc}; rolling back to {local[:8]}"
-        )
-        # Hold BEFORE the reset + rollback redeploy. deploy() is unbounded (timeout=None) with no
-        # SIGTERM handler, so if the rollback redeploy HANGS (wedged docker daemon, stalled pull)
-        # systemd SIGTERMs at TimeoutStartSec before a trailing write_hold could run — leaving no
-        # marker, origin still ahead, and the next tick re-merging + redeploying the same bad commit
-        # in a per-tick loop. Holding first makes the next tick skip_hold even if we're killed
-        # mid-rollback. (A catchable raise below is already handled; this covers the kill/hang.)
-        state.write_hold(origin)
-        tools.run(["git", "reset", "--hard", local], cwd=config.repo)
-        try:
-            deploy_io.deploy(config.repo, cs.services)
-        except Exception as exc2:
-            log(f"rollback redeploy of the prior version also failed: {exc2}")
-        posted = deploy_alerts.discord(
-            tools,
-            config,
-            deploy_alert_text.deploy_failure_alert(
-                config.hostname, local, origin, cs.services, exc
-            ),
-        )
-        # A rollback already surfaces via THIS detailed post + the GitOps Deploy — Status monitor
-        # (hold_sha). Exit 0 when the detailed post was delivered so systemd's
-        # OnFailure=gitops-deploy-alert.service (a GENERIC "unit failed" curl) doesn't ALSO fire — one
-        # detailed page, not a duplicate. Only if the detailed post failed (Cloudflare-1010/webhook
-        # down) exit 1, so OnFailure is the guaranteed backstop. last_run is written either way (the
-        # tick completed; the deployer is alive — GitOps-Alive stays green, Status carries the hold).
-        return 0 if posted else 1
-
-    # Health-gate only services actually deployed on THIS host. A changed template for an
-    # other-host-only service (dozzle is daniel-pi-only) renders no compose here, so
-    # containers_for() returns [] and service_healthy() is vacuously true — without this the gate
-    # would poll a phantom container to timeout and trigger a false rollback. (deploy(cs.services)
-    # above is a harmless no-op for those tags.)
-    skipped = sorted(
-        s for s in cs.services if not deploy_io.containers_for(config.repo, s)
-    )
-    if skipped:
-        log(f"not deployed on this host; skipping health gate: {skipped}")
-    # Budget the gate so gate+rollback finishes inside the unit's TimeoutStartSec (see
-    # config.run_budget_s): once the deadline passes, gate_services marks the rest failed and we roll
-    # back, rather than polling to HEALTH_TIMEOUT_S per container and getting SIGTERMed mid-gate
-    # (which would strand the bad commit live). tools.run_start is measured from process start.
-    gate_deadline = tools.run_start + config.run_budget_s
-    failed = gate_services(
-        cs.services,
-        lambda svc, deadline: tools.service_healthy(
-            config.repo, svc, config.health_timeout_s, deadline
-        ),
-        gate_deadline,
-        time.time,
-    )
-    if not failed:
-        state.clear_service_hold(cs.services)
-        # Combined-push safety: a tasks/ or meta/deps.yml change bundled for a service OTHER than
-        # the one(s) just deployed is ff-merged but unapplied — flag that remainder (a bundled
-        # change to a DEPLOYED service rode its own --tags redeploy, so it's excluded). Only on a
-        # clean deploy: a rollback below git-resets the whole commit, reverting those changes too.
-        deploy_defer.alert_and_record_deferred(
-            tools, state, config, origin, cs.services, cs, plan.k8s_services
-        )
-        return 0
-    if time.time() >= gate_deadline:
-        log(
-            f"health-gate budget ({config.run_budget_s}s) exhausted before gating completed"
-        )
-
-    # Rollback: reset to prior HEAD, redeploy the prior version. Redeploy the WHOLE batch
-    # (cs.services), not just `failed`: in a multi-service tick the services that DID pass
-    # were recreated on the new images, so after the git reset they'd otherwise stay on the
-    # new images while the tree points at old — partial-batch drift. Hold BEFORE the reset +
-    # redeploy (see the exec-failure path above): a hung rollback redeploy would otherwise be
-    # SIGTERMed before write_hold, stranding the bad commit into a per-tick redeploy loop.
-    log(f"health gate failed for {failed}; rolling back to {local[:8]}")
-    state.write_hold(origin)
-    tools.run(["git", "reset", "--hard", local], cwd=config.repo)
-    try:
-        deploy_io.deploy(config.repo, cs.services)
-    except Exception as exc:
-        log(f"rollback redeploy of the prior version also failed: {exc}")
-    posted = deploy_alerts.discord(
-        tools,
-        config,
-        deploy_alert_text.rollback_alert(config.hostname, local, origin, failed),
-    )
-    # Exit 0 on a delivered detailed post so OnFailure's generic curl doesn't double-page (see the
-    # exec-failure path above); exit 1 only if the detailed post failed, leaving OnFailure the backstop.
-    return 0 if posted else 1

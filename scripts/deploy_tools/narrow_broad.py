@@ -68,14 +68,14 @@ _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the
 # play itself and the three task directories it imports, the toposort that orders the whole
-# run, the shared Docker deploy path, and the config every ansible-playbook run reads.
+# run, and the config every ansible-playbook run reads. The Pi's shared Docker deploy path is
+# not here: `deploy_changes` classifies it as Pi work, never as a broad path (#2805).
 PLAY_PREFIXES = (
     "ansible/deploy.yml",
     "ansible/tasks/",
     "ansible/pre_tasks/",
     "ansible/post_tasks/",
     "ansible/filter_plugins/",
-    "ansible/roles/containers/common/",
     "ansible.cfg",
 )
 # The trees a variable or a macro can be consumed from and still map to a deploy tag.

@@ -16,7 +16,7 @@ the port split only makes sense read together.
 - **Image:** `ghcr.io/wg-easy/wg-easy` (`wg-easy`)
 - **Entry:** `host_vars/daniel-pi.yml` → port `51821`, UDP port `51822`, networks `proxy`, no
   Authelia
-- **Depends on:** `traefik`, `authelia` (`meta/deps.yml`)
+- **Depends on:** nothing (no `meta/deps.yml`)
 - **Config-change wiring:** none — the compose file is the only config, and a compose change
   recreates on its own
 <!-- /generated_from -->

@@ -106,7 +106,6 @@ def test_broad_deploy_plane_flags_broad_deploy_not_setup():
     for p in (
         "ansible/templates/resources.yml.j2",
         "ansible/inventory/host_vars/daniel-server.yml",
-        "ansible/roles/containers/common/templates/healthcheck.yml.j2",
         "ansible/deploy.yml",
         "ansible/filter_plugins/toposort.py",
         "ansible.cfg",

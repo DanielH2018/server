@@ -1,10 +1,9 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_io.py
-"""The boundaries the deployer crosses to act: git, docker, the repo's files, the deploys.
+"""The boundaries the deployer crosses to act: git, the repo's files, the deploys.
 
 `deploy_logic.py` and the `deploy_*` modules behind it hold the decisions, which are pure.
 This module holds their I/O counterparts, which until now sat in `gitops_deploy.py` beside
-`main()` — `health_ok` next to `deploy_health`, `consult_staging`'s subprocess half next to
-`deploy_staging`, `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
+`main()` — `consult_staging`'s subprocess half next to `deploy_staging`, `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
 `gitops_deploy.main()` be a sequence of named phases a test can drive one at a time.
 
 Three boundaries are leaves of their own: `deploy_config` (the config file, `Config`, `log`),
@@ -30,7 +29,6 @@ import os
 import pathlib
 import signal
 import subprocess
-import time
 from datetime import tzinfo
 
 from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
@@ -49,10 +47,8 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
     head,
     tail,
 )
-from deploy_health import HealthSample, containers_to_gate, health_decision
-from deploy_inventory import declared_services, stale_rendered_services
 from deploy_k8s import k8s_role_paths
-from deploy_locks import locked_budget, service_locks
+from deploy_locks import locked_budget
 from deploy_state import STATE_DIR, DeployerState  # noqa: F401 — re-exported
 
 
@@ -84,7 +80,7 @@ def run(
         subprocess.TimeoutExpired: the process (and its group) was killed after `timeout`.
     """
     # timeout defaults to None so the long deploy/git calls are unbounded as before;
-    # only the health-gate's docker inspects and the k8s deploy/rollback calls pass one.
+    # only the k8s deploy/rollback calls pass one.
     if timeout is None:
         r = subprocess.run(args, cwd=cwd, text=True, capture_output=True, timeout=None)
     else:
@@ -188,121 +184,7 @@ def git_fetch(repo: str, branch: str) -> subprocess.CompletedProcess:
     )
 
 
-# ── docker ────────────────────────────────────────────────────────────────────────────────────
-
-
-def inspect_field(fmt: str, container: str, timeout: float = 15.0) -> str:
-    """One `docker inspect -f` field, or '' if empty/gone — or if the call exceeds `timeout`.
-
-    The deadline in health_ok() is only checked between calls, so a wedged daemon on an unbounded
-    inspect would block the whole deployer forever; bounding each inspect lets a hang degrade into a
-    failed gate instead.
-    """
-    try:
-        return run(
-            ["docker", "inspect", "-f", fmt, container],
-            cwd=None,
-            check=False,
-            timeout=timeout,
-        )
-    except subprocess.TimeoutExpired:
-        return ""
-
-
-def health_ok(
-    container: str,
-    poll_timeout_s: float,
-    settle_checks: int = 3,
-    deadline: float | None = None,
-) -> bool:
-    """True if `container` reaches 'healthy', or settles as 'running' with no HEALTHCHECK.
-
-    For an image with no HEALTHCHECK, stays 'running' across `settle_checks` consecutive polls
-    (~20s) so a boot-then-crash loop doesn't slip the gate the way a single 'running' sample
-    would. Polls until `poll_timeout_s` (HEALTH_TIMEOUT_S) — or the earlier `deadline` (the
-    run-wide gate budget), so one slow container can't blow the whole gate past the unit
-    timeout — then fails.
-
-    The per-sample pass/wait + streak transition is the pure, unit-tested
-    `deploy_health.health_decision`; this function is just its I/O shell (docker inspect, the
-    10s poll, and the wall-clock deadline). `.State.Running` is only inspected in the
-    no-healthcheck case (status == ''), matching the decision's use.
-    """
-    per_deadline = time.time() + poll_timeout_s
-    if deadline is not None:
-        per_deadline = min(per_deadline, deadline)
-    running_streak = 0
-    while time.time() < per_deadline:
-        status = inspect_field("{{.State.Health.Status}}", container)
-        sample = HealthSample(
-            status=status,
-            running=status == ""
-            and inspect_field("{{.State.Running}}", container) == "true",
-        )
-        verdict, running_streak = health_decision(
-            sample.status, sample.running, running_streak, settle_checks
-        )
-        if verdict == "healthy":
-            return True
-        time.sleep(10)
-    return False
-
-
-def containers_for(repo: str, service: str) -> list[str]:
-    """Container names to health-gate for a deployed service, from its rendered compose.
-
-    Empty when the service isn't deployed on THIS host — its rendered file doesn't exist (dozzle is
-    daniel-pi-only, and the deployer doesn't run on the Pi at all) — so the caller skips it instead
-    of gating a phantom container (see deploy_health.containers_to_gate). A present compose that
-    declares no container_name falls back to [service].
-    """
-    path = os.path.join(repo, "containers", service, "docker-compose.yml")
-    try:
-        with open(path) as fh:
-            text: str | None = fh.read()
-    except FileNotFoundError:
-        text = None
-    return containers_to_gate(text, service)
-
-
-def service_healthy(
-    repo: str, service: str, poll_timeout_s: float, deadline: float | None = None
-) -> bool:
-    """True when every container this service renders here reaches healthy.
-
-    A role may run several containers; gate every one (the bumped image's container is often not
-    the role-named one). `deadline` (the run-wide gate budget) is threaded to each container's
-    poll loop.
-    """
-    return all(
-        health_ok(c, poll_timeout_s, deadline=deadline)
-        for c in containers_for(repo, service)
-    )
-
-
-def stale_composes(repo: str, hostname: str) -> list[str] | None:
-    """Rendered composes on disk with no `containers_list` entry, or None if unreadable.
-
-    The stale-compose trap (see deploy_inventory.stale_rendered_services for the incident
-    history). None — not [] — when the inventory or the tree cannot be read: an unreadable
-    checkout is not evidence that nothing is stale, and the caller stays silent rather than
-    clearing its alert marker on it. A MISSING `containers/` is [] — nothing is rendered,
-    so nothing is stale — and the caller clears a Docker-era marker on it (#2021).
-    """
-    containers_dir = os.path.join(repo, "containers")
-    hostvars = os.path.join(repo, "ansible/inventory/host_vars", f"{hostname}.yml")
-    try:
-        with open(hostvars) as fh:
-            declared = declared_services(fh.read())
-        names = os.listdir(containers_dir) if os.path.isdir(containers_dir) else []
-        rendered = [
-            d
-            for d in names
-            if os.path.isfile(os.path.join(containers_dir, d, "docker-compose.yml"))
-        ]
-    except OSError:
-        return None
-    return stale_rendered_services(rendered, declared)
+# ── the repo's files ──────────────────────────────────────────────────────────────────────────
 
 
 def host_vars_text(repo: str, hostname: str) -> str | None:
@@ -543,18 +425,6 @@ def record_staging_tick(
 PLAYBOOK_ARGV = ("uv", "run", "--frozen", "ansible-playbook")
 
 
-def deploy(repo: str, services: set[str]) -> None:
-    """Deploy Docker-platform `services` via `ansible/deploy.yml --tags <services>`.
-
-    Args:
-        repo: the checkout to run the playbook from.
-        services: service tags to deploy, joined into one comma-separated `--tags` value.
-    """
-    tags = ",".join(sorted(services))
-    with service_locks(services):  # No budget to share; SERVICE_LOCK_WAIT_S bounds it.
-        run([*PLAYBOOK_ARGV, "ansible/deploy.yml", "--tags", tags], cwd=repo)
-
-
 def deploy_k8s(
     repo: str, services: set[str], timeout: float, restore_sha: str | None = None
 ) -> None:
@@ -563,9 +433,7 @@ def deploy_k8s(
     No health-poll phase here on purpose: the play already runs apply (roles/k8s/manifests)
     -> `rollout status --timeout` (roles/k8s/rollout-drain) -> a post-Available soak
     (post_tasks/k8s_stabilise_gate.yml) that hard-fails on a restart-count delta or a
-    readiness shortfall. Polling again would duplicate it, and containers_for() — the Docker
-    gate's input — returns [] for a k8s service, which is exactly the 2026-08-08 configarr
-    false-rollback.
+    readiness shortfall. Polling again would duplicate it.
 
     The wait and the soak moved out of roles/k8s/manifests in 5eea64e6, when rollouts were
     batched and the stabilisation window deferred to end-of-play; the sequence above is
@@ -616,9 +484,7 @@ def emit_deploy_annotation(services: set[str], sha: str) -> None:
     address or routing through Traefik with a standing write credential. Neither is needed: the
     Alloy shipper tails /var/log/syslog into loki-homelab, and Grafana reads that Loki by DNS.
 
-    Only the k8s auto-deploy path calls this. The Docker branch is unreachable on both cluster
-    nodes (neither has had Docker since 2026-08-14), so wiring it there would be dead code
-    rather than symmetry.
+    Only the k8s auto-deploy path and the broad arm call this.
 
     Fire-and-forget: any failure is logged and swallowed. An annotation is a convenience, and a
     deploy that succeeded must not be reported as failed because recording it did not.
