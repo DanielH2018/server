@@ -19,7 +19,29 @@ LAUNCH_TIMEOUT_S = 120.0
 # `brief.LANDS`, which is the host that LANDS a PR: the same host today, a different fact, and
 # `brief` is already imported by `transport`, which `launch` imports.
 TICK_HOST = "daniel-box"
-CLAUDE_ARGS = "claude -p --model opus --permission-mode auto --output-format json"
+# The early-stop paragraph from Anthropic's Opus 5.5 guide (*Unattended agentic runs*),
+# adapted: a text-only end of turn is a progress report, and the brief's completion condition
+# is what ends the run (issue #2816). A path relative to the unit's WorkingDirectory, the
+# worktree, which `worktree add` checks out from origin/master, so the file is always there.
+# It goes through this headless launch only; an interactive session never reads it.
+SYSTEM_PROMPT_FILE = "scripts/dev/fanout_lib/headless_system_prompt.md"
+# A runaway bound, not a tight one. Over 84 fan-out sessions to 2026-09-28 the largest read
+# 64M cached tokens and wrote 152k output tokens: about $18 at Opus 5.5's list prices ($0.20
+# per million cache reads, $20 per million output, $8 per million 1h cache writes).
+# `renovate_agent.py` bounds its own headless session the same way. A spent budget ends the
+# session with `is_error: true` and `terminal_reason: budget_exhausted` (probed 2026-09-28),
+# which `status` reports as `failed`.
+BUDGET_USD = 40
+CLAUDE_ARGS = (
+    "claude -p --model opus --permission-mode auto --output-format json"
+    f" --max-budget-usd {BUDGET_USD} --append-system-prompt-file {SYSTEM_PROMPT_FILE}"
+)
+# DECIDED: `RuntimeMaxSec=` here, where `claude-rc-restart.service.j2` rejects it for
+# claude-rc.service. systemd records its expiry as a failure (`Result=timeout`); for a
+# long-lived service host that is a false alarm, and for a batch that ran out of time it is
+# the verdict `status` should print. Five hours covers the longest fan-out session measured
+# (286 minutes; the next longest was 104) and bounds one that waits on something forever.
+RUNTIME_MAX_S = 5 * 3600
 # The user manager's PATH lacks ~/.local/bin (claude, uv) and repo hooks need uv.
 PATH = "/home/ubuntu/.local/bin:/usr/local/bin:/usr/bin:/bin"
 
@@ -156,6 +178,7 @@ def systemd_run_command(batch: str) -> str:
             f"-p StandardOutput=file:{wt}/.fanout/report.json "
             f"-p StandardError=file:{wt}/.fanout/stderr.log "
             f"-p Environment=PATH={PATH} -p Environment=HOME=/home/ubuntu "
+            f"-p RuntimeMaxSec={RUNTIME_MAX_S} "
             f"{CLAUDE_ARGS}"
         ),
         "systemd-run",

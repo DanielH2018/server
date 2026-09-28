@@ -8,11 +8,15 @@ Run: uv run pytest scripts/dev/tests/test_fanout_launch.py
 import json
 import subprocess
 from datetime import UTC, datetime
+from pathlib import Path
 
 import pytest
 
 from fanout_lib.brief import Issue
 from fanout_lib.launch import (
+    BUDGET_USD,
+    RUNTIME_MAX_S,
+    SYSTEM_PROMPT_FILE,
     LaunchError,
     create_worktree_command,
     fast_forward_primary_command,
@@ -26,6 +30,8 @@ from fanout_lib.launch import (
 )
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
 from _fanout_fakes import fake_tools, ok
+
+REPO_ROOT = Path(__file__).resolve().parents[3]
 
 ISSUES = [
     Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),
@@ -209,6 +215,24 @@ def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief()
         in cmd
     )
     assert "claude -p --model opus --permission-mode auto --output-format json" in cmd
+
+
+def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
+    """Issue #2816: nothing bounded a headless batch's wall clock or its spend."""
+    cmd = systemd_run_command("b")
+    assert f"-p RuntimeMaxSec={RUNTIME_MAX_S} " in cmd
+    assert cmd.index("RuntimeMaxSec") < cmd.index("claude -p")
+    assert f"--max-budget-usd {BUDGET_USD}" in cmd
+
+
+def test_the_appended_system_prompt_file_exists_where_the_unit_resolves_it():
+    """The path is relative to the unit's WorkingDirectory, the worktree root. A rename that
+    missed `SYSTEM_PROMPT_FILE` would make every launch fail at unit start."""
+    cmd = systemd_run_command("b")
+    assert f"--append-system-prompt-file {SYSTEM_PROMPT_FILE}" in cmd
+    prompt = REPO_ROOT / SYSTEM_PROMPT_FILE
+    assert prompt.is_file()
+    assert "needs input:" in prompt.read_text()
 
 
 def test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run():

@@ -107,6 +107,22 @@ of your final message. A daniel-box session lands it and closes the issue.
 """
 
 
+def _finishing(host: str) -> str:
+    # The same completion condition `.claude/hooks/fanout-stop.py` and `status.py` check.
+    # Only the landing host can owe a host apply, so only its brief names the heading.
+    after = (
+        "after the landing steps above, with any `MANUAL APPLY PENDING` heading above it"
+        if host == LANDS
+        else "after `gh pr create`"
+    )
+    return f"""## Finishing
+The batch is finished when your final message ends with the PR URL, {after}. If you cannot
+get there, end with one line starting `needs input:` or `failed:` that names the blocker. Any
+other final message is a progress report: a Stop hook sends you back to work, and
+`fanout_place.py status` reports the batch `no-pr` rather than `done`.
+"""
+
+
 def render_brief(
     issues: Sequence[Issue],
     host: str,
@@ -134,8 +150,10 @@ def render_brief(
     numbers = " ".join(str(i.number) for i in issues)
     bodies = "\n\n".join(_issue_block(i) for i in issues)
     health_block = "\n".join(health) if health else "(both hosts reported clean)"
+    # Single quotes: inside double quotes the shell reads the backticks as a command
+    # substitution, runs the branch name as a command and posts "Worked by ".
     first_act = "\n".join(
-        f'gh issue comment {i.number} --body "Worked by `{branch}`"' for i in issues
+        f"gh issue comment {i.number} --body 'Worked by `{branch}`'" for i in issues
     )
     return f"""# Fan-out batch {batch} on {host}
 
@@ -153,6 +171,7 @@ Your first act is to record which agent took the work:
 {health_block}
 
 {_landing(host, batch)}
+{_finishing(host)}
 ## Anything you do not fix
 File it with `findings.py open` (flags: docs/reference/scripts.md). Never leave it unmentioned.
 Name it in the PR body as `Filed for later: #N`. A closing keyword before the number — close,

@@ -145,8 +145,12 @@ only daniel-box can verify.
 
 Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
 batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
-<PR URL>`, `no-report`, or `failed` (`permission_denials=N` is appended when the agent hit
-classifier denials). A daniel-server batch reports `done <PR URL>` and stops there: land that
+<PR URL>`, `needs-input`, `no-pr`, `no-report`, or `failed` (`permission_denials=N` is
+appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
+text. A clean finish without one reads `needs-input` when the text names a blocker line
+(`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
+progress report and the Stop hook's three continuations ran out. Both print the final text
+and exit 1, because no PR exists to land. A daniel-server batch reports `done <PR URL>` and stops there: land that
 PR from this session with `land.sh`. A `failed` batch keeps its worktree — `status` already
 shows the last 300 bytes of `<worktree>/.fanout/stderr.log`; read the full file there for more
 before deciding what to do.
@@ -313,6 +317,13 @@ Each agent starts with none of this conversation's context, so its brief must ca
   `MANUAL APPLY PENDING` heading in its report. Five headless sessions between 2026-09-12 and
   2026-09-26 ended with the PR merged and the apply left in end-of-job prose (issue #2683),
   which no register tracks.
+- **What finishes the run.** The final message ends with the PR URL, or carries one line
+  starting `needs input:` or `failed:` that names the blocker. A headless agent that ends a
+  turn on a progress report ("Next I will open the PR") ends the whole `claude -p` process
+  there (issue #2816). In a headless batch the `fanout-stop` Stop hook sends it back up to
+  three times, and `launch.py` appends `fanout_lib/headless_system_prompt.md` to its system
+  prompt. A subagent in this fallback path gets neither, so the sentence in its brief is all
+  it has.
 - That it closes a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`, and may
   **not** use `--refuted` or `--accepted` — those are terminal and operator-only; an agent
   holding that authority could bury a real finding invisibly.
