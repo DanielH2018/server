@@ -28,7 +28,7 @@
 (function () {
   var MIN_ROWS = 10;
   var MIN_COLUMNS = 3;
-  var MAX_CHOICES = 15;
+  var MAX_CHOICES = 25;
   var MAX_CHOICE_LENGTH = 40;
   var SECTION = "Section";
   var TEXT_PARAM = "filter";
