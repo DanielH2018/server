@@ -6,7 +6,7 @@ role** — a host-setup role under `ansible/roles/setup/`, run by `initial_setup
 `deploy.yml`. See repo-root `CLAUDE.md` (§ Secrets Management) for the bigger picture.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `bootstrap.yml --tags "sops_setup"`; `initial_setup.yml --tags "sops_setup"`
 - **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
   `templates/*.timer.j2`)

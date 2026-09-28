@@ -19,15 +19,14 @@ one of its actuator planes. This file carries what is specific to the host cron:
 schedule, the lock, and the contract below.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "fake_remux"` when `inventory_hostname ==
   fake_remux_host`
 - **Crons (4):**
-  - `fake-remux scan` — `{{ fake_remux_scan_cron_minute }} {{ fake_remux_scan_cron_hour }} * *
-    *`
-  - `fake-remux reconcile` — `{{ fake_remux_replace_cron_minute }} * * * *`
-  - `mkv attachment repair` — `{{ fake_remux_mkv_attachment_cron_minute }} * * * *`
-  - `fake-remux health` — `{{ fake_remux_health_cron_minute }} * * * *`
+  - `fake-remux scan` — `45 4 * * *`
+  - `fake-remux reconcile` — `*/20 * * * *`
+  - `mkv attachment repair` — `*/15 * * * *`
+  - `fake-remux health` — `*/10 * * * *`
 <!-- /generated_from -->
 
 ## Autonomous-role contract (it deletes media files with no human in the loop)

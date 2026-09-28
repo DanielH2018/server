@@ -6,7 +6,7 @@ Installs the chezmoi binary into `~/.local/bin`, seeds `~/.config/chezmoi/chezmo
 `initial_setup.yml` (`--tags chezmoi`) where `has_chezmoi` is set.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "chezmoi"` when `has_chezmoi`
 - **Crons / timers:** none (no `ansible.builtin.cron` task in `tasks/`, no
   `templates/*.timer.j2`)

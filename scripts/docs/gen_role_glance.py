@@ -14,6 +14,11 @@ directly under the heading; everything after the closing marker is hand-written 
 It carries only facts with one source each. A judgement — why a claim is on the tier it is
 on, what a route bypasses, why a pin is held back — stays in the prose below the block.
 
+DECIDED: the blocks stay, rather than moving these facts into `docs/reference/services.md`.
+Re-examined 2026-09-28 (#2808). Both renders share one derivation, so moving them gains no
+single source of truth, and it loses locality: inject-nested-docs puts a role doc's head, this
+block first, in front of a session that touches the role, and nothing injects `services.md`.
+
 ONE FIELD SET PER ROLE SHAPE, not one schema (#2096). The three planes declare different
 facts in different places, and a single schema would print "none" for most fields on most
 roles:
@@ -122,7 +127,9 @@ def begin_marker(sources: str) -> str:
 BEGIN = begin_marker(
     "defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists"
 )
-BEGIN_SETUP = begin_marker("tasks, timer templates or playbook entry")
+BEGIN_SETUP = begin_marker(
+    "tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml"
+)
 BEGIN_PI = begin_marker(
     "compose template, tasks, meta/deps.yml or containers_list entry"
 )

@@ -12,11 +12,10 @@ Makes a host able to run VMs. Deploys the staging cluster's substrate; see
   role asserts it rather than leaving it to the operator.
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "hypervisor"`
 - **Crons (1):**
-  - `Full etcd restore drill in a throwaway guest` — `{{ etcd_drill_full_cron.split()[0] }} {{
-    etcd_drill_full_cron.split()[1] }} {{ etcd_drill_full_cron.split()[2] }} * *`
+  - `Full etcd restore drill in a throwaway guest` — `20 11 1 * *`
 <!-- /generated_from -->
 
 ## The staging guest

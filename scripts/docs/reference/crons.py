@@ -6,8 +6,11 @@ human in the loop. That set is the reason to read the page, and it is not obviou
 single role: the tasks are spread across roles/setup/, roles/k8s/ and roles/containers/.
 
 STATIC PARSING ONLY. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
-in a schedule or a job line is printed as written, since it cannot be resolved without a
-real deploy — an unresolved `{{ var }}` is the honest rendering, not a guess.
+in a schedule or user resolves only where every host would get the same value: its variables
+come from role defaults or `group_vars/all.yml` and no `host_vars` file sets them
+(`lib.jinja_defaults`). Anywhere else it is printed as written, because a value that differs
+by host cannot be resolved without a real deploy, and an unresolved `{{ var }}` is the honest
+rendering there, not a guess.
 
 WHAT IT CANNOT DECIDE. Whether a job changes state is judged from its command by the
 keyword list below, and a job whose command is a wrapper script is marked as needing the
@@ -34,6 +37,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib import yaml_fast
 from lib.docs_provenance import md_cell
+from lib.jinja_defaults import resolve
 
 from lib.repo_paths import REPO, ROLES
 
@@ -192,12 +196,13 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
             if str(spec.get("state", "present")) == "absent":
                 continue
             job = str(spec.get("job", ""))
+            role_dir = path.parent.parent
             rows.append(
                 {
                     "name": str(spec.get("name", task.get("name", "unnamed"))),
-                    "schedule": schedule_text(spec),
+                    "schedule": resolve(schedule_text(spec), role_dir),
                     "host": _host_for(task),
-                    "user": str(spec.get("user", "root")),
+                    "user": resolve(str(spec.get("user", "root")), role_dir),
                     "changes_state": _changes_state(job),
                     "source": _rel(path, roles),
                 }
@@ -236,10 +241,11 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
 
     parts.append(
         "\n## Schedule format\n\n"
-        "Five fields: minute, hour, day-of-month, month, day-of-week. A value still "
-        "showing `{{ ... }}` is an Ansible variable that only resolves at deploy time — "
-        "these pages are rendered by static parsing and never run Ansible, so the "
-        "template is the honest rendering.\n"
+        "Five fields: minute, hour, day-of-month, month, day-of-week. A schedule or user "
+        "shows the value every host resolves when its variables come from role defaults or "
+        "`group_vars/all.yml` and no host overrides them. A value still showing `{{ ... }}` "
+        "differs by host or does not evaluate statically, so it only resolves at deploy "
+        "time, and the template is the honest rendering.\n"
     )
     return "\n".join(parts).rstrip("\n") + "\n"
 

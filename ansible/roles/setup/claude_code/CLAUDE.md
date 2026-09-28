@@ -14,10 +14,10 @@ uv run ansible-playbook ansible/initial_setup.yml --tags claude_code
 ```
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
 - **Timers (2):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
-  `claude-rc-restart.timer` (`OnCalendar={{ claude_code_rc_restart_schedule }}`)
+  `claude-rc-restart.timer` (`OnCalendar=weekly`)
 <!-- /generated_from -->
 
 ## The two Remote Control modes are different features

@@ -14,10 +14,10 @@ uv run ansible-playbook ansible/initial_setup.yml --tags renovate_agent
 ```
 
 ## At a glance
-<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates or playbook entry. -->
+<!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "renovate_agent"` when `inventory_hostname ==
   renovate_agent_host`
-- **Timer:** `renovate-agent.timer` (`OnCalendar={{ renovate_agent_oncalendar }}`)
+- **Timer:** `renovate-agent.timer` (`OnCalendar=*-*-* 06:00:00 America/Chicago`)
 <!-- /generated_from -->
 
 ## Arming it
