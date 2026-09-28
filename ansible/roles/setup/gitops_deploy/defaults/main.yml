@@ -292,7 +292,10 @@ gitops_deploy_staging_gate_blocking: false
 # 0c0b03d1, then 54s and 52s against 7781d7b9 — four runs, all PASS. The 130s is a genuinely
 # cold cache (image pulls); steady state is ~53s. Six services is the upper bound by
 # construction: the gated set is the change intersected with the subset, and
-# gitops_deploy_k8s_autodeploy_max_per_tick caps a tick at 3 anyway. 600s is ~4.6x the cold run
+# gitops_deploy_k8s_autodeploy_max_per_tick caps a tick at 3 anyway. Since #2797 a gate run is
+# TWO sequential deploy.sh legs — traefik and authelia to re-render the stage edge, then the
+# gated set — so the upper bound is at most a six-service run plus a two-service one, under
+# 2x the 130s cold figure. 600s is ~4.6x the cold run
 # and ~11x steady state. Do not shrink it back toward the steady-state figure on a warm reading
 # alone — the cold run is the one a real tick pays after an image bump.
 #

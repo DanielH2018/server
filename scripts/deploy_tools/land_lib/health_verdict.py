@@ -159,10 +159,12 @@ def health(ln: Landing) -> NoReturn:
             )
     if ln.remaining_setup:
         local = ln.tools.hostname()
-        print(
-            f"  services deployed and the tick applied on {local}, but it also reaches: "
-            f"{ln.remaining_setup}"
-        )
+        # The note says which hosts and why for each role it names, including the repo-file
+        # case where the tick applied the role on NO host (#2798) -- so this line states what
+        # was deployed and hands the rest to the note, rather than asserting a self-apply on
+        # `local` that a repo-file-only role never had.
+        note = remaining_hosts_note(ln.remaining_setup).lstrip()
+        print(f"  services deployed, and {note}")
         ln.finish(
             Verdict.NEEDS_MANUAL_APPLY,
             1,
