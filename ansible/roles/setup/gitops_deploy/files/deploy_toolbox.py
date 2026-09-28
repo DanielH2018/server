@@ -28,11 +28,10 @@ Stdlib only, like the rest of the deployer.
 
 import os
 import subprocess
-import time
 import urllib.error
 import urllib.request
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime
 from functools import partial
 
@@ -166,13 +165,6 @@ class DeployTools:
     # the ledger's tzinfo, so a `lambda: datetime.now()` adapter would change what that
     # function receives.
     now: Callable[..., datetime] = datetime.now
-    # When this process started, in `time.time()` terms — the only non-callable here, and a
-    # boundary all the same: it is what the OS did, not what the config said. Nothing reads it
-    # since the Docker health gate that measured its deadline from it was removed (#2805); it
-    # goes with RUN_BUDGET_S in #2834.
-    # A default_factory rather than a literal: every `DeployTools()` a test builds gets its own
-    # start, so a deadline never lands in the past.
-    run_start: float = field(default_factory=time.time)
 
 
 def default_tools(config: Config) -> DeployTools:

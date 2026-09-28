@@ -1,7 +1,7 @@
 """Parsing the deployer's config cannot fail; only running with a bad one can.
 
 `load_config` used to be ~40 `int(C.get(...))` calls evaluated at module level, so a config
-file with `HEALTH_TIMEOUT_S=5m` in it raised `ValueError: invalid literal for int() with base
+file with `K8S_DEPLOY_TIMEOUT_S=5m` in it raised `ValueError: invalid literal for int() with base
 10: '5m'` during IMPORT — before the process had a webhook, a log line or a heartbeat, and with
 no key name anywhere in the traceback. The parse now records the error and `Config.validate()`
 raises it from inside `main()`, where `entrypoint()` turns it into one line and a Discord post.
@@ -20,7 +20,7 @@ def test_an_empty_environment_is_a_usable_default_config():
     cfg = deploy_io.load_config({})
     cfg.validate()
     assert cfg.repo == "" and cfg.branch == "master"
-    assert cfg.health_timeout_s == 300 and cfg.k8s_deploy_timeout_s == 1440
+    assert cfg.k8s_deploy_timeout_s == 1440 and cfg.broad_deploy_timeout_s == 1800
 
 
 def test_the_config_is_frozen():
@@ -127,8 +127,8 @@ def test_require_ci_false_does_not_log_the_disarm(capsys):
 # ── a malformed value ─────────────────────────────────────────────────────────────────────
 def test_a_malformed_number_does_not_raise_at_parse_time():
     """The property that keeps a half-written config out of the import path."""
-    cfg = deploy_io.load_config({"HEALTH_TIMEOUT_S": "5m"})
-    assert cfg.health_timeout_s == 300, (
+    cfg = deploy_io.load_config({"K8S_DEPLOY_TIMEOUT_S": "5m"})
+    assert cfg.k8s_deploy_timeout_s == 1440, (
         "the field keeps its default while the error is held"
     )
     assert cfg.errors
@@ -149,29 +149,31 @@ def test_a_malformed_staging_timeout_does_not_raise_at_parse_time():
 
 
 def test_validate_raises_one_line_naming_the_key_and_what_it_held():
-    cfg = deploy_io.load_config({"HEALTH_TIMEOUT_S": "5m"})
+    cfg = deploy_io.load_config({"K8S_DEPLOY_TIMEOUT_S": "5m"})
     with pytest.raises(deploy_io.ConfigError) as excinfo:
         cfg.validate()
     message = str(excinfo.value)
     assert "\n" not in message, (
         f"a diagnosable failure is one line, not a block: {message}"
     )
-    assert "HEALTH_TIMEOUT_S" in message and "5m" in message
+    assert "K8S_DEPLOY_TIMEOUT_S" in message and "5m" in message
 
 
 def test_every_malformed_key_is_named_not_just_the_first():
     """A truncated config.env usually damages more than one key; naming one at a time turns a
     single re-render into several."""
-    cfg = deploy_io.load_config({"HEALTH_TIMEOUT_S": "5m", "RUN_BUDGET_S": "lots"})
+    cfg = deploy_io.load_config(
+        {"K8S_DEPLOY_TIMEOUT_S": "5m", "BROAD_DEPLOY_TIMEOUT_S": "lots"}
+    )
     with pytest.raises(deploy_io.ConfigError) as excinfo:
         cfg.validate()
-    assert "HEALTH_TIMEOUT_S" in str(excinfo.value)
-    assert "RUN_BUDGET_S" in str(excinfo.value)
+    assert "K8S_DEPLOY_TIMEOUT_S" in str(excinfo.value)
+    assert "BROAD_DEPLOY_TIMEOUT_S" in str(excinfo.value)
 
 
 def test_a_good_config_validates_silently():
     """The accepting half of the pair above — without it the check could raise on everything."""
-    deploy_io.load_config({"HEALTH_TIMEOUT_S": "600"}).validate()
+    deploy_io.load_config({"K8S_DEPLOY_TIMEOUT_S": "600"}).validate()
 
 
 # ── the file reader ───────────────────────────────────────────────────────────────────────

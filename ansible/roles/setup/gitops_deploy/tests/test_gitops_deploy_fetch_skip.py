@@ -141,7 +141,7 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
 ):
     """The acceptance criterion for moving the config parse out of import time.
 
-    `HEALTH_TIMEOUT_S=5m` used to raise `ValueError: invalid literal for int()` while the module
+    `K8S_DEPLOY_TIMEOUT_S=5m` used to raise `ValueError: invalid literal for int()` while the module
     was still importing — no key name, no webhook, no log line. The handler must sit ABOVE the
     generic `except Exception` (ConfigError subclasses it, so a reordering silently restores the
     traceback), and must leave last_run alone: a deployer that cannot parse its config is not
@@ -155,7 +155,7 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
         gitops_deploy,
         monkeypatch,
         deploy_io.ConfigError(
-            "unusable deployer config: HEALTH_TIMEOUT_S='5m' is not a whole number"
+            "unusable deployer config: K8S_DEPLOY_TIMEOUT_S='5m' is not a whole number"
         ),
     )
     assert gitops_deploy.entrypoint(tools) == 0
@@ -163,8 +163,8 @@ def test_an_unusable_config_is_one_line_and_exit_0_on_a_delivered_post(
     assert out.count("\n") == 0, (
         f"a diagnosable failure is one line, not a block: {out}"
     )
-    assert "HEALTH_TIMEOUT_S" in out and "5m" in out
-    assert len(seen["posts"]) == 1 and "HEALTH_TIMEOUT_S" in seen["posts"][0]
+    assert "K8S_DEPLOY_TIMEOUT_S" in out and "5m" in out
+    assert len(seen["posts"]) == 1 and "K8S_DEPLOY_TIMEOUT_S" in seen["posts"][0]
     assert not (state_dir / "last_run").exists()
     assert not (state_dir / "behind_since").exists(), (
         "a skipped tick must not record the behind-origin marker"
@@ -184,7 +184,7 @@ def test_an_unusable_config_exits_1_when_the_alert_itself_cant_be_delivered(
         gitops_deploy,
         monkeypatch,
         deploy_io.ConfigError(
-            "unusable deployer config: HEALTH_TIMEOUT_S='5m' is not a whole number"
+            "unusable deployer config: K8S_DEPLOY_TIMEOUT_S='5m' is not a whole number"
         ),
         discord_ok=False,
     )

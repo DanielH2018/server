@@ -10,18 +10,16 @@ Type=oneshot
 # the 30-min timer (OnUnitActiveSec) — without this a hang stalls the whole pipeline until manual
 # intervention.
 #
-# Two independent worst cases must fit inside this ceiling, and task 6b's k8s one is why it is
-# 45min rather than 25min (the staging gate below took it to 60min, and #2397's forward cap to
-# 70min):
-#   - Docker path: 180s max flock wait + RUN_BUDGET_S (1020s, the health-gate phase) +
-#     HEALTH_TIMEOUT_S (300s, the rollback redeploy) = 1500s = 25min exactly, still true and
-#     now with slack under the larger ceiling. See config.env.j2.
+# Two independent worst cases must fit inside this ceiling — the k8s path and the broad path.
+# The k8s one is why it is 45min rather than the 25min a Docker tick needed before #2805 removed
+# that arm (the staging gate below took it to 60min, and #2397's forward cap to 70min):
 #   - k8s path: a failed forward deploy can spend its whole K8S_DEPLOY_TIMEOUT_S (1440s, derived
 #     from the worst promoted role — see defaults/main.yml) before gitops_deploy.py catches the
 #     timeout, THEN the rollback redeploy can spend its whole K8S_ROLLBACK_TIMEOUT_S (1620s,
 #     re-sized against the real per-service ceiling) — the two run SEQUENTIALLY in one unit
-#     activation, not concurrently, and neither shares the Docker path's RUN_BUDGET_S. That pair
-#     alone is 180 (max flock wait) + 1440 + 1620 = 3240s, which needs more than 25min (1500s) — see
+#     activation, not concurrently. That pair
+#     alone is 180 (max flock wait) + 1440 + 1620 = 3240s, which needs more than the 25min this
+#     ceiling used to be — see
 #     ansible/roles/k8s/volume-revert/CLAUDE.md for the drill that sized the two revert-role
 #     timeouts feeding K8S_ROLLBACK_TIMEOUT_S.
 #   - k8s path WITH the staging gate armed (STAGING_GATE, off by default), which is why this is
@@ -98,11 +96,12 @@ Environment=ANSIBLE_CACHE_PLUGIN_CONNECTION=/home/{{ sys_user }}/.cache/gitops-d
 SyslogLevel=notice
 # flock serializes against the weekly secret-rotate cron (secret-rotate.sh) — both mutate
 # this same git working tree, and this deployer's `git reset --hard` on a failed health gate
-# could silently discard a half-rotated secret. `DeployTools.run_start` (and so RUN_BUDGET_S,
-# see gitops_deploy.py) is set when entrypoint() builds the tools, AFTER flock acquires — so time spent
-# waiting here is pure overhead against this unit's TimeoutStartSec, uncounted by that
-# budget. -w 180 outlasts any normal deploy-step contention (secret-rotate is short — 0-2
-# tokens) but fails fast enough to leave the health-gate/rollback budget intact; /run/lock is
+# could silently discard a half-rotated secret. Every phase budget — the staging pair,
+# K8S_DEPLOY_TIMEOUT_S, K8S_ROLLBACK_TIMEOUT_S, BROAD_DEPLOY_TIMEOUT_S — starts when its phase
+# starts, AFTER flock acquires, so time spent waiting here is pure overhead against this unit's
+# TimeoutStartSec and is counted by none of them. -w 180 outlasts any normal deploy-step
+# contention (secret-rotate is short — 0-2
+# tokens) but fails fast enough to leave the forward/rollback budgets intact; /run/lock is
 # world-writable+sticky, so the unprivileged {{ sys_user }} can create the lockfile.
 #
 # DECIDED: contention exits 75 and the unit SUCCEEDS — do not "fix" this back to a failure, and

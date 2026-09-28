@@ -415,7 +415,8 @@ were removed with the deployer's Docker apply arm in #2805: no `has_gitops` host
 The hold rules in the second and third paragraphs still govern a failed k8s deploy, whose
 rollback lives in `deploy_handlers._rollback_k8s`. The rest is kept as the record.
 
-After a Docker deploy it polled each container's health (`max(5min)` default, see HEALTH_TIMEOUT_S).
+After a Docker deploy it polled each container's health, bounded by a `HEALTH_TIMEOUT_S` config
+key (5 min) that #2834 removed along with the `RUN_BUDGET_S` gate budget beside it.
 On failure it `git reset --hard`es to the previous HEAD, redeploys the prior version,
 writes the bad SHA to `/var/lib/gitops-deploy/hold_sha` (so the next tick won't redeploy it),
 and alerts the dedicated Discord webhook. Reverting the offending PR advances `origin` past
