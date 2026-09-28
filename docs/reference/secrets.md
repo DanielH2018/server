@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-28 06:17 UTC
-generated_sha: 180a57cbc
+generated_at: 2026-09-28 19:25 UTC
+generated_sha: 19d4b6c65
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 180a57cbc
 
 # Secrets
 
-182 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+180 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -158,7 +158,6 @@ rotated unattended by the weekly secret-rotate cron.
 | `monitor_bridge_bazarr_push_token` | 2026-08-16 | 2027-02-02 | 127 |
 | `monitor_bridge_cert_push_token` | 2026-08-30 | 2027-02-19 | 144 |
 | `monitor_bridge_cloudflare_drift_push_token` | 2026-08-28 | 2027-02-14 | 139 |
-| `monitor_bridge_cluster_prometheus_push_token` | 2026-08-30 | 2027-02-20 | 145 |
 | `monitor_bridge_cluster_targets_push_token` | 2026-08-30 | 2027-02-20 | 145 |
 | `monitor_bridge_configarr_push_token` | 2026-08-28 | 2027-02-17 | 142 |
 | `monitor_bridge_cpu_push_token` | 2026-08-30 | 2027-02-20 | 145 |
@@ -208,7 +207,6 @@ rotated unattended by the weekly secret-rotate cron.
 | `pi_sd_health_push_token` | 2026-08-30 | 2027-02-22 | 147 |
 | `registry_gc_push_token` | 2026-05-10 | 2026-11-06 | 39 |
 | `release_staleness_push_token` | 2026-04-05 | 2026-09-26 | -2 |
-| `remember_logs_push_token` | 2026-04-16 | 2026-10-02 | 4 |
 | `render_records_push_token` | 2026-08-17 | 2027-01-30 | 124 |
 | `renovate_agent_kuma_push_token` | 2026-09-10 | 2027-03-04 | 157 |
 | `ruleset_drift_push_token` | 2026-09-01 | 2027-02-26 | 151 |
