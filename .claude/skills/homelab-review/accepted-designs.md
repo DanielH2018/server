@@ -39,5 +39,6 @@ that makes the trade-off. When an entry moves there, delete it here.
   valheim's SteamCMD install volume are re-downloadable, while valheim's *world* volume IS
   backed up. `docs/longhorn-backup-tiering.md` is the tiering doc.
 - The push-watchdog semantics are "down = no heartbeat".
-- The Pi is monitored via static Kuma labels. Do NOT propose a Pi node-exporter: `node_*`
-  checks are instance-blind.
+- The Pi is monitored via static Kuma labels. The Pi's node-exporter (scrape job `node-pi`)
+  feeds only Pi Pressure and Host Temp. Do NOT add the Pi to the instance-blind `node_*`
+  disk/memory checks; `HOST_METRIC_ORIGIN_EXCLUDE` keeps it out of them.
