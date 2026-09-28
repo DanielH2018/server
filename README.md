@@ -162,7 +162,7 @@ playbooks). The manual post-deploy setup Ansible can't do is verified by
   [`docs/longhorn-backup-tiering.md`](docs/longhorn-backup-tiering.md). Recovery procedure:
   [`docs/longhorn-disaster-recovery.md`](docs/longhorn-disaster-recovery.md). The Pi's own
   data is covered by `pi-peer-backup`. **Kopia is retired** (2026-08-13; repo deleted
-  2026-08-14) — [`docs/kopia-disaster-recovery.md`](docs/kopia-disaster-recovery.md) is kept
+  2026-08-14) — [`docs/archive/kopia-disaster-recovery.md`](docs/archive/kopia-disaster-recovery.md) is kept
   only as history.
 - **Updates** — **Renovate** opens PRs for version-pinned images and the pinned `prek.toml`
   hook revisions (see [`renovate.json`](renovate.json)); it requires installing the Renovate

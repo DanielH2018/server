@@ -100,9 +100,11 @@ exclude_docs: |
 
 # Built and served on purpose, but deliberately absent from the nav. `archive/` is the
 # historical record of executed work — other docs and CLAUDE.md link INTO it, so excluding it
-# would 404 those links, while listing 38 superseded planning docs in the nav would bury the
-# live pages. Declaring it here is what separates "decided to leave unlinked" from "nobody
-# noticed", which is the distinction the nav coverage test now enforces.
+# would 404 those links, while listing every superseded planning doc in the nav would bury the
+# live pages. Its README is the one exception: the nav's History section names it, as the
+# index a reader browses the archive from. Declaring it here is what separates "decided to
+# leave unlinked" from "nobody noticed", which is the distinction the nav coverage test now
+# enforces.
 # `reference/backlog.md` is the same case for a different reason: `findings.py list` is the
 # open register, this page is only its rendering, and `issue-claiming-and-fanout.md` and
 # CLAUDE.md link INTO it directly — so it stays built and reachable, just off the nav.
@@ -177,31 +179,21 @@ nav:
   # section, ordered day-to-day first and recovery last.
   - Operations:
       - Deploying by hand: deploying.md
-      # Specced, not started (#2412). Listed beside the page it will change, so a reader of
-      # the deploy wrapper finds the planned port before editing the bash it replaces.
-      - deploy.sh port to Python: deploy-sh-python-port.md
       - The GitOps pipeline: gitops-pipeline.md
-      # Specced, not started — same convention as Staging Phase C below. It changes what a
-      # session does after every merge, so a reader arriving at the pipeline page should find
-      # it rather than discover the behaviour changed under them.
-      - Post-merge automation: post-merge-automation.md
       # The "(drafted)" suffix was dropped when the claim protocol and the /issue-fanout
       # skill landed: the page now describes a system that exists, not one still specced.
       - Issue claiming and fan-out: issue-claiming-and-fanout.md
       # The "(planned)" suffix was dropped on 2026-08-28 when Phase B landed: the cluster
       # exists on daniel-server and serves freshrss, so a reader arriving from Operations now
-      # finds what the label promises. The page is still a spec as well as a description —
-      # Phase C (gating the pipeline on a staging deploy) is unbuilt and says so.
+      # finds what the label promises.
       - Staging cluster: staging-cluster.md
-      # Drafted, not started — the gate itself is unimplemented. Listed anyway because the
-      # reachability decision it turns on is one an unrelated change could foreclose.
-      - Staging Phase C (drafted): staging-phase-c.md
+      # Phase C is the staging gate, built in slices 1-4 and blocking prod on a rejection
+      # since 2026-09-02. Both staging pages stay here rather than in History: they are
+      # written as specs, but they describe the live cluster and gate, and the gitops_markers
+      # copies four roles ship cite them by path.
+      - Staging gate (Phase C): staging-phase-c.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
-      # The #2245 spike: measured CI wall clock, billed minutes and peak memory for
-      # carrying this repo's CI on daniel-server. Listed because its verdict turns on a
-      # repository-visibility decision the operator has to make, not on anything built.
-      - Self-hosted runner spike: self-hosted-runner-spike.md
       - Claude tooling reference: claude-tooling.md
       - Failure classes: failure-classes.md
       # Layout decisions, module conventions and the ranked structural findings from the
@@ -217,19 +209,26 @@ nav:
       # Same split as the line above, for k8s/volume-snapshot (#2699): the drill records and the
       # measured traps, kept off the role CLAUDE.md a session loads on every touch of the role.
       - volume-snapshot drill record: volume-snapshot-drills.md
-      # Label omits the word this document's title carries before "drain". With it,
-      # gitleaks' generic-api-key rule reads the label plus the high-entropy filename
-      # after the colon as a credential and fails the commit.
-      - B2 drain scoping: b2-api-drain-scoping.md
-      - B2 transaction cap gaps: b2-transaction-cap-monitoring-gaps.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md
       - Longhorn upgrade: longhorn-upgrade.md
       - Longhorn disaster recovery: longhorn-disaster-recovery.md
       - k3s etcd restore: k3s-etcd-restore.md
-      - "Kopia disaster recovery (RETIRED — history only)": kopia-disaster-recovery.md
       # The last stop on the recovery ladder — total loss of daniel-box or the author's own
       # access. It is the entry point that links to every runbook above rather than one more
       # subsystem-specific procedure, so it sits after all of them.
       - Break glass: break-glass.md
+  # Work that shipped, a spike that concluded and an incident that closed: kept as the record,
+  # not as instructions. Operations holds only pages that describe the lab as it runs.
+  # The archive index lists every archived plan and names where its live documentation went;
+  # the pages under it stay off the nav (see not_in_nav above). The two pages after it are
+  # history as well but keep their docs/ path, and the index's *History outside this
+  # directory* section says why for each.
+  - History:
+      - Archive index: archive/README.md
+      - "B2 transaction cap incident, 2026-08-02": b2-transaction-cap-monitoring-gaps.md
+      # The #2245 spike: measured CI wall clock, billed minutes and peak memory for carrying
+      # this repo's CI on daniel-server. The issue closed, but its verdict still turns on a
+      # repository-visibility decision the operator has to make.
+      - Self-hosted runner spike: self-hosted-runner-spike.md

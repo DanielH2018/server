@@ -56,7 +56,7 @@ hand-carried `last_rotated` or it silently resets the secret's rotation clock. T
 generalises to every secret in the store, which is why the procedure landed in
 [`docs/secret-rotation.md`](../secret-rotation.md) rather than staying here.
 
-**`docs/kopia-disaster-recovery.md` describes a retired tool.** It is kept because the
+**`docs/archive/kopia-disaster-recovery.md` describes a retired tool.** It is kept because the
 account, the bucket and the recovery vocabulary are still real, but the tool in its title is
 not running.
 

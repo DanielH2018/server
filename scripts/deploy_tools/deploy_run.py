@@ -2,9 +2,10 @@
 """Run an interactive Ansible deploy under the locks the automated deployers take.
 
 Invoke it as ``./scripts/deploy.sh``, which execs this file; every doc, skill, hook and
-consumer names the shim. The port from bash is issue #2412, planned in
-``docs/deploy-sh-python-port.md``. This module holds the FRONT half: argument parsing and
-every gate that runs before the tree lock. The locked half -- tree lock, snapshot, service
+consumer names the shim. The port from bash is issue #2412. Its plan is archived at
+``docs/archive/deploy-sh-python-port.md``, and its *The frozen contract* section lists the
+exit codes, output lines and variables other processes read, as of the port. This module holds
+the FRONT half: argument parsing and every gate that runs before the tree lock. The locked half -- tree lock, snapshot, service
 locks, playbook -- is ``deploy_under_locks.py``, and ``--detach``'s is ``deploy_detach.py``;
 this module calls one of them once every gate has passed.
 

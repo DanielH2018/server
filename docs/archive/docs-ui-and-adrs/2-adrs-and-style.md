@@ -364,7 +364,7 @@ The target set, in a sensible reading order. Each names its primary source:
 | 0011 | One git-tree lock serializing every deploy path | `scripts/deploy.sh`, `ansible/roles/setup/gitops_deploy/CLAUDE.md` |
 | 0012 | Zero-downtime deploys: the rollout gate design | `docs/archive/zero-downtime/design.md` |
 | 0013 | daniel-pi stays on Docker | repo-root `CLAUDE.md`, `ansible/roles/containers/` |
-| 0014 | Kopia retired; Longhorn owns the B2 credentials | `docs/kopia-disaster-recovery.md` |
+| 0014 | Kopia retired; Longhorn owns the B2 credentials | `docs/archive/kopia-disaster-recovery.md` |
 
 For each: fill the template, then **find the `file:line` it governs and add the `ADR-NNNN` reference to that marker**. A marker that currently reads:
 
