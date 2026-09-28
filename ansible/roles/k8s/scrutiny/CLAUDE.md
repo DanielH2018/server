@@ -50,20 +50,18 @@ SMART trend history. See repo-root `CLAUDE.md` for shared conventions.
 - The collector runs on its own cron (`scrutiny_k8s_collector_cron`, daily at
   midnight), pinned because monitor-bridge's SMART-freshness check has a fixed window
   and must not depend on the image's own default schedule.
-- **Scrutiny pushes its own Discord alert, and the env key is not the obvious one.**
-  `SCRUTINY_NOTIFY_URLS` — top-level `notify.urls` upstream, so `SCRUTINY_WEB_NOTIFY_URLS`
-  (the shape the neighbouring `SCRUTINY_WEB_INFLUXDB_*` keys suggest) boots clean and
-  notifies nothing. The wrapper in `web.yaml.j2` exports it from the Secret mount rather
-  than the pod spec, because the value embeds the webhook token. `secret.yaml.j2` derives
-  the shoutrrr `discord://<token>@<id>` from `monitor_discord_webhook_url`, the shared
-  "Homelab Alerts" channel Kuma posts to; `tasks/main.yml` asserts that value's shape,
-  because CI renders it stubbed and only a deploy sees the real one.
-  This does not replace monitor-bridge's `check_scrutiny` — that reads `/api/summary` on a
-  poll and covers freshness, wear and temperature as well as `device_status`, and it pages
-  when the collector stops reporting at all, which scrutiny itself cannot.
-- **The notify LEVEL is not settable here.** `notify.level` is deprecated upstream and
+- **Scrutiny sends no notification of its own; monitor-bridge is the single pager.**
+  `check_scrutiny` reads `/api/summary` on a poll of at most 300 s and pages on a non-zero
+  `device_status`, which is the same SMART self-assessment and the same Scrutiny attribute
+  thresholds scrutiny's own alert fired on. It also covers freshness, wear and temperature,
+  it drives a Kuma up/down tile, and it pages when the collector stops reporting at all.
+  The shoutrrr `SCRUTINY_NOTIFY_URLS` path went on 2026-09-28 (#2832) because it was a
+  second page for one failed disk, and it added no threshold the bridge lacks.
+- **Do not re-add a notify path here without moving `check_scrutiny` out of the way first.**
+  Two senders on one threshold is the state #2832 removed. Two upstream traps make re-adding
+  it look easier than it is: the env key is top-level `notify.urls`, so
+  `SCRUTINY_WEB_NOTIFY_URLS` (the shape the neighbouring `SCRUTINY_WEB_INFLUXDB_*` keys
+  suggest) boots clean and notifies nothing; and `notify.level` is deprecated upstream and
   rejected at startup with a `ConfigValidationError`, so `SCRUTINY_NOTIFY_LEVEL` crashloops
-  the pod. The level lives in the dashboard Settings page — SQLite in `scrutiny-web-config`,
-  not the repo. Read 2026-09-06 through `GET /api/settings`: `metrics.notify_level: 2`
-  (Fail) with `status_threshold: 3` (SMART self-assessment and Scrutiny's own thresholds
-  both). Changing it is a UI action, and nothing in this role can hold it.
+  the pod. The level is dashboard state — SQLite in `scrutiny-web-config`, not the repo —
+  so nothing in this role can hold it either way.
