@@ -91,7 +91,7 @@ HOSTNAME = CONFIG.hostname
 TIMEOUT = CONFIG.health_timeout_s
 # The Docker health gate's wall-clock budget. Nothing reads RUN_BUDGET_S or TIMEOUT since #2805
 # removed that gate. Both still feed the unit's TimeoutStartSec arithmetic, which
-# test_gitops_deploy_timeout_budgets.py holds, so their removal is filed separately.
+# test_gitops_deploy_timeout_budgets.py holds, so their removal is #2834.
 RUN_BUDGET_S = CONFIG.run_budget_s
 
 # ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
