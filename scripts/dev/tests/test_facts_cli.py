@@ -3,6 +3,7 @@
 import subprocess
 
 from fact_status import _USAGE, main
+from lib.facts.lock import read_lock
 
 
 def _repo(tmp_path):
@@ -159,12 +160,18 @@ def test_verify_unverified_leaves_a_moved_atom_out(tmp_path, capsys):
     """The flag raises coverage; it can never launder a section already in the lock."""
     repo = _repo(tmp_path)
     main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
-    (repo / "t" / "m.py").write_text("LIMIT = 90\n")
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Cap\n`t/m.py:OTHER` caps it.\n"
+    )
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
     capsys.readouterr()
+
     assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
-    capsys.readouterr()
+    assert "verified CLAUDE.md#Cap" in capsys.readouterr().out
+
     assert main(["status", "--repo", str(repo)]) == 1
-    assert "OUT  CLAUDE.md#Gate" in capsys.readouterr().out
+    out = capsys.readouterr().out
+    assert "OUT  CLAUDE.md#Gate" in out and "IN  CLAUDE.md#Cap" in out
 
 
 def test_verify_with_no_unit_and_no_flag_is_usage_error(tmp_path, capsys):
@@ -214,3 +221,15 @@ def test_reverify_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
     repo = _repo(tmp_path)
     assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 2
     assert "cannot resolve" in capsys.readouterr().err
+
+
+def test_verify_unverified_leaves_a_probe_only_section_unrecorded(tmp_path, capsys):
+    """An empty row records no hash and still reads UNVERIFIED, so none is written."""
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Down\n`probe.py monitors` answers it.\n"
+    )
+    assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
+    out = capsys.readouterr().out
+    assert "left 1 probe-only sections unrecorded" in out
+    assert "CLAUDE.md#Down" not in read_lock(repo / "docs" / "facts.lock")
