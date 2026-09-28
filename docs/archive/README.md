@@ -50,6 +50,7 @@ recording rather than that nobody looked.
 | `post-merge-automation.md` | slices 1–3 shipped: `await_ci.py` and `land.sh` exist, and the deployer applies broad setup- and deploy-plane changes itself | repo-root `CLAUDE.md` → *After a PR Merges*; the `land-after-merge` skill; `docs/gitops-pipeline.md` | the marker in `deploy_remediation.py` that keeps the broad deploy-plane arm forward-only |
 | `kopia-disaster-recovery.md` | retired 2026-08-13 and fully historical since 2026-08-14 (marked in the file itself) | `docs/longhorn-disaster-recovery.md`, its successor | [ADR-0014](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) |
 | `b2-api-drain-scoping.md` | built as `scripts/backup/b2_drain.py`, run by `ansible/prune_backups.yml`'s `b2-drain` mode | the `b2_drain.py` docstring and the playbook's header | — |
+| `self-hosted-runner-spike.md` | the #2245 spike concluded 2026-09-22 and its issue closed; no runner was built | ADR-0018 states the repository-visibility decision the verdict waited on, and this page holds the measurements behind it | [ADR-0018](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
@@ -63,7 +64,7 @@ documentation and not as history.
 
 ## History outside this directory
 
-Two pages are history and still sit directly under `docs/`. The site lists them under
+One page is history and still sits directly under `docs/`. The site lists it under
 *History*, beside this index, so the Operations section holds only pages that describe the
 lab as it runs.
 
@@ -74,9 +75,6 @@ lab as it runs.
   checksum, so the edit restarts monitor-bridge on its next deploy, and the eight media roles
   join the deployer's changed set for a comment. That is the same trade the `slice-` decision
   above records.
-- `docs/self-hosted-runner-spike.md` is the concluded #2245 spike. Its issue is closed, but
-  its verdict turns on a repository-visibility decision the operator has not made, and no
-  ADR records one. Once that decision has a record, the page can move here.
 
 Two specs stay in Operations and are not history: `docs/staging-cluster.md` and
 `docs/staging-phase-c.md`. They are written as plans, but what they plan is built. They
