@@ -317,6 +317,93 @@ def verify_units(
     return lock, sorted(skipped)
 
 
+BENIGN_KINDS = frozenset({"unrecorded-atom", "atom-no-longer-cited"})
+"""The findings a prose edit produces, and the only ones re-verified without a human reading the section.
+
+Both are set-membership changes: the section gained a citation or dropped one, which the
+author did in the edit being committed and can see in the same diff. Neither can hide content
+drift — a cited atom whose CONTENT moved is `moved`, and that is the finding which says a
+documented claim may now be wrong. Re-hashing one of those without a human reading the prose
+is the failure this set exists to rule out, so the split is by kind and not by how small the
+diff looks.
+
+`atom-no-longer-cited` has a SECOND cause, and ``_spans_still_in_the_prose`` separates it. A
+citation is support only while it names a tracked file, so removing a cited file from the
+index drops the atom out of the section's citations exactly as deleting the sentence would —
+same finding, opposite meaning. One is the author withdrawing a claim; the other is the
+claim's subject going away while the sentence still names it, and that one is refused.
+"""
+
+
+def _spans_still_in_the_prose(repo: Path) -> dict[str, set[str]]:
+    """Every backticked citation span each section still WRITES, tracked or not.
+
+    ``repo_citations`` filters through ``in_tree``, so it cannot tell a citation the author
+    deleted from one whose file left the index. This reads the prose alone.
+    """
+    out: dict[str, set[str]] = {}
+    for doc in repo_docs(repo):
+        rel = doc.relative_to(repo).as_posix()
+        for sec in sections(rel, doc.read_text(encoding="utf-8")):
+            out[sec.key] = {c.raw for c in parse_citations(sec.body)[0]}
+    return out
+
+
+def reverify_benign(
+    repo: Path,
+    lock_path: Path,
+    changed_keys: set[str],
+    head_sha: str,
+    by_unit: Citations | None = None,
+) -> tuple[list[str], list[Finding]]:
+    """Re-hash the edited sections whose findings are all benign; name the ones that need a human.
+
+    ``changed_keys`` is the set of sections whose DOC TEXT the commit edits
+    (``lint.changed_units``). A section outside it is never touched: a commit that moves an
+    atom without editing the prose is the guard firing, and folding it in would make the hook
+    a rubber stamp.
+
+    Returns the sections re-verified and EVERY blocking finding, including the ones against
+    sections the commit did not edit. Those are not this hook's to fold, but they are CI's
+    next failure, and the author is standing right here — withholding them buys the exact
+    round-trip the hook exists to remove. A unit carrying even one blocking finding is left
+    whole: its benign findings are not fixed either, because the author is going to run
+    ``verify`` on that unit anyway.
+    """
+    if by_unit is None:
+        by_unit = repo_citations(repo)
+    findings = check_lock(repo, lock_path, by_unit)
+    blocking = [f for f in findings if f.kind not in BENIGN_KINDS]
+    # A tampered lock reports one finding against no unit and check_lock returns nothing
+    # else, so every unit reads clean; refuse the whole run rather than re-verify on top of
+    # a file someone hand-edited.
+    if any(f.kind == "lock-tampered" for f in blocking):
+        return [], blocking
+    # Removing a cited file from the index reads as `atom-no-longer-cited` too. Folding that
+    # one would re-hash a section whose sentence still names the file it just lost.
+    written = _spans_still_in_the_prose(repo)
+    blocking += [
+        f
+        for f in findings
+        if f.kind == "atom-no-longer-cited" and f.atom in written.get(f.unit, set())
+    ]
+    blocked_units = {f.unit for f in blocking}
+    lock = read_lock(lock_path)
+    todo = sorted(
+        {
+            f.unit
+            for f in findings
+            if f.kind in BENIGN_KINDS
+            and f.unit in changed_keys
+            and f.unit not in blocked_units
+            and f.unit in lock
+        }
+    )
+    if todo:
+        verify_units(repo, lock_path, todo, head_sha, by_unit)
+    return todo, blocking
+
+
 def forget_units(lock_path: Path, keys: list[str]) -> dict[str, dict]:
     """Drop the named rows and rewrite the lock. Raises ``KeyError`` on a key with no row.
 

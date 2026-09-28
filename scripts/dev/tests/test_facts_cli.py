@@ -3,6 +3,7 @@
 import subprocess
 
 from fact_status import _USAGE, main
+from lib.facts.lock import read_lock
 
 
 def _repo(tmp_path):
@@ -145,3 +146,108 @@ def test_lint_warning_only_exits_zero(tmp_path):
     repo = _repo(tmp_path)
     (repo / "CLAUDE.md").write_text("## Gate\n`t/m.py:LIMIT` bounds 13 entries.\n")
     assert main(["lint", "--repo", str(repo)]) == 0
+
+
+def test_verify_unverified_covers_every_section_with_no_row(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
+    capsys.readouterr()
+    assert main(["status", "--repo", str(repo)]) == 0
+    assert "IN  CLAUDE.md#Gate" in capsys.readouterr().out
+
+
+def test_verify_unverified_leaves_a_moved_atom_out(tmp_path, capsys):
+    """The flag raises coverage; it can never launder a section already in the lock."""
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Cap\n`t/m.py:OTHER` caps it.\n"
+    )
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    capsys.readouterr()
+
+    assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
+    assert "verified CLAUDE.md#Cap" in capsys.readouterr().out
+
+    assert main(["status", "--repo", str(repo)]) == 1
+    out = capsys.readouterr().out
+    assert "OUT  CLAUDE.md#Gate" in out and "IN  CLAUDE.md#Cap" in out
+
+
+def test_verify_with_no_unit_and_no_flag_is_usage_error(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["verify", "--repo", str(repo)]) == 2
+    assert "--unverified" in capsys.readouterr().err
+
+
+def test_reverify_folds_a_prose_edit_into_the_commit(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it. `t/m.py:OTHER` too.\n\n## Style\nwhy, not what.\n"
+    )
+    capsys.readouterr()
+
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
+    captured = capsys.readouterr()
+    assert "re-verified CLAUDE.md#Gate" in captured.out
+    assert "git add docs/facts.lock" in captured.err
+    assert main(["status", "--repo", str(repo)]) == 0
+
+
+def test_reverify_refuses_a_moved_atom(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it. `t/m.py:OTHER` too.\n\n## Style\nwhy, not what.\n"
+    )
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    capsys.readouterr()
+
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
+    assert "moved" in capsys.readouterr().err
+    assert main(["status", "--repo", str(repo)]) == 1
+
+
+def test_reverify_is_quiet_when_nothing_changed(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    capsys.readouterr()
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 0
+    assert capsys.readouterr().out == ""
+
+
+def test_reverify_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
+    repo = _repo(tmp_path)
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "nope"]) == 2
+    assert "cannot resolve" in capsys.readouterr().err
+
+
+def test_verify_unverified_leaves_a_probe_only_section_unrecorded(tmp_path, capsys):
+    """An empty row records no hash and still reads UNVERIFIED, so none is written."""
+    repo = _repo(tmp_path)
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Down\n`probe.py monitors` answers it.\n"
+    )
+    assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
+    out = capsys.readouterr().out
+    assert "left 1 probe-only sections unrecorded" in out
+    assert "CLAUDE.md#Down" not in read_lock(repo / "docs" / "facts.lock")
+
+
+def test_reverify_names_a_moved_atom_in_a_section_the_commit_did_not_edit(
+    tmp_path, capsys
+):
+    """CI's next failure is cheaper to read here than from the run."""
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not what. Reworded.\n"
+    )
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    capsys.readouterr()
+
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
+    err = capsys.readouterr().err
+    assert "not folded, and CI fails on these:" in err
+    assert "moved: CLAUDE.md#Gate" in err

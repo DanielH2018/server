@@ -1,6 +1,5 @@
 """One hash rule per citation form, each with the edit that must NOT move it and the edit that must."""
 
-import subprocess
 import textwrap
 
 import pytest
@@ -34,48 +33,54 @@ PY = '''
 '''
 
 
-def test_path_file_hashes_its_content(tmp_path):
+def test_path_file_content_edit_is_clean(tmp_path):
+    """A bare path says where a file lives, so editing it is not a claim moving."""
     _write(tmp_path, "a/b.txt", "one\n")
     c = Citation("path", "a/b.txt", "a/b.txt", "")
     h1 = hash_atom(c, tmp_path)
     _write(tmp_path, "a/b.txt", "two\n")
-    assert h1 and h1 != hash_atom(c, tmp_path)
+    assert h1 and h1 == hash_atom(c, tmp_path)
+
+
+def test_path_file_deleted_is_flagged(tmp_path):
+    _write(tmp_path, "a/b.txt", "one\n")
+    c = Citation("path", "a/b.txt", "a/b.txt", "")
+    assert hash_atom(c, tmp_path) is not None
+    (tmp_path / "a" / "b.txt").unlink()
+    assert hash_atom(c, tmp_path) is None
+
+
+def test_two_paths_do_not_share_a_hash(tmp_path):
+    """Non-vacuity: a constant would pass both halves above and record nothing."""
+    _write(tmp_path, "a/b.txt", "one\n")
+    _write(tmp_path, "a/c.txt", "one\n")
+    assert hash_atom(Citation("path", "a/b.txt", "a/b.txt", ""), tmp_path) != hash_atom(
+        Citation("path", "a/c.txt", "a/c.txt", ""), tmp_path
+    )
 
 
 def test_path_missing_is_none(tmp_path):
     assert hash_atom(Citation("path", "nope.txt", "nope.txt", ""), tmp_path) is None
 
 
-def test_directory_hashes_its_tracked_tree(tmp_path, monkeypatch):
+def test_directory_member_edit_is_clean(tmp_path):
+    """The churn this rules out: a pin bump under a cited role directory."""
     _write(tmp_path, "d/x.txt", "x\n")
     _write(tmp_path, "d/y.txt", "y\n")
-    monkeypatch.setattr(
-        "lib.facts.atoms._tracked_under", lambda repo, rel: ["d/x.txt", "d/y.txt"]
-    )
     c = Citation("path", "d/", "d/", "")
     h1 = hash_atom(c, tmp_path)
     _write(tmp_path, "d/y.txt", "changed\n")
-    assert h1 != hash_atom(c, tmp_path)
+    (tmp_path / "d" / "z.txt").write_text("z\n")
+    assert h1 and h1 == hash_atom(c, tmp_path)
 
 
-def test_symlinked_member_does_not_enter_a_directory_hash(tmp_path):
-    """Reading a symlink hashes its TARGET, which the citation does not name."""
+def test_directory_removed_is_flagged(tmp_path):
     _write(tmp_path, "d/x.txt", "x\n")
-    _write(tmp_path, "outside.txt", "one\n")
-    (tmp_path / "d" / "link.txt").symlink_to(tmp_path / "outside.txt")
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
     c = Citation("path", "d/", "d/", "")
-    h1 = hash_atom(c, tmp_path)
-    _write(tmp_path, "outside.txt", "two\n")
-    assert h1 == hash_atom(c, tmp_path)
+    assert hash_atom(c, tmp_path) is not None
+    (tmp_path / "d" / "x.txt").unlink()
+    (tmp_path / "d").rmdir()
+    assert hash_atom(c, tmp_path) is None
 
 
 def test_directory_without_slash_resolving_to_a_dir_is_none(tmp_path):

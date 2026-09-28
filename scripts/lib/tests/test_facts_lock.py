@@ -15,6 +15,7 @@ from lib.facts.lock import (
     lock_tampered,
     read_lock,
     repo_citations,
+    reverify_benign,
     verify_units,
     write_lock,
 )
@@ -273,3 +274,118 @@ def test_a_reader_given_the_parsed_citations_reads_them_not_the_tree(tmp_path):
     parsed = repo_citations(repo)
     assert check_lock(repo, repo / LOCK_REL, parsed) == []
     assert {u for u, _ in build_repo_edb(repo, {}, parsed).cites} == {"CLAUDE.md#Gate"}
+
+
+def _add_a_citation(repo):
+    """Edit the Gate section's prose to cite one more atom — the benign edit."""
+    (repo / "t" / "other.py").write_text("CAP = 3\n")
+    _git_add(repo, "t/other.py")
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace(
+            "bounds it", "bounds it, `t/other.py:CAP` caps it"
+        )
+    )
+
+
+def test_a_prose_edit_that_adds_a_citation_is_reverified(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    _add_a_citation(repo)
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert (done, blocking) == (["CLAUDE.md#Gate"], [])
+    assert not check_lock(repo, repo / LOCK_REL)
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "def5678"
+
+
+def test_a_moved_atom_is_refused_even_when_the_prose_changed(tmp_path):
+    """The contract: a re-hash of content drift stays a human's call."""
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    _add_a_citation(repo)
+    (repo / "t" / "m.py").write_text("LIMIT = 86\n")
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert done == []
+    assert [f.kind for f in blocking] == ["moved"]
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"
+
+
+def test_a_section_the_commit_did_not_edit_is_left_alone(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    _add_a_citation(repo)
+
+    done, blocking = reverify_benign(repo, repo / LOCK_REL, set(), "def5678")
+
+    assert done == []
+    assert blocking == []  # the finding is benign; it is just not this commit's to fold
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"
+
+
+def test_a_tampered_lock_is_never_reverified_over(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    lock_path = repo / LOCK_REL
+    lock_path.write_text(
+        lock_path.read_text().replace(
+            '"verified_sha": "abc1234"', '"verified_sha": "zzz"'
+        )
+    )
+
+    done, blocking = reverify_benign(repo, lock_path, {"CLAUDE.md#Gate"}, "def5678")
+
+    assert done == []
+    assert [f.kind for f in blocking] == ["lock-tampered"]
+    assert lock_tampered(lock_path)
+
+
+def test_a_citation_the_author_deleted_is_reverified(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace(", ENFORCED by `t/test_m.py::test_limit`", "")
+    )
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert (done, blocking) == (["CLAUDE.md#Gate"], [])
+    assert (
+        "t/test_m.py::test_limit"
+        not in read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["atoms"]
+    )
+
+
+def test_a_cited_file_leaving_the_index_is_refused(tmp_path):
+    """Untracking a cited file drops the same atom the author would have dropped.
+
+    The sentence still names the file, so the claim is now stale and a person reads it.
+    """
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
+    subprocess.run(
+        ["git", "rm", "-q", "-f", "--cached", "t/test_m.py"],
+        cwd=repo,
+        check=True,
+        env=env,
+    )
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace("bounds it", "still bounds it")
+    )
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert done == []
+    assert [f.kind for f in blocking] == ["atom-no-longer-cited"]
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"
