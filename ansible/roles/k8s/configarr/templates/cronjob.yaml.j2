@@ -47,11 +47,18 @@ spec:
           containers:
             - name: configarr
               image: {{ configarr_k8s_image }}
+              # Read-only root since 2026-09-28. The Docker-era compose left it off with "write
+              # footprint unverified; revisit", and the k8s port dropped that note. Configarr
+              # writes its guide clones to /app/repos; /tmp is the one other path Node or git
+              # may touch.
               securityContext:
                 allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
                 capabilities:
                   drop: [ALL]
               volumeMounts:
+                - name: configarr-tmp
+                  mountPath: /tmp
                 # readOnly because configarr never writes here — the live Docker config dir has
                 # held exactly one file, config.yml, with Ansible's own mtime, since 2026-07-17.
                 - name: configarr-config
@@ -74,4 +81,6 @@ spec:
             # of two public git repos, re-cloned in seconds, and a Longhorn volume would mean an
             # attach/detach on every nightly pod for no durability anyone needs.
             - name: configarr-repos
+              emptyDir: {}
+            - name: configarr-tmp
               emptyDir: {}
