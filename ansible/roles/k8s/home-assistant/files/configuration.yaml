@@ -276,15 +276,35 @@ logger:
     # the composite `k8s_workloads` tile red 11 times in 14 days, and a tile already red reports
     # no new DOWN transition for a real replica, crashloop or DaemonSet failure.
     #
-    # The fault itself is one-sided and benign. pychromecast's homeassistant controller hands the
-    # Nest Hub Max (10.0.0.137) HA's external_url, the receiver cannot reach it, and
-    # `_connect_hass failed for https://home-assistant.<the public domain>` raises
-    # PyChromecastError on every cast-status callback. Casting a dashboard still works. Silencing
-    # this logger drops the ERROR record and its traceback together, because the traceback is
-    # that record's exc_info rather than a line of its own.
+    # The fault itself is EPISODIC, not per-callback, and the receiver does reach HA (measured
+    # 2026-09-28, issue #2800; every date here is the container's America/Chicago clock, which
+    # is what the log line prints). pychromecast's homeassistant controller hands the Nest Hub
+    # Max (10.0.0.137) HA's external_url, sends a `connect` message, and waits
+    # DEFAULT_HASS_CONNECT_TIMEOUT = 30s for the receiver's `receiver_status` to flip it to
+    # connected. When that ack does not arrive it logs `_connect_hass failed for
+    # https://home-assistant.<the public domain>` and raises PyChromecastError at the
+    # cast-status listener. Consecutive warnings sit 30.05s apart, which is that timeout rather
+    # than a poll interval. All 197 fell in 11 hour-buckets across 4 of the 7 days to
+    # 2026-09-27 (09-21, 09-22, 09-23, 09-26), and the 197 `Exception thrown when calling cast
+    # status listener` records fell in exactly those buckets, one per warning. Silencing this
+    # logger drops the ERROR record and its traceback together, because the traceback is that
+    # record's exc_info rather than a line of its own.
     #
-    # The cost is that a genuine cast-controller failure is silenced too. The rejected
-    # alternative is monitor-bridge's LOG_ERROR_IGNORE, whose own comment says a growing ignore
-    # list means the arm is decaying. `pychromecast.socket_client` keeps its default level: its
-    # connect-retry lines carry no traceback, so the arm never counted them.
+    # Every burst is interleaved with `frontend.js.modern.<build>` "Uncaught error from Chrome
+    # 150.0.0.0 on unknown OS" records: 1570 of them, in those same 11 buckets and no others.
+    # Those are the Hub Max's own cast receiver posting its JS exceptions back to HA over its
+    # connection to external_url — "unknown OS" is what the receiver reports where a desktop
+    # browser names its platform. So the receiver reaches HA, and the LAN hairpin through
+    # Cloudflare, the served certificate and CrowdSec are all refuted: each would fail on every
+    # cast rather than in bursts, and none would deliver receiver-side JS errors into this log.
+    # Casting a dashboard still works.
+    #
+    # The cost is that a genuine cast-controller failure is silenced too, and BOTH records the
+    # fault emits sit on this logger, so no query for `_connect_hass failed` can tell "not
+    # firing" from "silenced" — which is why issue #2800's own verify-by was unfalsifiable. The
+    # signal that survives is the `frontend.js` channel above, silenced by nothing here
+    # (ENFORCED: ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py). The
+    # rejected alternative is monitor-bridge's LOG_ERROR_IGNORE, whose own comment says a
+    # growing ignore list means the arm is decaying. `pychromecast.socket_client` keeps its
+    # default level: its connect-retry lines carry no traceback, so the arm never counted them.
     pychromecast.controllers: critical
