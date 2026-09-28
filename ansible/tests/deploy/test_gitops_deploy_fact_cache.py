@@ -18,7 +18,7 @@ import subprocess
 import sys
 from pathlib import Path
 
-from _helpers import REPO
+from _helpers import ALL_VARS, REPO, load_yaml
 
 _UNIT = REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
 _ENV_LINE = re.compile(r"^Environment=(ANSIBLE_[A-Z_]+)=(\S+)$", re.MULTILINE)
@@ -43,12 +43,16 @@ def _cache_connection(extra_env: dict[str, str]) -> tuple[str, str]:
 
 
 def test_the_deployer_unit_resolves_a_fact_cache_outside_the_shared_one():
-    unit_env = dict(_ENV_LINE.findall(_UNIT.read_text()))
+    sys_user = load_yaml(ALL_VARS)["sys_user"]
+    unit = _UNIT.read_text().replace("{{ sys_user }}", sys_user)
+    unit_env = dict(_ENV_LINE.findall(unit))
     assert "ANSIBLE_CACHE_PLUGIN_CONNECTION" in unit_env, (
         f"{_UNIT.name} no longer gives the deployer its own fact cache"
     )
     private = unit_env["ANSIBLE_CACHE_PLUGIN_CONNECTION"]
-    assert private.startswith("/var/lib/gitops-deploy/"), private
+    assert private.startswith(f"/home/{sys_user}/"), private
+    # monitor-bridge mounts the deployer's state directory into its pod.
+    assert not private.startswith("/var/lib/gitops-deploy"), private
 
     shared_source, shared = _cache_connection({})
     assert shared_source.endswith("ansible.cfg") and shared != private, (

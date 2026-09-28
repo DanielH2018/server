@@ -1368,7 +1368,9 @@ argv and the 1800 s. That gap is filed as #2914.
 ### The deployer reads a fact cache of its own
 
 `gitops-deploy.service` sets `ANSIBLE_CACHE_PLUGIN_CONNECTION` to
-`/var/lib/gitops-deploy/ansible-facts`. `ansible.cfg`'s cache is one file per host in
+`~/.cache/gitops-deploy/ansible-facts`. The directory is not under `/var/lib/gitops-deploy`,
+because monitor-bridge mounts that one over a hostPath and a pod has no use for gathered
+facts. `ansible.cfg`'s cache is one file per host in
 `~/.cache/ansible/facts`, shared by every checkout on the machine, and it stores
 `discovered_interpreter_python`: under `uv run`, the `.venv` of whichever checkout gathered
 facts last. The deployer never pins a doomed interpreter, because it runs from the primary

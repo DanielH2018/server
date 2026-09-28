@@ -41,7 +41,7 @@ NOT THE AUTOMATED PIPELINE, WHICH HAS A CACHE OF ITS OWN. gitops_deploy.py invok
 ansible-playbook from the primary checkout, whose `.venv` is never pruned, so it cannot PIN a
 doomed path. It could READ one: it shared this cache until the 2026-09-03 12:36 broad apply
 died on a pruned worktree's interpreter (#2862). Its unit now sets
-ANSIBLE_CACHE_PLUGIN_CONNECTION to a directory under /var/lib/gitops-deploy/, so no worktree
+ANSIBLE_CACHE_PLUGIN_CONNECTION to ~/.cache/gitops-deploy/ansible-facts, so no worktree
 writes the cache it reads, and this guard stays a deploy.sh preflight.
 
 Usage:

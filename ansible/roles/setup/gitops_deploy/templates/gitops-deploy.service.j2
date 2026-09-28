@@ -87,8 +87,9 @@ Environment=PATH=/home/{{ sys_user }}/.local/bin:/usr/local/bin:/usr/bin:/bin
 # `initial_setup.yml --tags renovate_agent` failed on `.claude/worktrees/arm-renovate-agent/`'s
 # python3.14. `deploy.sh` clears such an entry (`scripts/deploy_tools/fact_cache_guard.py`);
 # this unit never runs that preflight, so it reads a cache no worktree writes instead. The
-# jsonfile plugin creates the directory, and teardown.yml's removal of the state dir reaps it.
-Environment=ANSIBLE_CACHE_PLUGIN_CONNECTION=/var/lib/gitops-deploy/ansible-facts
+# jsonfile plugin creates the directory. It is NOT under /var/lib/gitops-deploy: monitor-bridge
+# mounts that directory over a hostPath, and gathered facts are no pod's business.
+Environment=ANSIBLE_CACHE_PLUGIN_CONNECTION=/home/{{ sys_user }}/.cache/gitops-deploy/ansible-facts
 # journald stores only notice+ on these hosts (initial_setup caps MaxLevelStore=notice), and a
 # unit's stdout logs at info by default — so every log() line the deployer printed was discarded
 # at the source, leaving nothing to read after the 2026-08-08 false-rollback hold. The output is
