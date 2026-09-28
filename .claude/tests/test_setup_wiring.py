@@ -93,8 +93,8 @@ def test_hook_wrappers_reference_existing_python():
     This is exactly the block-containers-edit -> block-protected-edits rename scenario:
     rename the .py but not the wrapper and the hook silently dies. Comment lines (`#`)
     are skipped — only actual invocations count. The .py may live in hooks/ (sibling
-    invocation) or at repo-root scripts/ (e.g. validate-compose.sh), so membership is
-    checked by basename across the whole repo.
+    invocation) or at repo-root scripts/, so membership is checked by basename across the
+    whole repo.
     """
     py_names = _repo_python_basenames()
     hooks_dir = os.path.join(CLAUDE, "hooks")

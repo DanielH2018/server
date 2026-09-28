@@ -27,8 +27,6 @@ KNOWN_REGISTERED = frozenset(
         "bash-pretool.sh",
         "uv-python.sh",
         "block-protected-edits.sh",
-        "ansible-lint.sh",
-        "validate-compose.sh",
         "auto-mode-bridge.sh",
         "log-instructions.sh",
         "session-health.sh",

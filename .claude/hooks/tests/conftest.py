@@ -4,11 +4,10 @@
 as a real subprocess (deliberately -- see that test's own docstring), which means `main()`
 runs for real and reaches whatever it reaches: `gh pr list` once per stale worktree
 candidate (an authenticated GitHub API call), `sops -d` to decrypt `ansible/vars/secrets.yml`
-for the `domain` key, `docker ps` x2, `curl` against the live Prometheus endpoint, and
-`journalctl` for the release-staleness cron's last verdict (#1993).
-`test_main_runs_targets_even_when_docker_down` used to hand-roll its own monkeypatches
-instead of going through `_run_main`, so `stale_worktree_lines` ran for real too and made the
-same 5 `gh` calls. Measured 2026-09-04. None of that is what either test is checking.
+for the `domain` key, `curl` against the live Prometheus endpoint, and `journalctl` for the
+release-staleness cron's last verdict (#1993). A main() test that hand-rolled its own
+monkeypatches instead of going through `_run_main` let `stale_worktree_lines` run for real too
+and made 5 `gh` calls. Measured 2026-09-04. None of that is what either test is checking.
 
 Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path` and
 `scripts/deploy_tools/tests/conftest.py`'s `_no_syslog`: not shared with them here, because
@@ -25,13 +24,13 @@ import pytest
 
 # One line per invocation, so a test can assert the stub intercepted a call rather than the
 # real binary running underneath it. A stub that silently drops off PATH fails OPEN -- the
-# run stays green and the real binary (real gh auth, a real SOPS decrypt, the real docker
-# socket, a real curl to Prometheus) takes every call again.
+# run stays green and the real binary (real gh auth, a real SOPS decrypt, a real curl to
+# Prometheus) takes every call again.
 _STUB_TEMPLATE = """#!/bin/sh
 printf '%s\\n' "{name} $*" >> "$FENCE_CALLS"
 """
 
-_FENCED_BINARIES = ("gh", "sops", "docker", "curl", "journalctl")
+_FENCED_BINARIES = ("gh", "sops", "curl", "journalctl")
 
 
 @pytest.fixture(autouse=True)

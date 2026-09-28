@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""The banner's docker and scrape-target sections, split out of session-health.py — #1678.
+"""The banner's scrape-target and stale-release sections, split out of session-health.py — #1678.
 
 These drive `hooklib.service_lines` through its `run` and `scaled_to_zero` seams rather than
-patching a module attribute, so they need no live docker, cluster or Prometheus. Their
-subjects lived in session-health.py until that file hit its 600-line cap.
+patching a module attribute, so they need no live cluster or Prometheus. Their subjects lived
+in session-health.py until that file hit its 600-line cap.
 
 Run: uv run pytest .claude/hooks
 """
@@ -32,46 +32,6 @@ def _raises(exc):
         raise exc
 
     return boom
-
-
-def test_docker_problems_parses_unhealthy_and_restarting():
-    lines, ok = service_lines.docker_problems(
-        _answers(
-            _result("jellyfin\tUp 2 hours (unhealthy)\n"),  # health=unhealthy filter
-            _result("sonarr\tRestarting (1) 3 seconds ago\n"),  # status=restarting
-        )
-    )
-    assert ok is True
-    assert any("jellyfin" in l and "unhealthy" in l for l in lines)
-    assert any("sonarr" in l and "restarting" in l for l in lines)
-
-
-def test_docker_problems_all_green():
-    lines, ok = service_lines.docker_problems(lambda *a, **k: _result(""))
-    assert lines == []
-    assert ok is True
-
-
-def test_wedged_dockerd_is_reported_not_raised():
-    """A docker that hangs is the signal the banner exists for."""
-    lines, ok = service_lines.docker_problems(
-        _raises(subprocess.TimeoutExpired("docker", 5))
-    )
-    assert ok is False
-    assert any("docker unreachable" in l for l in lines)
-
-
-def test_missing_docker_binary_is_silent():
-    """daniel-box runs k3s with has_docker: false — no binary is expected, not broken.
-
-    Warning here would put a false '✗ docker unreachable' on every session open on that
-    host, forever, which is exactly the context noise the all-green contract avoids.
-    """
-    lines, ok = service_lines.docker_problems(_raises(FileNotFoundError("docker")))
-    assert lines == []
-    # Still False: this only gates the docker section of the banner — the Prometheus check
-    # does not depend on docker and runs regardless.
-    assert ok is False
 
 
 _TARGETS_ONE_DOWN = (

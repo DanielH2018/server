@@ -14,7 +14,7 @@ skill carries the compose skeleton and the shared macros in `ansible/templates/`
 the *target host* at `/home/<user>/server/containers/<svc>/docker-compose.yml`. Post-migration
 it exists only on `daniel-pi`; neither cluster node has one. It is still read-only: edits are
 overwritten on the next deploy, so always modify `ansible/roles/containers/*/templates/`
-instead. (The `block-protected-edits` hook enforces this.)
+instead.
 
 ## Conventions
 

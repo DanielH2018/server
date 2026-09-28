@@ -211,7 +211,7 @@ def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
         (Path(__file__).resolve().parents[1].parent / "settings.json").read_text()
     )
     commands = arm.registered_hook_commands(settings)
-    assert len(commands) >= 9, commands
+    assert len(commands) >= 8, commands
     names = {os.path.basename(c) for c in commands}
     assert {"session-health.sh", "bash-pretool.sh", "block-protected-edits.sh"} <= names
 
@@ -298,15 +298,15 @@ def test_a_missing_shim_is_not_also_read_for_siblings():
 
 
 def test_a_shim_that_names_no_sibling_is_not_ruled_on():
-    """`uv-python.sh` and `ansible-lint.sh` run no `.py` at all."""
+    """`uv-python.sh` runs no `.py` at all."""
     assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body="exit 0\n") == []
 
 
 def test_a_sibling_path_composed_from_a_variable_is_not_ruled_on():
-    """`validate-compose.sh`'s `$repo_root/scripts/validate/${script}.py` is undecidable here.
+    """A `$repo_root/scripts/validate/${script}.py` is undecidable without running the shell.
 
-    It reports its own absence loudly instead (`… MISSING at … — the hook needs updating`,
-    exit 2), which is why abstaining costs nothing.
+    No shim composes its sibling path that way today. The abstain stays tested because a shim
+    that does must report its own missing script loudly itself — this arm cannot rule on it.
     """
     body = 'script_path="$repo_root/scripts/validate/${script}.py"\n'
     assert _sibling_lines(present=(f"{_HOOKS}/new.sh",), shim_body=body) == []
@@ -350,12 +350,10 @@ def test_the_repos_own_shims_name_the_siblings_this_parse_must_find():
     }
     for name, siblings in expected.items():
         assert found.get(name) == siblings, found
-    # The three that name no resolvable sibling, listed so a NEW shim with an unrecognised
+    # The one that names no resolvable sibling, listed so a NEW shim with an unrecognised
     # idiom fails here instead of abstaining in silence.
     assert {name for name, siblings in found.items() if not siblings} == {
-        "ansible-lint.sh",
         "uv-python.sh",
-        "validate-compose.sh",
     }, found
 
 

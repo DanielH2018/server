@@ -6,9 +6,8 @@ flow), which is defensible for a permission hook — a broken guard must not bri
 call. But two of the three failure paths already write a line to stderr on their own (`uv`
 missing, the `.py` missing), and the `cd` arm did not, so it disarmed the guard with nothing
 to notice. Issue #2171: for the four DENY/ASK guards a silent exit 0 is still an allow, so
-their `cd` arm now emits an `ask` decision naming the shim. The linter and the bridge keep
-exit 0 with no stdout: a missed approval is a prompt, not a bypass, and the bridge's events
-have no `ask` to emit. Issue #2394 merged five PreToolUse:Bash shims into `bash-pretool.sh`,
+their `cd` arm now emits an `ask` decision naming the shim. The bridge keeps
+exit 0 with no stdout: the bridge's events have no `ask` to emit. Issue #2394 merged five PreToolUse:Bash shims into `bash-pretool.sh`,
 three of them deny guards and two of them silent, so that one shim carries the `ask` and its
 reason names all three guards. This test proves per shim:
 
@@ -58,9 +57,9 @@ def _cd_guarded_shims() -> list[str]:
 
     DERIVED, not listed. The four names above were hardcoded with `len(...) == 4` as the
     non-vacuity anchor, and a count cannot notice a shim that was added and never listed:
-    auto-mode-bridge, auto-approve-readonly, auto-approve-remote-ssh and ansible-lint all grew
-    the same `cd ... || exit 0` and none of them got issue #1014's stderr line, so four guards
-    kept disarming silently while this file reported full coverage of "the four shims".
+    auto-mode-bridge, auto-approve-readonly and auto-approve-remote-ssh all grew the same
+    `cd ... || exit 0` and none of them got issue #1014's stderr line, so several guards kept
+    disarming silently while this file reported full coverage of "the four shims".
     """
     return sorted(
         p.name for p in HOOKS.glob("*.sh") if _CD_GUARD in p.read_text(encoding="utf-8")
@@ -68,7 +67,7 @@ def _cd_guarded_shims() -> list[str]:
 
 
 # Shims that `exec` into a paired `.py`. The ACCEPT half below only means something for these:
-# it proves execution reached the exec, and ansible-lint.sh has no exec to reach.
+# it proves execution reached the exec, and a shim with no exec has none to reach.
 def _exec_shims() -> list[str]:
     return [
         name
@@ -87,14 +86,14 @@ def test_the_shim_census_is_non_vacuous():
     # the failure mode the repo-root CLAUDE.md describes, and the one the old `len() == 4`
     # anchor could not see because it pinned the size of a hand-written list instead.
     assert set(SHIM_NAMES) == {
-        "ansible-lint.sh",
         "auto-mode-bridge.sh",
         "bash-pretool.sh",
         "block-protected-edits.sh",
     }
     assert DENY_GUARD_SHIMS <= set(SHIM_NAMES)
-    # ansible-lint.sh is the only one that does not exec into a paired .py.
-    assert set(SHIM_NAMES) - set(EXEC_SHIM_NAMES) == {"ansible-lint.sh"}
+    # Every cd-guarded shim execs into a paired .py, so the ACCEPT half below covers all of
+    # them. A future shim that does not exec drops out of EXEC_SHIM_NAMES and fails here.
+    assert set(SHIM_NAMES) == set(EXEC_SHIM_NAMES)
 
 
 def _variant(hook_path: Path, cd_target: str) -> str:
@@ -162,8 +161,8 @@ def test_reject_a_deny_guard_that_cannot_run_asks(tmp_path, hook_name):
 
 @pytest.mark.parametrize("hook_name", sorted(set(SHIM_NAMES) - DENY_GUARD_SHIMS))
 def test_reject_a_non_deny_shim_that_cannot_run_stays_silent(tmp_path, hook_name):
-    """The near miss: the linter and the bridge keep no stdout on a failed `cd` — an `ask`
-    from either would be a prompt where the design is a pass-through."""
+    """The near miss: the bridge keeps no stdout on a failed `cd` — an `ask` from it would be
+    a prompt where the design is a pass-through."""
     proc = _run(tmp_path, hook_name, str(tmp_path / "does-not-exist"))
     assert proc.returncode == 0, proc.stderr
     assert proc.stdout == ""
