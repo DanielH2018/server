@@ -96,9 +96,9 @@ OVER_CEILING: dict[str, str] = {
         "completion` can move to docs/"
     ),
     "renovate_notify": (
-        "10704 chars on 2026-09-28: the fingerprint gate and the two ways the stuck-pending "
-        "clock goes inert are operating rules for a notifier that fails silent; the sandbox "
-        "surprises can move to docs/"
+        "11400 chars on 2026-09-28: the fingerprint gate, the two ways the stuck-pending "
+        "clock goes inert and the soak a type-erased grouped row takes (#2885) are operating "
+        "rules for a notifier that fails silent; the sandbox surprises can move to docs/"
     ),
 }
 
