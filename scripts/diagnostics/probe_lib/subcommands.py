@@ -33,7 +33,6 @@ from diagnostics.probe_lib.health import run_health
 from diagnostics.probe_lib.longhorn import (
     run_b2_budget,
     run_b2_longhorn,
-    run_longhorn_blocks,
 )
 from diagnostics.probe_lib.metrics import run_query
 from diagnostics.probe_lib.monitors import run_kuma_drift, run_monitors
@@ -104,13 +103,6 @@ SUBCOMMANDS = [
         "b2-budget listing (exit 1 when one cannot be priced)",
         "b2_ledger",
         run_b2_deletions,
-    ),
-    (
-        "longhorn-blocks",
-        "census live Longhorn volumes by tier and backup block size (exit 1 when a weekly-"
-        "shard volume is not on 16 MiB blocks)",
-        "longhorn",
-        run_longhorn_blocks,
     ),
     (
         "readonly-rbac",

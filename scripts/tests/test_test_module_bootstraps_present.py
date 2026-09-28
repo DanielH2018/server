@@ -259,7 +259,6 @@ def test_the_census_contains_the_modules_this_guard_exists_for():
             "scripts/diagnostics/tests/test_ui_login.py",
             "scripts/diagnostics/tests/test_probe_vip_placement.py",
             "scripts/diagnostics/tests/test_probe_readonly_rbac.py",
-            "scripts/diagnostics/tests/test_probe_longhorn_blocks.py",
             "scripts/tests/test_script_bootstraps_present.py",
             "ansible/tests/conftest.py",
             "scripts/deploy_tools/tests/_land_fakes.py",

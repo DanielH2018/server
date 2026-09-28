@@ -67,10 +67,10 @@ def split_spend_by_target(vols, targets, b2_target=B2_BACKUP_TARGET_NAME):
     The join reads each volume's CURRENT target. A volume moved between tiers inside the window
     is attributed wholly to its new target, so the error is bounded to that one volume.
 
-    `longhorn_blocks.volume_tier_census` warns that the recurring-job GROUP decides the tier and
-    `spec.backupTargetName` does not, because `default` is the default name and 18 volumes no job
-    backs up report it. That trap cannot bite here: the only volumes in `vols` are ones that
-    emitted a backup log line, so an unbacked volume never reaches this function.
+    The recurring-job GROUP decides the tier, not `spec.backupTargetName`, because `default` is
+    the default name and 18 volumes no job backs up report it. That trap cannot bite here: the
+    only volumes in `vols` are ones that emitted a backup log line, so an unbacked volume never
+    reaches this function.
     """
     b2, other, unknown = {}, {}, {}
     for vol, v in vols.items():

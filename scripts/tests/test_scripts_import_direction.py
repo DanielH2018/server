@@ -75,8 +75,7 @@ FACADE_EDGES = frozenset(
         ("dev.findings", "dev.findings_lib.verify"),
         # probe_lib/b2_ledger.py over the spend report split out at its 600-line cap.
         ("diagnostics.probe_lib.b2_ledger", "diagnostics.probe_lib.b2_spend"),
-        # probe_lib/longhorn.py over the three modules split out of its 630 lines.
-        ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_blocks"),
+        # probe_lib/longhorn.py over the two modules split out of its 630 lines.
         ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_budget"),
         ("diagnostics.probe_lib.longhorn", "diagnostics.probe_lib.longhorn_cluster"),
         # probe_lib/health.py over the transport- and object-specific readers.

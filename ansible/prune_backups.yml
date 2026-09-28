@@ -2,7 +2,7 @@
 # Delete Longhorn backups that nothing else will ever prune. One playbook, three modes, each with
 # its own safety floor. Every mode is a dry run unless you pass -e prune_apply=true.
 #
-#   migrated-chain  the old chain a volume left behind when migrate_volume_block_size.yml rebuilt
+#   migrated-chain  the old chain a volume left behind when the block-size migration rebuilt
 #                   it. Deletes Longhorn Backup CRs.
 #   seeds           the seed backups seed_volume_backup.yml made, once the rotation covers their
 #                   volume. Deletes Longhorn Backup CRs.

@@ -223,16 +223,6 @@ def _build_parser():
         dest="no_record",
         help="report what would be charged without writing the ledger",
     )
-    lb = sub.add_parser(
-        "longhorn-blocks",
-        help="census live Longhorn volumes by tier and backup block size; exit 1 when a "
-        "weekly-shard volume is not on 16 MiB blocks. Reads the cluster, spends no B2.",
-    )
-    lb.add_argument(
-        "--dry-run",
-        action="store_true",
-        help="print the kubectl call without making it",
-    )
     rb = sub.add_parser(
         "readonly-rbac",
         help="assert plain kubectl is still read-only — exit 1 on privilege creep, 2 when the "

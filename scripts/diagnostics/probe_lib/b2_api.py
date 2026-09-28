@@ -6,8 +6,8 @@ paging `b2_list_file_names` under a prefix, and turning that listing into per-vo
 and metadata counts.
 
 longhorn.py keeps the `b2-longhorn` and `b2-budget` subcommands that drive this.
-`longhorn_budget.py` prices a retention prune from the same listing, `longhorn_cluster.py`
-reads the live Volume/Backup/PV objects, and `longhorn_blocks.py` censuses block sizes.
+`longhorn_budget.py` prices a retention prune from the same listing and `longhorn_cluster.py`
+reads the live Volume/Backup/PV objects.
 """
 
 import json
