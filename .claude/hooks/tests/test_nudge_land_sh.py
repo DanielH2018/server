@@ -17,7 +17,6 @@ import json
 import os
 import sys
 
-import pytest
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "nudge-land-sh.py"
@@ -29,8 +28,6 @@ _mod = importlib.util.module_from_spec(_spec)
 _spec.loader.exec_module(_mod)
 
 from _hook_common import Unsplittable  # noqa: E402
-
-pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
 
 
 # --- classify: blocking waits --------------------------------------------------------------
@@ -96,7 +93,6 @@ def test_unbalanced_quotes_are_declined_rather_than_guessed():
     assert _mod.classify("gh run watch 'oops") is None
 
 
-@pytest.mark.without_segmenter
 def test_a_missing_segmenter_is_declined_rather_than_asked():
     """The half-deployed host. An `ask` on every command for the sake of a nudge is a hook the
     operator turns off; the deny guards with a real cost ask instead."""

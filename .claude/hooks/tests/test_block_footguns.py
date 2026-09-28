@@ -28,8 +28,6 @@ _spec.loader.exec_module(_mod)
 
 from _hook_common import Unsplittable  # noqa: E402
 
-pytestmark = pytest.mark.usefixtures("segmenter_or_skip")
-
 
 # --- 3. kubectl rollout restart ------------------------------------------------------------------
 
@@ -153,7 +151,6 @@ def _missing_segmenter(command):
     raise Unsplittable("segmenter-missing", "not deployed")
 
 
-@pytest.mark.without_segmenter
 def test_a_missing_segmenter_asks_for_a_rule_shaped_command():
     """A silent fail-open here would retire every rule on exactly the host `_claude_guard`'s
     DECIDED marker was written about, so it is an `ask` that names the fix."""
@@ -164,7 +161,6 @@ def test_a_missing_segmenter_asks_for_a_rule_shaped_command():
     assert "chezmoi apply" in reason
 
 
-@pytest.mark.without_segmenter
 def test_a_missing_segmenter_leaves_an_unrelated_command_alone():
     assert _mod.decide("ls -la", split=_missing_segmenter) == (None, None)
 

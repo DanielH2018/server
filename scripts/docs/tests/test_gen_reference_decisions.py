@@ -150,6 +150,16 @@ def test_the_generators_own_source_and_test_file_are_excluded(tmp_path):
     assert _rows(tmp_path) == []
 
 
+def test_the_facts_lock_is_excluded(tmp_path):
+    """The lock keys a cited marker by its text beside a hash, which is not a decision."""
+    _write(
+        tmp_path,
+        "docs/facts.lock",
+        '"a.py:DECIDED: use the retry flag": "' + "a1" * 32 + '",\n',
+    )
+    assert _rows(tmp_path) == []
+
+
 def test_a_similarly_named_file_is_not_excluded(tmp_path):
     """The red-proof pair to the exclusion above: only the exact self-paths are skipped."""
     _write(
@@ -258,6 +268,7 @@ def test_live_tree_excludes_its_own_generator_and_test_file():
     paths = {r["path"] for r in rows}
     assert "scripts/docs/reference/decisions.py" not in paths
     assert "scripts/docs/tests/test_gen_reference_decisions.py" not in paths
+    assert "docs/facts.lock" not in paths
 
 
 # ── Pointer resolution ───────────────────────────────────────────────────────────────────
