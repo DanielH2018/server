@@ -1,7 +1,8 @@
 <!--
-Merging is not shipping here. The GitOps deployer auto-deploys only an image-pin bump to a
-non-denylisted k8s service; an ordinary manifest or template change fast-forwards onto the
-primary checkout and is never applied. The boxes below are the follow-through, not paperwork.
+Merging is not shipping here. The GitOps deployer applies an image-pin bump to a
+non-denylisted k8s service, a setup-role change and a deploy-plane change on its own; an
+ordinary manifest or template change to one k8s role fast-forwards onto the primary checkout
+and is never applied. The boxes below are the follow-through, not paperwork.
 Full procedure: CLAUDE.md → "After a PR Merges — Pull, Deploy, Verify".
 -->
 
