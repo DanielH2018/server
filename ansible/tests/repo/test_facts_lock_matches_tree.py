@@ -3,8 +3,8 @@
 This is the repo half of the fact-support design: a CLAUDE.md section's status is derived
 from the atoms it cites, and the PR that moves one of them fails here, naming the section.
 The author edits the section or re-runs `scripts/dev/fact_status.py verify` on it — either
-way the rule and its support change in the same PR. Spec:
-docs/superpowers/specs/2026-09-19-fact-support-invalidation-design.md
+way the rule and its support change in the same PR. The design is
+in PR #2138.
 """
 
 import subprocess

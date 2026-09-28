@@ -158,7 +158,7 @@ and the bedtime/wake routines that drive them.
   `validate-ha-config` hook via `state/sanctioned_writers.yml` (module ∪ exemptions): a new automation
   that writes an actuator directly fails CI. **Add a writer = route it through the mediator, or
   declare it in `sanctioned_writers.yml`.** `reason: "off"` MUST stay quoted (unquoted `off` is YAML
-  `false` → silent no-op). Design: `docs/superpowers/specs/2026-06-21-ha-state-model-phase2-mediator-design.md`.
+  `false` → silent no-op). It shipped in commit `d87841da7`.
   The mediator's `reason` is contract-checked by `validate-ha-config` (`mediator_reason_errors`
   in `ha_state_model.py`): every `bedroom_lights_set`/`bedroom_fan_set` call must pass a quoted
   `reason` from the declared vocabulary (`MEDIATOR_REASONS`) — a missing/typo'd reason or the

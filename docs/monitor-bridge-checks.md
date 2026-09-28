@@ -261,7 +261,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   apibay.org backend 503'd/timed-out for hours and flapped this monitor up/down on 2026-07-05,
   the second for the same chronic flapping (the remaining indexers
   cover the same searches; the all-down onHealthIssue is still the backstop). Pure
-  `indexers_down()` is unit-tested. Spec: `docs/superpowers/specs/2026-07-04-prowlarr-indexer-watchdog-design.md`.)
+  `indexers_down()` is unit-tested. It shipped in commit `9abc18da4`.)
 - **GitOps Deploy — Alive** (reads `/gitops-state/last_run`, a bind-mounted host timestamp the
   `gitops_deploy` deployer rewrites each non-crashing tick; `down` once it's older than
   `GITOPS_MAX_AGE_MIN` — that is, the deployer stalled / host down. The deployer no longer pushes
@@ -745,7 +745,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   WHOLE check during a Loki outage, which would blind the real heartbeat. The ban arm instead
   fails open on a Loki error and keeps the heartbeat's own verdict. Pure `ha_ban_verdict()` is
   unit-tested.
-  Spec: `docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md`.)
+  It shipped in commit `9a3404b4b`.)
 - **k3s Speedtest** (speedtest-tracker's `/api/v1/results`, newest row only, Bearer
   `speedtest_api_token` from the mounted credentials Secret. Three arms in this order —
   status, then age, then the download floor. The order is load-bearing: `download_bits` is
@@ -784,7 +784,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
   `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and
   its dead-man semantics are unchanged.
-  Spec: `docs/superpowers/specs/2026-06-19-renovate-manual-action-notifier-design.md`.
+  It shipped in commit `e02965544` and its neighbours.
 - **Loki Reachable** (a fixed `/loki/api/v1/labels` probe — the root-cause GATE for the
   Loki-querying checks, the peer of Prometheus Reachable. Evaluated each cycle: when Loki is
   unreachable the `LOKI_DEPENDENT` check (`loki_ingestion`) is
@@ -1475,8 +1475,8 @@ because every `check_*` reads `_get_json` or a threshold. The two tests that re-
 `PROM_ORIGIN` from the environment used to `importlib.reload(bridge.config)`; since the seam
 they call `load_config({...})` with the two Prometheus URLs they mean, which asks the same
 question without mutating the process. The registry and the gates took the same shape on
-2026-09-05. Design and history of the module split:
-`docs/superpowers/specs/2026-09-01-monitor-bridge-check-split-design.md` (seven slices, all
+2026-09-05. The module split began in commit
+`9e7040cf0` (seven slices, all
 landed 2026-09-01, `check.py` from 3,732 lines to ~510; slice 17b took the last 675 down to the
 run loop alone on 2026-09-05).
 

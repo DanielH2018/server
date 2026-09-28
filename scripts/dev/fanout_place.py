@@ -6,7 +6,7 @@ fleet) and user-1000.slice (the login plane) — on daniel-box and daniel-server
 on the tighter of the two, picks the host with the most headroom per batch, creates a fresh
 worktree there, and starts a headless
 Opus agent as a transient user service. daniel-box agents land their PR; daniel-server agents
-stop at `gh pr create`. Spec: docs/superpowers/specs/2026-09-06-claude-fanout-placement-design.md
+stop at `gh pr create`. It shipped in commit bd8e62bf8.
 
 Usage::
 

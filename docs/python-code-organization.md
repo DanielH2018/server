@@ -61,6 +61,12 @@ step. pytest's guide "strongly" suggests a `src` layout under the default `prepe
 mode ([pytest good practices][pytest-good]); that advice is knowingly declined here, and the
 unique-basename rule for tests is the price.
 
+Re-examined on 2026-09-28 (#2809) and kept. Packaging `scripts/` as the uv project would retire
+the `sys.path` bootstraps and the layout meta-guards, but it would not reach the hosts. Roles
+still copy `scripts/` modules to hosts that have no checkout and no install step:
+`ansible/roles/setup/common/tasks/release_bin.yml` ships
+`scripts/deploy_tools/prune_releases.py` that way.
+
 ### PEP 420 namespace packages, no `__init__.py` anywhere
 
 Every directory under `scripts/` and every role's `files/` resolves as a namespace package
@@ -208,8 +214,9 @@ daniel-pi is 3.12.3 — and below 3.14 there is no PEP 649, so annotations evalu
 `def`/`class` time and the import is real insurance against a forward reference. The repo suite
 cannot see that difference, because it runs on 3.14 where both spellings are lazy.
 
-**A check ships with a proof it can go red.** Repo-root `CLAUDE.md` owns this rule; it
-applies to every validator or guard in this tree.
+**A check ships with a proof it can go red.** `.claude/rules/python-layout.md` owns this rule
+and its two companions, non-vacuity and a measured transport. They apply to every validator or
+guard in this tree.
 
 **Length and `monkeypatch` are ratcheted.** A module may be 600 lines and a test module 500,
 counted the way `wc -l` counts. A test module may patch no first-party module at all — a

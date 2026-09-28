@@ -23,8 +23,8 @@ Utility role (not a container). Every container role calls into it via
 > but it *does* handle image changes (`build: always` rebuilds; identical rebuild = no-op)
 > and `docker-compose.yml` edits. Wired roles: `grep -rl common_config_changed
 > roles/containers/*/tasks/` lists them. When #2385 deleted the retired Compose roles, alloy
-> (its bind-mounted `config.alloy`) was the only one left. Design:
-> `docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md`.
+> (its bind-mounted `config.alloy`) was the only one left. It shipped in
+> commit `1c8cfabb7`.
 >
 > **New config-mounting role?** `register:` each bind-mounted config task with a
 > `<role>_`-prefixed name and pass `common_config_changed: "{{ <reg> is changed }}"` (OR
