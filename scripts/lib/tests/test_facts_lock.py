@@ -322,9 +322,10 @@ def test_a_section_the_commit_did_not_edit_is_left_alone(tmp_path):
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
     _add_a_citation(repo)
 
-    done, _blocking = reverify_benign(repo, repo / LOCK_REL, set(), "def5678")
+    done, blocking = reverify_benign(repo, repo / LOCK_REL, set(), "def5678")
 
     assert done == []
+    assert blocking == []  # the finding is benign; it is just not this commit's to fold
     assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"
 
 

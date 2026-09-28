@@ -131,8 +131,17 @@ def cmd_reverify(args: argparse.Namespace) -> int:
         return _USAGE
     head = git_stdout("rev-parse", "--short=9", "HEAD", cwd=repo)
     done, blocking = reverify_benign(repo, repo / LOCK_REL, changed, head)
-    for f in blocking:
+    # Two headings, because the remedy differs. A finding in a section this commit edits is
+    # one the author is looking at. A finding elsewhere is CI's next failure, and saying so
+    # here is cheaper than letting them push and read it from the run.
+    here = [f for f in blocking if f.unit in changed or not f.unit]
+    elsewhere = [f for f in blocking if f not in here]
+    for f in here:
         print(f"{f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
+    if elsewhere:
+        print("not folded, and CI fails on these:", file=_sys.stderr)
+        for f in elsewhere:
+            print(f"  {f.kind}: {f.unit} {f.atom} — {f.detail}", file=_sys.stderr)
     for u in done:
         print(
             f"re-verified {u} at {head}: its citation set changed, no recorded atom moved"

@@ -233,3 +233,21 @@ def test_verify_unverified_leaves_a_probe_only_section_unrecorded(tmp_path, caps
     out = capsys.readouterr().out
     assert "left 1 probe-only sections unrecorded" in out
     assert "CLAUDE.md#Down" not in read_lock(repo / "docs" / "facts.lock")
+
+
+def test_reverify_names_a_moved_atom_in_a_section_the_commit_did_not_edit(
+    tmp_path, capsys
+):
+    """CI's next failure is cheaper to read here than from the run."""
+    repo = _repo(tmp_path)
+    main(["verify", "--repo", str(repo), "CLAUDE.md#Gate"])
+    (repo / "CLAUDE.md").write_text(
+        "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not what. Reworded.\n"
+    )
+    (repo / "t" / "m.py").write_text("LIMIT = 90\nOTHER = 1\n")
+    capsys.readouterr()
+
+    assert main(["reverify", "--repo", str(repo), "--changed-since", "HEAD"]) == 1
+    err = capsys.readouterr().err
+    assert "not folded, and CI fails on these:" in err
+    assert "moved: CLAUDE.md#Gate" in err

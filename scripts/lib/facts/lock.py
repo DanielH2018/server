@@ -363,9 +363,12 @@ def reverify_benign(
     atom without editing the prose is the guard firing, and folding it in would make the hook
     a rubber stamp.
 
-    Returns the sections re-verified and the blocking findings that stopped the rest. A unit
-    carrying even one blocking finding is left whole — its benign findings are not fixed
-    either, because the author is going to run ``verify`` on that unit anyway.
+    Returns the sections re-verified and EVERY blocking finding, including the ones against
+    sections the commit did not edit. Those are not this hook's to fold, but they are CI's
+    next failure, and the author is standing right here — withholding them buys the exact
+    round-trip the hook exists to remove. A unit carrying even one blocking finding is left
+    whole: its benign findings are not fixed either, because the author is going to run
+    ``verify`` on that unit anyway.
     """
     if by_unit is None:
         by_unit = repo_citations(repo)
@@ -398,7 +401,7 @@ def reverify_benign(
     )
     if todo:
         verify_units(repo, lock_path, todo, head_sha, by_unit)
-    return todo, [f for f in blocking if f.unit in changed_keys or not f.unit]
+    return todo, blocking
 
 
 def forget_units(lock_path: Path, keys: list[str]) -> dict[str, dict]:
