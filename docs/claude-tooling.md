@@ -608,12 +608,17 @@ same final text. A batch reads `done` only with a PR URL, `needs-input` with a b
 
 ## What an edit costs, by file type
 
-An edit now runs one hook: `block-protected-edits`, a ~7 ms no-op except on the paths it owns.
-The two PostToolUse linters that carried the cost here — `ansible-lint` at **1,642 ms** on
-`roles/*/tasks/main.yml` and `validate-compose` at **177 ms** on `docker-compose.yml.j2`,
-measured 2026-08-23 — were deleted in #2856 as duplicates of the prek hooks that run the same
-checks at commit time. The OTEL figures they explain (`PostToolUse:Edit` averaging 559 ms over
-the same 24h) are history, kept so the drop is not mistaken for a measurement error.
+This repo now registers one hook on `Edit|Write`: `block-protected-edits`, a ~7 ms no-op except
+on the paths it owns. The user-level hooks in the dotfiles repo still run alongside it and are
+not counted here.
+
+The two PostToolUse linters that carried this repo's edit cost — `ansible-lint` at **1,642 ms**
+on `roles/*/tasks/main.yml` and `validate-compose` at **177 ms** on `docker-compose.yml.j2`,
+both measured 2026-08-23 — were deleted in #2856 as duplicates of the prek hooks that run the
+same checks at commit time. Over the same 24h the OTEL telemetry put `PostToolUse:Edit` at a
+559 ms average and `PostToolUse:Write` at 234 ms. Those figures are history: they are recorded
+so a later measurement showing an order-of-magnitude drop reads as the deletion rather than as a
+broken exporter.
 
 ## `auto-mode-bridge` internals
 
