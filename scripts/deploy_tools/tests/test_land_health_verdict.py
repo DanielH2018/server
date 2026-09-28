@@ -104,7 +104,10 @@ def test_a_self_applied_role_that_reaches_other_hosts_is_not_settled(landing, ca
         health_verdict.health(ln)
     assert (exc.value.rc, exc.value.verdict) == (1, "needs-manual-apply")
     assert "other hosts still need it" in exc.value.detail
-    assert "it also reaches: daniel-server, daniel-pi" in capsys.readouterr().out
+    assert (
+        "services deployed, and STILL UNAPPLIED on the hosts this tick never touched: "
+        "daniel-server, daniel-pi" in capsys.readouterr().out
+    )
 
 
 def test_no_remaining_hosts_still_settles(landing):

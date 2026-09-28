@@ -58,8 +58,11 @@ OVER_CEILING: dict[str, str] = {
         "adding one."
     ),
     "hypervisor": (
-        "411 lines on 2026-09-21, predating the ceiling; the staging-guest lifecycle it "
-        "documents has no docs/ page of its own yet. Trim or split it before adding to it."
+        "420 lines on 2026-09-28, up from 411: the gate's edge-reconcile leg and its "
+        "PREP_FAILED semantics are an operating rule an operator needs before touching the "
+        "gate (#2797). The staging-guest lifecycle it documents still has no docs/ page of "
+        "its own. The M-2 history under 'The staging gate's checkout' is the next thing to "
+        "move to docs/staging-cluster.md; trim or split before adding to it again."
     ),
 }
 
