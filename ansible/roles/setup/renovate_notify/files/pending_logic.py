@@ -79,6 +79,14 @@ def pending_section_unreadable(body: str) -> bool:
     return PENDING_HEADER in (body or "") and not parse_pending(body)
 
 
+# The parenthetical every `groupSingleUpdates: true` rule in renovate.json opens its group name
+# with. Such a row's title is the GROUP name, so it carries no update type at all — see
+# `item_soak_days`. `test_grouped_marker_appears_in_renovate_json` asserts this literal still
+# matches a real grouped rule, so a reword of those group names fails here rather than silently
+# restoring the four-day-late alert this marker exists to fix (issue #2885).
+GROUPED_TITLE_MARKER = "(manual "
+
+
 def item_soak_days(description: str) -> int:
     """The `minimumReleaseAge` that applies to one pending item, read from its description.
 
@@ -86,15 +94,30 @@ def item_soak_days(description: str) -> int:
     X to vY" for a version bump, and renovate.json soaks those for 3 and 7 days respectively.
     Anything unrecognised gets the LONGER soak: a misread must delay the alert, never invent one.
 
+    A GROUPED row is the third shape, and it carries no update type to read. `groupSingleUpdates:
+    true` (#2646) makes Renovate title a single-dependency update with its group name, so the row
+    reads `Update k8s image ghcr.io/haveagitgat/tdarr (manual — k8s_autodeploy: false, ...)` where
+    an ungrouped digest row reads `... Docker digest to df221db`. Those rows took the version soak
+    and alerted four days late; five sat 10.3 days on 2026-09-28 against a 10-day threshold with
+    the digest naming none of them (#2885).
+
+    # DECIDED: a grouped row takes the DIGEST soak. It is not the unrecognised default breaking —
+    # the shape is recognised, and only its type is erased. The cost is that a grouped VERSION
+    # bump (`code-server build pins` is a live one) pages four days early, against every grouped
+    # digest bump paging four days late today; a grouped bump is manual-merge by construction, so
+    # four days early nudges someone who already owes the merge. Rejected alternative: put
+    # `{{updateType}}` into each group's `commitMessageTopic` so the title carries the type again
+    # — it cannot be verified from this host (Renovate runs as the Mend hosted app), and it edits
+    # the title/branch machinery #2620/#2641/#2646 settled.
+
     The 1-day `vulnerabilityAlerts` soak is deliberately not modelled: nothing in the item text
     distinguishes a CVE-driven bump, and those are scheduled "at any time" so they should never
     linger here. A CVE bump that does get stuck waits the 7+7 version allowance like any other.
     """
-    return (
-        DIGEST_SOAK_DAYS
-        if "digest to" in (description or "").lower()
-        else VERSION_SOAK_DAYS
-    )
+    text = (description or "").lower()
+    if "digest to" in text or GROUPED_TITLE_MARKER in text:
+        return DIGEST_SOAK_DAYS
+    return VERSION_SOAK_DAYS
 
 
 def update_pending_seen(

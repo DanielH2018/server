@@ -136,6 +136,47 @@ def test_item_soak_is_seven_days_for_a_version_bump():
     assert pl.item_soak_days("something else entirely") == 7
 
 
+# One real grouped row from issue #3, captured 2026-09-28: tdarr's pin is `latest@sha256:...`,
+# so this is a digest bump whose title says nothing of the sort.
+GROUPED_DIGEST_ROW = (
+    "Update k8s image ghcr.io/haveagitgat/tdarr "
+    "(manual \u2014 k8s_autodeploy: false, so the tick applies nothing; land.sh deploys it)"
+)
+
+
+def test_item_soak_is_three_days_for_a_grouped_row():
+    """A grouped title carries no update type, and most such rows are digest bumps (#2885)."""
+    assert pl.item_soak_days(GROUPED_DIGEST_ROW) == pl.DIGEST_SOAK_DAYS
+
+
+def test_stale_pending_flags_a_grouped_digest_row_at_its_own_threshold():
+    now = 1_000_000.0
+    current = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": GROUPED_DIGEST_ROW}
+    seen = {"renovate/k8s-image-ghcr.iohaveagitgattdarr": now - 10.3 * DAY}
+    # The dwell measured on 2026-09-28: past 3+7, short of 7+7 — it must fire, not wait.
+    assert [i[0] for i in pl.stale_pending(seen, current, now)] == [
+        "renovate/k8s-image-ghcr.iohaveagitgattdarr"
+    ]
+
+
+def test_grouped_marker_appears_in_renovate_json():
+    """The marker item_soak_days matches must still open a real grouped rule's name.
+
+    Named-member guard for a pattern-based classifier: reword those group names and this fails,
+    rather than silently restoring the four-day-late alert the marker exists to fix.
+    """
+    repo_root = pathlib.Path(__file__).resolve().parents[5]
+    rules = json.loads((repo_root / "renovate.json").read_text())["packageRules"]
+    grouped = [
+        r["groupName"]
+        for r in rules
+        if r.get("groupSingleUpdates") and "groupName" in r
+    ]
+    assert grouped, "no groupSingleUpdates rule carries a groupName"
+    unmarked = [g for g in grouped if pl.GROUPED_TITLE_MARKER not in g.lower()]
+    assert not unmarked, "group name(s) no longer carry the marker: %s" % unmarked
+
+
 def test_soak_constants_match_renovate_json():
     """The two soaks are read from renovate.json, not trusted to a comment.
 

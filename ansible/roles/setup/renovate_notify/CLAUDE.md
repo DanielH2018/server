@@ -80,6 +80,15 @@ That state is the arm's single point of failure, and it fails silently in two sh
   witness that this host has completed a run before, and the digest names the date the clocks
   become usable again (#1526).
 
+**A grouped row carries no update type, so it takes the digest soak.** `groupSingleUpdates:
+true` (#2646) titles a single-dependency update with its GROUP name, so the row reads `Update
+k8s image ghcr.io/haveagitgat/tdarr (manual — ...)` where an ungrouped digest row says `Docker
+digest to df221db`. Those rows took the 7-day version soak and alerted four days late — five
+sat 10.3 days on 2026-09-28 against their 10-day threshold, unnamed by the digest (#2885).
+`ansible/roles/setup/renovate_notify/files/pending_logic.py:GROUPED_TITLE_MARKER` is the
+parenthetical `item_soak_days` matches; the cost, weighed in the `DECIDED:` comment there, is a
+grouped VERSION bump paging four days early.
+
 **A reset posts once, then posts again the next day.** The reset rides the same fingerprint as
 the other three arms; the following run rewrites the file, so the component drops and the
 fingerprint moves a second time. The follow-up digest (or `CLEARED_MSG`) is the cost of one
