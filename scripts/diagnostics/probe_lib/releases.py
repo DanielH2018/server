@@ -528,8 +528,8 @@ def compute_stale(
 def _consumes_manifests(role_dir):
     """Whether `role_dir`'s tasks include `k8s/manifests`, the contract that ends in a stamp.
 
-    Not every `containers_list` k8s entry does: `n8n-images` only calls `k8s/image-builder` to
-    build n8n's images into the registry and applies no manifests of its own, so it can never
+    Not every `containers_list` k8s entry has to: the retired `n8n-images` only called
+    `k8s/image-builder` and applied no manifests of its own, so it could never
     be stamped and would otherwise read as permanently missing -- the exact "monitor nobody
     trusts" failure `manifest-prune-check.sh.j2`'s header warns against. Same one-level grep the
     repo CLAUDE.md names for this question (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/`).

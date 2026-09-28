@@ -233,8 +233,8 @@ def main() -> int:
             if is_manifest_template(p)
         )
         if not templates:
-            # A role that only delegates — n8n-images calls image-builder twice and owns no
-            # manifests of its own. Not a failure, but it must still have an inventory entry,
+            # A role that only delegates — as the retired n8n-images did, calling image-builder
+            # twice and owning no manifests of its own. Not a failure, but it must still have an inventory entry,
             # so the check below is deliberately not skipped with it.
             if role in entries:
                 continue

@@ -323,7 +323,7 @@ def _guarded_at_entry(role: Path) -> bool:
     Requires at least one mutating task, and a guard on every one of them. The "at least one"
     half is what keeps a role that applies its objects some other way — `_bypasses_manifests`,
     with nothing this file recognises as a kubectl write — from reading as guarded on an empty
-    loop. n8n-images is that role, and it belongs in k8s_dry_run_unsupported.
+    loop. n8n-images was that role until #2813 folded it into n8n.
     """
     return bool(_mutates_outside_manifests(role)) and not _unguarded_mutations(role)
 

@@ -13,7 +13,7 @@ while reporting success.
 - **Builder image:** `moby/buildkit:v0.33.0-rootless` (`image_builder_image`) — rootless
   BuildKit, not kaniko (archived upstream) or the daemonful BuildKit variant (wants a
   privileged pod). Runs as uid 1000 with no added capabilities.
-- **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n-images`, `code-server`,
+- **Callers:** `ical-proxy`, `terraria`, `pi-peer-backup`, `n8n`, `code-server`,
   `nut`, `homelab-mcp`, `valheim`, `karakeep` — each `include_role`s this with its own
   `image_builder_*` vars.
 - **Auto-deploy: denylisted.** Renders a Job and a ConfigMap, no Deployment — nothing for
@@ -37,11 +37,9 @@ while reporting success.
     a deploy that skips the building role falls back to the mutable alias instead of naming a
     tag nothing pushed. **All nine `*_k8s_image` pins read it**
     (`ansible/tests/k8s/test_built_images_name_the_content_tag.py` requires it).
-    - Seven consumers include this role themselves, ahead of `k8s/manifests`, so the fact is
-      published before their manifests render. n8n is the exception — `k8s/n8n-images` builds
-      its two images — so the n8n entry declares `depends_on: [n8n-images]` for the full-deploy
-      order, and the n8n-images entry is tagged `n8n` as well so a `--tags n8n` run cannot skip
-      the builder and flip the Deployment spec back to `:latest`.
+    - Every consumer includes this role itself, ahead of `k8s/manifests`, so the fact is
+      published before its manifests render. n8n was the exception until #2813 folded its
+      separate `n8n-images` builder role into it.
     - A render outside a play has no fact at all. `scripts/lib/render_guard.py:BUILT_IMAGE_TAG_STUBS`
       seeds one for every rendered-manifest guard, which would otherwise check `:latest` while
       production renders the hash.

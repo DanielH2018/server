@@ -23,7 +23,7 @@ ROLES = g.RoleIndex(
         "prometheus": "prometheus",
         "unbound": "pihole",
     },
-    batch_roles=frozenset({"configarr", "n8n-images"}),
+    batch_roles=frozenset({"configarr", "media-volume"}),
 )
 
 

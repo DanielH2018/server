@@ -209,8 +209,8 @@ def expand_shared_roles(plan: Plan) -> None:
         tags, replaced = expand_shared_tags(
             plan.tags, declared, role_callers(plan.repo_root)
         )
-        # A caller that only builds an image (`n8n-images` under `image-builder`) needs the
-        # role that rolls it, the coupling `deploy_tags.changed` and land.sh add too.
+        # A caller that only builds an image needs the role that rolls it, the coupling
+        # `deploy_tags.changed` and land.sh add too. No such caller exists since #2813.
         from deploy_logic import expand_build_couplings
 
         tags += sorted(expand_build_couplings(set(tags)) - set(tags))

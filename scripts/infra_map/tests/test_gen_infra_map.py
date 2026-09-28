@@ -182,8 +182,8 @@ def test_reconcile_k8s_is_down_when_nothing_is_ready():
     assert g.reconcile_k8s(svc, workloads, ROLES)["status"] == "down"
 
 
-def test_reconcile_k8s_calls_a_build_role_a_job():
-    svc = service("n8n-images", platform="k8s", namespace="homelab")
+def test_reconcile_k8s_calls_a_no_workload_role_a_job():
+    svc = service("media-volume", platform="k8s", namespace="homelab")
     assert g.reconcile_k8s(svc, {}, ROLES)["status"] == "job"
 
 
@@ -351,10 +351,10 @@ def test_load_roles_derives_ownership_from_the_role_trees():
     # manifests now — and pi-peer-backup, which the compose rule never saw, qualifies too.
     assert "configarr" in roles.batch_roles
     assert "pi-peer-backup" in roles.batch_roles
-    # Roles whose templates hold no long-running workload at all: Dockerfiles, a
-    # route onto a chart-owned Deployment, a PVC, NetworkPolicies. All four sat
-    # in the map as "Missing · no deployment found" until 2026-09-01.
-    for role in ("n8n-images", "longhorn-ui", "media-volume", "netpol-baseline"):
+    # Roles whose templates hold no long-running workload at all: a route onto a
+    # chart-owned Deployment, a PVC, NetworkPolicies. All three sat in the map as
+    # "Missing · no deployment found" until 2026-09-01.
+    for role in ("longhorn-ui", "media-volume", "netpol-baseline"):
         assert role in roles.batch_roles, role
     # And a DaemonSet-only role is a real workload the collector must find.
     assert "node-exporter" not in roles.batch_roles

@@ -5,6 +5,30 @@
 # their own scheduler. Coexistence would double-fire every schedule and double-write to TickTick.
 # See docs/archive/k3s-migration/slice-2-leaf-apps.md.
 
+# Both builds come first and are ordered rather than parallel, because n8n and its task runners
+# are version-coupled the way karakeep and Meilisearch are. Building them back to back keeps a
+# release boundary from landing between the two. They also have to come before the render: the
+# two image pins read the `k8s_built_image_tags` fact image-builder publishes, and without it they
+# fall back to `:latest`. Each build is gated on its rendered context changing, so an n8n deploy
+# with no Dockerfile change pays two registry HEADs, not a BuildKit run.
+- name: Build the n8n image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: n8n
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile.j2"
+
+- name: Build the n8n task-runners image
+  ansible.builtin.include_role:
+    name: k8s/image-builder
+  vars:
+    image_builder_name: n8n-runners
+    image_builder_dockerfile: "{{ playbook_dir }}/roles/k8s/n8n/templates/Dockerfile-runners.j2"
+    # The one file either Dockerfile COPYs. The key must be the exact path the COPY names,
+    # since the ConfigMap mount puts each key at the context root under that name.
+    image_builder_context:
+      "{{ playbook_dir }}/roles/k8s/n8n/templates/config/n8n-task-runners.json.j2": n8n-task-runners.json
+
 - name: Create the n8n data volume claim
   tags: [deploy]
   ansible.builtin.include_role:

@@ -1,6 +1,6 @@
 """Guard: the npm package the n8n image installs is pinned, and Renovate can read the pin (#2213).
 
-`roles/k8s/n8n-images/templates/Dockerfile.j2` ran `npm install -g fuzzball` with no version
+`roles/k8s/n8n/templates/Dockerfile.j2` ran `npm install -g fuzzball` with no version
 until 2026-09-21, so every rebuild took whatever npm served that day and nothing recorded which
 version a pod carried — the class #2149 closed for code-server. Two halves here: the Dockerfile
 carries an exact version, and the renovate.json regex manager over that file extracts it, so a
@@ -14,7 +14,7 @@ import re
 
 from _helpers import K8S_ROLES, REPO
 
-DOCKERFILE = K8S_ROLES / "n8n-images" / "templates" / "Dockerfile.j2"
+DOCKERFILE = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"
 RENOVATE = REPO / "renovate.json"
 
 _NPM_INSTALL = re.compile(r"^\s*RUN\s+npm\s+install\s+-g\s+(.+?)\s*$", re.MULTILINE)

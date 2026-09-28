@@ -219,7 +219,7 @@ def test_service_present_in_records_is_not_missing(tmp_path):
 
 
 def test_a_role_that_never_applies_manifests_is_never_missing(tmp_path):
-    """The n8n-images shape: a `containers_list` k8s entry whose role only builds an image
+    """The retired n8n-images shape: a `containers_list` k8s entry whose role only builds an image
     (`k8s/image-builder`) and never includes `k8s/manifests`, so it is never release-stamped and
     must not read as permanently missing -- 'a monitor nobody trusts is worse than none'."""
     roles_dir = tmp_path / "roles"
@@ -251,10 +251,9 @@ def test_shared_k8s_roles_matches_the_known_set():
 
 
 def test_consumes_manifests_agrees_with_the_real_tree():
-    """sonarr applies manifests; n8n-images (image-builder only) does not -- the exact pair this
-    repo hit live while building this feature."""
+    """sonarr applies manifests; volume-snapshot, whose tasks drive kubectl directly, does not."""
     assert pr._consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
-    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/n8n-images") is False
+    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/volume-snapshot") is False
 
 
 def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():

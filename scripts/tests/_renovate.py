@@ -169,8 +169,8 @@ def render_auto_replace(template: str, **values: str | None) -> str:
 # #1440 proposed a lockstep DOWNGRADE that way and passed every check (issue #1493). The
 # ledger beside the Dockerfiles records the version each adopted digest carries; the helpers
 # here parse it, and the guards in test_renovate_dockerfiles.py assert against it.
-N8N_IMAGES_DIR = _REPO / "ansible/roles/k8s/n8n-images"
-N8N_PIN_HISTORY = N8N_IMAGES_DIR / "base-pin-history.tsv"
+N8N_ROLE_DIR = _REPO / "ansible/roles/k8s/n8n"
+N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 
 # image -> the Dockerfile whose FROM must equal that image's last ledger entry. Named rather
 # than globbed: a census that discovers its own subjects returns an empty set the moment a file

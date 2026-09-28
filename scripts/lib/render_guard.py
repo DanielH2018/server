@@ -294,7 +294,7 @@ def entry_tags_at(ref: str, cwd: Path) -> dict[str, set[str]]:
     """Entry name -> the tags that entry declares, for every host's list AT ``ref``.
 
     The answer ``ctx.declared`` cannot give: ``service_tags_at`` returns a flat set of tag
-    strings, so nothing in it says that the ``n8n-images`` entry also declares ``n8n``. Two
+    strings, so nothing in it says that an entry also declares a second tag, as ``n8n-images`` did. Two
     hosts declaring the same name is not a shape this inventory has; the tags are unioned
     rather than raising, because a union only ever makes a caller's answer more cautious.
     """

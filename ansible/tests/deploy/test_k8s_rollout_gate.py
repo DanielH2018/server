@@ -289,8 +289,9 @@ def test_every_built_image_reaches_a_running_pod() -> None:
     fires. That trigger keys on `manifests_service`, which assumes one built image per role,
     named after the role that deploys it.
 
-    `n8n-runners` broke both halves of that assumption: it is built under its own name by the
-    n8n-images role and deployed by the n8n role as a SECOND Deployment. So the trigger never
+    `n8n-runners` broke both halves of that assumption: it is built under its own name (then by
+    a separate n8n-images role, folded into n8n by #2813) and deployed by the n8n role as a
+    SECOND Deployment. So the trigger never
     matched, and even if it had, the rollout targets a single name. The rebuilt image reached the
     registry and never reached a pod, with the deploy reporting green. This is the executable
     form of that finding: it fails until every built image is either rolled or opted out.

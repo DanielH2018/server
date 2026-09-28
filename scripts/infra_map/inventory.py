@@ -80,7 +80,7 @@ def load_roles(repo_root: Path = REPO_ROOT) -> RoleIndex:
     # between deploys, so "not running" is correct for it, not a fault. That is
     # a role with no templates directory (the seed and snapshot roles), one whose
     # only workload is a CronJob, and one whose templates are all non-workload
-    # objects: Dockerfiles (n8n-images), an IngressRoute onto a chart-owned
+    # objects: an IngressRoute onto a chart-owned
     # Deployment (longhorn-ui), a PVC (media-volume), NetworkPolicies
     # (netpol-baseline). Derived from the manifests rather than from the Docker
     # compose that used to declare no container name — that plumbing was deleted

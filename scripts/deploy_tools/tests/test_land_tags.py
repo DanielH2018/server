@@ -126,17 +126,18 @@ def test_missing_changed_files_count_falls_back_rather_than_guessing():
 def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
     """PR #570's real shape: a build role must pull in the workload that runs its image.
 
-    Renovate bumped only the two n8n Dockerfiles. Deriving `n8n-images` alone builds the images and
-    rolls nothing, because k8s_rebuilt_images is play-scoped -- the 2026-08-08 `@n8n/di` failure.
-    Caught landing #570 on 2026-08-29.
+    Renovate bumped only the two n8n Dockerfiles. Deriving the build role alone built the images
+    and rolled nothing, because k8s_rebuilt_images is play-scoped -- the 2026-08-08 `@n8n/di`
+    failure, caught landing #570 on 2026-08-29. Since #2813 the n8n role builds its own images,
+    so the Dockerfiles derive the workload's tag directly.
     """
     files = [
-        "ansible/roles/k8s/n8n-images/templates/Dockerfile.j2",
-        "ansible/roles/k8s/n8n-images/templates/Dockerfile-runners.j2",
+        "ansible/roles/k8s/n8n/templates/Dockerfile.j2",
+        "ansible/roles/k8s/n8n/templates/Dockerfile-runners.j2",
     ]
     tags, source = land_tags.derive(files, changed_files=2)
     assert source == "pr"
-    assert tags == ["n8n", "n8n-images"]
+    assert tags == ["n8n"]
 
 
 def test_an_ordinary_role_is_not_widened():

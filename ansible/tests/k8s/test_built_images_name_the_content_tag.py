@@ -106,8 +106,7 @@ def builder_include_is_too_late(tasks: str) -> bool:
     """Does this role include k8s/manifests before k8s/image-builder?
 
     Pure over the task file's text so the red proof below can hand it a reversed copy. `False`
-    for a role carrying only one of the two — n8n-images renders no manifest, and n8n's images
-    are built by that sibling rather than by itself.
+    for a role carrying only one of the two, the shape the retired n8n-images role had.
     """
     builder = tasks.find("name: k8s/image-builder")
     manifests = tasks.find("name: k8s/manifests")

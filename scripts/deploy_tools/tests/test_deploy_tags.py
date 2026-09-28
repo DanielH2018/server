@@ -143,8 +143,14 @@ def test_describe_groups_by_host_and_flags_dry_run_unsupported(capsys):
     assert deploy_tags.main(["describe"]) == 0
     out = capsys.readouterr().out
     assert "daniel-box (k8s):" in out
-    # n8n-images is dry-run-unsupported in the real group_vars/all.yml.
-    assert "n8n-images  [dry-run: unsupported]" in out
+    # The real k8s_dry_run_unsupported is empty since n8n-images folded into n8n (#2813), so
+    # nothing is flagged. A role added to it must show up flagged here.
+    flagged = {
+        line.split()[0]
+        for line in out.splitlines()
+        if line.endswith("[dry-run: unsupported]")
+    }
+    assert flagged == deploy_tags.dry_run_unsupported()
     assert "block tags: config, cron, deploy" in out
 
 

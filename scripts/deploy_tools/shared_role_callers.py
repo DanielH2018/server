@@ -118,9 +118,10 @@ def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
     """Every declared role a deploy of `role` also runs, `role` itself included.
 
     `_role_tags` stops at a role that has a `containers_list` entry, because that entry's
-    NAME is a tag. It never reads the entry's other declared tags, and `n8n-images` declares
-    `tags: [n8n-images, n8n]` — so a `--tags n8n` deploy runs the builder, writes `n8n.json`,
-    and the derivation could not see that recording caller (#2666).
+    NAME is a tag. It never reads the entry's other declared tags, and `n8n-images` declared
+    `tags: [n8n-images, n8n]` — so a `--tags n8n` deploy ran the builder, wrote `n8n.json`,
+    and the derivation could not see that recording caller (#2666). No entry declares extra
+    tags since #2813 folded n8n-images into n8n; this stays for the next one that does.
 
     The subset is what makes a record stand in. Role `S` is applied by every tag its own
     entry declares, so a record for `S` proves `role` ran only where EVERY tag that selects
@@ -142,16 +143,16 @@ def _co_applied(role: str, entry_tags: dict[str, set[str]]) -> set[str]:
 # would leave `longhorn-api` and `volume-revert` — whose only callers are shared — with a
 # line nothing but a hand clears, which is the defect this exists to remove.
 # DECIDED: a caller that never runs `manifests` is dropped rather than required. It writes
-# no record, so requiring it keeps the line forever. `n8n-images` is the one live instance,
-# and it is the whole of it: of the declared entries, its role is the only one that renders
-# no manifest, so `image-builder`'s set drops it. That means an `image-builder` line can
+# no record, so requiring it keeps the line forever. `n8n-images` was the one live instance
+# until #2813 folded it into n8n: of the declared entries, its role was the only one that
+# rendered no manifest, so `image-builder`'s set dropped it. That means an `image-builder` line can
 # discharge while `n8n-images` alone is behind. That line is a banner entry that never
 # pages, and a permanent one is the always-red surface #2570 refused, so the gap is taken. A
 # role left with no recording caller at all still keeps its line.
 #
-# NARROWED by #2666, not contradicted. `n8n-images` is still dropped here; what changed is
-# that `_co_applied` adds the `n8n` its entry also declares, so an `n8n-images` line of its
-# own now discharges on `n8n.json`. `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml`
+# NARROWED by #2666, not contradicted. `n8n-images` was still dropped here; what changed was
+# that `_co_applied` added the `n8n` its entry also declared, so an `n8n-images` line of its
+# own discharged on `n8n.json`. `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml`
 # against the declared entries is how to re-derive whether a second instance has appeared.
 def recorded_callers(
     roles, ctx: Context, entry_tags: dict[str, set[str]]

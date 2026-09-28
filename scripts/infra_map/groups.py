@@ -54,7 +54,6 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
             "bento-pdf",
             "homepage",
             "n8n",
-            "n8n-images",
             "code-server",
             "livesync",
             "homelab-mcp",

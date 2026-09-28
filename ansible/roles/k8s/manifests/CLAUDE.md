@@ -90,7 +90,7 @@ same resources.
   whose manifests were *accepted*, not one whose pods are up.
 - **A rebuilt image rolls only if its name matches the role.** `k8s_rebuilt_images` is keyed on
   `manifests_service`, and that holds for six of the seven built images. It does not hold for
-  `n8n-runners`, which `n8n-images` builds under its own name while the `n8n` role deploys it —
+  `n8n-runners`, which the `n8n` role builds under its own name and deploys as a second Deployment —
   a runners-only rebuild reached the registry and never reached a pod, green throughout. A role
   deploying more than one Deployment names the rest in `manifests_extra_rollouts` as
   `{name, image}` pairs (`freshrss`, `prowlarr`, `karakeep`, `n8n` today), where `image` is the
@@ -268,8 +268,8 @@ modules) on `not k8s_dry_run | bool`. Without that guard, an hourly dry run woul
 origin/master's host half ahead of its landing. `render_records_enabled` switches it off.
 
 Every stamped service can be dry-run since #2588. Each role that includes this one guards its
-own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` holds only `n8n-images`,
-which renders no manifests. n8n's image-checksum annotation reads the registry digest a deploy
+own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` is empty. Its last entry,
+`n8n-images`, folded into n8n (#2813). n8n's image-checksum annotation reads the registry digest a deploy
 would stamp, where it used to render `unstaged` under a dry run.
 
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`

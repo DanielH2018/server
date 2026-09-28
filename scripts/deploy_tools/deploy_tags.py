@@ -11,7 +11,7 @@ valid and no service matches.
 
 That fails in the worst direction — it reports success while shipping nothing, so the
 operator believes the change is live. With ~50 service names, several of them near
-misses of one another (sonarr/radarr, n8n/n8n-images, wg-easy on two hosts), a typo is
+misses of one another (sonarr/radarr, wg-easy on two hosts), a typo is
 not hypothetical.
 
 WHAT COUNTS AS VALID. The union of:

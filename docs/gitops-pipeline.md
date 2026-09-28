@@ -1193,9 +1193,9 @@ what it recorded.
   with `gitops_state.py clear-k8s-deferred <svc>`.
 - `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
   for a change that was reverted rather than applied, or for a shared role whose
-  `recorded_callers` answer is empty. A role that only LOOKED like the second case —
-  `n8n-images`, whose entry declares `tags: [n8n-images, n8n]` — discharges itself since
-  #2666, because the derivation reads the entry's other tag.
+  `recorded_callers` answer is empty. A role that only LOOKS like the second case —
+  an entry that declares a second tag, as the retired `n8n-images` did — discharges itself
+  since #2666, because the derivation reads the entry's other tag.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history

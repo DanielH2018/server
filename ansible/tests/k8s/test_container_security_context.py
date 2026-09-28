@@ -78,8 +78,6 @@ _UNCOVERED_ROLES = {
     # it writes is a row in the app's database, so it renders no manifest and starts no
     # container — there is nothing here for a securityContext to be wrong about.
     "arr-notification",
-    # Dockerfiles and app config only — no Kubernetes objects at all.
-    "n8n-images",
 }
 
 # The real container count is ~103. A floor of 40 cannot distinguish a broken collector from

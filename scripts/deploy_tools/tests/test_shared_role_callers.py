@@ -86,14 +86,11 @@ def test_a_merely_overlapping_entry_is_not_a_record_that_stands_in():
 # replace the subprocess, so only this sees a flag the CLI does not take, and game-stats-lib's
 # two callers are the named members a broken caller walk would lose.
 def test_the_deployers_argv_is_one_main_accepts(capsys):
-    argv = deploy_narrow.shared_callers_argv({"game-stats-lib", "n8n-images"})
+    argv = deploy_narrow.shared_callers_argv({"game-stats-lib"})
     assert argv[4] == deploy_narrow.SHARED_CALLERS_SCRIPT
     assert shared_role_callers.main([*argv[5:], "--repo", str(REPO)]) == 0
-    # `n8n-images` is the named member #2666 is about: it printed `[]` until this tree
-    # expanded its entry's own `tags: [n8n-images, n8n]`.
     assert json.loads(capsys.readouterr().out) == {
         "game-stats-lib": ["terraria-stats", "valheim-stats"],
-        "n8n-images": ["n8n"],
     }
 
 

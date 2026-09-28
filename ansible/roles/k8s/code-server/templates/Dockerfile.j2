@@ -4,7 +4,7 @@
 # it. The explicit -lsNN tag is what the built-in dockerfile manager tracks (the linuxserver
 # packageRule in renovate.json orders that form); the digest beside it is what makes the build
 # reproducible from a commit — linuxserver rebuilds a tag in place, so the tag alone named a
-# moving image (#2149). Renovate bumps both together. See Dockerfile.j2 in roles/k8s/n8n-images
+# moving image (#2149). Renovate bumps both together. See Dockerfile.j2 in roles/k8s/n8n
 # for the full reasoning behind pinning a built image's base.
 FROM lscr.io/linuxserver/code-server:4.138.0-ls365@sha256:3ca0faa2891c694dab184a85c61441c8be512a038fea27bfdaa01246030b6c30
 

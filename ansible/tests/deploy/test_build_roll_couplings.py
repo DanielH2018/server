@@ -5,9 +5,9 @@ A build role that renders no workload of its own pushes an image some OTHER role
 without deploying the consumer leaves the old pods up and reports green -- the 2026-08-08
 `@n8n/di` failure, recorded in roles/k8s/n8n/defaults/main.yml.
 
-The constant is hand-written because the population is ONE. This re-derives that population
-from the role sources, so adding a second split build role fails here instead of silently
-inheriting the bug. That is the whole point: the risk is not that the current entry is wrong,
+The constant is hand-written, and the population is empty since n8n-images folded into n8n
+(#2813). This re-derives that population from the role sources, so adding a split build role
+fails here instead of silently inheriting the bug. That is the whole point: the risk is not that the current entry is wrong,
 it is that a future role joins the class unnoticed.
 
 Run: uv run pytest ansible/tests/deploy/test_build_roll_couplings.py
@@ -82,10 +82,17 @@ def test_no_coupling_names_a_role_that_deploys_itself():
 
 
 def test_the_census_actually_finds_build_roles():
-    """A discriminator that matched nothing would make both tests above vacuously true."""
-    assert _split_build_roles(), (
-        "found no split build roles at all — the census is broken"
-    )
+    """A discriminator that matched nothing would make both tests above vacuously true.
+
+    The split population is empty, so name members of each half instead: n8n and code-server
+    build an image AND render the workload that runs it.
+    """
+    for name in ("n8n", "code-server"):
+        role = K8S_ROLES / name
+        assert _builds_an_image(role), (
+            f"the census no longer sees {name} build an image"
+        )
+        assert _renders_a_workload(role), f"the census no longer sees {name}'s workload"
 
 
 def test_every_coupling_target_is_a_real_role():
@@ -119,13 +126,17 @@ def test_the_build_role_runs_before_its_consumer():
             )
 
 
+# A stand-in pair: the live map is empty, so the expansion's own behaviour is tested on this.
+_PAIR = {"builder": ("app",)}
+
+
 def test_expansion_adds_the_consumer():
-    assert expand_build_couplings({"n8n-images"}) == {"n8n-images", "n8n"}
+    assert expand_build_couplings({"builder"}, _PAIR) == {"builder", "app"}
 
 
 def test_expansion_leaves_an_unrelated_tag_alone():
     """The reject half. An expansion that widened everything would pass the test above."""
-    assert expand_build_couplings({"sonarr"}) == {"sonarr"}
+    assert expand_build_couplings({"sonarr"}, _PAIR) == {"sonarr"}
 
 
 def test_expansion_is_one_directional():
@@ -133,4 +144,4 @@ def test_expansion_is_one_directional():
 
     Widening that direction would rebuild an image on every manifest edit.
     """
-    assert expand_build_couplings({"n8n"}) == {"n8n"}
+    assert expand_build_couplings({"app"}, _PAIR) == {"app"}

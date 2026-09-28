@@ -418,11 +418,11 @@
 
 # Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
 # Keyed on manifests_service because every built image is named after the role that deploys it
-# — including n8n, whose image is built by the separate n8n-images role in an earlier batch,
-# which works because k8s_rebuilt_images is play-scoped rather than role-scoped.
+# — k8s_rebuilt_images is play-scoped, so it would work across roles too, as it did while n8n's
+# images were built by a separate n8n-images role (folded in by #2813).
 #
 # "named after the role" holds for six of the seven built images. It does NOT hold for
-# n8n-runners, which n8n-images builds under its own name while the n8n role deploys it — so
+# n8n-runners, which the n8n role builds under its own name and deploys as a second Deployment — so
 # `manifests_service in k8s_rebuilt_images` was False for a runners-only rebuild, and the
 # rollout below targets a single Deployment name anyway. A rebuilt runners image therefore
 # reached the registry and never reached a pod, with the deploy reporting green. Roles that

@@ -60,23 +60,24 @@ _ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 # which roles/k8s/manifests turns into `manifests_image_changed` and rolls on. That fact is
 # PLAY-SCOPED, so the build and the rollout must happen in one ansible-playbook run; two runs
 # lose it and leave the old pods up. `roles/k8s/n8n/defaults/main.yml` records the incident
-# (2026-08-08 `@n8n/di`) and prescribes `--tags "n8n-images,n8n"`. That prescription was prose,
-# so every path→tag derivation missed it: a Renovate Dockerfile bump derives `n8n-images` alone.
+# (2026-08-08 `@n8n/di`). A prose prescription to deploy both tags together was missed by every
+# path→tag derivation: a Renovate Dockerfile bump derived the build role alone.
 #
-# ONE ENTRY, NOT A MECHANISM. Six roles under roles/k8s/ include image-builder, and five of
-# them (code-server, homelab-mcp, ical-proxy, nut, pi-peer-backup) render their own workload
-# manifest, so a single tag already covers build and roll and the fact never crosses a role
-# boundary. n8n-images is the only split one. test_build_roll_couplings.py re-derives that
-# population from the role sources, so a second split build role fails the test rather than
-# silently inheriting the bug.
+# EMPTY SINCE #2813. Every role under roles/k8s/ that includes image-builder renders its own
+# workload manifest, so a single tag covers build and roll and the fact never crosses a role
+# boundary. The one split role, n8n-images, folded into n8n. test_build_roll_couplings.py
+# re-derives that population from the role sources, so a new split build role fails the test
+# rather than silently inheriting the bug.
 #
-# ONE-DIRECTIONAL. Editing roles/k8s/n8n's manifests needs no rebuild — a manifest change rolls
-# on its own — so this must not be read as a symmetric pair.
-_BUILD_ROLL_COUPLINGS = {"n8n-images": ("n8n",)}
+# ONE-DIRECTIONAL. Editing a consumer's manifests needs no rebuild — a manifest change rolls
+# on its own — so an entry must not be read as a symmetric pair.
+_BUILD_ROLL_COUPLINGS: dict[str, tuple[str, ...]] = {}
 
 
-def expand_build_couplings(tags):
+def expand_build_couplings(tags, couplings=_BUILD_ROLL_COUPLINGS):
     """`tags` plus the workload roles any build role among them requires.
+
+    `couplings` defaults to the live map; a test passes its own, since the live one is empty.
 
     Called by the TAG derivations -- `deploy_tags.py changed` and land_tags.py -- and
     deliberately NOT by `services_from_changed_paths`, whose `cs.k8s` also feeds
@@ -89,7 +90,7 @@ def expand_build_couplings(tags):
     rolls nothing.
     """
     widened = set(tags)
-    for build_role, needs in _BUILD_ROLL_COUPLINGS.items():
+    for build_role, needs in couplings.items():
         if build_role in widened:
             widened.update(needs)
     return widened

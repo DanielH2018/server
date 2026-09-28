@@ -3,9 +3,10 @@
 n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 
 > **Migrated to k3s on 2026-08-06.** This role is the live service on daniel-box; deploy it
-> with `--tags n8n` from there. The two images are built in-cluster with BuildKit by the
-> sibling `k8s/n8n-images` role, from `roles/k8s/n8n-images/templates/Dockerfile.j2`,
-> `Dockerfile-runners.j2` and `templates/config/n8n-task-runners.json.j2` — edit those there.
+> with `--tags n8n` from there. This role also builds its two images in-cluster with
+> BuildKit, from `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
+> `templates/config/n8n-task-runners.json.j2`. The builds lived in a separate `n8n-images`
+> role until #2813 folded them in.
 > The Docker role's compose template is gone (recover it from git history if ever needed);
 > `containers/n8n/data` is still on disk from the migration.
 
@@ -26,8 +27,15 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
   n8n-data
 <!-- /generated_from -->
 
-- **Both images are built by `k8s/n8n-images`** from its `templates/Dockerfile.j2` (`n8n`) +
-  `Dockerfile-runners.j2` (`n8n-runners`)
+- **This role builds both images** through two ordered `include_role: k8s/image-builder`
+  calls at the top of `tasks/main.yml`: `templates/Dockerfile.j2` (`n8n`) and
+  `templates/Dockerfile-runners.j2` (`n8n-runners`). They are ordered rather than parallel
+  because n8n and its task runners are version-coupled. They run before the render because
+  the two image pins read the `k8s_built_image_tags` fact the builds publish; rendered without
+  it, the pins fall back to `:latest` and a Recreate pod stop-starts onto the same digest.
+- **Base images:** each Dockerfile is `FROM` the upstream `:stable` channel tag with a digest
+  beside it. Renovate bumps the digest; the tag holds the channel. No `*_image:` var names an
+  upstream image, so a bump ships only through an operator-driven `--tags n8n` deploy.
 - **Host:** daniel-box (k8s) · **Port:** 5678
 - **Network:** the cluster pod network. The broker binds `0.0.0.0:5679` (n8n has no
   per-interface bind option), so the `n8n-broker` NetworkPolicy in
@@ -49,6 +57,13 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - **`/webhook/` bypasses Authelia** (public webhooks) via a dedicated higher-priority
   Traefik router. `/webhook-test/` is intentionally NOT exposed (dev-only endpoint).
 - Both images are built — update via redeploy, not Watchtower.
+- The runners image `COPY`s exactly one file, `n8n-task-runners.json.j2`, staged via
+  `image_builder_context` — the ConfigMap mount key must match the `COPY` path exactly.
+- **The one npm package the n8n image adds, `fuzzball`, is pinned by exact version** (#2213,
+  2026-09-21). A renovate.json regex manager reads the pin over the npm datasource and opens a
+  manual PR in its own `n8n fuzzball` group; a merged bump ships only when a `--tags n8n`
+  deploy rebuilds the image. `ansible/tests/services/test_n8n_build_is_pinned.py` refuses a
+  bare or ranged install and asserts the manager's matchString still finds the pin.
 - **DR / encryption key:** the credential-encryption key lives in `/home/node/.n8n/config` and
   the encrypted credentials in `/home/node/.n8n/database.sqlite` — both on the `n8n-data` PVC
   (`n8n_k8s_claim`), which the Deployment mounts at `/home/node/.n8n`, so Longhorn backs them
@@ -82,7 +97,7 @@ it does not cover `nodes`. Installed packages therefore live on the volume, not 
   backup restores them with it; a fresh claim starts with none, and the workflows that used them
   break at run time rather than at deploy time. Same class of state as the encryption key above.
 - A package is npm-installed against the **running image's** Node runtime. A base-image Node
-  major bump in `k8s/n8n-images` can break a package with native dependencies while every
+  major bump in this role's Dockerfiles can break a package with native dependencies while every
   manifest and template here reads unchanged.
 
 **How to list what is installed — an operator does it, a Claude session cannot.** Both
@@ -101,7 +116,20 @@ shape — see the `TWO_FACTOR_SERVICES` comment in `scripts/diagnostics/tests/te
   `communityNodesEnabled`. Curl it with `--resolve <host>:443:<MetalLB ingress VIP>`, the same
   DNS pin `probe_lib/core.py` uses.
 
+## Every digest bump appends a row to `base-pin-history.tsv`
+
+The `FROM`s pin a channel tag with a digest beside it, so a bump changes 64 hex characters and
+no version string. The diff cannot show which way the version moved: Renovate PR #1440
+(2026-09-09) proposed moving both files from the 2.37.10 digests to the 2.37.9 digests — a
+downgrade of the running n8n — and passed all nine checks. A human resolving each digest to its
+version by hand is what caught it (issue #1493).
+
+`base-pin-history.tsv` records the version behind each adopted digest, append-only, and its own
+header carries the registry commands for resolving one. `scripts/tests/test_renovate_dockerfiles.py`
+fails until the row is appended, and fails again if a version decreases with no `DOWNGRADE-ACK:`
+note. An acknowledged decrease passes on purpose — a channel pin follows what upstream promotes,
+so a withdrawn release has to be followable; what the guard forbids is a silent decrease.
+
 ## Editing
-- Images: `templates/Dockerfile*.j2` + `templates/n8n-task-runners.json.j2` (built/copied by
-  the `n8n-images` k8s role)
+- Images: `templates/Dockerfile*.j2` + `templates/config/n8n-task-runners.json.j2`
 - Deploy (from daniel-box): `./scripts/deploy.sh --tags "n8n"`

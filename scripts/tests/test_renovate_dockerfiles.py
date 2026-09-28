@@ -16,7 +16,7 @@ import re
 import pytest
 
 from _renovate import (
-    N8N_IMAGES_DIR,
+    N8N_ROLE_DIR,
     N8N_PIN_HISTORY,
     N8N_PINS,
     PinEntry,
@@ -165,7 +165,7 @@ def test_n8n_base_pins_in_lockstep() -> None:
     The same shape as test_shellcheck_py_pins_in_lockstep below, and for the same reason: a
     grouping rule expresses intent, only a test enforces it.
     """
-    root = _REPO / "ansible/roles/k8s/n8n-images/templates"
+    root = _REPO / "ansible/roles/k8s/n8n/templates"
     app = re.search(
         r"^FROM\s+n8nio/n8n:([^@\s]+)",
         (root / "Dockerfile.j2").read_text(),
@@ -193,7 +193,7 @@ def test_n8n_base_pins_in_lockstep() -> None:
 # checks. Nothing in the repo read the version behind either digest; a human did, by hand.
 # Issue #1493.
 #
-# The ledger (ansible/roles/k8s/n8n-images/base-pin-history.tsv) is where the version lands,
+# The ledger (ansible/roles/k8s/n8n/base-pin-history.tsv) is where the version lands,
 # appended once per bump. These guards tie it to the live FROMs and to each other. The check
 # is deliberately offline: `-p leakguard` in pyproject's addopts fails any test that reaches
 # the network, so resolving a digest against the registry is not available to the suite, and
@@ -206,7 +206,7 @@ def test_n8n_base_pins_in_lockstep() -> None:
 
 
 def _live_digest(dockerfile: str, image: str) -> str:
-    text = (N8N_IMAGES_DIR / dockerfile).read_text()
+    text = (N8N_ROLE_DIR / dockerfile).read_text()
     m = re.search(rf"^FROM\s+{re.escape(image)}:[^@\s]+@(sha256:[0-9a-f]+)", text, re.M)
     assert m, f"no digest-pinned `FROM {image}:<tag>@sha256:...` in {dockerfile}"
     return m.group(1)
@@ -219,7 +219,7 @@ def test_the_ledger_covers_both_n8n_dockerfiles() -> None:
     which one went missing."""
     assert set(N8N_PINS) == {"n8nio/n8n", "n8nio/runners"}
     for image, dockerfile in N8N_PINS.items():
-        assert (N8N_IMAGES_DIR / dockerfile).exists(), (
+        assert (N8N_ROLE_DIR / dockerfile).exists(), (
             f"{dockerfile} (the pin for {image}) is gone — move the ledger with it"
         )
     entries = parse_pin_history(N8N_PIN_HISTORY.read_text())
