@@ -9,7 +9,14 @@ Run: uv run pytest scripts/docs/tests/test_catalog_backup.py
 
 import service_catalog
 from _catalog_fixtures import make_repo, write
-from catalog_backup import LonghornTiers, backup_tier, claim_index, claim_tiers
+import catalog_backup
+from catalog_backup import (
+    LonghornTiers,
+    backup_tier,
+    claim_index,
+    claim_names,
+    claim_tiers,
+)
 from catalog_model import K8S_ROLES
 
 
@@ -404,3 +411,66 @@ def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
     }
     missing = {name: sc for name, sc in expected.items() if index.get(name) != sc}
     assert not missing, f"claim_index no longer resolves: {missing}"
+
+
+def _macro_repo(tmp_path):
+    """A role template that mounts both its claims through a shared macro call."""
+    shared = tmp_path / "shared"
+    shared.mkdir()
+    write(
+        shared / "arr-deployment.yml.j2",
+        """\
+        {% macro arr_deployment(app, config_claim, media_claim) -%}
+              volumes:
+                - name: config
+                  persistentVolumeClaim:
+                    claimName: {{ config_claim }}
+                - name: media
+                  persistentVolumeClaim:
+                    claimName: {{ media_claim }}
+        {%- endmacro %}
+        """,
+    )
+    caller = tmp_path / "caller.yaml.j2"
+    write(
+        caller,
+        """\
+        {% from 'arr-deployment.yml.j2' import arr_deployment with context %}
+        {{ arr_deployment('radarr',
+                          port=container_item.port,
+                          config_claim=radarr_k8s_claim,
+                          media_claim=radarr_k8s_media_claim) }}
+        """,
+    )
+    return shared, caller
+
+
+def test_a_claim_a_shared_macro_mounts_is_read_through_the_call_site(tmp_path):
+    """Shape 5: the macro body names a parameter, the caller binds it to a role variable."""
+    shared, caller = _macro_repo(tmp_path)
+    assert catalog_backup._shared_macro_claim_exprs(caller.read_text(), shared) == [
+        "{{ radarr_k8s_claim }}",
+        "{{ radarr_k8s_media_claim }}",
+    ]
+
+
+def test_a_template_that_calls_no_shared_macro_contributes_no_claim(tmp_path):
+    """The rejecting half: an import with no call, and a call to a macro that mounts nothing."""
+    shared, caller = _macro_repo(tmp_path)
+    import_only = caller.read_text().split("{{ arr_deployment(")[0]
+    assert catalog_backup._shared_macro_claim_exprs(import_only, shared) == []
+    write(
+        shared / "service.yml.j2",
+        "{% macro service(name) -%}\nkind: Service\n{%- endmacro %}",
+    )
+    other = "{% from 'service.yml.j2' import service with context %}\n{{ service('radarr') }}\n"
+    assert catalog_backup._shared_macro_claim_exprs(other, shared) == []
+
+
+def test_the_arr_roles_still_report_the_media_claim_they_mount_through_the_macro():
+    """Named members, against the real tree: radarr and sonarr mount `media-data` only
+    through `ansible/templates/arr-deployment.yml.j2` (#2871), so a scanner that stopped
+    following the macro would drop it from both At-a-glance blocks and from the catalogue."""
+    for role in ("radarr", "sonarr"):
+        names = claim_names(K8S_ROLES / role)
+        assert names == [f"{role}-config", "media-data"], names

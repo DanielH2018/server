@@ -19,6 +19,11 @@ A macro cannot force its own call, so this guard is textual and has two halves p
     (sysctls, supplementalGroups) stays literal at the call site and passes, because none of
     its keys are the owned four.
 
+The walk covers `ansible/templates/` as well as the roles. A shared macro that emits a whole
+Deployment body — `arr-deployment.yml.j2`, radarr's and sonarr's — carries the two calls on its
+callers' behalf, so the file to scan is the macro and not either caller. That is the same move
+pihole's two-Deployment macro already forced (#2884), one directory further out.
+
 Jobs and CronJobs are out of scope: their pod spec sits at another depth for a CronJob and
 carries no priority tier for either (`test_pod_template_hygiene.py` says why), so a literal in
 a Job document is not an offence. The rendered-fleet census in `test_pod_template_hygiene.py`,
@@ -29,8 +34,10 @@ Run: uv run pytest ansible/tests/k8s/test_workload_shell_uses_the_macros.py
 """
 
 import re
+from pathlib import Path
 
 from _helpers import K8S_ROLES
+from lib.repo_paths import SHARED_TPL
 
 _KIND = re.compile(r"^kind: (\w+)\s*$", re.MULTILINE)
 _SPEC_LITERAL = re.compile(r"^  (revisionHistoryLimit|strategy):", re.MULTILINE)
@@ -56,6 +63,9 @@ _MUST_CONTAIN = frozenset(
         "claude-otel/prometheus.yaml.j2",
         "node-exporter/daemonset.yaml.j2",
         "dri-device-plugin/daemonset.yaml.j2",
+        # radarr's and sonarr's whole Deployment body, shared out of ansible/templates/ — the
+        # roles' own templates are a single macro call and name no kind (#2871).
+        "templates/arr-deployment.yml.j2",
     }
 )
 _MIN_DOCUMENTS = 60
@@ -90,11 +100,25 @@ def shell_offences(text: str) -> list[str]:
     return offences
 
 
+def _scanned_templates() -> list[tuple[str, Path]]:
+    """(label, path) for every template that can carry a workload document.
+
+    Both trees, because a whole-Deployment macro in `ansible/templates/` is where its callers'
+    documents live. A shared macro that emits a field block (`service.yml.j2`, `pvc.yml.j2`)
+    names no `kind: Deployment` and so contributes nothing here.
+    """
+    roles = [
+        (f"{t.parent.parent.name}/{t.name}", t)
+        for t in sorted(K8S_ROLES.glob("*/templates/*.yaml.j2"))
+    ]
+    shared = [(f"templates/{t.name}", t) for t in sorted(SHARED_TPL.glob("*.yml.j2"))]
+    return roles + shared
+
+
 def test_every_workload_template_takes_its_shell_from_the_macros():
     seen, count, offenders = set(), 0, {}
-    for template in sorted(K8S_ROLES.glob("*/templates/*.yaml.j2")):
+    for rel, template in _scanned_templates():
         text = template.read_text()
-        rel = f"{template.parent.parent.name}/{template.name}"
         n = sum(
             1 for kind, _ in _documents(text) if kind in {"Deployment", "DaemonSet"}
         )

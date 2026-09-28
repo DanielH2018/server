@@ -23,6 +23,7 @@ import yaml
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib import yaml_fast
 from lib.render_guard import load_yaml as _load_yaml
+from lib.repo_paths import SHARED_TPL
 
 __all__ = [
     "ClaimDecl",
@@ -78,6 +79,17 @@ _VOLUME_CLAIM_ROLE = "k8s/volume-claim"
 # The fourth pattern — a reference, not a declaration.
 _CLAIM_NAME_RE = re.compile(r"claimName:\s*(\{\{.*?\}\}|\S+)")
 _SIMPLE_VAR_RE = re.compile(r"^\{\{\s*([A-Za-z_][A-Za-z0-9_]*)\s*\}\}$")
+# The fifth: a `claimName:` inside a SHARED macro the role's template calls, naming a macro
+# parameter the call site binds (`arr-deployment.yml.j2`, radarr's and sonarr's whole
+# Deployment). The claim is still the role's — it is mounted by its pod — but no line of the
+# role's own templates names it, so a scan that stops at `templates/` drops it silently. radarr
+# and sonarr lost `media-data` from their At-a-glance blocks exactly that way (#2871).
+_SHARED_IMPORT_RE = re.compile(
+    r"\{%-?\s*from\s*'(?P<file>[^']+)'\s*import\s+(?P<names>[^%]*?)\s*(?:with context\s*)?-?%\}"
+)
+_KWARG_RE = re.compile(
+    rf"(?P<param>[A-Za-z_][A-Za-z0-9_]*)\s*=\s*(?P<value>{_MACRO_ARG})"
+)
 
 
 @dataclass(frozen=True)
@@ -224,14 +236,66 @@ def _declared_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
     )
 
 
-def _referenced_claim_exprs(role_dir: Path) -> list[str]:
-    """Every `claimName:` expression in a role's templates — references, not declarations."""
+def _call_kwargs(text: str, macro: str) -> dict[str, str]:
+    """The keyword arguments of the first `macro(...)` call in `text`, as written.
+
+    Reads to the matching close paren rather than to the first one, so a call carrying a
+    nested call (`port=container_item.port`) is not cut short. Positional arguments are
+    ignored: a claim is always passed by name at these call sites.
+    """
+    start = text.find(macro + "(")
+    if start < 0:
+        return {}
+    depth, i = 0, start + len(macro)
+    for i in range(start + len(macro), len(text)):
+        if text[i] == "(":
+            depth += 1
+        elif text[i] == ")":
+            depth -= 1
+            if depth == 0:
+                break
+    return {
+        m.group("param"): m.group("value") for m in _KWARG_RE.finditer(text[start:i])
+    }
+
+
+def _shared_macro_claim_exprs(text: str, shared_tpl: Path) -> list[str]:
+    """Shape 5: every claim a shared macro this template calls mounts on its behalf.
+
+    A `claimName: {{ <param> }}` in the macro body is rewritten to the expression the call
+    site binds that parameter to, so the role's own defaults resolve it as they would a
+    `claimName:` written out here. A macro-body claim naming anything but a bare parameter
+    is passed through unchanged — it resolves or reports unknown on its own terms.
+    """
+    exprs = []
+    for imp in _SHARED_IMPORT_RE.finditer(text):
+        macro_file = shared_tpl / imp.group("file")
+        if not macro_file.is_file():
+            continue
+        body = macro_file.read_text()
+        for name in (n.strip() for n in imp.group("names").split(",")):
+            if not name or name + "(" not in text:
+                continue
+            bound = _call_kwargs(text, name)
+            for expr in _CLAIM_NAME_RE.findall(body):
+                param = _SIMPLE_VAR_RE.match(expr)
+                if param and param.group(1) in bound:
+                    exprs.append(_macro_arg_expr(bound[param.group(1)]))
+                else:
+                    exprs.append(expr)
+    return exprs
+
+
+def _referenced_claim_exprs(role_dir: Path, shared_tpl: Path = SHARED_TPL) -> list[str]:
+    """Every `claimName:` expression a role's templates name, their own or a shared macro's."""
     templates = role_dir / "templates"
     if not templates.is_dir():
         return []
     exprs = []
     for tmpl in sorted(templates.glob("*.j2")):
-        exprs.extend(_CLAIM_NAME_RE.findall(tmpl.read_text()))
+        text = tmpl.read_text()
+        exprs.extend(_CLAIM_NAME_RE.findall(text))
+        exprs.extend(_shared_macro_claim_exprs(text, shared_tpl))
     return exprs
 
 

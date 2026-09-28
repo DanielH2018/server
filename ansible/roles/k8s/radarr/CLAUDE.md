@@ -39,4 +39,7 @@ when both paths share one mount.
   rationale across all three *arr roles.
 
 ## Editing
-- Manifest: `templates/deployment.yaml.j2`
+- Manifest: `templates/deployment.yaml.j2` — a single call to the shared
+  `ansible/templates/arr-deployment.yml.j2` macro, which radarr and sonarr both render from
+  (#2871). Change the body there; change an argument here. The macro's header says why
+  prowlarr is not a caller.

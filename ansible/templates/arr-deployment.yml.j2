@@ -1,0 +1,152 @@
+{#
+  The whole Deployment radarr and sonarr share — one library manager, one exportarr sidecar, a
+  config PVC at /config and the shared media tree at /data.
+
+  WHY A WHOLE-DOCUMENT MACRO, where the other shared templates here carry a field block. The two
+  templates were 94 lines each and differed on 22 of them (#2871), and every one of those 22 is
+  either a name derived from the app or a value the role already holds in `defaults/main.yml`.
+  There was no shape to share short of the document: splitting it into a container macro and a
+  volumes macro would have left the metadata, the selector, the labels and both shell calls
+  copied in two places, which is where a field drifts. `service.yml.j2`, `pvc.yml.j2` and
+  `ingressroute.yml.j2` already emit a whole object from this directory; this is the same move
+  for a Deployment.
+
+  PROWLARR IS NOT A CALLER, and should not become one. It mounts no media volume at all (an
+  indexer proxy touches no file on disk), installs no DOCKER_MODS, needs no startupProbe
+  because it has no mod payload to install, and pins itself to daniel-server with a node
+  affinity none of the others carry. Four differences out of a 94-line body is a second shape,
+  not an argument list — it would arrive as four `if`s in here and a call site nobody can read.
+  Its exportarr sidecar is shared through `exportarr.yml.j2`, which is the part that genuinely
+  is one shape across all three.
+
+  The call site keeps the two macro calls this body makes on its behalf —
+  `workload-shell.yml.j2`'s `spec_shell`/`pod_shell` and `security-context.yml.j2`'s
+  `hardened_security_context` — inside THIS file rather than at the caller, so
+  `ansible/tests/k8s/test_workload_shell_uses_the_macros.py` scans this file for them the way
+  it scans pihole's shared Deployment macro instead of pihole's two callers (#2884).
+
+  Arguments. Everything textual derives from `app`: `metadata.name`, both `app:` labels, the
+  container name, the config volume name, the `<APP>__LOG__*` env keys and the exportarr
+  subcommand. Everything else is a VALUE and is passed explicitly, so a call site names every
+  role variable the body reads:
+
+    app                     `radarr` or `sonarr`, lowercase.
+    image, exportarr_image  the two pins, from the role's own `defaults/main.yml` — a shared
+                            var one directory up is invisible to Renovate's k8s-images manager
+                            (exportarr.yml.j2 has the incident).
+    port                    `container_item.port`. Interpolated into the capability comment
+                            rather than written out: that comment said 8989 in prowlarr, copied
+                            from sonarr, until 2026-08-23b L6.
+    rollout_timeout         the role's `<app>_k8s_rollout_timeout` STRING (`660s`), which this
+                            body converts to `progressDeadlineSeconds`. One variable feeds both
+                            the drain's `rollout status --timeout` and the deadline, or
+                            `rollout status` fails at the 600s Kubernetes default whatever the
+                            budget says (#2370).
+    log_level, log_rotate, docker_mods
+                            the three env values.
+    config_claim, media_claim
+                            the two PVC names.
+    cpu_limit, mem_limit, cpu_request, mem_request
+                            passed straight to `container_resources`.
+    root_folder             the seeded root folder inside the media tree, when the role knows
+                            it (sonarr: `/data/media/tv`). Named in the path-contract comment
+                            only; omitted, the comment stands without the example.
+    additional_metrics      sonarr alone, gating its episode collector. See exportarr.yml.j2.
+#}
+{% from 'container-resources.yml.j2' import container_resources with context %}
+{% from 'security-context.yml.j2' import hardened_security_context with context %}
+{% from 'exportarr.yml.j2' import exportarr with context %}
+{% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
+{% macro arr_deployment(app, image, port, rollout_timeout, log_level, log_rotate, docker_mods, config_claim, media_claim, exportarr_image, cpu_limit, mem_limit, cpu_request, mem_request, root_folder=none, additional_metrics=false) -%}
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ app }}
+  namespace: {{ k8s_namespace }}
+spec:
+  # The config PVC is ReadWriteOnce on single-replica Longhorn, so a rolling update deadlocks:
+  # the new pod waits for a volume the old pod has not released. (The media PVC is RWX and does
+  # not have this problem — this is about /config.)
+{{ spec_shell('Recreate') }}
+  replicas: 1
+  # The same budget as the drain's rollout wait. See {{ app }}_k8s_rollout_timeout in
+  # defaults/main.yml.
+  progressDeadlineSeconds: {{ rollout_timeout[:-1] | int }}
+  selector:
+    matchLabels:
+      app: {{ app }}
+  template:
+    metadata:
+      labels:
+        app: {{ app }}
+        netpol-baseline: enforced
+    spec:
+      # No fsGroup: volume-claim restores ownership with `tar -p --numeric-owner`, the LSIO image
+      # chowns /config itself on startup, and an fsGroup here would make the kubelet recursively
+      # chown the 19 G media volume on every mount.
+{{ pod_shell('homelab-standard') }}
+      containers:
+        - name: {{ app }}
+          image: {{ image }}
+          ports:
+            - containerPort: {{ port }}
+          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
+          # NET_BIND_SERVICE: {{ app }} listens on {{ port }} (>1024), which needs no privilege.
+{{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
+          env:
+            - name: PUID
+              value: "{{ puid }}"
+            - name: PGID
+              value: "{{ pgid }}"
+            - name: TZ
+              value: "{{ tz }}"
+            # {{ app | capitalize }}:Log, reached through the unprefixed environment-variable provider.
+            # Upstream defaults are debug / 50 files; see roles/k8s/sonarr/defaults/main.yml.
+            - name: {{ app | upper }}__LOG__LEVEL
+              value: "{{ log_level }}"
+            - name: {{ app | upper }}__LOG__ROTATE
+              value: "{{ log_rotate }}"
+            - name: DOCKER_MODS
+              value: "{{ docker_mods }}"
+          volumeMounts:
+            - name: {{ app }}-config
+              mountPath: /config
+            # THE PATH CONTRACT (D4). {{ app }}.db stores absolute in-container paths{% if root_folder %} — the seeded
+            # database's root folder is `{{ root_folder }}`{% endif %}. Mount this anywhere else and the
+            # library still loads, the UI still works, and every import silently fails.
+            - name: media
+              mountPath: /data
+          startupProbe:
+            # DOCKER_MODS install runs before {{ app }} serves /ping, and the striptracks mod's
+            # payload is set upstream, not pinned here — on 2026-08-09 it grew to 86 apk
+            # packages (llvm/mesa via mkvtoolnix) and outran the liveness window, so every
+            # restart re-installed from scratch and the pod crash-looped for 5h. This gate
+            # gives first boot up to 10 minutes; liveness only starts once it has passed.
+            httpGet:
+              path: /ping
+              port: {{ port }}
+            periodSeconds: 10
+            failureThreshold: 60
+          readinessProbe:
+            httpGet:
+              path: /ping
+              port: {{ port }}
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          livenessProbe:
+            httpGet:
+              path: /ping
+              port: {{ port }}
+            initialDelaySeconds: 60
+            periodSeconds: 30
+{{ container_resources(cpu_limit=cpu_limit, mem_limit=mem_limit, cpu_request=cpu_request, mem_request=mem_request) }}
+        {{ exportarr(app, exportarr_image, port, additional_metrics=additional_metrics) }}
+      volumes:
+        - name: {{ app }}-config
+          persistentVolumeClaim:
+            claimName: {{ config_claim }}
+        - name: media
+          persistentVolumeClaim:
+            claimName: {{ media_claim }}
+{%- endmacro %}
