@@ -22,9 +22,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_repo_shipped_files
 
 from pathlib import Path
 
+import pytest
 
 import land_reach
 import land_tags
+from _land_fakes import MERGE_SHA
+from deploy_tools.land_lib import deploy
+from deploy_tools.land_lib.outcome import Outcome
 
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
@@ -113,3 +117,54 @@ def test_the_note_survives_the_quiet_set_land_sh_passes():
         _PR_2792_PATHS, "daniel-box", quiet=quiet
     )
     assert "daniel-server" in note, note
+
+
+# --- Issue #2798: the PR that puts no role in the change set at all -------------------------
+
+
+def test_a_repo_file_only_pr_names_the_installing_host():
+    """The accept half of #2798: no path under `ansible/roles/setup/hypervisor/` at all.
+
+    `cs.setup_roles` is built by path classification, so this PR leaves it empty and the
+    self-applied loop has nothing to iterate. The role is reached through the file it ships.
+    """
+    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
+    assert "daniel-server" in note, note
+    assert "ships a changed repo file" in note, note
+
+
+def test_a_repo_file_only_pr_of_a_file_no_task_ships_names_nobody():
+    """The reject half: widening every setup role to its reach is the failure to avoid."""
+    assert land_reach.remaining_setup_hosts_note([_NOT_SHIPPED], "daniel-box") == ""
+
+
+def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone():
+    """No `- {local_host}` here: with no role path in the PR the tick applied the role nowhere.
+
+    Landing the same PR ON daniel-server must still name daniel-server, and with the plain
+    local command rather than an ssh hop to the machine already running it.
+    """
+    note = land_reach.remaining_setup_hosts_note([_ALSO_SHIPPED], "daniel-server")
+    assert "daniel-server" in note, note
+    assert "ssh daniel-server" not in note, note
+    assert "`ansible-playbook ansible/initial_setup.yml --tags hypervisor`" in note, (
+        note
+    )
+
+
+def test_a_repo_file_only_pr_ends_needs_manual_apply(landing):
+    """The verify-by: the LANDING names it. The note alone was already computed before #2798.
+
+    `no_tag_outcome` read `self_applied` and ended at `nothing-to-deploy` with
+    `ln.remaining_setup` populated and never printed.
+    """
+    ln, _ = landing(None)
+    ln.merge_sha = MERGE_SHA
+    ln.plane = land_tags.plane_note([_SHIPPED])
+    ln.self_applied = land_tags.self_applied([_SHIPPED])
+    ln.self_applied_command = land_tags.self_applied_command([_SHIPPED])
+    ln.remaining_setup = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-box")
+    assert (ln.plane, ln.self_applied) == ("", False), "the premise of #2798 moved"
+    with pytest.raises(Outcome) as exc:
+        deploy.no_tag_outcome(ln)
+    assert (exc.value.verdict, exc.value.rc) == ("needs-manual-apply", 1)

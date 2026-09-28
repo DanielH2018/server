@@ -29,6 +29,28 @@ set -uo pipefail
 
 PREP_FAILED=70 # outside deploy.sh's vocabulary (2, 3, 4, 75) and outside 0/1
 
+# The stage-wide edge, reconciled to the SHA under test before any verdict is measured.
+#
+# WHY. The gate deploys only the tags under test, so stage's copy of a service nothing has
+# gated lately sits at whatever SHA last gated it. Measured 2026-09-27 (#2789): stage's
+# traefik-static ConfigMap lacked the `allowEmptyServices` key #2765 added, and stage's traefik
+# ran a different image digest from the one the repo pins — both five days stale, because no
+# gated change had touched traefik since. Every gated service sits behind this edge, so a
+# verdict measured there is a verdict about the change under an edge config prod no longer has.
+#
+# WHY IT IS A SEPARATE LEG, AND WHY ITS FAILURE IS PREP_FAILED. Folding these tags into $TAGS
+# would make a stage-edge fault exit non-zero from the verdict-bearing command, which
+# staging_gate.py reads as REJECTED — a change rejected for a reason that has nothing to do with
+# it, and prod held on it (gitops_deploy_staging_gate_blocking is true). Deploying wider than it
+# judges is the whole point: the edge leg's failure means the gate could not be ASKED, which
+# classify() maps to NO_VERDICT, and the expectation check downstream stays scoped to $TAGS.
+#
+# Every name here must be one daniel-stage runs, or deploy.sh exits 2 on a tag that matched
+# nothing and every gated tick answers NO_VERDICT.
+# ansible/tests/staging/test_staging_gate_reconciles_the_edge.py holds it against
+# daniel-stage's containers_list.
+EDGE_TAGS=traefik,authelia
+
 # The gate's OWN checkout, not this host's. Until 2026-08-29 (review M-2) this was
 # /home/ubuntu/server, which the gate fast-forwarded to the SHA under test, unlocked, and
 # never restored — so asking staging a question moved an operator's tree to an arbitrary
@@ -44,6 +66,20 @@ LOCK=/var/lock/staging-gate.lock
 fail_prep() {
   echo "staging-gate: prep failed: $1" >&2
   exit "$PREP_FAILED"
+}
+
+# The members of EDGE_TAGS that $1 (a comma-separated tag list) does not already name.
+# Prints an empty string when it names them all, which is the caller's skip condition.
+edge_tags_outside() {
+  local outside=() tag
+  for tag in ${EDGE_TAGS//,/ }; do
+    case ",$1," in
+      *",$tag,"*) ;;
+      *) outside+=("$tag") ;;
+    esac
+  done
+  local IFS=,
+  echo "${outside[*]-}"
 }
 
 main() {
@@ -115,6 +151,15 @@ main() {
 # equal instead of failing spuriously.
 [ "$(git rev-parse HEAD)" = "$(git rev-parse "$SHA")" ] ||
   fail_prep "HEAD is $(git rev-parse --short HEAD) after merging $SHA — refusing to report a verdict about a tree that is not the SHA under test"
+
+  # The edge leg. Skipped entirely when $TAGS already carries every edge tag, so a traefik
+  # change under test is deployed once rather than twice.
+  local EDGE
+  EDGE="$(edge_tags_outside "$TAGS")"
+  if [ -n "$EDGE" ]; then
+    ./scripts/deploy.sh --tags "$EDGE" -e target=daniel-stage --skip-staleness-check ||
+      fail_prep "could not reconcile the stage edge ($EDGE) to $SHA — stage would have answered for a change under an edge it no longer shares with prod"
+  fi
 
   # The verdict-bearing command. Its exit code is returned verbatim.
   #

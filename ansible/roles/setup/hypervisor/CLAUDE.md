@@ -269,6 +269,15 @@ from anywhere, while a clean tree costs a re-clone. It reads the tree with the s
 that was never rendered is worse than any refusal. The measurement and who can reach it are in
 that script's comment.
 
+**The gate deploys the stage edge as well as the tags under test, and judges only the tags.**
+`EDGE_TAGS` in `scripts/deploy_tools/staging_gate_remote.sh` names traefik and authelia, and the
+script deploys the members `$TAGS` does not carry in their own `deploy.sh` run, ahead of the
+verdict-bearing one. Without it stage's traefik sat five days behind the repo while every gated
+verdict described its change under an edge prod no longer had (#2797). **The edge leg fails as
+`fail_prep`, never as a rejection** — inside `$TAGS`, a stage-edge fault would hold prod over a
+change that has nothing to do with the edge. ENFORCED by
+`ansible/tests/staging/test_staging_gate_reconciles_the_edge.py`.
+
 The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
 script, which cannot read a Jinja var. `ansible/tests/staging/test_staging_gate_paths_agree.py`
 pins them equal; the drift is silent in the worst direction, since a stale path makes every tick

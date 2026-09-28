@@ -184,6 +184,20 @@ def no_tag_outcome(ln: Landing, scope: str = "no service tag") -> NoReturn:
             f"PR #{pr} reaches {scope}, but is not done",
         )
     if not ln.self_applied:
+        if ln.remaining_setup:
+            # No plane, no tag, and nothing the tick applies -- and still a host owes a hand.
+            # A PR whose only loud path is a repo file a setup role ships out of the checkout
+            # (`scripts/deploy_tools/staging_gate_remote.sh` -> `/usr/local/bin/staging-gate-run`)
+            # puts no role in the change set, so `self_applied` is False and this arm used to
+            # end the landing at `nothing-to-deploy` with the remediation already computed and
+            # never printed (issue #2798).
+            print(remaining_hosts_note(ln.remaining_setup))
+            ln.finish(
+                Verdict.NEEDS_MANUAL_APPLY,
+                1,
+                f"PR #{pr} reaches {scope}, but a setup role ships a changed repo file to "
+                "hosts no tick applies",
+            )
         ln.finish(Verdict.NOTHING_TO_DEPLOY, 0, f"PR #{pr} touched no service")
     state = ln.tick_state()
     if state == TickState.UNKNOWN:

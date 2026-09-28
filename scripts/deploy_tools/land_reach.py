@@ -336,8 +336,13 @@ def setup_repo_file_hosts(
     return _hosts_passing(chains, role_hosts, all_vars, host_vars_dir)
 
 
-def _setup_apply_command(role: str, host: str) -> str:
+def _setup_apply_command(role: str, host: str, local_host: str = "") -> str:
     """The exact command that applies `role` on `host` via initial_setup.yml.
+
+    `local_host` is the host the note is being written on. Only the repo-file arm ever passes
+    a `host` equal to it -- the self-applied arm subtracts that host -- and there the command
+    is the plain local run: no ssh hop to this same machine, and no `git pull`, because
+    `land.sh` has already fast-forwarded the checkout it is reading.
 
     Mirrors `deploy_remediation._setup_commands`'s hand-written pair for the `common` role
     (ssh-then-run for a local-connection host, `-e target=` for daniel-pi) -- generalised to
@@ -354,6 +359,8 @@ def _setup_apply_command(role: str, host: str) -> str:
     renders on THIS host's already-current checkout and only executes remotely over SSH.
     """
     tag = setup_role_tag(role)
+    if host == local_host:
+        return f"`ansible-playbook ansible/initial_setup.yml --tags {tag}`"
     if host in _LOCAL_CONNECTION_HOSTS:
         return (
             f'`ssh {host} "cd /home/ubuntu/server && git pull --ff-only && '
@@ -377,6 +384,13 @@ def remaining_setup_hosts_note(
     case, not a duplicate of it: that flags a role no playbook ever reaches; this flags a
     role `initial_setup.yml` DOES reach, on hosts the tick's single run never touches.
 
+    A role reached ONLY through a changed repo file it ships is named too, and named
+    differently: `cs.setup_roles` is built from path classification, so a PR whose only loud
+    path is `scripts/deploy_tools/staging_gate_remote.sh` put no role in the change set at all
+    and got no line, while daniel-server kept running the old `/usr/local/bin/staging-gate-run`
+    (issue #2798). The tick applied that role on no host, so its remediation includes
+    `local_host`.
+
     Empty for the #723 shape -- `gitops_deploy` is `when: has_gitops`, true only on
     daniel-box, so a PR touching only a role whose sole reached host is `local_host` stays
     unowed to a hand, exactly as `plane_note` already keeps it.
@@ -384,6 +398,7 @@ def remaining_setup_hosts_note(
     loud = changes_for(files, quiet)
     cs = loud.changes
     remaining: dict[str, frozenset[str]] = {}
+    unapplied: dict[str, frozenset[str]] = {}
     role_files = {
         r: [p for p in files if p.startswith(f"ansible/roles/setup/{r}/")]
         for r in cs.setup_roles
@@ -410,11 +425,53 @@ def remaining_setup_hosts_note(
         ) - {local_host}
         if hosts:
             remaining[role] = hosts
-    if not remaining:
+    # A role NO path in this PR sits under, which nonetheless ships one of the changed repo
+    # files. `local_host` is NOT subtracted here: the role entered through the file alone, so
+    # `cs.setup_roles` never held it, the tick applied it on no host at all, and the host the
+    # tick ran on is owed the apply like every other (issue #2798).
+    for role in _repo_file_only_roles(cs.setup_roles, roles_dir) if repo_files else []:
+        hosts = frozenset().union(
+            *(
+                setup_repo_file_hosts(
+                    role, p, playbook, all_vars, host_vars_dir, roles_dir
+                )
+                for p in repo_files
+            ),
+            frozenset(),
+        )
+        if hosts:
+            unapplied[role] = hosts
+    if not (remaining or unapplied):
         return ""
     return "; ".join(
-        f"`{role}` also reaches {host} (not applied by this tick): "
-        f"{_setup_apply_command(role, host)}"
-        for role in sorted(remaining)
-        for host in sorted(remaining[role])
+        [
+            f"`{role}` also reaches {host} (not applied by this tick): "
+            f"{_setup_apply_command(role, host)}"
+            for role in sorted(remaining)
+            for host in sorted(remaining[role])
+        ]
+        + [
+            f"`{role}` ships a changed repo file to {host} "
+            f"(this tick applied the role nowhere): "
+            f"{_setup_apply_command(role, host, local_host)}"
+            for role in sorted(unapplied)
+            for host in sorted(unapplied[role])
+        ]
+    )
+
+
+def _repo_file_only_roles(changed_roles, roles_dir: Path) -> list[str]:
+    """Every setup role with no changed path of its own, sorted.
+
+    The candidates for the repo-file read: a role already in `changed_roles` is handled by the
+    loop above, which subtracts the host the tick applied it on. Reading every other role costs
+    one walk of its `tasks/` tree per changed repo file, which `setup_role_chains._parse_tasks`
+    caches per file on disk.
+    """
+    if not roles_dir.is_dir():
+        return []
+    return sorted(
+        p.name
+        for p in roles_dir.iterdir()
+        if p.is_dir() and p.name not in changed_roles
     )
