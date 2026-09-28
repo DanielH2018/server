@@ -1,8 +1,8 @@
 """The cross-file timeout sums nothing else pins.
 
-"The rollback survives max flock contention" is split across config.env.j2 (the run and
-health budgets), defaults/main.yml (the k8s deploy, rollback and staging budgets) and
-gitops-deploy.service.j2 (the flock wait and TimeoutStartSec). Four other jobs wait on the same
+"The rollback survives max flock contention" is split across defaults/main.yml (the k8s deploy,
+rollback and staging budgets) and gitops-deploy.service.j2 (the flock wait and
+TimeoutStartSec). Four other jobs wait on the same
 lock, so every one of their waits must clear the deployer's worst hold, and
 K8S_ROLLBACK_TIMEOUT_S must cover one full revert cycle for the worst promoted service. Every
 value is read from its source rather than pinned, so a bump to any one of them fails here
@@ -29,16 +29,13 @@ import yaml
 from _helpers import manifests_rollout_timeout_s
 from _role_tasks import in_role_wait_s
 
-# "The rollback survives max flock contention" is an invariant split across two templates:
-#   config.env.j2            -> RUN_BUDGET_S (health-gate budget) + HEALTH_TIMEOUT_S (rollback redeploy)
-#   gitops-deploy.service.j2 -> flock -w <N> (max lock wait) + TimeoutStartSec (systemd hard kill)
-# `DeployTools.run_start` (built in entrypoint(), so AFTER flock acquires) is what the gate measures
-# its deadline from, but TimeoutStartSec counts from unit activation and so
-# INCLUDES the flock wait — so the worst case flock_wait + RUN_BUDGET_S + HEALTH_TIMEOUT_S must fit
-# inside TimeoutStartSec, else systemd SIGTERMs the deployer mid-rollback and the bad commit is
-# stranded live (the failure 1ba4fbb2 sized these four values to avoid, down to zero slack). Nothing
-# else pins the cross-file sum, so a later bump to any one value would silently reopen it while every
-# other test stays green — the same class the write_hold / divergence-marker guards above pin.
+# Each phase budget is measured from the moment its phase starts, which is AFTER flock acquires,
+# while TimeoutStartSec counts from unit activation and so INCLUDES the flock wait. The worst case
+# is therefore flock_wait + the summed phase budgets, and it must fit inside TimeoutStartSec, else
+# systemd SIGTERMs the deployer mid-rollback and the bad commit is stranded live (the failure
+# 1ba4fbb2 sized these values to avoid). Nothing else pins the cross-file sum, so a later bump to
+# any one value would silently reopen it while every other test stays green — the same class the
+# write_hold / divergence-marker guards pin.
 
 _TEMPLATES = pathlib.Path(__file__).parents[1] / "templates"
 
@@ -56,25 +53,8 @@ def _systemd_seconds(span: str) -> int:
     return int(m.group(1)) * (60 if m.group(2) in ("min", "m") else 1)
 
 
-def test_deploy_timeout_budget_survives_max_flock_contention():
-    env = (_TEMPLATES / "config.env.j2").read_text()
-    unit = (_TEMPLATES / "gitops-deploy.service.j2").read_text()
-    flock_wait = int(_search1(r"^ExecStart=.*?flock\s+-w\s+(\d+)", unit))
-    run_budget = int(_search1(r"^RUN_BUDGET_S=(\d+)", env))
-    health_timeout = int(_search1(r"^HEALTH_TIMEOUT_S=(\d+)", env))
-    timeout_start = _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
-    budget = flock_wait + run_budget + health_timeout
-    assert budget <= timeout_start, (
-        f"flock -w {flock_wait} + RUN_BUDGET_S {run_budget} + HEALTH_TIMEOUT_S {health_timeout} "
-        f"= {budget}s must fit inside TimeoutStartSec {timeout_start}s, or a slow health-gate under "
-        f"max flock contention gets SIGTERMed mid-rollback and the bad commit is stranded live "
-        f"(see 1ba4fbb2)."
-    )
-
-
-# A second, independent invariant from the Docker one above: on the k8s path, a failed forward
-# deploy and its rollback redeploy run SEQUENTIALLY inside one systemd unit activation, each
-# bounded by its own K8S_DEPLOY_TIMEOUT_S / K8S_ROLLBACK_TIMEOUT_S rather than by RUN_BUDGET_S.
+# On the k8s path a failed forward deploy and its rollback redeploy run SEQUENTIALLY inside one
+# systemd unit activation, each bounded by its own K8S_DEPLOY_TIMEOUT_S / K8S_ROLLBACK_TIMEOUT_S.
 # Both values are Jinja references in config.env.j2, not literals, so this reads their source —
 # defaults/main.yml — instead of the rendered template.
 
@@ -84,13 +64,6 @@ _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 def _worst_lock_hold(defaults: dict) -> int:
     """The four k8s-path terms of the git-tree lock hold, EXCLUDING this unit's own flock wait
     (which is spent before the lock is held).
-
-    NOT the longest hold on every path, and the difference is named rather than papered over:
-    the DOCKER `deploy_io.deploy()` runs `ansible-playbook` with no timeout at all, and waits
-    up to `deploy_locks.SERVICE_LOCK_WAIT_S` for its service locks, both inside this same hold.
-    Nothing bounds that path, so nothing here can sum it. It is unreachable on the only host
-    that runs this unit — daniel-box declares every containers_list entry `platform: k8s` — and
-    the day a Docker service lands there, this function is what has to grow a fifth term.
 
     All four terms are on the SAME path and are additive, not alternative: consult_staging runs
     inside `if cs.k8s_deploy:` in main(), ahead of deploy_k8s, so an activation that stalls the

@@ -66,8 +66,6 @@ class Config:
     branch: str = "master"
     hostname: str = "unknown-host"
     discord_webhook: str = ""
-    health_timeout_s: int = 300
-    run_budget_s: int = 1020
     require_ci: bool = False
     ci_contexts: frozenset[str] = frozenset()
     ci_repo: str = ""
@@ -178,8 +176,6 @@ def load_config(env: Mapping[str, str]) -> Config:
         branch=env.get("BRANCH", "master"),
         hostname=env.get("HOSTNAME", "unknown-host"),
         discord_webhook=env.get("DISCORD_WEBHOOK", ""),
-        health_timeout_s=_int("HEALTH_TIMEOUT_S", 300),
-        run_budget_s=_int("RUN_BUDGET_S", 1020),
         require_ci=require_ci,
         ci_contexts=ci_contexts,
         ci_repo=ci_repo,

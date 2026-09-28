@@ -17,7 +17,7 @@ leaf that imported this module would get a second copy of it whenever the deploy
 `__main__`. Reach `deploy_io` and `deploy_alerts` QUALIFIED, not by from-import.
 
 Config comes from /etc/gitops-deploy/config.env (KEY=VALUE), written by Ansible:
-  REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK, HEALTH_TIMEOUT_S,
+  REPO_DIR, BRANCH, HOSTNAME, DISCORD_WEBHOOK,
   REQUIRE_CI, CI_CONTEXTS, GITHUB_REPO
 
 `deploy_config.load_config` parses it into one frozen `Config`, and CONFIG is that object. The
@@ -88,11 +88,6 @@ CONFIG = load_config(C)
 REPO = CONFIG.repo
 BRANCH = CONFIG.branch
 HOSTNAME = CONFIG.hostname
-TIMEOUT = CONFIG.health_timeout_s
-# The Docker health gate's wall-clock budget. Nothing reads RUN_BUDGET_S or TIMEOUT since #2805
-# removed that gate. Both still feed the unit's TimeoutStartSec arithmetic, which
-# test_gitops_deploy_timeout_budgets.py holds, so their removal is #2834.
-RUN_BUDGET_S = CONFIG.run_budget_s
 
 # ── k8s auto-deploy ───────────────────────────────────────────────────────────────────────────
 # OFF unless the host explicitly enables it, so a host that has not re-templated config.env
@@ -215,8 +210,8 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    FIVE of the nineteen kwargs below are load-bearing, and fourteen are not — that asymmetry
-    is deliberate, so do not prune the fourteen. The four:
+    FIVE of the seventeen kwargs below are load-bearing, and twelve are not — that asymmetry
+    is deliberate, so do not prune the twelve. The four:
 
       - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
         literal fallback in this file is what `scripts/docs/gen_doc_fragments.py` reads.
@@ -228,7 +223,7 @@ def tick_config() -> Config:
       - `repo`, `staging_gate` and `staging_subset` are what `tests/conftest.py`'s `tick`
         fixture repoints — so `staging_subset` is load-bearing twice over.
 
-    The other fourteen equal CONFIG's fields today and are passed anyway, so that a patch of ANY
+    The other twelve equal CONFIG's fields today and are passed anyway, so that a patch of ANY
     module constant above reaches the phases. Dropping them would make the set of constants a
     test may repoint an implicit list nobody maintains, and the failure would be a fixture that
     silently describes the host's settings instead of the scripted ones.
@@ -244,8 +239,6 @@ def tick_config() -> Config:
         repo=REPO,
         branch=BRANCH,
         hostname=HOSTNAME,
-        health_timeout_s=TIMEOUT,
-        run_budget_s=RUN_BUDGET_S,
         k8s_autodeploy_enabled=K8S_AUTODEPLOY_ENABLED,
         k8s_autodeploy_enabled_in_file=K8S_AUTODEPLOY_ENABLED_IN_FILE,
         k8s_autodeploy_pilot=K8S_AUTODEPLOY_PILOT,
