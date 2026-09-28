@@ -11,6 +11,7 @@ def _edb(
     *,
     cites: frozenset[tuple[str, str]] = frozenset({(U, A)}),
     recorded: Mapping[tuple[str, str], str] | None = None,
+    recorded_units: frozenset[str] | None = None,
     current: Mapping[str, str] | None = None,
     live: frozenset[str] = frozenset(),
     transport_failed: frozenset[str] = frozenset(),
@@ -23,9 +24,12 @@ def _edb(
         recorded = {(U, A): "h1"}
     if current is None:
         current = {A: "h1"}
+    if recorded_units is None:
+        recorded_units = frozenset(u for u, _a in recorded)
     return Edb(
         cites=cites,
         recorded=recorded,
+        recorded_units=recorded_units,
         current=current,
         live=live,
         transport_failed=transport_failed,
@@ -68,6 +72,19 @@ def test_never_verified_unit_is_unverified():
     e = _edb(recorded={})
     i = derive(e)
     assert U not in i.out and status_of(e, i, U) == "UNVERIFIED"
+
+
+def test_a_recorded_unit_with_no_recorded_atom_is_not_unverified():
+    # A probe-only section: verify writes its row, but a probe has no hash to put in it.
+    p = "probe.py kuma-drift"
+    e = _edb(
+        cites=frozenset({(U, p)}),
+        recorded={},
+        recorded_units=frozenset({U}),
+        live=frozenset({p}),
+        transport_failed=frozenset({p}),
+    )
+    assert status_of(e, derive(e), U) == "UNKNOWN"
 
 
 def test_missing_atom_on_a_never_verified_unit_is_unverified_not_out():

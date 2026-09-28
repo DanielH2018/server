@@ -22,7 +22,6 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import argparse
 from pathlib import Path
 
-from lib.facts.atoms import HASHED_FORMS
 from lib.facts.lint import changed_units, lint_sections
 from lib.facts.lock import (
     LOCK_REL,
@@ -64,29 +63,21 @@ def cmd_verify(args: argparse.Namespace) -> int:
     repo = Path(args.repo)
     by_unit = repo_citations(repo)
     units = list(args.units)
-    probe_only: list[str] = []
     if args.unverified:
         # Sections with NO lock row only. The flag can therefore never launder a `moved`
         # atom — a verified section is untouched by it, whatever state it is in — so
         # raising coverage in bulk is safe in a way re-verifying in bulk would not be.
         recorded = set(read_lock(repo / LOCK_REL))
         fresh = sorted(set(by_unit) - recorded - set(units))
-        # A section citing nothing but a probe has no atom this store can hash, so verify
-        # would write it an empty row — and an empty row reads UNVERIFIED anyway, because
-        # `relations` derives the recorded units from the recorded ATOMS. Leaving the row
-        # out keeps the lock a record of hashes rather than of runs. A section citing
-        # nothing at all is a convention and never had a row to write.
-        probe_only = [
-            u
-            for u in fresh
-            if by_unit[u] and not any(c.form in HASHED_FORMS for c in by_unit[u])
-        ]
-        units += [u for u in fresh if by_unit[u] and u not in set(probe_only)]
+        # A section citing nothing is a convention and never had a row to write. A section
+        # citing only a probe gets an empty row: the row is what moves it from UNVERIFIED to
+        # UNKNOWN, since `relations` reads the recorded units from the lock's keys.
+        units += [u for u in fresh if by_unit[u]]
     if not units:
         if not args.unverified:
             print("name a section, or pass --unverified", file=_sys.stderr)
             return _USAGE
-        print("every section that cites a hashable atom already has a lock row")
+        print("every section that cites an atom already has a lock row")
         return 0
     args.units = units
     unknown = [u for u in units if u not in by_unit]
@@ -107,12 +98,6 @@ def cmd_verify(args: argparse.Namespace) -> int:
         print(f"verified {u} at {head}: {len(lock[u]['atoms'])} atoms")
     if skipped:
         print(f"skipped {len(skipped)} unresolved: {', '.join(skipped)}")
-    if probe_only:
-        print(
-            f"left {len(probe_only)} probe-only sections unrecorded: this store can hash "
-            "no atom they cite, so they stay UNVERIFIED until a reconcile run supplies a "
-            "probe's shape"
-        )
     return 0
 
 

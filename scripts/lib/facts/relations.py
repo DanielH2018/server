@@ -17,6 +17,10 @@ STATUSES = frozenset({"IN", "OUT", "UNKNOWN", "UNVERIFIED", "UNDECLARED", "CONVE
 class Edb:
     cites: frozenset[tuple[str, str]]
     recorded: Mapping[tuple[str, str], str]
+    # The units that HAVE a lock row, read from the lock's keys rather than derived from
+    # `recorded`. A section citing only a probe records no atom, so deriving the set from
+    # the atom pairs would leave its row invisible and the section UNVERIFIED for good.
+    recorded_units: frozenset[str]
     current: Mapping[str, str]
     live: frozenset[str]
     transport_failed: frozenset[str]
@@ -65,8 +69,8 @@ def derive(edb: Edb) -> Idb:
     """
     cites = edb.cites
     # A unit with no lock row at all is UNVERIFIED, not OUT: missing and unrecorded grade
-    # only a unit verify has already recorded at least one atom for.
-    recorded_units = frozenset(u for u, _a in edb.recorded)
+    # only a unit verify has already recorded, even one it recorded no atom for.
+    recorded_units = edb.recorded_units
     # A live probe with no answer is unknown, not missing: only live probes earn UNKNOWN.
     # A non-live atom in transport_failed is missing/unrecorded, making the unit OUT.
     missing = frozenset(

@@ -223,16 +223,17 @@ def test_reverify_with_unresolvable_ref_is_usage_error(tmp_path, capsys):
     assert "cannot resolve" in capsys.readouterr().err
 
 
-def test_verify_unverified_leaves_a_probe_only_section_unrecorded(tmp_path, capsys):
-    """An empty row records no hash and still reads UNVERIFIED, so none is written."""
+def test_verify_unverified_records_a_probe_only_section_as_unknown(tmp_path, capsys):
+    """The row holds no hash, and it is still what takes the section out of UNVERIFIED."""
     repo = _repo(tmp_path)
     (repo / "CLAUDE.md").write_text(
         "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Down\n`probe.py monitors` answers it.\n"
     )
     assert main(["verify", "--repo", str(repo), "--unverified"]) == 0
-    out = capsys.readouterr().out
-    assert "left 1 probe-only sections unrecorded" in out
-    assert "CLAUDE.md#Down" not in read_lock(repo / "docs" / "facts.lock")
+    assert read_lock(repo / "docs" / "facts.lock")["CLAUDE.md#Down"]["atoms"] == {}
+    capsys.readouterr()
+    assert main(["status", "--repo", str(repo)]) == 0
+    assert "UNKNOWN  CLAUDE.md#Down" in capsys.readouterr().out
 
 
 def test_reverify_names_a_moved_atom_in_a_section_the_commit_did_not_edit(

@@ -174,6 +174,7 @@ def build_repo_edb(
     return Edb(
         cites=frozenset(cites),
         recorded=recorded,
+        recorded_units=frozenset(lock),
         current=current,
         live=frozenset(live),
         transport_failed=frozenset(failed),
