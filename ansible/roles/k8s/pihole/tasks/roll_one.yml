@@ -2,9 +2,11 @@
 # One instance: restart, then block until it is serving again. Included per instance so the
 # next Pi-hole is never taken down while this one is still coming back.
 #
-# Skipped entirely when this run just created the Deployment (mirrors the guard at
-# roles/k8s/manifests/tasks/main.yml:156): its pod has not appeared yet, so a `rollout
-# restart` here races the initial rollout instead of following it.
+# Skipped entirely when the shared apply just created the Deployment (mirrors the guard in
+# roles/k8s/manifests/tasks/main.yml): its pod has not appeared yet, so a `rollout restart` here
+# races the initial rollout instead of following it. That apply only ever creates instance 1 since
+# #2884, so for pihole-2 the block runs and apply_instance_2.yml carries the `created` guard
+# instead — it has to, because it is the task that would do the creating.
 - name: Roll instance if this run did not just create it {{ pihole_instance }}
   tags: [deploy]
   # `| default('')` — see the same guard in k8s/claude-otel for why an unreadable register
@@ -33,10 +35,46 @@
       become: true
       changed_when: false
 
-    # Skipped when the apply already rolled this instance -- its pod template changed, which
-    # an image-pin bump does -- and only the restart is skipped: the sibling check above and
-    # the rollout wait below still run, so the play still follows the roll the apply started
-    # one instance at a time. A second roll here deleted the pod the apply had just created
+    # The wait above cannot tell a serving sibling from a terminating one. A pod that has begun
+    # terminating keeps phase `Running` and condition `Ready` for its whole grace period, so on
+    # 2026-09-28 the check passed against a `pihole-2` pod that was already going away and the
+    # play restarted `pihole` into a LAN-wide DNS outage it reported as failed=0 (#2884).
+    #
+    # Both Deployments are `replicas: 1` with `Recreate`, so the sibling legitimately has exactly
+    # one pod here and none of it terminating. Any `deletionTimestamp` at all is therefore the
+    # condition to refuse: the jsonpath prints one per pod that carries the field and nothing for
+    # a pod that does not, so an empty read is the only passing answer. failed_when rather than a
+    # retry loop — this is the last moment before the restart, and a sibling mid-termination means
+    # the play's own model of what is serving is wrong.
+    - name: Refuse the restart while the sibling is terminating {{ pihole_instance }}
+      ansible.builtin.command:
+        cmd: >-
+          k3s kubectl -n {{ k8s_namespace }} get pod -l instance={{ pihole_sibling_instance }}
+          -o jsonpath={.items[*].metadata.deletionTimestamp}
+      become: true
+      changed_when: false
+      register: pihole_sibling_terminating
+      failed_when: (pihole_sibling_terminating.stdout | default('') | trim) != ''
+
+    # Instance 2's Deployment is applied HERE, not by the shared role, and this is what makes an
+    # image-pin bump reach the two instances one at a time (#2884). It runs after the checks
+    # above, so instance 1 is serving before instance 2's pod template is allowed to change.
+    - name: Apply the second Pi-hole instance's Deployment
+      ansible.builtin.include_tasks: apply_instance_2.yml
+      when: pihole_instance == 'pihole-2'
+
+    # Skipped when an apply already rolled this instance -- its pod template changed, which an
+    # image-pin bump does -- and only the restart is skipped: the checks above and the rollout
+    # wait below still run, so the play follows that roll instead of adding a second one.
+    #
+    # Which apply depends on the instance, and until #2884 this comment claimed the play followed
+    # the shared apply's roll "one instance at a time", which for an image bump was false: that
+    # apply carried both Deployments and rolled both in the same second. It now carries instance 1
+    # alone (`manifests_rolled_by_apply`), and instance 2 is rolled by apply_instance_2.yml above
+    # (whose verdict arrives as `pihole_k8s_rolled_by_own_apply`, keyed by instance name the
+    # same way, so the gate below reads one shape for both) after instance 1 is serving again.
+    #
+    # A second roll here deleted the pod the apply had just created
     # while the kubelet was mid-pull, and on these Recreate Deployments the wait below sat
     # out the whole pull before the next ReplicaSet could appear (#1994, the self-rollout
     # half of #1988). `manifests_rolled_by_apply` is the shared role's fingerprint verdict, keyed
@@ -47,7 +85,11 @@
         cmd: "k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ pihole_instance }}"
       become: true
       changed_when: true
-      when: not manifests_rolled_by_apply.get(pihole_instance, false)
+      # Two facts, one per apply, both keyed by instance name so neither can suppress the
+      # other instance's restart whatever order the loop runs in.
+      when: >-
+        not (manifests_rolled_by_apply.get(pihole_instance, false)
+             or pihole_k8s_rolled_by_own_apply.get(pihole_instance, false))
 
     - name: Wait for serving Pi-hole instance {{ pihole_instance }}
       ansible.builtin.command:

@@ -1,0 +1,84 @@
+---
+# Apply instance 2's Deployment, from its own staging directory, and work out whether that apply
+# rolled it.
+#
+# Included from roll_one.yml for the `pihole-2` iteration only, after the sibling checks have
+# proved instance 1 is serving. That ordering is the whole point: while both Deployments sat in
+# one file, `kubectl apply -f <dir>/` changed both pod templates in one request and both pods
+# terminated in the same second. Instance 2's new pod also pulled its image through the resolver
+# it was replacing and failed with `lookup registry-1.docker.io: Try again`; applying it while
+# instance 1 serves removes that dependency without a pre-pull, because the registry name still
+# resolves (#2884).
+
+# The same fingerprint the shared role takes across its own apply, for the same reason and with
+# the same failure handling: a pod template that differs across the apply is a roll the apply
+# started, and a `rollout restart` on top of it would delete the pod the apply just created while
+# the kubelet is mid-pull (#1988/#1994). Hashed in the shell so the register carries 64 hex
+# characters rather than a pod template, which can inline an env value. `failed_when: false`
+# because on the first-ever deploy the Deployment does not exist on the before side; a non-zero rc
+# on either side reads as "not rolled", which restarts -- the recoverable direction.
+- name: Fingerprint pihole-2's pod template before its apply
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} get deploy/pihole-2
+      -o jsonpath='{.spec.template}' | sha256sum
+    executable: /bin/bash
+  become: true
+  register: pihole_k8s_instance_2_before
+  changed_when: false
+  failed_when: false
+  # Read-only, and the state it reads exists independently of this play. Without it `--check`
+  # skips the task and the consumer below reads `.rc` off a skip result.
+  check_mode: false
+
+# No --prune: this directory holds one file and the role is not armed for it. The `configured` /
+# `created` wording is kubectl's own, and the changed_when below reads it the way the shared
+# role's apply does.
+- name: Apply pihole-2's Deployment
+  ansible.builtin.command:
+    cmd: "k3s kubectl apply -f {{ pihole_k8s_instance_2_dir }}/"
+  become: true
+  register: pihole_k8s_instance_2_apply
+  changed_when: >-
+    'created' in (pihole_k8s_instance_2_apply.stdout | default(''))
+    or 'configured' in (pihole_k8s_instance_2_apply.stdout | default(''))
+
+- name: Fingerprint pihole-2's pod template after its apply
+  ansible.builtin.shell:
+    cmd: >-
+      set -o pipefail;
+      k3s kubectl -n {{ k8s_namespace }} get deploy/pihole-2
+      -o jsonpath='{.spec.template}' | sha256sum
+    executable: /bin/bash
+  become: true
+  register: pihole_k8s_instance_2_after
+  changed_when: false
+  failed_when: false
+  # Read-only, and the state it reads exists independently of this play. Without it `--check`
+  # skips the task and the consumer below reads `.rc` off a skip result.
+  check_mode: false
+
+# `created` is its own clause because the before-side read fails on a Deployment this apply
+# creates, so the fingerprint comparison cannot see that roll. Restarting a just-created
+# Deployment races its initial rollout, which is the case the shared role's own `created` guard
+# skips -- and after the split the shared apply's own output never names pihole-2, so that guard
+# no longer covers it and this clause is what replaces it.
+- name: Note whether pihole-2's own apply rolled it
+  # Keyed by instance name, like the shared role's own `manifests_rolled_by_apply`, rather than a
+  # bare boolean: the restart gate in roll_one.yml runs once per instance, and a bare fact set
+  # here would also suppress the restart of whichever instance the loop visited next. Written
+  # under the role's own prefix rather than into the shared fact, which ansible-lint refuses
+  # (var-naming[no-role-prefix]) and which would hide who decided the answer.
+  # `--check` skips the apply above whatever its `when:` says, leaving a register with no
+  # `stdout` for this task to read. roll_one.yml is gated on `k8s_no_mutate`, so nothing here is
+  # reachable under `--check` today; the guard says so rather than relying on that.
+  when: not ansible_check_mode
+  ansible.builtin.set_fact:
+    pihole_k8s_rolled_by_own_apply: >-
+      {{ {'pihole-2': (
+           (pihole_k8s_instance_2_apply.stdout | default('')) is search('deployment.apps/pihole-2 created')
+           or ((pihole_k8s_instance_2_before.rc | default(1)) == 0
+               and (pihole_k8s_instance_2_after.rc | default(1)) == 0
+               and (pihole_k8s_instance_2_before.stdout | default('')) != (pihole_k8s_instance_2_after.stdout | default('')))
+         )} }}

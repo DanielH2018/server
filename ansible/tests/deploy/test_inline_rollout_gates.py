@@ -207,6 +207,13 @@ _UNRESOLVED_TARGETS = {
         "pihole",
         "Rebuild gravity after a blocklist change",
     ): "execs a pod name resolved at runtime; ordering carried by the gated lookup above it",
+    # This read IS the gate (#2884): it refuses to restart one instance while the other is
+    # terminating. Requiring a rollout to have been proved before it would invert the ordering —
+    # the whole point is that it runs before anything rolls.
+    (
+        "pihole",
+        "Refuse the restart while the sibling is terminating {{ pihole_instance }}",
+    ): "reads the sibling's pods to decide whether a roll may start; it precedes every roll",
 }
 
 

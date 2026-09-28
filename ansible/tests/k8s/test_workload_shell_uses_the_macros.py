@@ -49,7 +49,10 @@ _MUST_CONTAIN = frozenset(
     {
         "authelia/deployment.yaml.j2",
         "traefik/deployment.yaml.j2",
-        "pihole/deployment.yaml.j2",
+        # pihole renders both its Deployments from one macro body, and this census reads
+        # `kind:` out of the template text rather than a render — so the file to scan is the
+        # macro, not either caller (#2884).
+        "pihole/pihole-deployment.yaml.j2",
         "claude-otel/prometheus.yaml.j2",
         "node-exporter/daemonset.yaml.j2",
         "dri-device-plugin/daemonset.yaml.j2",
