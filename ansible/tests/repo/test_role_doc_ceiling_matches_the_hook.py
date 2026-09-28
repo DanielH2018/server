@@ -1,0 +1,40 @@
+"""The role-doc character ceiling is the inject hook's payload budget, and stays equal to it.
+
+`_doc_size.MAX_CHARS` is what the two role-doc guards fail over, and it means something only
+because `.claude/hooks/inject-nested-docs.py:INLINE_MAX_CHARS` is the point where that hook
+stops inlining a doc and injects its head instead. Two numbers in two trees drift, and the
+drift is silent: the guard keeps passing docs the hook has started truncating. #2826 is what
+that looks like at scale, in the other unit — a 400-line ceiling passed 30 of 93 role docs the
+hook was already cutting.
+
+Run: uv run pytest ansible/tests/repo/test_role_doc_ceiling_matches_the_hook.py
+"""
+
+import pytest
+from _doc_size import INJECT_HOOK, MAX_CHARS, hook_inline_max_chars
+
+
+def test_the_ceiling_equals_the_hooks_inline_budget():
+    assert MAX_CHARS == hook_inline_max_chars(), (
+        f"_doc_size.MAX_CHARS is {MAX_CHARS} and {INJECT_HOOK.name} inlines up to "
+        f"{hook_inline_max_chars()} — move the ceiling to the hook's budget, or say in both "
+        f"files why a role doc is held to a different number"
+    )
+
+
+def test_the_live_hook_still_carries_the_literal():
+    """Non-vacuity: the reader finds its subject by pattern, so it must find the real one."""
+    assert hook_inline_max_chars() > 0
+
+
+def test_a_hook_without_the_literal_is_flagged(tmp_path):
+    hook = tmp_path / "inject-nested-docs.py"
+    hook.write_text("BUDGET = 7500\n")
+    with pytest.raises(AssertionError, match="no longer assigns INLINE_MAX_CHARS"):
+        hook_inline_max_chars(hook)
+
+
+def test_a_hook_with_the_literal_is_read(tmp_path):
+    hook = tmp_path / "inject-nested-docs.py"
+    hook.write_text('"""Doc."""\n\nINLINE_MAX_CHARS = 1234\nINLINE_MAX_LINES = 190\n')
+    assert hook_inline_max_chars(hook) == 1234

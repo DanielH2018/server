@@ -48,7 +48,9 @@ Sessions read the full doc after 61 of 262 outline injections over 2026-09-21..2
 against 69 of 425 Bash-only pairs (16%) before the hook existed, so the headings bought
 almost nothing over no injection at all. The head spends the same budget on text a session
 can act on without a second read: a role doc opens with its generated `## At a glance` block
-and its operative rules.
+and its operative rules. The head path retires only when the `OVER_CEILING` lists in
+`ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and its setup sibling are empty: those
+name every role doc still over `INLINE_MAX_CHARS`, and each entry is a doc to trim (#2826).
 
 Observability-shaped: never emits a decision, swallows every error and exits 0.
 """
