@@ -93,4 +93,3 @@ A `moved` or `missing` atom is refused and left red, whatever else the commit di
 contract: a documented claim whose support drifted is re-read by a person, and the hook exists
 to remove the second commit, not the reading. It fails like a formatter — it writes the lock
 and exits non-zero, so `git add docs/facts.lock` and commit again.
-
