@@ -343,3 +343,48 @@ def test_a_tampered_lock_is_never_reverified_over(tmp_path):
     assert done == []
     assert [f.kind for f in blocking] == ["lock-tampered"]
     assert lock_tampered(lock_path)
+
+
+def test_a_citation_the_author_deleted_is_reverified(tmp_path):
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace(", ENFORCED by `t/test_m.py::test_limit`", "")
+    )
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert (done, blocking) == (["CLAUDE.md#Gate"], [])
+    assert (
+        "t/test_m.py::test_limit"
+        not in read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["atoms"]
+    )
+
+
+def test_a_cited_file_leaving_the_index_is_refused(tmp_path):
+    """Untracking a cited file drops the same atom the author would have dropped.
+
+    The sentence still names the file, so the claim is now stale and a person reads it.
+    """
+    repo = _repo(tmp_path)
+    verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
+    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
+    subprocess.run(
+        ["git", "rm", "-q", "-f", "--cached", "t/test_m.py"],
+        cwd=repo,
+        check=True,
+        env=env,
+    )
+    (repo / "CLAUDE.md").write_text(
+        DOC.format(repo="t/").replace("bounds it", "still bounds it")
+    )
+
+    done, blocking = reverify_benign(
+        repo, repo / LOCK_REL, {"CLAUDE.md#Gate"}, "def5678"
+    )
+
+    assert done == []
+    assert [f.kind for f in blocking] == ["atom-no-longer-cited"]
+    assert read_lock(repo / LOCK_REL)["CLAUDE.md#Gate"]["verified_sha"] == "abc1234"

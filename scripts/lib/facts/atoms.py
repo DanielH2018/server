@@ -6,9 +6,11 @@ docstrings stripped (a reword must not invalidate a claim about a value), a YAML
 atom does not resolve; a probe atom is never hashed here — its shape hash needs a live run.
 
 A **path** atom is about location, not content, so its hash is over the path itself: the atom
-resolves while the file or directory is there and reads ``None`` once it is gone, which is
-what makes a delete or a rename a ``missing`` finding. The finer claim — a value, a key, a
-decision, a test's body — has a form of its own, and those are the forms that content-hash.
+resolves while the file or directory is there and reads ``None`` once it is gone. A delete or
+a rename therefore still fails CI, though the finding it raises is ``atom-no-longer-cited``
+rather than ``missing`` — a citation stops being support the moment it stops naming a tracked
+file, so the atom leaves the section's citations before it can fail to hash. The finer claim —
+a value, a key, a decision, a test's body — has a form of its own, and those content-hash.
 Hashing a cited file's bytes instead made every edit anywhere in it a finding about a
 sentence that only said where the file lives: 687 of the 1,253 commits in the 30 days to
 2026-09-28 touched a cited file that way, and none of them corrected a documented claim.

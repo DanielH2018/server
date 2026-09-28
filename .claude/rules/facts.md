@@ -46,8 +46,10 @@ symbol or the marker instead.
 ## What each form's hash is over
 
 A path atom hashes **existence**, not content. A bare path says where something lives, so the
-claim it supports breaks when the file or directory goes away — a delete or a rename reads
-`missing` — and not when someone edits the file. The finer claim has a form of its own: cite
+claim it supports breaks when the file or directory goes away, and not when someone edits the
+file. A delete or a rename reads `atom-no-longer-cited` rather than `missing`: support has to
+name a tracked file, so the atom leaves the section's citations before it can fail to hash.
+The finer claim has a form of its own: cite
 the symbol, the YAML key, the `DECIDED:` marker or the test node, and those four content-hash.
 This is why a Renovate pin bump under a cited role directory no longer arrives red. Hashing a
 cited file's bytes instead made an edit anywhere in it a finding about a sentence that only
@@ -89,7 +91,17 @@ text **and** no recorded atom of that section moved. `scripts/lib/facts/lock.py:
 is the pair that qualifies — `unrecorded-atom` and `atom-no-longer-cited`, both of them the
 author adding or dropping a citation in the diff they are already looking at.
 
+One `atom-no-longer-cited` is refused anyway, because it has a second cause. Untracking a
+cited file drops the atom exactly as deleting the sentence would, so
+`scripts/lib/facts/lock.py:_spans_still_in_the_prose` asks which happened: a span the section
+still writes means the tree lost the file while the claim stands, and that is a claim to
+re-read.
+
 A `moved` or `missing` atom is refused and left red, whatever else the commit did. That is the
 contract: a documented claim whose support drifted is re-read by a person, and the hook exists
 to remove the second commit, not the reading. It fails like a formatter — it writes the lock
 and exits non-zero, so `git add docs/facts.lock` and commit again.
+
+**Nothing ratchets the IN count.** A section added tomorrow arrives UNVERIFIED and fails
+nothing, so run `verify --unverified` when you add one, the way you would run the role-glance
+generator.
