@@ -16,11 +16,11 @@ non-zero if any template fails to render, fails `bash -n`, fails shellcheck, or 
 itself isn't available (a missing linter degrades the gate silently otherwise — fail loud
 instead of falling back to bash -n alone).
 
-This module is the entry point; the pieces it composes live in `scripts/lib/`:
-`ansible_jinja_compat` (Ansible's `search` test and `bool` filter, which vanilla Jinja2 lacks),
-`shell_lint` (render, then `bash -n` and shellcheck), `cron_targets` (which templates a cron
-`job:` actually schedules) and `cron_checks` (the PATH and KUBECONFIG rules those targets must
-satisfy).
+This module is the entry point. `ansible_jinja_compat` in `scripts/lib/` supplies Ansible's
+`search` test and `bool` filter, which vanilla Jinja2 lacks. The pieces only this validator
+imports live in `validate_lib/`: `shell_lint` (render, then `bash -n` and shellcheck),
+`cron_targets` (which templates a cron `job:` actually schedules) and `cron_checks` (the PATH
+and KUBECONFIG rules those targets must satisfy).
 """
 
 import shutil
@@ -36,12 +36,12 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from lib.cron_checks import (
+from validate.validate_lib.cron_checks import (
     cron_kubeconfig_error,
     cron_path_error,
     cron_uv_interpreter_error,
 )
-from lib.cron_targets import cron_job_scripts
+from validate.validate_lib.cron_targets import cron_job_scripts
 from lib.render_guard import (
     ALL_VARS,
     ANSIBLE,
@@ -53,7 +53,7 @@ from lib.render_guard import (
 )
 from lib.repo_paths import ROLES
 from lib.ansible_jinja_env import template_env
-from lib.shell_lint import (
+from validate.validate_lib.shell_lint import (
     bash_syntax_check,
     find_shellcheck,
     shellcheck_batch,

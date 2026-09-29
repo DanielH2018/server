@@ -6,9 +6,9 @@ single run: unresolved claimNames, schema failures, a role default shadowing the
 https route with no `tls:`, a NetworkPolicy on a Service's port, and the coverage tail naming
 any object no schema checked.
 
-The unit tests for the pieces `main()` calls live beside those pieces, under
-`scripts/lib/tests/` — `test_k8s_yaml.py`, `test_k8s_pvc.py`, `test_k8s_schema.py`,
-`test_k8s_context.py` and `test_k8s_net_rules.py`. They were split out of this file on
+The unit tests for the pieces `main()` calls live beside those pieces: `test_k8s_yaml.py`,
+`test_k8s_pvc.py` and `test_k8s_context.py` under `scripts/lib/tests/`, and `test_k8s_schema.py`
+and `test_k8s_net_rules.py` in this directory. They were split out of this file on
 2026-09-04 with the code they cover. What stays here is what needs the real tree.
 
 Run: uv run pytest scripts/validate/tests/test_validate_k8s_manifests.py
@@ -19,7 +19,7 @@ import io
 
 import pytest
 
-from lib import k8s_schema
+from validate.validate_lib import k8s_schema
 from validate import k8s_manifests as vkm
 
 
@@ -115,7 +115,7 @@ def test_an_object_no_vendored_schema_covers_is_flagged(monkeypatch, tmp_path):
     proof for `main()` itself, which is why it carries the `..._is_flagged` name that guard's
     convention asks for.
 
-    `CRD_SCHEMA_DIR` is patched on `lib.k8s_schema`, the module that reads it. Patching the
+    `CRD_SCHEMA_DIR` is patched on `validate.validate_lib.k8s_schema`, the module that reads it. Patching the
     facade's re-export would rebind a name nothing looks at, and the assertions below would
     fail — which is the good failure: a dead patch cannot pass here.
     """

@@ -18,7 +18,7 @@ from pathlib import Path
 # A directly-invoked script gets only its own directory on sys.path, and pyproject's
 # `pythonpath` is a pytest setting — so the cross-directory imports below need the
 # scripts/ root here, the same way its siblings reach it.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from lib.ansible_jinja_env import render_template
 

@@ -16,7 +16,7 @@ import subprocess
 
 import pytest
 from validate import shell_templates as v
-from lib import shell_lint as sl
+from validate.validate_lib import shell_lint as sl
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"

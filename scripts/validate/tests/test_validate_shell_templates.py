@@ -13,7 +13,7 @@ import shutil
 import pytest
 from validate import shell_templates as v
 from lib import ansible_jinja_compat as ajc
-from lib import shell_lint as sl
+from validate.validate_lib import shell_lint as sl
 
 
 # The inputs `to_bool`'s tables name, the inputs `convert_bool.boolean` accepts and `to_bool`

@@ -28,7 +28,7 @@ from pathlib import Path
 import pytest
 from _helpers import ANSIBLE, registry_secret_names
 
-# The resolver is shared with scripts/lib/cron_targets.py so the two checks
+# The resolver is shared with scripts/validate/validate_lib/cron_targets.py so the two checks
 # cannot disagree about what a group contains.
 from lib import release_bin_groups
 
@@ -60,7 +60,7 @@ def scan_for_secrets(text, names):
 def release_bin_sources():
     """Every `src` handed to release_bin.yml anywhere in the tree, as (task_file, src).
 
-    Delegates to the shared resolver so this guard and `lib/cron_targets.py` cannot
+    Delegates to the shared resolver so this guard and `validate/validate_lib/cron_targets.py` cannot
     disagree about a group's contents. This function used to keep its own copy, which iterated
     `release_bin_templates` looking for dicts — and that key is a folded Jinja string naming a
     group, so it matched nothing and the guard passed having scanned zero files.
