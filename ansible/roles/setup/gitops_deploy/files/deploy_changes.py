@@ -52,50 +52,6 @@ _ACTIVE_ROLE = re.compile(r"^ansible/roles/containers/([^/]+)/")
 # silent ff-merge, same as the containers/ catch-all.
 _ACTIVE_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
 
-# Build roles that render no workload of their own, mapped to the roles that run what they
-# build. Deploying the key WITHOUT the value builds a new image that nothing rolls onto,
-# and reports green doing it.
-#
-# WHY A COUPLING EXISTS AT ALL. image-builder appends a rebuilt image to `k8s_rebuilt_images`,
-# which roles/k8s/manifests turns into `manifests_image_changed` and rolls on. That fact is
-# PLAY-SCOPED, so the build and the rollout must happen in one ansible-playbook run; two runs
-# lose it and leave the old pods up. `roles/k8s/n8n/defaults/main.yml` records the incident
-# (2026-08-08 `@n8n/di`). A prose prescription to deploy both tags together was missed by every
-# path→tag derivation: a Renovate Dockerfile bump derived the build role alone.
-#
-# EMPTY SINCE #2813. Every role under roles/k8s/ that includes image-builder renders its own
-# workload manifest, so a single tag covers build and roll and the fact never crosses a role
-# boundary. The one split role, n8n-images, folded into n8n. test_build_roll_couplings.py
-# re-derives that population from the role sources, so a new split build role fails the test
-# rather than silently inheriting the bug.
-#
-# ONE-DIRECTIONAL. Editing a consumer's manifests needs no rebuild — a manifest change rolls
-# on its own — so an entry must not be read as a symmetric pair.
-_BUILD_ROLL_COUPLINGS: dict[str, tuple[str, ...]] = {}
-
-
-def expand_build_couplings(tags, couplings=_BUILD_ROLL_COUPLINGS):
-    """`tags` plus the workload roles any build role among them requires.
-
-    `couplings` defaults to the live map; a test passes its own, since the live one is empty.
-
-    Called by the TAG derivations -- `deploy_tags.py changed` and land_tags.py -- and
-    deliberately NOT by `services_from_changed_paths`, whose `cs.k8s` also feeds
-    `split_k8s_auto_deploy`. A coupled role is added with no changed path of its own, so
-    `image_only()` would diff an untouched defaults/main.yml and could read the empty result
-    as vacuously image-only, promoting a role nothing asked for. n8n is denylisted today, so
-    that is a latent hazard rather than a live one -- which is exactly the kind that should
-    not be created. Widening a hand-scoped deploy is safe: the added role is one a correct
-    deploy would have included anyway, and deploying a workload whose image did not move
-    rolls nothing.
-    """
-    widened = set(tags)
-    for build_role, needs in couplings.items():
-        if build_role in widened:
-            widened.update(needs)
-    return widened
-
-
 # The Pi's shared Compose deploy path, which daniel-box's play never reads: Pi work
 # (`ChangeSet.pi_shared`), not a broad change buying a full `deploy.yml` run here (#2805).
 _PI_SHARED_PREFIX = "ansible/roles/containers/common/"

@@ -287,17 +287,11 @@ def _load_deploy_logic():
     """
     from deploy_logic import (
         broad_remediation,
-        expand_build_couplings,
         k8s_remediation,
         services_from_changed_paths,
     )
 
-    return (
-        services_from_changed_paths,
-        broad_remediation,
-        expand_build_couplings,
-        k8s_remediation,
-    )
+    return services_from_changed_paths, broad_remediation, k8s_remediation
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -334,7 +328,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     # the cross-directory import they are kept clear of.
     from land_changes import changes_for
 
-    _, broad_remediation, _, _ = _load_deploy_logic()
+    _, broad_remediation, _ = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -418,7 +412,6 @@ def changed(ref: str, cwd: Path = REPO) -> int:
     (
         services_from_changed_paths,
         broad_remediation,
-        expand_build_couplings,
         k8s_remediation,
     ) = _load_deploy_logic()
     # Calls the mapper directly, NOT through the `land_changes.changes_for` the other five
@@ -474,8 +467,7 @@ def changed(ref: str, cwd: Path = REPO) -> int:
             file=sys.stderr,
         )
 
-    # A build role whose workload lives in a different role must not deploy alone.
-    tags, shared = split_shared_roles(expand_build_couplings(cs.k8s) | cs.services)
+    tags, shared = split_shared_roles(cs.k8s | cs.services)
     if shared:
         # Emitting these as tags is what PR #617 did, and deploy.sh then refuses the whole
         # list (exit 2) — so the shared roles leave the tag list and become an instruction

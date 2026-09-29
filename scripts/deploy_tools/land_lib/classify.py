@@ -15,7 +15,7 @@ from typing import Any
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))  # scripts/
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.outcome import Outcome, Verdict, say
-from deploy_tools.land_tags import DeriveSource, expand_build_couplings
+from deploy_tools.land_tags import DeriveSource
 
 
 def _classified(
@@ -175,8 +175,8 @@ def classify(ln: Landing) -> None:
     ln.resolved_tags = list(tags)
     if source == DeriveSource.PR:
         # Which of these tags a changed PATH proves is a k3s change (#2730). Read over `paths`
-        # rather than `tags`, which `derive` has already widened with the build couplings: a
-        # coupled tag is named by no path, so nothing proves its platform. The FALLBACK path
+        # rather than `tags`, so that a tag `derive` reached some other way than by path stays
+        # unproven rather than being credited to a tree. The FALLBACK path
         # answers the same question in step 5 instead, over the diff's paths rather than this
         # file list, which `gh` truncated -- `deploy.record_k8s_only` (#2738).
         ln.k8s_only = _classified(
@@ -200,11 +200,9 @@ def classify(ln: Landing) -> None:
                 )
         extra = set().union(*reached.values()) - set(tags)
         if extra:
-            # Recorded BEFORE `expand_build_couplings`: a coupled tag is named by neither a
-            # path nor the caller graph, so nothing here proves which platform it belongs to
-            # and it stays routed to every host that declares it (#2718).
+            # The caller graph is the provenance, so these ARE proven k3s (#2718).
             ln.k8s_only = sorted(set(ln.k8s_only) | extra)
-            ln.resolved_tags = sorted(expand_build_couplings(set(tags) | extra))
+            ln.resolved_tags = sorted(set(tags) | extra)
     if source == DeriveSource.FALLBACK:
         if not ln.opts.since:
             ln.die(

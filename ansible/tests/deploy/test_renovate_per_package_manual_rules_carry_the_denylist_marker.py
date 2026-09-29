@@ -15,7 +15,7 @@ from `customManagers`: a manager with a `depNameTemplate` names its package outr
 file it matches owns the pin; one without derives the name from the file, so the file must
 carry the package literally (the `_image:` pins). Renovate's built-in `dockerfile` manager
 reads the n8n Dockerfiles with no entry in `customManagers`, so it is spelled here. A build role that renders no workload of
-its own would hand the bump to the role that runs what it builds, through `_BUILD_ROLL_COUPLINGS`
+its own would hand the bump to the role that runs what it builds
 in `deploy_changes.py` (empty since #2813) — so ownership follows that same coupling, and a pin
 no role owns fails rather than passing as "not denied".
 `test_renovate_agent_unit.py` reads the marker out of every such groupName and pins that the
@@ -30,7 +30,6 @@ from pathlib import Path
 
 from _autodeploy import _denylist
 from _helpers import REPO
-from deploy_changes import expand_build_couplings
 from test_renovate_automerge_follows_the_autodeploy_denylist import (
     MANUAL_GROUP_PREFIX,
     find_rule,
@@ -90,11 +89,9 @@ def pin_owner_roles(
     managers: list[dict],
     files: list[str],
     read=_read,
-    couple=expand_build_couplings,
     datasources: set[str] | None = None,
 ) -> set[str]:
-    """The k8s roles whose files a custom manager reads `package` from, plus the roles a build
-    role among them rolls the result onto.
+    """The k8s roles whose files a custom manager reads `package` from.
 
     `datasources` is the rule's `matchDatasources`: a manager whose datasource the rule never
     matches cannot own its pin, whatever its files say. Without it, a github-releases rule for
@@ -116,7 +113,7 @@ def pin_owner_roles(
                 if named is None and package not in read(rel):
                     continue
                 owners.add(Path(rel).parts[3])
-    return set(couple(owners))
+    return owners
 
 
 def per_package_manual_rules(rules: list[dict]) -> list[dict]:
