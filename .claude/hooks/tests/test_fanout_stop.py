@@ -14,6 +14,7 @@ import json
 import os
 
 from fanout_lib import status
+from fanout_lib.brief import Issue, render_brief
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fanout-stop.py"
@@ -27,9 +28,15 @@ PROGRESS = "Tests pass. Next I will open the PR."
 FINISHED = "Opened https://github.com/DanielH2018/server/pull/2900 and landed it."
 
 
-def _fanout_tree(tmp_path):
-    (tmp_path / ".fanout").mkdir()
-    (tmp_path / ".fanout" / "brief.md").write_text("# Fan-out batch\n")
+# The line only the daniel-box brief carries; a daniel-server brief says to stop at
+# `gh pr create`, which is what makes the marker the right thing to key on.
+LANDING_BRIEF = "# Fan-out batch\n./scripts/deploy_tools/land.sh --pr 1 --arm-merge\n"
+LANDED = FINISHED + "\nVERDICT: settled"
+
+
+def _fanout_tree(tmp_path, brief="# Fan-out batch\n"):
+    (tmp_path / ".fanout").mkdir(parents=True)
+    (tmp_path / ".fanout" / "brief.md").write_text(brief)
     return tmp_path
 
 
@@ -104,3 +111,45 @@ def test_the_hook_and_status_read_the_same_patterns():
     assert _mod.PR_URL.flags == status.PR_URL.flags
     assert _mod.BLOCKER.pattern == status.BLOCKER.pattern
     assert _mod.BLOCKER.flags == status.BLOCKER.flags
+    assert _mod.VERDICT.pattern == status.VERDICT.pattern
+    assert _mod.VERDICT.flags == status.VERDICT.flags
+
+
+def test_a_landing_batch_that_names_a_pr_but_no_verdict_is_blocked(tmp_path):
+    """#2890: on daniel-box `gh pr create` returning is not the finish the brief asks for."""
+    root = _fanout_tree(tmp_path, LANDING_BRIEF)
+    reason = _stop(root, FINISHED)
+    assert reason and "no `VERDICT:` line" in reason
+    # The clean half: the same message on a batch not told to land is a finish.
+    assert _stop(_fanout_tree(tmp_path / "other"), FINISHED) is None
+
+
+def test_a_landing_batch_is_allowed_once_a_verdict_exists(tmp_path):
+    root = _fanout_tree(tmp_path, LANDING_BRIEF)
+    assert _stop(root, LANDED) is None
+    assert not (root / ".fanout" / "stop-blocks").exists()
+
+
+def test_a_verdict_in_the_land_log_finishes_a_batch_that_reported_tersely(tmp_path):
+    root = _fanout_tree(tmp_path, LANDING_BRIEF)
+    (root / ".fanout" / "land1.log").write_text("deploying...\nVERDICT: settled\n")
+    assert _stop(root, FINISHED) is None
+    # The rejecting half: a log with no verdict in it leaves the batch owing one.
+    other = _fanout_tree(tmp_path / "other", LANDING_BRIEF)
+    (other / ".fanout" / "land1.log").write_text("deploying...\n")
+    assert _stop(other, FINISHED) is not None
+
+
+def test_a_landing_batch_may_still_stop_on_a_blocker_line(tmp_path):
+    """A blocker is a finish on either host; the verdict rule must not trap one."""
+    root = _fanout_tree(tmp_path, LANDING_BRIEF)
+    assert _stop(root, "needs input: master CI is red") is None
+
+
+def test_the_landing_marker_is_a_line_the_real_daniel_box_brief_carries():
+    """Non-vacuity: a reworded brief would silently stop the hook asking for a verdict."""
+    issues = [Issue(1, "one", "body")]
+    box = render_brief(issues, "daniel-box", "1", "worktree-orch", [])
+    server = render_brief(issues, "daniel-server", "1", "worktree-orch", [])
+    assert _mod.LANDING_MARKER in box
+    assert _mod.LANDING_MARKER not in server

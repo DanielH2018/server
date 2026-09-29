@@ -12,6 +12,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from fanout_lib.brief import LANDS
 from fanout_lib.manifest import Batch
 
 STATUS_TIMEOUT_S = 30.0
@@ -20,6 +21,10 @@ PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 # both prefixes. `.claude/hooks/fanout-stop.py` lets a session stop on either this or a PR URL,
 # and copies both patterns because the hooks stay stdlib-only; a test holds the copies equal.
 BLOCKER = re.compile(r"(?im)^(?:needs input|failed):")
+# The line `land.sh` prints when the landing reaches a verdict. A batch on the landing host
+# owes one: a PR URL alone says the PR was opened, never that it merged and deployed.
+# `.claude/hooks/fanout-stop.py` copies this pattern too.
+VERDICT = re.compile(r"(?m)^VERDICT:")
 RESULT_TYPE = "result"
 # The state of a batch whose unit ended cleanly but left no report behind it.
 NO_REPORT = "no-report"
@@ -28,6 +33,9 @@ NEEDS_INPUT = "needs-input"
 # A clean finish whose final text names neither a PR nor a blocker: a progress report that
 # ended the turn, left after the Stop hook's continuations ran out (issue #2816).
 NO_PR = "no-pr"
+# A batch on the landing host that opened its PR and ended its turn before `land.sh` printed a
+# verdict. The PR exists; the landing it owes did not finish (issue #2890).
+NO_VERDICT = "no-verdict"
 
 
 @dataclass(frozen=True)
@@ -36,8 +44,9 @@ class BatchStatus:
 
     Attributes:
         batch: the batch id.
-        state: running, done, needs-input, no-pr, no-report, or failed. `done` means the
-            final text carries a PR URL.
+        state: running, done, needs-input, no-pr, no-verdict, no-report, or failed. `done`
+            means the final text carries a PR URL, and on the landing host a verdict with
+            it.
         pr_url: the PR the final text names, or empty.
         final_text: the session's own `result` string, or empty.
         exit_code: the unit's ExecMainStatus, or None when it could not be read.
@@ -49,7 +58,7 @@ class BatchStatus:
     """
 
     batch: str
-    state: str  # running | done | needs-input | no-pr | no-report | failed
+    state: str  # running | done | needs-input | no-pr | no-verdict | no-report | failed
     pr_url: str
     final_text: str
     exit_code: int | None
@@ -64,7 +73,12 @@ def _one(b: Batch) -> str:
         f"echo '=== {b.batch}'; "
         f"systemctl --user show {b.unit} -p ActiveState -p Result -p ExecMainStatus; "
         f"echo '--- stderr'; tail -c 2000 {b.worktree}/.fanout/stderr.log 2>/dev/null; "
-        f"echo; echo '--- report'; cat {b.worktree}/.fanout/report.json 2>/dev/null"
+        f"echo; echo '--- report'; cat {b.worktree}/.fanout/report.json 2>/dev/null; "
+        # The landing's own record, read because a batch can land correctly and still not
+        # echo the verdict into its final message. Only the last line is needed, and
+        # `land.sh` prints one verdict per run.
+        f"echo; echo '--- verdict'; "
+        f"grep -h '^VERDICT:' {b.worktree}/.fanout/land*.log 2>/dev/null | tail -n 1"
     )
 
 
@@ -76,7 +90,7 @@ def stop_command(unit: str) -> str:
     return f"systemctl --user stop {unit}"
 
 
-_SECTION_NAMES = ("stderr", "report")
+_SECTION_NAMES = ("stderr", "report", "verdict")
 
 
 def _section(block: str, name: str) -> str:
@@ -153,12 +167,21 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
         code_text = props.get("ExecMainStatus", "")
         code = int(code_text) if code_text.isdigit() else None
         m = PR_URL.search(final)
+        # Either the agent echoed the verdict or the land log holds it; the log is what keeps
+        # a batch that landed correctly but reported tersely out of `no-verdict`.
+        landed = bool(
+            VERDICT.search(final) or VERDICT.search(_section(body, "verdict"))
+        )
         if props.get("ActiveState") in ("active", "activating"):
             state = "running"
         elif props.get("Result") == "success" and final and not is_error:
             # A non-empty final text is not a finish: a turn that ends on "Next I will open
             # the PR" exits the process just as cleanly as one that opened it (#2816).
-            if m:
+            if m and b.host == LANDS and not landed:
+                # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
+                # Without that, a PR URL only means `gh pr create` returned (issue #2890).
+                state = NO_VERDICT
+            elif m:
                 state = "done"
             elif BLOCKER.search(final):
                 state = NEEDS_INPUT
@@ -215,6 +238,11 @@ def status_line(
 ) -> tuple[str, int]:
     """Render one batch's status line, and the exit tier it contributes.
 
+    A batch on the landing host reads `no-verdict` rather than `done` when nothing — not its
+    final text, not its `land<n>.log` — carries a `VERDICT:` line: the PR was opened and the
+    landing it owes did not finish. A daniel-server batch stops at `gh pr create`, so a PR url
+    alone is `done` there.
+
     A `no-report` batch is reconciled here rather than left as it was parsed: `merged_pr`
     is the only oracle that can tell a batch which finished and removed its own worktree
     from one that died before writing a report, since both leave a unit that exited 0 and
@@ -241,7 +269,7 @@ def status_line(
         line += f" {s.pr_url or landed_url}"
     if s.permission_denials:
         line += f" permission_denials={s.permission_denials}"
-    if state in ("done", NEEDS_INPUT, NO_PR):
+    if state in ("done", NEEDS_INPUT, NO_PR, NO_VERDICT):
         line += f" {one_line(s.final_text)}"
     if state in ("failed", NO_REPORT):
         exit_text = "unknown" if s.exit_code is None else str(s.exit_code)
@@ -258,4 +286,8 @@ def status_line(
         # Tier 1, not 5: the session ended cleanly and its final text is the thing to read,
         # not a stderr log. Not 0 either: no PR exists to land, so an operator has to act.
         return line, 1
+    if state == NO_VERDICT:
+        # Tier 1 for the same reason, and the PR url stays on the line: the work to do is to
+        # land that PR, which nothing here says has merged or deployed.
+        return line + " — land.sh printed no VERDICT", 1
     return line, 5 if state == "failed" else 0
