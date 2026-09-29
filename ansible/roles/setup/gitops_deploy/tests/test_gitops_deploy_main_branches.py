@@ -280,6 +280,21 @@ DEPLOY_SONARR = [
 ]
 
 
+def test_an_image_bump_beside_a_pi_change_deploys_and_names_the_pi_half(
+    gitops_deploy, monkeypatch, tick, capsys
+):
+    """#2836: the bump deploys, and the Pi work it rode in with is still named.
+
+    The promotion used to be refused outright when `cs.services` was non-empty. Dropping that
+    moves the tick off `handle_no_services`, which was the only path that said anything about
+    the Pi half — so `handle_k8s` says it now.
+    """
+    _image_bump(gitops_deploy, monkeypatch, tick, extra_paths=[DOCKER_TEMPLATE])
+    assert gitops_deploy.main(tick.tools) == 0
+    assert tick.playbooks == [DEPLOY_SONARR], "the bump deployed rather than deferring"
+    assert "does not deploy: ['wg-easy']" in capsys.readouterr().out
+
+
 def test_an_image_bump_merges_then_deploys(gitops_deploy, monkeypatch, tick, state_dir):
     _image_bump(gitops_deploy, monkeypatch, tick)
     assert gitops_deploy.main(tick.tools) == 0

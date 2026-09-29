@@ -240,12 +240,16 @@ def split_k8s_auto_deploy(
 
     Fail-closed by construction — anything not promoted stays in `cs.k8s`, which defer-and-alerts
     exactly as it does today.
+
+    A PI DOCKER CHANGE RIDING ALONG DOES NOT DEFER THE BUMP (#2836). It did until then: a
+    non-empty `cs.services` returned early, on the reason that the k8s branch would skip the
+    Docker deploy and its health gate. #2805 removed that arm, so no `has_gitops` host applies
+    a Pi role at all and the k8s branch skips nothing. The bump is promoted and the Pi half is
+    merged and logged, which is what `handle_no_services` already did for it — and what
+    `deploy_handlers.log_pi_changes` now does on every path that merges. `cs.pi_shared` was
+    never read here, so treating the two Pi shapes alike is the other half of the fix.
     """
     if not enabled:
-        return cs
-    if cs.services:
-        # A tick carrying Pi Docker services too. Nothing applies those here, and a combined
-        # push is rare enough that deferring the k8s half keeps a one-plane tick.
         return cs
     promoted: set[str] = set()
     for svc in cs.k8s:

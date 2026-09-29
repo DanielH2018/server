@@ -221,8 +221,9 @@ Each arm below is a rule and the function that holds it. The record page has the
   - **The pilot list is empty, so the denylist alone decides** — an empty pilot means every
     non-denylisted service, the opposite of the empty-denylist guard. The
     `ansible/tests/test_k8s_autodeploy_*.py` family enforces the role shapes that must never
-    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`; promotion is refused when
-    the tick also carries a Pi Docker role change.
+    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`. A Pi Docker change riding
+    along no longer defers the bump (#2836): nothing here applies one, so the k8s branch skips
+    nothing, and `deploy_handlers.log_pi_changes` names the Pi half on every path that merges.
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and
   `meta/deps.yml`** are ff-merged but NOT auto-deployed; the deployer defers-and-alerts once
   per SHA (`tasks_alerted_sha` / `meta_alerted_sha`, `deploy_logic.deferred_service_alerts`).

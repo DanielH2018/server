@@ -1039,8 +1039,12 @@ stay).
     `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
-  - Promotion is refused when the tick also carries a Pi Docker role change, so the tick stays
-    one-plane.
+  - **A Pi Docker change riding along does not defer the bump** (#2836). It did until then, on
+    the reason that the k8s branch would skip the Docker deploy and its health gate; #2805
+    removed that arm, so no `has_gitops` host applies a Pi role and there is nothing to skip.
+    The guard also read `cs.services` and never `cs.pi_shared`, so the two Pi shapes were
+    treated differently for no reason anyone could state. `deploy_handlers.log_pi_changes`
+    names whichever shape rode along, from each handler's own ff-merge.
 
   The original rationale, still accurate for every non-eligible k8s change:
   This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is

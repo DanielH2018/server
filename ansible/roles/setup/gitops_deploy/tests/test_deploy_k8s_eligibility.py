@@ -196,17 +196,34 @@ def test_split_k8s_denies_the_services_the_pilot_used_to_mask():
     assert cs.k8s == set(masked)
 
 
-def test_split_k8s_defers_when_the_tick_also_carries_docker_services():
-    # main()'s k8s branch returns before the Docker deploy + health gate, so promoting here
-    # would silently skip them. Defer instead.
+def test_split_k8s_promotes_beside_a_pi_docker_change():
+    """#2836: the bump is promoted, and the Pi half rides along merged-and-unapplied.
+
+    The early return this replaces was for the Docker deploy and health gate the k8s branch
+    would have skipped. #2805 removed that arm, so no `has_gitops` host applies a Pi role and
+    the k8s branch skips nothing. `deploy_handlers.log_pi_changes` names the Pi half.
+    """
     paths = [
         _SPEEDTEST_DEFAULTS,
         "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
     ]
     cs = _split(paths, denylist={"traefik"})
-    assert cs.k8s_deploy == set()
-    assert cs.k8s == {"speedtest"}
+    assert cs.k8s_deploy == {"speedtest"}
+    assert cs.k8s == set()
     assert cs.services == {"dozzle"}
+
+
+def test_split_k8s_promotes_beside_a_pi_shared_change():
+    """The other Pi shape, which the removed guard never read at all.
+
+    `roles/containers/common/` set `cs.pi_shared` and not `cs.services`, so a bump sharing a
+    tick with it was already promoted while one sharing with a Pi service role was not — the
+    inconsistency #2836 was filed about.
+    """
+    paths = [_SPEEDTEST_DEFAULTS, "ansible/roles/containers/common/tasks/main.yml"]
+    cs = _split(paths, denylist={"traefik"})
+    assert cs.k8s_deploy == {"speedtest"}
+    assert cs.pi_shared is True
 
 
 def test_split_k8s_combined_push_deploys_eligible_defers_denylisted():
