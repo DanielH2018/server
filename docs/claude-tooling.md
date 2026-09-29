@@ -537,7 +537,10 @@ text or a here-document accounted for 30 of 374 role-doc injections. Some of tho
 
 It *denies* a command that blocks on CI (`gh run watch`, `gh pr checks --watch`) and the third or
 later CI-status read in one session, naming the `land.sh --pr <n> --since <sha>` form instead.
-The first two reads are an ordinary glance and pass. Measured over the 7 days to 2026-08-29: 173
+The first two reads are an ordinary glance and pass. A read that names another repository through
+`--repo`/`-R` or a GitHub URL passes and does not count, because land.sh lands only this repo's
+PRs (#2901). `gh run view --log` and `--log-failed` also pass, since they read a finished run's
+log rather than poll a running one. Measured over the 7 days to 2026-08-29: 173
 `gh pr checks` + 75 `gh run list` + 61 `gh run watch` against 29 `land.sh` runs, which is why the
 CLAUDE.md paragraph became a hook.
 
