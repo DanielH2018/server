@@ -496,3 +496,13 @@ stdin
 [Bb]lockquote
 [Cc]allout
 [Uu]ngrouped
+
+# traefik role doc split across two docs/ pages (#2989)
+TLSOption
+SNICheck
+startupProbe
+https
+selfcheck
+[Uu]nban
+Yaegi
+[Dd]atafiles?

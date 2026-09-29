@@ -188,7 +188,7 @@ def _provider(host: str, overrides: dict | None = None) -> dict:
 
 @pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
 def test_empty_services_keep_their_router_is_clean(overrides: dict | None) -> None:
-    # fact: ansible/roles/k8s/traefik/CLAUDE.md#Notable
+    # fact: ansible/roles/k8s/traefik/CLAUDE.md#Client identity and TLS
     assert empty_services_problem(_provider(_HOST, overrides)) is None
 
 

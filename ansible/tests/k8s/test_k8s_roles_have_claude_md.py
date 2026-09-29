@@ -71,7 +71,8 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # (#2826); #2921 started the trim, and configarr and healthchecks left the list by fitting
 # under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
 # plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
-# account each moved to a docs/ page. Each remaining reason names its own next section to move.
+# account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
+# subject across two docs/ pages. Each remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -116,11 +117,6 @@ OVER_CEILING: dict[str, str] = {
     "qbittorrent": (
         "16640 chars on 2026-09-28: the netns-reset and modcache traps are what a session "
         "must read before editing; the throughput-settings history can move to docs/"
-    ),
-    "traefik": (
-        "13487 chars on 2026-09-28: `## Notable` carries the router, middleware and "
-        "rate-limit rules every routed service inherits; split it by subject rather than "
-        "trimming the rules"
     ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
