@@ -207,6 +207,9 @@ nav:
       # Same split as the line above, for k8s/volume-snapshot (#2699): the drill records and the
       # measured traps, kept off the role CLAUDE.md a session loads on every touch of the role.
       - volume-snapshot drill record: volume-snapshot-drills.md
+      # And again for k8s/claude-otel (#2925): the board provenance and the panel-query traps a
+      # 2026-09-10 audit measured, kept off the role CLAUDE.md, which keeps the editing rules.
+      - claude-otel dashboard record: claude-otel-dashboards.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

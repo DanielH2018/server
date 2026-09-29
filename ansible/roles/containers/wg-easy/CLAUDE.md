@@ -64,29 +64,12 @@ the port split only makes sense read together.
   (`initial_setup` tasks, ~line 598) dropped; if it turns out to lean on direct IPv6, keep both. A
   crypto-authed WireGuard port with no valid peer key is safe to expose. (2026-07-06 review Finding 1,
   reframed from "gap" to intentional once the operator confirmed the backup-access purpose.)
-- **UPDATE 2026-08-14 (host flip 1): the two bullets below are history.** The peer pull
-  is now the `roles/k8s/pi-peer-backup` CronJob — same nightly rsync + file-count floor,
-  landing on a Longhorn PVC the 03:30 daily-backup group carries to B2 (Kopia is
-  retired), pushing the same **WG Pi Peer Backup** monitor directly. The
-  `backup_controller_host` var and the monitor-bridge `pi_peers` check retired with it.
-- **Pi peer configs are backed up to Kopia (2026-07-04).** The Pi is otherwise out of Kopia scope,
-  but its wg-easy `wg0.conf`/`wg0.json` (WireGuard private keys) can't be rebuilt by a redeploy. So
-  this role installs a daily cron on **`backup_controller_host`** (`group_vars/all.yml`, defaults to
-  daniel-server) (`/usr/local/bin/wg-easy-pull-pi-peers.sh`, 23:30) that `sudo rsync`-pulls the Pi's
-  `containers/wg-easy/config/` (root-owned `0600`/`0640`, so the Pi's NOPASSWD `sudo rsync` is
-  required to read them) into `containers/wg-easy/pi-peers/` on that host — inside Kopia's snapshot
-  source. Tasks are gated on `inventory_hostname == backup_controller_host` (NOT `containers_list` —
-  a tagged deploy filters that). The kopia role that owned the snapshot was deleted in #2385:
-  `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/kopia/`.
-- **The pull is watchdogged (2026-07-05).** It uses **no `--delete`**, so a silently-failing pull
-  (Pi unreachable, SSH/sudo break) leaves the last-good copy in place and the nightly Kopia snapshot
-  still succeeds — **Backup Freshness would stay green while the un-rebuildable peer keys go stale**.
-  So the script captures the rsync exit code + a `>=2` file-count floor and writes
-  `/var/lib/wg-easy-pi-peers/state.json` (created sys_user-owned by this role's cron tasks);
-  monitor-bridge bind-mounts it `:ro` and its `pi_peers` check pushes the **WG Pi Peer Backup** Kuma
-  monitor — `down` on a failed pull, >2.5 d staleness, or missing state. The pulled `pi-peers/wg0.json`
-  is also the monthly restore-drill sentinel for `wg-easy`. Deploy `wg-easy` before `monitor-bridge`
-  on a fresh host so the state dir exists sys_user-owned. Push token `monitor_bridge_pi_peers_push_token`.
+- **The Pi's peer keys are pulled nightly by `ansible/roles/k8s/pi-peer-backup/`, not by this
+  role (host flip 1, 2026-08-14).** That CronJob owns the contract: the rsync, the file-count
+  floor, the **WG Pi Peer Backup** Kuma monitor and the Longhorn PVC a weekly shard carries to
+  B2. This role's daniel-server host cron, the `backup_controller_host` var and monitor-bridge's
+  `pi_peers` check retired with the flip — read `ansible/roles/k8s/pi-peer-backup/CLAUDE.md`
+  rather than re-deriving the pull from here.
 - **Built-in healthcheck, compose-supplied timing.** The `wg-easy/wg-easy` image ships its own
   Docker `HEALTHCHECK` (`wg show | grep -q interface` — verifies the WireGuard *interface* is
   up, not just the UI). `autoheal` and uptime-kuma rely on this native status — don't add a
