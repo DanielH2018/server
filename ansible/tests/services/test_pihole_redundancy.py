@@ -344,6 +344,34 @@ def test_the_deferred_render_is_what_triggers_instance_twos_apply():
     )
 
 
+def test_a_deferred_only_change_rolls_instance_two_alone():
+    """A `deployment-2.yaml.j2` change moves instance 2's manifests only, so the fourth trigger
+    must fire the `pihole-2` iteration and skip `pihole` (#2957). The include's `when` is
+    evaluated per loop item, so this renders every clause once per instance."""
+    task = task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")
+    unchanged = {"changed": False}
+    context = {
+        "k8s_no_mutate": False,
+        "manifests_render": unchanged,
+        "manifests_secret_render": unchanged,
+        "manifests_image_changed": False,
+        "manifests_deferred_render": {"changed": True},
+    }
+
+    def fires(instance: str, **overrides) -> bool:
+        ctx = {**context, **overrides, "pihole_instance": instance}
+        return all(
+            render_expr("{{ " + clause + " }}", **ctx) for clause in task["when"]
+        )
+
+    assert task["loop_control"]["loop_var"] == "pihole_instance"
+    assert fires("pihole-2"), "a deferred-only change must still roll instance 2"
+    assert not fires("pihole"), "a deferred-only change must not restart instance 1"
+    # Control: a change the shared apply carries still rolls both.
+    assert fires("pihole", manifests_render={"changed": True})
+    assert fires("pihole-2", manifests_render={"changed": True})
+
+
 def test_instance_twos_bytes_reach_the_release_digest():
     """The point of moving the render into the shared role (#2899): the deferred file is stat'd
     into `manifests_release_files`, so `manifests_digest` covers it and
