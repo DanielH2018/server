@@ -12,11 +12,6 @@ than through the exit code; the `0 if posted else 1` branches are reached only w
 failure alert could not be delivered, and 1 there is what leaves systemd's OnFailure unit as
 the backstop.
 
-The staging gate's I/O shell — `consult_staging`, `record_staging_tick` and
-`consume_staging_override` — sat at the bottom of this file until 2026-09-11 and is now
-`deploy_staging_io.py`. `handle_k8s` is still its only production caller; what moved it out was
-this file reaching its length cap.
-
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
 
@@ -37,8 +32,6 @@ from deploy_git import (
     should_alert_dirty,
 )
 from deploy_k8s import declares_snapshot_claims, rollback_volume_revert_note
-from deploy_staging import staging_blocks
-from deploy_staging_io import consult_staging, consume_staging_override
 from deploy_state import DeployerState
 from deploy_tick_types import TickPlan, TickTarget
 from deploy_toolbox import DeployTools
@@ -116,6 +109,33 @@ def alert_red_tip(
     deploy_alerts.alert_once(tools, state, config, "ci_alerted", "ci", red, body)
 
 
+def log_pi_changes(cs) -> None:
+    """Name the Pi Docker work this tick merged and cannot apply, in the journal.
+
+    Called from each handler right after its `git merge --ff-only`, because the claim the line
+    makes is that the change is merged. The Pi has `has_gitops: false`, so no tick here ever
+    deploys one of these; the operator does, with `-e target=daniel-pi`.
+
+    Two shapes, one line each: a `roles/containers/<svc>/` change (`cs.services`) and a
+    `roles/containers/common/` change (`cs.pi_shared`). Before #2836 only the
+    `handle_no_services` path said either, so a Pi change sharing a tick with a promoted image
+    bump or a broad plane was merged in silence.
+
+    A contention arm below the call site resets the tree seconds later, which makes the line
+    retroactively wrong on that path. Accepted rather than moved: `for_contention` logs its own
+    reason, and the next tick re-crosses the range and says it again.
+    """
+    if cs.services:
+        log(
+            f"merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
+        )
+    if cs.pi_shared:
+        log(
+            "merged a roles/containers/common change this host does not deploy; "
+            "apply it with `./scripts/deploy.sh -e target=daniel-pi`"
+        )
+
+
 def handle_broad(
     tools: DeployTools,
     state: DeployerState,
@@ -155,16 +175,8 @@ def handle_broad(
         if applies
         else []
     )
-    # BEFORE the ff-merge, for the reason `handle_k8s`'s DECIDED gives: a process death inside
-    # the gate's window must leave `local` behind origin so the next tick re-evaluates. After
-    # `plans`, because a bump the deploy plane applies is not gated. It returns the ChangeSet
-    # the rest of this tick acts on, with the rejected bumps demoted into the deferred set, and
-    # that set itself — `record_demoted` below writes it to `k8s_deferred` at the ff-merge,
-    # where a marker written here would be reset out from under by a contention arm (#2471).
-    cs, demoted = deploy_broad_k8s.gate_broad_k8s(
-        tools, state, config, target, cs, plans
-    )
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
+    log_pi_changes(cs)
     # Recorded at the ff-merge, which is the moment the role becomes merged-and-unapplied —
     # not after the apply below. A mixed range whose apply FAILS returns from the except arm,
     # and a record placed after it never ran: the role sat fast-forwarded on disk with no
@@ -177,10 +189,6 @@ def handle_broad(
         if pending
         else deploy_defer.nothing_recorded(state)
     )
-    # Same moment, same reason: a bump the staging gate demoted is merged-and-unapplied from
-    # here, and the failure arm below returns without re-deriving it. The `DECIDED:` in
-    # `record_demoted` carries which classes on this channel get a marker and which do not.
-    recorded = deploy_defer.record_demoted(state, origin, recorded, demoted)
     # FORWARD-ONLY. deploy_logic.broad_budget_ok carries the argument and its 2026-08-29
     # re-derivation: at the 60min ceiling a full deploy.yml (1212s measured 2026-08-22) plus
     # a rollback re-run now fits, so the budget is no longer the reason — but a rollback
@@ -278,47 +286,10 @@ def handle_k8s(
     target: TickTarget,
     plan: TickPlan,
 ) -> int:
-    """The promoted k8s image bumps: consult staging, ff-merge, deploy, roll back on failure."""
-    cs, local, origin = plan.cs, target.local, target.origin
-    # DECIDED: consult the gate BEFORE the ff-merge, never after. consult_staging blocks for up
-    # to STAGING_GATE_TIMEOUT_S + STAGING_EXPECT_TIMEOUT_S, and a process death inside that
-    # window used to leave local == origin with nothing deployed — next_action() then returns
-    # noop forever (the SHA is already merged, so nothing re-triggers), `last_run` keeps ticking,
-    # and both Kuma tiles stay green over a permanently stranded deploy. Merging after the gate
-    # makes the same death self-healing: local is still behind, so the next tick re-evaluates.
-    # Whether the verdict blocks is staging_blocks' decision; while config.staging_gate_blocking is
-    # false it never does, and this branch is the slice-3 behaviour unchanged.
-    verdict = consult_staging(tools, state, config, cs.k8s_deploy, origin)
-    if staging_blocks(verdict, blocking=config.staging_gate_blocking):
-        if consume_staging_override(state):
-            deploy_alerts.discord(
-                tools,
-                config,
-                deploy_alert_text.staging_override_alert(
-                    config.hostname, origin, state.path("staging_override")
-                ),
-            )
-            log(f"staging rejected {origin[:8]}; override armed, deploying prod anyway")
-        else:
-            # No reset and no volume revert: consult_staging runs BEFORE the ff-merge, so the
-            # tree is still on `local` and prod was never applied. That asymmetry is Phase C's
-            # main prize — a staging failure costs nothing to undo. Do not add a reset here
-            # without also moving the gate, or the two will disagree.
-            state.write_hold(origin)
-            posted = deploy_alerts.discord(
-                tools,
-                config,
-                deploy_alert_text.staging_rejected_alert(
-                    config.hostname,
-                    local,
-                    origin,
-                    cs.k8s_deploy,
-                    state.path("staging_override"),
-                ),
-            )
-            log(f"staging rejected {origin[:8]}; holding, prod not deployed")
-            return 0 if posted else 1
+    """The promoted k8s image bumps: ff-merge, deploy, roll back on failure."""
+    cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)
+    log_pi_changes(cs)
     try:
         deploy_io.deploy_k8s(config.repo, cs.k8s_deploy, config.k8s_deploy_timeout_s)
     except deploy_locks.ServiceLockBusy as exc:
@@ -421,15 +392,7 @@ def handle_no_services(
     """
     cs, origin = plan.cs, target.origin
     tools.run(["git", "merge", "--ff-only", origin], cwd=config.repo)  # docs-only etc.
-    if cs.services:
-        log(
-            f"merged Docker role change(s) this host does not deploy: {sorted(cs.services)}"
-        )
-    if cs.pi_shared:
-        log(
-            "merged a roles/containers/common change this host does not deploy; "
-            "apply it with `./scripts/deploy.sh -e target=daniel-pi`"
-        )
+    log_pi_changes(cs)
     # A secrets-only push (rotated value, no service template changed) maps to nothing, so the
     # ff-merge above is all we can do automatically — but the new value only reaches a container
     # on its next deploy. Defer-and-alert (once per SHA) so the operator redeploys the

@@ -28,12 +28,10 @@ _DEFAULTS = (
     _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
 )
 
-# The four phases of one gitops-deploy activation, in the order `config.env.j2` renders them.
+# The two phases of one gitops-deploy activation, in the order `config.env.j2` renders them.
 # Named rather than globbed for a `_timeout_s` suffix: a new unrelated timeout must not
 # silently join the sum, and a renamed one must fail here rather than drop out of it.
 _HOLD_KEYS = (
-    "gitops_deploy_staging_gate_timeout_s",
-    "gitops_deploy_staging_expect_timeout_s",
     "gitops_deploy_k8s_timeout_s",
     "gitops_deploy_k8s_rollback_timeout_s",
 )
@@ -46,7 +44,7 @@ def _worst_case_hold(defaults: dict) -> int:
         defaults: the parsed `gitops_deploy` role defaults.
 
     Returns:
-        The sum of the four sequential phase timeouts.
+        The sum of the sequential phase timeouts.
 
     Raises:
         KeyError: a phase timeout the deployer still reads is missing from `defaults`.

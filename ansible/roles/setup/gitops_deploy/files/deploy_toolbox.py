@@ -2,7 +2,7 @@
 """Every process boundary `gitops_deploy.py` crosses, as one injectable object.
 
 A test replaces one field of `DeployTools` and never a module attribute. The defaults are the
-real implementations: `deploy_io`'s for git, the health gate and the staging scripts,
+real implementations: `deploy_io`'s for git and the health gate,
 `post` below for the webhook, `datetime.now` for the clock. **This module names
 `gitops_deploy` nowhere**, at import time or later, which is what makes it a leaf the entry
 module can import.
@@ -148,7 +148,6 @@ class DeployTools:
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated
     discord_post: Callable[[str, str], bool] = post
-    run_staging_scripts: Callable[..., tuple[int, int]] = deploy_io.run_staging_scripts
     # The deploy-plane narrowing, which is a subprocess because the derivation parses YAML
     # and this unit runs under `uv run --no-project`. A field rather than a qualified call,
     # so the broad arm's tests script an exit code instead of a process.
@@ -161,9 +160,8 @@ class DeployTools:
     emit_deploy_annotation: Callable[[set[str], str], None] = (
         deploy_io.emit_deploy_annotation
     )
-    # `datetime.now`, NOT a zero-argument clock: `deploy_io.record_staging_tick` calls it with
-    # the ledger's tzinfo, so a `lambda: datetime.now()` adapter would change what that
-    # function receives.
+    # `datetime.now`, NOT a zero-argument clock: `deploy_handlers.handle_dirty` calls it with
+    # `CHICAGO`, so a `lambda: datetime.now()` adapter would change what that call receives.
     now: Callable[..., datetime] = datetime.now
 
 

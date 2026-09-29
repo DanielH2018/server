@@ -77,9 +77,17 @@ def test_the_rendered_config_carries_the_ancestor_walk_bound():
 
 def test_a_boolean_is_true_only_for_the_literal_word():
     """`true` and nothing else, case-insensitively — the same test the module made inline."""
-    assert deploy_io.load_config({"STAGING_GATE": "TRUE"}).staging_gate is True
+
+    # `k8s_autodeploy_enabled_in_file` is the raw parse of the key, before the denylist
+    # disarm `k8s_autodeploy_enabled` also carries — so it reads the boolean and nothing else.
+    def parse(raw: str) -> bool:
+        return deploy_io.load_config(
+            {"K8S_AUTODEPLOY_ENABLED": raw}
+        ).k8s_autodeploy_enabled_in_file
+
+    assert parse("TRUE") is True
     for raw in ("false", "1", "yes", "", "True "):
-        assert deploy_io.load_config({"STAGING_GATE": raw}).staging_gate is False, raw
+        assert parse(raw) is False, raw
 
 
 # ── the CI gate's own disarm ──────────────────────────────────────────────────────────────
@@ -132,20 +140,6 @@ def test_a_malformed_number_does_not_raise_at_parse_time():
         "the field keeps its default while the error is held"
     )
     assert cfg.errors
-
-
-def test_a_malformed_staging_timeout_does_not_raise_at_parse_time():
-    """`STAGING_GATE_TIMEOUT_S`/`STAGING_EXPECT_TIMEOUT_S` used to be parsed by a bare
-    `int(C.get(...))` at gitops_deploy.py module level — a malformed value there died at
-    import, before either of these tests could even run. They are Config fields now, parsed
-    with the same error handling as every other numeric."""
-    cfg = deploy_io.load_config(
-        {"STAGING_GATE_TIMEOUT_S": "10m", "STAGING_EXPECT_TIMEOUT_S": "2m"}
-    )
-    assert cfg.staging_gate_timeout_s == 600, "the field keeps its default"
-    assert cfg.staging_expect_timeout_s == 120, "the field keeps its default"
-    assert any("STAGING_GATE_TIMEOUT_S" in e for e in cfg.errors)
-    assert any("STAGING_EXPECT_TIMEOUT_S" in e for e in cfg.errors)
 
 
 def test_validate_raises_one_line_naming_the_key_and_what_it_held():

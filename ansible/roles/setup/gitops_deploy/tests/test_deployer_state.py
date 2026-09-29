@@ -59,11 +59,8 @@ EXPECTED_MARKERS = frozenset(
         ("stale_denylist_alerted", "stale_denylist_alerted_sha"),
         ("denylist_rendered", "denylist_rendered_sha"),
         ("ci_alerted", "ci_alerted_sha"),
-        ("staging_alerted", "staging_alerted_sha"),
         ("dirty_alerted", "dirty_alerted_date"),
         ("pending_alerts", "pending_alerts.json"),
-        ("staging_ticks", "staging-ticks.jsonl"),
-        ("staging_override", "staging_gate_override"),
     }
 )
 

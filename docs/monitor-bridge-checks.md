@@ -291,7 +291,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   on its next run that is not deferred, and `gitops_state.py clear-contention` clears it by
   hand. The last arm is **`k8s_deferred`** (#2449): a promoted image bump a broad tick
   fast-forwarded and then deferred, either because the shared budget left less than
-  `K8S_DEPLOY_TIMEOUT_S` or because the staging gate rejected it (#2471). The range is merged,
+  `K8S_DEPLOY_TIMEOUT_S`. The range is merged,
   so `behind_since` is empty and no later tick's range carries the bump — the defer-and-alert post names it once and then nothing does. This
   pages once the oldest line is older than the same six hours, naming the
   `./scripts/deploy.sh --tags <svc>` that applies it and the

@@ -79,9 +79,7 @@ widen it. Each line is a summary; the section it names carries the detail.
 - **Abort valves:** the CI gate (a non-green tip deploys the newest green ancestor or
   nothing — *Safety*); `hold_sha` / `hold_plane`, which park a failed SHA until a later
   successful apply of the same plane clears it (*Health gate + rollback*, *Which apply clears
-  a hold*); `K8S_DEPLOY_TIMEOUT_S` and the rollback budget, which bound one tick's wall clock; the
-  staging gate, which asks `daniel-stage` about every commit that would auto-deploy a k8s
-  service and, when `STAGING_GATE_BLOCKING` is on, stops the prod deploy on a rejection.
+  a hold*); `K8S_DEPLOY_TIMEOUT_S` and the rollback budget, which bound one tick's wall clock.
 - **Required evidence:** every tick writes `last_run` (the GitOps-Alive tile expires without
   it); every deploy, rollback, hold and deferral posts to the dedicated Discord webhook, and
   a `hold_sha` pages through the **GitOps Deploy — Status** tile until cleared. An
@@ -117,17 +115,11 @@ Each arm below is a rule and the function that holds it. The record page has the
     `master`, and PR CI is scoped to changed files while master runs the full sweep.
     `cancelled`/`stale` are **no verdict, not failure**. `CI_CONTEXTS` must match `ci.yml`'s
     `name:` exactly; an empty list disarms the gate with a log line.
-- **Staging gate — two switches.** `STAGING_GATE` asks daniel-stage about every commit that
-  would auto-deploy a k8s service; `STAGING_GATE_BLOCKING` decides whether a REJECTION stops
-  the prod deploy. Both default false; daniel-box sets both (`docs/staging-phase-c.md` owns the
-  flip). NO VERDICT never blocks (`staging_blocks`, `tests/test_staging_blocking.py`).
-  `consult_staging` runs BEFORE the ff-merge, so a rejection holds the SHA with nothing to
-  roll back; moving it after the merge silently breaks that. The escape hatch is one tick:
-  `touch /var/lib/gitops-deploy/staging_gate_override`, read only where the gate would block.
-- **The staging-backfill ratchet is retired** (#2414, 2026-09-24); the trade-off is the
-  `DECIDED:` above the retirement tasks in `tasks/install.yml`. A real gated tick now reaches
-  `consult_staging` about once a month, and its Discord post on every non-PASS is the one
-  alarm left for a gate that rots into NO VERDICT.
+- **The tick does not consult staging.** It did from 2026-09-02 until #2859 retired the arm on
+  2026-09-29, over which the gate stopped no deploy. `docs/archive/staging-phase-c.md` is the
+  record. The cluster is still live and driven by hand (`docs/staging-cluster.md`), and the
+  staging-backfill ratchet that used to exercise the gate is retired too (#2414, 2026-09-24;
+  the `DECIDED:` above the retirement tasks in `tasks/install.yml`).
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True) ->
   "dirty"`): `last_run` is still written, so GitOps-Alive stays green, and the page is
@@ -157,14 +149,12 @@ Each arm below is a rule and the function that holds it. The record page has the
     every arm here is FORWARD-ONLY.** A failure writes `hold_sha` and a `hold_plane` entry (a bump's
     is `ansible/deploy.yml <tags>`), says nothing was rolled back, and leaves the tree
     fast-forwarded: a `git reset` would claim the old commit over half-new live state. A bump
-    the deploy plane covers deploys once, ungated; the rest pass the staging gate, and a block
-    or a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES them to defer-and-alert
-    (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
+    the deploy plane covers deploys once; a budget under `K8S_DEPLOY_TIMEOUT_S` DEMOTES the
+    rest to defer-and-alert (`deploy_broad_k8s`). A failed plane names them in its post, as nothing re-derives them.
     `deploy_logic.broad_budget_ok` has no production caller.
     - **Two markers record a k8s change the tick merged and did not deploy**, one
       `"<origin_sha> <service> <unix_ts>"` line per service. `k8s_deferred` holds a BUDGET
-      deferral (#2449) or a STAGING-gate demotion (#2471), and `gitops_status` pages on its age
-      at six hours. `k8s_unapplied` holds the hand-edited and denylisted classes (#2570) and
+      deferral (#2449), and `gitops_status` pages on its age at six hours. `k8s_unapplied` holds the hand-edited and denylisted classes (#2570) and
       never pages; the SessionStart banner reads it. Every tick discharges a `k8s_unapplied`
       line once its service's release record descends from the line's SHA
       (`deploy_defer.discharge_k8s_unapplied`), and any tick that deploys a service clears its
@@ -231,8 +221,9 @@ Each arm below is a rule and the function that holds it. The record page has the
   - **The pilot list is empty, so the denylist alone decides** — an empty pilot means every
     non-denylisted service, the opposite of the empty-denylist guard. The
     `ansible/tests/test_k8s_autodeploy_*.py` family enforces the role shapes that must never
-    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`; promotion is refused when
-    the tick also carries a Pi Docker role change.
+    be eligible. The deploy is bounded by `K8S_DEPLOY_TIMEOUT_S`. A Pi Docker change riding
+    along no longer defers the bump (#2836): nothing here applies one, so the k8s branch skips
+    nothing, and `deploy_handlers.log_pi_changes` names the Pi half on every path that merges.
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and
   `meta/deps.yml`** are ff-merged but NOT auto-deployed; the deployer defers-and-alerts once
   per SHA (`tasks_alerted_sha` / `meta_alerted_sha`, `deploy_logic.deferred_service_alerts`).
@@ -270,13 +261,13 @@ Three layers, and which one a function belongs in is decided by what it touches.
 
 | layer | modules | holds |
 |---|---|---|
-| decisions (pure) | `deploy_changes` (which services and planes a path list reaches), `deploy_git` (what a tick does given the two HEADs, the hold and the CI verdict), `deploy_health` (the delivery queue's pure half), `deploy_inventory` (what this host declares), `deploy_k8s` (auto-deploy eligibility, the denylist, the revert note), `deploy_remediation` (the text a deferred alert prescribes), `deploy_staging` (the staging subset, its verdict, whether it blocks) | every branch the tick takes, as functions over plain values |
+| decisions (pure) | `deploy_changes` (which services and planes a path list reaches), `deploy_git` (what a tick does given the two HEADs, the hold and the CI verdict), `deploy_health` (the delivery queue's pure half), `deploy_inventory` (what this host declares), `deploy_k8s` (auto-deploy eligibility, the denylist, the revert note), `deploy_remediation` (the text a deferred alert prescribes) | every branch the tick takes, as functions over plain values |
 | what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
 | transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
 | the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS, split from `deploy_alerts` at the seam its docstring named (#2600) |
 | transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families as a mixin `DeployerState` inherits, and the text a failed run's alert quotes — each importing nothing from `deploy_io` |
 | the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses, and `default_tools(CONFIG)` |
-| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s`, `deploy_staging_io` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does; the staging gate's I/O shell |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch; what the broad arm does with the half it will not apply, and with the promoted bumps it does |
 | the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` sequencing the phases, and `entrypoint()` |
 
 - **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,
@@ -292,14 +283,13 @@ Three layers, and which one a function belongs in is decided by what it touches.
   ENFORCED in `ansible/tests/deploy/test_gitops_deploy_imports.py`, which also holds every
   module's sibling imports to an explicit `ALLOWED` map, keeps `deploy_logic.py` defining
   nothing (it re-exports every decision name, so a `deploy_logic.<name>` citation stays true),
-  and keeps `deploy_staging` import-pure — `await_ci.py` and `land_tags.py` import the index
-  with only this `files/` on `sys.path`, so its I/O shell lives in `deploy_staging_io.py`.
+  and keeps every module it re-exports import-pure — `await_ci.py` and `land_tags.py` import
+  the index with only this `files/` on `sys.path`, so none of them may reach `host_lib`.
 - **Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config`
   collects a malformed value into `Config.errors`; `CONFIG.validate()` at the top of `main()`
   turns it into one line naming the key plus a Discord post. `tick_config()` snapshots the
   module-level constants back onto a `Config` once per tick, which keeps a
-  `monkeypatch.setattr(gitops_deploy, "REPO", ...)` live. Three keys keep a `C.get("<KEY>",
-  "<literal>")` call because `scripts/docs/gen_doc_fragments.py` parses them by name.
+  `monkeypatch.setattr(gitops_deploy, "REPO", ...)` live.
 - **One marker module, copied.** `files/gitops_markers.py` is the hand-edited source of the
   state directory, the `MARKERS` table and the marker parsers. `scripts/dev/gen_gitops_markers.py`
   writes a verbatim copy into every other reader (monitor-bridge, deploy-ui, renovate-agent,
@@ -376,9 +366,8 @@ under-sized. `docs/gitops-pipeline.md` has the arithmetic.
   failure aborts the play, so failure-driven worst cases cannot stack; the residual is a SLOW
   BUT SUCCESSFUL run cut short.
 - Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
-  `gitops-deploy.service.j2` is `max(broad, staging + k8s + rollback)` plus the flock wait,
-  and the template's own comment carries the arithmetic. Under-sizing the staging pair does
-  not fail safe: a timed-out consultation is NO VERDICT.
+  `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait, and the
+  template's own comment carries the arithmetic.
 - **The FORWARD cap is derived from the worst promoted role** (#2397).
   `test_the_forward_cap_covers_the_worst_promoted_role` derives the sum from role sources and
   fails when it outgrows `gitops_deploy_k8s_timeout_s`; under-sized, a cap kill lands MID-DRAIN

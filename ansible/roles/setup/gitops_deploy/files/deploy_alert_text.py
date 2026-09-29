@@ -197,45 +197,6 @@ def stale_denylist_alert(origin: str, detail: str, fix: str) -> str:
     )
 
 
-def staging_verdict_alert(origin: str, summary: str, blocking: bool) -> str:
-    """The post for any staging verdict that is not a PASS."""
-    tail_line = (
-        "This gate BLOCKS — prod was not deployed unless the verdict was no_verdict."
-        if blocking
-        else "Prod deployed regardless — this gate does not block yet."
-    )
-    return f"🧪 gitops-deploy: {summary} for `{origin[:8]}`. {tail_line}"
-
-
-def staging_override_alert(hostname: str, origin: str, override_file: str) -> str:
-    """The post announcing that the operator's one-tick override was spent."""
-    return (
-        f"🔓 gitops-deploy: **staging override used** on {hostname}. "
-        f"Staging REJECTED `{origin[:8]}` and it was deployed to prod anyway, "
-        f"because `{override_file}` was armed.\n"
-        f"The override is now spent — re-arm it with `touch` if the next tick "
-        f"needs it too."
-    )
-
-
-def staging_rejected_alert(
-    hostname: str, local: str, origin: str, services: set[str], override_file: str
-) -> str:
-    """The post for a blocking staging rejection: nothing was applied, nothing to undo."""
-    return (
-        f"🧪 gitops-deploy: **staging REJECTED** `{origin[:8]}` on {hostname} — "
-        f"prod was NOT deployed and the tree stays on `{local[:8]}`.\n"
-        f"`{', '.join(sorted(services))}` failed on daniel-stage. Nothing was "
-        f"applied here, so there is nothing to roll back and no volume was "
-        f"reverted.\n"
-        f"**Action:** fix forward on master, or — if staging itself is the "
-        f"problem rather than the change — `touch {override_file}` to let "
-        f"the next tick through once.\n"
-        f"The hold only skips THIS commit: `skip_hold` matches while "
-        f"`origin_head == hold_sha`, so the next push past it is gated afresh."
-    )
-
-
 def k8s_failure_alert(
     hostname: str,
     local: str,

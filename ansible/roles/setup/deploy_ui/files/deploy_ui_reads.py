@@ -14,7 +14,7 @@ from pathlib import Path
 
 import gitops_markers
 
-# The six markers the panels show, by basename — `gitops_markers` is the deployer's own table,
+# The five markers the panels show, by basename — `gitops_markers` is the deployer's own table,
 # copied into this `files/` (its header says how it is kept fresh). The basenames are also the
 # keys `/api/state` serves, which is what the page reads.
 MARKERS = tuple(
@@ -24,11 +24,9 @@ MARKERS = tuple(
         "hold_plane",
         "last_run",
         "behind",
-        "staging_override",
         "k8s_deferred",
     )
 )
-_OVERRIDE = gitops_markers.MARKERS["staging_override"]
 _HOLD_PLANE = gitops_markers.MARKERS["hold_plane"]
 _K8S_DEFERRED = gitops_markers.MARKERS["k8s_deferred"]
 
@@ -289,7 +287,7 @@ def read_state(state_dir: Path) -> dict[str, str | list]:
         except FileNotFoundError:
             st[name] = ""
             continue
-        st[name] = "set" if name == _OVERRIDE else text.strip()
+        st[name] = text.strip()
     st["hold_plane_entries"] = hold_plane_entries(str(st[_HOLD_PLANE]))
     st["k8s_deferred_entries"] = k8s_deferred_rows(str(st[_K8S_DEFERRED]))
     return st

@@ -36,16 +36,9 @@ every 10 minutes (`gitops_deploy_tick_interval`). One tick, in order:
    deploy; gating on it parked a green commit behind the CI sweep of every later merge.
 4. Choose an action from the verdict for the chosen SHA and the changed paths (`next_action()` in
    `deploy_logic.py`).
-5. Consult the staging cluster, on a k8s deploy where `gitops_deploy_staging_gate` is armed
-   and the services intersect `STAGING_SUBSET`. Advisory: it returns no verdict and cannot
-   block the deploy — worth knowing when a tick looks stuck.
-6. Fast-forward the checkout to the chosen SHA, if the action allows it.
-7. Deploy whatever is eligible.
-8. Health-gate the result, and roll back on failure.
-
-<!-- Generated from STAGING_GATE_TIMEOUT_S and STAGING_EXPECT_TIMEOUT_S in gitops_deploy.py;
-     edit those. -->
---8<-- "assets/generated/fragments/staging-timeouts.md"
+5. Fast-forward the checkout to the chosen SHA, if the action allows it.
+6. Deploy whatever is eligible.
+7. Health-gate the result, and roll back on failure.
 
 All of it runs while holding `/var/lock/server-git-tree.lock`, which is what stops a tick
 rewriting the tree under the secret-rotation cron or under an operator's snapshot. The deploy
@@ -172,8 +165,8 @@ worse than never starting one. The arm stays forward-only because proving it fit
 fresh `deploy.yml` measurement, not because of any particular timeout value:
 `deploy_logic.broad_budget_ok` encodes the check and has no production caller. The numbers
 and the date they were taken are under *The deployer's record* below; read `TimeoutStartSec`
-out of `gitops-deploy.service.j2` rather than from prose, since it moves when the staging
-gate's budget changes.
+out of `gitops-deploy.service.j2` rather than from prose, since it moves when a phase budget
+changes.
 
 It deliberately does not reset the tree either. Resetting without redeploying would leave the
 tree claiming the old commit while live state is half-new — a tree that lies, over which every
@@ -515,33 +508,14 @@ stay).
     (that file carries a comment saying so). An empty list or repo **disarms** the gate with a log
     line rather than passing everything — the same fail-closed shape as the k8s denylist. Set
     `gitops_deploy_require_ci: false` to turn it off.
-- **Staging gate — two switches, and only one of them is about blocking.** `STAGING_GATE`
-  (`gitops_deploy_staging_gate`) asks daniel-stage about every commit that would auto-deploy a
-  k8s service, on the k8s path only. `STAGING_GATE_BLOCKING`
-  (`gitops_deploy_staging_gate_blocking`) decides whether a REJECTION stops the prod deploy.
-  With the second false the gate is advisory: the verdict is logged and alerted, prod deploys
-  either way, and this deployer behaves as it did before slice 4. Both are false by default.
-  `docs/staging-phase-c.md` carries the entry condition the flip is gated on — do not restate
-  the status here.
-  - **Nothing exercises the gate between real ticks.** The staging-backfill ratchet did, hourly,
-    until the operator retired it on 2026-09-24 (#2414). A real gated tick arrives about once a
-    month, so a gate that rots between two of them is noticed only by `consult_staging`'s alert
-    on that tick's NO VERDICT. The trade-off and what was removed are in `docs/staging-phase-c.md`,
-    *After the flip: the ratchet is retired*.
-  - **NO VERDICT never blocks, in either mode.** A wedged guest, an ssh outage, a timeout or a
-    bug in the gate reports NO VERDICT and prod deploys. Blocking there would park prod behind
-    one guest on a NAT network covering six services of fifty-four, where passing through leaves prod
-    where it was before the gate existed. `staging_blocks` carries the reasoning and
-    `tests/test_staging_blocking.py` pins it.
-  - **A rejection holds the SHA and applies nothing.** `consult_staging` runs BEFORE the
-    ff-merge, so the tree is still on `local` when the verdict arrives: no reset, no volume
-    revert, nothing to roll back. That asymmetry is Phase C's main prize. Moving the gate after
-    the merge would silently break it.
-  - **The escape hatch is one tick, and it announces itself.** `touch
-    /var/lib/gitops-deploy/staging_gate_override` on this host lets the next blocking tick
-    through, posts to Discord when it is spent, and removes itself; `rm` disarms it before use.
-    It is read at the point the gate would block, never on entry — arming it before a quiet tick
-    must not burn it.
+- **The tick does not consult staging** (#2859, 2026-09-29). It did from 2026-09-02, blocking
+  prod on a rejection. Over that life the arm stopped no deploy, while both faults staging
+  found came from elsewhere: a backfill replay caught a registry break the tick would never
+  have gated (`registry` is `k8s_autodeploy: false`), and a manual session found the
+  volume-snapshot remote-target bug. `docs/archive/staging-phase-c.md` is the record, including
+  the escape hatch and the NO-VERDICT asymmetry the arm was built around. The staging cluster
+  itself is live and operator-driven — `docs/staging-cluster.md` — and `roles/setup/hypervisor`
+  still builds the guest and the network the monthly etcd drill needs.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the
@@ -600,27 +574,13 @@ stay).
       snapshot of every claim sonarr declares and spent the shared budget twice. Gating a
       covered bump could withhold nothing: the plane applies it whatever the verdict, exactly
       as it applied every such bump before #2348.
-    - **The staging gate decides first, and a rejection DEMOTES rather than holds.**
-      `deploy_broad_k8s.gate_broad_k8s` consults it before the ff-merge, which is where
-      `handle_k8s`'s own `DECIDED:` says it has to run. The gate is armed and blocking on
-      daniel-box, the only host running this deployer, so deploying past it in this arm would
-      be a way around an abort valve a k8s-only tick honours and would leave a mixed range out
-      of the tick ledger the Phase-C evidence is made of. That holds for the bumps this arm
-      deploys itself; a bump the deploy plane covers bypasses the gate, as above. On a block the gated set is folded
-      back into `ChangeSet.k8s` — the defer-and-alert channel any change the promotion
-      refuses takes — and the broad half still applies. Holding instead would park the setup plane and
-      whatever else shared the push behind one service's verdict, which is the cost
-      `deploy_defer`'s `DECIDED:` measured; and the range merges below, so `skip_hold` could
-      never match it again and the hold would stick. The one-tick
-      `staging_gate_override` is honoured here exactly as `handle_k8s` honours it.
     - **Forward-only, and on the broad budget.** `_rollback_k8s` resets the tree to `local`,
       which here would undo the ff-merge under a setup plane this tick already applied — the
       tree would claim the old commit while the host runs the new one, which is the state the
       broad arm's own no-reset rule exists to prevent. The bumps share the plans'
       `BROAD_DEPLOY_TIMEOUT_S` rather than taking a `K8S_DEPLOY_TIMEOUT_S` of their own, for
-      the reason the plans share it: the broad path's worst case is then 180 flock + 720
-      staging + 1800 apply = 2700s, still under the k8s path's 3120s, so the unit's ceiling
-      does not move. A budget per phase would have put a mixed range past it.
+      the reason the plans share it: the broad path's worst case is then 180 flock + 1800
+      apply = 1980s, still under the k8s path's 3240s, so the unit's ceiling does not move. A budget per phase would have put a mixed range past it.
     - **The bump deploy starts only when `K8S_DEPLOY_TIMEOUT_S` still fits.** That is the
       budget a k8s-only tick grants the same bump. With less left, the run would die at the
       timeout (a hold and a page, often for a healthy service) or its lock wait would raise
@@ -633,10 +593,9 @@ stay).
       can see on a tile that is already red (the state PR #2381's second review found it in).
       So the deferral is also written to **`k8s_deferred`**, one line per service, and
       `gitops_status` pages on the oldest line's age at the six hours `manual_plane` uses
-      (#2449). Two of the three classes on that channel are recorded, decided per class rather
-      than per channel (#2471): the BUDGET deferral, and a bump the STAGING gate demoted, which
-      has the same two properties — the tick chose it rather than a person, and nothing reports
-      it again. A hand-edited or denylisted k8s role is not: it is merged by a person who is
+      (#2449). One of the classes on that channel is recorded, decided per class rather than
+      per channel (#2471): the BUDGET deferral, where the tick chose it rather than a person
+      and nothing reports it again. A hand-edited or denylisted k8s role is not: it is merged by a person who is
       landing it, and forty of the fifty-four k8s roles are denylisted, so recording those would
       hold GitOps Deploy — Status red as normal operation. It was not enough on its own
       (#2570), and the resolution keeps that argument intact: what it rules out is a signal
@@ -686,7 +645,7 @@ stay).
     are in `scripts/deploy_tools/narrow_broad.py`; the `# DECIDED:` at the fallback in
     `deploy_narrow.py` carries why doubt runs the whole play. **The narrowed list is not
     filtered through `K8S_AUTODEPLOY_DENYLIST`** (issue #1962): the denylist gates promotion
-    into the k8s auto-deploy machinery — snapshot, staging gate, rollback — and the broad
+    into the k8s auto-deploy machinery — snapshot, rollback — and the broad
     plane has none of it, running the plain playbook forward-only the way an operator's
     `deploy.sh` does; a filter could only reach the narrowed path anyway, since a refused
     range runs the whole play over every denied role. The `# DECIDED:` on
@@ -726,8 +685,8 @@ stay).
   - **Both arms are FORWARD-ONLY.** `deploy_logic.broad_budget_ok` showed a rollback re-run did
     not fit: 180s max flock + 1212s forward (measured 2026-08-22) + 1212s rollback against
     `TimeoutStartSec=2700` left 96s, and a rollback SIGTERMed partway is worse than none.
-    **The budget argument expired on 2026-08-29** — the staging gate raised the ceiling to 60min,
-    at which the same numbers fit (2904 against 3600). The arm is still forward-only, on the
+    **The budget argument expired on 2026-08-29** — the ceiling went to 60min, at which the
+    same numbers fit (2904 against 3600). The arm is still forward-only, on the
     second half of the argument alone: funding a broad rollback needs a fresh deploy.yml
     measurement against today's tree, not the slack a ceiling raise left behind. Nothing changed
     behaviour when the ceiling moved — `broad_budget_ok` has no production caller. A
@@ -932,8 +891,8 @@ stay).
     - **A render ENDS that tick.** Two reasons, and the second is the harder one. The config in
       memory still holds the list the render just disproved, so anything after it would decide
       against a list known to be wrong. And every arm of this unit is non-stacking by
-      construction — the unit template sizes `TimeoutStartSec` as `max(broad, staging + k8s +
-      rollback)` rather than a sum — so a render that ran on to a k8s deploy would be the first
+      construction — the unit template sizes `TimeoutStartSec` as `max(broad, k8s + rollback)`
+      rather than a sum — so a render that ran on to a k8s deploy would be the first
       arm to add its budget to a sibling's, and could be SIGTERMed mid-rollback. The next tick is
       ten minutes away and reads the fresh config.
     - **A dirty tree is never rendered from**, because the filter reads the working tree and
@@ -1080,8 +1039,12 @@ stay).
     `readinessProbe`.
   - **The deploy is time-bounded by `K8S_DEPLOY_TIMEOUT_S`.** Without an explicit timeout the
     only bound is systemd's `TimeoutStartSec` SIGTERM, which can land mid-rollback.
-  - Promotion is refused when the tick also carries a Pi Docker role change, so the tick stays
-    one-plane.
+  - **A Pi Docker change riding along does not defer the bump** (#2836). It did until then, on
+    the reason that the k8s branch would skip the Docker deploy and its health gate; #2805
+    removed that arm, so no `has_gitops` host applies a Pi role and there is nothing to skip.
+    The guard also read `cs.services` and never `cs.pi_shared`, so the two Pi shapes were
+    treated differently for no reason anyone could state. `deploy_handlers.log_pi_changes`
+    names whichever shape rode along, from each handler's own ff-merge.
 
   The original rationale, still accurate for every non-eligible k8s change:
   This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
@@ -1149,9 +1112,7 @@ deferral goes here (#2449). The deferral post names it once and the range is mer
 later tick's `local..origin` carries the bump. `Release Staleness Drift` reads the unapplied
 pin, but that monitor is DOWN for any stale record in the fleet, so a new deferral adds
 nothing to an already-red tile. `gitops_status` therefore pages on the marker's own age, at
-the six hours `manual_plane` uses. A bump the STAGING gate demoted goes here too, decided per
-class rather than per channel (#2471): a demotion has the same two properties the budget case
-has, in that the tick chose it and nothing reports it again.
+the six hours `manual_plane` uses.
 
 **`k8s_unapplied` records the hand-edited and denylisted classes** (#2570). Forty of the
 fifty-four k8s roles are denylisted, so paging on those would hold Status red as normal
@@ -1273,9 +1234,9 @@ the generator, commit every copy in the same PR. The shell and manifest literals
 import anything — `gitops_tick.sh`, `deploy-ui.service.j2`, monitor-bridge's hostPath — are
 pinned to `STATE_DIR` by the same test.
 
-**State is one object.** `deploy_state.DeployerState` wraps the marker files — the
-fifteen dedupe and status markers plus the pending-alert queue, the staging tick ledger and
-the staging override — and holds the hold-marker writes (`write_hold`, `clear_broad_hold`,
+**State is one object.** `deploy_state.DeployerState` wraps the marker files — the dedupe
+and status markers plus the pending-alert queue — and holds the hold-marker writes
+(`write_hold`, `clear_broad_hold`,
 `clear_service_hold`) and `record_behind`. A caller names a marker (`state.path("hold")`)
 rather than carrying a path, which is what lets `state_dir` repoint the whole state directory
 by replacing one object. `gitops_deploy.STATE` is the instance, and `gitops_markers.MARKERS` is the only
@@ -1615,47 +1576,40 @@ was raised from 25min to 35min (task 6b), then to 45min so 180s max flock wait +
 2400s fitted with margin — see that template's own arithmetic comment for both the Docker-path and
 k8s-path budgets it now covers.
 
-**With the staging gate armed, two more budgets join that same sequence, which is why the
-ceiling is 70min.** `consult_staging` runs at the top of `deploy_handlers.handle_k8s`, ahead of
-`deploy_k8s`, so `STAGING_GATE_TIMEOUT_S` (600s) and `STAGING_EXPECT_TIMEOUT_S` (120s) are
-additive to the pair above rather than alternative to them: 180 + 600 + 120 + 1440 + 1620 = 3960s
-against 4200s. The two staging budgets are sized from a measured staging deploy. A full
-six-service run of the whole `STAGING_SUBSET` took 130s cold and 53s warm on 2026-08-29, so 600s is ~4.6x the cold
-case — and `defaults/main.yml` carries the measurement. Under-sizing them does not fail safe: a
-staging consultation that times out reports NO VERDICT, indistinguishable from a staging that is
-down, and slice 4's entry condition is a measured false-failure rate.
-
-The ceiling was 60min until 2026-09-25. #2397 raised the forward cap from 900s to 1440s, sized
-from the worst promoted role's own waits, and the ceiling moved to 70min with it.
+The staging gate added two more budgets to that same sequence, which took the ceiling to
+60min; #2397 then raised the forward cap from 900s to 1440s, sized from the worst promoted
+role's own waits, and the ceiling moved to 70min with it. #2859 removed the staging pair, so
+the worst case is 180 + 1440 + 1620 = 3240s against 4200s. The ceiling keeps its headroom
+rather than shrinking: nothing on this path needs it back, and a re-derivation would have to
+re-measure the two playbook budgets it is made of.
 
 **Consequence for the lock: this unit's own hold exceeds the 30-minute timer interval, where
 at a 900s rollback budget it landed exactly at the edge (900 + 900 = 1800s = 30min flat) without
 crossing it.** `ExecStart` wraps the whole run in `flock -w 180
 /var/lock/server-git-tree.lock` — the same lock `./scripts/deploy.sh` and the weekly
 secret-rotate cron take. In the pathological case (a stalled forward deploy followed by a
-stalled rollback), this unit can hold that lock for up to 3780s (600 + 120 + 1440 + 1620 with the
-staging gate armed, 3060s without it, excluding its own flock wait) — past the 30-minute (1800s)
+stalled rollback), this unit can hold that lock for up to 3060s (1440 + 1620, excluding its
+own flock wait) — past the 30-minute (1800s)
 timer interval. A concurrent `./scripts/deploy.sh`
 during that window waits `LOCK_WAIT=3840` — **not** the unit's
-own `-w 180`, which governs only the deployer — so it **outlasts the 3780s hold and then
+own `-w 180`, which governs only the deployer — so it **outlasts the 3060s hold and then
 deploys**, rather than returning exit 75. It returns exit 75 only if the lock stays busy past
 the full 3840s. The secret-rotate cron waits on the same lock rather than failing outright,
-which is true only because its `flock -w` is likewise 3840s and so clears that 3780s hold. The
+which is true only because its `flock -w` is likewise 3840s and so clears that 3060s hold. The
 cron's was 1200s until 2026-08-22, at which point this paragraph was wrong in the direction that
 matters: the cron gave up mid-incident and skipped that week's rotation, with no retry until the
 next weekly tick.
 
 **All FOUR waiters on this lock are pinned as a census, not one test each.** `deploy.sh`,
-secret-rotate, docs-refresh and eval-run each wait 3840s, derived from the same four timeouts
+secret-rotate, docs-refresh and eval-run each wait 3840s, derived from the same phase timeouts
 via `_LOCK_WAITERS` and `_worst_lock_hold()` in `tests/test_gitops_deploy_timeout_budgets.py`.
 Only the first two were pinned until 2026-09-05, and the two that were not had drifted: both sat
 at 2700, *inside* the 2940s hold, and docs-refresh's own comment claimed it matched
-secret-rotate while secret-rotate was 3000. PR #585 resized the staging gate and raised the two
+secret-rotate while secret-rotate was 3000. PR #585 resized a phase budget and raised the two
 pinned copies; nothing recomputed the unpinned ones. A per-consumer test covers only the
 consumers somebody wrote one for, so the census plus `test_the_lock_waiter_census_is_non_vacuous`
-is what makes a new waiter fail rather than pass silently. Raising any of
-`gitops_deploy_k8s_timeout_s`, `gitops_deploy_k8s_rollback_timeout_s`,
-`gitops_deploy_staging_gate_timeout_s` or `gitops_deploy_staging_expect_timeout_s` fails those tests rather
+is what makes a new waiter fail rather than pass silently. Raising either of
+`gitops_deploy_k8s_timeout_s` or `gitops_deploy_k8s_rollback_timeout_s` fails those tests rather
 than silently shortening an operator's wait, which is how `deploy.sh`'s copy rotted once already
 (it sat at 1500 through two `TimeoutStartSec` bumps).
 

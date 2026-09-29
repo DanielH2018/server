@@ -37,27 +37,6 @@ def module_constant(path: _Path, name: str):
     raise KeyError(f"{path.relative_to(REPO)}: no top-level `{name} = <literal>`")
 
 
-def config_default(path: _Path, name: str) -> str:
-    """The default string a `C.get("<name>", "<default>")` call supplies for `name`.
-
-    The deployer reads its tunables from a config file with a literal fallback. The
-    fallback is what the tree says; a host's config.env can override it, and a fragment
-    says so where it matters.
-    """
-    for node in ast.walk(ast.parse(path.read_text())):
-        if (
-            isinstance(node, ast.Call)
-            and isinstance(node.func, ast.Attribute)
-            and node.func.attr == "get"
-            and len(node.args) == 2
-            and isinstance(node.args[0], ast.Constant)
-            and node.args[0].value == name
-            and isinstance(node.args[1], ast.Constant)
-        ):
-            return str(node.args[1].value)
-    raise KeyError(f"{path.relative_to(REPO)}: no `C.get({name!r}, <default>)` call")
-
-
 def role_defaults(path: _Path) -> dict:
     return yaml_fast.safe_load(path.read_text())
 

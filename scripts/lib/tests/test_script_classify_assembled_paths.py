@@ -1,10 +1,15 @@
 """A script whose path the caller assembles from segments is still a script it runs.
 
-`deploy_io.staging_expect_script` builds `os.path.join(repo, "scripts", "deploy_tools",
-"staging_expectations.py")`, so no string literal in that file spells the filename next to its
+`deploy_io.staging_expect_script` built `os.path.join(repo, "scripts", "deploy_tools",
+"staging_expectations.py")`, so no string literal in that file spelled the filename next to its
 directory. The caller census matched a whole-path literal only, and `docs/reference/scripts.md`
 called both staging scripts "no automated caller in the tree" while the GitOps deployer ran
 them after every staging deploy that exits 0 (#2424).
+
+That caller is gone — #2859 retired the deployer's staging consultation, so the two staging
+scripts are operator-driven again and the tree holds no assembled-path caller to name. The
+cases below are synthetic for that reason; a real one reaching the tree again belongs here as
+a fourth, named case.
 
 Run: uv run pytest scripts/lib/tests/test_script_classify_assembled_paths.py
 """
@@ -51,15 +56,3 @@ def test_a_join_whose_filename_a_variable_supplies_is_not_an_invocation(tmp_path
         'def script(repo, name):\n    return os.path.join(repo, "scripts", name)\n',
     )
     assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
-
-
-def test_the_live_tree_sees_the_deployer_running_both_staging_scripts(live_verdicts):
-    """Non-vacuity: the two rows #2424 was filed about, named so a silent narrowing fails.
-
-    `deploy_io.py` sits under a role's `files/`, which the census reads as a deploy-time
-    caller, so both are `gate` rather than scripts nobody runs.
-    """
-    for name in ("staging_expectations.py", "staging_gate.py"):
-        verdict, evidence = live_verdicts[name]
-        assert verdict == "gate", name
-        assert "deploy_io.py" in evidence, name

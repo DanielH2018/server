@@ -1,17 +1,15 @@
 #!/usr/bin/env python3
-"""The k8s half of a broad range: what the gate says about it, and applying it.
+"""The k8s half of a broad range: deploying the promoted bumps a plane did not.
 
 `split_k8s_auto_deploy` promotes an eligible image bump out of `ChangeSet.k8s` into
 `k8s_deploy`, and it does that whether or not the range is broad. Until #2348 `handle_broad`
 then ignored `k8s_deploy` entirely — so a mixed range fast-forwarded the bumps, deployed none
 of them, and named none of them either, because `alert_deferred` fires its k8s channel on
-`ChangeSet.k8s` alone. These functions are that half of the broad arm: `gate_broad_k8s`
-decides whether it may deploy, `apply_broad_k8s` deploys it, and `covered_by_plane` says which
-bumps the deploy plane applies on its own.
+`ChangeSet.k8s` alone. These functions are that half of the broad arm: `apply_broad_k8s`
+deploys it, and `covered_by_plane` says which bumps the deploy plane applies on its own.
 
 A module of its own rather than more functions on `deploy_handlers.py`, which is at its
-length cap — the same reason `deploy_staging_io.py` moved out of it in 2026-09. `handle_broad`
-is the only production caller of these.
+length cap. `handle_broad` is the only production caller of these.
 
 Reach `deploy_io` and `deploy_alerts` qualified, never by from-import.
 """
@@ -26,8 +24,6 @@ import deploy_io
 import deploy_locks
 from deploy_changes import ChangeSet
 from deploy_config import Config, log
-from deploy_staging import staging_blocks
-from deploy_staging_io import consult_staging, consume_staging_override
 from deploy_state import DeployerState
 from deploy_tick_types import TickPlan, TickTarget
 from deploy_toolbox import DeployTools
@@ -49,74 +45,6 @@ def covered_by_plane(plans, bumps: set[str]) -> set[str]:
         if broad.playbook == DEPLOY_PLAYBOOK and broad.apply:
             return set(bumps) if not broad.tags else set(bumps) & set(broad.tags)
     return set()
-
-
-def gate_broad_k8s(
-    tools: DeployTools,
-    state: DeployerState,
-    config: Config,
-    target: TickTarget,
-    cs: ChangeSet,
-    plans,
-) -> tuple[ChangeSet, set[str]]:
-    """Ask staging about the promoted bumps in a broad range, and demote them if it blocks.
-
-    Returns:
-        The ChangeSet the rest of the tick acts on, and the bumps this gate demoted. The
-        ChangeSet is unchanged and the set empty when nothing was gated or the verdict does
-        not block; otherwise the gated bumps have been folded back into `k8s`, which is the
-        defer-and-alert channel every unpromotable change takes. `handle_broad` records the
-        demoted set in `k8s_deferred` at the ff-merge (`deploy_defer.record_demoted`) — it
-        cannot be recorded here, because this runs BEFORE that merge and a contention arm
-        below it resets the tree.
-
-    The gate is ARMED AND BLOCKING on daniel-box, the only host running this deployer
-    (`gitops_deploy_staging_gate` and `_blocking`, both true in its host_vars since
-    2026-09-02). Deploying the bumps in this arm without consulting it would be a way past an
-    abort valve that a k8s-only tick honours, and it would leave a mixed range out of the tick
-    ledger the Phase-C evidence is made of.
-
-    A BUMP THE DEPLOY PLANE COVERS IS NOT GATED. The plane applies it whatever the verdict,
-    exactly as it applied every such bump before #2348, so a rejection could withhold nothing:
-    it would only make the verdict post's "prod was not deployed" and the defer-and-alert
-    post's "not applied" false.
-
-    DEMOTING RATHER THAN HOLDING is where this differs from `handle_k8s`, deliberately. That
-    handler's range IS the bumps, so holding the SHA costs nothing; a broad range carries the
-    setup plane and whatever else shared the push, and parking all of it behind one service's
-    staging verdict is what `deploy_defer`'s `DECIDED:` measured the cost of. The verdict is
-    about the gated services — `staging_scope` picks them — and says nothing about the setup
-    plane, so the broad half still applies and the bumps defer-and-alert. No `hold_sha`
-    either: the range merges below, so `skip_hold` could never match it again, and a hold
-    nothing can clear turns GitOps Deploy — Status red for good.
-    """
-    covered = covered_by_plane(plans, cs.k8s_deploy)
-    if covered:
-        log(
-            f"{sorted(covered)}: the deploy plane applies these, so staging is not asked"
-        )
-    gated = cs.k8s_deploy - covered
-    if not gated:
-        return cs, set()
-    origin = target.origin
-    verdict = consult_staging(tools, state, config, gated, origin)
-    if not staging_blocks(verdict, blocking=config.staging_gate_blocking):
-        return cs, set()
-    if consume_staging_override(state):
-        deploy_alerts.discord(
-            tools,
-            config,
-            deploy_alert_text.staging_override_alert(
-                config.hostname, origin, state.path("staging_override")
-            ),
-        )
-        log(f"staging rejected {origin[:8]}; override armed, deploying prod anyway")
-        return cs, set()
-    log(
-        f"staging rejected {origin[:8]}; the broad range still merges and applies, and "
-        f"{sorted(gated)} defer-and-alert rather than deploying"
-    )
-    return replace(cs, k8s=cs.k8s | gated, k8s_deploy=cs.k8s_deploy - gated), gated
 
 
 def apply_broad_k8s(
@@ -147,7 +75,7 @@ def apply_broad_k8s(
 
     IT SHARES THE BROAD DEADLINE rather than adding a `K8S_DEPLOY_TIMEOUT_S` of its own, for
     the reason the plans share it: `gitops-deploy.service.j2` sizes `TimeoutStartSec` treating
-    this whole arm as one apply plus the staging pair and the flock wait. It STARTS only when
+    this whole arm as one apply plus the flock wait. It STARTS only when
     what is left is at least `k8s_deploy_timeout_s`, the budget a k8s-only tick grants the
     same bump. With less, the run would die at the timeout (a hold and a page, often for a
     service that was healthy) or its lock wait would raise `ServiceLockBusy` and reset the

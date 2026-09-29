@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Ask the staging cluster whether it accepts a commit, from daniel-box.
 
-SLICE 1 OF PHASE C (docs/staging-phase-c.md). This wires to nothing: it deploys a named SHA to
+SLICE 1 OF PHASE C (docs/archive/staging-phase-c.md). This wires to nothing: it deploys a named SHA to
 `daniel-stage` and reports a verdict. `gitops_deploy.py` does not call it, and gating on it is
 slice 4. What lands here is the piece every later slice needs — a way for the deployer's host to
 get an answer out of a cluster it cannot reach.

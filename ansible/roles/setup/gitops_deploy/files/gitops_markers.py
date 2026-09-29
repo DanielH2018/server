@@ -132,8 +132,8 @@ MARKERS: dict[str, str] = {
     # to dedupe against `deployed`), a stale denylist (the DISARM itself is stateless and
     # recomputed every tick — only the page is throttled), a master tip that FAILED CI (until
     # the operator fixes or reverts; there is no marker for `ci_pending`, which resolves
-    # itself within a tick or two and stays silent), and a staging-gate verdict — rather than
-    # every tick for as long as the state persists.
+    # itself within a tick or two and stays silent) — rather than every tick for as long as
+    # the state persists.
     "broad_alerted": "broad_alerted_sha",
     "secrets_alerted": "secrets_alerted_sha",
     "tasks_alerted": "tasks_alerted_sha",
@@ -146,14 +146,13 @@ MARKERS: dict[str, str] = {
     # config rendered from an unpushed tree) re-renders once per SHA rather than every tick.
     "denylist_rendered": "denylist_rendered_sha",
     "ci_alerted": "ci_alerted_sha",
-    "staging_alerted": "staging_alerted_sha",
     # The last dirty-alert slot (`YYYY-MM-DD:am|pm`) paged for a dirty working tree. The tick
     # runs every 30 min, so without this an open edit session would re-alert all day; one
     # alert per slot — a morning slot at/after DIRTY_ALERT_MORNING_HOUR (08:00 CT) and an
     # evening slot at/after DIRTY_ALERT_EVENING_HOUR (20:00 CT). See
     # `deploy_logic.dirty_alert_slot`.
     "dirty_alerted": "dirty_alerted_date",
-    # The three that are not per-SHA dedupe markers. They are here for the same reason as the
+    # The one that is not a per-SHA dedupe marker. It is here for the same reason as the
     # rest — so a caller names a marker rather than carrying a path — and because the
     # `state_dir` fixture repoints the whole `DeployerState` at once, which a path threaded
     # through a function argument would escape.
@@ -170,19 +169,6 @@ MARKERS: dict[str, str] = {
     # per-SHA markers above still gate DETECTION (so a delivered alert isn't re-queued on the
     # broad path's every-tick re-eval); this queue owns delivery.
     "pending_alerts": "pending_alerts.json",
-    # Where a real gated tick's verdict is recorded (docs/staging-phase-c.md, *After the flip:
-    # the tick ledger*). Nothing reads it back since the staging-backfill ratchet was retired
-    # (#2414); an operator reads it with `jq`.
-    "staging_ticks": "staging-ticks.jsonl",
-    # The operator's one-tick escape hatch, armed by creating the file and disarmed by
-    # removing it. Decision 4: "Build the override before the gate. A gate with no escape
-    # hatch becomes a gate somebody deletes at 2 AM, and nobody reviews the deletion."
-    #
-    # It is CONSUMED at the point the gate would block, never at the point it is read.
-    # Consuming on entry would spend it on the first tick after arming — which is usually a
-    # tick with nothing to gate — and leave the operator's actual push facing the block with
-    # the hatch already gone.
-    "staging_override": "staging_gate_override",
 }
 
 # What the playbook field of a `manual_plane` line holds for a role no playbook applies

@@ -264,14 +264,14 @@ def _deploy_plane(narrow, config, target) -> BroadPlan:
         log(
             f"narrow: {','.join(denied)} are denylisted for k8s auto-deploy and are applied "
             "here regardless — the broad plane runs the plain playbook forward-only, with "
-            "no snapshot, staging gate or rollback for the denylist to withhold"
+            "no snapshot or rollback for the denylist to withhold"
         )
     return BroadPlan(playbook, tags, True)
 
 
 # DECIDED: the broad plane ignores `K8S_AUTODEPLOY_DENYLIST` (issue #1962). The denylist gates
 # PROMOTION into the k8s auto-deploy machinery — `split_k8s_auto_deploy` — whose pre-apply
-# snapshot, staging gate and automatic rollback are what a role declares `k8s_autodeploy:
+# snapshot and automatic rollback are what a role declares `k8s_autodeploy:
 # false` to stay out of: a probe-less workload the rollout gate cannot see, migrating state a
 # revert would corrupt, a platform role whose rollback needs the access it just broke. The
 # broad plane has none of that machinery. It runs the plain playbook forward-only and holds

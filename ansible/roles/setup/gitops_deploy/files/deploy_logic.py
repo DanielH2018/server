@@ -13,7 +13,6 @@ This module is the index: every decision the deployer makes is defined in one of
 | `deploy_health` | the Discord delivery queue's pure half |
 | `deploy_inventory` | what this host declares, parsed from host_vars text |
 | `deploy_k8s` | k8s auto-deploy eligibility, the denylist, the rollback's revert note |
-| `deploy_staging` | the staging subset and its verdict summary |
 
 Nothing defines a name here, and that is load-bearing for the tests: a `monkeypatch` on
 `deploy_logic.<name>` rebinds a re-export that no function reads, so the test passes against
@@ -105,17 +104,4 @@ from deploy_remediation import (  # noqa: F401
     manual_plane_clear_cmd,
     manual_plane_clear_for,
     manual_plane_remediation,
-)
-from deploy_staging import (  # noqa: F401
-    STAGING_NO_VERDICT,
-    STAGING_PASS,
-    STAGING_REJECTED,
-    STAGING_SKIPPED,
-    StagingVerdict,
-    TickOutcome,
-    staging_blocks,
-    staging_scope,
-    staging_tick_outcome,
-    staging_verdict,
-    staging_verdict_summary,
 )

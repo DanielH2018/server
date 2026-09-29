@@ -174,10 +174,8 @@ def test_read_state_missing_reads_clear_is_clean(state_dir):
 
 def test_read_state_present_reads_value_is_flagged(state_dir):
     (state_dir / "hold_sha").write_text("deadbeef\n")
-    (state_dir / "staging_gate_override").write_text("")
     st = reads.read_state(state_dir)
     assert st["hold_sha"] == "deadbeef"
-    assert st["staging_gate_override"] == "set"
 
 
 def test_read_state_splits_hold_plane_into_its_entries_is_clean(state_dir):

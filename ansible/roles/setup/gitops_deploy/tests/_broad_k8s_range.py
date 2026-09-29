@@ -87,13 +87,6 @@ def mixed(settings, tick, *broad_paths, promote: bool = True):
     )
 
 
-def blocking(settings, tick, *broad_paths):
-    """A mixed range whose staging consultation rejects, with blocking armed as on daniel-box."""
-    config = mixed(settings, tick, *broad_paths)
-    tick.staging_verdict = "rejected"
-    return dataclasses.replace(config, staging_gate_blocking=True)
-
-
 def plane_applies_radarr(settings, tick):
     """A range whose narrowed deploy plane applies a radarr bump, with sonarr's left to deploy.
 

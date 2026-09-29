@@ -53,8 +53,8 @@ class DeployerState(K8sLineMarkers):
 
     The files record what this host believes — the held SHA, the plane that failed, how long
     it has been behind origin, the setup roles no tick can apply, one dedupe marker per alert
-    channel, the undelivered-alert queue, the staging tick ledger and the operator's staging
-    override. `tests/test_deployer_state.py` pins every marker by name against `MARKERS`.
+    channel and the undelivered-alert queue. `tests/test_deployer_state.py` pins every marker
+    by name against `MARKERS`.
 
     Attributes:
         directory: where the markers live. `/var/lib/gitops-deploy` on a host; a tmp_path

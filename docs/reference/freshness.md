@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-28 23:52 UTC
-generated_sha: f1c4b8c76
+generated_at: 2026-09-29 00:40 UTC
+generated_sha: 3094dcf46
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,18 +12,18 @@ generated_sha: f1c4b8c76
 
 # Doc freshness
 
-47 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+46 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
-| [staging-cluster.md](../staging-cluster.md) | 2026-09-23 | 31 | 17 | `scripts/deploy.sh` (2026-09-28) |
 | [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 14 | `ansible/vars/secrets.yml` (2026-09-28) |
-| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 12 | `ansible/roles/k8s/sonarr/tasks/verify.yml` (2026-09-28) |
+| [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 12 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-29) |
+| [python-code-organization.md](../python-code-organization.md) | 2026-09-28 | 67 | 11 | `ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py` (2026-09-29) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-26 | 22 | 10 | `scripts/dev/findings.py` (2026-09-28) |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-09-26 | 10 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-09-24 | 9 | 6 | `ansible/inventory/group_vars/all.yml` (2026-09-28) |
-| [deploying.md](../deploying.md) | 2026-09-25 | 10 | 6 | `scripts/deploy.sh` (2026-09-28) |
+| [deploying.md](../deploying.md) | 2026-09-25 | 10 | 6 | `scripts/deploy_tools/staging_gate_remote.sh` (2026-09-29) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-09-27 | 13 | 6 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-09-21 | 9 | 5 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-09-26 | 13 | 5 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
@@ -32,8 +32,9 @@ generated_sha: f1c4b8c76
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-17 | 9 | 4 | `scripts/deploy_tools/land_tags.py` (2026-09-26) |
 | [adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md](../adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | 2026-09-24 | 5 | 4 | `scripts/deploy.sh` (2026-09-28) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-09-24 | 7 | 4 | `CLAUDE.md` (2026-09-28) |
+| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | — | 4 | 3 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-06 | 3 | 3 | `ansible/roles/k8s/manifests/tasks/main.yml` (2026-09-28) |
-| [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `scripts/deploy.sh` (2026-09-28) |
+| [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` (2026-09-29) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-09-18 | 11 | 3 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-09-28) |
 | [healthchecks-io-deadman.md](../healthchecks-io-deadman.md) | 2026-09-25 | 17 | 3 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [adr/0015-d2-for-hand-authored-diagrams.md](../adr/0015-d2-for-hand-authored-diagrams.md) | 2026-09-01 | 2 | 2 | `scripts/docs/build_docs.py` (2026-09-24) |
@@ -47,19 +48,17 @@ generated_sha: f1c4b8c76
 | [adr/0008-16-mib-longhorn-blocks.md](../adr/0008-16-mib-longhorn-blocks.md) | 2026-09-02 | 1 | 1 | `ansible/tests/longhorn/test_pvc_sizes_match_block_size.py` (2026-09-05) |
 | [adr/0013-daniel-pi-stays-on-docker.md](../adr/0013-daniel-pi-stays-on-docker.md) | 2026-09-02 | 1 | 1 | `ansible/inventory/host_vars/daniel-pi.yml` (2026-09-24) |
 | [security-tools.md](../security-tools.md) | 2026-09-02 | 3 | 1 | `ansible/initial_setup.yml` (2026-09-28) |
-| [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-09-03 | 2 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-28) |
+| [wireguard-private-homelab-access.md](../wireguard-private-homelab-access.md) | 2026-09-03 | 2 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-29) |
 | [email-to-rss.md](../email-to-rss.md) | 2026-09-21 | 1 | 1 | `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2` (2026-09-28) |
-| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-09-27 | 7 | 1 | `docs/monitor-bridge-checks.md` (2026-09-28) |
+| [volume-snapshot-drills.md](../volume-snapshot-drills.md) | 2026-09-27 | 7 | 1 | `docs/monitor-bridge-checks.md` (2026-09-29) |
+| [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-28 | 3 | 1 | `ansible/roles/setup/gitops_deploy/files/gitops_deploy.py` (2026-09-29) |
+| [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-09-28 | 5 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-29) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
-| [adr/0010-pull-based-gitops-over-argo-and-flux.md](../adr/0010-pull-based-gitops-over-argo-and-flux.md) | 2026-09-28 | 3 | 0 | — |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 0 | — |
-| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-09-28 | 4 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-09-28 | 1 | 0 | — |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-28 | 46 | 0 | — |
-| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-28 | 80 | 0 | — |
 | [index.md](../index.md) | 2026-09-28 | 0 | 0 | — |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-09-28 | 15 | 0 | — |
-| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-09-28 | 47 | 0 | — |
-| [python-code-organization.md](../python-code-organization.md) | 2026-09-28 | 69 | 0 | — |
-| [staging-phase-c.md](../staging-phase-c.md) | 2026-09-28 | 17 | 0 | — |
-| [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-09-28 | 5 | 0 | — |
+| [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-29 | 80 | 0 | — |
+| [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-09-29 | 47 | 0 | — |
+| [staging-cluster.md](../staging-cluster.md) | 2026-09-29 | 33 | 0 | — |

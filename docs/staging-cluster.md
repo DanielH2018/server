@@ -9,9 +9,14 @@ server without applying them. Tier 1 catches bad apiVersions, schema drift and C
 cannot catch scheduling, PVC binding, probe or rollout behaviour, because nothing is ever
 actually run. Tier 2 is what runs it.
 
-Covers **Phase A** (the cluster exists) and **Phase B** (Ansible can deploy to it). Phase C —
-gating the GitOps pipeline on a staging deploy — gets its own spec once staging has run long
-enough to show what a realistic health gate looks like.
+Covers **Phase A** (the cluster exists) and **Phase B** (Ansible can deploy to it).
+
+**Phase C — gating the GitOps tick on a staging deploy — was built and then retired** (#2859,
+2026-09-29). The deployer no longer consults staging; `docs/archive/staging-phase-c.md` is the
+record. What stays live is this cluster and the way in by hand:
+`uv run python scripts/deploy_tools/staging_gate.py <sha> --tags <svc>` from daniel-box, then
+`scripts/deploy_tools/staging_expectations.py`. The guest and its network also carry the
+monthly etcd restore drill (`roles/setup/hypervisor`).
 
 ---
 
@@ -304,19 +309,10 @@ a false failure. The subset in *Decision 6* is chosen partly to avoid that class
 
 ### 6. The staging subset, and the hole this leaves
 
-Staging cannot carry every service in 8 GB, and **a gate over a subset gates only that subset.**
-This is stated here, in the spec, because it is the claim most likely to be quietly overread once
-the pipeline is green.
-
-<!-- Generated from the STAGING_SUBSET default in gitops_deploy.py; edit that. -->
---8<-- "assets/generated/fragments/staging-subset.md"
-
-That is a small fraction of the fleet, and most of the fleet is auto-deployable — an
-image-pin bump reaches an eligible role unattended regardless of whether staging covers it:
-
-<!-- Generated from STAGING_SUBSET against every roles/k8s/ directory and each role's own
-     k8s_autodeploy declaration; edit those, not this table. -->
---8<-- "assets/generated/fragments/staging-coverage.md"
+Staging cannot carry every service in 8 GB, and **a run over a subset says nothing about the
+rest.** This is stated here, in the spec, because it is the claim most likely to be quietly
+overread. A session names its own services, and six of roughly fifty-four k8s roles are what
+staging has ever been sized to run — the rest reach production having never been on it.
 
 The subset is chosen for coverage of **mechanisms**, not importance:
 
@@ -592,22 +588,24 @@ templates read comes from `group_vars/all.yml` or the builder's own defaults. Le
 rather than a widening, on the same reasoning as the cron-PATH guard — don't extend a check
 on principle when the uncovered forms have been audited.
 
-Phase C (pipeline gating) is built — all four slices, live on daniel-box. **Letting the
-gate run was not, on its own, how the false-failure rate got measured** — that was this
-spec's assumption and it did not survive contact: only about one tick a month can reach the
-gate, so the rate was gathered by a deliberate backfill.
-[staging-phase-c.md](staging-phase-c.md) carries the live status and the rescoped entry
-condition; do not restate either here, because a second copy is what made this paragraph
-assert an unmet precondition for a day after the gate was already running — and what made it
-assert a measurement plan for two days after that plan was known not to work. The mode was
-the third: this paragraph called the gate advisory for the hours after it started blocking.
+Phase C (pipeline gating) was built — all four slices, live on daniel-box from 2026-09-02 —
+and retired on 2026-09-29 (#2859) because the arm stopped no deploy. **Letting the gate run
+was not, on its own, how the false-failure rate got measured** — that was this spec's
+assumption and it did not survive contact: only about one tick a month could reach the gate,
+so the rate was gathered by a deliberate backfill.
+[archive/staging-phase-c.md](archive/staging-phase-c.md) carries the whole record; do not
+restate it here, because a second copy is what made this paragraph assert an unmet
+precondition for a day after the gate was already running — and what made it assert a
+measurement plan for two days after that plan was known not to work. The mode was the third:
+this paragraph called the gate advisory for the hours after it started blocking.
 
-## Open questions for Phase C, recorded now
+## Questions Phase C had to answer
 
-Answered, or at least given a recommendation, in [staging-phase-c.md](staging-phase-c.md).
-The three below are kept here because they are what that document had to resolve, and because
-it added a fourth the spike had not surfaced: **the deployer runs on daniel-box and staging is
-reachable only from daniel-server**, so gating cannot be a step added to `main()`.
+Answered, or at least given a recommendation, in [archive/staging-phase-c.md](archive/staging-phase-c.md).
+The three below are kept because they are what that document had to resolve, and because it
+added a fourth the spike had not surfaced: **the deployer runs on daniel-box and staging is
+reachable only from daniel-server**, so gating could not be a step added to `main()`. They
+read the same way for a manual session, minus the window question.
 
 - What counts as a staging pass. `probe.py health` per service is the obvious gate and now
   covers Deployments and DaemonSets, but the pass criteria for a whole-cluster deploy is a

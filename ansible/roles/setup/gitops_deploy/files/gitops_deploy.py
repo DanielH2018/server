@@ -10,7 +10,7 @@ record the bad SHA as a hold marker, and alert the dedicated Discord webhook.
 and returns a `TickTarget`, `deploy_phases.plan_tick()` turns the incoming range into a
 `TickPlan`, and one `deploy_handlers.handle_*` function owns each terminal branch. The
 transport lives in `deploy_io.py` and its leaves, the message bodies and the alert queue in
-`deploy_alerts.py`, the staging gate's vocabulary in `deploy_staging.py`, the marker files in
+`deploy_alerts.py`, the marker files in
 `deploy_state.py`, and the decisions in the `deploy_*` modules that `deploy_logic.py` indexes.
 Every phase takes the tick's `tools`, `state` and `config` and imports nothing from here — a
 leaf that imported this module would get a second copy of it whenever the deployer runs as
@@ -47,7 +47,6 @@ import deploy_tick_types
 from deploy_config import (
     Config,
     ConfigError,
-    csv_set,
     load_config,
     log,
     read_config_file,
@@ -143,50 +142,8 @@ K8S_ROLLBACK_TIMEOUT_S = CONFIG.k8s_rollback_timeout_s
 # full deploy (2026-08-22) with headroom, inside TimeoutStartSec alongside the 180s max flock
 # wait. This arm does not stack with the k8s one — it returns before that block — so it is
 # never the term that sizes the ceiling. See deploy_logic.broad_budget_ok for why no rollback
-# is funded on top, including why raising the ceiling for the staging gate did not change that.
+# is funded on top.
 BROAD_DEPLOY_TIMEOUT_S = CONFIG.broad_deploy_timeout_s
-
-# ── the staging gate (Phase C slice 3) ──────────────────────────────────────────────────────
-# OFF by default. Turning it on costs every k8s-deploying tick the staging deploy's wall-clock,
-# so it is a switch rather than a given — and while it is off, this file behaves exactly as it
-# did before the gate existed.
-STAGING_GATE = CONFIG.staging_gate
-# The services staging actually runs (docs/staging-cluster.md, Decision 6). A deploy is split
-# against this: the intersection is what staging can speak for, and the remainder is reported as
-# unchecked rather than passed. Configurable because the subset grows by config, not by code.
-#
-# This one and the two timeouts below read their fallback from `C` here rather than from CONFIG,
-# and that is load-bearing rather than an oversight: scripts/docs/gen_doc_fragments.py parses
-# `C.get("<KEY>", "<literal>")` calls OUT OF THIS FILE by name to publish the staging fragment,
-# so a default that moved into load_config would leave the fragment with no source at all.
-STAGING_SUBSET = csv_set(
-    C.get(
-        "STAGING_SUBSET", "traefik,authelia,freshrss,node-exporter,registry,ical-proxy"
-    )
-)
-# Sized from a measured staging deploy, not from K8S_DEPLOY_TIMEOUT_S — see
-# defaults/main.yml, which carries the measurement and the unit-budget arithmetic. These
-# fallbacks MUST equal the Ansible defaults, because config.env.j2 renders both and a host
-# whose config predates that render falls back to exactly these literals. Pinned by
-# test_gitops_deploy_staging_timeouts.py::test_staging_timeout_fallbacks_match_the_ansible_defaults.
-# A timeout here is NO VERDICT, never a rejection.
-#
-# The actual parsing lives in deploy_config.load_config now, with the same error-collection as
-# every other numeric — a malformed value is recorded in CONFIG.errors rather than raising at
-# import. The two `C.get(...)` calls below are unused: they exist only so
-# scripts/docs/fragment_readers.py's config_default() parser, which reads a
-# `C.get("<KEY>", "<default>")` call out of THIS file by name, still has one to find. Pinned
-# against Config's own defaults by test_staging_timeout_module_fallbacks_match_config_defaults.
-_STAGING_GATE_TIMEOUT_FALLBACK = C.get("STAGING_GATE_TIMEOUT_S", "600")
-_STAGING_EXPECT_TIMEOUT_FALLBACK = C.get("STAGING_EXPECT_TIMEOUT_S", "120")
-STAGING_GATE_TIMEOUT_S = CONFIG.staging_gate_timeout_s
-STAGING_EXPECT_TIMEOUT_S = CONFIG.staging_expect_timeout_s
-# Slice 4. Whether a staging REJECTION stops the prod deploy, or is only logged and alerted.
-# A SEPARATE switch from STAGING_GATE, and off by default even where the gate is on: the entry
-# condition in docs/staging-phase-c.md is evidence rather than effort, so the code lands long
-# before the flip is justified. While this is false the deployer behaves exactly as slice 3 left
-# it. What blocking does and does not act on is `staging_blocks`, not this constant.
-STAGING_GATE_BLOCKING = CONFIG.staging_gate_blocking
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────
 # Refuse to deploy a master tip whose CI is red or unfinished. Without this the deployer applies
@@ -210,20 +167,17 @@ def tick_config() -> Config:
 
     Every phase takes a `deploy_config.Config` rather than a type of the deployer's own.
 
-    FIVE of the seventeen kwargs below are load-bearing, and twelve are not — that asymmetry
-    is deliberate, so do not prune the twelve. The four:
+    THREE of the twelve kwargs below are load-bearing, and nine are not — that asymmetry
+    is deliberate, so do not prune the nine. The three:
 
-      - `staging_subset` is derived from `C` here rather than parsed by `load_config`; its
-        literal fallback in this file is what `scripts/docs/gen_doc_fragments.py` reads.
       - `k8s_autodeploy_enabled` is the value AFTER the empty-denylist fail-closed disarm above,
         which is a decision this module makes and `load_config` cannot.
       - `k8s_autodeploy_enabled_in_file` is the value BEFORE it — the pair is what tells a host
         that has the feature off from one whose denylist line was lost, which is the difference
         `deploy_phases.reconcile_denylist` gates on.
-      - `repo`, `staging_gate` and `staging_subset` are what `tests/conftest.py`'s `tick`
-        fixture repoints — so `staging_subset` is load-bearing twice over.
+      - `repo` is what `tests/conftest.py`'s `tick` fixture repoints.
 
-    The other twelve equal CONFIG's fields today and are passed anyway, so that a patch of ANY
+    The other nine equal CONFIG's fields today and are passed anyway, so that a patch of ANY
     module constant above reaches the phases. Dropping them would make the set of constants a
     test may repoint an implicit list nobody maintains, and the failure would be a fixture that
     silently describes the host's settings instead of the scripted ones.
@@ -231,8 +185,7 @@ def tick_config() -> Config:
     Called from `main()` and `entrypoint()`, never at import, and that is what keeps the
     constants above the single source: a phase reads `config.repo`, and `config.repo` is
     whatever `REPO` holds at the moment the tick starts — which is how `tests/conftest.py`'s
-    `tick` fixture repoints `REPO`, `STAGING_GATE` and `STAGING_SUBSET` without any phase
-    importing this module.
+    `tick` fixture repoints `REPO` without any phase importing this module.
     """
     return dataclasses.replace(
         CONFIG,
@@ -248,11 +201,6 @@ def tick_config() -> Config:
         k8s_deploy_timeout_s=K8S_DEPLOY_TIMEOUT_S,
         k8s_rollback_timeout_s=K8S_ROLLBACK_TIMEOUT_S,
         broad_deploy_timeout_s=BROAD_DEPLOY_TIMEOUT_S,
-        staging_gate=STAGING_GATE,
-        staging_gate_blocking=STAGING_GATE_BLOCKING,
-        staging_subset=STAGING_SUBSET,
-        staging_gate_timeout_s=STAGING_GATE_TIMEOUT_S,
-        staging_expect_timeout_s=STAGING_EXPECT_TIMEOUT_S,
     )
 
 
@@ -315,7 +263,7 @@ def main(tools: DeployTools | None = None, config: Config | None = None) -> int:
         # A render ENDS the tick, for two reasons. The in-memory config still holds the list the
         # render just proved wrong, so anything below would decide against it. And every arm of
         # this unit is non-stacking by construction — the unit template sizes TimeoutStartSec as
-        # max(broad, staging + k8s + rollback), not a sum — so a render that ran on to a k8s
+        # max(broad, k8s + rollback), not a sum — so a render that ran on to a k8s
         # deploy would be the first arm to add its budget to another's and could be SIGTERMed
         # mid-rollback. The next tick is ten minutes away and reads the fresh config.
         return 0
