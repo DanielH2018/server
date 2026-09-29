@@ -69,7 +69,9 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # count fails too (#2679) — the ratchet is what makes these entries a shrinking list rather
 # than a set of permanent exemptions. Recorded 2026-09-28 when the unit became characters
 # (#2826); #2921 started the trim, and configarr and healthchecks left the list by fitting
-# under the ceiling. Each remaining reason names its own next section to move.
+# under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
+# plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
+# account each moved to a docs/ page. Each remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -87,23 +89,9 @@ OVER_CEILING: dict[str, str] = {
         "`/api/user/orgs` measurements and the unconfirmed claim-delivery hypothesis are the "
         "next thing to move there"
     ),
-    "cronjob-gate": (
-        "11548 chars on 2026-09-28: every section answers why the gate is shaped as it is, "
-        "for a caller writing a CronJob; `## Provenance` is the one section with a docs/ home"
-    ),
     "crowdsec": (
         "16194 chars on 2026-09-28: the two operator allowlists and the unban procedure are "
         "operating rules; the 2026-08-22 Metabase removal is dead history to cut"
-    ),
-    "game-stats": (
-        "11160 chars on 2026-09-28: the per-game sections and the shared `stats_lib.py` "
-        "skeleton are editing rules for code the role ships; the two games' duplicated prose "
-        "is the trim. Grew by the terraria-stats replica rule (#2877), which names the one "
-        "value three renders read"
-    ),
-    "headlamp": (
-        "10358 chars on 2026-09-28: the two-identities grant and the OIDC login rules are "
-        "operating rules; `## Plugins` is the next thing to move"
     ),
     "home-assistant": (
         "14137 chars on 2026-09-28: the one convention that breaks edits and the routing "
@@ -124,10 +112,6 @@ OVER_CEILING: dict[str, str] = {
         "18492 chars on 2026-09-29: the gates-and-hysteresis rules govern a check that pages, "
         "and the module-layout rule governs the code it ships; `## Checks` was cut to a "
         "pointer at `files/registry.py` (#2921), and `## Module layout` is the next trim"
-    ),
-    "n8n": (
-        "9427 chars on 2026-09-28: the PVC-state warning and the digest-pin ledger rule are "
-        "operating rules; the pin history belongs in `base-pin-history.tsv`, not here"
     ),
     "qbittorrent": (
         "16640 chars on 2026-09-28: the netns-reset and modcache traps are what a session "

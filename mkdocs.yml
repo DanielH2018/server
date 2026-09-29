@@ -210,6 +210,13 @@ nav:
       # And again for k8s/claude-otel (#2925): the board provenance and the panel-query traps a
       # 2026-09-10 audit measured, kept off the role CLAUDE.md, which keeps the editing rules.
       - claude-otel dashboard record: claude-otel-dashboards.md
+      # Four more of the same split (#2985), each taking one role CLAUDE.md back under the
+      # inject hook's character budget. The role doc keeps the operating rules; the page takes
+      # the working-out a session reads only when it edits that code.
+      - cronjob-gate design record: cronjob-gate-design.md
+      - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
+      - game-stats internals: game-stats-internals.md
+      - n8n community node packages: n8n-community-packages.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md
