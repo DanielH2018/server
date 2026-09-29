@@ -1,8 +1,7 @@
 # traefik — the cluster ingress edge
 
-Traefik terminates TLS and installs the IngressRoute/Middleware CRDs every other k8s
-role depends on, so it must render before any role whose manifests reference those CRDs.
-See repo-root `CLAUDE.md` for shared conventions.
+Traefik terminates TLS and installs the IngressRoute/Middleware CRDs every other k8s role
+depends on, so it must render before any role whose manifests reference those CRDs.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -18,7 +17,7 @@ See repo-root `CLAUDE.md` for shared conventions.
 
 - **The dashboard has its own IngressRoute** (`dashboard-ingressroute.yaml.j2`).
 - **`traefik-acme` is the `acme.json` cert store** (`Recreate`, ReadWriteOnce — two Traefiks
-  racing to write it would corrupt it).
+  writing it corrupt it).
 
 The working-out behind the rules below sits on two pages, split by subject:
 `docs/traefik-plugins-and-startup.md` (the plugin download, the probe's red path, the init
@@ -35,9 +34,9 @@ origin-pull, the 421 incidents).
   too. Three constraints hold it together — the entrypoint, the path and matching on a path
   rather than a Host — and `ansible/tests/services/test_traefik_edge_selfcheck.py` ENFORCES
   all three.
-- **Do not re-run the outage to see the red path — it is already measured** (2026-09-10,
-  #1345). Every container restart re-downloads the plugin, so the shared `/plugins-storage`
-  emptyDir short-circuits nothing.
+- **Do not re-run the outage to see the red path — it is measured** (2026-09-10, #1345).
+  Every container restart re-downloads the plugin, so the shared `/plugins-storage` emptyDir
+  short-circuits nothing.
 - **The bouncer runs with `metricsUpdateIntervalSeconds: 0`** (#2752): the default ticker
   silently stops the 60s decision stream for 600s or 1200s at a time, and a ban made in that
   window never reaches the edge. The `DECIDED: no usage-metrics ticker` comment in
@@ -54,14 +53,14 @@ origin-pull, the 421 incidents).
 
 - **The https entrypoint rewrites a Cloudflare request's X-Forwarded-For to
   CF-Connecting-IP, first in its chain.** Cloudflare appends the client address to any XFF the
-  client sent, so without it the leftmost entry is client-chosen. Authelia logs that entry as
-  `remote_ip`, and the CrowdSec agent bans on it.
+  client sent, so without it the leftmost entry is client-chosen — and Authelia logs that
+  entry as `remote_ip` while the CrowdSec agent bans on it.
 - **The access log's `ClientHost` is the whole X-Forwarded-For chain, and every reader takes
   its rightmost entry** (#2446) — the access-log handler wraps outside the entrypoint
   middlewares, so it records the field before `cloudflare-realip` runs. A harness that sends
   the header from a trusted source proves nothing about either reader.
-- **Only Cloudflare is a trusted forwarder** (`forwardedHeaders.trustedIPs`). `lan_subnet`
-  was dropped on 2026-09-24; the `DECIDED:` comment in `static-config.yaml.j2` has why.
+- **Only Cloudflare is a trusted forwarder** (`forwardedHeaders.trustedIPs`); `lan_subnet`
+  was dropped 2026-09-24, and `static-config.yaml.j2`'s `DECIDED:` comment has why.
 - **Every public `x.<domain>` router requires Cloudflare's origin-pull client certificate**
   (#1990) — the `cloudflare-origin-pull` TLSOption, rendered by
   `ansible/templates/origin-pull.yml.j2`. Traefik picks TLS options by SNI, so the
@@ -76,9 +75,9 @@ origin-pull, the 421 incidents).
   kube-apiserver's OIDC fetches for hours on 2026-09-27 while fresh curls answered 200.
   monitor-bridge's `check_traefik_421` pages on a per-router rate that stays up for 15 minutes
   (#2757).
-- **`allowEmptyServices` keeps a router whose backend has no ready endpoints** (#2747, #2758),
-  which is what opened that router-less window on a reboot. `static-config.yaml.j2` carries
-  the `DECIDED: keep a router` marker, and
+- **`allowEmptyServices` keeps a router whose backend has no ready endpoints** (#2747,
+  #2758), which is what opened that router-less window on a reboot. `static-config.yaml.j2`
+  carries the `DECIDED: keep a router` marker, and
   `ansible/tests/services/test_traefik_watched_namespaces.py::test_empty_services_keep_their_router_is_clean`
   pins the flag.
 

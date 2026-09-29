@@ -1,8 +1,8 @@
 # valheim (k8s) — Valheim dedicated server
 
-Archived on Docker 2026-01-07 (`6f942bd2`), reactivated 2026-08-13 **straight onto k3s**. The
-archived compose role and its reactivation recipe (deleted in #2385) describe a topology that
-no longer exists. `k8s/terraria` is the sibling this role copies.
+Archived on Docker 2026-01-07, reactivated 2026-08-13 **straight onto k3s**. The archived
+compose role and its reactivation recipe (deleted in #2385) describe a topology that no
+longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -39,8 +39,8 @@ no longer exists. `k8s/terraria` is the sibling this role copies.
   chain, so the join password is the only access control.
 
 ## Notable
-- **The join password lives in SOPS as `valheim_server_pass`.** The compose value it replaced
-  is disclosed in a public git log; treat it as burned.
+- **The join password lives in SOPS as `valheim_server_pass`.** The compose value it
+  replaced is disclosed in a public git log; treat it as burned.
 - **The probes read `/proc/net/udp6`,** not `/proc/net/tcp` and not `/proc/net/udp` alone:
   Valheim is UDP and binds v6, so a copied terraria probe can never pass. It is a kernel-side
   bind check, so a Ready pod proves the port is bound and nothing more.
@@ -48,9 +48,8 @@ no longer exists. `k8s/terraria` is the sibling this role copies.
   `initgroups()` for the hourly world backup, and without the capability every tick fails
   behind a healthy-looking log.
 - **No Kuma tile, deliberately** — Kuma's port monitor is TCP-only and Valheim is UDP, the
-  same reason wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health and
-  the pod-restart alerting. A port monitor added here would probe a closed TCP port and sit
-  permanently red.
+  same reason wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health
+  instead, and a port monitor added here would sit permanently red on a closed TCP port.
 - **First rollout is slow** — SteamCMD downloads ~1.8 G before anything binds, and
   `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout` is the budget both
   the drain's `rollout status --timeout` and `progressDeadlineSeconds` read (#2409).
@@ -76,23 +75,22 @@ it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
   not `valheim-mods`: `k8s/manifests` keys `k8s_rebuilt_images` on `manifests_service`, and a
   mismatched name pushes an image no pod runs.
 - **`valheim_k8s_bepinex` is DERIVED from the mod list, never set by hand.** Either drift is
-  silent — mods with BepInEx off is a vanilla server that still reports every plugin copied
-  into place, and BepInEx on with an empty list is a modded launch path carrying nothing.
+  silent: mods with BepInEx off is a vanilla server that still reports every plugin copied
+  into place, and BepInEx on with an empty list is a modded launch carrying nothing.
 - **Verify by the plugin log lines, not by pod Ready** — the startup probe passes identically
   with zero plugins loaded. `grep -i 'Loading \[.*\]'` over the pod log should name one per
   live entry in `valheim_k8s_mods`, and **loading is not working**: a plugin can log itself
   installed and then throw every frame.
 - **Enable one mod at a time and read the boot log before adding the next.** The live set is
   two because Valheim 1.0's rolling updates keep breaking the rest, and `UPDATE_CRON` runs at
-  its default `*/15` — so the game can update out from under the mods with no repo change and
-  no failing check.
+  its default `*/15` — the game can update out from under the mods with nothing failing.
 - **Ore through portals is a vanilla world modifier, not a mod** — `valheim_k8s_server_args`
   passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.
 
 `docs/valheim-modding.md` has the two directories the initContainer writes, the
-`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, the three log lines that look like
-success, and how to vet a candidate.
+`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, and the three log lines that look
+like success.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`

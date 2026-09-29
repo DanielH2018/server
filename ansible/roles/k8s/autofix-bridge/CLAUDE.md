@@ -16,7 +16,7 @@ and contract unchanged.
   two independent reasons
 <!-- /generated_from -->
 
-- **Stdlib only** (no build, no extra deps) · **No web UI**, no Authelia
+- **Stdlib only**, no web UI, no Authelia
 - **Host:** daniel-box — pinned by `nodeSelector`, so a daniel-server drain or cold boot
   cannot take the remediation loop down with it
 - **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
@@ -38,7 +38,7 @@ here must satisfy this summary.
   guess.
 - **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
   match reads as a systemic cause, so it acts on **none** and alerts.
-- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file or push heartbeat that
+- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file or heartbeat that
   monitor-bridge reads, and a live action is Discord-alerted. No silent mutation.
 - **Next-run review:** before widening scope or flipping a plane to `live`, read the last
   run's outcomes (`outcomes.jsonl`, the Discord log).
@@ -70,19 +70,19 @@ here must satisfy this summary.
 
 ## Notable
 - **Two Kuma monitors, on purpose:** a liveness tile as the fast dead-man for a hard crash,
-  and a push monitor as the loop's per-cycle heartbeat on a 600s backstop.
+  a push monitor as the per-cycle heartbeat on a 600s backstop.
 - **RENAME GOTCHA — don't "fix" it:** the **push monitor id, token and env are deliberately
   kept** `arr-autoblock` / `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`, because a
   monitor names the *check* rather than the container and renaming loses its history. A grep
   hitting `arr-autoblock` here is CORRECT, not a missed rename.
-- **journald cap is NOT owned here.** It lives solely in initial_setup's `50-homelab.conf`. A
-  `60-` drop-in this role once shipped silently won, because systemd merges drop-ins
-  last-wins-by-filename, so the role now REMOVES any stale `60-autofix-journald.conf`.
-- **Deploy `autofix-bridge` before `monitor-bridge`**, which bind-mounts the fake-remux state
-  dir `:ro`. Both state files are seeded on first deploy so its two checks cannot false-DOWN
-  on a fresh host.
+- **journald cap is NOT owned here.** It lives in initial_setup's `50-homelab.conf`. A `60-`
+  drop-in this role once shipped silently won, because systemd merges drop-ins
+  last-wins-by-filename, so the role now REMOVES any stale one.
+- **Deploy `autofix-bridge` before `monitor-bridge`**, which bind-mounts the fake-remux
+  state dir `:ro`. Both state files are seeded on first deploy so its two checks cannot
+  false-DOWN on a fresh host.
 - **Don't re-propose the rejected auto-fix candidates** — prowlarr indexers, b2, recyclarr
-  and targets were surveyed and refused. See [[autofix-bridge-auto-remediation]].
+  and targets were surveyed and refused ([[autofix-bridge-auto-remediation]]).
 
 ## Editing & testing
 - Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
@@ -90,9 +90,9 @@ here must satisfy this summary.
   fork a second copy of `bridge/common.py` here** — edit monitor-bridge's. The
   `checksum/autofix-script` annotation hashes every staged module, because a ConfigMap change
   alone does not restart a Deployment.
-- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2`
+- Manifests: `templates/deployment.yaml.j2` and `templates/env-secret.yaml.j2`
 - The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
   `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
-- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
+- Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
   ansible/roles/setup/fake_remux/files`.
 - Deploy: `./scripts/deploy.sh --tags "autofix-bridge"`
