@@ -6,7 +6,8 @@ human in the loop. That set is the reason to read the page, and it is not obviou
 single role: the tasks are spread across roles/setup/, roles/k8s/ and roles/containers/.
 
 STATIC PARSING ONLY. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
-in a schedule or user resolves only where every host would get the same value: its variables
+in a schedule or user, and a variable a `when:` compares `inventory_hostname` against, resolve
+only where every host would get the same value: their variables
 come from role defaults or `group_vars/all.yml` and no `host_vars` file sets them
 (`lib.jinja_defaults`). Anywhere else it is printed as written, because a value that differs
 by host cannot be resolved without a real deploy, and an unresolved `{{ var }}` is the honest

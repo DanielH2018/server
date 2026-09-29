@@ -18,6 +18,7 @@ Run: uv run pytest ansible/tests/setup/test_ops_cron_host_gate.py
 import re
 
 from _helpers import ALL_VARS, ANSIBLE
+from land_reach import _eval_when
 from lib import yaml_fast
 
 VAR = "ops_cron_host"
@@ -59,6 +60,14 @@ def test_the_single_host_gate_names_the_variable_not_a_literal():
     assert [when for when in gated.values() if VAR in when]
 
 
-def test_the_variable_resolves_where_the_reach_reader_looks():
-    """In group_vars, not role defaults — `land_reach` reads only the former."""
+def test_the_reach_reader_still_narrows_the_gate_to_one_host():
+    """The reader itself, not its precondition.
+
+    `_eval_when` resolves a gate against `group_vars/all.yml` + `host_vars` and fails OPEN,
+    so the variable moved into a role's `defaults/` would read as every host while
+    `group_vars` still held the old value and every assertion here passed.
+    """
     assert yaml_fast.safe_load(ALL_VARS.read_text()).get(VAR) == "daniel-box"
+    gate = f"inventory_hostname == {VAR}"
+    assert _eval_when(gate, "daniel-box") is True
+    assert _eval_when(gate, "daniel-pi") is False
