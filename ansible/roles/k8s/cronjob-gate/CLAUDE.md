@@ -10,8 +10,8 @@ never `--tags cronjob-gate` — see the invocation example below.
 image RUNS. It does not prove the workload succeeded.** That is weaker than the Deployment path,
 where `roles/k8s/manifests` runs `rollout status` and then a stability soak against a
 readinessProbe. Here, a run whose container never started fails the deploy; a run whose container
-started and exited non-zero is reported and the deploy continues. "Why the split is drawn there"
-below explains why, and it is a decision rather than an omission.
+started and exited non-zero is reported and the deploy continues. *Why the split is drawn
+there* in `docs/cronjob-gate-design.md` explains why: it is a decision, not an omission.
 
 ```yaml
 - name: Gate the widget deploy on a one-off run
