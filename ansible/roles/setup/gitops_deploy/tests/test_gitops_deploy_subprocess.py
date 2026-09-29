@@ -135,3 +135,36 @@ def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
         f"grandchild pid {grandchild_pid} outlived the timeout — only the direct child was "
         f"killed, not its process group"
     )
+
+
+# ── a timed-out run must still name the task it was running ──────────────────────────────────
+# `subprocess.TimeoutExpired.__str__` prints the argv and the deadline and nothing else, so the
+# 2026-09-01 17:47:19 broad apply on daniel-box logged exactly `Command [...] timed out after
+# 1800 seconds` — neither the running task nor a PLAY RECAP (#2914). The broad arm is
+# forward-only, so that line was all the operator had. RED proof: against a `run()` that
+# re-raises the stdlib exception unchanged, the message below carries no TASK header at all,
+# even though the playbook printed one before it wedged.
+_WEDGED_TASK_SHAPE = """#!/bin/sh
+echo 'TASK [manifests : apply rendered manifests] ***'
+echo 'changed: [daniel-box]'
+sleep 300
+"""
+
+_TASK_HEADER = "TASK [manifests : apply rendered manifests]"
+
+
+def test_run_timeout_error_names_the_task_that_was_still_running(tmp_path) -> None:
+    script = tmp_path / "wedged.sh"
+    script.write_text(_WEDGED_TASK_SHAPE)
+    script.chmod(0o755)
+
+    with pytest.raises(subprocess.TimeoutExpired) as caught:
+        deploy_io.run(["sh", str(script)], cwd=str(tmp_path), timeout=1.0)
+
+    message = str(caught.value)
+    assert _TASK_HEADER in message, (
+        f"the timeout error must name the running task; got: {message!r}"
+    )
+    # The stdlib's own text stays: the argv and the deadline are what say it was a timeout
+    # rather than a failure, and `deploy_handlers` logs this string and nothing else.
+    assert "timed out after" in message

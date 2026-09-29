@@ -40,10 +40,15 @@ from deploy_failtext import (  # noqa: F401 — re-exported for `deploy_io.<name
     RUN_ERROR_STDERR_TAIL,
     RUN_ERROR_STDOUT_CHARS,
     TRUNCATED,
+    TimedOutWithOutput,
+    decoded,
     failing_task,
     failure_detail,
     head,
+    last_task,
+    running_task_detail,
     tail,
+    timeout_detail,
 )
 from deploy_k8s import k8s_role_paths
 from deploy_locks import locked_budget
@@ -75,7 +80,11 @@ def run(
 
     Raises:
         RuntimeError: the process exited non-zero and `check` is True.
-        subprocess.TimeoutExpired: the process (and its group) was killed after `timeout`.
+        deploy_failtext.TimedOutWithOutput: the process (and its group) was killed after
+            `timeout`. A `subprocess.TimeoutExpired` subclass, so an `except
+            subprocess.TimeoutExpired` arm still catches it; its `str()` additionally carries
+            a bounded tail of what the killed process had printed, which on an
+            `ansible-playbook` run names the task that was still running.
     """
     # timeout defaults to None so the long deploy/git calls are unbounded as before;
     # only the k8s deploy/rollback calls pass one.
@@ -112,7 +121,7 @@ def run(
         ) as proc:
             try:
                 stdout, stderr = proc.communicate(timeout=timeout)
-            except subprocess.TimeoutExpired:
+            except subprocess.TimeoutExpired as exc:
                 try:
                     os.killpg(proc.pid, signal.SIGKILL)
                 except ProcessLookupError:
@@ -122,7 +131,15 @@ def run(
                 # on it forever. wait() only reaps the direct child's exit status and doesn't
                 # touch the pipes — CPython's own subprocess.run() does the same on this path.
                 proc.wait()
-                raise
+                # The stdlib already read this: Popen._communicate accumulates every chunk
+                # into _fileobj2output as it goes, and _check_timeout attaches what it had
+                # to the TimeoutExpired it raises. Re-reading the pipes here would risk the
+                # block the wait() above exists to avoid, and would find nothing more that
+                # mattered. What was missing is that TimeoutExpired.__str__ prints only the
+                # argv and the deadline, so the running TASK header never reached the log.
+                raise TimedOutWithOutput(
+                    exc.cmd, exc.timeout, output=exc.output, stderr=exc.stderr
+                ) from exc
         r = subprocess.CompletedProcess(args, proc.returncode, stdout, stderr)
     if check and r.returncode != 0:
         detail = "\n".join(

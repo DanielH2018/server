@@ -15,6 +15,7 @@ Stdlib only: the unit runs under `uv run --no-project` and the host is still on 
 """
 
 import re
+import subprocess
 
 
 # ansible-playbook writes the failing TASK header, the `fatal:` line carrying its msg and the
@@ -96,6 +97,86 @@ def failing_task(text: str) -> tuple[str, str] | None:
         task = "\n".join([section[0], *section[failed_at:]]).strip()
         return task, "\n".join(lines[end:])
     return None
+
+
+def decoded(chunk: str | bytes | None) -> str:
+    """Return ``chunk`` as text, whatever the subprocess layer handed back.
+
+    `TimeoutExpired.output` and `.stderr` are BYTES even under `text=True`: the partial
+    output is joined in `Popen._check_timeout`, which never runs the newline translation the
+    success path does. `scripts/dev/fanout_lib/transport.py` records the same asymmetry
+    against `CalledProcessError`. Undecodable bytes are replaced rather than raised on — a
+    timed-out playbook's error string must not itself fail to render.
+    """
+    if chunk is None:
+        return ""
+    if isinstance(chunk, bytes):
+        return chunk.decode("utf-8", errors="replace")
+    return chunk
+
+
+def last_task(text: str) -> tuple[str, str] | None:
+    """Find the task a killed run was still inside: the last `TASK`/`RUNNING HANDLER` header.
+
+    The peer of `failing_task` for a run that never got to fail. It filters on nothing —
+    a process killed at its deadline printed no `fatal:` line, no `PLAY RECAP` and no
+    profile_tasks table, so the last header ansible wrote is the task that was running.
+
+    Returns:
+        The task's lines (its header and everything the section printed) and everything
+        printed after the section, or None when no section header is there at all.
+    """
+    lines = text.splitlines()
+    starts = [i for i, line in enumerate(lines) if _SECTION_HEADER.match(line)]
+    for n in range(len(starts) - 1, -1, -1):
+        start = starts[n]
+        if not _TASK_HEADER.match(lines[start]):
+            continue
+        end = starts[n + 1] if n + 1 < len(starts) else len(lines)
+        return "\n".join(lines[start:end]).strip(), "\n".join(lines[end:])
+    return None
+
+
+def running_task_detail(stdout: str, limit: int) -> str:
+    """Bound a killed run's stdout to ``limit`` characters, RUNNING TASK FIRST.
+
+    Task-first for the reason `failure_detail` is: `deploy_alert_text.alert_excerpt` trims a
+    Discord post to `ALERT_EXCERPT_CHARS` and `host_lib.discord_post` cuts at 1900 keeping the
+    HEAD, so a header 3000 characters into a tail reaches the journal and never the page.
+    Stdout with no task header in it is a plain tail.
+    """
+    found = last_task(stdout)
+    if found is None:
+        return tail(stdout, limit)
+    task, rest = found
+    task = head(task, limit)
+    rest = tail(rest, limit - len(task))
+    return f"{task}\n{rest}" if rest else task
+
+
+def timeout_detail(stdout: str | bytes | None, stderr: str | bytes | None) -> str:
+    """Bound what a KILLED run had printed: stdout's running task, then stderr's tail."""
+    parts = (
+        running_task_detail(decoded(stdout), RUN_ERROR_STDOUT_CHARS),
+        tail(decoded(stderr), RUN_ERROR_STDERR_TAIL),
+    )
+    return "\n".join(part for part in parts if part)
+
+
+class TimedOutWithOutput(subprocess.TimeoutExpired):
+    """A `TimeoutExpired` whose `str()` names the task the killed playbook was running.
+
+    `subprocess.TimeoutExpired.__str__` prints only the argv and the deadline, so the
+    2026-09-01 17:47:19 broad apply on daniel-box logged `Command [...] timed out after 1800
+    seconds` and nothing else — the broad arm is forward-only, and the operator had nothing
+    to fix forward from (#2914). It stays a `TimeoutExpired` subclass so every
+    `except subprocess.TimeoutExpired` arm and every documented `Raises:` still holds.
+    """
+
+    def __str__(self) -> str:
+        detail = timeout_detail(self.output, self.stderr)
+        base = super().__str__()
+        return f"{base}\n{detail}" if detail else base
 
 
 def failure_detail(stdout: str, limit: int) -> str:
