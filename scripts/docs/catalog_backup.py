@@ -23,7 +23,11 @@ import yaml
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib import yaml_fast
 from lib.render_guard import load_yaml as _load_yaml
-from lib.repo_paths import SHARED_TPL
+from lib.repo_paths import FILTER_PLUGINS, SHARED_TPL
+
+_sys.path.insert(0, str(FILTER_PLUGINS))
+
+from k8s_autodeploy import is_leftover_dir
 
 __all__ = [
     "ClaimDecl",
@@ -331,7 +335,11 @@ def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:
     index: dict[str, str | None] = {}
     if not k8s_roles.is_dir():
         return index
-    for role_dir in sorted(p for p in k8s_roles.iterdir() if p.is_dir()):
+    # A retired role's `__pycache__`-only shell is skipped: it declares nothing (#2888).
+    role_dirs = (
+        p for p in k8s_roles.iterdir() if p.is_dir() and not is_leftover_dir(str(p))
+    )
+    for role_dir in sorted(role_dirs):
         for claim in _declared_claims(role_dir, k8s_roles):
             if claim.resolved and index.get(claim.name) is None:
                 index[claim.name] = claim.storage_class

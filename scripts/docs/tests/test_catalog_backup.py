@@ -413,6 +413,26 @@ def test_claim_index_reads_the_real_tree_for_each_declaration_shape():
     assert not missing, f"claim_index no longer resolves: {missing}"
 
 
+def test_claim_index_skips_a_retired_roles_pycache_shell(tmp_path, monkeypatch):
+    """A `__pycache__`-only directory is not walked as a role; a real one is (#2888).
+
+    The ghost declares no claims either way, so the index alone cannot tell the difference.
+    The spy records which directories `claim_index` hands to the declaration walk.
+    """
+    pycache = tmp_path / "retired" / "files" / "__pycache__"
+    pycache.mkdir(parents=True)
+    (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
+    write(tmp_path / "real" / "defaults" / "main.yml", "---\n")
+    walked = []
+    monkeypatch.setattr(
+        catalog_backup,
+        "_declared_claims",
+        lambda role_dir, _: walked.append(role_dir.name) or [],
+    )
+    claim_index(tmp_path)
+    assert walked == ["real"]
+
+
 def _macro_repo(tmp_path):
     """A role template that mounts both its claims through a shared macro call."""
     shared = tmp_path / "shared"
