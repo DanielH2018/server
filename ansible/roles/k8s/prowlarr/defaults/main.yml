@@ -94,12 +94,36 @@ prowlarr_k8s_mem_request: 128Mi
 #
 # Upstream exposes NO concurrency cap to fix this at the source: FlareSolverr's README documents
 # no env var for concurrent sessions or browser-pool size, and tells the operator to size RAM
-# instead ("With each request a new browser is launched").
+# instead ("With each request a new browser is launched"). Sizing is therefore the only lever on
+# how MANY browsers run at once; prowlarr_k8s_fs_disable_media below is the second lever, on how
+# expensive each one is.
 #
 # The REQUEST deliberately stops well short of the peak. It reserves node memory permanently,
 # and 2048Mi held out of a scheduler that only sees 128Mi used steady-state would hoard a
 # gigabyte to cover minutes per deploy. 512Mi covers the observed steady range so the scheduler
 # stops placing this pod as if it were 128Mi, and the pod stays Burstable either way.
+# Stops the headless browser loading images, CSS and other media while it solves a challenge
+# (#2893). The lever the memory limit above works around: the limit absorbs a burst of
+# overlapping solves, while this makes each solve cheaper.
+#
+# HONESTLY SCOPED — upstream documents DISABLE_MEDIA as a BANDWIDTH saving, not a memory one
+# ("To disable loading images, CSS, and other media in the web browser to save network
+# bandwidth"). The memory reduction is an inference: a renderer that never fetches an image
+# never decodes it into a bitmap buffer either. Nothing here measures it, so the limit above
+# stays at 2048Mi until the 7d working-set peak is re-measured against the 934Mi figure #2883
+# recorded.
+#
+# THE REGRESSION IT RISKS points at the indexers, not at this pod. A Cloudflare interstitial is
+# a rendered widget, and the flag strips STYLESHEETS as well as images — upstream gives no
+# separate switch — so a challenge type that needs either would start failing. The readout is
+# monitor-bridge's `prowlarr_indexers` check (registered in
+# ansible/roles/k8s/monitor-bridge/files/registry.py, reading Prowlarr's /api/v1/indexerstatus
+# in files/checks/service.py), which pages rather than sitting silent.
+#
+# THE REVERT is this var, not an edit to the template: set it false and deploy. Record the
+# refutation here when you do, so the next reader does not re-propose it.
+prowlarr_k8s_fs_disable_media: true
+
 prowlarr_k8s_fs_cpu_limit: "2"
 prowlarr_k8s_fs_mem_limit: 2048Mi
 prowlarr_k8s_fs_cpu_request: "100m"
