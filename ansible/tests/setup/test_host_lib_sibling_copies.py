@@ -30,6 +30,7 @@ import ast
 from pathlib import Path
 
 from _helpers import ROLES, load_tasks, walk_tasks
+from _role_census import role_dirs
 
 MODULE = "host_lib"
 SHARED_TASK = "common/tasks/install_host_lib.yml"
@@ -83,8 +84,7 @@ def _role_dirs(roles_root: Path) -> list[Path]:
         d
         for plane in sorted(roles_root.iterdir())
         if plane.is_dir()
-        for d in plane.iterdir()
-        if d.is_dir()
+        for d in role_dirs(plane)
     )
 
 

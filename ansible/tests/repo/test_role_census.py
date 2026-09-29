@@ -1,10 +1,11 @@
 """`role_dirs` returns real roles and skips a retired role's `__pycache__` shell.
 
-The census is what nine deploy guards, five k8s guards, the longhorn PVC tier guard and the
-shared render read the `roles/k8s/` tree through, so its two edges — debris is skipped, an
-empty directory is not — need their own coverage rather than each caller's.
+The census is what every guard reads a role tree through — `roles/k8s/`, `roles/setup/` and
+the Pi's `roles/containers/` alike (#2964) — so its two edges, debris is skipped and an empty
+directory is not, need their own coverage rather than each caller's.
 """
 
+from _helpers import CONTAINER_ROLES, SETUP_ROLES
 from _role_census import role_dirs
 
 
@@ -39,3 +40,9 @@ def test_the_default_census_finds_the_real_k8s_roles():
     """Non-vacuity against the real tree, and the default argument every guard relies on."""
     names = {p.name for p in role_dirs()}
     assert {"manifests", "volume-claim", "cronjob-gate"} <= names
+
+
+def test_the_census_finds_the_real_setup_and_pi_roles():
+    """Non-vacuity for the two trees #2964 added, each named by a role that predates it."""
+    assert {"common", "gitops_deploy"} <= {p.name for p in role_dirs(SETUP_ROLES)}
+    assert {"wg-easy", "docker-proxy"} <= {p.name for p in role_dirs(CONTAINER_ROLES)}
