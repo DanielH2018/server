@@ -11,6 +11,34 @@
     reload: true
   become: true
 
+# UFW keeps its OWN sysctl file and re-applies it on every `ufw enable`/`reload` and at boot
+# (`IPT_SYSCTL=/etc/ufw/sysctl.conf` in /etc/default/ufw). Ubuntu ships that file with
+# `net/ipv4/conf/{all,default}/log_martians=0` uncommented, so it is the one thing on the host
+# that sets the key to 0 — /etc/sysctl.conf persists 1 and no /etc/sysctl.d or /usr/lib/sysctl.d
+# file mentions the key at all. The hardening loop below writes 1, then `Enable UFW firewall`
+# further down this same file re-applies 0 about twenty tasks later, so daniel-server read 0
+# seconds after a run that reported `changed` and the loop reported `changed` again every run
+# (#2977, measured 2026-09-29). Rewriting UFW's copy to 1 here, BEFORE the loop, makes the two
+# files agree: the loop sets the live value and any later reload re-asserts the same 1.
+# Host-agnostic on purpose — the file is the distro default, identical on daniel-box.
+- name: Check for UFW's own sysctl file
+  tags: [sysctl]
+  ansible.builtin.stat:
+    path: /etc/ufw/sysctl.conf
+  register: initial_setup_ufw_sysctl
+
+- name: Stop UFW's sysctl file from disabling martian logging
+  tags: [sysctl]
+  ansible.builtin.lineinfile:
+    path: /etc/ufw/sysctl.conf
+    regexp: "^#?net/ipv4/conf/{{ item }}/log_martians="
+    line: "net/ipv4/conf/{{ item }}/log_martians=1"
+  loop:
+    - all
+    - default
+  become: true
+  when: initial_setup_ufw_sysctl.stat.exists
+
 - name: Apply kernel security hardening
   tags: [sysctl]
   ansible.posix.sysctl:
@@ -181,6 +209,9 @@
     proto: udp
     delete: true
   become: true
+  # DECIDED: a host literal, not a capability flag (#2975). The rule being deleted was added by
+  # hand on this one machine, so the gate reads "the host that carries that stale rule" — host
+  # history, not hardware. It retires once the Pi has converged.
   when: inventory_hostname == 'daniel-pi'
 
 - name: Enable UFW firewall

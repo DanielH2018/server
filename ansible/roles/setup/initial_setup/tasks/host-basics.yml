@@ -11,7 +11,7 @@
 - name: Gather service facts
   tags: [pi-swap]
   ansible.builtin.service_facts:
-  when: inventory_hostname == 'daniel-pi'
+  when: has_low_memory_board
 
 - name: Stop the hardware watchdog during provisioning (Pi)
   tags: [pi-swap]
@@ -20,7 +20,7 @@
     state: stopped
   become: true
   when:
-    - inventory_hostname == 'daniel-pi'
+    - has_low_memory_board
     - "'watchdog.service' in (ansible_facts.services | default({}))"
 
 - name: Create swap file (Pi)
@@ -30,7 +30,7 @@
     creates: "{{ pi_swapfile_path }}"
   become: true
   register: initial_setup_swapfile_create
-  when: inventory_hostname == 'daniel-pi'
+  when: has_low_memory_board
 
 - name: Secure swap file permissions (Pi)
   tags: [pi-swap]
@@ -40,7 +40,7 @@
     group: root
     mode: "0600"
   become: true
-  when: inventory_hostname == 'daniel-pi'
+  when: has_low_memory_board
 
 - name: Format swap file (Pi)
   tags: [pi-swap]
@@ -49,7 +49,7 @@
   become: true
   changed_when: true
   when:
-    - inventory_hostname == 'daniel-pi'
+    - has_low_memory_board
     - initial_setup_swapfile_create is changed
 
 - name: Persist swap file in fstab (Pi)
@@ -61,7 +61,7 @@
     opts: sw
     state: present
   become: true
-  when: inventory_hostname == 'daniel-pi'
+  when: has_low_memory_board
 
 - name: Activate swap file (Pi)
   tags: [pi-swap]
@@ -70,7 +70,7 @@
   become: true
   changed_when: true
   when:
-    - inventory_hostname == 'daniel-pi'
+    - has_low_memory_board
     - initial_setup_swapfile_create is changed
 
 # The Docker engine must not move under running containers -- and it sits here, BEFORE the
@@ -125,7 +125,7 @@
       - wireguard
     state: present
   become: true
-  when: inventory_hostname == 'daniel-pi'
+  when: has_raspi_kernel
 
 # apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
 # of swap-thrash on the 512 MB Pi (caused the 2026-06-08 dpkg corruption pre-swapfile,
@@ -139,7 +139,7 @@
     state: absent
     purge: true
   become: true
-  when: inventory_hostname == 'daniel-pi'
+  when: has_low_memory_board
   tags: [packages]
 
 - name: Install required packages
@@ -156,12 +156,14 @@
   become: true
   tags: [packages]
 
-- name: Install apt-show-versions (non-Pi hosts only)
+- name: Install apt-show-versions (roomy hosts only)
+  # The inverse of the removal above, on the same fact: the apt-hook cache rebuild is the
+  # cost a 512 MB board cannot pay.
   ansible.builtin.apt:
     name: apt-show-versions
     state: present
   become: true
-  when: inventory_hostname != 'daniel-pi'
+  when: not has_low_memory_board
   tags: [packages]
 
 - name: Resolve the deploy user's home directory

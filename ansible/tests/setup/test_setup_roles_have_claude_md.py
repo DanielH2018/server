@@ -79,9 +79,10 @@ OVER_CEILING: dict[str, str] = {
         "docs/archive/staging-cluster.md next"
     ),
     "initial_setup": (
-        "30677 chars on 2026-09-28: the granular-tag list and the two autonomous-role "
-        "contracts are operating rules for the setup plane; `## What it does` can thin to a "
-        "pointer at `tasks/main.yml`"
+        "32177 chars on 2026-09-29: the granular-tag list and the two autonomous-role "
+        "contracts are operating rules for the setup plane, and #2975/#2977 added two more — "
+        "the capability-flag rule for a hardware gate, and UFW's second sysctl file "
+        "overwriting this role's; `## What it does` can thin to a pointer at `tasks/main.yml`"
     ),
     "k3s": (
         "21391 chars on 2026-09-28: the crons' autonomous-role contract and the layout map "

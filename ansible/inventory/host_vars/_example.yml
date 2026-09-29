@@ -54,6 +54,16 @@ has_repo_checkout: true
 # Default: false.
 # has_code_server: true
 
+# Default: false. Board too small for a heavy apt step without a disk-backed swapfile
+# (a 512 MB Pi Zero 2 W). Gates initial_setup's swap + watchdog preamble.
+# has_low_memory_board: true
+
+# Default: false. Boots a Raspberry Pi kernel, so `linux-raspi` installs here.
+# has_raspi_kernel: true
+
+# Default: false. Enough RAM that initial_setup lowers vm.swappiness to 10.
+# has_ample_ram: true
+
 # Physical location for the homepage weather widget — only the host running homepage needs it.
 # lat: 38.89
 # long: -77.08

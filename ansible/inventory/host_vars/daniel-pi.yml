@@ -28,6 +28,12 @@ has_gitops: false
 # opts IN to the engine (group_vars/all.yml defaults it false). Every service in
 # containers_list below runs on it.
 has_docker: true
+# A 512 MB Zero 2 W: the one host where a heavy apt step OOM-kills without the disk-backed
+# swapfile, so initial_setup's swap + watchdog-stop preamble and its apt-show-versions purge
+# run here and nowhere else. group_vars/all.yml defaults both flags false.
+has_low_memory_board: true
+# Boots the Raspberry Pi kernel, so `linux-raspi` is a real package here.
+has_raspi_kernel: true
 # optimize_pi masks rsyslog here (journald is the log of record; rsyslog's text logs landed in
 # the RAM-backed log2ram tmpfs), so initial_setup must not render its rsyslog filter or
 # notify `Restart rsyslog` -- a masked unit fails that handler and the recap reads failed=1

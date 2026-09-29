@@ -67,6 +67,33 @@ docker_network: proxy
 # Intel iGPU/QuickSync passthrough (jellyfin/tdarr hardware transcode via /dev/dri).
 # False by default — override to true in a host's host_vars if the machine has one.
 has_igpu: false
+# ── Host hardware capability flags (#2975) ─────────────────────────────────────────────────
+# Each names ONE hardware fact that a task in roles/setup/initial_setup gates on. They
+# replace `inventory_hostname == '<host>'` literals, so replacing a machine is a host_vars
+# edit rather than a sweep through three task files.
+#
+# They live here rather than in the role's defaults for the reason `ops_cron_host` gives
+# below: `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against
+# `group_vars/all.yml` + `host_vars` only, and a name it cannot resolve reads as "every
+# host" — the over-broad verdict issue #2073 closed.
+#
+# ENFORCED by ansible/tests/setup/test_initial_setup_host_gates.py, which censuses the gates
+# and asserts each flag's effective value on all three hosts.
+#
+# Whether this host's board has so little RAM that a heavy apt step OOM-kills without a
+# disk-backed swapfile. False by default; daniel-pi (a 512 MB Zero 2 W) overrides it true.
+# Gates initial_setup's swapfile + watchdog-stop preamble and the apt-show-versions purge.
+has_low_memory_board: false
+# Whether this host boots a Raspberry Pi kernel, so it needs the `linux-raspi` package.
+# Separate from the flag above on purpose: "is a Pi board" and "is memory-constrained" are
+# two facts, and a 4 GB Pi would carry this one alone.
+has_raspi_kernel: false
+# Whether this host has enough RAM that reclaiming page cache beats swapping service heaps,
+# so initial_setup lowers vm.swappiness to 10. False by default; daniel-server (30 GB)
+# overrides it true. daniel-box also has ample RAM, and it stays FALSE here because the
+# literal this flag replaced excluded it — arming it is a live tuning change rather than a
+# refactor, tracked separately.
+has_ample_ram: false
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
 kuma_notification_id: discord
