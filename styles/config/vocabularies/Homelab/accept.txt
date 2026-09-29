@@ -506,3 +506,16 @@ selfcheck
 [Uu]nban
 Yaegi
 [Dd]atafiles?
+
+# valheim role doc split to docs/valheim-modding.md (#2989)
+Thunderstore
+initContainers?
+eval'd
+install's
+Server_devcommands
+Azumatt's
+[Ii]nitializer
+[Cc]oroutines?
+Jotunn
+Serverside_Simulations
+[Cc]rossplay

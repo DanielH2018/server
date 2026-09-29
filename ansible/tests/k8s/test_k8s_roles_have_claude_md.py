@@ -72,8 +72,9 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
 # plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
 # account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
-# subject across two docs/ pages, and home-assistant's testing, tooling and traps moved into
-# the role's own docs/ tree. Each remaining reason names its own next section to move.
+# subject across two docs/ pages, home-assistant's testing, tooling and traps moved into the
+# role's own docs/ tree, and valheim's modding account moved to docs/valheim-modding.md. Each
+# remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -119,10 +120,6 @@ OVER_CEILING: dict[str, str] = {
         "operating rules for every monitor, and #2802 added the maintenance window's "
         "derivation and its two Kuma API shapes; the status-page and host-check tile "
         "history is the next thing to move to docs/"
-    ),
-    "valheim": (
-        "14940 chars on 2026-09-28: the modding and world-handling rules break the server "
-        "when missed; the release history under `## Notable` is the trim"
     ),
     "volume-revert": (
         "20010 chars on 2026-09-28: every section is the caller contract or a measured "

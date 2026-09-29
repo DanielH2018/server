@@ -1,9 +1,8 @@
 # valheim (k8s) — Valheim dedicated server
 
-Archived on Docker 2026-01-07 (`6f942bd2`), reactivated 2026-08-13 **straight onto k3s**.
-It did not go back to Docker, which was uninstalled from daniel-server on 2026-08-14. The
-archived compose role and the archive's four-step reactivation recipe (both deleted in #2385; `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/CLAUDE.md`) describe a topology
-that no longer exists. `k8s/terraria` is the sibling this role copies.
+Archived on Docker 2026-01-07 (`6f942bd2`), reactivated 2026-08-13 **straight onto k3s**. The
+archived compose role and its reactivation recipe (deleted in #2385) describe a topology that
+no longer exists. `k8s/terraria` is the sibling this role copies.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -17,176 +16,84 @@ that no longer exists. `k8s/terraria` is the sibling this role copies.
   readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds
 <!-- /generated_from -->
 
-- **Version-pinned.** The upstream repo was renamed from `lloesche/valheim-server-docker`; only the new ghcr package
-  publishes semver tags (the old one is stuck on `latest`/`dev`). No rolling-tag exception
-  needed, unlike terraria. **The tag pins the wrapper, not the game** — SteamCMD fetches the
-  current Valheim build on every start, so the game is on the latest release either way.
+- **Version-pinned**, and **the tag pins the wrapper, not the game** — SteamCMD fetches the
+  current Valheim build on every start, so the game runs the newest release either way.
 - **Mods:** BepInEx, with 12 plugins pinned in `defaults/main.yml` (2 live, 10 disabled) —
-  see *Modding* below.
-- **The second image** is built in-cluster from `templates/Dockerfile.j2`, holding only the
-  plugin DLLs.
-- **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with
-  traefik, pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement
-  nodeSelector move together or not at all; see `roles/setup/k3s/templates/metallb-pool.yaml.j2`.
-- **Ports:** UDP 2456 (game) + 2457 (Steam query) via
-  `Service type: LoadBalancer`, `externalTrafficPolicy: Local`, pinned to the node IP —
-  the router forward has to target a DHCP/ARP-known device, so not a MetalLB VIP
+  see *Modding* below. The second image is built in-cluster from `templates/Dockerfile.j2`
+  and holds only the plugin DLLs.
+- **Host:** daniel-box, by a hard `nodeSelector` — a member of the **VIP unit** with traefik,
+  pihole, mosquitto and terraria. The pin and the MetalLB L2Advertisement nodeSelector move
+  together or not at all (`roles/setup/k3s/templates/metallb-pool.yaml.j2`).
+- **Ports:** UDP 2456 (game) and 2457 (Steam query) via a LoadBalancer Service,
+  `externalTrafficPolicy: Local`, pinned to the node IP rather than a MetalLB VIP — the
+  router forward has to target a DHCP/ARP-known device.
 - **Storage:** two claims on deliberately different backup postures —
   `valheim-config` (`longhorn`, **backed up**) for worlds/lists/prefs, and
-  `valheim-server` (`longhorn-nobackup`) for the SteamCMD install. 1.8 G download, 2.2 G
-  unpacked, but the image keeps three copies of it (`dl/server`, `server`, `bepinex`) and
-  writes a fourth into `bepinex.tmp` on every game update — 7.7 G at rest, ~10 G at the
-  peak. The claim is 20Gi for that peak; at 10Gi the 2026-09-17 update hit ENOSPC (#1866),
-  and the `# DECIDED:` block at `valheim_k8s_server_size` in `defaults/main.yml` has the numbers.
+  `valheim-server` (`longhorn-nobackup`) for the SteamCMD install. The install claim is 20Gi
+  for a game update's transient peak; at 10Gi the 2026-09-17 update hit ENOSPC (#1866), and
+  the `# DECIDED:` block at `valheim_k8s_server_size` in `defaults/main.yml` has the numbers.
   The k3s PVC Fullness tile pages while the claim has less than
-  `valheim_k8s_server_update_transient_bytes` (3 GiB) free, whatever its percentage reads —
-  monitor-bridge's `PVC_MIN_FREE` carries that value, and a test pins the two together (#1875).
-- **Auth:** none possible — raw UDP game protocol, so no Traefik, no Authelia, no CrowdSec
-  HTTP chain. The join password is the only access control.
+  `valheim_k8s_server_update_transient_bytes` (3 GiB) free, whatever its percentage reads
+  (#1875).
+- **Auth:** none possible — a raw UDP game protocol reaches no Traefik, Authelia or CrowdSec
+  chain, so the join password is the only access control.
 
 ## Notable
-- **The password did not carry over.** The Docker compose hardcoded
-  `SERVER_PASS: ThisPasswordIsAwesome` until `c3330c5a` swapped it for a variable — but
-  this repo is **public**, so the plaintext is still readable in the git log. Treat it as
-  disclosed. The live value is a fresh one in SOPS as `valheim_server_pass`.
-- **The probes read `/proc/net/udp` AND `/proc/net/udp6`, not `/proc/net/tcp`.** Two traps
-  stacked here, both hit on the first boot. Copying terraria's probe verbatim is the first:
-  Valheim is UDP, a UDP socket has no LISTEN state and never appears in the TCP table, so
-  that check can never pass. The second is that checking `/proc/net/udp` alone still never
-  matches — **the server binds v6, so the socket shows up only in `/proc/net/udp6`.** With
-  the v4-only check the pod sat un-Ready for 27 minutes with a completely working server
-  behind it, and would have been killed once the startup threshold expired. `:0998` is hex
-  2456. Like terraria's, it is a kernel-side bind check rather than a connect probe —
-  anything that actually spoke to the port would log a join attempt every cycle.
-- **`SETGID` is load-bearing, and its absence is silent.** The container runs its own cron
-  for the hourly world backup and the Steam update check; cron calls `initgroups()` before
-  every job, which needs `CAP_SETGID` even when the target user is already root. With caps
-  dropped to `ALL` + `SYS_NICE`, every tick failed with
-  `(CRON) error (do_command:initgroups(0) failed: Operation not permitted)` while the rest
-  of the log looked perfectly healthy — the backups would simply never have run.
-- **No Kuma tile, deliberately.** terraria gets one (`terraria-vip.json`, a TCP port check on
-  the node IP), but Kuma's port monitor is TCP-only and Valheim is UDP — the same reason
-  wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health / the
-  pod-restart alerting instead. Do not "fix" this by adding a port monitor; it would probe a
-  closed TCP port and be permanently red.
-- **First rollout is slow.** An empty install PVC means SteamCMD downloads ~1.8 G before
-  anything binds, hence `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout`
-  and `failureThreshold: 60` on the startupProbe. That one default is the whole budget: the
-  drain's `rollout status --timeout` and the Deployment's `progressDeadlineSeconds` both read
-  it, because a deadline below the budget fails the rollout on ProgressDeadlineExceeded whatever
-  the timeout says (#2409). Later boots are a delta check plus world load and clear in under a
-  minute.
-- **`/opt/valheim` is a PVC, not an emptyDir**, purely so that download happens once.
-- **No `DAC_OVERRIDE`**: `PUID`/`PGID` default to 0, the one-off seed at reactivation restored
-  uid 0 with `tar -p --numeric-owner`, and root writing root-owned files needs no override.
-  Add it only if a world save ever fails on the backup step. `SYS_NICE` is kept — Steam's
-  threading layer raises its own thread priority and warns on every boot without it.
-- **9001 (supervisord) is deliberately unpublished.** The archived compose exposed it; it is
-  unauthenticated remote process control inside the container. `SUPERVISOR_HTTP` is off.
-- **2458 is unpublished too** — crossplay backend, only bound with `CROSSPLAY=true`. The
-  image's README warns that mods using RPC want gameport+2 open; no plugin run here
-  has needed it. If a mod's sync misbehaves, that port plus a router forward is the first
-  thing to try.
-- The image's hourly world zips go to `/opt/valheim/backups` on the nobackup claim
-  (`BACKUPS_DIRECTORY`), pruned at `BACKUPS_MAX_AGE=3` days. At the default `/config/backups`
-  they sat on the backed-up claim, and since a zip shares no bytes with the previous one every
-  weekly Longhorn backup re-uploaded the whole three-day rotation — 2.2 G a week, 5.0 G of a
-  7.6 G B2 bucket by 2026-09-02, which tripped the storage-cap alert. The 385 M of 2025 zips
-  that came over in the seed aged out under the same rule; the originals stay on daniel-server.
-- cloudflare-ddns publishes `valheim.<domain>` direct/unproxied (game traffic cannot ride
-  Cloudflare's HTTP proxy).
+- **The join password lives in SOPS as `valheim_server_pass`.** The compose value it replaced
+  is disclosed in a public git log; treat it as burned.
+- **The probes read `/proc/net/udp6`,** not `/proc/net/tcp` and not `/proc/net/udp` alone:
+  Valheim is UDP and binds v6, so a copied terraria probe can never pass. It is a kernel-side
+  bind check, so a Ready pod proves the port is bound and nothing more.
+- **`SETGID` is load-bearing, and its absence is silent** — the container's own cron calls
+  `initgroups()` for the hourly world backup, and without the capability every tick fails
+  behind a healthy-looking log.
+- **No Kuma tile, deliberately** — Kuma's port monitor is TCP-only and Valheim is UDP, the
+  same reason wg-easy's tunnel has no tile. Pod death surfaces through k3s Workload Health and
+  the pod-restart alerting. A port monitor added here would probe a closed TCP port and sit
+  permanently red.
+- **First rollout is slow** — SteamCMD downloads ~1.8 G before anything binds, and
+  `ansible/roles/k8s/valheim/defaults/main.yml:valheim_k8s_rollout_timeout` is the budget both
+  the drain's `rollout status --timeout` and `progressDeadlineSeconds` read (#2409).
+  `/opt/valheim` is a PVC so that download happens once.
+- **The hourly world zips go to the NOBACKUP claim** (`BACKUPS_DIRECTORY`). At the image's
+  default they sat on the backed-up claim, and every weekly Longhorn backup re-uploaded the
+  whole rotation until the storage-cap alert tripped in 2026-09.
+- **The live world is `Midgard`, a modded world**; a vanilla server cannot be relied on to
+  read it. The previous `Dedicated` world is untouched while another is selected, so reverting
+  is `valheim_k8s_world_name` back to it. `valheim-stats` totals are all-time by design.
+- 9001 (supervisord) and 2458 (crossplay) are deliberately unpublished, and cloudflare-ddns
+  publishes `valheim.<domain>` direct/unproxied — game traffic cannot ride Cloudflare's HTTP
+  proxy.
+
+`docs/valheim-modding.md` has each of these in full.
 
 ## Modding
-Added 2026-09-09 with the wrapper bump to 1.2.0 and a fresh world.
+`BEPINEX=true` makes the image install BepInExPack beside the vanilla server and run through
+it; it is mutually exclusive with `VALHEIM_PLUS`, unused here.
 
-- **`BEPINEX=true`** makes the image install BepInExPack beside the vanilla server in
-  `/opt/valheim/bepinex` and run the server through it. Mutually exclusive with
-  `VALHEIM_PLUS`, which this server does not use.
-- **The plugins are baked into an image, not downloaded at boot.** `templates/Dockerfile.j2`
-  fetches each Thunderstore release, verifies its sha256 and flattens the DLL out; the `mods`
-  initContainer copies them in. A boot-time download would mean a Thunderstore outage brings
-  the server up vanilla with the pod Ready either way.
-- **The built image is named `valheim`, not `valheim-mods`.** `k8s/manifests` keys
-  `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes a new image that no
-  pod ever runs — the recorded `n8n-runners` failure. It contains no server.
-- **The live set is two, and Valheim 1.0's rolling updates are why it keeps changing.** Live:
-  Server_devcommands 1.113.0, AchievementEnabler 0.3.2 (added 2026-09-13). MouseTweaks 1.0.3
-  and AAABuildMenu 1.0.1 were live from 2026-09-09 until SteamCMD auto-updated the game from
-  `l-1.0.7` to `l-1.0.12` and broke both — no newer Thunderstore release exists for either, so
-  they moved to the disabled block. Eight further mods were requested across 2026-09-09 and
-  every one of them fails on `l-1.0.7` or is only needed by one that does; each disabled entry
-  in `defaults/main.yml` carries the error that disabled it. BepInExPack is not listed — the
-  image installs it itself.
-- **Ore through portals is a vanilla world modifier, not a mod.** `valheim_k8s_server_args`
-  passes `-modifier portals casual` through the image's `SERVER_ARGS`, so AdvancedPortals
-  being disabled costs nothing. The other values are `hard` (default, no metals) and
-  `veryhard` (no items at all). A modifier applies at launch and is not written into the
+- **The plugins are baked into an image, not downloaded at boot,** so a Thunderstore outage
+  cannot bring the server up vanilla with the pod Ready anyway. That image is named `valheim`,
+  not `valheim-mods`: `k8s/manifests` keys `k8s_rebuilt_images` on `manifests_service`, and a
+  mismatched name pushes an image no pod runs.
+- **`valheim_k8s_bepinex` is DERIVED from the mod list, never set by hand.** Either drift is
+  silent — mods with BepInEx off is a vanilla server that still reports every plugin copied
+  into place, and BepInEx on with an empty list is a modded launch path carrying nothing.
+- **Verify by the plugin log lines, not by pod Ready** — the startup probe passes identically
+  with zero plugins loaded. `grep -i 'Loading \[.*\]'` over the pod log should name one per
+  live entry in `valheim_k8s_mods`, and **loading is not working**: a plugin can log itself
+  installed and then throw every frame.
+- **Enable one mod at a time and read the boot log before adding the next.** The live set is
+  two because Valheim 1.0's rolling updates keep breaking the rest, and `UPDATE_CRON` runs at
+  its default `*/15` — so the game can update out from under the mods with no repo change and
+  no failing check.
+- **Ore through portals is a vanilla world modifier, not a mod** — `valheim_k8s_server_args`
+  passes `-modifier portals casual`. A modifier applies at launch and is not written into the
   world, so changing that line and redeploying is the whole procedure, both ways.
-- **`valheim_k8s_bepinex` is DERIVED from the mod list, never set by hand.** The two drift in
-  both directions and both are silent: mods listed with BepInEx off is a vanilla server that
-  still reports every plugin copied into place, and BepInEx on with an empty list is a modded
-  launch path carrying nothing. The initContainer and the image build are gated on the same
-  condition — an empty list would otherwise build an image with no DLLs and fail the pod on
-  `cp /mods/*.dll` matching nothing.
-- **A ServerSync version line is NOT proof a mod works.** The log prints
-  `Sending AzuCraftyBoxes version 1.8.15 ... to the client` on every join because ServerSync
-  registers statically, and it kept printing for a plugin whose type initializer had already
-  thrown. That line was read here as evidence three mods were healthy; all three were dead.
-  **Attribute a load error by reading between consecutive `Loading [...]` lines** — the error
-  belongs to the plugin named above it.
-- **A clean server-side join is not evidence the client can play.** Upstream
-  ValheimModding-Jotunn 2.29.2 patches `ZNet.RPC_PeerInfo` to buffer a joining client's
-  packages, replaying them and calling `socket.VersionMatch()` only once its own
-  `SynchronizeInitialData` coroutine finishes; on `l-1.0.7` that coroutine throws
-  `MissingFieldException: ZRoutedRpc.Everybody` on its first send, so the buffer never
-  flushes. The player spawns and is stuck — unable to move, camera shaking — while the server
-  logs an ordinary successful connect. ReefTeam's fork 2.29.3 fixes that specific failure
-  (verified: the `Everybody` reference is absent and the GUID is still `com.jotunn.jotunn`),
-  but the mods needing Jotunn fail for their own reasons, so the whole group is off. **The
-  tell for the next one: no `Got character ZDOID` line for a peer that connected.**
-- **Vetting a candidate mod before adding it:** check its assembly for a `ZRoutedRpc.Everybody`
-  reference, the field `l-1.0.7` removed. Necessary, NOT sufficient — the Harmony
-  `Undefined target method` failures are invisible to any string check. Enable one at a time
-  and read the boot log before adding the next.
-- **Every mod here is client-side too.** Azumatt's use ServerSync, which can refuse a client
-  whose version differs, so players need the same versions locally.
-- **The initContainer writes two directories, and neither is redundant.**
-  `/config/bepinex/plugins/homelab` is the image's sanctioned drop point, which a BepInEx or
-  Valheim update rebuilds the install tree from; `/opt/valheim/bepinex/BepInEx/plugins/homelab`
-  is the tree the server actually loads, and it is only re-synced during such an update — so a
-  mod bump alone, which moves neither, would otherwise keep running the old DLLs. Both are
-  wipe-then-copy into a `homelab/` subdirectory: BepInEx scans recursively, and owning a
-  subdirectory is what makes a dropped mod actually disappear instead of lingering on the PVC.
-- **`PRE_BEPINEX_CONFIG_HOOK` is one `mkdir`, and the whole mod set depends on it.** The image
-  syncs `/config/bepinex/plugins` into the install tree only when that tree already has a
-  `plugins` directory, and BepInExPack's archive ships none — so on a fresh install the
-  documented drop-point mechanism silently does nothing. The hook is eval'd inside that
-  function one line before the sync, with `plugins_path` in scope.
-- **`UPDATE_CRON` still runs at its default `*/15`, so the game can update out from under the
-  mods.** A Valheim release the mods have not caught up with can break them with no repo change
-  and no failing check. Set `UPDATE_CRON: ""` in the deployment to make updates deliberate.
-- **Mod configs land on the backed-up claim.** The image symlinks the install's
-  `BepInEx/config` to `/config/bepinex`, so per-mod `.cfg` files sit beside the world.
-- **Verify by the plugin log lines, not by pod Ready.** The startup probe is a kernel-side
-  bind check and passes identically with zero plugins loaded:
-  `k3s kubectl -n homelab logs deploy/valheim | grep -i 'Loading \[.*\]'` should name one per
-  live entry in `valheim_k8s_mods`. **Loading is not working** — read the log for
-  `MissingMethodException` afterwards as well, which is how Serverside_Simulations was caught:
-  it logged `Serverside Simulations installed` and then threw every frame.
 
-## The world
-`Midgard` — a NEW world, created on first boot 2026-09-09 at the operator's request. It is a
-modded world; a vanilla server cannot be relied on to read it afterwards.
-
-The previous world, `Dedicated`, was seeded from
-`daniel-server:/home/ubuntu/server/containers/valheim/valheim/config` and last saved
-2025-11-22. It is **not deleted, and nothing touches it while another world is selected** —
-the server runs with `-world "$WORLD_NAME"` and the hourly backup archives
-`worlds_local/$WORLD_NAME`, not the directory. So reverting is `valheim_k8s_world_name` back
-to `Dedicated`, and the daniel-server directory it came from is the rollback behind that.
-
-**`valheim-stats` totals do not reset with the world.** Its SQLite DB carries all-time
-per-player deaths and playtime across worlds by design.
+`docs/valheim-modding.md` has the two directories the initContainer writes, the
+`PRE_BEPINEX_CONFIG_HOOK` mkdir the mod set depends on, the three log lines that look like
+success, and how to vet a candidate.
 
 ## Editing
 - Manifests: `templates/*.yaml.j2` · Defaults: `defaults/main.yml`
+- Deploy: `./scripts/deploy.sh --tags "valheim"`

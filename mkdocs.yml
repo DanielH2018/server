@@ -222,6 +222,7 @@ nav:
       - renovate_notify internals: renovate-notify-internals.md
       - Traefik startup and plugins: traefik-plugins-and-startup.md
       - Traefik client identity and TLS: traefik-client-identity-and-tls.md
+      - Valheim modding: valheim-modding.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md
