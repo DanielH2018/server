@@ -74,8 +74,10 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
 # subject across two docs/ pages, home-assistant's testing, tooling and traps moved into the
 # role's own docs/ tree, valheim's modding account moved to docs/valheim-modding.md, and
-# autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. Each remaining
-# reason names its own next section to move.
+# autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. #2991 took three
+# more: crowdsec's incident record to docs/crowdsec-waf-record.md, qbittorrent's two outages
+# and prefs plane to docs/qbittorrent-vpn-and-prefs.md, and jellyfin's per-plugin record to
+# docs/jellyfin-plugins.md. Each remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -89,28 +91,14 @@ OVER_CEILING: dict[str, str] = {
         "`/api/user/orgs` measurements and the unconfirmed claim-delivery hypothesis are the "
         "next thing to move there"
     ),
-    "crowdsec": (
-        "16194 chars on 2026-09-28: the two operator allowlists and the unban procedure are "
-        "operating rules; the 2026-08-22 Metabase removal is dead history to cut"
-    ),
     "homepage": (
         "19799 chars on 2026-09-28: `## Where the config lives` and the traps under `## "
         "Notable` are editing rules; the per-widget history in that same section is the trim"
-    ),
-    "jellyfin": (
-        "17823 chars on 2026-09-28: the plugin allowlist, the per-installer version pin "
-        "(#2905) and the snapshot-space cap are operating rules for a pod that runs a plugin "
-        "deleting media; `## Plugin analyses that outlive their decision` says in its own "
-        "title that it is history"
     ),
     "monitor-bridge": (
         "18492 chars on 2026-09-29: the gates-and-hysteresis rules govern a check that pages, "
         "and the module-layout rule governs the code it ships; `## Checks` was cut to a "
         "pointer at `files/registry.py` (#2921), and `## Module layout` is the next trim"
-    ),
-    "qbittorrent": (
-        "16640 chars on 2026-09-28: the netns-reset and modcache traps are what a session "
-        "must read before editing; the throughput-settings history can move to docs/"
     ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "

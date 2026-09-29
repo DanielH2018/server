@@ -1,7 +1,11 @@
 # crowdsec — WAF / behavioural bouncer in front of Traefik
 
 CrowdSec LAPI plus remote agents; the role registers the agent machines on the LAPI after
-applying the manifests. See repo-root `CLAUDE.md` for shared conventions.
+applying the manifests.
+
+This file holds the rules; `docs/crowdsec-waf-record.md` holds the record behind them — the
+rollout race, the stalled bouncer pull, the partial-line measurements, the removed Metabase
+dashboard and the dashboard findings.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -18,34 +22,24 @@ applying the manifests. See repo-root `CLAUDE.md` for shared conventions.
 
 - **Traefik's entry declares `depends_on: [crowdsec]`**, so the LAPI is up before the bouncer
   that needs its credential.
-- **`use_authelia: false`** — bouncers authenticate with their own API keys.
-- **`crowdsec-db` is on the no-backup tier**: decisions expire and re-derive from logs.
+- **`use_authelia: false`** — bouncers authenticate with their own API keys, and `crowdsec-db`
+  is on the no-backup tier because decisions expire and re-derive from logs.
 
 ## The two operator allowlists, and how to unban yourself
 
-Both are LAPI allowlists (`cscli allowlists`), fed by root crons on daniel-box every 5 min.
-An allowlisted address raises no decision, local or CAPI.
+Both are LAPI allowlists (`cscli allowlists`), fed by root crons on daniel-box every 5 min, and an
+allowlisted address raises no decision, local or CAPI. **`home-ips`** holds the home public IPv4
+and IPv6 /64 from ipify. **`remote-ips`** is `files/remote_allowlist.py`: a client address that got
+a 2xx on an `authelia`-gated router, kept 7 days, capped at 8 entries, which is what covers a VPN
+exit or a phone (#2123). Its module docstring is the design.
 
-- **`home-ips`** — `crowdsec-update-home-allowlist.sh` looks up the home public IPv4 and
-  IPv6 /64 via ipify. Covers browsing from home.
-- **`remote-ips`** — `crowdsec-update-remote-allowlist.sh` runs
-  `files/remote_allowlist.py`, which reads Traefik's access log for a 2xx on a router that
-  carries the `authelia` middleware and keeps that client address for 7 days, refreshed on
-  use, capped at 8 entries. Covers a VPN exit or a phone, which the server cannot look up
-  and which self-banned the operator on 2026-08-09, 2026-09-19 and 2026-09-21 (#2123). The
-  module docstring is the design: why the signal is the access log and not an Authelia
-  login, why router names are derived from the IngressRoutes rather than listed, and what
-  bounds the trade-off that a shared exit is exempted for everyone on it.
-  `crowdsec-trusted-remote-whitelist.yaml` (a parser whitelist, pinned /32s) predates it and
-  is kept as the fallback; with the cron live its entries are redundant, not wrong.
+To see what is exempt: `… exec deploy/crowdsec -c crowdsec -- cscli allowlists inspect
+remote-ips`; to withdraw one, `… cscli allowlists remove remote-ips <ip>`.
 
-To see what is exempt: `sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli
-allowlists inspect remote-ips`. To withdraw one: `… cscli allowlists remove remote-ips <ip>`.
-
-Neither list lifts a ban already in force, and the remote cron cannot see a banned address at
-all — a 403 is not a 2xx — so the first burst from a brand-new exit still bans it for up to
-the cron period before the entry lands. To lift a ban by hand (a Claude session cannot; the
-read-only ServiceAccount is refused `pods/exec`):
+**Neither list lifts a ban already in force**, and the remote cron cannot see a banned address at
+all — a 403 is not a 2xx — so the first burst from a new exit still bans it for up to the cron
+period. To lift a ban by hand (a Claude session cannot; the read-only ServiceAccount is refused
+`pods/exec`):
 
 ```bash
 sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions delete --ip <ip>
@@ -54,196 +48,64 @@ sudo k3s kubectl -n homelab exec deploy/crowdsec -c crowdsec -- cscli decisions 
 ## Traps
 
 ### A crowdsec deploy races its own rollout
-The task "Register the remote agent machines on the LAPI" in
-`ansible/roles/k8s/crowdsec/tasks/main.yml` runs
-`k3s kubectl exec deploy/crowdsec -- cscli machines ...`. It sits immediately after
-`k8s/manifests`' rollout-restart, which deliberately does not wait — the drain is queued for
-the end of the batch. So whenever a crowdsec manifest actually changes, the exec lands on a
-pod that is terminating or not yet ready, and the task fails.
-
-Observed 2026-08-16: a one-line comment edit to `deployment.yaml.j2` changed the render,
-triggered the roll, and the deploy came back `failed=1` with two loop items OK and two failed.
-Re-running once the pod was `2/2` gave `failed=0` with no other change.
-
-`no_log: true` on that task — it pipes the agent password over stdin — censors the error body,
-so the failure reads as an opaque "Module failed: non-zero return code" with no hint that it
-is a rollout race. Easy to misread as a credential or RBAC problem.
-
-**FIXED** 2026-08-16 in PR #229: a `rollout status` gate now precedes the LAPI tasks, proven
-by the deploy that shipped it (the gate blocked 61.83s, registration then succeeded,
-`failed=0` on the first run). The signature above is kept because it is what makes a
-regression recognisable if the gate is ever removed as apparent drift from the drain's
-"never wait inline" rule — which is why the gate carries a comment naming itself the
-deliberate exception. A naive `kubectl wait --for=condition=Available` would not help: the pod
-is single-replica, so the old pod satisfies the condition.
-
-If it recurs, a `--tags crowdsec` deploy that fails only on that task right after a manifest
-change is this. Wait for `kubectl -n homelab get pods` to show crowdsec `1/1` (`2/2` before the
-Metabase dashboard was removed on 2026-08-22), then re-run —
-the second pass rolls nothing and succeeds. A deploy that changes no crowdsec manifest never
-hits it.
+The LAPI-registration task in `ansible/roles/k8s/crowdsec/tasks/main.yml` execs into the running
+pod, and `k8s/manifests`' rollout-restart deliberately does not wait. **The `rollout status` gate
+ahead of the LAPI tasks is the deliberate exception to the drain's "never wait inline" rule** —
+removing it as apparent drift brings the race back (PR #229). `no_log: true` censors the failure to
+a bare non-zero return code, so the docs page carries its signature.
 
 ### `--check` skips the whole b1-gate rather than failing in it
-The gate is unprovable in check mode by construction: you cannot demonstrate a ban is
-enforced without taking the ban. Check mode skips the *ban* task, so the probe that follows
-it can never see a 403. `ansible/roles/k8s/crowdsec/tasks/main.yml` therefore gates its
-`import_tasks: verify.yml` on `not k8s_no_mutate`, which also covers a `k8s_dry_run`. A
-`when` on an import propagates to every task in the imported file, including those nested in
-a block, so one line covers every task in `ansible/roles/k8s/crowdsec/tasks/verify.yml`.
-Keep that guard when adding a task there.
-
-Before the guard, check mode ran the probe against an un-banned host and it burned all eight
-retries on every `--check` of this role. A dry run that always reports red trains an operator
-to skip the check, which is what `.claude/rules/ansible.md` asks for before touching
-production state.
+You cannot demonstrate a ban is enforced without taking the ban, so
+`ansible/roles/k8s/crowdsec/tasks/main.yml` gates its `import_tasks: verify.yml` on
+`not k8s_no_mutate`, covering `k8s_dry_run` too. The `when` reaches every task in
+`ansible/roles/k8s/crowdsec/tasks/verify.yml`, nested ones included — keep it when adding one.
 
 ### The ban gate waits for the edge bouncer's pull, not a timer
 
-The gate proves three hops in order, and its rescue names the hop that failed:
+The gate proves three hops in order, and its rescue names the hop that failed: the decision reads
+back from LAPI; the edge bouncer's newest `last_pull` moves past its value read just after the ban
+(every `k8straefik` and `k8straefik@*` row, because the base row never pulls); the edge answers 403
+to the Pi. The ban, checks and probe sit in one block with the lift in its `always`, so a failed
+gate leaves no ban behind.
 
-1. The decision reads back from LAPI (`cscli decisions list --ip`).
-1. The edge bouncer's newest `last_pull` in `cscli bouncers list` moves past its value
-   read just after the ban. Only a stream pull after the ban can carry it to the edge.
-   LAPI records those pulls on an auto-created `k8straefik@<pod IP>` row, one per Traefik
-   pod IP (next section). The base `k8straefik` row never pulls, so the gate reads every
-   `k8straefik` and `k8straefik@*` row. Reading only the base row failed the gate's first
-   live run, after the pull it waited for had already happened.
-1. The edge answers 403 to the Pi.
-
-The ban, the checks and the probe sit in one block, and the lift is in its `always`. A failed
-gate therefore leaves no ban on the Pi behind it.
-
-Until #2752 the gate probed on a fixed 80s timer. On 2026-09-27 that failed a 58-service
-deploy with eight 302s, then passed on a re-run. The decision had landed at LAPI at 12:25:18Z,
-but the Traefik bouncer made no stream pull from 12:22:24Z to 12:32:24Z. That was the
-plugin's metrics-ticker stall, which `metricsUpdateIntervalSeconds: 0` turns off. The
-`DECIDED: no usage-metrics ticker` comment in
-`ansible/roles/k8s/traefik/templates/dynamic.yaml.j2` has the evidence. A failure at hop 2
-means the stall is back, or the traefik pod cannot reach LAPI. The LAPI log's
-`GET /v1/decisions/stream` lines from the traefik pod tell those two apart.
-`ansible/tests/services/test_crowdsec_ban_gate.py` evaluates the hop-2 wait against sample
-`cscli` output and pins the order and the `always` lift.
+**A failure at hop 2 means the plugin's metrics-ticker stall is back, or the traefik pod cannot
+reach LAPI** — the LAPI log's `GET /v1/decisions/stream` lines from the traefik pod tell those
+apart. `ansible/tests/services/test_crowdsec_ban_gate.py` pins the hop-2 wait, the order and the
+lift.
 
 ### LAPI adds a bouncer row per Traefik pod IP, and an hourly cron prunes them
 
-LAPI authenticates a bouncer by its API-key hash and its client IP. When a known key arrives
-from an IP with no row, LAPI creates `k8straefik@<ip>` and never touches the old row again.
-Each Traefik restart brings a new pod IP. By 2026-09-27 that had left 80 rows, each a valid
-identity for the one key (#2762).
-
-`crowdsec-prune-bouncers.sh` runs `files/bouncer_prune.py` hourly as root on daniel-box. The
-module runs `cscli bouncers prune -d 60m --force`, which deletes every bouncer row with no pull
-in the hour. That includes the base `k8straefik` row, and the image entrypoint re-adds it from
-`BOUNCER_KEY_k8straefik` at the next engine start. The module docstring has the rest:
-
-- `cscli bouncers delete k8straefik@<ip>` cannot do this. It exits 0 without deleting an
-  auto-created row, and deleting the parent deletes every row that holds the key.
-- Pruning the live row is harmless while another row holds the key: the next pull
-  re-creates it and gets a full resync.
-- Pruning the LAST row that holds the key makes LAPI answer 403 to the edge. The module
-  therefore refuses to prune unless a `k8straefik*` row pulled in the last 50 minutes.
-
-Each run logs one line under the `crowdsec-bouncer-prune` syslog tag. The line comes from a
-second `cscli bouncers list` taken after the prune. It names the rows deleted, the count of
-`k8straefik` rows left and the oldest `last_pull` among them. A refusal starts `status=down`. A session reads it with
-`probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`, because `cscli bouncers
-list` needs `pods/exec`. There is no Kuma monitor: a failed run only lets rows accumulate
-until the next run succeeds. To stop pruning, remove the "Schedule the bouncer prune" task
-(and set its cron `state: absent` once); a hand delete of `/etc/cron.d/crowdsec-bouncer-prune`
-lasts only until the next crowdsec deploy.
+LAPI creates a `k8straefik@<pod IP>` row per new client IP, and every Traefik restart brings one.
+`crowdsec-prune-bouncers.sh` runs `files/bouncer_prune.py` hourly as root on daniel-box to clear
+them. Two rules: **`cscli bouncers delete k8straefik@<ip>` is not the tool** (it exits 0 without
+deleting, and deleting the parent takes every row holding the key), and **the module refuses to
+prune unless a `k8straefik*` row pulled in the last 50 minutes**, because pruning the last row
+makes LAPI answer 403 to the edge. Read a run with
+`probe.py loki-query '{job="syslog"} |= "crowdsec-bouncer-prune"'`.
 
 ### `UnmarshalJSON : unexpected end of JSON input` is a partial-line read, fixed only upstream
-The agent sidecar in the traefik pod logs this against a Traefik access-log line cut at a
-random offset (150 to 900+ bytes in, never at a fixed ceiling). It is not the acquisition
-buffer and not the rotate sidecar: crowdsec tails through `nxadm/tail` without
-`CompleteLines`, so when the tailer reaches EOF in the middle of a line Traefik is still
-writing, the library emits the partial line, then seeks to the end of the file. The partial
-line fails the traefik parser with this error; the remainder arrives as a second line that
-does not start with `{` and is dropped silently, or is skipped by the seek. Each occurrence
-is one request the WAF never sees, and the error count is a LOWER bound — upstream's second
-data point measured 389 lines lost against 168 errors.
+The tailer read a Traefik access-log line before Traefik finished writing it. Each occurrence is
+one request the WAF never sees, about 0.05% of traffic. Nothing here fixes it, and the syslog
+sources (`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`) lose lines silently.
 
-Measured 2026-09-21 over 24h: 94,043 requests served, 51 errors, 59 parser failures — about
-0.05% of the edge's traffic. The same tailer reads `authelia.log` and both nodes' `auth.log`
-(`ansible/roles/k8s/crowdsec/templates/node-agent-acquis.yaml.j2`); a partial syslog line
-fails the parser with no error at all, so nothing here can count that loss.
-
-Nothing in this repo fixes it. `CompleteLines` is not an `acquis.yaml` key, Traefik's
-`bufferingSize` batches entries into a channel and still writes one line per call, and
-`poll_without_inotify` only changes when the reader wakes. The fix is
-crowdsecurity/crowdsec#4678 (sets `CompleteLines: true`; on 2026-09-22 it was open and in no
-release). **Re-check #2124 on the next `crowdsec_k8s_image` bump**
-(`ansible/inventory/group_vars/all.yml:crowdsec_k8s_image`): a release carrying that PR
-closes it; verify with
-`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h`
-returning nothing. Building a patched image through `k8s/image-builder` was rejected: it
-would take the WAF binary out of Renovate's view for a 0.05% loss.
-
-## The Metabase dashboard was removed (2026-08-22)
-
-The engine pod carried a Metabase sidecar (plus a `metabase-seed` initContainer, a
-`crowdsec-dashboard` Service and its Authelia-gated IngressRoute at `crowdsec.local.<domain>`).
-It is gone. Two reasons:
-
-- **It gated the edge WAF.** Pod Ready is the AND of all containers, so Metabase's startupProbe
-  withheld the crowdsec Service endpoints that front LAPI and AppSec. Observed 2026-08-16: LAPI
-  was serving while the pod sat 1/2 with no endpoints.
-- **Its aggregate view was already Grafana's.** The four Security-folder boards
-  (`roles/k8s/claude-otel/files/dashboards/Security/`) read the engine's `:6060` metrics.
-
-**What was lost, and has no Grafana equivalent.** Metabase read the LAPI's `decisions` and
-`alerts` tables directly, so it could show what Prometheus has no label for: per-IP identity
-(`Top IPs`, `By Source IP`), geography (`Alerts Map`, `Top countries`), ASN (`Top AS`), decision
-origin (`By Origin`), and row-level tables (`Actives Decisions List`, `Alerts Table`). Loki is
-not a substitute — the engine's alert insertions never reach pod stdout, verified over 7 days
-against a DB holding 424 alerts younger than that. Use `cscli decisions list` and
-`cscli alerts list` for per-ban detail.
-
-Upstream `crowdsecurity/grafana-dashboards` cannot fill the gap either: it is Prometheus-only,
-was last touched 2023-06-20 targeting CrowdSec v1.5.x, and its `dashboards_v5` panel set is
-already what this repo ships (identical titles, `instance` relabelled to `machine`).
+**Re-check #2124 on the next `crowdsec_k8s_image` bump**
+(`ansible/inventory/group_vars/all.yml:crowdsec_k8s_image`): a release carrying
+crowdsecurity/crowdsec#4678 closes it. Verify with
+`probe.py loki-query '{container="crowdsec-agent"} |= "UnmarshalJSON"' --since 24h` returning
+nothing.
 
 ## Which Prometheus job covers which agent
 
-Four CrowdSec containers run in this cluster and a scrape job covers each, all defined in
-`roles/k8s/claude-otel/templates/prometheus.yaml.j2`:
+Four CrowdSec containers run here and one job in
+`roles/k8s/claude-otel/templates/prometheus.yaml.j2` covers each: `crowdsec` (the engine pod, LAPI
+plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` and
+`crowdsec-authelia-agent` (the two sidecars).
 
-| Container | Job | Node dimension |
-|---|---|---|
-| the engine pod (LAPI + AppSec) | `crowdsec` | none — a singleton |
-| the `crowdsec-node-agent` DaemonSet | `crowdsec-node-agents` | `node`, from the pod's node name |
-| the traefik pod's `crowdsec-agent` sidecar | `crowdsec-traefik-agent` | none — a singleton |
-| the authelia pod's `crowdsec-agent` sidecar | `crowdsec-authelia-agent` | none — a singleton |
+Read the job before writing a CrowdSec query: `node` is not a CrowdSec label and only the
+DaemonSet job attaches one, so a per-node selector on an engine or sidecar metric matches nothing
+(ENFORCED by `ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py`).
 
-Read the job before writing a CrowdSec query: `node` is not a CrowdSec label, and only the
-DaemonSet job attaches one. A per-node selector on an engine or sidecar metric matches nothing,
-which is how `Alerts per Scenario` and `Bucket pour time` sat dead on the per-machine board
-(#1690). `ansible/tests/services/test_dashboard_queries_match_this_clusters_labels.py` enforces
-that.
-
-**A sidecar job needs two edits, not one.** Pod-role SD emits a target per *declared*
-containerPort, so each sidecar declares 6060 (`roles/k8s/traefik/templates/deployment.yaml.j2`,
-`roles/k8s/authelia/templates/deployment.yaml.j2`), and that pod's baseline NetworkPolicy admits
-prometheus to that port (`roles/k8s/netpol-baseline/templates/networkpolicy-<pod>.yaml.j2`).
-Either one missing gives a job that discovers nothing or reads `up == 0` forever — both
-indistinguishable from the job nobody added.
-`ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py` holds all three together, for both
-sidecars.
-
-**The netpol grant is a `from` item of its own, not a port appended to an existing rule.** A
-NetworkPolicy rule ANDs its `from` with its `ports`, so adding 6060 to authelia's
-traefik-to-9091 rule would have admitted *traefik* to the agent's metrics and prometheus to
-nothing (#1706). It reads like a grant in a diff. traefik's own policy already had a prometheus
-`from` item for :8080, which is why #1694 there was a one-line port addition and #1706 here was
-not.
-
-The overview board's agent tile is a RATIO — `sum(up{job=~"crowdsec.*"}) / count(...)` — so 1
-means every agent reports whatever the fleet size. It plotted a raw count against a green step
-at 10, sized by the upstream for ten machines, and so read red on a healthy fleet of three and
-could never go green (#1709). The ratio has one blind spot, the same one `kuma-drift` names: a
-job that DISAPPEARS from service discovery leaves the survivors at N/N, so the tile answers "is
-an agent down", not "is an agent missing".
-
-`Bucket pour time` on the per-machine board reads `{job="crowdsec"}` — the engine's AppSec
-pours alone. The traefik sidecar's own pour series are excluded on purpose: the panel legends
-by `le` only, so two datasources would collide into one set of bars.
+**A sidecar job needs two edits, not one** — the containerPort declaration on that pod, and a
+prometheus `from` item of its own in its baseline NetworkPolicy (#1706: appending a port to an
+existing rule grants the wrong client). ENFORCED by
+`ansible/tests/k8s/test_crowdsec_sidecars_are_scraped.py`.
