@@ -25,6 +25,15 @@ a name that mentions neither (`_ROLE.parent.iterdir()`, the shape
 `test_cronjob_gate_decision.py` used). `EXPECTED_ROLE_DIRS_CALLERS` below covers that half:
 those files must keep calling `role_dirs`, whatever spelling a rewrite reaches for.
 
+#2968 found two more such spellings, both walking `roles/k8s/` unfiltered: a from-import
+alias (`from _helpers import K8S_ROLES as K8S`, then `sorted(K8S.iterdir())`) and a path
+rebuilt segment by segment (`K8S = REPO / "ansible" / "roles" / "k8s"`). Both are now routed
+through `role_dirs` and listed below. The segmented literal joined the pattern, since
+`"roles" / "k8s"` is as readable as `"roles/k8s"` — but only where the walk is on that same
+line. The pattern is one line wide by construction, so a tree bound to a constant on one line
+and walked on another is invisible to it whatever the spelling, and the list is what covers
+that. Neither was a live failure: both tolerated a planted `__pycache__`-only shell.
+
 The scan covers tracked `.py` files under `ansible/tests` only. The role-tree walkers
 outside the suite — `scripts/validate/k8s_manifests.py`, `scripts/docs/catalog_backup.py`,
 `scripts/docs/glance_facts.py`, `scripts/dev/k8s_autodeploy_counts.py`,
@@ -45,11 +54,13 @@ from _helpers import ANSIBLE, REPO
 # on `iterdir` alone, so a walk of some other directory is not an offender. Two spellings per
 # tree reach it: the constant a guard imports (`K8S_ROLES`, `SETUP_ROLES`, `CONTAINER_ROLES`,
 # and the local aliases that end in one of those names — `_SETUP_ROLES_DIR`, `DOCKER_ROLES`),
-# and the literal path, either written out or built as `ROLES / "<plane>"`.
+# and the literal path, written out or built a segment at a time (`ROLES / "<plane>"`,
+# `REPO / "ansible" / "roles" / "<plane>"`).
 BARE_ROLE_WALK = re.compile(
     r"(?:K8S_ROLES|SETUP_ROLES|CONTAINER_ROLES|CONTAINERS_ROLES|DOCKER_ROLES"
     r'|roles/(?:k8s|setup|containers)"'
-    r'|ROLES\s*/\s*"(?:k8s|setup|containers)")[^\n]*\.iterdir\(\)'
+    r'|ROLES\s*/\s*"(?:k8s|setup|containers)"'
+    r'|"roles"\s*/\s*"(?:k8s|setup|containers)")[^\n]*\.iterdir\(\)'
 )
 
 # Every module whose role census goes through `role_dirs`. Pinned by name so a rewrite that
@@ -61,6 +72,7 @@ EXPECTED_ROLE_DIRS_CALLERS = frozenset(
         "k8s/test_configmap_keys_not_absorbed.py",
         "k8s/test_k8s_roles_have_claude_md.py",
         "k8s/test_manifest_roles_include_the_shared_render.py",
+        "k8s/test_script_configmaps_apply_server_side.py",
         "k8s/test_vip_pins.py",
         "longhorn/test_every_longhorn_pvc_has_a_tier.py",
         "deploy/test_containers_list_roles_exist.py",
@@ -74,6 +86,7 @@ EXPECTED_ROLE_DIRS_CALLERS = frozenset(
         "deploy/test_renovate_automerge_follows_the_autodeploy_denylist.py",
         "deploy/test_restart_on_narrows_the_restart_signals.py",
         "deploy/test_setup_role_playbooks_agree.py",
+        "services/test_bridge_patch_boundary.py",
         "services/test_container_roles_have_claude_md.py",
         "setup/test_has_flag_roles_have_both_directions.py",
         "setup/test_host_lib_sibling_copies.py",
@@ -147,6 +160,9 @@ def test_the_pattern_rejects_a_bare_walk_and_accepts_a_filtered_one():
     assert BARE_ROLE_WALK.search("for p in sorted(_K8S_ROLES.iterdir()):")
     assert BARE_ROLE_WALK.search('for p in (REPO / "ansible/roles/k8s").iterdir():')
     assert BARE_ROLE_WALK.search('for p in (ROLES / "k8s").iterdir():')
+    assert BARE_ROLE_WALK.search(
+        'for p in (REPO / "ansible" / "roles" / "k8s").iterdir():'
+    )
     assert BARE_ROLE_WALK.search("for p in sorted(_SETUP_ROLES_DIR.iterdir()):")
     assert BARE_ROLE_WALK.search('for p in (ROLES / "setup").iterdir():')
     assert BARE_ROLE_WALK.search("for p in DOCKER_ROLES.iterdir():")
