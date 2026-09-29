@@ -486,12 +486,14 @@ def test_load_issues_is_silent_below_the_list_cap(issue, make_tools, capsys):
 
 
 def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
-    """A cap above gh's own 1000 makes the warning above unreachable (#2892).
+    """A cap above the 1000 a label-filtered list stops at makes the warning unreachable.
 
-    Measured 2026-09-29: the repo held 1026 `claude` issues by the search API's count, and
-    `gh issue list --label claude --state all` returned exactly 1000 at `--limit 5000` and
-    at `--limit 1200`. With `ISSUE_LIST_CAP` at 5000 the `>=` never held, so the truncation
-    the warning exists to announce was silent — two refuted findings were missing from the
-    rendered settled register.
+    A `--label` sends `gh issue list` through GitHub's search API, which caps at 1000
+    whatever `--limit` says. Measured 2026-09-29: the repo held 1026 `claude` issues by the
+    search API's own `total_count`, and `--label claude --state all` returned exactly 1000
+    at `--limit 5000` and again at `--limit 1200`. An unfiltered list pages past it (1029),
+    which is where the old 5000 came from, but every list `load_issues` builds carries
+    `--label claude`. With the cap at 5000 the `>=` never held, so the truncation was silent
+    and two refuted findings were missing from the rendered settled register (#2892).
     """
     assert ISSUE_LIST_CAP <= 1000

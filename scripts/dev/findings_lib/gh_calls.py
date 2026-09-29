@@ -51,13 +51,18 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
 
 
 # The `--limit` every list here passes, and the number the warning below compares against.
-# It is set to GH'S OWN CEILING on purpose (#2892). Measured on 2026-09-29: the repo held
-# 1026 `claude` issues by the search API's count, and `gh issue list --label claude --state
-# all --limit 5000` returned exactly 1000 — as did `--limit 1200`. gh truncates there and
-# says nothing, so a cap ABOVE 1000 can never make `len(issues) >= ISSUE_LIST_CAP` true and
-# the warning becomes unreachable. It had already cost the settled register two refuted rows
-# (#804 and #826 were missing from the rendered page). At 1000 the warning fires exactly
-# when gh truncates, which is what it says it does.
+# It is set to GH'S OWN CEILING ON A LABEL-FILTERED LIST on purpose (#2892). A `--label`
+# sends `gh issue list` through GitHub's SEARCH API, which caps at 1000 whatever `--limit`
+# says — measured 2026-09-29: the repo held 1026 `claude` issues by the search API's own
+# `total_count`, and `--label claude --state all` returned exactly 1000 at `--limit 5000`
+# and again at `--limit 1200`. An UNFILTERED list pages past it (1029 at `--limit 1200` the
+# same day, and 1001 at `--limit 1005` on 2026-09-28), which is where the 5000 cap came
+# from; every list here carries `--label claude`, so 1000 is the number that binds.
+#
+# A cap above that ceiling can never make `len(issues) >= ISSUE_LIST_CAP` true, so the
+# truncation the warning below exists to announce was silent, and it had already cost the
+# settled register two refuted rows (#804 and #826 were missing from the rendered page). At
+# 1000 the warning fires exactly when gh truncates, which is what it says it does.
 #
 # Nothing fetches the whole register any more, so no live caller is near this: every
 # `findings.py` subcommand reads `--state open`, `open` asks gh's search index for one
