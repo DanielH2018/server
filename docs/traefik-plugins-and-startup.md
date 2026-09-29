@@ -10,13 +10,13 @@ it when it edits the plugin, probe or sidecar wiring (#2989).
 ## The outage the startupProbe exists for
 
 `/ping` answers 200 from the moment the process starts. On 2026-09-06 the boot-time download
-of the CrowdSec bouncer plugin timed out, the `crowdsec` Middleware the https entrypoint names
+of the CrowdSec bouncer plugin timed out, the `crowdsec` Middleware the `https` entrypoint names
 resolved to `invalid middleware type`, every router on that entrypoint was rejected, and the
 pod sat 3/3 Ready serving 404 to the whole fleet for 3.5 hours (#1322). Traefik does not retry
 the download.
 
 The probe targets `edge-selfcheck-ingressroute.yaml.j2`, a router of Traefik's own on the
-https entrypoint backed by `ping@internal`, so the same failure that kills every app route
+`https` entrypoint backed by `ping@internal`, so the same failure that kills every app route
 kills it too and kubelet restarts the container instead.
 
 Three constraints hold it together, all ENFORCED by
@@ -33,7 +33,7 @@ Measured 2026-09-10 on `traefik:v3.7.12`, with `traefik_k8s_bouncer_plugin_versi
 - The pod never became Ready and the container restarted every ~30s, reaching restart 4 in
   2m10s. `deploy.sh --tags traefik` failed at the rollout wait rather than reporting green.
 - `https://<podIP>:8443/.well-known/traefik-edge-selfcheck` returned 404 throughout, and every
-  app router on the https entrypoint logged `invalid middleware
+  app router on the `https` entrypoint logged `invalid middleware
   "homelab-crowdsec@kubernetescrd" configuration: invalid middleware type or middleware does
   not exist` — the routing table was gone, not merely unhealthy.
 - Restarts 3 and 4 each logged `Loading plugins...` followed by `unable to download plugin

@@ -501,7 +501,6 @@ stdin
 TLSOption
 SNICheck
 startupProbe
-https
 selfcheck
 [Uu]nban
 Yaegi
