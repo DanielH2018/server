@@ -224,6 +224,12 @@ nav:
       - Traefik client identity and TLS: traefik-client-identity-and-tls.md
       - Valheim modding: valheim-modding.md
       - autofix-bridge actuators: autofix-bridge-actuators.md
+      # The same split once more (#2991), for the five largest remaining role docs.
+      - CrowdSec record: crowdsec-waf-record.md
+      - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
+      - Jellyfin plugins: jellyfin-plugins.md
+      - claude-rc caps: claude-code-rc-caps.md
+      - hypervisor libvirt internals: hypervisor-libvirt-internals.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

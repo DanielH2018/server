@@ -526,3 +526,15 @@ ffprobes?
 [Dd]epreferenced
 [Tt]unables?
 host_vars
+
+# Role-doc prose moved to docs/ pages (#2991): crowdsec, qbittorrent, jellyfin, claude_code,
+# hypervisor. Identifiers stay code spans; these are the words Vale reads as prose.
+Metabase
+[Rr]esync
+[Tt]ailer
+[Pp]refs
+Trakt
+Webhook's
+[Uu]nmanaged
+[Uu]nreferenced
+[Rr]eparented

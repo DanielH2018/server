@@ -1,7 +1,10 @@
 # qbittorrent — torrent client behind a WireGuard sidecar
 
-qBittorrent with a `wireguard` sidecar init container that tunnels all egress through
-Mullvad. See repo-root `CLAUDE.md` for shared conventions.
+qBittorrent with a `wireguard` sidecar that tunnels all egress through Mullvad.
+
+This file holds the rules; `docs/qbittorrent-vpn-and-prefs.md` holds the record — the two outages,
+how the gate was measured, LinuxServer's modcache behaviour line by line, the cross-role rollout-gate
+finding and why the prefs plane is shaped this way.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -18,233 +21,84 @@ Mullvad. See repo-root `CLAUDE.md` for shared conventions.
   and are not the blocker
 <!-- /generated_from -->
 
-- **`qbittorrent-config` is on the weekly B2 tier**; `media-data` is the shared claim
-  (mounted, not owned).
-- **What "state coupled outside the volume" means:** a snapshot revert of
-  `qbittorrent-config` cannot undo what the tracker and the `/data/torrents` tree already saw.
+- **What "state coupled outside the volume" means:** a snapshot revert of `qbittorrent-config`
+  cannot undo what the tracker and the `/data/torrents` tree already saw. `media-data` is the
+  shared claim — mounted here, owned elsewhere.
 
 ## Traps
 
 ### A VPN kill-switch outlives the container it fenced
-On 2026-08-16 one momentary registry blip cost 9 hours down and 107 restarts.
-
-The `wireguard` sidecar init container fetches `linuxserver/mods:wireguard-mullvad` from
-lscr.io at every container start. The mod writes `/config/wg_confs/wg0.conf` and installs
-iptables rules that REJECT anything not leaving via `wg0`, permitting only `LAN_NETWORKS`.
-Its startup probe is `wg show wg0`, failure 60 × 5s, so a pod with no tunnel is killed and
-restarted every ~5 minutes.
-
-The deadlock: iptables rules live in the pod's network namespace, and the netns survives
-container restarts. Once the tunnel dropped, the kill-switch stayed behind with nothing to
-exit through. `LAN_NETWORKS` includes `10.42.0.0/15`, which covers the `10.43.x` service
-CIDR, so cluster DNS kept resolving normally while every external connection was rejected.
-The mod fetch failed as `[mod-init] (ERROR) No response from lscr.io` — not a DNS error —
-then `OFFLINE: ... not found in modcache, skipping`, so `wg0.conf` was never written, so
-`wg0` never came up, so the rules never lifted. Self-sustaining.
-
-Recovery was `delete pod`, never a container restart, because only a new pod got a new netns.
-**Since 2026-09-17 the sidecar resets the netns itself** — see "The sidecar resets the netns
-on every start" below — so a container restart now clears this state without a human.
-
-What made the diagnosis certain: lscr.io answered the host fine (`HTTP 401` in 0.36s, the
-expected unauthenticated reply) and cluster DNS returned three A records with an empty AAAA,
-so it was neither an outage nor a Pi-hole AAAA problem. The decisive evidence came after —
-the replacement pod downloaded the mod from the same registry minutes later. A registry that
-gives no response to one pod while serving another at the same instant is not the broken
-party. Generalise: when a network failure is scoped to one pod, suspect the pod's own netns
-before the remote host.
-
-The failure is also invisible while it happens: the init container exits **0** ("Completed"),
-so it reads as a restart loop rather than an error.
-
-It recurred on 2026-09-13 with a different trigger and the same deadlock (#1838): the mod's
-first API call failed with `curl: (6) Could not resolve host: api.mullvad.net (Could not contact
-DNS servers)` after the previous container's tunnel had dropped, and 1005 sidecar restarts over
-3.5 days never cleared it. The stale state is self-sustaining twice over, not once: the API call
-routes into the dead wg0 and fails, and even a successful call ends in wg-quick's PostUp hitting
-the LAN routes the previous PostUp already added (`RTNETLINK answers: File exists`, the fatal
-case documented on `qbittorrent_k8s_lan_networks`), so the tunnel is torn back down.
-
-**The standing design risk is now addressed — see the next section.** The sidecar mounts a
-persistent `/modcache`, so a start that cannot reach lscr.io applies the cached mod instead of
-stranding. What has *not* changed is that a mod is still fetched over the network on a cold
-cache; the cache makes the failure survivable, not impossible.
+The mod's iptables rules live in the **pod's** network namespace, which survives a container restart,
+and the sidecar's own mod fetch and Mullvad API call route through the dead `wg0` they fence — so a
+dropped tunnel used to sustain itself until someone deleted the pod (9 hours on 2026-08-16, 3.5 days
+on 2026-09-13, #1838). It presents as a restart loop rather than an error, because the init container
+exits **0**. The netns reset below clears it without a human, and `delete pod` is the escape hatch if
+that reset is ever removed.
 
 ## The sidecar resets the netns on every start
 
-`files/netns-reset.sh` runs as the wireguard container's entrypoint wrapper
-(`command: ["/bin/sh", "-c", "/opt/netns-reset/netns-reset.sh && exec /init"]`, mounted from
-the `qbittorrent-netns-reset` ConfigMap) before the image's own s6 init. It removes what a
-previous container left in the pod netns — the wg0 link, wg-quick's two policy rules, the
-`LAN_NETWORKS` routes, and every rule in the filter OUTPUT chain and the raw/mangle tables — so
-a container restart is equivalent to the pod delete that used to be the only recovery.
+`files/netns-reset.sh` is the wireguard container's entrypoint wrapper, mounted from the
+`qbittorrent-netns-reset` ConfigMap and running before the image's s6 init. It clears the wg0 link,
+wg-quick's policy rules and LAN routes, the OUTPUT chain and the raw/mangle tables.
 
-**The gate goes up before the tunnel comes down, and that order is the privacy argument.**
-qbittorrent keeps running while the sidecar restarts, and between the reset and the mod's
-PostUp the netns would otherwise have no tunnel and no kill-switch. The script's first act is
-one atomic `iptables-restore` that installs the `LAN_NETWORKS` ACCEPTs and
-`! -o wg0 -m owner --uid-owner $PUID ... -j REJECT`: every off-LAN packet from qbittorrent's
-uid that is not leaving via wg0 is refused, root's (the mod's API calls) is not. The mod's own
-mark-exempt REJECT lands after it; both stay, and they agree wherever they overlap. If that
-restore fails the script exits 1 and touches nothing — the old deadlock, never a leak.
-
-Measured in the real image on daniel-pi (2026-09-17, `linuxserver/wireguard` under Docker
-with NET_ADMIN+NET_RAW, staged stale state, then the script): the after-state had no wg0, no
-fwmark/suppress rules, no LAN routes, empty raw/mangle, and the OUTPUT chain reduced to the
-gate; a second run on the clean netns was a no-op. Through the gate, `curl https://1.1.1.1`
-as uid 1000 was refused (`curl: (7)`), as root it reached the host, and a LAN address passed.
-To rerun it, copy the script to the Pi and stage the state inside the image the same way — the
-cluster nodes refuse unprivileged user namespaces, so there is no sandbox on them.
-
-**That measurement never sent uid-1000 traffic through a live tunnel, and the first deploy
-did.** A packet qbittorrent sends into wg0 leaves the pod as an encrypted UDP carrier on
-eth0, and the carrier still belongs to the originating socket: `--uid-owner 1000` matched
-it, `! -o wg0` was true, and the gate rejected it. Deployed 2026-09-17 15:20, the tunnel
-stayed up (the liveness curl runs as root), the pod read 2/2 Ready, and qbittorrent saw only
-timeouts — `DHT: 0 nodes`, every tracker and peer dead, `s6-setuidgid abc curl https://1.1.1.1`
-timing out where root's succeeded. The gate now exempts fwmark 51820 (`wg set wg0 fwmark`)
-exactly as the mod's own REJECT does; `test_the_gate_exempts_wireguards_own_carrier_packets`
-holds it. Verify a gate change by the rule's packet counter after a uid-1000 attempt
-(`iptables -Z OUTPUT; s6-setuidgid abc curl …; iptables -L OUTPUT -v -n`), never by root's
-curl — root is the uid the gate exempts.
-
-What the reset does NOT do: fetch the mod or bring the tunnel up. A start whose API call still
-fails restarts every ~5 minutes on the startup probe as before, with the gate holding each
-time; the difference is that the first start after the outside world recovers succeeds.
+- **The gate goes up before the tunnel comes down, and that order is the privacy argument.** Its
+  first act is one atomic `iptables-restore` installing the uid-owner REJECT, and **a failed restore
+  exits 1 and touches nothing** — the old deadlock, never a leak.
+- **The gate exempts fwmark 51820, and must.** WireGuard's carrier packets still belong to
+  qbittorrent's socket, so a gate without that exemption leaves a Ready pod at `DHT: 0 nodes`.
+  `ansible/tests/services/test_qbittorrent_sidecar_resets_the_netns.py` holds it.
+- **The reset does not fetch the mod or bring the tunnel up.** A start whose API call still fails
+  restarts every ~5 minutes on the startup probe, gate holding.
 
 ## The modcache, and the lock file it can leave behind
 
-`deployment.yaml.j2` mounts the config claim a second time at `/modcache`, `subPath: modcache`.
-That one mount is the whole fix, and the reason it works is in LinuxServer's `docker-mods.v3`:
+`deployment.yaml.j2` mounts the config claim again at `/modcache` (`subPath: modcache`), and that one
+mount is the whole fix: `docker-mods.v3` already falls back to a cached tarball when the registry
+lookup fails, and before the mount the cache died with each pod. **A cold cache still fetches over
+the network** — survivable, not impossible.
 
-| line | behaviour |
-|---|---|
-| 385, 394 | `MOD_OFFLINE="true"` is set **automatically** when the registry lookup fails — there is no env var to add |
-| 403 | cached tarball present and its sha256 matches the registry's layer → apply from cache |
-| 405 | cached tarball present and offline → `OFFLINE: … found in modcache`, apply it |
-| 408 | tarball absent and offline → `OFFLINE: … not found in modcache, skipping` — **the line from the 2026-08-16 incident** |
-| 431-438 | a successful download writes the tarball into `/modcache` itself — the cache is self-populating |
-
-So the fallback already existed and already fired during the outage. It had nothing to fall back
-to only because line 257 creates `/modcache` inside the container, where it died with each pod.
-
-A `subPath` of the existing claim rather than a PVC of its own: the tarball is a few MB against
-1Gi, and a second claim would add a storage-class decision and a backup surface for a cache any
-successful start can rebuild.
+Its one new failure mode: a pod killed mid-download leaves `/modcache/<name>.lock` behind, and later
+starts **wait on it and then skip the mod** — *the same symptom as the outage this cache prevents*.
+`verify.yml` warns rather than fails on a lock, which is legitimate mid-download. If the sidecar logs
+a skip or a lock timeout rather than `Downloading` or `found in modcache`, delete the lock file.
 
 ### verify.yml waits for the rollout, and has to
-`roles/k8s/manifests` does not wait for a rollout — it **queues** it, and `roles/k8s/manifests/tasks/drain.yml`
-runs `rollout status` for the whole batch afterwards. So a role's own `verify.yml` runs *before*
-its rollout finishes and `get pod -l app=qbittorrent` returns the **outgoing** pod. That went
-unnoticed here for as long as every proof held for the old pod too: a tunnel and a return path
-look identical either side of a roll. Proof 3 is the first assertion whose answer differs, and it
-failed the 2026-08-27 deploy against a pod that was already `Terminating` while the correctly
-mounted new pod came up seconds later.
+`roles/k8s/manifests` **queues** the rollout rather than waiting, so a role's own `verify.yml`
+otherwise runs against the **outgoing** pod — which passed every proof here until one mount assertion
+differed and failed the 2026-08-27 deploy. `verify.yml` now gates on `rollout status` before finding
+the pod, a no-op when nothing rolled.
 
-`verify.yml` now gates on `rollout status` before finding the pod. It is one inline wait for one
-role, not a reversal of the batch drain, and it is a no-op when nothing rolled.
-
-Two primitives that look like they solve this and do not, both because they are satisfied by the
-**outgoing** pod:
-
-| primitive | why it returns instantly mid-roll |
-|---|---|
-| `wait --for=condition=Available deploy/<x>` | Available is true of the old ReplicaSet |
-| `wait --for=condition=ready pod -l app=<x>` | the old pod is still Ready until it stops |
-| `--field-selector status.phase=Running` | `.status.phase` stays `Running` while Terminating — that word is kubectl's rendering of `deletionTimestamp`, not a phase |
-
-**This exposure was not unique to this role.** The same gap was found on 2026-08-27 in
-`roles/k8s/jellyfin` and `roles/k8s/tdarr` (pod lookup with no wait at all) and in
-`roles/k8s/janitorr` (a `wait --for=condition=ready pod` the old pod satisfies). All three are
-fixed. None had been caught because, as here, their assertions happened to hold on both sides
-of a roll.
-
-**Don't re-derive this by hand.** `ansible/tests/deploy/test_inline_rollout_gates.py` now decides it:
-any role that looks up a pod by its own app label must gate on `rollout status` first, and the
-check flattens included *and* imported task files so it can see a `verify.yml`. A new role with
-this shape fails the suite rather than waiting for a deploy to fail.
-
-### The new failure mode — a stale lock
-Lines 413-421 hold `/modcache/<name>.lock` for the duration of a download. A pod killed
-mid-download leaves it behind, and later starts **wait on it and then skip the mod** — which
-presents as no tunnel and a restarting pod, *the same symptom as the outage this cache exists to
-prevent*. The script says so itself: "If no other containers are using this mod you may need to
-delete /modcache/<name>.lock". `verify.yml` warns when a lock is present rather than failing,
-because a lock is legitimate while a download is genuinely in flight.
-
-Diagnosing it: if the sidecar logs a skip or a lock timeout rather than `Downloading` or
-`found in modcache`, delete the lock file from the volume; the sidecar's next restart resets
-the netns (the section above) and the modcache is re-read on the start after that.
+ENFORCED by `ansible/tests/deploy/test_inline_rollout_gates.py`: any role looking up a pod by its own
+app label gates on `rollout status` first. The docs page names the three other roles that carried the
+gap and the primitives that look like a fix and are not.
 
 ## Throughput settings live on the PVC, not in this role
 
-The role templates two of qBittorrent's settings and no others: `WEBUI_PORT` and
-`TORRENTING_PORT`, which the LinuxServer image applies from the environment at every
-start. Everything else — connection limits, hashing threads, the libtorrent working-set
-bound — lives in `qBittorrent.conf` on the `qbittorrent-config` Longhorn PVC. A WebUI
-change to any of it is live state that no Ansible run reproduces and a volume restore
-silently reverts.
+The role templates `WEBUI_PORT` and `TORRENTING_PORT` and nothing else. Connection limits, hashing
+threads and the libtorrent working-set bound live in `qBittorrent.conf` on the `qbittorrent-config`
+PVC, so **a WebUI change to any of them is live state no Ansible run reproduces and a volume restore
+silently reverts.**
 
-`files/apply_prefs.py` is the repo-side source of truth for the eight settings that were
-tuned for throughput on 2026-08-26. Run it after a PVC restore, or after changing a value
-in its `DESIRED` dict:
+`files/apply_prefs.py` is the repo-side source of truth for the eight settings tuned for throughput
+on 2026-08-26. Run it after a PVC restore, or after changing a value in its `DESIRED` dict — the docs
+page has the command. It diffs before writing, sends only the keys that differ, and reads back to
+prove the write, so a second run reports "nothing to do".
 
-```bash
-QBT_USERNAME=$(sops -d --extract '["qbittorrent_username"]' ansible/vars/secrets.yml) \
-QBT_PASSWORD=$(sops -d --extract '["qbittorrent_password"]' ansible/vars/secrets.yml) \
-QBT_URL=http://<pod-ip>:8080 \
-uv run python ansible/roles/k8s/qbittorrent/files/apply_prefs.py --dry-run
-```
-
-It diffs before writing, sends only the keys that differ, and reads back to prove the
-write — so a second run reports "nothing to do" rather than rewriting.
-
-**It is deliberately NOT wired into `deploy.yml`.** A deploy renders manifests, which
-fires the central rollout-restart, and the replacement pod waits on the wireguard
-sidecar's startupProbe (`failureThreshold: 60 × 5s`). A prefs task in the deploy path
-would block on that window every time, and an lscr.io blip during it — the failure above —
-would surface as a *failed deploy* instead of as the mod-fetch problem it is. Keep the
-apply manual.
+**It is deliberately NOT wired into `deploy.yml`.** The replacement pod waits on the sidecar's
+startupProbe (`failureThreshold: 60 × 5s`), so a prefs task in the deploy path would block on that
+window every time and turn an lscr.io blip into a failed deploy. Keep the apply manual.
 
 ### The daily drift check is log-only, and does not apply anything
 
-Nothing used to re-run `apply_prefs.py` or notice when the PVC's live preferences drifted from
-`DESIRED` (2026-08-27 review, Medium). `tasks/main.yml` now installs a daily host cron on
-daniel-box (`qbittorrent_k8s_prefs_check_cron_hour`/`_minute`, `cron_file:
-qbittorrent-prefs-check`) that copies `files/apply_prefs.py` to
-`/opt/qbittorrent-prefs-check/` and runs it with `--dry-run` from
-`templates/prefs-check.sh.j2`, then `logger -t qbittorrent-prefs-check`s the result. It never
-writes to qBittorrent — applying a changed value stays the manual step documented above.
-
-**Deliberately NOT a Kuma monitor.** The 2026-08-27 review that found this gap also found six
-live Kuma push tokens leaking into `curl` argv across the estate, one world-readable — adding a
-seventh for a low-urgency drift check would grow the exact class being remediated in the same
-review. `logger` writes to the `{job="syslog"}` Loki stream instead, which
-`scripts/diagnostics/probe.py alerts` already reads. This is why `prefs-check.sh.j2` is absent
-from `ansible/tests/setup/test_cron_scripts_publish_via_pr.py`'s push-script corpus (it holds neither
-`api/push` nor `PUSH_URL`) — it isn't a push script and doesn't need to sit in the shared
-`kuma-push-lib.sh` contract that file enforces.
-
-**Credentials are the existing `qbittorrent_username`/`qbittorrent_password` SOPS keys** —
-the same ones `homepage`'s widget already renders — projected into
-`/usr/local/bin/qbittorrent-prefs-check.sh` at 0700 owner `{{ sys_user }}` (the same shape as
-`janitorr-health.sh.j2`'s Kuma token: interpolated directly rather than split into a separate
-env file, since only one user ever needs to read this one). No new SOPS surface.
-
-**apply_prefs.py's exit codes are a contract now, not an accident**: `EXIT_OK` (0),
-`EXIT_UNREACHABLE` (1), `EXIT_BAD_ARGS` (2), `EXIT_DRIFT` (3, `--dry-run` only). Before
-2026-08-27, `--dry-run` returned 0 whether or not anything had drifted, which is why the cron
-above could not previously have branched on it. No caller shelled out to this script before
-that date (grep confirmed), so this widened the contract rather than breaking one.
+`tasks/main.yml` installs a daily daniel-box cron
+(`qbittorrent_k8s_prefs_check_cron_hour`/`_minute`, `cron_file: qbittorrent-prefs-check`) that runs
+`files/apply_prefs.py --dry-run` from `templates/prefs-check.sh.j2` and `logger`s the result under
+the `qbittorrent-prefs-check` tag. **It never writes to qBittorrent** — applying a changed value
+stays manual. It is deliberately not a Kuma monitor and reads the script's exit codes as a contract
+(`EXIT_DRIFT` is 3, `--dry-run` only); the docs page has why.
 
 ### The login trap
-qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an
-empty body**. Older builds answered `200 "Ok."`, and a client that checks for that string
-rejects a login that in fact succeeded. Check for the `QBT_SID` cookie instead — a bad
-password returns 200 `"Fails."` and sets no cookie, so the cookie means the same thing on
-both versions. `web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.
-
-### Why these values, in one line
-The pod egresses through Mullvad, which forwards no ports, so qBittorrent can only pair
-with peers it dials itself. Every raised limit is about dialing faster and wider; none of
-it substitutes for an inbound port. See `files/apply_prefs.py` for the per-setting reasons.
+qBittorrent 5.2.3 answers a successful `POST /api/v2/auth/login` with **HTTP 204 and an empty
+body**, where older builds answered `200 "Ok."` — so a client checking for that string rejects a
+login that succeeded. Check for the `QBT_SID` cookie instead; a bad password sets none.
+`web_ui_max_auth_fail_count` is 5, so don't debug a login by retrying it.

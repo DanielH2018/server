@@ -58,12 +58,10 @@ MIN_NON_BLANK_LINES = 8
 # characters (#2826); #2921 and #2982 started the trim on gitops_deploy and initial_setup,
 # and each reason names the section that goes next. #2989 took renovate_notify out: its
 # sandbox surprises, dashboard-parser measurements and module layout moved to
-# docs/renovate-notify-internals.md.
+# docs/renovate-notify-internals.md. #2991 took two more: claude_code's memory incidents and
+# slice-placement argument moved to docs/claude-code-rc-caps.md, and hypervisor's staging
+# reap, subnet census and libvirt collisions to docs/hypervisor-libvirt-internals.md.
 OVER_CEILING: dict[str, str] = {
-    "claude_code": (
-        "17338 chars on 2026-09-28: the two Remote Control modes and the `user.slice` fleet "
-        "bound are operating rules; `## Traps already paid for` is history with a docs/ home"
-    ),
     "docker_install": (
         "17522 chars on 2026-09-28: the engine hold and the teardown arm are operating rules "
         "for the last Docker host; `## What it does` can thin to a pointer at "
@@ -74,13 +72,6 @@ OVER_CEILING: dict[str, str] = {
         "to, and the contract governs a deployer that ships to production unattended; `## "
         "Traps` and the error-string ledger moved to docs/gitops-pipeline.md (#2921), and "
         "`## Safety`'s per-arm narration is the next thing to thin against that page"
-    ),
-    "hypervisor": (
-        "15176 chars on 2026-09-29: the etcd restore drill's guest lifecycle and the reap of "
-        "the retired staging guest "
-        "are operating rules an operator needs before touching the role, and neither has a "
-        "docs/ page of its own; the egress-fence history can thin to a pointer at "
-        "docs/archive/staging-cluster.md next"
     ),
     "initial_setup": (
         "28054 chars on 2026-09-29: the granular-tag list and the two autonomous-role "
