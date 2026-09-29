@@ -159,14 +159,12 @@ To change a board: edit the JSON here (or edit in the Grafana UI and round-trip 
 `sudo k3s kubectl`, so expect a sudo prompt), then deploy **claude-otel**.
 `scripts/grafana/fetch_grafana_dashboards.py` seeds the two community boards, each pinned
 to a grafana.com REVISION in `scripts/grafana/fetch_grafana_dashboards.py:DASHBOARDS` (1860 at
-revision 45, 14282 at revision 1). The script asked for `revisions/latest` until 2026-09-28,
-which made a refresh return whatever upstream had published since — `node-exporter-full.json`
-is 13,746 lines, and an unrelated re-run could rewrite all of them with no commit explaining
-it. Bump a revision in its own commit and read the diff. A fresh fetch still differs from the
-committed boards. Both carry post-fetch hand edits the script does not reproduce, and the query
-variables' defaults resolve against the live Prometheus. So the script writes a board only when
-it is missing or already matches, and otherwise refuses and writes nothing (#2912). To take the
-upstream form on purpose, pass `--overwrite`, then re-apply the hand edits before committing.
+revision 45, 14282 at revision 1); until 2026-09-28 it fetched `revisions/latest`, so an
+unrelated re-run could rewrite all 13,746 lines of `node-exporter-full.json`. Bump a revision
+in its own commit and read the diff. A fresh fetch still differs from the committed boards:
+both carry hand edits the script does not reproduce, and query-variable defaults resolve
+against the live Prometheus. So it refuses to overwrite a differing board and writes nothing
+(#2912); `--overwrite` takes the upstream form, after which re-apply the hand edits.
 A hand-edited board must stay in the writers' form — keys sorted at every depth, 2-space
 indent, non-ASCII literal — or the next export rewrites it and the drift read (`git diff
 --stat` after an export) shows a change that is not one. ENFORCED by
