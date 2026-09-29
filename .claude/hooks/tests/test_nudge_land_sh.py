@@ -41,6 +41,11 @@ def test_gh_pr_checks_with_watch_flag_is_a_watch():
     assert _mod.classify("gh pr checks 620 --watch") == "watch"
 
 
+def test_gh_pr_checks_web_flag_is_a_status_read():
+    """`-w` is `--web`, not a short `--watch`: it opens a browser and returns (#2959)."""
+    assert _mod.classify("gh pr checks 1 -w") == "status"
+
+
 def test_gh_pr_checks_without_watch_is_a_status_read():
     assert _mod.classify("gh pr checks 620") == "status"
 

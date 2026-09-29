@@ -134,8 +134,10 @@ def classify(command: str, split=split_stages) -> str | None:
                 w in _LOG_FLAGS for w in stage
             ):
                 continue
-            # `--watch` turns a one-shot read into a blocking wait.
-            if "--watch" in stage or "-w" in stage:
+            # `--watch` turns a one-shot read into a blocking wait. Only the long form: on
+            # both `gh pr checks` and `gh run view`, `-w` is `--web`, which opens a browser
+            # and returns, and `gh pr checks` has no short form of `--watch` at all (#2959).
+            if "--watch" in stage:
                 return "watch"
             return "status"
     return None
