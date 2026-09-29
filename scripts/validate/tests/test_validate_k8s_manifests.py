@@ -126,3 +126,22 @@ def test_an_object_no_vendored_schema_covers_is_flagged(monkeypatch, tmp_path):
     out = buf.getvalue()
     assert _UNCOVERED in out
     assert "traefik.io/v1alpha1/IngressRoute" in out
+
+
+def _ghost_and_real(tmp_path):
+    """A retired role's `__pycache__`-only shell beside a real role."""
+    pycache = tmp_path / "retired" / "files" / "__pycache__"
+    pycache.mkdir(parents=True)
+    (pycache / "check.cpython-312.pyc").write_bytes(b"\x00")
+    (tmp_path / "real" / "defaults").mkdir(parents=True)
+    (tmp_path / "real" / "defaults" / "main.yml").write_text("---\n")
+    return tmp_path
+
+
+def test_a_role_with_defaults_is_rendered_is_clean(tmp_path):
+    assert "real" in vkm.role_names(_ghost_and_real(tmp_path))
+
+
+def test_a_pycache_only_directory_is_flagged_as_no_role(tmp_path):
+    """A retired role's leftover shell renders nothing and proves nothing (#2888)."""
+    assert vkm.role_names(_ghost_and_real(tmp_path)) == ["real"]

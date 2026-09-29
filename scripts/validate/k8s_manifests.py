@@ -46,6 +46,11 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.repo_paths import FILTER_PLUGINS
+
+_sys.path.insert(0, str(FILTER_PLUGINS))
+
+from k8s_autodeploy import is_leftover_dir
 from lib.k8s_context import (
     colliding_default_keys,
     resolve_vars,
@@ -168,6 +173,20 @@ def check_template(role: str, tpl: Path, ctx: dict) -> tuple[str | None, list]:
     return None, parse_docs(rendered)
 
 
+def role_names(k8s_roles: Path) -> list[str]:
+    """Every role under `k8s_roles` this validator renders, sorted.
+
+    A retired role's gitignored `__pycache__/` keeps its directory on disk after the
+    deployer's fast-forward removes the tracked files. `is_leftover_dir` drops that shell,
+    which would otherwise render as a role with no templates and prove nothing (#2888).
+    """
+    return sorted(
+        d.name
+        for d in k8s_roles.iterdir()
+        if d.is_dir() and d.name not in SKIP_ROLES and not is_leftover_dir(str(d))
+    )
+
+
 def main() -> int:
     """Render every k8s role's manifest templates and validate them against the k3s schemas.
 
@@ -199,9 +218,7 @@ def main() -> int:
     base = resolve_vars(base, base)
     entries = k8s_entries()
 
-    roles = sorted(
-        d.name for d in K8S_ROLES.iterdir() if d.is_dir() and d.name not in SKIP_ROLES
-    )
+    roles = role_names(K8S_ROLES)
     checked = failures = 0
     # Built up alongside the existing per-template loop below (one render pass, not two): every
     # declared PVC name (from a rendered PersistentVolumeClaim, or from a volume-claim include —
