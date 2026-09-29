@@ -478,3 +478,12 @@ Tdie
 [Tt]oolchains?
 [Dd]atasources?
 gitleaks
+
+# Role-doc prose moved to docs/ pages (#2985): cronjob-gate, headlamp, game-stats, n8n
+adaliszk
+[Dd]ockerfiles?
+[Dd]eploy's
+localStorage
+mtail
+[Pp]repends
+supervisord
