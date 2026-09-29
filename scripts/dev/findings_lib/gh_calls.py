@@ -1,8 +1,8 @@
 """The gh reads and writes `findings.py` makes, and the one place a plan is executed.
 
 Everything here takes a `FindingsTools`, so a test answers gh from a fake rather than from
-the network. `load_issues` defaults its own, which is how `scripts/docs/reference/backlog.py`
-calls it with nothing to inject.
+the network. `load_issues` defaults its own, which is how `load_backlog_issues` calls it
+with nothing to inject.
 
 `run` carries almost all of the write surface: it prints a plan under `--dry-run` and calls
 `tools.gh` otherwise, so a command that goes through it does not have to remember which mode
@@ -50,45 +50,57 @@ def _warn_at_the_comment_cap(issues: list[dict]) -> list[dict]:
     return issues
 
 
-# `gh issue list` returns at most this many and says nothing when it truncates. The
-# settled register in docs/reference/backlog.md reads `state="all"`, which stood at 645 of
-# these on 2026-09-21 and 995 on 2026-09-28, so a silent cut there would drop refuted
-# findings from the table a reviewer reads before flagging -- the harm the register exists
-# to prevent. Raised from 1000 five issues before the register reached it. `gh` itself
-# pages past 1000: `gh issue list --state all --limit 1005 --json number` on this repo
-# returned 1001 issues on 2026-09-28, so the cap is ours alone and the warning below still
-# means what it says. The remaining `--state all` caller is the backlog cron
-# (`scripts/docs/reference/backlog.py`), which can afford the minute this costs; `open`
-# stopped reading the whole register in #2846.
-ISSUE_LIST_CAP = 5000
-
-# `lib.gh.gh`'s default timeout is 60s, which the `--state all` fetch outgrew. It asks for
-# `body` and `comments` on every `claude` issue in every state, and on 2026-09-28 that was
-# 4.19 MB across ~900 issues and took 67.5s wall — so EVERY findings.py subcommand failed,
-# `open` included, with a bare "gh failed: ... timed out after 60.0 seconds" (#2800's session
-# could not file its own follow-ups). The cost grows with the register and nothing else here
-# does, so the timeout is set at this call site rather than raised for every `gh` caller.
+# The `--limit` every list here passes, and the number the warning below compares against.
+# It is set to GH'S OWN CEILING on purpose (#2892). Measured on 2026-09-29: the repo held
+# 1026 `claude` issues by the search API's count, and `gh issue list --label claude --state
+# all --limit 5000` returned exactly 1000 — as did `--limit 1200`. gh truncates there and
+# says nothing, so a cap ABOVE 1000 can never make `len(issues) >= ISSUE_LIST_CAP` true and
+# the warning becomes unreachable. It had already cost the settled register two refuted rows
+# (#804 and #826 were missing from the rendered page). At 1000 the warning fires exactly
+# when gh truncates, which is what it says it does.
 #
-# #2846 proposed narrowing `_LIST_FIELDS` per subcommand as the durable fix. MEASURED ON
-# 2026-09-28, THAT IS THE WRONG LEVER, so do not reach for it: the field set is not what
-# makes this slow, the STATE is. `--state all` was 995 issues and 58.4s; `--state open` was
-# 57 issues and 0.9s. Every subcommand but `open` already reads `open` only, and the fields
-# they would drop are the ones `issue_model.issue_rows` structurally needs — `body` for
-# `verify_by` and `paths`, `comments` for `claimed` and `reobservations`. What #2846 fixed
-# instead is `open`: it asks gh to find the one fingerprint rather than fetching the
-# register (`fingerprint_match` below). This timeout now covers the backlog cron alone.
+# Nothing fetches the whole register any more, so no live caller is near this: every
+# `findings.py` subcommand reads `--state open`, `open` asks gh's search index for one
+# fingerprint (#2846), and the backlog cron reads the three narrow slices
+# `load_backlog_issues` names. The largest of those was 49 issues on 2026-09-29.
+ISSUE_LIST_CAP = 1000
+
+# `lib.gh.gh`'s default timeout is 60s, which the whole-register `--state all` fetch
+# outgrew: it asked for `body` and `comments` on every `claude` issue in every state, and on
+# 2026-09-28 that was 4.19 MB across ~900 issues and took 67.5s wall — so EVERY findings.py
+# subcommand failed, `open` included, with a bare "gh failed: ... timed out after 60.0
+# seconds" (#2800's session could not file its own follow-ups). Raising the timeout only
+# moved the wall: at ~58s per 1000 issues, 300s breaks at about 5,100 issues, and a fetch
+# that times out never reaches the cap warning that would have explained it (#2892).
+#
+# NARROWING THE FIELD SET IS THE WRONG LEVER, measured 2026-09-28 — the field set is not
+# what makes a fetch slow, the STATE is (`--state all` 995 issues / 58.4s, `--state open` 57
+# issues / 0.9s), and `issue_model.issue_rows` structurally needs `body` for `verify_by` and
+# `paths` and `comments` for `claimed` and `reobservations`. Narrowing the QUERY is the
+# lever: `fingerprint_match` for `open`, `load_backlog_issues` for the cron. This timeout is
+# now a ceiling over fetches measured in seconds, kept because the register keeps growing
+# and a slow LAN is not a reason to lose the page.
 REGISTER_FETCH_TIMEOUT = 300.0
 
 
-def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[dict]:
+def load_issues(
+    state: str = "all",
+    tools: FindingsTools | None = None,
+    labels: tuple[str, ...] = (),
+) -> list[dict]:
     """Fetches every ``claude``-labeled issue from gh, warning when it hits the list cap.
 
     Args:
         state: issue state to filter by (``open``, ``closed`` or ``all``).
         tools: the boundaries to reach gh through; the real ones when omitted, which is how
-            `scripts/docs/reference/backlog.py` calls it.
+            `load_backlog_issues` calls it.
+        labels: extra labels to narrow by. `gh issue list` ANDs repeated `--label`, so each
+            one here is a further filter on the `claude` register, never a union.
     """
-    argv = ("issue", "list", "--label", "claude", "--state", state, "--limit")
+    argv = ["issue", "list", "--label", "claude"]
+    for label in labels:
+        argv += ["--label", label]
+    argv += ["--state", state, "--limit"]
     issues = (tools or FindingsTools()).gh_json(
         *argv,
         str(ISSUE_LIST_CAP),
@@ -102,6 +114,37 @@ def load_issues(state: str = "all", tools: FindingsTools | None = None) -> list[
             "cap -- the register past it is missing, not empty\n"
         )
     return _warn_at_the_comment_cap(issues)
+
+
+# The labels `findings.py close` writes on its two not-planned outcomes, and the whole of
+# what the settled register renders. `NO_REOPEN` is the same pair read for the other half of
+# the contract — `open` refusing to re-file either.
+SETTLED_LABELS = ("refuted", "accepted")
+
+
+def load_backlog_issues(tools: FindingsTools | None = None) -> list[dict]:
+    """The rows `scripts/docs/reference/backlog.py` renders, in three narrow fetches.
+
+    NOT `--state all` (#2892). `backlog.render_markdown` renders exactly three sets — the
+    open findings, the closed `refuted` ones and the closed `accepted` ones — and drops
+    every other closed issue on the floor. Fetching the whole register to throw most of it
+    away cost 995 issues and 58.4s on 2026-09-28 and grew about 350 issues a week, which
+    `REGISTER_FETCH_TIMEOUT` above put on a course to break at about 5,100 issues with the
+    backlog page silently stale behind it. The same three sets were 49 + 26 + 21 = 96 issues
+    on 2026-09-29, and they grow with what is FILED and SETTLED rather than with what is
+    closed, so this cost does not track the register's size.
+
+    Returns them deduplicated by issue number: an issue carrying both settled labels comes
+    back from two of the fetches and must render once.
+    """
+    tools = tools or FindingsTools()
+    fetched = load_issues("open", tools)
+    for label in SETTLED_LABELS:
+        fetched += load_issues("closed", tools, labels=(label,))
+    by_number: dict[int, dict] = {}
+    for issue in fetched:
+        by_number.setdefault(issue["number"], issue)
+    return list(by_number.values())
 
 
 # How many search hits `fingerprint_match` reads back. A fingerprint is a 12-hex string that

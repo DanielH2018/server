@@ -483,3 +483,15 @@ def test_load_issues_is_silent_below_the_list_cap(issue, make_tools, capsys):
     tools, _ = make_tools(Fakes(issues=[issue(n) for n in range(ISSUE_LIST_CAP - 1)]))
     load_issues("all", tools)
     assert capsys.readouterr().err == ""
+
+
+def test_the_list_cap_does_not_sit_above_the_ceiling_gh_enforces_itself():
+    """A cap above gh's own 1000 makes the warning above unreachable (#2892).
+
+    Measured 2026-09-29: the repo held 1026 `claude` issues by the search API's count, and
+    `gh issue list --label claude --state all` returned exactly 1000 at `--limit 5000` and
+    at `--limit 1200`. With `ISSUE_LIST_CAP` at 5000 the `>=` never held, so the truncation
+    the warning exists to announce was silent — two refuted findings were missing from the
+    rendered settled register.
+    """
+    assert ISSUE_LIST_CAP <= 1000
