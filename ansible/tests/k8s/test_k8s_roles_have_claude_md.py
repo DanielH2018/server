@@ -120,8 +120,9 @@ OVER_CEILING: dict[str, str] = {
         "Notable` are editing rules; the per-widget history in that same section is the trim"
     ),
     "jellyfin": (
-        "16789 chars on 2026-09-28: the plugin allowlist and the snapshot-space cap are "
-        "operating rules; `## Plugin analyses that outlive their decision` says in its own "
+        "17823 chars on 2026-09-28: the plugin allowlist, the per-installer version pin "
+        "(#2905) and the snapshot-space cap are operating rules for a pod that runs a plugin "
+        "deleting media; `## Plugin analyses that outlive their decision` says in its own "
         "title that it is history"
     ),
     "monitor-bridge": (
