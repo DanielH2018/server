@@ -74,7 +74,7 @@ def test_no_k8s_role_builds_an_image_and_renders_no_workload_is_clean():
         "k8s_rebuilt_images is play-scoped. The build-roll coupling that derived the consumer "
         f"alongside the build role was deleted as memberless in #2876; restore it with "
         f"`git show {DELETED_IN}^:ansible/tests/deploy/test_build_roll_couplings.py` and "
-        f"`git show {DELETED_IN} -- scripts/deploy_tools/deploy_tags.py`."
+        f"`git show {DELETED_IN}` (the coupling reached about a dozen land and deploy call sites)."
     )
 
 
