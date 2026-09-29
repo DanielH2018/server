@@ -209,21 +209,24 @@ Ansible runs through the repo's pinned uv env (see repo-root [`CLAUDE.md`](../CL
 uv run ansible-playbook ansible/preflight.yml       # read-only; asserts §1-§5 actually landed
 uv run ansible-playbook ansible/initial_setup.yml   # OS hardening; base pkgs, uv-tool CLIs, gitops deployer — needs §5 SOPS
 uv run ansible-playbook ansible/k3s-bringup.yml     # cluster foundation (k3s, Longhorn, CRDs) — cluster nodes only
-uv run ansible-playbook ansible/deploy.yml          # deploy all workloads (Docker play dependency-ordered; k8s play in list order)
+./scripts/deploy.sh                                 # deploy all workloads (both plays dependency-ordered; deploy.yml toposorts the k8s play)
 ```
 
 > `docker_install` runs on every host, unconditionally — `tasks/main.yml` is a dispatcher:
 > `has_docker: true` runs `install.yml`, `has_docker: false` runs `teardown.yml` (reaps stale
-> Compose systemd units and crons; a no-op on a host that never had Docker). Both cluster nodes
-> set `has_docker: false` (daniel-server since the 2026-08-14 uninstall), so `initial_setup.yml`
-> only *installs* Docker on `daniel-pi` — the `has_docker: true` in `group_vars/all.yml` is now a
-> default that every real host except the Pi overrides, and on daniel-box/daniel-server a run
-> instead exercises the teardown path. `ansible/tests/setup/test_k3s_host_has_no_docker.py` guards
-> against reintroducing the old `when: has_docker` gate on the role include.
+> Compose systemd units and crons; a no-op on a host that never had Docker). `group_vars/all.yml`
+> defaults `has_docker: false` and `daniel-pi` alone overrides it true, so `initial_setup.yml`
+> only *installs* Docker on the Pi and a run on either cluster node exercises the teardown path.
+> Both cluster nodes also declare the `false` at host level, where the reason for each is
+> recorded. `ansible/tests/setup/test_k3s_host_has_no_docker.py` guards against reintroducing the
+> old `when: has_docker` gate on the role include.
 
-or `./ansible/bring-up.sh --continue [--host <name>]`, which runs those three in order and
-stops at the first failure. Add `-e target=<host>` to each command when driving another host
-(see the §5 note — `--limit` alone silently matches nothing).
+or `./ansible/bring-up.sh --continue [--host <name>]`, which runs them in order and stops at
+the first failure. It reads `k3s_server_hosts` from the inventory and runs `k3s-bringup.yml`
+only on a host listed there, naming the join command for an agent node instead — an agent is
+joined from the server node over SSH, which the agent's own bring-up cannot do. Add
+`-e target=<host>` to each command when driving another host (see the §5 note — `--limit` alone
+silently matches nothing).
 
 `preflight.yml` changes nothing — it just fails fast, with an error that names the cause, on
 the mistakes that otherwise surface deep inside `initial_setup.yml`: a missing `host_vars`
@@ -299,7 +302,7 @@ admin user on the next deploy with no UI step.
 
 External prerequisites, none of them IaC-managed: the Cloudflare DNS records (including the
 hand-created grey-cloud `*.local.<domain>` wildcard that all internal routing depends on — see
-[`roles/containers/cloudflare-ddns/CLAUDE.md`](roles/containers/cloudflare-ddns/CLAUDE.md)),
+[`roles/k8s/cloudflare-ddns/CLAUDE.md`](roles/k8s/cloudflare-ddns/CLAUDE.md)),
 router port-forwards for Traefik and WireGuard, a Backblaze B2 bucket for the Longhorn
 backup plane (kopia retired 2026-08-13), and the off-box UptimeRobot dead-man's-switch.
 Rebuilding rather than bringing up a new host? Follow

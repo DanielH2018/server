@@ -28,7 +28,8 @@ Usage:  ansible/bring-up.sh [--host <name>] [--scaffold] [--continue]
   --host <name>   inventory host to bring up (default: this machine's hostname)
   --scaffold      create the §4 inventory entries (hosts.ini line + host_vars file) if
                   missing, then stop so you can edit them. Never overwrites.
-  --continue      skip §3-§5 and run §8: preflight.yml, initial_setup.yml, deploy.yml
+  --continue      skip §3-§5 and run §8: preflight.yml, initial_setup.yml,
+                  k3s-bringup.yml (k3s server nodes only), then deploy.sh
   -h, --help      show this help
 EOF
 }
@@ -118,14 +119,50 @@ if uv run ansible-playbook ansible/bootstrap.yml -e target="$HOST" --limit "$HOS
   exit 1
 fi
 
+# The hosts k3s-bringup.yml installs a k3s SERVER on, one per line.
+#
+# Read from the inventory rather than hard-coded here, so the answer stays the one
+# `k3s_server_hosts` in group_vars/all.yml gives and k3s-bringup.yml's own assert checks.
+# `ansible-inventory --host` merges group_vars into the host's vars and neither connects to
+# the host nor decrypts secrets, so it answers on a machine that has not been onboarded yet.
+#
+# Assigned to a variable rather than tested inside an `if` pipeline: a failed read there would
+# read as "not a server node" and silently skip the cluster step, which is the shape of the
+# bug this call was added to fix. As an assignment, `set -e` aborts on it instead.
+k3s_server_nodes() {
+  uv run ansible-inventory --host "$HOST" |
+    uv run python -c 'import json, sys; print("\n".join(json.load(sys.stdin).get("k3s_server_hosts") or []))'
+}
+
 # §8: hand off to Ansible (opt-in, after the SOPS exchange)
 if [[ "$CONTINUE" == true ]]; then
   echo ">> preflight (read-only) ..."
   uv run ansible-playbook ansible/preflight.yml -e target="$HOST"
   echo ">> initial_setup (OS hardening) ..."
   uv run ansible-playbook ansible/initial_setup.yml -e target="$HOST"
-  echo ">> deploy (all containers, dependency-ordered) ..."
-  uv run ansible-playbook ansible/deploy.yml -e target="$HOST"
+  # README §8 lists this between initial_setup and deploy for a cluster node, and leaving it
+  # out is how a rebuilt control-plane node reached deploy.yml with no cluster to apply
+  # manifests to (#2861). Skipped with a named reason on every other host, rather than run
+  # and left to fail k3s-bringup.yml's `inventory_hostname in k3s_server_hosts` assert.
+  SERVER_NODES="$(k3s_server_nodes)"
+  if printf '%s\n' "$SERVER_NODES" | grep -qxF "$HOST"; then
+    echo ">> k3s-bringup (cluster foundation — k3s, Longhorn, CRDs) ..."
+    uv run ansible-playbook ansible/k3s-bringup.yml -e target="$HOST"
+  else
+    echo ">> skipping k3s-bringup: '$HOST' is not in k3s_server_hosts."
+    echo "   Narrow on purpose — an AGENT node is joined by k3s-bringup.yml's opt-in join"
+    echo "   plays, which run FROM the server node over SSH, so run this there:"
+    echo "       uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=$HOST"
+  fi
+  # deploy.sh, not `ansible-playbook deploy.yml`: the playbook alone takes none of the locks
+  # the GitOps deployer and the weekly secret-rotate cron take on this tree, so a bring-up
+  # that overlaps either interleaves two writers. No --tags — an empty tag set is a full run.
+  #
+  # It refuses a tree behind origin/master (exit 4, nothing deployed). That gate is kept: a
+  # bring-up host deploying an old master is the same hazard anywhere else, and `git pull`
+  # then re-running --continue is the fix.
+  echo ">> deploy (all workloads, dependency-ordered) ..."
+  ./scripts/deploy.sh -e target="$HOST"
   cat <<'EOF'
 
 ============================================================

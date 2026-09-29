@@ -302,7 +302,7 @@
   # The cron `name:` is unchanged from when this ran `--gc` alone. `cron_file` entries are
   # tracked by that comment, so renaming one adds a second entry beside the first rather than
   # replacing it.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Weekly git object-store repair"
     minute: "20"
@@ -330,7 +330,7 @@
   # No Healthchecks ping, unlike the crons above: a failed run leaves the previous page in
   # place rather than corrupting anything, and the page prints the timestamp it was generated
   # at — so a run that stops working shows up as a visibly stale date on the artifact itself.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Refresh homelab infrastructure map"
     minute: "*/15"
@@ -356,7 +356,7 @@
 
 - name: Create the cert-expiry credentials directory (box only)
   tags: [crons]
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.file:
     path: /etc/homelab
     state: directory
@@ -371,7 +371,7 @@
   # sits in /proc/<pid>/cmdline, world-readable, for the whole run. Same reason
   # setup-drift-kuma-push.env exists as its own file below. 0640 root:{{ sys_user }}, matching
   # that file's mode, so only the cron's own user can read it.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.template:
     src: cert-expiry-webhook.env.j2
     dest: /etc/homelab/cert-expiry-webhook.env
@@ -395,7 +395,7 @@
   # cert-expiry-specific one. No healthcheck ping is wired -- doing so needs a check created
   # by hand in a console this play cannot reach, so $CERT_EXPIRY_HEALTHCHECK_URL is left
   # unset and the watcher simply skips that ping.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "TLS cert-expiry watch"
     minute: "10"
@@ -668,7 +668,7 @@
   # /home/{{ sys_user }}/server would be untracked dirt, which parks gitops-deploy exactly as the
   # dirt it is recording does. Owned by the cron user because that cron runs without become; the
   # parent /var/lib/homelab stays root-owned 0755, created by the k3s role's health crons.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.file:
     path: /var/lib/homelab/docs-refresh.d
     state: directory
@@ -679,7 +679,7 @@
 
 - name: Install the docs refresh script (box only)
   tags: [crons, docs]
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.template:
     src: docs-refresh.sh.j2
     dest: /usr/local/bin/docs-refresh.sh
@@ -708,7 +708,7 @@
   # Twice daily, not every 15 minutes like the infra map. That one writes an artifact
   # nothing commits; this one commits and pushes, so each run that finds a change costs a
   # master CI run. The inputs are repo files, which only move when a PR merges.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Refresh generated docs"
     minute: "17"
@@ -733,7 +733,7 @@
 # every repo-side check reads green.
 - name: Stamp the rendered docs-refresh wrapper (box only)
   tags: [crons]
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: docs-refresh
@@ -746,7 +746,7 @@
   # Outside the checkout for the same reason as the docs-refresh directory above: a file written
   # under /home/{{ sys_user }}/server would be untracked dirt, parking gitops-deploy exactly as
   # the dirt it records does. Owned by the cron user because that cron runs without become.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.file:
     path: /var/lib/homelab/eval-run.d
     state: directory
@@ -757,7 +757,7 @@
 
 - name: Install the homelab eval sweep script (box only)
   tags: [crons, evals]
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.template:
     src: eval-run.sh.j2
     dest: /usr/local/bin/eval-run.sh
@@ -781,7 +781,7 @@
   # anthropic_api_key (see eval-run.sh.j2's header) and reports UP either way, so this
   # cron runs disarmed until that SOPS secret exists rather than needing a second deploy
   # to arm it.
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Homelab eval sweep"
     minute: "0"
@@ -801,7 +801,7 @@
 # reads green.
 - name: Stamp the rendered eval-run wrapper (box only)
   tags: [crons]
-  when: inventory_hostname == 'daniel-box'
+  when: inventory_hostname == ops_cron_host
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
     stamp_render_name: eval-run

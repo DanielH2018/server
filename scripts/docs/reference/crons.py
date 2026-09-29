@@ -6,7 +6,8 @@ human in the loop. That set is the reason to read the page, and it is not obviou
 single role: the tasks are spread across roles/setup/, roles/k8s/ and roles/containers/.
 
 STATIC PARSING ONLY. Every `ansible.builtin.cron` task is read with yaml.safe_load. Jinja
-in a schedule or user resolves only where every host would get the same value: its variables
+in a schedule or user, and a variable a `when:` compares `inventory_hostname` against, resolve
+only where every host would get the same value: their variables
 come from role defaults or `group_vars/all.yml` and no `host_vars` file sets them
 (`lib.jinja_defaults`). Anywhere else it is printed as written, because a value that differs
 by host cannot be resolved without a real deploy, and an unresolved `{{ var }}` is the honest
@@ -60,7 +61,13 @@ _MUTATING = (
     "reboot",
 )
 
-_HOST_RE = re.compile(r"inventory_hostname\s*==\s*'([^']+)'")
+# A host gate, written either as a quoted literal or as the name of a variable holding it
+# (`inventory_hostname == ops_cron_host`). Both forms are in the tree, and the variable form is
+# the one that keeps a host rename to a single edit, so a reader that understood only the
+# literal degraded 13 rows of this page to "conditional (...)" the moment one was converted.
+_HOST_RE = re.compile(
+    r"inventory_hostname\s*==\s*(?:'([^']+)'|\"([^\"]+)\"|([A-Za-z_]\w*))"
+)
 
 
 def _cron_tasks(path: Path) -> list[dict]:
@@ -74,13 +81,27 @@ def _cron_tasks(path: Path) -> list[dict]:
     return [t for t in loaded if isinstance(t, dict) and "ansible.builtin.cron" in t]
 
 
-def _host_for(task: dict) -> str:
-    """The host a `when:` restricts the task to, or 'all hosts in the play'."""
+def _host_for(task: dict, role_dir: Path) -> str:
+    """The host a `when:` restricts the task to, or 'all hosts in the play'.
+
+    Args:
+        task: One Ansible task, read for its `when:`.
+        role_dir: The role the task belongs to, for resolving a variable gate against that
+            role's defaults and `group_vars/all.yml`.
+
+    Returns:
+        The host name, or a phrase describing the gate when it names no single host. A
+        variable the fleet-wide resolver cannot settle is returned as written, the same
+        honest rendering the schedule column uses.
+    """
     when = task.get("when")
     text = " ".join(when) if isinstance(when, list) else str(when or "")
     match = _HOST_RE.search(text)
     if match:
-        return match.group(1)
+        single, double, var = match.groups()
+        if var:
+            return resolve("{{ " + var + " }}", role_dir)
+        return single or double
     if "has_gitops" in text:
         return "the gitops host"
     return "every host in the play" if not text else f"conditional ({text[:60]})"
@@ -201,7 +222,7 @@ def build_rows(roles: Path = ROLES) -> list[dict[str, str]]:
                 {
                     "name": str(spec.get("name", task.get("name", "unnamed"))),
                     "schedule": resolve(schedule_text(spec), role_dir),
-                    "host": _host_for(task),
+                    "host": _host_for(task, role_dir),
                     "user": resolve(str(spec.get("user", "root")), role_dir),
                     "changes_state": _changes_state(job),
                     "source": _rel(path, roles),

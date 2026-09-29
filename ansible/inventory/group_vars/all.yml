@@ -617,6 +617,16 @@ renovate_agent_host: daniel-box
 # role entry is evaluated before that role's defaults are in scope, the same reason
 # renovate_notify_host is.
 fake_remux_host: daniel-box
+# The one host that runs the repo-level ops crons `initial_setup/tasks/crons.yml` gates to a
+# single host: the worktree sweep, the infrastructure-map refresh, the TLS cert-expiry watch,
+# the generated-docs refresh and the weekly eval sweep. They need the primary checkout, uv, gh
+# and a local kubectl, which daniel-box is the only host to carry together.
+#
+# Here rather than in the role's defaults for the reason fake_remux_host gives above, plus one
+# the reader in scripts/deploy_tools/land_reach.py adds: `_eval_when` resolves a gate against
+# group_vars + host_vars only, and a name it cannot resolve reads as "every host", which is the
+# over-broad verdict issue #2073 closed.
+ops_cron_host: daniel-box
 # The one host that writes k8s render records (roles/setup/render_records, #2587). It must be
 # the host the release records name, because the staleness reader refuses a render record
 # whose `host` differs, and the host whose primary checkout the GitOps deployer fetches.
@@ -664,13 +674,13 @@ weekly_reboot_timezone: UTC
 # gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and
 # driven manually over SSH, not by GitOps, by design.
 has_gitops: true
-# Whether this host runs Docker. True by default — it is the container runtime the whole
-# containers_list plane is built on. daniel-box overrides this false: it is the k3s node, and
-# k3s ships its own containerd plus flannel/kube-proxy iptables rules. A bare
-# initial_setup.yml run once installed Docker there and tripped the k3s role's fail-closed
-# "already runs Docker" guard; this gate is what stops that recurring, since relying on the
-# operator to remember --tags is what let it happen.
-has_docker: true
+# Whether this host runs Docker. FALSE by default since the 2026-08-14 k3s migration, which
+# left daniel-pi as the only Docker host: both cluster nodes run k3s's own containerd, and a
+# bare initial_setup.yml run once installed Docker on daniel-box and tripped the k3s role's
+# fail-closed "already runs Docker" guard. The default is the safe direction of that incident,
+# so a host nobody thought about gets the teardown arm rather than a second container runtime.
+# daniel-pi overrides this true.
+has_docker: false
 # The Docker engine packages, listed once because three tasks must agree on the set:
 # docker_install installs them, initial_setup's host-basics HOLDS them before its
 # dist-upgrade, and docker_install's teardown unholds them before its purge. An upgrade of
