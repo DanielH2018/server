@@ -180,10 +180,11 @@
     - (initial_setup_cpugov_current.content | b64decode | trim) == 'performance'
   tags: [tuning]
 
-- name: Lower swappiness (daniel-server)
-  # 30G RAM and swap sits unused — prefer reclaiming page cache over swapping
-  # service heaps. The Pi runs the OPPOSITE tuning (swappiness=130, zram-eager)
-  # in optimize_pi — 512 MB + zram needs eager swap.
+- name: Lower swappiness (ample-RAM hosts)
+  # Tens of GB of RAM with swap sitting unused — prefer reclaiming page cache over
+  # swapping service heaps. True of daniel-server and of daniel-box, whose control
+  # plane holds etcd, Longhorn and Prometheus heaps (#2981). The Pi runs the OPPOSITE
+  # tuning (swappiness=130, zram-eager) in optimize_pi — 512 MB + zram needs eager swap.
   ansible.posix.sysctl:
     name: vm.swappiness
     value: "10"
@@ -201,7 +202,9 @@
 # zero-regret subset; purging it would block any future snap-packaged tool.
 # DECIDED: a host literal, not a capability flag (#2975). The subject is a snap the Ubuntu
 # Server installer seeded on this one machine, so the gate reads "the host whose installer did
-# that" — host history again, not hardware. See the governor block above.
+# that" — host history again, not hardware. See the governor block above. #2981 asked whether
+# daniel-box should be added: `snap list` there reports no snaps installed (2026-09-29), so
+# widening the gate would remove nothing. The literal stays as it is.
 - name: Remove the unused LXD snap and its orphaned bases (daniel-server)
   # One snap per call, ordered (lxd before the bases it uses): passing the list in
   # a single call made community.general.snap (11.x) mangle its snap-remove argv

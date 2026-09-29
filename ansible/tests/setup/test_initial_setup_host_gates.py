@@ -35,10 +35,10 @@ _HOST_LITERAL = re.compile(r"inventory_hostname\s*[!=]=\s*['\"]")
 
 HOSTS = ("daniel-box", "daniel-pi", "daniel-server")
 
-# The effective value each flag must have on every host — the truth value the literal it
-# replaced gave. `has_ample_ram` is false on daniel-box even though the machine has ample RAM:
-# the literal it replaced said `== 'daniel-server'`, and widening it is a live tuning change,
-# not a refactor.
+# The effective value each flag must have on every host — the intended per-host truth, which
+# started as the truth value the literal each flag replaced gave. `has_ample_ram` has since
+# diverged from that literal: #2981 armed it on daniel-box (28 GiB control-plane node) as a
+# deliberate tuning change, so two hosts carry it while the literal named only daniel-server.
 EXPECTED_FLAGS = {
     "has_low_memory_board": {
         "daniel-box": False,
@@ -50,7 +50,7 @@ EXPECTED_FLAGS = {
         "daniel-pi": True,
         "daniel-server": False,
     },
-    "has_ample_ram": {"daniel-box": False, "daniel-pi": False, "daniel-server": True},
+    "has_ample_ram": {"daniel-box": True, "daniel-pi": False, "daniel-server": True},
 }
 
 # Task name -> the flag its gate must name. Named rather than counted, so a rename fails with
@@ -66,7 +66,7 @@ EXPECTED_FLAG_GATES = {
     "Remove apt-show-versions (daniel-pi — apt-hook tax on 512 MB)": "has_low_memory_board",
     "Install apt-show-versions (roomy hosts only)": "has_low_memory_board",
     "Install Raspberry Pi-specific packages": "has_raspi_kernel",
-    "Lower swappiness (daniel-server)": "has_ample_ram",
+    "Lower swappiness (ample-RAM hosts)": "has_ample_ram",
 }
 
 # The literals that stay, because they read host history rather than hardware. Each must sit
@@ -149,10 +149,16 @@ def test_the_reach_reader_resolves_each_flag_to_the_same_hosts_as_the_literal():
             assert _eval_when(flag, host) is expected, (flag, host)
 
 
-def test_only_the_named_host_opts_into_each_flag():
-    """Non-vacuity on the host_vars side: a flag nobody sets true gates nothing."""
+def test_every_host_the_table_arms_opts_in_from_its_own_host_vars():
+    """Non-vacuity on the host_vars side: a flag nobody sets true gates nothing.
+
+    A flag may arm more than one host — `has_ample_ram` arms both daniel-server and
+    daniel-box (#2981) — so the count is "at least one", and every armed host must carry
+    the opt-in itself rather than inheriting it from `group_vars`.
+    """
     for flag, per_host in EXPECTED_FLAGS.items():
         armed = {h for h, v in per_host.items() if v}
-        assert len(armed) == 1, (flag, armed)
-        host = armed.pop()
-        assert f"{flag}: true" in (HOST_VARS / f"{host}.yml").read_text(), (flag, host)
+        assert armed, f"{flag} is true on no host, so it gates nothing"
+        for host in sorted(armed):
+            opt_in = (HOST_VARS / f"{host}.yml").read_text()
+            assert f"{flag}: true" in opt_in, (flag, host)

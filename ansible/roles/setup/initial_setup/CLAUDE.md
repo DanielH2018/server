@@ -35,17 +35,18 @@ first** and scope with `--tags` when iterating.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
 
 ## Hardware gates are capability flags, not host names
-A task that runs on one machine gates on a flag naming the HARDWARE fact it reads —
+A gate names the HARDWARE fact it reads, never the host that has it —
 `ansible/inventory/group_vars/all.yml:has_low_memory_board`,
 `ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
-`ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false in `group_vars/all.yml`
-and is true in one host's `host_vars`, so replacing a machine is a `host_vars` edit. They sit in
-`group_vars` because `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against
-`group_vars` + `host_vars` only, and an unresolvable name reads as every host.
+`ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false there and is true in
+every carrying host's `host_vars` — two for `has_ample_ram` (#2981). Replacing a
+machine is a `host_vars` edit. They sit in `group_vars` because
+`scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against `group_vars` +
+`host_vars` only, and an unknown name reads as every host.
 
 Three gates keep a host literal behind a `DECIDED:` comment: the CPU-governor cleanup, the
-LXD-snap debloat and the stale WireGuard UFW rule. They read HOST HISTORY, which no capability
-names, and they delete themselves once the host converges.
+LXD-snap debloat, the stale WireGuard UFW rule. They read HOST HISTORY, which no capability
+names, and delete themselves once the host converges.
 `ansible/tests/setup/test_initial_setup_host_gates.py::test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones`
 refuses a new bare literal.
 
