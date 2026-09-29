@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-29 01:30 UTC
-generated_sha: fea456d31
+generated_at: 2026-09-29 06:17 UTC
+generated_sha: a3360b904
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,17 +12,17 @@ generated_sha: fea456d31
 
 # State of the lab
 
-3 of 7 loops within cadence.
+7 of 7 loops within cadence.
 
 !!! warning "Status is a heuristic over the last recorded state"
     `late` means the loop's last recorded run is more than 2x its expected cadence old. `unreadable` means this generator could not reach the loop's state at all (wrong host, permission, or unparseable content) -- not that the loop is unhealthy. `never` means the state is reachable and simply has no run recorded yet.
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | never | — | 10m | unreadable | state directory not reachable from here |
-| renovate-agent | never | — | 1d | unreadable | state directory not reachable from here |
-| renovate-notify | 2026-09-28T13:01:53+0000 | 12h28m | 1d | ok | checked, nothing new to notify |
-| docs-refresh | 2026-09-29T00:15:00+0000 | 1h15m | 12h | ok | generators: failed: gen_infra_map.py |
-| secret-rotate | 2026-09-28T19:44:48+0000 | 5h45m | 7d | ok | last touched by: Delete the Cluster Prometheus gate and scrutiny's own Discord notify, which both page twice |
-| longhorn-restore-drill | never | — | 1d | unreadable | state directory not reachable from here |
-| etcd-restore-drill | never | — | 7d | never | no run recorded yet |
+| gitops-deploy | 2026-09-29T06:09:30+0000 | 8m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-28T11:23:11+0000 | 18h54m | 1d | ok | session completed |
+| renovate-notify | 2026-09-28T22:30:26+0000 | 7h47m | 1d | ok | notified |
+| docs-refresh | 2026-09-28T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-29T02:00:06+0000 | 4h17m | 7d | ok | last touched by: Retire the daniel-stage guest and reclaim its 8 GiB and 100 GB disk |
+| longhorn-restore-drill | 2026-09-29T04:10:47+0000 | 2h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-28T10:20:04+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1790563503.zip) |

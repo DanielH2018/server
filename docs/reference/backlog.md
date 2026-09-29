@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-29 01:31 UTC
-generated_sha: fea456d31
+generated_at: 2026-09-29 06:18 UTC
+generated_sha: a3360b904
 ---
 
 !!! warning "Generated file — do not edit"
@@ -17,7 +17,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
 | [#2851](https://github.com/DanielH2018/server/issues/2851) | high | improvement | cicd | Give the enforcement ladder a way to retire a check, not only to add one | 2026-09-28 | 0 | - | ✓ |
-| [#2802](https://github.com/DanielH2018/server/issues/2802) | medium | improvement | backup-observability | Declare a Kuma maintenance window for the weekly reboot, via an API reconcile | 2026-09-27 | 0 | worktree-fanout-2026-09-28-decisions | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
 | [#2808](https://github.com/DanielH2018/server/issues/2808) | medium | improvement | docs | Sixteen stores hold what the next session needs; consolidate to seven and retire facts.lock | 2026-09-28 | 0 | - | ✓ |
 | [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 0 | - | ✓ |
@@ -32,6 +31,8 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2901](https://github.com/DanielH2018/server/issues/2901) | medium | gap | cicd | Scope nudge-land-sh to this repo's CI reads | 2026-09-28 | 0 | - | - |
 | [#2912](https://github.com/DanielH2018/server/issues/2912) | medium | gap | backup-observability | fetch_grafana_dashboards.py reverts hand edits and live variable defaults on every re-run | 2026-09-28 | 0 | - | ✓ |
 | [#2921](https://github.com/DanielH2018/server/issues/2921) | medium | improvement | docs | Trim the 29 role CLAUDE.md files over the inject hook's character budget | 2026-09-28 | 0 | - | ✓ |
+| [#2943](https://github.com/DanielH2018/server/issues/2943) | medium | gap | security | Restore a reachability gate for the staging egress fence | 2026-09-29 | 0 | - | ✓ |
+| [#2947](https://github.com/DanielH2018/server/issues/2947) | medium | gap | cicd | Nothing notices when one of the four classes #2876 deleted gains a member again | 2026-09-29 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
@@ -48,7 +49,6 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2864](https://github.com/DanielH2018/server/issues/2864) | low | improvement | cicd | Measure whether deploy-ui and renovate_agent are used before keeping them | 2026-09-28 | 0 | - | ✓ |
 | [#2865](https://github.com/DanielH2018/server/issues/2865) | low | improvement | - | Delete or relocate dead and single-caller code: expose.yml.j2, unused scripts/lib modules, longhorn_reap | 2026-09-28 | 0 | - | ✓ |
 | [#2872](https://github.com/DanielH2018/server/issues/2872) | low | improvement | container | Render a default Service from the containers_list entry when a k8s role ships none | 2026-09-28 | 0 | - | ✓ |
-| [#2876](https://github.com/DanielH2018/server/issues/2876) | low | improvement | cicd | Decide the fate of four mechanisms the #2813 role merges left memberless | 2026-09-28 | 0 | worktree-fanout-2026-09-28-decisions | ✓ |
 | [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2888](https://github.com/DanielH2018/server/issues/2888) | low | gap | cicd | Three more roles/k8s walkers still count a retired role's __pycache__ leftover as a role | 2026-09-28 | 0 | - | - |
@@ -62,7 +62,9 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2920](https://github.com/DanielH2018/server/issues/2920) | low | gap | docs | No size guard covers ansible/roles/containers/*/CLAUDE.md | 2026-09-28 | 0 | - | ✓ |
 | [#2925](https://github.com/DanielH2018/server/issues/2925) | low | improvement | docs | Trim claude-otel CLAUDE.md back under the role-doc ceiling instead of re-recording it | 2026-09-28 | 0 | - | ✓ |
 | [#2933](https://github.com/DanielH2018/server/issues/2933) | low | improvement | cicd | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | 2026-09-28 | 0 | - | ✓ |
-| [#2941](https://github.com/DanielH2018/server/issues/2941) | low | improvement | cicd | Decide whether daniel-stage keeps running now that no tick consults it | 2026-09-29 | 0 | worktree-fanout-2026-09-28-decisions | ✓ |
+| [#2944](https://github.com/DanielH2018/server/issues/2944) | low | improvement | cicd | Decide whether the retired staging cluster's two shared-machinery constants stay | 2026-09-29 | 0 | - | ✓ |
+| [#2945](https://github.com/DanielH2018/server/issues/2945) | low | gap | cicd | Authelia's SMTP notifier branch lost its only rehearsal with daniel-stage | 2026-09-29 | 0 | - | ✓ |
+| [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -149,6 +151,6 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
-| [#917](https://github.com/DanielH2018/server/issues/917) | refuted | The staging gate sees 6 of ~54 services, so most merges cross it ungated | Derived from the tree, as the issue's own suggested approach asked. The 61 roles under roles/k8s/ render 21 distinct top-level kinds; the six subset members exercise 16. The five they do not — CronJob, LimitRange, Namespace, StorageClass, PersistentVolume — are rendered only by configarr, pi-peer-backup, claude-otel and media-volume, every one already permanently excluded by Decision 6. No admissible role adds a kind, so widening buys no mechanism coverage, which is the principle Decision 6 selects on. Non-vacuity: the shared manifests role has no templates/ at all (so the 16 come from the six members, not inherited plumbing), and no StatefulSet exists anywhere in the tree (so the line-anchored kind match drops nothing). What widening still buys is per-role coverage, declined on three bounds now recorded in Decision 6: validate/k8s_manifests.py already renders and parses every template and --dry-run shows them to a real API server; the 8192 MiB VM cannot fit code-server (4096Mi) or valheim (6144Mi) beside the six members' 1664 MiB; and volume-claim/volume-snapshot/volume-revert gate nothing here because k8s_autodeploy_snapshot_pvcs is empty host-wide for reasons that are properties of the cluster. The cost side also moved: a rejection parks prod now that the gate blocks. Census and bounds landed in docs/archive/staging-cluster.md via PR #921. |
+| [#917](https://github.com/DanielH2018/server/issues/917) | refuted | The staging gate sees 6 of ~54 services, so most merges cross it ungated | Derived from the tree, as the issue's own suggested approach asked. The 61 roles under roles/k8s/ render 21 distinct top-level kinds; the six subset members exercise 16. The five they do not — CronJob, LimitRange, Namespace, StorageClass, PersistentVolume — are rendered only by configarr, pi-peer-backup, claude-otel and media-volume, every one already permanently excluded by Decision 6. No admissible role adds a kind, so widening buys no mechanism coverage, which is the principle Decision 6 selects on. Non-vacuity: the shared manifests role has no templates/ at all (so the 16 come from the six members, not inherited plumbing), and no StatefulSet exists anywhere in the tree (so the line-anchored kind match drops nothing). What widening still buys is per-role coverage, declined on three bounds now recorded in Decision 6: validate/k8s_manifests.py already renders and parses every template and --dry-run shows them to a real API server; the 8192 MiB VM cannot fit code-server (4096Mi) or valheim (6144Mi) beside the six members' 1664 MiB; and volume-claim/volume-snapshot/volume-revert gate nothing here because k8s_autodeploy_snapshot_pvcs is empty host-wide for reasons that are properties of the cluster. The cost side also moved: a rejection parks prod now that the gate blocks. Census and bounds landed in docs/staging-cluster.md via PR #921. |
 | [#2584](https://github.com/DanielH2018/server/issues/2584) | accepted | Role-doc warning band never reaches the CI log, because prek hides a passing hook's output | Operator decision 2026-09-25: keep the pytest-only surface. The band exists to reach the author, and sessions here run uv run pytest routinely, which prints RoleDocNearCeiling. CI already fails hard at MAX_LINES=400, the one threshold that must hold. A census page reaches nobody mid-edit, and an At-a-glance band field would fire the staleness gate on every prose edit to a banded doc. |
 | [#2717](https://github.com/DanielH2018/server/issues/2717) | accepted | A 58-service shared-role caller expansion is unmeasured against a full deploy.yml | Measured 838s untagged vs 905s for the 58-tag expansion (one run each, within rollout-wait noise); no speed case for switching, and an untagged run holds the all lock for its whole duration. Operator decision 2026-09-27: keep expand_shared_tags as it is. |
