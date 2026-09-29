@@ -44,9 +44,26 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   replaced). `templates/deployment.yaml.j2` now carries instance 1 and
   `templates/deployment-2.yaml.j2` instance 2, both from one macro body in
   `templates/pihole-deployment.yaml.j2`, and `tasks/apply_instance_2.yml` applies the second only
-  after `roll_one.yml` has proved the first is serving. Two costs, both deliberate: instance 2's
-  bytes are outside `manifests_digest`, and a dry run never reaches its manifest — read the
-  comments above each in `tasks/main.yml`.
+  after `roll_one.yml` has proved the first is serving.
+- **The shared role still renders instance 2, and still digests it; only the apply is this
+  role's.** `manifests_deferred_files: [deployment-2.yaml]` with
+  `manifests_deferred_dir_name: pihole-instance-2` is that contract (#2899). Rendering it here
+  instead left its bytes outside `manifests_digest`, so a change to `deployment-2.yaml.j2` moved
+  no digest at all and `probe.py releases --stale-only` fell back to paths and diffs for half
+  this role's workload. One cost remains, deliberately: a dry run renders instance 2's manifest
+  but never shows it to the API server, because `kubectl apply -f <dir>/` is not recursive and a
+  dry run must not write the node outside `roles/k8s/manifests` (#2611/#2614). The macro keeps
+  that gap small — instance 1's dry run exercises the schema instance 2 renders.
+- **`probe.py health pihole` holds a roll expectation for pihole-2 only because `roll_one.yml`
+  writes one.** The release record is stamped inside the shared include, before
+  `tasks/apply_instance_2.yml` runs, so it cannot know whether that apply rolled instance 2 by
+  changing its pod template (stamping no `restartedAt`) or `roll_one.yml` restarted it (stamping
+  one). `rolled_by_role: true` on the `manifests_self_rollouts` entry records `restart: false`
+  and hands the decision over; `roll_one.yml` then raises it through the shared
+  `tasks/rollout_amend.yml`, but only where it actually issued a `rollout restart` (#2902).
+  Deploy time is covered either way and more strictly: `roll_one.yml` blocks on pihole-2's
+  `rollout status`, and `Verify both Pi-hole instances have a ready DNS endpoint` refuses fewer
+  than two ready endpoints.
 - **`roll_one.yml` refuses a sibling that is terminating.** A pod keeps phase `Running` and
   condition `Ready` for its whole grace period, so `kubectl wait` alone reported a
   half-gone sibling as a serving one. The check reads `deletionTimestamp` and fails the play.
@@ -63,5 +80,4 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   `externalTrafficPolicy: Local`. Recreating the Service needs a new address chosen deliberately.
 
 ## Editing
-Adlists/regex: `defaults/main.yml`. Deploy:
-`./scripts/deploy.sh --tags "pihole"`.
+Adlists/regex: `defaults/main.yml`.

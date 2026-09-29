@@ -32,12 +32,17 @@
   # skips the task and the consumer below reads `.rc` off a skip result.
   check_mode: false
 
-# No --prune: this directory holds one file and the role is not armed for it. The `configured` /
+# `manifests_deferred_dir` is the shared role's published path for the directory it rendered
+# instance 2 into (#2899) — /etc/rancher/k3s/manifests/pihole-instance-2 on a real run. Reading
+# its fact rather than repeating the literal keeps the render and the apply on one answer.
+#
+# No --prune: the shared role prunes this directory from `manifests_deferred_files`, the same way
+# it prunes its own, so a file dropped from that list does not keep re-applying here. The `configured` /
 # `created` wording is kubectl's own, and the changed_when below reads it the way the shared
 # role's apply does.
 - name: Apply pihole-2's Deployment
   ansible.builtin.command:
-    cmd: "k3s kubectl apply -f {{ pihole_k8s_instance_2_dir }}/"
+    cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
   become: true
   register: pihole_k8s_instance_2_apply
   changed_when: >-

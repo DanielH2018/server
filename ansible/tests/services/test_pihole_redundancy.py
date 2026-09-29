@@ -28,6 +28,8 @@ from _helpers import walk_tasks as _flatten_tasks
 
 _TASKS = _REPO / "ansible/roles/k8s/pihole/tasks/main.yml"
 _ROLL_ONE = _REPO / "ansible/roles/k8s/pihole/tasks/roll_one.yml"
+_APPLY_INSTANCE_2 = _REPO / "ansible/roles/k8s/pihole/tasks/apply_instance_2.yml"
+_MANIFESTS_TASKS = _REPO / "ansible/roles/k8s/manifests/tasks"
 
 INSTANCES = {"pihole", "pihole-2"}
 CLAIM_BY_INSTANCE = {"pihole": "pihole-etc", "pihole-2": "pihole-etc-2"}
@@ -292,24 +294,98 @@ def test_the_shared_apply_carries_instance_one_only():
 def test_instance_two_is_staged_outside_the_pruned_directory():
     """Its own directory, not a subdirectory of the one the shared prune owns.
 
-    The shared role deletes every file in `<root>/pihole/` that `manifests_files` does not name,
-    so staging there would make instance 2's Deployment a permanently `changed` prune item on an
-    otherwise idempotent run."""
-    select = task_named(
-        load_tasks(_TASKS), "Select the second Pi-hole instance's manifest"
+    The shared role deletes every file in `<root>/pihole/` that `manifests_files` does not name
+    and applies that directory in one request, so staging instance 2 there would be #2884 again
+    plus a permanently `changed` prune item. Since #2899 the render is the shared role's, through
+    `manifests_deferred_files`, so this reads the directory the shared role derives from pihole's
+    `manifests_deferred_dir_name` rather than a fact pihole sets itself — and the apply has to
+    read the same fact, or it would apply a directory the deploy never writes.
+    """
+    declared = next(
+        task["vars"]
+        for task in load_tasks(_TASKS)
+        if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests"
     )
-    staged = str(
-        select["ansible.builtin.set_fact"]["pihole_k8s_instance_2_dir"]
+    assert declared["manifests_deferred_files"] == ["deployment-2.yaml"], declared
+    dir_name = declared["manifests_deferred_dir_name"]
+
+    select = task_named(
+        load_tasks(_MANIFESTS_TASKS / "main.yml"),
+        "Select the deferred render directory",
+    )
+    staged = render_expr(
+        select["ansible.builtin.set_fact"]["manifests_deferred_dir"],
+        k8s_dry_run=False,
+        manifests_dest_dir=f"{MANIFEST_ROOT}/pihole",
+        manifests_deferred_dir_name=dir_name,
     ).strip()
     assert staged.startswith(MANIFEST_ROOT + "/"), staged
     assert staged != f"{MANIFEST_ROOT}/pihole", staged
     assert not staged.startswith(f"{MANIFEST_ROOT}/pihole/"), staged
 
-    render = task_named(
-        load_tasks(_TASKS), "Render the second Pi-hole instance's Deployment"
+    apply_cmd = str(
+        task_named(load_tasks(_APPLY_INSTANCE_2), "Apply pihole-2's Deployment")[
+            "ansible.builtin.command"
+        ]["cmd"]
     )
-    dest = str(render["ansible.builtin.template"]["dest"])
-    assert "pihole_k8s_instance_2_dir" in dest, dest
+    assert "manifests_deferred_dir" in apply_cmd, apply_cmd
+
+
+def test_the_deferred_render_is_what_triggers_instance_twos_apply():
+    """A change to `deployment-2.yaml.j2` alone moves none of the shared role's three restart
+    facts — it renders into another directory, so `manifests_render` never sees it. Without the
+    fourth trigger the apply that carries instance 2 would simply not run, and the deploy would
+    report success having shipped nothing (#2884, re-pointed at the shared register by #2899)."""
+    when = str(task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")["when"])
+    assert "manifests_deferred_render" in when, when
+    assert "pihole_k8s_instance_2_render" not in when, (
+        "the role no longer renders instance 2 itself; reading its own stale register would "
+        "leave a deployment-2.yaml.j2 change undeployed"
+    )
+
+
+def test_instance_twos_bytes_reach_the_release_digest():
+    """The point of moving the render into the shared role (#2899): the deferred file is stat'd
+    into `manifests_release_files`, so `manifests_digest` covers it and
+    `probe.py releases --stale-only` can clear or catch a change to it. A render alone would not
+    have done that — the digest loops a list, not a directory."""
+    checksum = task_named(
+        load_tasks(_MANIFESTS_TASKS / "release_digest.yml"),
+        "Checksum the rendered deferred manifests",
+    )
+    assert checksum["loop"].strip() == "{{ manifests_deferred_files | default([]) }}"
+    assert "manifests_deferred_dir" in checksum["ansible.builtin.stat"]["path"]
+
+    files = task_named(
+        load_tasks(_MANIFESTS_TASKS / "release_digest.yml"),
+        "Digest the rendered manifests",
+    )["ansible.builtin.set_fact"]["manifests_release_files"]
+    stat_result = {
+        "results": [{"item": "deployment-2.yaml", "stat": {"checksum": "beef"}}]
+    }
+    rendered = render_expr(
+        files,
+        manifests_release_stat={
+            "results": [{"item": "deployment.yaml", "stat": {"checksum": "cafe"}}]
+        },
+        manifests_release_deferred_stat=stat_result,
+        manifests_deferred_dir_name="pihole-instance-2",
+    )
+    # Keyed by directory, so instance 2's `deployment-2.yaml` can never collide with a file of
+    # the same name in the shared directory — a collision that would read as a match.
+    assert rendered == {
+        "deployment.yaml": "cafe",
+        "pihole-instance-2/deployment-2.yaml": "beef",
+    }, rendered
+    # The reject half: a role that defers nothing digests exactly what it did before.
+    assert render_expr(
+        files,
+        manifests_release_stat={
+            "results": [{"item": "deployment.yaml", "stat": {"checksum": "cafe"}}]
+        },
+        manifests_release_deferred_stat={"results": []},
+        manifests_deferred_dir_name="",
+    ) == {"deployment.yaml": "cafe"}
 
 
 def _roll_one_index(fragment: str) -> int:

@@ -8,8 +8,9 @@
 # between the two digests is only meaningful while both are computed by the same code. A copy
 # drifts one edit at a time, and every drift reads as a stale service.
 #
-# Reads `manifests_dest_dir`, so it runs against whichever directory the caller rendered into.
-# Publishes `manifests_release_sha`, `manifests_release_dirty`, `manifests_release_files`,
+# Reads `manifests_dest_dir`, so it runs against whichever directory the caller rendered into,
+# and `manifests_deferred_dir` for the files the caller applies itself. Publishes
+# `manifests_release_sha`, `manifests_release_dirty`, `manifests_release_files`,
 # `manifests_release_digest` and `manifests_release_secret_digest`.
 
 - name: Resolve the release commit for the k8s plane
@@ -71,6 +72,20 @@
   register: manifests_release_stat
   become: true
 
+- name: Checksum the rendered deferred manifests for {{ manifests_service }}
+  tags: [deploy]
+  # The bytes the OWNING role applies, from the sibling directory this role rendered them into
+  # (#2899). Without this the digest covered half of pihole's workload: a change to
+  # `deployment-2.yaml.j2` moved no digest, so `probe.py releases --stale-only` could neither
+  # clear the path hit by a match nor catch it by a mismatch. A separate loop rather than one
+  # over both lists, because the two live in different directories.
+  ansible.builtin.stat:
+    path: "{{ manifests_deferred_dir }}/{{ item }}"
+    checksum_algorithm: sha256
+  loop: "{{ manifests_deferred_files | default([]) }}"
+  register: manifests_release_deferred_stat
+  become: true
+
 - name: Digest the rendered manifests for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.set_fact:
@@ -81,10 +96,21 @@
     # would not. Verified against Ansible's own zip/map, not bare Jinja: `zip` is an Ansible
     # filter and does not exist in plain Jinja, so this expression cannot be checked outside a
     # play.
+    # Deferred entries are keyed `<dir>/<file>`, never a bare basename: they live in another
+    # directory, and two files of the same name would otherwise collide into one entry — a
+    # collision that reads as a match. `| default('')` on the directory name because the
+    # expression is evaluated for all ~63 roles that defer nothing, where the map is empty but
+    # its key prefix is still built.
     manifests_release_files: >-
       {{ dict(manifests_release_stat.results | map(attribute='item') | list
               | zip(manifests_release_stat.results
-                    | map(attribute='stat.checksum', default='ABSENT') | list)) }}
+                    | map(attribute='stat.checksum', default='ABSENT') | list))
+         | combine(dict(manifests_release_deferred_stat.results | default([])
+                        | map(attribute='item')
+                        | map('regex_replace', '^', (manifests_deferred_dir_name | default('')) ~ '/')
+                        | list
+                        | zip(manifests_release_deferred_stat.results | default([])
+                              | map(attribute='stat.checksum', default='ABSENT') | list))) }}
 
 - name: Publish the release digest for {{ manifests_service }}
   tags: [deploy]
@@ -94,8 +120,11 @@
   # without walking the per-file map. `dictsort` before `to_json` because dict ordering is
   # not guaranteed and an order-dependent digest would differ for identical bytes.
   #
-  # Secret manifests never reach it: the stat above loops `manifests_files` only. They get their
-  # own keyed digest below, in a separate field, so this one is unchanged by that (#2574).
+  # Secret manifests never reach it: the stats above loop `manifests_files` and
+  # `manifests_deferred_files` only. They get their own keyed digest below, in a separate field,
+  # so this one is unchanged by that (#2574). Adding a deferred file to a role DOES move this
+  # digest, so that service reads stale once until its next deploy writes a fresh record —
+  # the same one-redeploy convergence `secret_digest` had.
   ansible.builtin.set_fact:
     manifests_release_digest: "{{ (manifests_release_files | dictsort | to_json) | hash('sha256') }}"
 
