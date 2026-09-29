@@ -375,3 +375,38 @@ Add the declaration as usual. `test_every_declared_monitor_lands_in_a_named_grou
 one of the group rules matches its id, so a new tile cannot quietly land in the runtime `Other`
 group. `Other` exists so a rule gap on a live cluster still shows the monitor somewhere; the
 test keeps it empty in the repo.
+
+## The weekly reboot's maintenance window is reconciled over the API
+
+`kuma-maintenance-sync` (hourly) declares ONE Kuma maintenance — `Weekly system restart` —
+over every monitor, so the Sunday reboot stops paging Discord for the ~85 tiles it takes
+down (#2802). The operator accepted the cost on 2026-09-28: a real outage starting inside
+the window is silent until it closes. AutoKuma cannot declare it — `entity.rs` at the pinned
+`2.1.0-rc.2` has no `Maintenance` variant — so this is the status-page sync's shape again.
+
+**Derived from the reboot cron, never written twice.** The four `weekly_reboot_*` values in
+`group_vars/all.yml` drive both the cron
+(`ansible/roles/setup/initial_setup/tasks/crons.yml`) and, with this role's lead and recovery
+allowance, the window: `25 7 * * 0` for 50 minutes, 07:25 to 08:15.
+`ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py` fails if either side stops
+reading them.
+
+**Why the job reads Kuma twice.** `maintenance list` carries the schedule and NOT the
+membership (`getMaintenanceList` emits `toPublicJSON()`; only `getMaintenance` fills in
+`monitors`), and membership is the field that decays — "every monitor" grows on every deploy
+that adds a tile. The payload writes every key including the unused ones: kuma-client has no
+serde default for `dateRange`, its timezone deserializer calls `missing_field` on all three
+timezone keys, and Kuma's `jsonToBean` indexes `dateRange[0]`, so `[null]` and not a bare
+null.
+
+**The sync must not run inside the window it declares.** An `edit` runs `bean.run(true)`,
+restarting the window's own cron job, which could lift the suppression mid-window.
+`ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py::test_the_sync_never_runs_inside_the_window_it_declares`
+holds the separation when either schedule moves.
+
+**No deadman tile, unlike the status-page sync.** That job fails silently; this one's failure
+announces itself as the Sunday Discord burst it exists to stop.
+
+**Verify it in Discord, not with `probe.py alerts`.** That subcommand rebuilds DOWN episodes
+from Loki, and a window suppresses notifications without stopping monitor-bridge logging
+`DOWN <name>`. The episodes still appear; the absent Discord message is the evidence.

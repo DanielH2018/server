@@ -64,6 +64,8 @@
       - ingressroute.yaml
       - status-page-sync-configmap.yaml
       - status-page-sync-cronjob.yaml
+      - maintenance-sync-configmap.yaml
+      - maintenance-sync-cronjob.yaml
     manifests_secret_files:
       - secret.yaml
       - static-monitors.yaml

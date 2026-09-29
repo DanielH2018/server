@@ -638,6 +638,21 @@ render_records_minute: 17
 # pending CI walk, rounded up. A shorter one flaps on an ordinary deferral; a longer one leaves
 # a stopped producer unread for longer than the records it last wrote stay useful.
 render_records_push_interval_s: 7200
+# ── weekly reboot ──────────────────────────────────────────────────────────────────────────
+# When every host in the play restarts itself. TWO roles read this: initial_setup installs the
+# `Weekly system restart` cron from it (roles/setup/initial_setup/tasks/crons.yml), and
+# uptime-kuma derives the Kuma maintenance window that keeps the restart from paging Discord
+# (roles/k8s/uptime-kuma/defaults/main.yml). It lives here rather than in either role's
+# defaults because a schedule written twice drifts: a reboot moved without the window is a
+# Sunday morning of DOWN messages, and a window moved without the reboot suppresses nothing.
+weekly_reboot_minute: 30
+weekly_reboot_hour: 7
+# Cron day-of-week, 0 = Sunday.
+weekly_reboot_weekday: 0
+# The `+5` in the cron job's `shutdown -r +5`. The hosts go down this many minutes AFTER the
+# cron fires, so 07:30 + 5 = 07:35 is when the monitors actually start failing. The maintenance
+# window's length is derived from it, so shortening the delay shortens the window.
+weekly_reboot_shutdown_delay_minutes: 5
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
 # every full host redeploys its own containers_list independently on a git push (see
 # gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and

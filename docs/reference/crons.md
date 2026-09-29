@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-29 01:30 UTC
-generated_sha: fea456d31
+generated_at: 2026-09-29 03:18 UTC
+generated_sha: fb9e4017f
 ---
 
 !!! warning "Generated file — do not edit"
@@ -50,7 +50,7 @@ generated_sha: fea456d31
 | Weekly git object-store repair | `20 4 * * 0` | daniel-box | `ubuntu` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Weekly rkhunter malware scan | `0 2 * * 3` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly secret rotation (auto tier) | `0 9 * * 0` | the gitops host | `ubuntu` | yes (rotate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
-| Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
+| Weekly system restart | `30 7 * * 0` | every host in the play | `root` | yes (reboot, restart) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | configarr sync health | `*/10 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/configarr/tasks/main.yml` |
 | daniel-box disk health | `*/10 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | etcd restore drill | `20 10 * * 1` | conditional (has_repo_checkout) | `root` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
