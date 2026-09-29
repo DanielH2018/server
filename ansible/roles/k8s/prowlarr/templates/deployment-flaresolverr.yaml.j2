@@ -72,10 +72,16 @@ spec:
             # prints here.
             #
             # The signal that a challenge is failing was never this log anyway: monitor-bridge
-            # reads Prowlarr's /api/v1/indexerstatus (check.py:1578), which is independent of
+            # reads Prowlarr's /api/v1/indexerstatus (files/checks/service.py's
+            # `check_prowlarr_indexers`), which is independent of
             # anything FlareSolverr writes to stdout.
             - name: LOG_LEVEL
               value: warning
+            # Rendered from prowlarr_k8s_fs_disable_media so the operator reverts a challenge
+            # regression by flipping one default, not by editing this manifest. Quoted because
+            # a Kubernetes env value is a string and `true` unquoted is a YAML boolean.
+            - name: DISABLE_MEDIA
+              value: "{{ prowlarr_k8s_fs_disable_media | bool | string | lower }}"
             - name: TZ
               value: "{{ tz }}"
           volumeMounts:
