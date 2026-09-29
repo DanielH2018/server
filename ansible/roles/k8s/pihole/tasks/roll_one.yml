@@ -85,6 +85,9 @@
         cmd: "k3s kubectl -n {{ k8s_namespace }} rollout restart deploy/{{ pihole_instance }}"
       become: true
       changed_when: true
+      # Read by the record amend below: `is changed` is false both when the gate skipped this
+      # task and when it never ran at all, which is exactly "no restartedAt was stamped".
+      register: pihole_k8s_restarted
       # Two facts, one per apply, both keyed by instance name so neither can suppress the
       # other instance's restart whatever order the loop runs in.
       when: >-
@@ -98,3 +101,23 @@
           --timeout=300s
       become: true
       changed_when: false
+
+    # pihole-2 only, and only after the wait above proved the roll finished (#2902). The release
+    # record was written before this file ran, and for pihole-2 it could not decide `restart` at
+    # all — `rolled_by_role: true` in tasks/main.yml has the derivation. This is the moment the
+    # answer exists: the restart above either ran, stamping a `restartedAt` newer than the
+    # record's `applied_at`, or the apply in apply_instance_2.yml rolled pihole-2 by changing its
+    # pod template and stamped nothing. Only the first is an expectation `probe.py health` can
+    # satisfy, so only the first raises it.
+    #
+    # Instance 1 needs none of this: the shared apply carries its manifest, so release_stamp.yml
+    # already decided its `restart` from the same facts the gate above reads.
+    - name: Record that pihole-2's own roll was a restart
+      ansible.builtin.include_role:
+        name: k8s/manifests
+        tasks_from: rollout_amend.yml
+      vars:
+        manifests_amend_service: pihole
+        manifests_amend_workload: pihole-2
+        manifests_amend_restart: "{{ pihole_k8s_restarted is changed }}"
+      when: pihole_instance == 'pihole-2'

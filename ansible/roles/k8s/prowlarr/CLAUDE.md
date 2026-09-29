@@ -49,4 +49,3 @@ rendering attacker-supplied pages in a headless browser.
 
 ## Editing
 - Manifest: `templates/deployment.yaml.j2`, `templates/deployment-flaresolverr.yaml.j2`
-- Deploy: `./scripts/deploy.sh --tags "prowlarr"`

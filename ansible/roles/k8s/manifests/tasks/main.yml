@@ -8,7 +8,19 @@
 #   manifests_rollout       workload to wait on; set '' to skip the wait entirely
 #   manifests_rollout_kind  kubectl kind of that workload (and of every entry in
 #                           manifests_extra_rollouts): 'deploy' (default) or 'daemonset'
-#   manifests_self_rollouts [{name, kind, image?, namespace?}] a role with
+#   manifests_deferred_files  [<basename>] manifests this role RENDERS, PRUNES and DIGESTS but
+#                           does NOT apply -- the owning role applies them itself, later and in
+#                           its own order. Staged in `manifests_deferred_dir_name`, a sibling
+#                           directory this role's prune and its `kubectl apply -f <dir>/` never
+#                           touch. Issue #2899: pihole's instance 2 was rendered by the pihole
+#                           role instead, so its bytes were outside `manifests_digest` and
+#                           `probe.py releases --stale-only` could neither clear nor catch a
+#                           change to its template.
+#   manifests_deferred_dir_name  the sibling directory basename under
+#                           /etc/rancher/k3s/manifests/. Required with the above, and reserved
+#                           the way `<service>-netpol` is -- see
+#                           ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py
+#   manifests_self_rollouts [{name, kind, image?, namespace?, rolled_by_role?}] a role with
 #                           `manifests_rollout: ''` restarts through its OWN task after this
 #                           role returns. Reaches the release record's `rollouts[]`
 #                           (release_stamp.yml), so `probe.py health` holds the same roll
@@ -19,6 +31,13 @@
 #                           role opted out of. `namespace` defaults to k8s_namespace; a role
 #                           whose workloads live elsewhere (claude-otel) names it, or the
 #                           fingerprints read nothing and it restarts twice. Issue #1902.
+#                           `rolled_by_role: true` (present only when true) says THIS role
+#                           cannot decide the entry's `restart`: the owning role applies the
+#                           workload's own manifest after the record is written, so the record
+#                           is stamped `restart: false` and the owner raises it through
+#                           tasks/rollout_amend.yml once it knows. Such an entry is also left
+#                           out of the fingerprints below, which would read "not rolled" for it
+#                           by construction. Issue #2902.
 #
 # Derived here, not passed in:
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
@@ -71,17 +90,42 @@
   # record as manifests_self_rollouts), so it needs the same constraint the primary rollout
   # gets. A self rollout's kind picks the `created` prefix the record checks, so it is held to
   # the same two literals.
+  #
+  # The second `that:` holds `rolled_by_role`'s shape rather than its meaning. The fingerprint
+  # list below selects on the key being DEFINED, because Jinja's `rejectattr` cannot read an
+  # attribute an entry omits — so `rolled_by_role: false` would read as true there and silently
+  # drop the entry from the fingerprints. Write the key only when it is true.
   ansible.builtin.assert:
     that:
       - item.kind | default('deploy') in ['deploy', 'daemonset']
+      - item.rolled_by_role | default(true) | bool
     fail_msg: >-
       rollout entry '{{ item.name }}' has kind '{{ item.kind | default('deploy') }}',
       which must be 'deploy' or 'daemonset'. kubectl aliases like 'ds' or 'DaemonSet' are
-      rejected here on purpose — see the manifests_rollout_kind assert above.
+      rejected here on purpose — see the manifests_rollout_kind assert above. A
+      `rolled_by_role` key must be a bare `true` or be omitted, never `false`.
     quiet: true
   loop: "{{ (manifests_extra_rollouts | default([])) + (manifests_self_rollouts | default([])) }}"
   loop_control:
     label: "{{ item.name }}"
+
+- name: Check that a deferred file list names its own staging directory
+  tags: [deploy]
+  # A deferred file staged in this role's own directory is applied by the very
+  # `kubectl apply -f <dir>/` the caller deferred it to escape, and deleted by the prune on the
+  # next deploy. Both failures are silent, so the directory name is required rather than
+  # defaulted.
+  ansible.builtin.assert:
+    that:
+      - (manifests_deferred_dir_name | default('') | trim | length) > 0
+      - (manifests_deferred_dir_name | default('')) != manifests_service
+    fail_msg: >-
+      manifests_deferred_files names {{ manifests_deferred_files | default([]) }} for
+      {{ manifests_service }} without a distinct manifests_deferred_dir_name. A deferred
+      manifest must be staged in a sibling directory: this role's apply sweeps its own
+      directory in one request, and its prune deletes every file there it does not render.
+    quiet: true
+  when: (manifests_deferred_files | default([]) | length) > 0
 
 - name: Create a throwaway render directory for {{ manifests_service }}
   # `always`, because manifests_dest_dir is read by BOTH config-tagged tasks (the renders) and
@@ -115,6 +159,23 @@
     manifests_dest_dir: >-
       {{ manifests_dry_run_dir.path if k8s_dry_run | bool
          else '/etc/rancher/k3s/manifests/' ~ manifests_service }}
+
+- name: Select the deferred render directory for {{ manifests_service }}
+  tags: [always]
+  # Set unconditionally, and to '' for the ~63 roles that defer nothing, because a set_fact is
+  # host-scoped: a value left over from an earlier role in the play would otherwise be read here.
+  # Same reason release_stamp.yml resets manifests_release_rollouts.
+  #
+  # Under a dry run this is a SUBDIRECTORY of the throwaway render dir, not the real sibling.
+  # `kubectl apply -f <dir>/` is not recursive, so the dry-run apply above still judges the
+  # caller's own files alone -- what the dry run gains is the RENDER, which is what the digest
+  # and `scripts/validate/k8s_manifests.py` need. Applying a deferred manifest under a dry run
+  # is the owning role's to arrange and is not attempted here.
+  ansible.builtin.set_fact:
+    manifests_deferred_dir: >-
+      {{ '' if (manifests_deferred_dir_name | default('') | trim | length) == 0
+         else (manifests_dest_dir ~ '/' ~ manifests_deferred_dir_name) if k8s_dry_run | bool
+         else '/etc/rancher/k3s/manifests/' ~ manifests_deferred_dir_name }}
 
 - name: Create the manifest directory for {{ manifests_service }}
   tags: [config]
@@ -153,6 +214,63 @@
   loop: "{{ manifests_secret_files | default([]) }}"
   become: true
   register: manifests_secret_render
+
+- name: Create the deferred manifest directory for {{ manifests_service }}
+  tags: [config]
+  ansible.builtin.file:
+    path: "{{ manifests_deferred_dir }}"
+    state: directory
+    mode: "0700"
+    owner: root
+    group: root
+  become: true
+  when: (manifests_deferred_files | default([]) | length) > 0
+
+- name: Render deferred manifests for {{ manifests_service }}
+  tags: [config]
+  # Rendered here so their bytes reach `manifests_digest` (release_digest.yml stats this list
+  # too) and so a dry run renders them at all. The APPLY stays the caller's: it is the ordering
+  # of that apply that the caller deferred them for. `manifests_deferred_render` is the register
+  # the caller gates its own apply on -- a change to a deferred template alone moves none of the
+  # three facts this role's own restart triggers read.
+  ansible.builtin.template:
+    src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
+    dest: "{{ manifests_deferred_dir }}/{{ item }}"
+    mode: "0644"
+    owner: root
+    group: root
+  loop: "{{ manifests_deferred_files | default([]) }}"
+  become: true
+  register: manifests_deferred_render
+
+- name: Find staged deferred manifests for {{ manifests_service }}
+  tags: [config]
+  ansible.builtin.find:
+    paths: "{{ manifests_deferred_dir }}"
+    file_type: file
+  register: manifests_deferred_staged
+  become: true
+  when:
+    - not k8s_dry_run | bool
+    - (manifests_deferred_files | default([]) | length) > 0
+
+- name: Prune staged deferred manifests dropped from the list for {{ manifests_service }}
+  tags: [config]
+  # The deferred directory is this role's to prune for the same reason the caller's own is: the
+  # caller applies the whole directory, so a file merely dropped from the list keeps re-applying
+  # its objects on every deploy (2026-08-13, the claude-otel-ingest IngressRoute). Skipped under
+  # dry-run, where the directory is a fresh tempfile and `manifests_deferred_staged` was never
+  # registered.
+  ansible.builtin.file:
+    path: "{{ manifests_deferred_dir }}/{{ item }}"
+    state: absent
+  loop: >-
+    {{ manifests_deferred_staged.files | default([]) | map(attribute='path') | map('basename')
+       | difference(manifests_deferred_files | default([])) | list }}
+  become: true
+  when:
+    - not k8s_dry_run | bool
+    - (manifests_deferred_files | default([]) | length) > 0
 
 - name: Record the render digest for {{ manifests_service }}
   tags: [deploy]
@@ -264,7 +382,7 @@
           | ternary([{'name': manifests_rollout | default(manifests_service),
                       'kind': manifests_rollout_kind | default('deploy')}], []))
          + (manifests_extra_rollouts | default([]))
-         + (manifests_self_rollouts | default([])) }}
+         + (manifests_self_rollouts | default([]) | rejectattr('rolled_by_role', 'defined') | list) }}
 
 # Fingerprint each target's pod template on both sides of the apply. The apply below rolls a
 # workload exactly when it changes `.spec.template` -- the Deployment controller creates a new

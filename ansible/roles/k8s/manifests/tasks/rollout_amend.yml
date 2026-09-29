@@ -1,0 +1,92 @@
+---
+# Raise ONE workload's rollout expectation in a release record already written (#2902).
+#
+# THE PROBLEM. release_stamp.yml runs inside this role, before the owning role's private apply
+# and restart. For a workload whose own manifest that later apply carries — pihole's instance 2,
+# staged as a deferred manifest since #2899 — the stamp cannot decide `restart`: a changed render
+# with no roll by the shared apply reads `true`, and then the owner's apply rolls the workload by
+# changing its pod template, which stamps no `restartedAt`. `probe.py health` would fail a roll
+# that did happen, on every image bump. So such an entry declares `rolled_by_role: true`, the
+# stamp writes `restart: false`, and the owner calls this file once it knows.
+#
+# WHAT THE OWNER KNOWS AND THE STAMP DOES NOT: whether it issued `kubectl rollout restart`. That
+# is the only roll that stamps `restartedAt`, so it is the only one `restart: true` may claim. A
+# workload the owner's own apply rolled keeps `restart: false`, exactly as
+# `manifests_rolled_by_apply` keeps it false for the shared apply's own rolls (#1988).
+#
+# `applied_at` is deliberately left as the shared apply wrote it. The owner's restart happens
+# strictly after it, so a fresh `restartedAt` is still strictly newer — which is the comparison
+# `probe_lib/health_rollout.py:unrolled_reason` makes.
+#
+# SKIP DIRECTION. Nothing here can invent an expectation: a missing record, an unparseable one or
+# a play that fails before this file runs all leave `restart: false`, so the gate keeps the
+# meaning it had. That is the direction `probe_lib/health.py:release_expected_restarts` names
+# safe — an expectation the deploy never earned is the false red #1867 rejects, while a missing
+# one leaves the rollout-complete and no-recent-restart halves of the gate in force.
+#
+# The caller passes:
+#   manifests_amend_service   the record to amend (a service, not a workload)
+#   manifests_amend_workload  the `rollouts[]` entry to rewrite
+#   manifests_amend_restart   true iff the caller issued `kubectl rollout restart` for it
+#
+# Included with `include_role: {name: k8s/manifests, tasks_from: rollout_amend.yml}` rather than
+# `include_tasks`, so this role's own defaults (`manifests_release_dir`) are in scope.
+
+- name: Amend the recorded rollout expectation for {{ manifests_amend_workload }}
+  tags: [deploy]
+  # Never under a dry run, which writes no record at all — a record this mode created or edited
+  # would name a release that does not exist. The caller is normally already behind
+  # `k8s_no_mutate`; this says so independently rather than relying on that.
+  when: not k8s_dry_run | bool
+  block:
+    - name: Read the release record for {{ manifests_amend_service }}
+      ansible.builtin.slurp:
+        src: "{{ manifests_release_dir }}/{{ manifests_amend_service }}.json"
+      register: manifests_amend_slurp
+      become: true
+      # A first-ever deploy whose stamp has not run, or an unreadable record, must not fail a
+      # working deploy — record-keeping never decides a deploy's verdict (release_stamp.yml's
+      # header states the same rule). The tasks below are gated on the read having produced
+      # content.
+      failed_when: false
+      # Read-only, and the record exists independently of this play. Without it `--check` skips
+      # the task and the tasks below read `.content` off a skip result.
+      check_mode: false
+
+    - name: Reset the amended rollout list for {{ manifests_amend_service }}
+      # set_fact is host-scoped, so without the reset a second amend in the same play would
+      # append to the first one's list — the reason release_stamp.yml resets its own.
+      ansible.builtin.set_fact:
+        manifests_amend_rollouts: []
+
+    - name: Rewrite the rollout expectation for {{ manifests_amend_workload }}
+      # One append per recorded entry, accumulating, the way release_stamp.yml builds the list in
+      # the first place. Every other entry is carried through byte for byte: this file amends one
+      # workload's `restart` and nothing else.
+      ansible.builtin.set_fact:
+        manifests_amend_rollouts: >-
+          {{ manifests_amend_rollouts + [
+               item | combine({'restart': manifests_amend_restart | bool})
+               if item.name == manifests_amend_workload else item] }}
+      loop: >-
+        {{ ((manifests_amend_slurp.content | default('') | b64decode | from_json)
+            if (manifests_amend_slurp.content | default('') | length) > 0
+            else {}).get('rollouts', []) }}
+      loop_control:
+        label: "{{ item.name }}"
+
+    - name: Write the amended release record for {{ manifests_amend_service }}
+      ansible.builtin.copy:
+        dest: "{{ manifests_release_dir }}/{{ manifests_amend_service }}.json"
+        mode: "0644"
+        owner: root
+        group: root
+        content: "{{ manifests_amend_record | to_nice_json }}\n"
+      vars:
+        manifests_amend_record: >-
+          {{ (manifests_amend_slurp.content | b64decode | from_json)
+             | combine({'rollouts': manifests_amend_rollouts}) }}
+      become: true
+      # No record, or one naming no rollouts at all, leaves the file untouched rather than
+      # rewriting it from a partial reading of itself.
+      when: manifests_amend_rollouts | length > 0

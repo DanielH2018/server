@@ -12,22 +12,27 @@
     # back to back and defers every wait to the end-of-batch drain, which would take both
     # Pi-holes down at once — exactly the outage the second instance exists to prevent.
     manifests_rollout: ''
-    # Instance 1 ONLY, since #2884 moved instance 2 to its own staging directory and its own
-    # later apply (tasks/apply_instance_2.yml). Declared to the release record so `probe.py health`
-    # expects pihole to roll after a changed render (issue #1902). `image: pihole`:
+    # Both instances, declared to the release record so `probe.py health` expects each to roll
+    # after a changed render (issue #1902) — but they reach it by different routes, because
+    # #2884 moved instance 2 to its own staging directory and its own later apply
+    # (tasks/apply_instance_2.yml). `image: pihole` on both:
     # roll_one.yml also fires on manifests_image_changed, which keys on the SERVICE name. The
     # shared role also fingerprints this entry's pod template across the apply, so roll_one.yml
     # can skip restarting the instance the apply already rolled (#1994).
     #
-    # pihole-2 is deliberately NOT declared here, and that costs a real check. The record is
-    # written inside this include, BEFORE apply_instance_2.yml runs, and its `restart` verdict
-    # would read true for pihole-2 (the render changed; this apply did not roll it). The
-    # sequenced apply then rolls pihole-2 by changing its pod template, which stamps no
-    # `restartedAt`, so `probe.py health` would fail a roll that actually happened. What covers
-    # pihole-2 instead is deploy-time and stricter: roll_one.yml blocks on its `rollout status`,
-    # and the ready-endpoint assertion at the end of this file refuses fewer than two.
+    # pihole-2 carries `rolled_by_role: true` (#2902): this include writes the release record
+    # BEFORE apply_instance_2.yml runs, so it cannot decide instance 2's `restart`. Its verdict
+    # would read true (the render changed; this apply did not roll it), and the sequenced apply
+    # then rolls pihole-2 by changing its pod template, which stamps no `restartedAt` —
+    # `probe.py health` would fail a roll that actually happened, on every image bump. The
+    # marker makes the record stamp `restart: false` and hands the decision to roll_one.yml,
+    # which raises it through the shared rollout_amend.yml once it knows whether it issued a
+    # `rollout restart`. Deploy-time cover is unchanged and stricter either way: roll_one.yml
+    # blocks on pihole-2's `rollout status`, and the ready-endpoint assertion at the end of this
+    # file refuses fewer than two.
     manifests_self_rollouts:
       - { name: pihole, kind: deploy, image: pihole }
+      - { name: pihole-2, kind: deploy, image: pihole, rolled_by_role: true }
     manifests_files:
       - pvc.yaml
       - configmap.yaml
@@ -36,9 +41,19 @@
       - ingressroute.yaml
     manifests_secret_files:
       - secret.yaml
+    # Instance 2's Deployment: rendered, pruned and DIGESTED by the shared role, applied by this
+    # one (#2899). Staged in its own directory, so neither the shared prune nor the shared
+    # `kubectl apply -f <dir>/` touches it, and the shared role publishes the path as
+    # `manifests_deferred_dir` and the render as `manifests_deferred_render`. Rendering it here
+    # instead left its bytes outside `manifests_digest`, so a change to `deployment-2.yaml.j2`
+    # moved no digest and `probe.py releases --stale-only` could neither clear pihole's path hit
+    # by a match nor catch it by a mismatch — for half the workload.
+    manifests_deferred_files:
+      - deployment-2.yaml
+    manifests_deferred_dir_name: pihole-instance-2
 
-# Instance 2's Deployment is staged and applied SEPARATELY, in its own directory, and the apply
-# above therefore carries instance 1 alone.
+# Instance 2's Deployment is applied SEPARATELY, from its own directory, and the apply above
+# therefore carries instance 1 alone.
 #
 # Until #2884 both Deployments rendered into one deployment.yaml, and `kubectl apply -f <dir>/`
 # applies every file in a directory in one request: an image-pin bump changed both pod templates
@@ -49,55 +64,24 @@
 # resolver they had just replaced. The play reported failed=0 throughout. Sequencing the restarts
 # could not help, because the restarts were not what rolled them.
 #
-# A separate directory rather than a second file in this one: the shared role's prune owns every
-# file in /etc/rancher/k3s/manifests/pihole/ and its apply sweeps the whole directory, so a
+# A separate directory rather than a second file in the shared one: the shared role's prune owns
+# every file in /etc/rancher/k3s/manifests/pihole/ and its apply sweeps the whole directory, so a
 # second Deployment file there would still be applied in the same request. `pihole-instance-2` is
 # a sibling name no role's `manifests_service` claims — the same reservation `<service>-netpol`
 # and `<service>-claims` use, derived rather than listed by
 # ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py.
 #
-# The cost: instance 2's rendered bytes are outside `manifests_digest`, so
-# `probe.py releases --stale-only` cannot clear a path hit in deployment-2.yaml.j2 by digest
-# match (issue filed).
-# Staged and applied only on a real run. A dry run must not write the node at all outside
-# roles/k8s/manifests (#2611/#2614 — an hourly fleet dry run would otherwise ship its own tree's
-# host half every hour), which is enforced by
-# ansible/tests/deploy/test_k8s_dry_run_host_writes.py. So a dry run judges instance 1's manifest
-# against the API server and never sees instance 2's. What makes that residual gap small is the
-# macro: both Deployments render from one body in templates/pihole-deployment.yaml.j2 and differ
-# only in the workload name and the claim name, so instance 1's dry run exercises the schema
-# instance 2 renders. `scripts/validate/k8s_manifests.py` renders and parses this template in CI
-# either way.
-- name: Select the second Pi-hole instance's manifest directory
-  # `always`, for the same reason the shared role's own directory fact is: the render below is
-  # config-tagged and the apply is deploy-tagged, and neither tag alone survives every documented
-  # invocation.
-  tags: [always]
-  ansible.builtin.set_fact:
-    pihole_k8s_instance_2_dir: /etc/rancher/k3s/manifests/pihole-instance-2
-
-- name: Create the second Pi-hole instance's manifest directory
-  tags: [config]
-  when: not k8s_dry_run | bool
-  ansible.builtin.file:
-    path: "{{ pihole_k8s_instance_2_dir }}"
-    state: directory
-    mode: "0700"
-    owner: root
-    group: root
-  become: true
-
-- name: Render the second Pi-hole instance's Deployment
-  tags: [config]
-  when: not k8s_dry_run | bool
-  ansible.builtin.template:
-    src: "{{ playbook_dir }}/roles/k8s/pihole/templates/deployment-2.yaml.j2"
-    dest: "{{ pihole_k8s_instance_2_dir }}/deployment-2.yaml"
-    mode: "0644"
-    owner: root
-    group: root
-  register: pihole_k8s_instance_2_render
-  become: true
+# The RENDER of that directory is the shared role's, through `manifests_deferred_files` (#2899).
+# It was this role's until then, which put instance 2's bytes outside `manifests_digest` and
+# outside a dry run's render entirely. The apply stays here, because the ordering of the apply is
+# the whole point. What a dry run still does not cover is that apply: `kubectl apply -f <dir>/`
+# is not recursive, so the dry-run render's subdirectory is never shown to the API server, and a
+# dry run must not write the node outside roles/k8s/manifests (#2611/#2614, enforced by
+# ansible/tests/deploy/test_k8s_dry_run_host_writes.py). What makes that residual gap small is
+# the macro: both Deployments render from one body in templates/pihole-deployment.yaml.j2 and
+# differ only in the workload name and the claim name, so instance 1's dry run exercises the
+# schema instance 2 renders. `scripts/validate/k8s_manifests.py` renders and parses this template
+# in CI either way.
 
 # Always defined, so the restart gate in roll_one.yml can read it without a `| default`, and
 # reset here rather than carried, so a previous run's answer never decides this one. The shared
@@ -122,13 +106,14 @@
   # Never on a dry run or --check: a dry-run render is always `changed` and the apply rolled
   # nothing, so this would restart both live Pi-holes on every dry run (#2588).
   #
-  # `pihole_k8s_instance_2_render` is the fourth trigger: instance 2's Deployment is rendered
-  # outside the shared role, so a change to deployment-2.yaml.j2 alone moves no fact the shared
-  # role registers, and without this the apply that carries it would never run.
+  # `manifests_deferred_render` is the fourth trigger: instance 2's Deployment is rendered into
+  # its own directory and is not part of `manifests_render`, so a change to deployment-2.yaml.j2
+  # alone moves none of the three facts above and without this the apply that carries it would
+  # never run.
   when:
     - not k8s_no_mutate
     - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
-      or (pihole_k8s_instance_2_render | default({})) is changed
+      or (manifests_deferred_render | default({})) is changed
   loop:
     - pihole
     - pihole-2

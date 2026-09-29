@@ -91,6 +91,16 @@
   # ConfigMap is hashed into its own pod template needs none of the three — the apply rolls it
   # and `manifests_rolled_by_apply` already zeroes the expectation. Issue #2858.
   #
+  # AN ENTRY MAY DISCLAIM THE DECISION ENTIRELY, with `rolled_by_role: true` (issue #2902). The
+  # record is written here, before the owning role's private apply and restart run, so for a
+  # workload whose OWN manifest that later apply carries this task cannot decide `restart` at
+  # all: the render changed and this apply did not roll it, which reads `true`, and then the
+  # owner's apply rolls it by changing its pod template — stamping no `restartedAt` for
+  # `probe.py health` to find. Such an entry is stamped `restart: false` and the owner raises it
+  # afterwards through tasks/rollout_amend.yml, which knows whether a `rollout restart` was
+  # actually issued. A skipped amend therefore leaves NO expectation rather than a false one,
+  # which is the direction probe_lib/health.py:release_expected_restarts calls safe.
+  #
   # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
   # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
   # (claude-otel's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
@@ -113,8 +123,12 @@
              (manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')) == 'daemonset')
              | ternary('daemonset.apps/', 'deployment.apps/')
              ~ manifests_release_target.name ~ ' created')
-           and not manifests_rolled_by_apply.get(manifests_release_target.name, false),
-         }] }}
+           and not manifests_rolled_by_apply.get(manifests_release_target.name, false)
+           and not manifests_release_target.get('rolled_by_role', false),
+         } | combine(
+             manifests_release_target.get('rolled_by_role', false)
+             | ternary({'rolled_by_role': true}, {})
+           )] }}
   loop: >-
     {{ ((manifests_rollout | default(manifests_service) | length > 0)
         | ternary([{'name': manifests_rollout | default(manifests_service),
@@ -203,5 +217,8 @@
       # DECIDED marker in release_digest.yml. '' when the host key was unreadable, which a
       # reader treats as absent. A record written before this field has none at all.
       secret_digest: "{{ manifests_release_secret_digest }}"
-      # [{name, kind, restart}] -- see the task that builds it above.
+      # [{name, kind, restart, rolled_by_role?}] -- see the task that builds it above. The
+      # marker is recorded rather than dropped so a reader can tell a `restart: false` this
+      # apply DECIDED from one it disclaimed: the second says the owning role rolls that
+      # workload and tasks/rollout_amend.yml is what raises the expectation.
       rollouts: "{{ manifests_release_rollouts }}"

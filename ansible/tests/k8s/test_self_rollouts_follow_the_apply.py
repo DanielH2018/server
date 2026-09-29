@@ -27,14 +27,24 @@ the private restart selects its targets with. Five of the six no longer restart 
 render at all — their ConfigMaps are hashed into their own pod templates — and a record that
 still expected one would fail `probe.py health` as NOT ROLLED.
 
-Issue #2884 narrowed pihole's declaration to instance 1. The shared apply carries
-`deployment.yaml`, which holds `pihole` alone; `pihole-2` is applied later, by
-tasks/apply_instance_2.yml, and the record is written before that task runs -- so a `pihole-2`
-entry here would name a `restart: true` no `restartedAt` ever satisfies. What covers the second
-instance instead is pinned in ansible/tests/services/test_pihole_redundancy.py.
+Issue #2884 took `pihole-2` out of pihole's declaration, because the shared apply carries
+`deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied later, by
+tasks/apply_instance_2.yml, and the record is written before that task runs -- so a plain
+`pihole-2` entry would name a `restart: true` no `restartedAt` ever satisfies.
+
+Issue #2902 puts it back, behind `rolled_by_role: true`. The marker says the stamp may not
+decide: the entry is recorded with `restart: false` and out of the pod-template fingerprints,
+and roll_one.yml raises the expectation afterwards through the shared
+`k8s/manifests` `tasks/rollout_amend.yml` -- `restart: true` only where it issued a
+`rollout restart`, which is the only roll that stamps a `restartedAt`. The accept/reject pair
+for the amend is at the bottom of this file; what covers the second instance at DEPLOY time is
+pinned in ansible/tests/services/test_pihole_redundancy.py.
 
 Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 """
+
+import base64
+import json
 
 from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
 from _release_expectation import (
@@ -96,9 +106,11 @@ def test_a_self_rolling_role_records_only_what_it_declares():
         manifests_extra_rollouts=[],
         manifests_self_rollouts=include_role_vars(PIHOLE)["manifests_self_rollouts"],
     )
-    # Instance 1 only (#2884): the shared apply no longer touches pihole-2's pod template, so
-    # fingerprinting it across that apply could only ever read "not rolled". apply_instance_2.yml
-    # fingerprints it across its OWN apply and writes the answer to the same fact.
+    # Instance 1 only (#2884), even though the declaration now names both (#2902): the shared
+    # apply does not touch pihole-2's pod template, so fingerprinting it across that apply could
+    # only ever read "not rolled" — two kubectl calls for a known answer. `rolled_by_role` is
+    # what excludes it; apply_instance_2.yml fingerprints it across its OWN apply and writes the
+    # answer to the same fact.
     assert {e["name"] for e in fingerprinted} == {"pihole"}, fingerprinted
     assert "manifests_self_rollouts" not in str(
         task_named(MAIN, "Roll the extra deployments after")
@@ -250,6 +262,11 @@ def test_pihole_an_image_bump_expects_instance_one_to_roll():
     k8s_rebuilt_images`; the record keys on the entry's `image`, so dropping `image: pihole`
     makes the rebuilt-image trigger read as a miss and the record expect no roll.
 
+    pihole-2 reads `false` on the same run, and must: the stamp runs before apply_instance_2.yml,
+    so it cannot know whether that apply will roll instance 2 by changing its pod template
+    (stamping no `restartedAt`) or roll_one.yml will restart it (stamping one). `rolled_by_role`
+    is what pins it false, and the amend at the bottom of this file is what raises it.
+
     The unchanged half is the reject: with nothing rebuilt and no changed render the record must
     expect no restart at all, or every idempotent re-run fails `probe.py health`."""
     declared = include_role_vars(PIHOLE)["manifests_self_rollouts"]
@@ -261,7 +278,12 @@ def test_pihole_an_image_bump_expects_instance_one_to_roll():
         manifests_render={"changed": False},
         k8s_rebuilt_images=["pihole"],
     )
-    assert {n: r["restart"] for n, r in rollouts.items()} == {"pihole": True}
+    assert {n: r["restart"] for n, r in rollouts.items()} == {
+        "pihole": True,
+        "pihole-2": False,
+    }
+    assert rollouts["pihole-2"]["rolled_by_role"] is True, rollouts["pihole-2"]
+    assert "rolled_by_role" not in rollouts["pihole"], rollouts["pihole"]
     unchanged = _rollouts(
         manifests_service="pihole",
         manifests_rollout="",
@@ -272,18 +294,23 @@ def test_pihole_an_image_bump_expects_instance_one_to_roll():
     assert not any(r["restart"] for r in unchanged.values()), unchanged
 
 
-def test_pihole_declares_the_instance_the_shared_apply_carries():
-    """The declaration is the instances the SHARED apply rolls, which since #2884 is instance 1.
+def test_pihole_declares_both_instances_and_marks_the_deferred_one():
+    """The declaration covers the whole restart loop again (#2902), with `rolled_by_role: true`
+    on the instance whose manifest the shared apply does not carry.
 
-    The loop still covers both, so the two sets deliberately differ by exactly `pihole-2` — and
-    the difference has to be that one name, not an arbitrary gap: a third instance added to the
-    loop and to neither the declaration nor `manifests_files` would otherwise pass here.
-    `ansible/tests/services/test_pihole_redundancy.py` pins what rolls pihole-2 instead."""
+    Both halves matter. Dropping the entry loses the expectation entirely, which is the state
+    #2902 filed. Dropping the marker makes the stamp claim a `restart: true` that an
+    apply-rolled instance 2 can never satisfy, failing every image bump at `probe.py health`.
+    The loop and the declaration must also still name the same instances, so a third instance
+    added to one alone is caught."""
     declared = include_role_vars(PIHOLE)["manifests_self_rollouts"]
     restart = _pihole_private_restart()
     declared_names = {e["name"] for e in declared}
-    assert declared_names == {"pihole"}, declared
-    assert set(restart["loop"]) - declared_names == {"pihole-2"}, restart["loop"]
+    assert declared_names == set(restart["loop"]) == {"pihole", "pihole-2"}, declared
+    assert {e["name"] for e in declared if e.get("rolled_by_role")} == {"pihole-2"}, (
+        "instance 2 is the one the shared apply does not carry, so it is the one whose "
+        "`restart` the stamp may not decide"
+    )
     assert {e["kind"] for e in declared} == {"deploy"}
     roll_one = (PIHOLE / "tasks/roll_one.yml").read_text()
     assert "rollout restart deploy/{{ pihole_instance }}" in roll_one
@@ -292,10 +319,10 @@ def test_pihole_declares_the_instance_the_shared_apply_carries():
         "manifests_render is changed",
         "manifests_secret_render is changed",
         "manifests_image_changed",
-        # The fourth trigger (#2884): instance 2's Deployment is rendered outside the shared role,
-        # so a change to it alone moves none of the three facts above and the apply that carries
-        # it would never run.
-        "pihole_k8s_instance_2_render",
+        # The fourth trigger (#2884, re-pointed by #2899): instance 2's Deployment renders into
+        # its own directory, so a change to it alone moves none of the three facts above and the
+        # apply that carries it would never run.
+        "manifests_deferred_render",
     ):
         assert ingredient in when, ingredient
     # The fourth ingredient (#1994) gates the restart task inside roll_one.yml, not the
@@ -389,3 +416,108 @@ def test_the_private_restarts_run_after_the_record_is_written():
         )
         restart = next(i for i, n in enumerate(names) if n.startswith(restart_name))
         assert include < restart, (role_dir.name, names[include], names[restart])
+
+
+# ── #2902: the owning role raises the expectation the stamp could not decide ──────────────────
+
+AMEND = load_tasks(ANSIBLE / "roles/k8s/manifests/tasks/rollout_amend.yml")
+
+
+def _amended(recorded, restart, workload="pihole-2"):
+    """The `rollouts[]` the amend writes, accumulated one entry at a time as the play does."""
+    task = task_named(AMEND, "Rewrite the rollout expectation")
+    acc = []
+    for entry in recorded:
+        acc = render_expr(
+            task["ansible.builtin.set_fact"]["manifests_amend_rollouts"],
+            manifests_amend_rollouts=acc,
+            item=entry,
+            manifests_amend_workload=workload,
+            manifests_amend_restart=restart,
+        )
+    return {r["name"]: r for r in acc}
+
+
+_RECORDED = [
+    {"name": "pihole", "kind": "deploy", "restart": True},
+    {"name": "pihole-2", "kind": "deploy", "restart": False, "rolled_by_role": True},
+]
+
+
+def test_a_restart_the_owning_role_issued_raises_the_recorded_expectation():
+    """The accept half. roll_one.yml restarted pihole-2, so a `restartedAt` newer than the
+    record's `applied_at` exists and `probe.py health` must require it — that is the post-hoc
+    check #2902 filed as missing."""
+    amended = _amended(_RECORDED, restart=True)
+    assert amended["pihole-2"]["restart"] is True
+    assert amended["pihole-2"]["rolled_by_role"] is True, (
+        "the marker says who owns the roll and must survive the amend"
+    )
+    assert amended["pihole"] == _RECORDED[0], (
+        "every other entry is carried through untouched"
+    )
+
+
+def test_a_roll_the_owning_apply_did_leaves_the_expectation_alone():
+    """The reject half, and the one that matters most. When apply_instance_2.yml rolled pihole-2
+    by changing its pod template, no `restartedAt` was stamped — so raising the expectation would
+    fail a roll that did happen, which is exactly what #2884 avoided by dropping the entry. The
+    amend must leave `restart: false` on that run."""
+    amended = _amended(_RECORDED, restart=False)
+    assert amended["pihole-2"]["restart"] is False
+    assert amended["pihole"]["restart"] is True
+
+
+def test_an_unreadable_record_amends_nothing():
+    """The amend's whole safety argument is this direction: it can lower an expectation to
+    nothing but never invent one. A first-ever deploy whose stamp has not written a record yet,
+    or an unreadable one, leaves the `slurp` with no content — the loop must then read zero
+    entries and the write must be skipped, rather than rewriting the record from a partial
+    reading of itself.
+
+    The accept half is a record that IS readable: the same expressions must find its entries.
+    """
+    task = task_named(AMEND, "Rewrite the rollout expectation")
+    write = task_named(AMEND, "Write the amended release record")
+    recorded = json.dumps({"service": "pihole", "rollouts": _RECORDED})
+    readable = {"content": base64.b64encode(recorded.encode()).decode()}
+
+    assert render_expr(task["loop"], manifests_amend_slurp=readable) == _RECORDED
+    assert render_expr(task["loop"], manifests_amend_slurp={}) == []
+    assert render_expr(
+        "{{ " + write["when"] + " }}", manifests_amend_rollouts=_RECORDED
+    )
+    assert not render_expr("{{ " + write["when"] + " }}", manifests_amend_rollouts=[])
+
+
+def test_the_amend_is_driven_by_whether_the_restart_task_ran():
+    """The value pihole passes is the restart task's own register, not a re-derivation of the
+    gate. A `when:` clause copied into roll_one.yml's amend would drift from the gate on the
+    restart task, and the record would then claim a `restartedAt` nothing stamped."""
+    restart = task_named(
+        load_tasks(PIHOLE / "tasks/roll_one.yml"), "Restart Pi-hole instance"
+    )
+    assert restart["register"] == "pihole_k8s_restarted"
+    amend = task_named(
+        load_tasks(PIHOLE / "tasks/roll_one.yml"), "Record that pihole-2"
+    )
+    assert amend["ansible.builtin.include_role"]["tasks_from"] == "rollout_amend.yml"
+    assert (
+        amend["vars"]["manifests_amend_restart"]
+        == "{{ pihole_k8s_restarted is changed }}"
+    )
+    assert amend["vars"]["manifests_amend_workload"] == "pihole-2"
+    assert str(amend["when"]) == "pihole_instance == 'pihole-2'"
+
+
+def test_the_amend_runs_after_the_wait_that_proves_the_roll_finished():
+    """Ahead of the `rollout status` wait the record would claim a roll still in flight, and a
+    failure in that wait would leave the claim behind. The whole point of the field is that a
+    later `probe.py health` can trust it."""
+    names = [
+        str(t.get("name", ""))
+        for t in walk_tasks(load_tasks(PIHOLE / "tasks/roll_one.yml"))
+    ]
+    wait = next(i for i, n in enumerate(names) if n.startswith("Wait for serving"))
+    amend = next(i for i, n in enumerate(names) if n.startswith("Record that pihole-2"))
+    assert wait < amend, names

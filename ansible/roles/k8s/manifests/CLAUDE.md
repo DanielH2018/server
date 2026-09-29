@@ -26,7 +26,21 @@ with the Docker-side `roles/containers/common` namespace.
 Optional, and empty by default: `manifests_extra_rollouts` (below), `manifests_self_rollouts`
 (below, under the release record; it also feeds the pod-template fingerprints),
 `manifests_rollout_timeout` (default `manifests_rollout_timeout_default`, `600s`),
-`k8s_autodeploy_snapshot_pvcs` (below).
+`k8s_autodeploy_snapshot_pvcs` (below), and the deferred pair below.
+
+**A caller may defer the APPLY of some of its manifests and keep the render.**
+`manifests_deferred_files: [<basename>]` plus `manifests_deferred_dir_name: <dir>` renders,
+prunes and **digests** those files here, into
+`/etc/rancher/k3s/manifests/<manifests_deferred_dir_name>/`, and applies none of them. The
+caller applies that directory itself, in its own order, reading the path from the published
+`manifests_deferred_dir` and gating on the published `manifests_deferred_render`. `pihole` is
+the one caller: its two Pi-hole Deployments must not change pod template in the same
+`kubectl apply` request, because that Recreate-cycles both LAN resolvers at once (#2884). Before
+#2899 pihole rendered instance 2 itself, which put those bytes outside `manifests_digest` — so a
+change to `deployment-2.yaml.j2` moved no digest and `probe.py releases --stale-only` could
+neither clear pihole's path hit by a match nor catch it by a mismatch, for half the workload.
+The directory name is reserved the way `<service>-netpol` is, by
+`ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py`.
 
 **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`. The
 `src` is derived from `manifests_service` and anchored to `playbook_dir` on purpose. A relative
@@ -155,9 +169,15 @@ Under `k8s_dry_run` the role renders into a fresh tempfile directory and applies
 admission a real apply goes through. `--check` cannot substitute: it skips the template writes,
 leaving nothing on disk to apply.
 
-Three consequences a green dry run does not cover:
+Four consequences a green dry run does not cover:
 
 - The **prune task never runs** — the temp dir is fresh, so nothing stale exists in it.
+- **A deferred manifest is rendered but never applied.** Under the flag its directory is a
+  SUBdirectory of the temp dir, and `kubectl apply -f <dir>/` is not recursive, so the API
+  server never sees it. The render is what the digest and `scripts/validate/k8s_manifests.py`
+  need; showing a deferred manifest to the API server is the owning role's to arrange, and
+  pihole does not, because a dry run must write nothing on the node outside this role
+  (#2611/#2614).
 - **Mode and owner differ** from the real path. Neither is something `kubectl apply` judges.
 - **`changed_when` is pinned false**, because dry-run stdout carries the same
   `created`/`configured` words a real apply does. The batch drain and the stabilisation gate
@@ -192,7 +212,8 @@ answer; `ansible/tests/k8s/test_release_stamp_rollout_expectation.py` pins the o
 
 A role that sets `manifests_rollout: ''` and restarts its workloads through a private task
 after this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
-namespace?}]`), and the record carries them with the same `restart` decision (#1902).
+namespace?, rolled_by_role?}]`), and the record carries them with the same `restart` decision
+(#1902).
 claude-otel passes `claude_otel_stabilise_workloads` with `namespace:
 k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
 since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name.
@@ -203,6 +224,24 @@ itself cannot work, because the record is written before that task runs.
 `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py` holds each role's declaration equal
 to the loop its private restart iterates, and holds each private restart to the
 `manifests_rolled_by_apply` skip.
+
+**`rolled_by_role: true` on an entry says this role may not decide its `restart`, and the owner
+amends the record afterwards** (#2902). One entry needs it: `pihole-2`, whose own Deployment the
+pihole role applies after the stamp has run. The stamp would read `restart: true` for it — the
+render changed and the shared apply did not roll it — and then that later apply rolls it by
+changing its pod template, stamping no `restartedAt` for `probe.py health` to find, so the gate
+would fail a roll that did happen on every image bump. Such an entry is recorded `restart:
+false`, kept out of the pod-template fingerprints (which could only read "not rolled" for it),
+and carries the marker into `rollouts[]` so a reader can tell a `restart: false` this apply
+decided from one it disclaimed. `ansible/roles/k8s/manifests/tasks/rollout_amend.yml` is what
+raises it: the owner passes the workload and whether it issued `kubectl rollout restart`, and
+that file rewrites the one `rollouts[]` entry. Only a `rollout restart` may claim `restart:
+true`, because it is the only roll that stamps a `restartedAt`. `applied_at` is left as the
+apply wrote it — the owner's restart is strictly later, so the comparison still holds. A skipped
+or failed amend leaves `restart: false`, which is no expectation rather than a false one.
+
+The write is 0644 and keyed by service, so nothing here may run under `k8s_dry_run`: that mode
+writes no release record, and an amended one would name a release that does not exist.
 
 **Secret manifests are digested under a host-local key, never plain-hashed.** They are
 rendered under `no_log` from decrypted SOPS values. Until 2026-09-26 they were recorded by name
@@ -225,6 +264,13 @@ so the operator approved a digest built to leave no read path (#2574):
 `ansible/roles/k8s/manifests/tasks/release_digest.yml:DECIDED: HMAC-SHA256 under a host-local key`
 carries the decision at the task that computes it. Deleting the key re-keys every future
 digest: each service with secret manifests then reads stale until its next deploy.
+
+`manifests` in the record is one entry per rendered file. A deferred file is keyed
+`<manifests_deferred_dir_name>/<basename>` rather than by basename alone, because it lives in
+another directory and two same-named files would otherwise collide into one entry — a collision
+that reads as a match. Adding a deferred file to a role therefore moves that service's
+`manifests_digest`, so it reads stale once until its next deploy writes a fresh record, the same
+one-redeploy convergence `secret_digest` had.
 
 **`manifests_digest` identifies the applied bytes, and a render-mode dry run reproduces it.**
 That matters because `probe.py releases --stale-only` decides staleness from paths and diffs,
