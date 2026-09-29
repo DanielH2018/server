@@ -217,6 +217,9 @@ nav:
       - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
       - game-stats internals: game-stats-internals.md
       - n8n community node packages: n8n-community-packages.md
+      # And the same split again (#2989), continuing the trim through the remaining
+      # over-budget role docs.
+      - renovate_notify internals: renovate-notify-internals.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

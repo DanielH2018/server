@@ -487,3 +487,12 @@ localStorage
 mtail
 [Pp]repends
 supervisord
+
+# Role-doc prose moved to docs/ pages (#2989): renovate_notify
+renovate_notify
+[Ss]andboxed
+[Uu]nwritable
+stdin
+[Bb]lockquote
+[Cc]allout
+[Uu]ngrouped
