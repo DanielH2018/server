@@ -144,7 +144,7 @@ OVER_CEILING: dict[str, str] = {
         "trimming the rules"
     ),
     "uptime-kuma": (
-        "29621 chars on 2026-09-29: the traps and the one-Discord-template contract are "
+        "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
         "operating rules for every monitor, and #2802 added the maintenance window's "
         "derivation and its two Kuma API shapes; the status-page and host-check tile "
         "history is the next thing to move to docs/"

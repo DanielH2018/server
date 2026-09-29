@@ -32,7 +32,7 @@ data:
          "shutdown_delay_minutes": weekly_reboot_shutdown_delay_minutes | int,
          "lead_minutes": kuma_maintenance_window_lead_minutes | int,
          "recovery_allowance_minutes": kuma_maintenance_recovery_allowance_minutes | int,
-         "timezone": tz,
+         "timezone": kuma_maintenance_window_timezone,
        } | tojson }}
   render_maintenance.py: |
 {{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/render_maintenance.py') | indent(4, true) }}

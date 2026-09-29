@@ -391,6 +391,20 @@ allowance, the window: `25 7 * * 0` for 50 minutes, 07:25 to 08:15.
 `ansible/roles/k8s/uptime-kuma/tests/test_maintenance_window.py` fails if either side stops
 reading them.
 
+**The window's clock is the HOST's, and it cannot be spelled `UTC`.** A host crontab fires on
+the host's local time, which is `Etc/UTC` on all three hosts; `tz` is America/Chicago, the
+containers' display timezone, and a window declared in it would open five hours late and page
+through the whole reboot. kuma-client parses the identifier against its own 424-entry
+`timezones.json`, which carries neither `UTC` nor `Etc/UTC`, so `kuma_maintenance_window_timezone`
+is `Atlantic/Reykjavik` — in that list, and +00:00 all year.
+
+**Suppression covers the push tiles, and the window's close is one message.**
+`Monitor.isUnderMaintenance` runs at the top of `beat()`'s try — ahead of the per-type branch, so
+the push watchdog is covered — and at the top of the `/api/push/` route, both before
+`isImportantForNotification`. `UP -> MAINTENANCE` and `MAINTENANCE -> MAINTENANCE` are not
+important, so nothing is sent while the window is open. `MAINTENANCE -> DOWN` IS important: a
+tile still down at 08:15 pages once as the window closes, which is the accepted cost, not a bug.
+
 **Why the job reads Kuma twice.** `maintenance list` carries the schedule and NOT the
 membership (`getMaintenanceList` emits `toPublicJSON()`; only `getMaintenance` fills in
 `monitors`), and membership is the field that decays — "every monitor" grows on every deploy

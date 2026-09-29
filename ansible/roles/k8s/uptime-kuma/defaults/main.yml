@@ -296,6 +296,15 @@ kuma_maintenance_window_description: >-
 # outage — it is slack for a monitor that flips in the seconds around the cron, and for a
 # heartbeat window that was already half-spent when the shutdown landed.
 kuma_maintenance_window_lead_minutes: 5
+# The window's timezone, which must be the reboot cron's clock — `weekly_reboot_timezone`, UTC.
+# It cannot be spelled `UTC`. kuma-client parses the identifier against its own 424-entry
+# timezones.json (kuma-client/build.rs generates the enum from it) and that list carries neither
+# `UTC` nor `Etc/UTC`, so a file saying either fails to load with `invalid value ... a valid
+# timezone identifier` and the apply stage writes nothing. Atlantic/Reykjavik is in the list and
+# is +00:00 all year with no DST, so it IS the hosts' clock; Europe/London and Europe/Dublin are
+# +00:00 in winter only and would drift an hour every summer.
+# `test_the_window_is_declared_on_the_reboot_cron_s_clock` holds the offset.
+kuma_maintenance_window_timezone: Atlantic/Reykjavik
 # How long after the reboot itself the window stays open. Measured on 2026-09-06: daniel-server
 # was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
 # records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room

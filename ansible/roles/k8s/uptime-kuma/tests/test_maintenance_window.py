@@ -9,6 +9,8 @@ suppress an ordinary hour and page through the restart.
 
 import json
 import sys as _sys
+from datetime import datetime
+from zoneinfo import ZoneInfo
 from pathlib import Path as _Path
 
 import yaml
@@ -55,6 +57,13 @@ def window(**overrides):
         render("maintenance-sync-configmap.yaml.j2", **overrides)
     )
     return window_cron(json.loads(configmap["data"]["window.json"]))
+
+
+def window_timezone(**overrides):
+    configmap = yaml.safe_load(
+        render("maintenance-sync-configmap.yaml.j2", **overrides)
+    )
+    return json.loads(configmap["data"]["window.json"])["timezone"]
 
 
 def week_minutes(cron, duration=1):
@@ -149,3 +158,26 @@ def test_the_job_applies_only_after_every_read_and_decision_succeeded():
     ]
     assert [c["name"] for c in spec["containers"]] == ["apply"]
     assert spec["containers"][0]["args"][0].count("/work/desired.json") == 2
+
+
+def test_the_window_is_declared_on_the_reboot_crons_clock():
+    """A host crontab fires on the host's clock, which is UTC here; `tz` is the containers'
+    America/Chicago and would put the window five hours off the reboot. Kuma's own identifier
+    list has no `UTC` entry, so the window names a zone that is +00:00 all year instead."""
+    assert GROUP_VARS["weekly_reboot_timezone"] == "UTC"
+    declared = ZoneInfo(window_timezone())
+    for month in (1, 7):
+        offset = datetime(2026, month, 15, tzinfo=declared).utcoffset()
+        assert offset.total_seconds() == 0, (month, offset)
+
+
+def test_the_containers_display_timezone_would_be_caught():
+    """The rejecting half: `tz` is what this was written as first, and it is five hours out."""
+    chicago = datetime(2026, 7, 15, tzinfo=ZoneInfo("America/Chicago")).utcoffset()
+    assert chicago.total_seconds() != 0
+
+
+def test_the_sync_and_the_window_share_one_clock():
+    """The collision check above compares two schedules as numbers; two clocks make it lie."""
+    doc = yaml.safe_load(render("maintenance-sync-cronjob.yaml.j2"))
+    assert doc["spec"]["timeZone"] == window_timezone()

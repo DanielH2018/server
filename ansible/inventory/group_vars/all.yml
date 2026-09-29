@@ -653,6 +653,12 @@ weekly_reboot_weekday: 0
 # cron fires, so 07:30 + 5 = 07:35 is when the monitors actually start failing. The maintenance
 # window's length is derived from it, so shortening the delay shortens the window.
 weekly_reboot_shutdown_delay_minutes: 5
+# The clock those three fields are read on. A host crontab fires on the HOST's local time, and
+# every host here runs Etc/UTC (`timedatectl` on daniel-box and daniel-server, 2026-09-29) — NOT
+# `tz`, which is America/Chicago and is the containers' display timezone. The two differ by five
+# or six hours, so a maintenance window derived from these values in `tz` would open at an
+# arbitrary Sunday midday and page straight through the reboot.
+weekly_reboot_timezone: UTC
 # Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
 # every full host redeploys its own containers_list independently on a git push (see
 # gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and

@@ -30,7 +30,10 @@ metadata:
   namespace: {{ k8s_namespace }}
 spec:
   schedule: "{{ kuma_maintenance_sync_schedule }}"
-  timeZone: {{ tz }}
+{# The WINDOW's clock, not `tz`. The schedule here and the window it declares are compared in one
+   clock by test_the_sync_never_runs_inside_the_window_it_declares, and two clocks five hours
+   apart would make that comparison say nothing. #}
+  timeZone: {{ kuma_maintenance_window_timezone }}
   concurrencyPolicy: Forbid
   successfulJobsHistoryLimit: 1
   failedJobsHistoryLimit: 2
