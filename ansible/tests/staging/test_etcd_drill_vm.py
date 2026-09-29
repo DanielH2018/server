@@ -12,7 +12,8 @@ reads green from every other gate:
   exact failure #1175's "1-year budget" would have built in over a monthly cron);
 - the cron task's shape: root, armed by the flag, day-of-month cadence, off every backup window.
 
-Renders the templates the same way test_staging_vm.py does. Run:
+Since daniel-stage was retired (#2941) this guest is the only one on the staging network, so
+these checks are also what holds the network template to a shape a guest can actually use. Run:
 uv run pytest ansible/tests/staging/test_etcd_drill_vm.py
 """
 
@@ -40,8 +41,7 @@ def _group_vars() -> dict:
 def _vars() -> dict:
     merged = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
     all_vars = _group_vars()
-    for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip", "sys_user"):
-        merged[key] = all_vars[key]
+    merged["sys_user"] = all_vars["sys_user"]
     merged["hypervisor_etcd_drill_vm_ssh_key"] = STUB_SSH_KEY
     merged["hypervisor_staging_net_uuid"] = "00000000-0000-5000-8000-000000000000"
     merged["hypervisor_etcd_drill_vm_hostkey_private"] = (
@@ -84,12 +84,13 @@ def test_the_drill_guest_renders_as_a_kvm_domain_with_its_own_disks():
         v["hypervisor_etcd_drill_vm_disk"],
         v["hypervisor_etcd_drill_vm_seed"],
     }
-    assert v["hypervisor_etcd_drill_vm_disk"] != v["hypervisor_staging_vm_disk"], (
-        "the drill guest must not share the staging guest's disk — the orchestrator deletes it"
+    assert v["hypervisor_etcd_drill_vm_disk"] != v["hypervisor_base_image_path"], (
+        "the drill guest must not boot the shared base image directly — the orchestrator "
+        "deletes its disk on every exit, which would destroy the pinned download"
     )
 
 
-def test_the_drill_guest_mac_matches_its_dhcp_reservation_and_is_not_the_staging_guests():
+def test_the_drill_guest_mac_matches_its_dhcp_reservation():
     v = _vars()
     domain_mac = (
         ET.fromstring(_render("etcd-drill-vm.xml.j2"))
@@ -102,8 +103,6 @@ def test_the_drill_guest_mac_matches_its_dhcp_reservation_and_is_not_the_staging
         f"the drill guest's MAC {domain_mac} has no reservation at {v['hypervisor_etcd_drill_vm_ip']}; "
         f"reservations: {reservations}"
     )
-    assert domain_mac != v["staging_vm_mac"]
-    assert v["hypervisor_etcd_drill_vm_ip"] != v["staging_vm_ip"]
 
 
 def test_the_staging_network_pins_its_uuid_and_pushes_reservations_live():
@@ -120,13 +119,10 @@ def test_the_staging_network_pins_its_uuid_and_pushes_reservations_live():
     assert "net-update" in argv and "--live" in argv and "ip-dhcp-host" in argv
     assert "existing dhcp host entry" in live["failed_when"]
     reserved = {h["name"] for h in live["loop"]}
-    assert reserved == {
-        "{{ staging_vm_hostname }}",
-        "{{ hypervisor_etcd_drill_vm_hostname }}",
-    }
+    assert reserved == {"{{ hypervisor_etcd_drill_vm_hostname }}"}
 
 
-def test_the_drill_guest_is_fenced_like_the_staging_guest():
+def test_the_drill_guest_attaches_to_the_fenced_staging_network():
     v = _vars()
     iface = ET.fromstring(_render("etcd-drill-vm.xml.j2")).find("./devices/interface")
     assert iface.find("source").get("network") == v["hypervisor_staging_net_name"]

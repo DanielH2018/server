@@ -130,6 +130,10 @@ RETIRED: frozenset[str] = frozenset(
         # (#2825). Both Prometheus URLs had named one Service since 2026-08-14, so the tile
         # could not go red on its own.
         "monitor_bridge_cluster_prometheus_push_token",
+        # 2026-09-29 — the staging gate's restricted ssh identity, retired with the gate and
+        # the daniel-stage guest (#2941). Its public halves stay in the hypervisor role's
+        # files/staging-gate-retired/ so every host withdraws the authorization.
+        "staging_gate_ssh_key",
     }
 )
 

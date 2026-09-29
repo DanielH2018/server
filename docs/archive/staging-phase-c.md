@@ -8,8 +8,8 @@ deploy to it. This is the phase where the cluster starts refusing things.
 describes the arm as it stood, and is kept as the record of what it cost and what it caught.
 The gate blocked on daniel-box from 2026-09-02; over its life it stopped no deploy, while the
 two faults staging did catch came through a backfill replay and a manual session. The staging
-cluster itself stays — `docs/staging-cluster.md` — driven by hand with
-`scripts/deploy_tools/staging_gate.py`, and `roles/setup/hypervisor` still builds the guest and
+cluster itself went a day later (#2941, `staging-cluster.md`), and `roles/setup/hypervisor`
+stays for the monthly etcd restore drill's throwaway guest and
 the network the monthly etcd drill needs.
 
 **The entry condition below was met in full before the flip**, which is the whole reason it
@@ -469,7 +469,7 @@ let #858 into #857's range. At those odds the hand-forced route is a coin-flip r
 is the argument for making a real gated tick ratchet on its own the way part 1 did.
 
 **The second sample needs a second such tick.** `freshrss_k8s_cache_image` — `nginx:alpine`,
-pinned at `4a73073b`, and `db35bfc6` upstream as of 2026-09-02 — is the remaining candidate in
+pinned at `4a73073b`, and `db35bfc6` upstream on 2026-09-02 — is the remaining candidate in
 that file.
 
 **Part 3: MET, 2026-09-02** — written above, and pinned by

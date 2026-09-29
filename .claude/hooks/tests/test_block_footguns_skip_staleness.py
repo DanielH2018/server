@@ -76,7 +76,7 @@ def test_the_rule_is_registered():
 
 
 def test_deploy_sh_with_the_staleness_flag_is_denied():
-    assert "staging_gate_remote.sh" in _mod.problem(
+    assert "land.sh --at" in _mod.problem(
         "./scripts/deploy.sh --tags sonarr --skip-staleness-check"
     )
 
@@ -93,17 +93,12 @@ def test_deploy_sh_without_the_flag_is_clean():
     assert _mod.problem("./scripts/deploy.sh --tags sonarr") is None
 
 
-def test_the_staging_gate_invocation_is_clean():
-    """The one sanctioned use is inside staging_gate_remote.sh's own text. DECIDED: this
-    case cannot fire — the flag never appears in the invocation — and the test stays, because
-    it is the boundary the issue (#2170) named and a widened rule keyed on the flag alone
-    would cross it."""
-    assert (
-        _mod.problem(
-            "./scripts/deploy_tools/staging_gate_remote.sh abc1234 sonarr,radarr"
-        )
-        is None
-    )
+def test_a_wrapper_script_that_passes_the_flag_itself_is_clean():
+    """The rule is keyed on the command word, so a script that passes the flag from inside its
+    own text never reaches it. The staging gate's runner was the one sanctioned case and went
+    with the daniel-stage guest (#2941); the boundary the issue named (#2170) is the same, so
+    this case stays with a stand-in — a widened rule keyed on the flag alone would cross it."""
+    assert _mod.problem("./scripts/some_wrapper.sh abc1234 sonarr,radarr") is None
 
 
 def test_the_flag_as_a_grep_argument_is_clean():

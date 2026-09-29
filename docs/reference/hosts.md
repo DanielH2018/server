@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/hosts.py
-generated_at: 2026-09-24 13:53 UTC
-generated_sha: 2460d0675
+generated_at: 2026-09-29 01:30 UTC
+generated_sha: fea456d31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 2460d0675
 
 # Hosts
 
-4 host(s) in `ansible/inventory/hosts.ini`.
+3 host(s) in `ansible/inventory/hosts.ini`.
 
 
 ## daniel-box
@@ -23,7 +23,7 @@ k3s server / control-plane node. Ansible runs here, and so do the GitOps timer, 
 |---|---|
 | LAN address | `10.0.0.215` |
 | Ansible connection | `local` |
-| Services declared | 59 |
+| Services declared | 57 |
 | Runs the GitOps timer | yes |
 | Has Docker | no |
 
@@ -48,18 +48,6 @@ k3s agent node. Intel iGPU for transcoding, LVM storage, and the UPS hardware be
 | LAN address | `10.0.0.161` |
 | Ansible connection | `local` |
 | Services declared | 0 |
-| Runs the GitOps timer | no |
-| Has Docker | no |
-
-## daniel-stage
-
-unknown (no description recorded)
-
-| Fact | Value |
-|---|---|
-| LAN address | `{{ staging_vm_ip }}` |
-| Ansible connection | `ssh` |
-| Services declared | 6 |
 | Runs the GitOps timer | no |
 | Has Docker | no |
 

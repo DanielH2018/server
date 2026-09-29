@@ -2,7 +2,7 @@
 
 The `crowdsec` role is not in the staging cluster's subset, so `crowdsec:8080` does not
 resolve there. An ungated agent sidecar crashloops against a LAPI that is not listening and
-the pod never reaches Ready — a false failure, which is the class docs/staging-cluster.md
+the pod never reaches Ready — a false failure, which is the class docs/archive/staging-cluster.md
 Decision 5 exists to avoid.
 
 The two surfaces are asymmetric and each has its own flag. Traefik carries the bouncer
@@ -341,14 +341,16 @@ def test_prod_manages_crowdsec(role: str) -> None:
 #    landed, every occurrence sits inside `{% if traefik_k8s_manage_crowdsec %}`, so the text
 #    is present whatever the flag says and the comparison read True unconditionally.
 # 2. It read `k8s_public_route` from group_vars/all.yml only, so a host that overrides it was
-#    never evaluated. daniel-stage sets `k8s_public_route: false` AND
+#    never evaluated. daniel-stage set `k8s_public_route: false` AND
 #    `traefik_k8s_manage_crowdsec: false` — a consistent pair the old guard never looked at.
+#    That host is retired (#2941); the reading is still per-host, and the rejecting test below
+#    drives the False side through an override.
 #
 # Detection here is on RENDERED output, under each host's own variables.
 
 
-def _host_render(host: str, template: str) -> str:
-    return render_role_template("traefik", template, host=host)
+def _host_render(host: str, template: str, overrides: dict | None = None) -> str:
+    return render_role_template("traefik", template, overrides, host=host)
 
 
 def _hosts_running_traefik() -> list[str]:
@@ -360,7 +362,7 @@ def _hosts_running_traefik() -> list[str]:
     return out
 
 
-def has_bouncer(host: str) -> bool:
+def has_bouncer(host: str, overrides: dict | None = None) -> bool:
     """Whether this host's rendered Traefik both DECLARES the bouncer and ATTACHES it.
 
     Both halves, because a declared-but-unattached middleware protects nothing, and an
@@ -368,16 +370,16 @@ def has_bouncer(host: str) -> bool:
     plugins silently, so every request through that entrypoint fails while the pod reads
     healthy.
     """
-    dynamic = _host_render(host, "dynamic.yaml.j2")
+    dynamic = _host_render(host, "dynamic.yaml.j2", overrides)
     declared = any(
         "crowdsecLapiKeyFile" in str(doc)
         for doc in yaml_fast.safe_load_all(dynamic)
         if doc is not None
     )
     config = yaml_fast.safe_load(
-        yaml_fast.safe_load(_host_render(host, "static-config.yaml.j2"))["data"][
-            "traefik.yml"
-        ]
+        yaml_fast.safe_load(_host_render(host, "static-config.yaml.j2", overrides))[
+            "data"
+        ]["traefik.yml"]
     )
     attached = any(
         "crowdsec" in mw
@@ -419,11 +421,12 @@ def test_the_bouncer_reading_follows_the_flag() -> None:
     cannot show that `has_bouncer` reads anything at all — a detector stuck on False would agree
     with every LAN-only host.
 
-    daniel-box runs the bouncer and daniel-stage does not, so one real True and one real False is
-    what proves the reading tracks the flag rather than the template text.
+    daniel-box runs the bouncer; daniel-stage was the host that did not, until #2941 retired it.
+    Turning the flag off by override gives one real True and one real False, which is what proves
+    the reading tracks the flag rather than the template text.
     """
     assert has_bouncer("daniel-box") is True
-    assert has_bouncer("daniel-stage") is False
+    assert has_bouncer("daniel-box", {"traefik_k8s_manage_crowdsec": False}) is False
 
 
 @pytest.mark.parametrize(

@@ -4,13 +4,18 @@
 WHAT WENT WRONG. Landing PR #2792 printed `hypervisor` also reaches daniel-pi and nothing
 else, and the verdict read `needs-manual-apply`. daniel-server is the one host with
 `has_hypervisor: true`, so it is the one host that runs `install.yml` -- and the PR's
-`scripts/deploy_tools/staging_gate_remote.sh` is what that half installs as
+`scripts/deploy_tools/staging_gate_remote.sh` was what that half installed as
 `/usr/local/bin/staging-gate-run`. `remaining_setup_hosts_note` handed `setup_file_hosts`
 only the paths under `ansible/roles/setup/hypervisor/`, so the changed script contributed
 nothing and the union came from `tasks/teardown.yml` alone (`not has_hypervisor`: daniel-box
 and daniel-pi). An operator following that line applies the teardown half to the Pi and
 leaves the gate running the old script. The hand-run on daniel-server took its copy from 0
 `ignore-submodules` matches to 3.
+
+That gate was retired with the daniel-stage guest (#2941), so the shipped file these cases
+drive is now `scripts/backup/etcd_restore_drill.sh` -- the other repo file this role installs
+from the checkout, on the same one host, through the same path literal. PR #2792's file list
+below carries that substitution and is otherwise verbatim.
 
 The reject half is `scripts/dev/pytest_shard_weights.json`, from the same PR: no task ships
 it, so it must contribute nothing. Without that half the fix would "pass" by widening every
@@ -33,16 +38,16 @@ from deploy_tools.land_lib.outcome import Outcome
 REPO_ROOT = Path(__file__).resolve().parents[3]
 
 _ROLE = "hypervisor"
-_SHIPPED = "scripts/deploy_tools/staging_gate_remote.sh"
-_ALSO_SHIPPED = "scripts/backup/etcd_restore_drill.sh"
+_SHIPPED = "scripts/backup/etcd_restore_drill.sh"
 _NOT_SHIPPED = "scripts/dev/pytest_shard_weights.json"
-_INSTALL = "ansible/roles/setup/hypervisor/tasks/install.yml"
+_INSTALL = "ansible/roles/setup/hypervisor/tasks/etcd_drill.yml"
 _PR_2792_SHA = "66ed500637abd09effe00c6bafde538c851914a9"
-# PR #2792's file list, verbatim (`gh pr view 2792 --json files`).
+# PR #2792's file list (`gh pr view 2792 --json files`), with its two retired paths replaced:
+# the shipped script by `_SHIPPED` above, and the deleted test by the module that replaced it.
 _PR_2792_PATHS = [
     "ansible/roles/setup/hypervisor/CLAUDE.md",
     "ansible/roles/setup/hypervisor/tasks/teardown.yml",
-    "ansible/tests/staging/test_staging_gate_ignores_submodule_gitlink.py",
+    "ansible/tests/staging/test_staging_tick_arm_retired.py",
     _SHIPPED,
     _NOT_SHIPPED,
 ]
@@ -54,9 +59,7 @@ def test_the_out_of_tree_ship_site_still_exists():
     `setup_repo_file_hosts` finds its subject by matching the path literal in a task, so
     every case below returns the empty set -- and passes -- once that literal moves.
     """
-    missing = [
-        p for p in (*_PR_2792_PATHS, _ALSO_SHIPPED) if not (REPO_ROOT / p).exists()
-    ]
+    missing = [p for p in _PR_2792_PATHS if not (REPO_ROOT / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
     install = (REPO_ROOT / _INSTALL).read_text()
     assert f'src: "{{{{ playbook_dir }}}}/../{_SHIPPED}"' in install, (
@@ -69,9 +72,6 @@ def test_a_shipped_repo_file_reaches_the_installing_host():
     assert land_reach.setup_repo_file_hosts(_ROLE, _SHIPPED) == frozenset(
         {"daniel-server"}
     )
-    assert land_reach.setup_repo_file_hosts(_ROLE, _ALSO_SHIPPED) == frozenset(
-        {"daniel-server"}
-    )
 
 
 def test_a_repo_file_no_task_ships_reaches_no_host():
@@ -80,7 +80,7 @@ def test_a_repo_file_no_task_ships_reaches_no_host():
 
 
 def test_another_role_does_not_claim_a_file_it_does_not_ship():
-    """Evidence is per role: gitops_deploy ships no staging-gate runner."""
+    """Evidence is per role: gitops_deploy ships no etcd restore drill."""
     assert land_reach.setup_repo_file_hosts("gitops_deploy", _SHIPPED) == frozenset()
 
 
@@ -144,7 +144,7 @@ def test_the_ticks_own_host_is_owed_when_the_role_entered_by_the_file_alone():
     Landing the same PR ON daniel-server must still name daniel-server, and with the plain
     local command rather than an ssh hop to the machine already running it.
     """
-    note = land_reach.remaining_setup_hosts_note([_ALSO_SHIPPED], "daniel-server")
+    note = land_reach.remaining_setup_hosts_note([_SHIPPED], "daniel-server")
     assert "daniel-server" in note, note
     assert "ssh daniel-server" not in note, note
     assert "`ansible-playbook ansible/initial_setup.yml --tags hypervisor`" in note, (

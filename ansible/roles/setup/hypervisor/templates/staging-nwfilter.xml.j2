@@ -1,7 +1,9 @@
 <!-- Managed by ansible (roles/setup/hypervisor). Edits here are overwritten. -->
 <!--
-  The staging guest's egress fence. One drop rule per production range — the LAN, the
-  cluster's pod CIDR and its Service CIDR — applied at the guest's own tap device.
+  The egress fence for every guest on the staging network. One drop rule per production range
+  — the LAN, the cluster's pod CIDR and its Service CIDR — applied at the guest's own tap
+  device. Since daniel-stage was retired (#2941) the only guest wearing it is the etcd restore
+  drill's, which needs the internet for R2 and nothing on the LAN.
 
   DECIDED: a libvirt nwfilter, not a ufw `route deny` and not a FORWARD hook script.
   The first attempt (#508) was a ufw route rule on daniel-server. It deployed, `ufw status`
@@ -20,29 +22,19 @@
 
   DECIDED: drop one destination, do not allowlist. An allowlist filter would also have to
   name DHCP, DNS and the whole internet, and the first thing it would break is the internet
-  egress staging legitimately needs — which the probe reports as a broken fence, correctly.
-  A single drop rule with everything else falling through keeps the blast radius to the one
-  thing being forbidden.
-
-  DECIDED: blanket, with no exception for the in-cluster registry. An exception looks
-  necessary because `ical-proxy` is in the staging subset to exercise the image-builder path
-  end to end — but docs/staging-cluster.md Decision 8 already rules that traffic out:
-  staging runs its OWN registry on daniel-stage, because a staging build pushing to the
-  production registry could overwrite a tag production pulls.
+  egress the drill guest legitimately needs to fetch its snapshot from R2. A single drop rule
+  with everything else falling through keeps the blast radius to the one thing being forbidden.
 
   Guest -> daniel-server itself is unaffected: the guest reaches this host on the staging
-  gateway address, which is not in the LAN CIDR. Ansible therefore still reaches the guest,
-  and because the acceptance probe runs over exactly that path a fence that broke it would
-  report UNREACHABLE rather than a clean pass.
+  gateway address, which is not in the LAN CIDR. The drill orchestrator therefore still reaches
+  the guest over ssh.
 
-  The acceptance gate, run on daniel-server (the only host that routes to the guest):
-
-    uv run python scripts/diagnostics/staging_egress_probe.py
-
-  It must report the internet still reachable and every production target refused. The shape
-  of this filter and its attachment are ENFORCED by ansible/tests/staging/test_staging_egress_fence.py,
-  but a filter that is defined and unattached reads identical to a working one from the host,
-  so the probe is the thing that decides.
+  The shape of this filter and its attachment are ENFORCED by
+  ansible/tests/staging/test_staging_egress_fence.py. A filter that is defined and unattached
+  reads identical to a working one from the host, so that check sees shape only. The
+  reachability half had an acceptance probe that ran INSIDE the persistent daniel-stage guest;
+  it went with the guest on 2026-09-29 (#2941), and re-pointing it at the drill's transient
+  guest is filed rather than done.
 -->
 <filter name='{{ hypervisor_staging_nwfilter_name }}' chain='root'>
   <!-- DECIDED: the UUID is pinned, derived from the filter's own name.
@@ -57,11 +49,11 @@
        BOTH commands, in this order — libvirt refuses to undefine a filter a domain references,
        with "Requested operation is not valid: nwfilter is in use":
 
-         virsh -c qemu:///system destroy {{ staging_vm_hostname }}
+         virsh -c qemu:///system destroy <the domain holding it>
          virsh -c qemu:///system nwfilter-undefine {{ hypervisor_staging_nwfilter_name }}
 
-       then re-run the role, which redefines the filter and starts the guest. That refusal is a
-       feature: a referenced fence cannot be removed out from under a running guest. -->
+       then re-run the role, which redefines the filter. That refusal is a feature: a referenced
+       fence cannot be removed out from under a running guest. -->
   <uuid>{{ hypervisor_staging_nwfilter_name | to_uuid }}</uuid>
   <!-- DECIDED: the cluster's pod and Service ranges are fenced alongside the LAN, and the
        Service range is fenced even though it also contains the guest's OWN Services.
@@ -70,13 +62,13 @@
        and on a longhorn-ui pod IP 10.42.1.216, exposing a mutating `diskUpdate` action, while
        the LAN rule correctly refused the MetalLB VIP. A ClusterIP is not on the LAN.
 
-       Fencing the guest's own ranges is safe only while staging is a single node, and that is
-       the assumption to check before adding a second one. Traffic to staging's own pods and
-       Services is delivered on the guest's internal cni0 and by its own kube-proxy rules; it
-       never crosses the tap device this filter attaches to, so these rules cannot see it.
-       Add a staging agent node and pod-to-pod traffic starts crossing the wire, where a /16
-       drop would break it. ansible/tests/staging/test_staging_egress_fence.py ties that assumption to
-       k3s_agent_node_ips and fails when it stops holding. -->
+       Fencing those ranges is safe only while no guest on this network runs a multi-node
+       cluster of its own, and that is the assumption to check before building one. A guest's
+       own pod and Service traffic is delivered on its internal cni0 and by its own kube-proxy
+       rules; it never crosses the tap device this filter attaches to, so these rules cannot see
+       it. Add a second node on this bridge and pod-to-pod traffic starts crossing the wire,
+       where a /16 drop would break it. ansible/tests/staging/test_staging_egress_fence.py ties
+       that assumption to k3s_agent_node_ips and fails when it stops holding. -->
 {% for cidr in [lan_subnet, k3s_pod_cidr, k3s_service_cidr] %}
   <rule action='drop' direction='out' priority='100'>
     <ip dstipaddr='{{ cidr.split('/')[0] }}' dstipmask='{{ cidr.split('/')[1] }}'/>

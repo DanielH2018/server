@@ -107,94 +107,30 @@
     autoremove: true
   become: true
 
-- name: Check whether the staging-gate checkout exists
+- name: Remove what the retired staging gate left on this host
   tags: [hypervisor]
-  ansible.builtin.stat:
-    path: "{{ hypervisor_staging_gate_repo }}/.git"
-  register: hypervisor_teardown_gate_repo
-  become: true
-
-- name: Read whether the staging-gate checkout has uncommitted work # noqa command-instead-of-module
-  tags: [hypervisor]
-  # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
-  # mode that REPORTS working-tree status. There is nothing to switch to here.
-  #
-  # `--ignore-submodules=all` for the same reason the gate itself carries it (#2777): the gate
-  # fast-forwards this tree, `git merge --ff-only` never moves a submodule's working tree, so
-  # every commit that bumps the `Email-to-RSS` gitlink leaves a ` M Email-to-RSS` line here that
-  # no one wrote. Without the flag the refusal below reads that as someone's uncommitted work and
-  # blocks teardown on a tree that holds none. Judge the superproject's own files, which are the
-  # only thing a deploy from here renders.
-  when: hypervisor_teardown_gate_repo.stat.exists
-  ansible.builtin.command:
-    cmd: git status --porcelain --ignore-submodules=all
-    chdir: "{{ hypervisor_staging_gate_repo }}"
-  register: hypervisor_teardown_gate_dirty
-  changed_when: false
-  failed_when: false
-  # A read, and the refusals below judge a one-way door on its output — a dry run that
-  # cannot evaluate them proves nothing about whether the teardown would stop (#2353).
-  check_mode: false
-  become: true
-  become_user: "{{ sys_user }}"
-
-- name: Refuse to remove a staging-gate checkout with uncommitted work in it
-  tags: [hypervisor]
-  # Same reasoning as the guests assert above, and the same reasoning that leaves
-  # /var/lib/libvirt alone: this tree is reproducible from the remote, so removing a CLEAN
-  # one costs a re-clone. An edit that exists only here is not reproducible from anywhere,
-  # and a flag flip is not a decision to discard it.
-  when:
-    - hypervisor_teardown_gate_repo.stat.exists
-    - hypervisor_teardown_gate_dirty.rc == 0
-  ansible.builtin.assert:
-    that: hypervisor_teardown_gate_dirty.stdout | trim | length == 0
-    fail_msg: >-
-      {{ hypervisor_staging_gate_repo }} has uncommitted changes
-      ({{ hypervisor_teardown_gate_dirty.stdout_lines | select | join(', ') }}), so it is not
-      being removed. The staging gate owns this tree and never leaves it dirty, so an edit
-      here is someone's — commit or discard it deliberately, then re-run.
-
-- name: Remove the staging-gate checkout
-  tags: [hypervisor]
-  when: hypervisor_teardown_gate_repo.stat.exists
+  # The gate and its guest were retired on 2026-09-29 (#2941), so these are reap targets rather
+  # than this role's own state. reap_staging.yml removes the same paths on the has_hypervisor:
+  # true path, and refuses first if the checkout holds uncommitted work; here the checkout is
+  # already gone by the time a host ever reaches this file, so this is the plain removal.
   ansible.builtin.file:
-    path: "{{ hypervisor_staging_gate_repo }}"
+    path: "{{ item }}"
     state: absent
+  loop:
+    - "{{ hypervisor_retired_staging_gate_repo }}"
+    - "{{ hypervisor_retired_staging_gate_lock }}"
+    - "{{ hypervisor_retired_staging_gate_dispatch_path }}"
+    - "{{ hypervisor_retired_staging_gate_runner_path }}"
   become: true
 
-- name: Remove the staging-gate lock
+- name: Deauthorize every retired staging-gate key
   tags: [hypervisor]
-  ansible.builtin.file:
-    path: "{{ hypervisor_staging_gate_lock }}"
-    state: absent
-  become: true
-
-- name: Deauthorize the staging-gate key
-  tags: [hypervisor]
-  # Before removing the dispatcher below, so the window where the key is authorized but its
-  # forced command is missing never exists. sshd would refuse such a key anyway, but the
-  # ordering means the host is never described by a state nobody intended.
-  #
-  # Removes only this key, by its public half. The operator's own key is untouched — this
+  # Removes only these keys, by their public halves. The operator's own key is untouched — this
   # teardown must never be able to lock the host out.
   ansible.posix.authorized_key:
     user: "{{ sys_user }}"
-    key: "{{ lookup('file', role_path ~ '/files/' ~ hypervisor_staging_gate_pubkey_file) }}"
+    key: "{{ lookup('file', item) }}"
     state: absent
-  become: true
-
-- name: Remove the staging-gate ssh dispatcher
-  tags: [hypervisor]
-  ansible.builtin.file:
-    path: "{{ hypervisor_staging_gate_dispatch_path }}"
-    state: absent
-  become: true
-
-- name: Remove the staging-gate runner
-  tags: [hypervisor]
-  # After the dispatcher, which is the only thing that execs it.
-  ansible.builtin.file:
-    path: "{{ hypervisor_staging_gate_runner_path }}"
-    state: absent
+  with_fileglob:
+    - "{{ role_path }}/files/staging-gate-retired/*.pub"
   become: true

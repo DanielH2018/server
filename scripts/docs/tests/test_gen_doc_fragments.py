@@ -177,20 +177,6 @@ def test_traefik_ports_names_both_container_ports():
     assert "`8443` (`traefik_k8s_https_port`)" in out
 
 
-def test_staging_vm_sizing_converts_mib_to_gb():
-    out = renderers.render_staging_vm_sizing(8192, 4, "100G")
-    assert "8 GB RAM" in out
-    assert "`hypervisor_staging_vm_memory_mib` = 8192" in out
-    assert "4 vCPU" in out
-    assert "100G disk" in out
-
-
-def test_staging_vm_sizing_with_a_different_memory_size():
-    out = renderers.render_staging_vm_sizing(4096, 2, "50G")
-    assert "4 GB RAM" in out
-    assert "8 GB RAM" not in out
-
-
 def test_secret_tiers_renders_cadence_and_count_per_tier():
     out = renderers.render_secret_tiers({"auto": 180, "ignore": None}, 8, {"auto": 3})
     assert "| `auto` | 180 d | 3 |" in out

@@ -1,13 +1,13 @@
 """Every exit-code contract the deploy tools share, named once.
 
 WHY ONE MODULE. `scripts/deploy.sh`'s contract used to be decoded twice: `land_lib/deploy.py`
-compared a return code to the bare integers 2, 75 and 20, while `staging_gate.py` named the
+compared a return code to the bare integers 2, 75 and 20, while the staging gate named the
 same numbers in a frozenset. Nothing tied the two together, so a change to one could not fail
 the other. Every consumer now imports the names from here.
 
 THE FOUR CONTRACTS ARE DISJOINT VOCABULARIES THAT REUSE THE SAME SMALL INTEGERS. 2 means
 "a tag matched no service" to deploy.sh, "bad arguments" to land.sh, "the gate could not be
-asked" to staging_gate.py and "the branch is on origin with no PR" to publish_pr.py. The
+asked" to the retired staging gate and "the branch is on origin with no PR" to publish_pr.py. The
 prefixes are what let a reader tell which contract a value belongs to, so they are not
 decoration: `publish_pr.py` in particular defines two groups of its own that both reuse 0 to
 3 with different meanings, and they are `PUBLISH_*` and `UNLANDED_*` here for that reason.
@@ -95,14 +95,6 @@ LAND_SETTLED = 0
 LAND_FAILED = 1
 LAND_BAD_ARGS = 2
 LAND_GAVE_UP = 75
-
-# -- scripts/deploy_tools/staging_gate.py -----------------------------------------------
-# The gate's verdicts, which are also its exit codes. Three outcomes rather than two,
-# because an operator who cannot tell "staging rejected this" from "staging could not be
-# asked" learns to override on reflex.
-GATE_PASS = 0
-GATE_REJECTED = 1
-GATE_NO_VERDICT = 2
 
 # -- scripts/deploy_tools/publish_pr.py, `publish` --------------------------------------
 # What state the tree is in afterwards. 1 promises the commit is still local and there is

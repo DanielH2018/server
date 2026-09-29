@@ -275,7 +275,7 @@ remainder is not re-derived as a new finding.
 | 1 `main()` split | `main()` is 58 lines over `assess()`, `plan_tick()` and one `handle_*` per branch, and the entry module is 456 lines: the phases moved to `deploy_phases.py` and `deploy_handlers.py`, the alert delivery to `deploy_alerts.py`, the staging gate's I/O shell to `deploy_staging_io.py`, beside nothing but its own subject (`deploy_staging.py` stays import-pure, because `deploy_logic.py` re-exports it to three tools that import without `host_lib` on the path), the hold and behind-origin markers onto `DeployerState`, and `TickTarget`/`TickPlan` to `deploy_tick_types.py`. Each leaf takes the tick's `tools`, `state` and `config` and imports nothing from the entry module | `gitops_deploy.py` keeps the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()`. `RetryableFetchError` is defined in `deploy_tick_types.py` and re-exported there under the same name: `assess` raises it and `entrypoint` catches it, and a leaf may not import the entry module |
 | 3 two mappers | A test asserts the two mappers agree at the role level over a fixed corpus | `derive` was not rerouted: `role_for` on a `k8s/manifests/` path returns `manifests` where the shared mapper returns a service set, and putting `manifests` in `--tags` makes `deploy.sh` refuse the list |
 | 6 config at import | Both programs cannot raise on import; `gitops_deploy` builds a frozen `Config` validated in `main()`, `monitor-bridge` collects `CONFIG_PROBLEMS` and reports them from `main()` with exit 2 | `gitops_deploy` keeps its module constants, derived from `CONFIG`; `STAGING_SUBSET` and two timeouts stay as literal `C.get()` calls because `fragment_readers.config_default`, behind `gen_doc_fragments.py`, parses them by text. `HTTP_TIMEOUT` stays in `bridge/common.py` because autofix-bridge imports it from there and does not ship `bridge/config.py` |
-| 10 seams | `GateTools` and `NotifyTools`; every subprocess monkeypatch converted | `staging_gate` tests still patch `IDENTITY` and `AUTHORIZED_PUBKEY`, which are filesystem constants rather than process boundaries |
+| 10 seams | `GateTools` and `NotifyTools`; every subprocess monkeypatch converted | the staging gate's tests still patched `IDENTITY` and `AUTHORIZED_PUBKEY`, which are filesystem constants rather than process boundaries (gate retired, #2941) |
 | 16 text assertions | `test_land_merge.py` from 18 `capsys` uses to 8 | The remaining eight are where the printed line is the only discriminator between two paths making one identical `gh` call |
 | 25 policy tables | The three R2 billing-class sets moved beside the R2 verdict | `K8S_EXTENDED_RESOURCES` and `PVC_EXCLUDE` are `_env`-read after all; one is rendered into the env Secret and the other is grepped out of `config.py` by a repo test |
 
@@ -297,7 +297,7 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
 
 2. **The `deploy.sh` exit contract is decoded twice, once as bare integers.**
    `land_lib/deploy.py:142,152,158` compares `rc` to `2`, `75` and `20` inline while
-   `staging_gate.py:91` names the same contract as `DEPLOY_SH_NO_VERDICT = frozenset({2, 3, 4,
+   the staging gate named the same contract as `DEPLOY_SH_NO_VERDICT = frozenset({2, 3, 4,
    75})`. The two can drift with no test between them. Confirmed. One `exit_codes.py` under
    `scripts/deploy_tools/`, imported at both sites. The same module absorbs
    `publish_pr.py:71-78`, which defines two `RC_*` groups that reuse 0 to 3 with different
@@ -350,8 +350,8 @@ in `merge.py` already wrapped a single call; the multi-statement block was the h
    `Classifier` out of `Tools` and give the remaining callables real signatures.
 
 10. **The top-level `deploy_tools` scripts have no injectable seam.** `test_deploy_detach_notify.py`
-    uses `monkeypatch` 31 times and `test_staging_gate.py` 25, where `land_lib` tests inject a dataclass. `publish_pr.py:101` already has its own
-    `Tools`; give `staging_gate.py` and `deploy_detach_notify.py` the same.
+    uses `monkeypatch` 31 times and the staging gate's tests 25, where `land_lib` tests inject a dataclass. `publish_pr.py:101` already has its own
+    `Tools`; give `deploy_detach_notify.py` the same. (The staging gate was retired in #2941.)
 
 11. **`Ledger.cause` is written from seven sites as free-form strings.** Including an f-string
     at `land_lib/deploy.py:161` that makes the value set unbounded, while its sibling

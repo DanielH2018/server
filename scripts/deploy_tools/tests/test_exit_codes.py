@@ -2,7 +2,7 @@
 
 The failure guarded is the one the module exists to close. `DEPLOY_SH_NO_VERDICT` and the
 individual `DEPLOY_*` names describe the same contract twice, so a change to one that misses
-the other is exactly the drift `staging_gate.py` and `land_lib/deploy.py` had between them
+the other is exactly the drift the retired `staging_gate.py` and `land_lib/deploy.py` had
 before this module existed.
 
 Every rule has a reject half, per CLAUDE.md: a set that quietly stopped containing a member
@@ -96,7 +96,6 @@ def test_the_broad_refusal_is_returned_by_name_from_deploy_tags():
             "UNLANDED_PR_OPEN",
             "UNLANDED_NO_PR",
         ),
-        ("GATE_PASS", "GATE_REJECTED", "GATE_NO_VERDICT"),
         ("CI_GREEN", "CI_RED", "CI_DISARMED", "CI_PENDING"),
         ("LAND_SETTLED", "LAND_FAILED", "LAND_BAD_ARGS", "LAND_GAVE_UP"),
         (
@@ -119,7 +118,7 @@ def test_no_contract_reuses_a_value_within_itself(group):
 
 def test_the_importers_take_their_values_from_here():
     """Non-vacuity: the module is pointless if a consumer still carries its own copy."""
-    from deploy_tools import staging_gate
+    from deploy_tools import deploy_tags, narrow_broad
 
-    assert staging_gate.DEPLOY_SH_NO_VERDICT is ec.DEPLOY_SH_NO_VERDICT
-    assert staging_gate.PASS == ec.GATE_PASS
+    assert deploy_tags.DEPLOY_BROAD is ec.DEPLOY_BROAD
+    assert narrow_broad.DEPLOY_OK is ec.DEPLOY_OK

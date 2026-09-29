@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-28 19:25 UTC
-generated_sha: 19d4b6c65
+generated_at: 2026-09-29 01:30 UTC
+generated_sha: fea456d31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 19d4b6c65
 
 # Secrets
 
-180 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+179 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -104,7 +104,6 @@ needs a human to mint the new value, then `secret_rotation.py rotate`.
 | `sonarr_api_key` | 2026-08-29 | 2027-08-28 | 334 |
 | `speedtest_api_token` | 2026-08-30 | 2027-08-24 | 330 |
 | `speedtest_app_key` | 2025-08-25 | 2026-07-29 | -61 |
-| `staging_gate_ssh_key` | 2026-08-29 | 2027-08-27 | 333 |
 | `terraria_password` | 2025-12-26 | 2026-12-09 | 72 |
 | `uptime_kuma_password` | 2026-03-24 | 2027-03-11 | 164 |
 | `valheim_server_pass` | 2026-08-30 | 2027-08-01 | 307 |

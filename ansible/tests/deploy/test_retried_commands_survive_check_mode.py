@@ -71,7 +71,6 @@ KNOWN_RETRIED_COMMAND_TASKS = frozenset(
         # opted out with `check_mode: false` — reads of pre-existing state
         "Read the read-only ServiceAccount token",
         "Read the secrets-encryption status",
-        "Read the guest's ssh host key",
         # skipped with `when: not ansible_check_mode` — waits and mutations
         "Wait for the re-encryption to finish",
         "Wait for the PVC to reach Bound",

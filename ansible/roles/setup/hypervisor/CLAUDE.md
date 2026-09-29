@@ -1,7 +1,9 @@
 # hypervisor — KVM/libvirt on daniel-server
 
-Makes a host able to run VMs. Deploys the staging cluster's substrate; see
-`docs/staging-cluster.md`, Decisions 1 and 2.
+Makes a host able to run VMs. It built the staging cluster's substrate until #2941 retired
+that cluster on 2026-09-29; what it runs now is the monthly etcd restore drill's throwaway
+guest, plus the network and egress fence that guest attaches to. `docs/archive/staging-cluster.md`
+is the historical record.
 
 - **Host:** `daniel-server` only (`has_hypervisor: true` in its host_vars). Default is
   `false` in `group_vars/all.yml` — this is opt-in per host, like `has_github_cli`.
@@ -18,33 +20,35 @@ Makes a host able to run VMs. Deploys the staging cluster's substrate; see
   - `Full etcd restore drill in a throwaway guest` — `20 11 1 * *`
 <!-- /generated_from -->
 
-## The staging guest
+## The retired staging guest, and how the host converges
 
-`guest.yml` builds and starts `daniel-stage`: 8 GiB, 4 vCPU, a 100 GB qcow2 converted from
-the Ubuntu noble cloud image, seeded with cloud-init and attached to the `staging` network.
+`daniel-stage` — 8 GiB, 4 vCPU, a 100 GB qcow2 — was removed on 2026-09-29 (#2941). The
+operator decided no manual staging sessions continue, and the GitOps tick had already stopped
+consulting it (#2859), so the guest sat allocated for work nothing drove.
 
-- **The cloud image checksum is pinned**, and upstream rotates `current` roughly monthly, so
-  this *will* eventually fail on a host that has not downloaded it yet. That is the intended
-  failure — re-pin from `cloud-images.ubuntu.com/noble/current/SHA256SUMS`. A staging
-  substrate silently built from a different image than the one reviewed defeats the point.
-- **The disk is a full `qemu-img convert`, not a backing file.** A backing chain would tie
-  the guest to the base image forever, so re-pinning would break an existing guest. qcow2 is
-  sparse, so the copy costs what the image holds rather than its virtual size.
-- **The seed ISO is built with `xorriso`**, because `cloud-image-utils` is not in this
-  host's package set and `xorriso` already is. Its volume id must be `cidata` — that string
-  is how cloud-init's NoCloud datasource finds the disk.
-- **cloud-init reads the seed on first boot only.** Editing `user-data` afterwards rebuilds
-  the ISO and changes nothing. Bump `hypervisor_staging_vm_instance_id` to make cloud-init
-  re-run its per-instance modules without rebuilding the disk.
-- **The guest's only credential is daniel-server's own ssh key**, slurped at run time. The
-  thing that needs to reach the guest is Ansible running on that host; a separate keypair
-  would be a second secret to rotate for no additional isolation.
-- **No graphics device.** `virsh console` is the recovery path when ssh is what is broken.
+**Deleting `guest.yml` would not have removed the guest.** `teardown.yml` runs only when
+`has_hypervisor` goes false, and that flag stays TRUE on daniel-server for the drill — so the
+domain would have kept running as an orphan Ansible no longer manages. That is the
+`docker_install` failure `tasks/main.yml` documents, and it is why the reap is on the INSTALL
+path: `reap_staging.yml`, included last from `install.yml`, destroys the domain, undefines it
+with `--remove-all-storage`, and removes the seed, the seed directory and the rendered XML by
+path. It is guarded on the domain existing, so it is a permanent no-op once the host has
+converged.
 
-ENFORCED by `ansible/tests/staging/test_staging_vm.py`. The load-bearing assertion is that the
-domain's interface MAC equals the network's DHCP reservation: if they drift, the guest still
-boots and still gets an address, just a dynamic one, and every later slice that names
-`staging_vm_ip` points at nothing.
+The same file reaps what the staging GATE left: `/home/ubuntu/server-staging`, its lock,
+`/usr/local/bin/staging-gate-dispatch` and `/usr/local/bin/staging-gate-run`. It **refuses
+while that checkout is dirty**, on the same reasoning that leaves `/var/lib/libvirt` alone — a
+tree is reproducible from the remote, an edit that exists only there is not.
+
+The gate's public key moved to `files/staging-gate-retired/`, so the withdrawal task in
+`install.yml` deauthorizes it. Deleting `files/staging-gate.pub` on its own would have left the
+key working here forever: `authorized_key` runs `state: present` with `exclusive` false, so it
+only ever ADDS. The private half (`staging_gate_ssh_key`) is out of SOPS and out of the
+rotation registry, and `roles/setup/gitops_deploy` deletes it from daniel-box.
+
+ENFORCED by `ansible/tests/staging/test_staging_tick_arm_retired.py`, which holds a census of
+what is gone against a census of what the drill still needs. Each without the other is the
+wrong retirement.
 
 ## The staging network
 
@@ -60,9 +64,15 @@ a census of what daniel-server actually routes: `10.0.0.0/24` (LAN), `10.42.0.0/
 install left behind), `192.168.122.0/24` (libvirt's `default`). Being outside `10/8` means a
 future k3s or Docker range cannot grow into it.
 
-The guest's address is a **DHCP reservation** on a fixed QEMU-OUI MAC, declared in
-`group_vars/all.yml` so the role and the inventory entry that reaches the guest share one
-source. It sits outside the dynamic range, or the lease could be handed out first.
+The drill guest's address is the network's one **DHCP reservation**, on a fixed QEMU-OUI MAC.
+It sits outside the dynamic range, or the lease could be handed out first. The load-bearing
+assertion is that the domain's interface MAC equals that reservation: if they drift, the guest
+still boots and still gets an address, just a dynamic one, and the orchestrator waits on an
+address nothing answers.
+
+The network keeps the name `staging` after the cluster went. daniel-server's copy carries that
+name under a UUID libvirt refuses to redefine under another one, so renaming it would mean
+destroying and rebuilding the bridge for cosmetics.
 
 ENFORCED by `ansible/tests/staging/test_staging_network.py`, which renders the template and parses
 it. That matters more here than elsewhere: nothing else in the repo validates libvirt XML,
@@ -85,10 +95,10 @@ the history at the line.
 
 Two mechanics that decide whether a change lands:
 
-- **A filter applies when the interface is CREATED.** Adding the `<filterref>` to the domain
-  template updates the persistent config; a running guest keeps its unfenced interface. `guest.yml`
-  reads the live XML and `virsh destroy`s a running guest that lacks it, so the existing start task
-  brings it back fenced. That task fires only while the live interface is unfenced.
+- **A filter applies when the interface is CREATED.** Adding the `<filterref>` to a domain
+  template updates the persistent config; a running guest keeps its unfenced interface. The only
+  guest left here is transient and gets a fresh tap device on every run, so it always starts
+  fenced — the correction task that handled this for the persistent guest went with it (#2941).
 - **Editing a rule inside the filter needs no restart.** libvirt re-applies a redefined filter to
   every interface already referencing it. That works only because the template pins the filter's
   UUID: with no `<uuid>` it mints one and then refuses the name collision, so the role would
@@ -101,27 +111,25 @@ Two mechanics that decide whether a change lands:
   UUID with `net-uuid` and pins that, falling back to `to_uuid` on a fresh host. A re-define
   still only rewrites the persistent config: the running dnsmasq keeps the reservations it
   started with, so the same tasks push a changed reservation in with `net-update --live`
-  rather than restart the network under daniel-stage.
+  rather than restart the network under whatever is on the bridge.
 - **A referenced filter cannot be undefined.** `nwfilter-undefine` reports "Requested operation is
   not valid: nwfilter is in use" while the guest holds it, so clearing a stray one means
-  `virsh destroy daniel-stage` first, then undefine, then re-run the role. The refusal is a
-  feature — the fence cannot be removed out from under a running guest.
+  `virsh destroy` on whatever domain holds it first, then undefine, then re-run the role. The
+  refusal is a feature — the fence cannot be removed out from under a running guest.
 
-ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which renders the filter and parses it.
-That check sees shape and attachment only. Whether the fence *fires* is a property of the host, and
-the gate for that half is the probe, run on daniel-server:
+ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which renders the filter and
+parses it. That check sees shape and attachment only.
 
-```bash
-uv run python scripts/diagnostics/staging_egress_probe.py
-```
-
-The internet control target must stay reachable. A fence that severed all egress would make every
-production target fail too, and that reads as a pass to anyone skimming.
+**Whether the fence FIRES has no gate any more.** That half was
+`scripts/diagnostics/staging_egress_probe.py`, and it ran INSIDE the persistent `daniel-stage`
+guest — the only place reachability can be measured from. It went with the guest (#2941).
+Re-pointing it at the drill's transient guest means running it during a drill, which is a
+different design; it is filed rather than done.
 
 ## The etcd restore drill's throwaway guest
 
-`etcd_drill.yml` prepares a second guest, `etcd-drill`, that exists only while the FULL etcd
-restore drill runs in it (issue #1175, path 1; the long form is `docs/k3s-etcd-restore.md`).
+`etcd_drill.yml` prepares the one guest this host builds, `etcd-drill`, which exists only while
+the FULL etcd restore drill runs in it (issue #1175, path 1; the long form is `docs/k3s-etcd-restore.md`).
 `scripts/backup/etcd_restore_drill.sh` cannot pass beside a live k3s, so the guest is made to
 look like a k3s server node whose k3s is stopped, and the script runs there unmodified.
 
@@ -133,9 +141,10 @@ look like a k3s server node whose k3s is stopped, and the script runs there unmo
   `/var/log/etcd-restore-drill/<run-id>/` (drill stdout, `restore.log`, `server.log`), pruned at
   `hypervisor_etcd_drill_log_retention_days`.
 - **The host key is pinned.** A fresh disk every run means a guest-minted host key every run, so
-  the orchestrator would have to accept any key — and `daniel-stage` sits on the same bridge. The
-  key is generated once by ansible, seeded through cloud-init's `ssh_keys`, and the orchestrator
-  connects with `StrictHostKeyChecking=yes` against that one public half.
+  the orchestrator would have to accept any key — and anything else that ever lands on this bridge
+  could then answer for the address. The key is generated once by ansible, seeded through
+  cloud-init's `ssh_keys`, and the orchestrator connects with `StrictHostKeyChecking=yes` against
+  that one public half.
 - **What it ships in, and where it comes from.** daniel-server's own `/usr/local/bin/k3s` (the
   same version as the server that wrote the snapshot; the drill prints the snapshot's recorded
   node versions beside it), `K3S_TOKEN` from the k3s-agent unit's env file (identical to the
@@ -205,215 +214,9 @@ irreversible in a way a package is not.
 
 **It refuses while any guest is still defined.** Purging libvirt out from under a domain
 orphans its disk image with nothing that knows how to start it, which reads as a successful
-teardown. Undefining a guest is a decision; the assert names the guests in the way.
+teardown. Undefining a guest is a decision; the assert names the guests in the way. The drill's
+guest is transient and never defined, so it is never in the way.
 
 ENFORCED by `ansible/tests/setup/test_has_flag_roles_have_both_directions.py`: a role dispatching
 on a `has_*` flag must handle both values. `docker_install` honoured only the true branch
 for months, which is how `has_docker: false` came to describe a state nothing converged to.
-
-## The staging gate's checkout
-
-`install.yml` clones `/home/ubuntu/server-staging`, and it is the tree the staging gate deploys
-FROM. `scripts/deploy_tools/staging_gate_remote.sh` cds there, fast-forwards it to the SHA under
-test, and runs `./scripts/deploy.sh --tags <svc> -e target=daniel-stage`.
-
-That script has **one caller**: the dispatcher behind the restricted key described below execs
-the copy installed at `hypervisor_staging_gate_runner_path`, and `staging_gate.py` no longer
-pipes it over ssh. **Its body is wrapped in a `main` function** — bash reads a script by byte
-offset, so a `git merge --ff-only` rewriting it mid-run would resume at a meaningless offset.
-The installed copy sits outside the tree it fast-forwards, so don't unwrap it: that wrapper is
-what makes a hand-run from the checkout safe.
-
-**It exists because the gate used to do all of that to `/home/ubuntu/server`, this host's own
-checkout** (2026-08-29 review M-2). Three things were wrong, and only the first is obvious:
-
-- An operator's tree jumped to arbitrary commits behind their back, since the gate never restored
-  what it merged. daniel-server's checkout was found sitting on whatever SHA the gate last tested.
-- Two gate runs — the 30-minute tick's and a hand-run of `staging_gate.py` — could interleave a
-  fetch, a merge and a deploy on one tree, each believing it had pinned the commit it measured.
-- A dirty tree there made the gate answer `PREP_FAILED` for every commit. That maps to NO_VERDICT,
-  which the deployer reports as "staging could not be asked, which is not a rejection" and then
-  deploys prod anyway — so the gate could be dead for days and read as staging being down.
-
-The clone fixes all three by giving the gate a tree it owns. **The gate moving its own tree
-forward is the point** — what M-2 objected to was it moving someone else's.
-
-Four things are load-bearing:
-
-- **`update: false` on the git task.** The gate fast-forwards this tree every tick; an updating
-  clone would yank it back to master's tip mid-run, and `deploy.sh` renders from the working
-  directory, so the verdict would describe a tree nobody asked about.
-- **Cloned from the remote, not from `/home/ubuntu/server`.** A local clone would share an object
-  store and re-couple the two trees' fates, which is the thing being undone.
-- **`/var/lock/staging-gate.lock` is NOT `/var/lock/server-git-tree.lock`.** `deploy.sh` takes the
-  latter *inside* the gate, and `flock` re-opens the file it is given while POSIX locks are not
-  reentrant across a fresh open — sharing one would deadlock the gate against itself. Contention
-  on the staging lock is a PREP failure, because a run that never started learned nothing about
-  the SHA.
-- **Both dirty checks pass `--ignore-submodules=all`.** `git merge --ff-only` moves the
-  `Email-to-RSS` gitlink in the index and never touches the submodule's working tree, so a
-  gitlink bump leaves this checkout printing ` M Email-to-RSS` — permanently, because the dirty
-  check runs before the fetch. It wedged the gate for five days in 2026-09 (#2777). Why the gate
-  ignores the submodule rather than syncing it: the `DECIDED:` comment at the check in
-  `scripts/deploy_tools/staging_gate_remote.sh`. ENFORCED by
-  `ansible/tests/staging/test_staging_gate_ignores_submodule_gitlink.py`.
-
-Teardown removes the clone and the lock, but **refuses while the tree is dirty**, on the same
-reasoning that leaves `/var/lib/libvirt` alone: an edit that exists only here is not reproducible
-from anywhere, while a clean tree costs a re-clone. It reads the tree with the same flag.
-
-**The gate refuses to report on a tree that is not the SHA it was asked about.** `git merge
---ff-only <ancestor>` exits 0 and leaves HEAD unmoved, so `staging_gate_remote.sh` asserts
-`HEAD == SHA` after the merge rather than trusting the exit code; a PASS attributed to a commit
-that was never rendered is worse than any refusal. The measurement and who can reach it are in
-that script's comment.
-
-**The gate deploys the stage edge as well as the tags under test, and judges only the tags.**
-`EDGE_TAGS` in `scripts/deploy_tools/staging_gate_remote.sh` names traefik and authelia, and the
-script deploys the members `$TAGS` does not carry in their own `deploy.sh` run, ahead of the
-verdict-bearing one. Without it stage's traefik sat five days behind the repo while every gated
-verdict described its change under an edge prod no longer had (#2797). **The edge leg fails as
-`fail_prep`, never as a rejection** — inside `$TAGS`, a stage-edge fault would hold prod over a
-change that has nothing to do with the edge. ENFORCED by
-`ansible/tests/staging/test_staging_gate_reconciles_the_edge.py`.
-
-The path and the lock are duplicated between this role's `defaults/main.yml` and that shell
-script, which cannot read a Jinja var. `ansible/tests/staging/test_staging_gate_paths_agree.py`
-pins them equal; the drift is silent in the worst direction, since a stale path makes every tick
-answer NO_VERDICT rather than fail.
-
-## The staging gate's restricted ssh key
-
-An operator drives the gate from daniel-box, and only daniel-server routes to the staging
-guest, so it hops here over ssh (`docs/archive/staging-phase-c.md`, Decision 1); until
-2026-08-29 that hop used **the operator's unrestricted key**, so anyone able to invoke
-the gate had a full shell here (M-3). The tick no longer runs it (#2859).
-
-`install.yml` now also deploys a dedicated ed25519 identity:
-
-- The **public** half is `files/staging-gate.pub`, authorized for `sys_user` with
-  `restrict,command="/usr/local/bin/staging-gate-dispatch"`.
-- The **private** half is `staging_gate_ssh_key` in SOPS, written to
-  `/etc/gitops-deploy/staging_gate_ed25519` (0600) on daniel-box by `roles/setup/gitops_deploy`.
-- **Withdrawn** public halves live in `files/staging-gate-retired/*.pub` and are removed with
-  `state: absent`. See *Rotating it* below — without that directory, swapping the live file
-  is half a rotation.
-- The forced command is rendered from `templates/staging-gate-dispatch.sh.j2`, root-owned 0755 —
-  if `sys_user` could rewrite it, that user would choose what the key runs.
-
-**The trap that makes the naive version useless: a `command=` forced command does NOT stop ssh
-forwarding stdin.** The gate's own design pipes a script to `bash -s`, so a forced command that
-still read stdin would execute whatever the caller sent, and the restriction would be
-decorative. The dispatcher therefore closes stdin on its first executable line and takes an
-**operation name plus arguments** — `gate <40-hex sha> <tags>` in `$SSH_ORIGINAL_COMMAND` —
-never a script body. Every field is checked against a whitelist charset and *rejected* rather
-than escaped; nothing is interpolated into a shell string.
-
-`ansible/tests/staging/test_staging_gate_dispatch.py` drives the dispatcher's own `validate_request`
-(the file guards `main` on `BASH_SOURCE` so the test can source it) and pins both properties.
-Its rejecting half covers `bash -s`, an empty command, a ref name for a SHA, and shell
-metacharacters in the tags; two tests feed a script body on stdin and assert it does not run.
-
-**The dispatcher does no git work and takes no lock**, on purpose. All of that stays in
-`staging_gate_remote.sh` so there is one copy, and because **flock attaches to the open file
-description rather than the process** — a second `exec 9>` on the same path conflicts with the
-first even inside one process tree, so a dispatcher that took the lock would deadlock the gate
-against itself.
-
-**What may lag, and why that is safe.** The dispatcher is pre-deployed, so it can be older than
-the SHA being gated. It reads nothing from the tree, so the only thing that can lag is its
-validation, and stale validation can only *refuse* — never approve. Everything after the `exec`
-comes from the checkout, including `deploy.sh`, whose exit code is the verdict. Refusals exit
-71 (`DISPATCH_REFUSED`) and prep failures 70, both of which `staging_gate.py` maps to
-NO_VERDICT: the gate could not be *asked*, which must never read as staging rejecting a change.
-
-**Residual risk, accepted:** a holder of this key can gate any commit reachable on `origin`,
-because the gate fetches from there. That is inherent to "the gate deploys a SHA" and is not
-made worse by this change.
-
-**The gate uses this key.** `staging_gate.py` authenticates with
-`/etc/gitops-deploy/staging_gate_ed25519` and sends `gate <sha> <tags>` as its request; it no
-longer pipes a script to `bash -s`. Prove the path with:
-
-```bash
-# on daniel-box, after `initial_setup.yml --tags hypervisor` has run on daniel-server
-./scripts/deploy_tools/verify_staging_gate_key.sh "$(git rev-parse origin/master)"
-```
-
-**Do not hand-roll those two ssh commands.** This file prescribed them until 2026-08-29 and they
-are unsound. The negative check was `ssh -i <key> -o IdentitiesOnly=yes <host> "bash -s"`
-expecting 71 — and it printed **0**, the signal of the restriction failing, when the real cause
-was that the key would not load, so ssh silently fell back to a default identity and ran a normal
-shell. `IdentitiesOnly=yes` does not prevent that: the DEFAULT identity files still count as
-configured, so it bounds which keys are offered without guaranteeing ours is one of them.
-
-A check that reports "your security control is broken" when the truth is "your key file is
-unreadable" is worse than no check, because the next person acts on the wrong diagnosis. The
-script closes both halves: it refuses to connect at all until `ssh-keygen -y` on the key matches
-`files/staging-gate.pub`, and it requires the negative case to produce **both** a 71 and the
-dispatcher's own refusal marker on stderr — a fallback to another key cannot print that marker,
-so "fell back" and "restriction bypassed" stay distinguishable. Its exit codes name them
-separately: 10 key unusable, 11 fell back, 12 restriction open, 13 no verdict.
-`ansible/tests/staging/test_verify_staging_gate_key.py` drives that verdict function without a network.
-
-**What stops a silent fallback.** `IdentitiesOnly=yes` does not guarantee this key is the one
-used — the default identity files still count as configured — so if the key were missing or
-unloadable, ssh would quietly authenticate as the operator and the gate would keep returning
-verdicts while running unrestricted. That would hide the very regression the key exists to
-prevent. `staging_gate.py:identity_problem()` therefore refuses to connect at all unless
-`ssh-keygen -y` on the key matches `files/staging-gate.pub`, and a far side that answers 127 —
-the shell not finding a `gate` command, which only happens when no forced command is attached —
-is reported as a failed authentication rather than as a verdict. Both map to NO_VERDICT, never
-to REJECTED: a security regression must not read as staging rejecting a change.
-
-Removing or restricting the operator's own key is a separate decision and is not part of this
-work.
-
-## Rotating it
-
-**`authorized_key` here runs `state: present` with `exclusive` left false, so it only ever
-ADDS.** Swapping `files/staging-gate.pub` therefore authorizes the new key and leaves the old
-one working — a rotation that reads as done from every angle except the one that matters.
-`files/staging-gate-retired/*.pub` is the other half: a second task withdraws every key in
-there with `state: absent`. `ansible/tests/staging/test_staging_gate_retired_keys.py` pins both
-properties, including that a retired key is never also the live one — the role would
-otherwise authorize a key and immediately withdraw it, since `absent` runs second.
-
-**Merging a rotation stops the gate until both hosts have converged, and that is not
-avoidable.** `staging_gate.py:identity_problem()` refuses to connect unless `ssh-keygen -y`
-on the deployed private key matches `files/staging-gate.pub` **in the checkout** — the check
-added by #608 to stop a silent fallback to the operator's key. So the moment master carries
-a new public half, daniel-box's still-old private key fails that comparison and every gate
-run answers NO_VERDICT. It cannot be ordered around: the tree is what both sides read.
-
-NO_VERDICT is the safe direction — the deployer reports "staging could not be asked, which
-is not a rejection" and deploys prod unguarded — but the window is real, so close it
-promptly rather than leaving it over a weekend:
-
-1. **daniel-server.** `uv run ansible-playbook ansible/initial_setup.yml --tags hypervisor`,
-   run **on that host**. Authorizes the new public half and withdraws the retired one in the
-   same run.
-2. **daniel-box.** `./scripts/deploy.sh --tags gitops-deploy` writes the new private half to
-   `/etc/gitops-deploy/staging_gate_ed25519`. The identity check now passes and the gate
-   answers again.
-3. **Prove it**, from daniel-box:
-   `./scripts/deploy_tools/verify_staging_gate_key.sh "$(git rev-parse origin/master)"`.
-
-Reversing 1 and 2 makes the window longer, not shorter: the new private half would be on the
-gate before anything authorized it, so the far side would reject rather than merely mismatch.
-
-**If the window is unacceptable**, split step 1: run it once with the retired file moved
-aside, so both keys are authorized, then step 2, then restore the file and re-run step 1 to
-withdraw the old one. The retired list being separate from the live key is what buys that.
-
-Keep a retired key in the tree until every host that ever held it has run this role. Deleting
-the file is what stops it being withdrawn, so pruning early leaves the key live on a host that
-had not converged.
-
-**2026-08-29 — the first rotation, and why.** `staging_gate_ssh_key` was rotated because the
-private half reached a Claude transcript in plaintext: a tool result printed
-`/etc/gitops-deploy/staging_gate_ed25519` while the restricted-key work was being verified,
-and `claude-transcript-scan` caught it twelve minutes later. The withdrawn key is
-`files/staging-gate-retired/2026-08-29-transcript-leak.pub`
-(`SHA256:hBZlj/febW80oXzSdsJcJABaL4+Jg5uR+u9Kh/mZ+0g`). That is the case the retired
-directory exists for — the old key has to stop being *accepted*, not merely stop being used.

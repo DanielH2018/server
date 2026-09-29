@@ -34,7 +34,7 @@ authelia_k8s_manage_crowdsec: true
 # (`authelia_oidc_hmac_secret`, `authelia_oidc_rsa_key_content`,
 # `authelia_client_password_hash`, `grafana_oidc_client_secret_hash`) that such a cluster has
 # no reason to hold. Turning it off is what lets staging's secrets file stay small, which is the
-# point of Decision 5 in docs/staging-cluster.md.
+# point of Decision 5 in docs/archive/staging-cluster.md.
 #
 # It gates the config block, not the portal: forward-auth, the session store and the user
 # database are unaffected, so a cluster with this false still proves the middleware chain

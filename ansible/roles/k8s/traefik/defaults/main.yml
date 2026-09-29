@@ -28,7 +28,7 @@ traefik_k8s_ping_port: 8082
 traefik_k8s_uid: 65532
 
 # Per-cluster subsystem switches. Both are true for prod and false for a staging cluster that
-# has neither a Cloudflare account nor the SOPS keys behind one — see docs/staging-cluster.md
+# has neither a Cloudflare account nor the SOPS keys behind one — see docs/archive/staging-cluster.md
 # Decision 4. They gate ANSIBLE-side inclusion, not just template branches, because the ACME
 # half spans a PVC, a Secret, an init container and two volumes as well as the resolver block.
 #

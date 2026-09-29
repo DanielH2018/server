@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/freshness.py
-generated_at: 2026-09-29 00:40 UTC
-generated_sha: 3094dcf46
+generated_at: 2026-09-29 01:30 UTC
+generated_sha: fea456d31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,27 +12,26 @@ generated_sha: 3094dcf46
 
 # Doc freshness
 
-46 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
+45 hand-written page(s). *Changed* is the page's last commit; *moved* counts the repo files the page names whose last commit is later than that. A moved source does not prove the page is wrong -- it marks the page to reread next. The generated reference pages are not listed: they are rebuilt from the tree.
 
 | Page | Changed | Sources named | Moved since | Most recently moved |
 |---|---|---|---|---|
 | [break-glass.md](../break-glass.md) | 2026-09-17 | 17 | 14 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [networkpolicy-slice-answers.md](../networkpolicy-slice-answers.md) | 2026-09-03 | 18 | 12 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-29) |
-| [python-code-organization.md](../python-code-organization.md) | 2026-09-28 | 67 | 11 | `ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py` (2026-09-29) |
 | [issue-claiming-and-fanout.md](../issue-claiming-and-fanout.md) | 2026-09-26 | 22 | 10 | `scripts/dev/findings.py` (2026-09-28) |
+| [python-code-organization.md](../python-code-organization.md) | 2026-09-28 | 65 | 9 | `ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py` (2026-09-29) |
 | [b2-transaction-cap-monitoring-gaps.md](../b2-transaction-cap-monitoring-gaps.md) | 2026-09-02 | 8 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [longhorn-backup-tiering.md](../longhorn-backup-tiering.md) | 2026-09-26 | 10 | 8 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [k3s-etcd-restore.md](../k3s-etcd-restore.md) | 2026-09-24 | 9 | 6 | `ansible/inventory/group_vars/all.yml` (2026-09-28) |
-| [deploying.md](../deploying.md) | 2026-09-25 | 10 | 6 | `scripts/deploy_tools/staging_gate_remote.sh` (2026-09-29) |
 | [secret-rotation.md](../secret-rotation.md) | 2026-09-27 | 13 | 6 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [longhorn-upgrade.md](../longhorn-upgrade.md) | 2026-09-21 | 9 | 5 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
+| [deploying.md](../deploying.md) | 2026-09-25 | 9 | 5 | `scripts/deploy.sh` (2026-09-28) |
 | [k3s-upgrade.md](../k3s-upgrade.md) | 2026-09-26 | 13 | 5 | `ansible/roles/setup/k3s/defaults/main.yml` (2026-09-28) |
 | [adr/0003-sops-with-age-for-secrets-at-rest.md](../adr/0003-sops-with-age-for-secrets-at-rest.md) | 2026-08-24 | 4 | 4 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [adr/0001-mkdocs-site-with-generated-reference.md](../adr/0001-mkdocs-site-with-generated-reference.md) | 2026-09-02 | 4 | 4 | `CLAUDE.md` (2026-09-28) |
 | [adr/0016-code-scanning-stays-on-default-setup.md](../adr/0016-code-scanning-stays-on-default-setup.md) | 2026-09-17 | 9 | 4 | `scripts/deploy_tools/land_tags.py` (2026-09-26) |
 | [adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md](../adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | 2026-09-24 | 5 | 4 | `scripts/deploy.sh` (2026-09-28) |
 | [claude-shell-permissions.md](../claude-shell-permissions.md) | 2026-09-24 | 7 | 4 | `CLAUDE.md` (2026-09-28) |
-| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | — | 4 | 3 | `ansible/vars/secrets.yml` (2026-09-28) |
 | [anilist-integration.md](../anilist-integration.md) | 2026-09-06 | 3 | 3 | `ansible/roles/k8s/manifests/tasks/main.yml` (2026-09-28) |
 | [adr/0011-one-lock-serialises-every-deploy-path.md](../adr/0011-one-lock-serialises-every-deploy-path.md) | 2026-09-12 | 3 | 3 | `ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_timeout_budgets.py` (2026-09-29) |
 | [networkpolicy-default-deny.md](../networkpolicy-default-deny.md) | 2026-09-18 | 11 | 3 | `ansible/roles/k8s/netpol-baseline/defaults/main.yml` (2026-09-28) |
@@ -55,10 +54,10 @@ generated_sha: 3094dcf46
 | [uptime-robot-monitors.md](../uptime-robot-monitors.md) | 2026-09-28 | 5 | 1 | `ansible/inventory/host_vars/daniel-box.yml` (2026-09-29) |
 | [adr/0004-authelia-is-the-single-sign-on-layer.md](../adr/0004-authelia-is-the-single-sign-on-layer.md) | 2026-09-02 | 0 | 0 | — |
 | [adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) | 2026-09-28 | 3 | 0 | — |
+| [adr/0018-the-repository-stays-public-and-ci-stays-hosted.md](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) | 2026-09-28 | 4 | 0 | — |
 | [adr/index.md](../adr/index.md) | 2026-09-28 | 1 | 0 | — |
 | [claude-tooling.md](../claude-tooling.md) | 2026-09-28 | 46 | 0 | — |
 | [index.md](../index.md) | 2026-09-28 | 0 | 0 | — |
 | [longhorn-disaster-recovery.md](../longhorn-disaster-recovery.md) | 2026-09-28 | 15 | 0 | — |
 | [gitops-pipeline.md](../gitops-pipeline.md) | 2026-09-29 | 80 | 0 | — |
 | [monitor-bridge-checks.md](../monitor-bridge-checks.md) | 2026-09-29 | 47 | 0 | — |
-| [staging-cluster.md](../staging-cluster.md) | 2026-09-29 | 33 | 0 | — |

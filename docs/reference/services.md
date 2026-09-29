@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-27 06:17 UTC
-generated_sha: 0e5e82b9e
+generated_at: 2026-09-29 01:30 UTC
+generated_sha: fea456d31
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,12 +12,12 @@ generated_sha: 0e5e82b9e
 
 # Services
 
-69 service(s) declared across 3 host(s).
+61 service(s) declared across 2 host(s).
 
 
 ## daniel-box
 
-59 service(s).
+57 service(s).
 
 | Service | Platform | Route | Auth | Backup tier | Auto-deploy |
 |---|---|---|---|---|---|
@@ -35,6 +35,7 @@ generated_sha: 0e5e82b9e
 | docs | k8s | <span class="fqdn" data-host="docs.local">docs.local.&lt;domain&gt;</span> (LAN only) | Authelia one_factor | no PVC (stateless) | eligible |
 | dri-device-plugin | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (manifests_rollout: '' skips the shared rollout gate; even a /health readinessProbe would only prove the HTTP listener, not that the plugin registered its gRPC socket with the kubelet, and an unregistered plugin makes jellyfin and tdarr unschedulable) |
 | freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | eligible |
+| game-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons) |
 | gpu-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | headlamp | k8s | <span class="fqdn" data-host="headlamp">headlamp.&lt;domain&gt;</span> · <span class="fqdn" data-host="headlamp.local">headlamp.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | healthchecks | k8s | <span class="fqdn" data-host="healthchecks">healthchecks.&lt;domain&gt;</span> · <span class="fqdn" data-host="healthchecks.local">healthchecks.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | denylisted (observability — cron dead-man's-switch monitor. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: check UUIDs here are baked into ping URLs in unrelated crons fleet-wide; a revert past a check's creation leaves those crons pinging a dead UUID, silently dropped) |
@@ -53,7 +54,6 @@ generated_sha: 0e5e82b9e
 | monitor-bridge | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (observability — this IS the alert pipeline; a broken deploy cannot page about being broken. ALSO no readinessProbe (probe-less) — two independent reasons) |
 | mosquitto | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | denylisted (dependency edges — MQTT broker for zigbee2mqtt/home-assistant; no intra-tick ordering. ALSO Recreate + its own PVC — two independent reasons) |
 | n8n | k8s | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | Authelia two_factor | weekly -> B2 (default target) | denylisted (two reasons: (1) probe-less n8n-runners sub-deployment; (2) migrating state — Recreate + RWO volume-claim PVC (n8n-data) holding the encryption key + credentials DB. COUPLING NOTE for a future promotion: n8n declares TWO claims, n8n-data and n8n-files — a revert of one without the other desyncs which workflow-referenced /files paths actually exist against the credentials/workflow state in n8n-data) |
-| n8n-images | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | navidrome | k8s | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | denylisted (parked at replicas 0 — an auto-applied image bump would never reach a pod) |
 | netpol-baseline | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
@@ -61,7 +61,7 @@ generated_sha: 0e5e82b9e
 | nut-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | peanut | k8s | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | pi-peer-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | eligible |
-| pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia one_factor | unknown (PVC present, claim name not statically resolvable: {{ inst.claim }}); no backup (StorageClass longhorn-nobackup) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
+| pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia one_factor | unknown (PVC present, claim name not statically resolvable: {{ claim }}); no backup (StorageClass longhorn-nobackup) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |
 | pihole-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | prowlarr | k8s | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | eligible |
 | qbittorrent | k8s | <span class="fqdn" data-host="qbittorrent">qbittorrent.&lt;domain&gt;</span> · <span class="fqdn" data-host="qbittorrent.local">qbittorrent.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | denylisted (state coupled outside the volume — reverting qbittorrent-config to a snapshot rewinds in-flight torrent bookkeeping while the media-data volume it references does not move; the pre-apply snapshot and revert work fine and are not the blocker) |
@@ -72,12 +72,10 @@ generated_sha: 0e5e82b9e
 | speedtest | k8s | <span class="fqdn" data-host="speedtest">speedtest.&lt;domain&gt;</span> · <span class="fqdn" data-host="speedtest.local">speedtest.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | eligible |
 | tdarr | k8s | <span class="fqdn" data-host="tdarr">tdarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="tdarr.local">tdarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | denylisted (state coupled outside the volume — rewrites media-data (shared RWX, not reverted) in place, an irreversible transcode the snapshot/revert can't undo; ALSO non-atomic two-claim revert (tdarr-configs, tdarr-server); ALSO the digest pin's 'stays manual' intent is unenforced — renovate.json automerges a digest re-push after a 3-day soak with no tdarr exclusion) |
 | terraria | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (two reasons: (1) probe-less — no readinessProbe; (2) migrating state — Recreate + RWO volume-claim PVC holding irreplaceable worlds) |
-| terraria-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companion to the hand-operated terraria server. ALSO Recreate + RWO volume-claim PVC holding irreplaceable stats — two independent reasons) |
 | texbrain | k8s | <span class="fqdn" data-host="texbrain">texbrain.&lt;domain&gt;</span> · <span class="fqdn" data-host="texbrain.local">texbrain.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
 | uptime-kuma | k8s | <span class="fqdn" data-host="uptime-kuma">uptime-kuma.&lt;domain&gt;</span> · <span class="fqdn" data-host="uptime-kuma.local">uptime-kuma.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (listed in k3s_longhorn_nobackup_volumes) | denylisted (observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding) |
 | valheim | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target); no backup (StorageClass longhorn-nobackup) | denylisted (two reasons: (1) probe-less — no readinessProbe at all; (2) migrating state — Recreate + RWO volume-claim PVC holding worlds) |
-| valheim-stats | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | denylisted (games — companion to the hand-operated valheim server. ALSO Recreate + its own RWO PVC holding un-seeded, irreplaceable stats — two independent reasons) |
 | wg-easy | k8s | <span class="fqdn" data-host="wg-easy">wg-easy.&lt;domain&gt;</span> · <span class="fqdn" data-host="wg-easy.local">wg-easy.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | denylisted (platform — sole remote-access path; a failed deploy can cut off remote recovery. ALSO Recreate + RWO Longhorn PVC (migrating-state shape, same class as sonarr/prowlarr) — two independent reasons. COUPLING NOTE for a future promotion: the PVC holds the server keypair and peer list, but each peer's own key lives on a client device outside it — a revert can un-revoke a removed peer or orphan an added one) |
 | zigbee2mqtt | k8s | <span class="fqdn" data-host="zigbee2mqtt">zigbee2mqtt.&lt;domain&gt;</span> · <span class="fqdn" data-host="zigbee2mqtt.local">zigbee2mqtt.local.&lt;domain&gt;</span> | Authelia one_factor | daily -> R2 | denylisted (state coupled outside the volume — the SLZB-06M coordinator's NVRAM holds the network key and frame counters, so reverting zigbee2mqtt-data to a snapshot desynchronises it from the coordinator and can silence paired devices; the pre-apply snapshot and revert work fine and are not the blocker) |
 
@@ -92,19 +90,6 @@ generated_sha: 0e5e82b9e
 | docker-proxy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 | wg-easy | docker | LAN-direct (no Traefik route) | none (public/no-auth) | n/a (Docker/Pi, not Longhorn-backed) | n/a (host has no GitOps auto-deploy path) |
 
-## daniel-stage
-
-6 service(s).
-
-| Service | Platform | Route | Auth | Backup tier | Auto-deploy |
-|---|---|---|---|---|---|
-| authelia | k8s | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | none (public/no-auth) | daily -> R2 | denylisted (platform — SSO/OIDC gate; a failed deploy locks out access to everything behind it, including the tools to fix it) |
-| freshrss | k8s | <span class="fqdn" data-host="freshrss">freshrss.&lt;domain&gt;</span> · <span class="fqdn" data-host="freshrss.local">freshrss.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target) | eligible |
-| ical-proxy | k8s | <span class="fqdn" data-host="ical-proxy.local">ical-proxy.local.&lt;domain&gt;</span> (LAN only) | none (public/no-auth) | no PVC (stateless) | eligible |
-| node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
-| registry | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no backup (StorageClass longhorn-nobackup) | denylisted (dependency edges — image-supply path for n8n/homelab-mcp/ical-proxy/nut/pi-peer-backup/code-server/terraria/valheim/karakeep; no intra-tick ordering. ALSO Recreate + its own PVC (blob store) — two independent reasons. COUPLING NOTE for a future promotion: a revert drops recently-pushed digests from the blob store while nodes that already pulled them keep running until their next pull 404s) |
-| traefik | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | daily -> R2 | denylisted (platform — ingress edge; a failed deploy removes the ability to reach or fix anything else, and host probes stay green through that kind of outage. COUPLING NOTE for a future promotion: the traefik-acme PVC holds the ACME account key and issued certs; reverting past a real rotation reinstates stale cert state) |
-
 ## Underivable facts
 
-26 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.
+21 field(s) read `unknown`. A fact with no machine-readable source prints its reason rather than a guess — see the FIELD NOTES section of `scripts/docs/service_catalog.py` for which facts those are and why.

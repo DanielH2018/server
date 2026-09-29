@@ -1,7 +1,6 @@
 ---
-# Makes the host able to run VMs. Does NOT define any guest or any network — those belong
-# to the slices that own them, so this role stays re-runnable on a host that already has a
-# staging VM without touching it.
+# Makes the host able to run VMs. Does NOT define any guest — the one guest left on this host,
+# the etcd restore drill's, is transient and created by its own cron.
 
 - name: Read the CPU virtualisation flags
   tags: [hypervisor]
@@ -23,8 +22,8 @@
 - name: Assert the CPU supports hardware virtualisation
   tags: [hypervisor]
   # Fail here with the reason rather than several tasks later with a qemu error. Software
-  # emulation would "work" and be slow enough to make the staging cluster useless, which is
-  # a worse outcome than refusing.
+  # emulation would "work" and be slow enough to make the monthly etcd restore drill useless,
+  # which is a worse outcome than refusing.
   ansible.builtin.assert:
     that: hypervisor_virt_flags.stdout | int > 0
     fail_msg: >-
@@ -125,104 +124,26 @@
   # hypervisor" rather than several tasks later on a net-define that could not have worked.
   ansible.builtin.include_tasks: network.yml
 
-- name: Define and start the staging guest
-  tags: [hypervisor]
-  # After network.yml: the domain's interface names that network, and libvirt refuses to
-  # start a domain whose network is not defined.
-  ansible.builtin.include_tasks: guest.yml
-
 - name: Prepare the etcd restore drill guest and its cron
   tags: [hypervisor]
-  # After guest.yml: the drill guest is built from the base image that task downloaded, and its
-  # DHCP reservation lives in the network network.yml declared. Nothing here starts a guest.
+  # After network.yml: the drill guest downloads the base image it is built from, and its DHCP
+  # reservation lives in the network that slice declared. Nothing here starts a guest.
   ansible.builtin.include_tasks: etcd_drill.yml
-
-- name: Clone the checkout the staging gate deploys from
-  tags: [hypervisor]
-  # `update: no` is the whole point, not a performance choice. The gate fetches and
-  # fast-forwards this tree itself, every tick, to the SHA under test. An updating clone
-  # would race that: Ansible would yank the tree back to master's tip while a gate run was
-  # rendering from an older commit, and deploy.sh renders from the working directory, so the
-  # verdict would describe a tree nobody asked about. Ansible creates this once; the gate
-  # owns it thereafter.
-  #
-  # Cloned from the remote rather than from /home/ubuntu/server, so the two checkouts share
-  # no object store and this one cannot be broken by anything done to that one.
-  ansible.builtin.git:
-    repo: "{{ hypervisor_staging_gate_repo_url }}"
-    dest: "{{ hypervisor_staging_gate_repo }}"
-    version: master
-    update: false
-  become: true
-  become_user: "{{ sys_user }}"
-
-- name: Install the staging-gate ssh dispatcher
-  tags: [hypervisor]
-  # Root-owned and not writable by sys_user, which is the point rather than habit: the
-  # restricted key's authorized_keys entry pins this path as its forced command, so anything
-  # that could rewrite this file could choose what that key runs.
-  ansible.builtin.template:
-    src: staging-gate-dispatch.sh.j2
-    dest: "{{ hypervisor_staging_gate_dispatch_path }}"
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Install the staging-gate runner outside the tree it renders
-  tags: [hypervisor]
-  # The dispatcher used to exec this script out of the gate's own checkout, which made the
-  # gate's mechanism a property of the commit under test. Two consequences, and the second is
-  # the one that bit: a commit could gate itself with its own edited copy of the gate, and
-  # resetting that checkout behind a backfill window removed the script entirely — measured
-  # 2026-08-30, eleven runs came back 127 and read as an authentication failure. Root-owned for
-  # the same reason as the dispatcher above: the key's forced command reaches this file.
-  ansible.builtin.copy:
-    src: "{{ playbook_dir }}/../scripts/deploy_tools/staging_gate_remote.sh"
-    dest: "{{ hypervisor_staging_gate_runner_path }}"
-    owner: root
-    group: root
-    mode: "0755"
-  become: true
-
-- name: Authorize the staging-gate key against that dispatcher only
-  tags: [hypervisor]
-  # `restrict` turns off port/agent/X11 forwarding, pty allocation and user rc — the whole
-  # tunnelling surface — and `command=` pins the one program the key may run. The two are not
-  # redundant: without `restrict` the key could still forward a port even while being unable to
-  # run a shell.
-  #
-  # A forced command does NOT stop ssh forwarding stdin, which is the trap that makes the naive
-  # version of this useless. The dispatcher closes stdin itself; see the header there and
-  # ansible/tests/staging/test_staging_gate_dispatch.py, which drives that property.
-  #
-  # This ADDS a key. It deliberately does not touch the operator's own key, and `exclusive` is
-  # left false: removing the only other way into this host in the same change that adds an
-  # untested one is how a host becomes reachable only with a screwdriver.
-  ansible.posix.authorized_key:
-    user: "{{ sys_user }}"
-    key: "{{ lookup('file', role_path ~ '/files/' ~ hypervisor_staging_gate_pubkey_file) }}"
-    key_options: 'restrict,command="{{ hypervisor_staging_gate_dispatch_path }}"'
-    state: present
-  become: true
 
 - name: Deauthorize retired staging-gate keys
   tags: [hypervisor]
-  # Rotating this key is only half done by swapping files/staging-gate.pub. The task above
-  # runs `state: present` with `exclusive` left false — it ADDS, and by design never removes
-  # — so without this the previous public half stays in authorized_keys forever and a
-  # "rotation" leaves the old key working. The first rotation, 2026-08-29, was forced by the
-  # private half reaching a Claude transcript in plaintext, which is exactly the case where
-  # the old key must stop being accepted rather than merely stop being used.
+  # Every public half this role has ever authorized lives here now, including the last live one
+  # — the staging gate was retired with the daniel-stage guest on 2026-09-29 (#2941), and
+  # `authorized_key` ran `state: present` with `exclusive` left false, so it only ever ADDED.
+  # Deleting files/staging-gate.pub alone would have left that key working on this host forever.
   #
-  # A directory rather than one more filename, so the next rotation appends instead of
-  # overwriting the record of what was withdrawn. Empty is the normal steady state once a
-  # retired key has been removed from every host that ever held it; the task is idempotent
-  # and a no-op then, and `with_fileglob` over an empty directory is a skip, not an error.
+  # A directory rather than one more filename, so a rotation appends instead of overwriting the
+  # record of what was withdrawn. `with_fileglob` over an empty directory is a skip, not an
+  # error, so this stays correct once the last entry is eventually dropped.
   #
-  # Keep a retired key here until every host has run this role at least once. Deleting the
-  # file is what stops it being withdrawn, so an entry removed early leaves the key live on
-  # any host that had not converged yet.
+  # Keep a retired key here until every host has run this role at least once. Deleting the file
+  # is what stops it being withdrawn, so an entry removed early leaves the key live on any host
+  # that had not converged yet.
   ansible.posix.authorized_key:
     user: "{{ sys_user }}"
     key: "{{ lookup('file', item) }}"
@@ -230,3 +151,10 @@
   with_fileglob:
     - "{{ role_path }}/files/staging-gate-retired/*.pub"
   become: true
+
+- name: Reap what the retired staging cluster left behind
+  tags: [hypervisor]
+  # After the withdrawal above, so the dispatcher this removes is never gone while its key is
+  # still authorized. has_hypervisor stays true on this host for the drill, so teardown.yml
+  # never runs here and this is the only path that reaps daniel-stage.
+  ansible.builtin.include_tasks: reap_staging.yml

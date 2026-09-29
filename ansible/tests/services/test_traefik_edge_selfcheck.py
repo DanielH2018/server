@@ -33,18 +33,19 @@ from validate.k8s_manifests import (
 from _k8s_render import host_context, render_role_template
 
 _ROLE = "traefik"
-# daniel-box runs the bouncer plugin; daniel-stage sets traefik_k8s_manage_crowdsec false and
-# so has neither the failure mode nor the probe.
+# daniel-box runs the bouncer plugin. A cluster without it has neither the failure mode nor
+# the probe; daniel-stage was that cluster until #2941 retired it, so the case is now driven by
+# an override rather than by a host.
 _HOST = "daniel-box"
-_HOST_WITHOUT_CROWDSEC = "daniel-stage"
+_WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
-def _render(host: str, template: str) -> str:
-    return render_role_template(_ROLE, template, host=host)
+def _render(host: str, template: str, overrides: dict | None = None) -> str:
+    return render_role_template(_ROLE, template, overrides, host=host)
 
 
-def _traefik_container(host: str) -> dict:
-    doc = yaml_fast.safe_load(_render(host, "deployment.yaml.j2"))
+def _traefik_container(host: str, overrides: dict | None = None) -> dict:
+    doc = yaml_fast.safe_load(_render(host, "deployment.yaml.j2", overrides))
     containers = doc["spec"]["template"]["spec"]["containers"]
     return next(c for c in containers if c["name"] == "traefik")
 
@@ -215,9 +216,9 @@ def test_the_route_is_a_traefik_service_not_a_kubernetes_one() -> None:
 def test_the_probe_is_absent_without_crowdsec() -> None:
     """The probe is gated on traefik_k8s_manage_crowdsec. A cluster without the bouncer plugin
     has no crowdsec Middleware and no #1322 failure mode, so the probe would only be a way for
-    the edge to crashloop — and defaults/main.yml is explicit that a false failure on staging
-    is a real hazard."""
-    assert _traefik_container(_HOST_WITHOUT_CROWDSEC).get("startupProbe") is None
+    the edge to crashloop — and defaults/main.yml is explicit that a false failure there is a
+    real hazard."""
+    assert _traefik_container(_HOST, _WITHOUT_CROWDSEC).get("startupProbe") is None
 
 
 def test_the_route_ships_only_where_the_probe_does() -> None:

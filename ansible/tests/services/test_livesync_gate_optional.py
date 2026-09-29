@@ -9,7 +9,7 @@ this flag is what lets Traefik deploy to a staging cluster at all.
 Slice 2a recorded that this needed no flag, on the reasoning that generated staging tokens
 would render harmless routes. That was wrong on both halves. The routers name backends the
 cluster does not run, and staging's secrets file is encrypted to daniel-server's key alone and
-holds one key by design (docs/staging-cluster.md, Decision 5), so there is nowhere for a
+holds one key by design (docs/archive/staging-cluster.md, Decision 5), so there is nowhere for a
 generated token to go.
 
 The static config's file provider and the Secret are two halves of one mechanism: the provider

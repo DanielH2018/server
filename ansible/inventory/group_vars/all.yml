@@ -232,23 +232,22 @@ k8s_namespace: homelab
 # preference and `hostvars[...]` lookup that means "this cluster's primary node" reads this
 # rather than the literal hostname, so a second cluster can be deployed to from the same
 # source. Prod resolves it to daniel-box; a single-node staging cluster resolves it to its
-# own node. See docs/staging-cluster.md, Decision 7.
+# own node. See docs/archive/staging-cluster.md, Decision 7.
 #
 # NOT a statement about WHY any given workload is pinned — the reasons differ (VIP
 # announcement, hostPath locality, registry loopback) and are recorded at each pin. This
 # variable only answers "which node is the primary one here".
 k8s_primary_node: daniel-box
 
-# Hosts k3s-bringup.yml will install a k3s SERVER on. Two entries, two clusters: daniel-box
-# is prod's control plane, daniel-stage is the staging cluster's single node. daniel-server
-# is deliberately absent — it is an agent in prod's cluster, and installing a server there
-# would give one node two control planes.
+# Hosts k3s-bringup.yml will install a k3s SERVER on. One entry since the staging cluster was
+# retired (#2941): daniel-box is prod's control plane. daniel-server is deliberately absent —
+# it is an agent in prod's cluster, and installing a server there would give one node two
+# control planes.
 #
 # An allowlist rather than a denylist, so a host nobody thought about is refused rather than
 # admitted. ENFORCED by ansible/tests/setup/test_k3s_server_hosts.py.
 k3s_server_hosts:
   - daniel-box
-  - daniel-stage
 
 # Hosts that render setup-plane templates but run NO manifest-prune-check, so nothing there can
 # report a stale render. That check is installed by roles/setup/k3s/tasks/health-crons.yml,
@@ -273,9 +272,9 @@ setup_drift_check_hosts:
 # either: #1693 left the route dead from daniel-server and reachable from daniel-box, because
 # which address a host arrives as depends on where the traefik pod sits.
 #
-# Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all, and
-# daniel-stage is a different cluster with no loki-homelab. An allowlist for the same reason as
-# k3s_server_hosts above. ENFORCED by ansible/tests/setup/test_loki_route_witness.py.
+# Both prod cluster nodes and nothing else. daniel-pi is not in the ClientIP set at all. An
+# allowlist for the same reason as k3s_server_hosts above. ENFORCED by
+# ansible/tests/setup/test_loki_route_witness.py.
 loki_route_witness_hosts:
   - daniel-box
   - daniel-server
@@ -315,8 +314,7 @@ loki_route_witness_boot_grace_s: 600
 # it — the gate was a proxy for a property the Pi does not have. Measured 2026-09-10 (issue
 # #1726): the Pi has neither uv nor vale and runs the distro's Python 3.12, so the tag has
 # never been applied there, and provisioning a pinned Python 3.14 on a 512 MB Zero 2 W was the
-# outcome the operator rejected. daniel-stage is deliberately absent too: `initial_setup.yml`
-# has never completed against the guest at all (docs/staging-cluster.md, *Sequencing*).
+# outcome the operator rejected.
 #
 # An allowlist for the same reason as k3s_server_hosts above — a host nobody thought about is
 # refused rather than provisioned. ENFORCED by ansible/tests/setup/test_dev_tooling_hosts.py.
@@ -333,12 +331,9 @@ setup_drift_tree_max_days: 14
 
 # Which SOPS file `pre_tasks/load_secrets.yml` decrypts, chosen per host. Production is the
 # default so a host nobody thought about gets the production file and fails closed on a
-# missing key, rather than silently running with no secrets at all.
-#
-# daniel-stage overrides it. The point is scope, not templating: staging renders none of
-# these values onto the guest today, but loading secrets.yml at all puts every production
-# credential in the play's variable scope, and "no role happens to reference it" is a much
-# weaker promise than the one docs/staging-cluster.md Decision 5 makes.
+# missing key, rather than silently running with no secrets at all. No host overrides it since
+# daniel-stage and its own secrets file were retired (#2941); the per-host mechanism stays,
+# because what it buys is that adding such a host is a var rather than a code change.
 #
 # Resolved relative to ansible/vars/. ENFORCED by ansible/tests/deploy/test_load_secrets_by_host.py,
 # which also checks every file named by any host actually exists.
@@ -516,7 +511,7 @@ k8s_public_route: true
 # the traefik role's static config.
 #
 # Empty means Traefik serves its own default self-signed certificate for the route. That is
-# the staging cluster's whole TLS story (docs/staging-cluster.md, Decision 4): staging holds
+# the staging cluster's whole TLS story (docs/archive/staging-cluster.md, Decision 4): staging holds
 # no Cloudflare token and must never issue against the real domain's ACME account and rate
 # limit, and nothing on staging needs to TRUST a certificate — the gate asks whether
 # manifests render, apply, schedule, bind and roll out, which a probe answers with `curl -k`.
@@ -596,7 +591,7 @@ k8s_registry_cluster_ip: 10.43.51.14
 # The node that runs the registry Deployment (nodeSelector) and therefore resolves the
 # mirror to its own loopback hostPort. Follows the cluster: a staging deploy must push and
 # pull its own images, never the prod registry, where a staging build could overwrite a tag
-# prod pulls and cause a prod rollout. See docs/staging-cluster.md, Decision 8.
+# prod pulls and cause a prod rollout. See docs/archive/staging-cluster.md, Decision 8.
 k8s_registry_node: "{{ k8s_primary_node }}"
 # The PUSH half of the pair described above. Fully qualified rather than bare `registry`,
 # because a builder Job's pod may not carry a search domain that resolves the short name,
@@ -695,34 +690,28 @@ docker_engine_packages:
 # their `Restart rsyslog` handler fails on a masked unit (#1946).
 has_rsyslog: true
 # Whether this host runs VMs under KVM/libvirt. Default OFF and opted into per host, like
-# has_github_cli: exactly one host needs it (daniel-server, for the staging cluster), and a
-# hypervisor appearing on a node by default is a third writer of firewall state next to k3s
-# and any container runtime. daniel-server overrides this true.
+# has_github_cli: exactly one host needs it (daniel-server, for the monthly etcd restore
+# drill's throwaway guest), and a hypervisor appearing on a node by default is a third writer
+# of firewall state next to k3s and any container runtime. daniel-server overrides this true.
 has_hypervisor: false
 # Whether this host holds a checkout of THIS repository at ~/server. True by default — every
 # host built by initial_setup.yml has had one, which is why a handful of tasks reach for
-# `{{ playbook_dir }}` or `~/server/...` with no gate at all. daniel-stage overrides this
-# false: it is a libvirt guest that Ansible drives over ssh and never checks the repo out.
+# `{{ playbook_dir }}` or `~/server/...` with no gate at all. No host overrides it false since
+# daniel-stage was retired (#2941); the gate stays because those tasks would fail outright on
+# a host that is driven over ssh and never checks the repo out.
 #
 # NOT derivable from ansible_connection. daniel-pi is `connection=ssh` and DOES hold a
 # checkout (verified 2026-09-02: /home/ubuntu/server/ansible exists there), so deriving this
 # from the connection type would skip three tasks that work on the Pi today.
 has_repo_checkout: true
 
-# The staging-cluster guest. Declared here rather than in the hypervisor role's defaults
-# because two places need one source of truth: the role reserves this MAC->IP pair in the
-# staging network's DHCP, and the inventory entry that reaches the guest names the same
-# address. The MAC uses QEMU's 52:54:00 OUI and is fixed so the reservation is stable across
-# a rebuild of the guest. See docs/staging-cluster.md.
-staging_vm_hostname: daniel-stage
-staging_vm_mac: "52:54:00:5a:11:e0"
-staging_vm_ip: 192.168.140.10
-# The staging network itself, as a CIDR. Here rather than in the hypervisor role's defaults
-# for the same reason as the guest above: two roles need one source of truth. The hypervisor
-# role builds the libvirt network from a gateway plus a netmask; `initial_setup` fences that
-# network off the production LAN and needs the prefix form. A fence keyed to the wrong
-# network is not a weaker fence, it is no fence at all — so
-# ansible/tests/test_staging_net_cidr_agrees.py asserts this prefix contains the role's
+# The libvirt NAT network the hypervisor host builds, as a CIDR. It outlived the daniel-stage
+# guest (#2941) because the monthly etcd restore drill's throwaway guest attaches to it. Here
+# rather than in the hypervisor role's defaults because two roles need one source of truth: the
+# hypervisor role builds the network from a gateway plus a netmask, while `initial_setup`
+# fences that network off the production LAN and needs the prefix form. A fence keyed to the
+# wrong network is not a weaker fence, it is no fence at all — so
+# ansible/tests/staging/test_staging_egress_fence.py asserts this prefix contains the role's
 # gateway and matches its netmask.
 staging_net_cidr: "192.168.140.0/24"
 # The full etcd restore drill, run monthly in a throwaway guest on the hypervisor host (issue

@@ -84,7 +84,7 @@ _COREDNS = _ROLES / "setup" / "k3s" / "tasks" / "coredns.yml"
 _KNOWN_TASK_FILES = frozenset(
     {
         "setup/k3s/tasks/coredns.yml",
-        "setup/hypervisor/tasks/guest.yml",
+        "setup/hypervisor/tasks/reap_staging.yml",
         "k8s/jellyfin/tasks/verify.yml",
         "k8s/media-volume/tasks/sync.yml",
         # The 2026-09-24 widenings: #2351 added `stdout_lines`/`stderr_lines`/`delta` to
@@ -400,7 +400,8 @@ def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
 ) -> None:
     """#2353: repeating the producer's `when:` is enough on a real run, not under `--check`.
 
-    `setup/hypervisor/tasks/guest.yml` as it was written. The consumer repeats the producer's
+    `setup/hypervisor/tasks/guest.yml` as it was written, before #2941 retired that guest and
+    its task file. The consumer repeats the producer's
     condition, so the when-based rule accepts it — and check mode skips the producer whatever
     its `when:` says, so against a running guest the consumer still read a skip result. The
     old `reg in when_based` early-out meant the check-mode rule never looked.
@@ -417,7 +418,9 @@ def test_a_when_gated_producer_is_still_judged_under_the_check_mode_rule(
 def test_a_when_gated_producer_that_opts_out_of_check_mode_is_clean(
     tmp_path: Path,
 ) -> None:
-    """The accepting half, and the fix guest.yml carries: `check_mode: false` on the read."""
+    """The accepting half, and the fix that file carried: `check_mode: false` on the read.
+
+    `setup/hypervisor/tasks/reap_staging.yml` carries the same shape today."""
     opted_out = _GUEST_PRODUCER.replace(
         "  register: hypervisor_staging_vm_live_xml\n",
         "  register: hypervisor_staging_vm_live_xml\n  check_mode: false\n",

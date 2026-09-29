@@ -513,9 +513,10 @@ stay).
   found came from elsewhere: a backfill replay caught a registry break the tick would never
   have gated (`registry` is `k8s_autodeploy: false`), and a manual session found the
   volume-snapshot remote-target bug. `docs/archive/staging-phase-c.md` is the record, including
-  the escape hatch and the NO-VERDICT asymmetry the arm was built around. The staging cluster
-  itself is live and operator-driven — `docs/staging-cluster.md` — and `roles/setup/hypervisor`
-  still builds the guest and the network the monthly etcd drill needs.
+  the escape hatch and the NO-VERDICT asymmetry the arm was built around. The cluster itself
+  followed a day later (#2941, `docs/archive/staging-cluster.md`): nothing consulted the guest
+  and no manual sessions continued. `roles/setup/hypervisor` stays for the monthly etcd
+  restore drill's throwaway guest.
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - Refuses to *deploy* from a dirty working tree (operator mid-edit) but the tick still
   completes normally and writes `last_run` (`next_action(..., dirty=True) -> "dirty"`) — the

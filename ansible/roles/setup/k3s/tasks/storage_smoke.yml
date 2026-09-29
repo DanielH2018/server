@@ -8,7 +8,7 @@
 # volumes, so creating and destroying one on every k3s-role run would be churn with no signal.
 # A NEW cluster has no such evidence — `kubectl get nodes` Ready and a longhorn-system pod
 # count say the control plane is up and the driver is running, neither of which is the same as
-# a PVC reaching Bound. docs/staging-cluster.md makes "a PVC binds" half of step 3's exit
+# a PVC reaching Bound. docs/archive/staging-cluster.md makes "a PVC binds" half of step 3's exit
 # criterion for exactly that reason.
 #
 # Runs against `default`, not k8s_namespace: a cluster that has never had a workload deployed

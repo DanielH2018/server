@@ -3,7 +3,7 @@
 Prod resolves certificates through Traefik's `cloudflare` ACME DNS-01 resolver. The staging
 cluster has no Cloudflare token and must never issue against the real domain's ACME account or
 rate limit, so `k8s_tls_cert_resolver` is empty there and Traefik serves its own default
-self-signed certificate (docs/staging-cluster.md, Decision 4).
+self-signed certificate (docs/archive/staging-cluster.md, Decision 4).
 
 The load-bearing property is what stays rather than what goes. An IngressRoute on the `https`
 entrypoint with NO `spec.tls` is not a losing router — it is a NON-TLS router, so an HTTPS
