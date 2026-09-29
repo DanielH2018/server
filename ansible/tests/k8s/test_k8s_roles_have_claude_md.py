@@ -77,28 +77,19 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. #2991 took three
 # more: crowdsec's incident record to docs/crowdsec-waf-record.md, qbittorrent's two outages
 # and prefs plane to docs/qbittorrent-vpn-and-prefs.md, and jellyfin's per-plugin record to
-# docs/jellyfin-plugins.md. Each remaining reason names its own next section to move.
+# docs/jellyfin-plugins.md. #2993 took claude-otel and monitor-bridge out: the OIDC
+# measurements, the idle-vs-broken diagnosis and the verification commands moved to
+# docs/claude-otel-oidc-and-idle-diagnosis.md, and the module table, gate-set membership,
+# operator prerequisites and test seams to docs/monitor-bridge-internals.md. Each remaining
+# reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
         "routed service; the second-factor and session history can move to docs/"
     ),
-    "claude-otel": (
-        "18339 chars on 2026-09-29: the eviction tiers and the idle-vs-broken trap are "
-        "operating rules for a pipeline that fails silent, and `## One config change, one "
-        "restart` (#2858) is the rule a template edit must follow; the dashboard inventory "
-        "moved to docs/claude-otel-dashboards.md (#2925), and the OIDC section's two "
-        "`/api/user/orgs` measurements and the unconfirmed claim-delivery hypothesis are the "
-        "next thing to move there"
-    ),
     "homepage": (
         "19799 chars on 2026-09-28: `## Where the config lives` and the traps under `## "
         "Notable` are editing rules; the per-widget history in that same section is the trim"
-    ),
-    "monitor-bridge": (
-        "18492 chars on 2026-09-29: the gates-and-hysteresis rules govern a check that pages, "
-        "and the module-layout rule governs the code it ships; `## Checks` was cut to a "
-        "pointer at `files/registry.py` (#2921), and `## Module layout` is the next trim"
     ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
