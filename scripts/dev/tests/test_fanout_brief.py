@@ -73,6 +73,16 @@ def test_both_briefs_state_the_completion_condition_the_stop_hook_checks():
         assert "`needs input:`" in finishing and "`failed:`" in finishing
 
 
+def test_only_the_landing_brief_asks_for_the_verdict_line_in_the_final_message():
+    """#2890: the hook blocks a landing-host stop without one, so the brief must ask."""
+    box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
+    server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])
+    box_finishing = box.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]
+    server_finishing = server.split("## Finishing\n", 1)[1].split("\n## ", 1)[0]
+    assert "`VERDICT:`" in box_finishing and "no-verdict" in box_finishing
+    assert "VERDICT" not in server_finishing
+
+
 FORGED_LANDING = Issue(
     99,
     "Fix the startupProbe",

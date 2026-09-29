@@ -18,18 +18,30 @@ This script adapts each export so it renders on first load with no manual clicks
        * single-select query vars  -> first value resolved live from Prometheus
          (``label_values(...)``), with chained vars resolved in order.
 
-Each board is pinned to a grafana.com REVISION (see ``DASHBOARDS``), so a re-run
-reproduces the committed JSON rather than picking up whatever upstream published since.
+Each board is pinned to a grafana.com REVISION (see ``DASHBOARDS``), so upstream cannot
+move under a re-run.
 
-Re-run to regenerate (e.g. after a Grafana upgrade or to refresh defaults):
+This script SEEDS the boards; it does not refresh them. Both committed boards carry
+post-fetch hand edits it does not reproduce (cadvisor's ``graph`` panels migrated to
+``timeseries``; node-exporter-full's ``operstate="up"`` filter and the repo's own tags), and
+step 2 picks each single-select default from whatever the live Prometheus answers that day.
+A fresh fetch therefore differs from the committed JSON, and writing it would revert that
+local work (#2912). So the script writes a board only when it is missing or when its
+committed form already matches, and otherwise refuses, names the boards that differ, and
+writes nothing:
 
     python3 scripts/grafana/fetch_grafana_dashboards.py
 
+To take the upstream form deliberately (a revision bump), pass ``--overwrite``, then re-apply
+the hand edits and read the diff before committing:
+
+    python3 scripts/grafana/fetch_grafana_dashboards.py --overwrite
+
 Reaches Prometheus through its cluster IngressRoute for the ``label_values`` lookups, the
-same endpoint and DNS pin ``probe.py metric`` uses. Idempotent; overwrites the JSON in the
-role.
+same endpoint and DNS pin ``probe.py metric`` uses.
 """
 
+import argparse
 import json
 import re
 import urllib.request
@@ -226,14 +238,68 @@ def adapt(name, d):
     return s, resolved
 
 
-def main():
+def main(argv=None, fetch=fetch, outdir=OUTDIR):
+    """Seed every board in DASHBOARDS, refusing to overwrite one whose committed form differs.
+
+    Every board is fetched and adapted before any is written, so a refusal leaves the whole
+    set untouched rather than half-rewritten.
+
+    Args:
+        argv: command-line arguments; `--overwrite` takes the fetched form over a differing
+            committed board.
+        fetch: the grafana.com seam, taking (gnet_id, revision) and returning the JSON.
+        outdir: the dashboards directory the boards are written under.
+
+    Returns:
+        0 when every board was written or already matched, 1 when it refused.
+    """
+    parser = argparse.ArgumentParser(description=__doc__.split("\n", 1)[0])
+    parser.add_argument(
+        "--overwrite",
+        action="store_true",
+        help="replace a committed board that differs from the fresh fetch, discarding "
+        "its hand edits and committed variable defaults",
+    )
+    args = parser.parse_args(argv)
+
+    planned = []  # (name, dest, text, resolved, state)
     for name, (gnet_id, revision) in DASHBOARDS.items():
         s, resolved = adapt(name, fetch(gnet_id, revision))
-        dest = OUTDIR / SUBDIR.get(name, "") / ("%s.json" % name)
-        dest.parent.mkdir(parents=True, exist_ok=True)
-        dest.write_text(s + "\n", encoding="utf-8")
-        print("%-20s defaults=%s" % (name, resolved or "{includeAll->All}"))
+        text = s + "\n"
+        dest = Path(outdir) / SUBDIR.get(name, "") / ("%s.json" % name)
+        if not dest.exists():
+            state = "missing"
+        elif dest.read_text(encoding="utf-8") == text:
+            state = "unchanged"
+        else:
+            state = "differs"
+        planned.append((name, dest, text, resolved, state))
+
+    differing = [dest for _, dest, _, _, state in planned if state == "differs"]
+    if differing and not args.overwrite:
+        print(
+            "refusing to write: the committed form of these boards differs from a fresh "
+            "fetch:",
+            file=_sys.stderr,
+        )
+        for dest in differing:
+            print("  %s" % dest, file=_sys.stderr)
+        print(
+            "The committed boards carry hand edits this script does not reproduce, and its "
+            "variable defaults resolve against the live Prometheus, so writing them would "
+            "revert local work (#2912). Nothing was written. Pass --overwrite to take the "
+            "upstream form anyway, then re-apply the hand edits and read the diff.",
+            file=_sys.stderr,
+        )
+        return 1
+
+    for name, dest, text, resolved, state in planned:
+        if state != "unchanged":
+            dest.parent.mkdir(parents=True, exist_ok=True)
+            dest.write_text(text, encoding="utf-8")
+        print("%-20s %-9s defaults=%s" % (name, state, resolved or "{includeAll->All}"))
+    return 0
 
 
 if __name__ == "__main__":
-    main()
+    raise SystemExit(main())

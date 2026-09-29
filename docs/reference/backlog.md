@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-29 06:18 UTC
-generated_sha: a3360b904
+generated_at: 2026-09-29 12:02 UTC
+generated_sha: c7d78bbc9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -25,11 +25,11 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2855](https://github.com/DanielH2018/server/issues/2855) | medium | improvement | container | Scaffold a new k8s service with a deterministic generator instead of copying a sibling role | 2026-09-28 | 0 | - | ✓ |
 | [#2857](https://github.com/DanielH2018/server/issues/2857) | medium | improvement | cicd | Replace 31 hand-rolled git fixtures and 27 bare Jinja environments in tests with the shared helpers | 2026-09-28 | 0 | - | ✓ |
 | [#2861](https://github.com/DanielH2018/server/issues/2861) | medium | gap | - | bring-up.sh --continue skips k3s-bringup.yml, so a rebuilt cluster node reaches deploy.yml with no cluster | 2026-09-28 | 0 | - | ✓ |
-| [#2889](https://github.com/DanielH2018/server/issues/2889) | medium | gap | cicd | fanout_place launch stacks more than three batches on one remote host across successive runs | 2026-09-28 | 0 | - | ✓ |
-| [#2890](https://github.com/DanielH2018/server/issues/2890) | medium | gap | - | fanout-stop lets a daniel-box batch stop on a PR URL before land.sh prints a VERDICT | 2026-09-28 | 0 | - | ✓ |
-| [#2892](https://github.com/DanielH2018/server/issues/2892) | medium | gap | cicd | Backlog render's whole-register fetch times out before its truncation warning fires | 2026-09-28 | 0 | - | ✓ |
+| [#2889](https://github.com/DanielH2018/server/issues/2889) | medium | gap | cicd | fanout_place launch stacks more than three batches on one remote host across successive runs | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
+| [#2890](https://github.com/DanielH2018/server/issues/2890) | medium | gap | - | fanout-stop lets a daniel-box batch stop on a PR URL before land.sh prints a VERDICT | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
+| [#2892](https://github.com/DanielH2018/server/issues/2892) | medium | gap | cicd | Backlog render's whole-register fetch times out before its truncation warning fires | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2901](https://github.com/DanielH2018/server/issues/2901) | medium | gap | cicd | Scope nudge-land-sh to this repo's CI reads | 2026-09-28 | 0 | - | - |
-| [#2912](https://github.com/DanielH2018/server/issues/2912) | medium | gap | backup-observability | fetch_grafana_dashboards.py reverts hand edits and live variable defaults on every re-run | 2026-09-28 | 0 | - | ✓ |
+| [#2912](https://github.com/DanielH2018/server/issues/2912) | medium | gap | backup-observability | fetch_grafana_dashboards.py reverts hand edits and live variable defaults on every re-run | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2921](https://github.com/DanielH2018/server/issues/2921) | medium | improvement | docs | Trim the 29 role CLAUDE.md files over the inject hook's character budget | 2026-09-28 | 0 | - | ✓ |
 | [#2943](https://github.com/DanielH2018/server/issues/2943) | medium | gap | security | Restore a reachability gate for the staging egress fence | 2026-09-29 | 0 | - | ✓ |
 | [#2947](https://github.com/DanielH2018/server/issues/2947) | medium | gap | cicd | Nothing notices when one of the four classes #2876 deleted gains a member again | 2026-09-29 | 0 | - | ✓ |
@@ -51,12 +51,12 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2872](https://github.com/DanielH2018/server/issues/2872) | low | improvement | container | Render a default Service from the containers_list entry when a k8s role ships none | 2026-09-28 | 0 | - | ✓ |
 | [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2888](https://github.com/DanielH2018/server/issues/2888) | low | gap | cicd | Three more roles/k8s walkers still count a retired role's __pycache__ leftover as a role | 2026-09-28 | 0 | - | - |
+| [#2888](https://github.com/DanielH2018/server/issues/2888) | low | gap | cicd | Three more roles/k8s walkers still count a retired role's __pycache__ leftover as a role | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
 | [#2893](https://github.com/DanielH2018/server/issues/2893) | low | improvement | container | flaresolverr loads media in every challenge solve, inflating the memory limit #2883 had to raise | 2026-09-28 | 0 | - | ✓ |
 | [#2897](https://github.com/DanielH2018/server/issues/2897) | low | gap | backup-observability | Patch the stale monitor-bridge and scrutiny Secret keys out of the live cluster after #2825/#2832 deploy | 2026-09-28 | 0 | - | ✓ |
-| [#2899](https://github.com/DanielH2018/server/issues/2899) | low | gap | cicd | A pihole deploy records no digest for its second instance's manifest — *no vetted remediation* | 2026-09-28 | 0 | - | - |
-| [#2902](https://github.com/DanielH2018/server/issues/2902) | low | gap | cicd | probe.py health holds no roll expectation for pihole-2 — *no vetted remediation* | 2026-09-28 | 0 | - | - |
-| [#2906](https://github.com/DanielH2018/server/issues/2906) | low | improvement | docs | Drop the deploy-tag line from the pihole and prowlarr Editing sections | 2026-09-28 | 0 | - | ✓ |
+| [#2899](https://github.com/DanielH2018/server/issues/2899) | low | gap | cicd | A pihole deploy records no digest for its second instance's manifest — *no vetted remediation* | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
+| [#2902](https://github.com/DanielH2018/server/issues/2902) | low | gap | cicd | probe.py health holds no roll expectation for pihole-2 — *no vetted remediation* | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
+| [#2906](https://github.com/DanielH2018/server/issues/2906) | low | improvement | docs | Drop the deploy-tag line from the pihole and prowlarr Editing sections | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2911](https://github.com/DanielH2018/server/issues/2911) | low | improvement | backup-observability | claude-otel holds the cluster monitoring plane its name does not mention | 2026-09-28 | 0 | - | ✓ |
 | [#2914](https://github.com/DanielH2018/server/issues/2914) | low | gap | cicd | A timed-out broad apply discards the playbook output that would name the stuck task | 2026-09-28 | 0 | - | ✓ |
 | [#2920](https://github.com/DanielH2018/server/issues/2920) | low | gap | docs | No size guard covers ansible/roles/containers/*/CLAUDE.md | 2026-09-28 | 0 | - | ✓ |
@@ -65,6 +65,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2944](https://github.com/DanielH2018/server/issues/2944) | low | improvement | cicd | Decide whether the retired staging cluster's two shared-machinery constants stay | 2026-09-29 | 0 | - | ✓ |
 | [#2945](https://github.com/DanielH2018/server/issues/2945) | low | gap | cicd | Authelia's SMTP notifier branch lost its only rehearsal with daniel-stage | 2026-09-29 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
+| [#2952](https://github.com/DanielH2018/server/issues/2952) | low | gap | cicd | Eight ansible/tests/deploy guards still walk a retired role's __pycache__ shell as a k8s role | 2026-09-29 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -115,6 +116,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
+| [#804](https://github.com/DanielH2018/server/issues/804) | refuted | Replace FlareSolverr with Byparr | Tried live on 2026-09-02 and rejected on the operator's decision to stay on FlareSolverr. The premise that Byparr is a drop-in replacement holds for the API and fails for the runtime: it accepts POST /v1 and then hangs inside InvisiblePlaywright's browser launch, spawning nothing. Prowlarr's indexer-proxy Test returned 400 after a 63s timeout twice, and during an outstanding request the pod sat at 5m CPU / 91Mi RSS with only tini and python main.py under the container -- no Firefox, no Xvfb, restartCount=0, and no log line after the request it received. Two hypotheses tested and dead: the /tmp emptyDir (removed, identical hang) and LOG_LEVEL (set to debug, output byte-for-byte unchanged, because main.py calls uvicorn.run(app, host, port) with no log_level and FastAPI(log_level=...) is not a parameter). The securityContext is exonerated rather than untested -- FlareSolverr runs a headless browser under the identical cap_drop ALL / runAsUser 1000 block with a quarter the shm. Shipped as PR #830, reverted by PR #841; live and origin/master both back on ghcr.io/flaresolverr/flaresolverr. Two measurements for anyone who revisits this despite the decision: the image is 0.87 GiB compressed and its cold pull took ~25 minutes, which blows both the role's 300s rollout timeout and the default progressDeadlineSeconds of 600, so a healthy pull reads as a failed deploy. |
 | [#2807](https://github.com/DanielH2018/server/issues/2807) | accepted | The Pi's four Docker services carry 5,374 lines of Docker platform; consider native systemd units | Operator decision 2026-09-28: keep Docker on the Pi. The independent Compose-twin comment cleanup moved to #2819. |
 | [#2863](https://github.com/DanielH2018/server/issues/2863) | refuted | fake_remux: fold the 20-minute reconcile into the daily scan; keep the mkv repair at */15 | On an empty ledger, reconcile_once (fake_remux_replace.py) makes one Sonarr queue call and plans no searches, so the 20-minute cron costs almost nothing when idle. When a grab is in flight, that cadence is what confirms it before the fake is deleted, and the shared lock and Kuma max-ages are sized from it. Folding it into the daily scan saves one cron entry and turns each replacement into a multi-day wait. |
 
@@ -122,6 +124,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
+| [#826](https://github.com/DanielH2018/server/issues/826) | refuted | gen_reference_scripts.py keys its table by bare filename, so two same-named modules merge into one row | Path keys relocate the ambiguity rather than remove it: invocation evidence comes from free text (a cron job: string, an argv literal, a shell line) that often names a bare filename with no directory, so a path-keyed generator still needs a basename-to-path resolution step — undecidable for exactly the colliding names. #838 enforces basename uniqueness instead, and separately fixed the real nesting blocker (discovery and the reference patterns were both capped at one directory level). |
 | [#2164](https://github.com/DanielH2018/server/issues/2164) | accepted | Make gitops_tick.sh's permission deterministic and collapse its duplicated classifier paragraph | Doc half landed in PR #2209; the determinism half is #2207, which the operator chose to live with (auto-mode-bridge retries the ~1-in-7 denial). |
 
 ### network

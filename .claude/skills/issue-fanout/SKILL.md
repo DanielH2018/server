@@ -137,21 +137,31 @@ The dispatcher writes the brief (issue bodies verbatim, the claim note, the firs
 the landing path or the stop-at-PR rule, and the session-health output of every host a batch
 was actually placed on) and starts a headless Opus agent as a transient user
 service in a fresh worktree on whichever host has the
-most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means neither
-host has a reservation's worth
-of headroom, or a placement would put more than three batches on one remote host: narrow the
-fan-out, do not queue. `--host daniel-box` pins a batch that must land in the same run or that
-only daniel-box can verify.
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means one of
+three things: neither host has a reservation's worth of headroom; the placement would put more
+than three batches on one remote host in this run (the ssh budget); or it would leave a host
+holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
+cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
+Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished runs first — an
+uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
+the same run or that only daniel-box can verify.
 
 Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
 batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
-<PR URL>`, `needs-input`, `no-pr`, `no-report`, or `failed` (`permission_denials=N` is
+<PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
+(`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
 text. A clean finish without one reads `needs-input` when the text names a blocker line
 (`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because no PR exists to land. A daniel-server batch reports `done <PR URL>` and stops there: land that
-PR from this session with `land.sh`. A `failed` batch keeps its worktree — `status` already
+PR from this session with `land.sh`.
+
+**`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
+that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's
+`.fanout/land<n>.log`, which `status` reads over the same ssh call. Without it the PR is open
+and nothing says it merged or deployed, so the line exits 1 and carries the PR URL to land by
+hand. A `failed` batch keeps its worktree — `status` already
 shows the last 300 bytes of `<worktree>/.fanout/stderr.log`; read the full file there for more
 before deciding what to do.
 

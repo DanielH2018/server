@@ -133,3 +133,80 @@ def test_the_download_url_names_the_pinned_revision_and_never_latest():
         fg.urllib.request.urlopen = original
     assert seen == ["https://grafana.com/api/dashboards/1860/revisions/45/download"]
     assert "latest" not in seen[0]
+
+
+# Seeding, not refreshing (#2912). The committed boards carry hand edits the script does not
+# reproduce, so a fresh fetch that differs from them must be refused rather than written. The
+# stub boards carry no query variables, so `adapt` never reaches Prometheus.
+def _board(title):
+    return {"uid": title, "templating": {"list": []}, "panels": [{"title": title}]}
+
+
+def _fetched(gnet_id, revision):
+    return _board("upstream-%d" % gnet_id)
+
+
+def _paths(outdir):
+    return {
+        name: outdir / fg.SUBDIR.get(name, "") / ("%s.json" % name)
+        for name in fg.DASHBOARDS
+    }
+
+
+def _fresh_text(name):
+    gnet_id, revision = fg.DASHBOARDS[name]
+    s, _ = fg.adapt(name, _fetched(gnet_id, revision))
+    return s + "\n"
+
+
+def test_a_board_whose_committed_form_differs_is_refused_and_left_untouched(
+    tmp_path, capsys
+):
+    paths = _paths(tmp_path)
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("hand-edited\n", encoding="utf-8")
+
+    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 1
+
+    assert {p.read_text(encoding="utf-8") for p in paths.values()} == {"hand-edited\n"}
+    err = capsys.readouterr().err
+    assert "refusing to write" in err
+    assert "cadvisor.json" in err and "--overwrite" in err
+
+
+def test_a_refusal_writes_nothing_even_for_a_missing_board(tmp_path):
+    paths = _paths(tmp_path)
+    differing = paths["cadvisor"]
+    differing.parent.mkdir(parents=True, exist_ok=True)
+    differing.write_text("hand-edited\n", encoding="utf-8")
+
+    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 1
+
+    assert not paths["node-exporter-full"].exists()
+
+
+def test_overwrite_takes_the_fetched_form_over_a_differing_board(tmp_path):
+    paths = _paths(tmp_path)
+    for path in paths.values():
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text("hand-edited\n", encoding="utf-8")
+
+    assert fg.main(["--overwrite"], fetch=_fetched, outdir=tmp_path) == 0
+
+    for name, path in paths.items():
+        assert path.read_text(encoding="utf-8") == _fresh_text(name)
+
+
+def test_a_missing_board_is_seeded_and_a_matching_one_is_not_rewritten(tmp_path):
+    paths = _paths(tmp_path)
+    matching = paths["cadvisor"]
+    matching.parent.mkdir(parents=True, exist_ok=True)
+    matching.write_text(_fresh_text("cadvisor"), encoding="utf-8")
+    matching.chmod(0o444)  # a write to the matching board would raise PermissionError
+
+    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 0
+
+    assert paths["node-exporter-full"].read_text(encoding="utf-8") == _fresh_text(
+        "node-exporter-full"
+    )

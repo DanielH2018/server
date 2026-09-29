@@ -16,8 +16,9 @@ Usage::
     fanout_place.py stop <run-id> [batch]
     fanout_place.py clean <run-id>
 
-Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
-puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
+Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a refusal from
+`fanout_lib.launch_gates` — too many batches on one remote host for its ssh budget, or too
+many live batches on one host across runs for its memory cap · 4 no host readable
 · 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
 verifies, or the account's registered signing keys could not be read.
 
@@ -26,8 +27,8 @@ a host a batch is actually placed on (its session-health read), plus one
 per batch placed there — worktree add+lock, brief write and systemd-run folded into one
 call. `--host` pins every batch to one host; leave it unset and placement reads both hosts
 and chooses per batch. Calls to the host this script itself runs on go over `bash -c`, not
-ssh, so they never count against `ufw limit ssh` — see MAX_BATCHES_PER_REMOTE_HOST below for
-the cap that keeps a placement on an actual remote host under it.
+ssh, so they never count against `ufw limit ssh` — `fanout_lib.launch_gates` holds the cap
+that keeps a placement on an actual remote host under it.
 
 Launch locks each worktree with reason `fanout-<batch>` so a merged-worktree prune cannot
 remove it while the unit still runs; `clean <run-id>` is the escape — it removes a batch's
@@ -53,6 +54,11 @@ from fanout_lib import signing as signing_mod
 from fanout_lib import status as status_mod
 from fanout_lib.brief import REQUIRED_LABEL, Issue, render_brief
 from fanout_lib.collisions import refuse_shared_files
+from fanout_lib.launch_gates import (
+    live_elsewhere,
+    over_live_batch_cap,
+    over_ssh_budget,
+)
 from lib.git import git
 from fanout_lib.placement import NoHeadroom, place
 from fanout_lib.transport import (
@@ -66,13 +72,6 @@ from fanout_lib.transport import (
 )
 
 BATCH_RE = re.compile(r"^\d+(,\d+)*$")
-# The host this script normally runs on; its launches go over `bash -c`, never ssh, so the
-# per-host ssh budget below doesn't apply to it.
-LOCAL_HOST = "daniel-box"
-# ufw limit ssh REJECTs a 6th connection to one host within 30s. Two of those five go to the
-# headroom and health reads, leaving room for at most this many batch launches — each its
-# own ssh connection — before the run risks the 6th.
-MAX_BATCHES_PER_REMOTE_HOST = 3
 # The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
 # rather than `</dev/null`; --no-python-downloads/--python match the version session-health.sh
 # itself pins so this reading is taken by the same interpreter a real session would use.
@@ -184,64 +183,11 @@ def _fetch_issues(
     return None if unlabelled else fetched
 
 
-def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
-    """Print and return True when the placement puts too many batches on one remote host."""
-    counts: dict[str, int] = {}
-    for _, host in placed:
-        counts[host] = counts.get(host, 0) + 1
-    over = False
-    for host, n in counts.items():
-        if host != LOCAL_HOST and n > MAX_BATCHES_PER_REMOTE_HOST:
-            print(
-                f"launch: {n} batches would land on {host}, more than "
-                f"{MAX_BATCHES_PER_REMOTE_HOST} fits the ssh budget there — split the "
-                "fan-out",
-                file=sys.stderr,
-            )
-            over = True
-    return over
-
-
-def _live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
-    """Print and return True when a new batch shares an issue with one still live.
-
-    `exists_check_command` guards the host a batch is placed on, which is not the same
-    question: placement is free to send a relaunch to the OTHER host, where no worktree of
-    that name exists, and a second agent then starts on issues the first is still holding.
-    The manifests are the only record that spans both hosts, and reading them costs no ssh.
-
-    The test is the issue set, not the batch id, because the id is derived from the spec as
-    typed: `--batch 1386,1345` and `--batch 1345` both miss a live `1345-1386` by name while
-    putting a second agent on issues it holds. What must not happen twice is an issue, so
-    that is what is compared.
-
-    Args:
-        batches: `_parse_batches`' mapping of batch id to the issue numbers it would take.
-        root: the manifest directory to read every run under.
-    """
-    live = manifest_mod.live_batches(root)
-    refused = False
-    for spec, issues in batches.items():
-        for run_id, b in live.values():
-            overlap = sorted(set(issues) & set(b.issues))
-            if not overlap:
-                continue
-            shared = ", ".join(f"#{n}" for n in overlap)
-            print(
-                f"launch: batch {spec} shares {shared} with batch {b.batch}, live in "
-                f"run {run_id} on {b.host}; run clean {run_id} first",
-                file=sys.stderr,
-            )
-            refused = True
-            break
-    return refused
-
-
 def cmd_launch(args, tools: Tools) -> int:
     batches = _parse_batches(args.batch)
     if batches is None:
         return 1
-    if _live_elsewhere(batches, args.manifest_root):
+    if live_elsewhere(batches, args.manifest_root):
         return 1
     fetched = _fetch_issues(tools, batches)
     if fetched is None:
@@ -275,7 +221,7 @@ def cmd_launch(args, tools: Tools) -> int:
     except NoHeadroom as exc:
         print(str(exc), file=sys.stderr)
         return 3
-    if _over_ssh_budget(placed):
+    if over_ssh_budget(placed) or over_live_batch_cap(placed, args.manifest_root):
         return 3
     # Only the hosts a batch actually landed on. Reading every host placement looked at
     # spends an ssh connection — against the 5-per-30s `ufw limit ssh` budget — on a host

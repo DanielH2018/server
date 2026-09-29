@@ -6,8 +6,9 @@ past `lib.gh.gh`'s 60s default — so every findings.py subcommand died with `gh
 timed out after 60.0 seconds`, `open` included. A session could neither file a finding nor
 read the register, and the failure looked like a GitHub outage rather than a fetch that had
 grown. `open` left this path in #2846 and searches for its one fingerprint instead
-(`gh_calls.fingerprint_match`); the docs-refresh cron behind
-`scripts/docs/reference/backlog.py` is what the override now covers.
+(`gh_calls.fingerprint_match`), and the backlog cron left it in #2892 for the three narrow
+slices `gh_calls.load_backlog_issues` names. The override is now a ceiling over fetches
+measured in seconds, kept because the register keeps growing.
 
 The kwarg is the whole fix, so it is what these assert. `_findings_fakes` records argv only, so
 these tests stub `gh_json` themselves to see the keyword.

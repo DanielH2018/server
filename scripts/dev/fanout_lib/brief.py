@@ -110,11 +110,18 @@ of your final message. A daniel-box session lands it and closes the issue.
 def _finishing(host: str) -> str:
     # The same completion condition `.claude/hooks/fanout-stop.py` and `status.py` check.
     # Only the landing host can owe a host apply, so only its brief names the heading.
-    after = (
-        "after the landing steps above, with any `MANUAL APPLY PENDING` heading above it"
-        if host == LANDS
-        else "after `gh pr create`"
-    )
+    if host == LANDS:
+        # The landing host owes a verdict as well as a PR: `gh pr create` returning says
+        # nothing about whether the PR merged and deployed (issue #2890). The hook and
+        # `status` both check for the VERDICT line, so the brief has to ask for it.
+        after = (
+            "after the landing steps above, with any `MANUAL APPLY PENDING` heading above "
+            "it. Quote `land.sh`'s `VERDICT:` line in that message as well — a PR URL with "
+            "no verdict reads as `no-verdict`, not `done`, and the Stop hook sends you back "
+            "to wait for it"
+        )
+    else:
+        after = "after `gh pr create`"
     return f"""## Finishing
 The batch is finished when your final message ends with the PR URL, {after}. If you cannot
 get there, end with one line starting `needs input:` or `failed:` that names the blocker. Any
