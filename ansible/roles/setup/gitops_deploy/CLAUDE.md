@@ -340,18 +340,13 @@ so an unbounded error evicts the remediation prose after it
 (`tests/test_gitops_deploy_failure_output.py`).
 
 A run killed at its deadline carries the same detail. `run()` re-raises the stdlib's
-`TimeoutExpired` as `deploy_failtext.py:TimedOutWithOutput`, a subclass whose `str()` appends
-a bounded tail of stdout and then of stderr — so the log line names the task that was still
-running instead of only the argv and the deadline. The partial output comes from the
-exception the stdlib already raises, which carries everything `communicate()` had read; the
-pipes are NOT re-read after the kill, because a descendant that escaped the process group
-would block that read (the reason `run()` calls `wait()` rather than `communicate()`). It is
-task-first for the same reason the failure detail is: `last_task` lifts out the last `TASK`
-header — a killed run printed no `fatal:` line for `failing_task` to key on — and
-`alert_excerpt` heads rather than tails that body, so the task reaches the Discord post and
-not only the journal
-(`tests/test_gitops_deploy_subprocess.py::test_run_timeout_error_names_the_task_that_was_still_running`,
-`tests/test_gitops_deploy_failure_output.py::test_a_timed_out_run_puts_the_running_task_in_the_discord_excerpt`).
+`TimeoutExpired` as `deploy_failtext.py:TimedOutWithOutput`, whose `str()` appends what the
+killed process had printed — the task that was still running, not just the argv and the
+deadline. That output comes from the exception the stdlib already raises; the pipes are NOT
+re-read after the kill, which would block on a descendant that escaped the process group.
+`last_task` puts the running task first (a killed run has no `fatal:` line) and
+`alert_excerpt` heads that body, so the task reaches the Discord post too
+(`tests/test_gitops_deploy_failure_output.py`).
 
 ## Traps
 
