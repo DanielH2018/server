@@ -60,13 +60,12 @@ MIN_NON_BLANK_LINES = 8
 # sandbox surprises, dashboard-parser measurements and module layout moved to
 # docs/renovate-notify-internals.md. #2991 took two more: claude_code's memory incidents and
 # slice-placement argument moved to docs/claude-code-rc-caps.md, and hypervisor's staging
-# reap, subnet census and libvirt collisions to docs/hypervisor-libvirt-internals.md.
+# reap, subnet census and libvirt collisions to docs/hypervisor-libvirt-internals.md. #2993
+# took docker_install out: the 2026-09-18 engine-upgrade incident, the pin derivations, the Go
+# runtime measurements and the uninstall behind the teardown arm moved to
+# docs/docker-engine-pins-and-runtime.md, and `## What it does` became a pointer at
+# `tasks/install.yml`.
 OVER_CEILING: dict[str, str] = {
-    "docker_install": (
-        "17522 chars on 2026-09-28: the engine hold and the teardown arm are operating rules "
-        "for the last Docker host; `## What it does` can thin to a pointer at "
-        "`tasks/install.yml`"
-    ),
     "gitops_deploy": (
         "29971 chars on 2026-09-29: `## Safety` is the path-rule table root CLAUDE.md routes "
         "to, and the contract governs a deployer that ships to production unattended; `## "
