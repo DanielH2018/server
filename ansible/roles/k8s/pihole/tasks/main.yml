@@ -109,11 +109,14 @@
   # `manifests_deferred_render` is the fourth trigger: instance 2's Deployment is rendered into
   # its own directory and is not part of `manifests_render`, so a change to deployment-2.yaml.j2
   # alone moves none of the three facts above and without this the apply that carries it would
-  # never run.
+  # never run. It fires the `pihole-2` iteration only: `when` on a looped include is evaluated
+  # per item, and instance 1's manifests did not move, so rolling it bought one needless
+  # Recreate cycle of a live resolver plus a Longhorn detach/attach (#2957). Skipping the
+  # `pihole` iteration skips nothing else — apply_instance_2.yml is included from `pihole-2`'s.
   when:
     - not k8s_no_mutate
     - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
-      or (manifests_deferred_render | default({})) is changed
+      or ((manifests_deferred_render | default({})) is changed and pihole_instance == 'pihole-2')
   loop:
     - pihole
     - pihole-2
