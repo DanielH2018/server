@@ -25,6 +25,7 @@ import pytest
 import yaml
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from _role_census import role_dirs
 
 
 SETUP_ROLES = ANSIBLE / "roles" / "setup"
@@ -53,7 +54,7 @@ KNOWN_DISPATCHERS = frozenset(
 def _dispatcher_roles():
     """Roles whose tasks/main.yml pulls in a file on a bare has_* flag."""
     found = []
-    for role_dir in sorted(SETUP_ROLES.iterdir()):
+    for role_dir in role_dirs(SETUP_ROLES):
         main = role_dir / "tasks" / "main.yml"
         if not main.is_file():
             continue

@@ -26,8 +26,12 @@ from typing import Any
 from lib import yaml_fast
 from lib.render_guard import containers_entries, entry_tags, load_yaml
 from lib.jinja_defaults import resolve
-from lib.repo_paths import ANSIBLE, REPO, ROLES
+from lib.repo_paths import ANSIBLE, FILTER_PLUGINS, REPO, ROLES
 from reference.crons import schedule_text
+
+_sys.path.insert(0, str(FILTER_PLUGINS))
+
+from k8s_autodeploy import is_leftover_dir
 
 # The one host that still runs Docker.
 PI_HOST_VARS = REPO / "ansible/inventory/host_vars/daniel-pi.yml"
@@ -78,13 +82,21 @@ def image_repository(ref: str) -> str:
 
 
 def setup_role_dirs(setup_roles: Path = SETUP_ROLES) -> list[Path]:
-    """Every setup role directory the generator writes a block for, sorted."""
+    """Every setup role directory the generator writes a block for, sorted.
+
+    `is_leftover_dir` skips a retired role's debris: the deployer's fast-forward removes the
+    role's tracked files, and a gitignored `__pycache__/` keeps its directory on disk. The
+    generator then wrote a block for a role that no longer exists in git, and the staleness
+    gate raised on its missing `CLAUDE.md` (#2964). Same predicate, same reasoning, as
+    `catalog_backup.role_dirs`.
+    """
     return sorted(
         d
         for d in setup_roles.iterdir()
         if d.is_dir()
         and not d.name.startswith(".")
         and d.name not in SETUP_ROLES_OUT_OF_SUBJECT
+        and not is_leftover_dir(str(d))
     )
 
 

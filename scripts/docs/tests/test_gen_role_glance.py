@@ -308,6 +308,19 @@ def test_the_gate_covers_the_known_setup_roles_and_pi_services():
     assert KNOWN_PI_SERVICES <= pi, sorted(KNOWN_PI_SERVICES - pi)
 
 
+def test_setup_role_dirs_drops_a_pycache_only_shell(tmp_path):
+    """A retired setup role's `__pycache__`-only directory is not a role (#2964).
+
+    Without the filter the generator wrote a block for a role that no longer exists in git,
+    and the staleness gate above raised on its missing `CLAUDE.md`.
+    """
+    (tmp_path / "retired" / "__pycache__").mkdir(parents=True)
+    (tmp_path / "retired" / "__pycache__" / "x.cpython-314.pyc").write_bytes(b"\x00")
+    (tmp_path / "real" / "tasks").mkdir(parents=True)
+    (tmp_path / "real" / "tasks" / "main.yml").write_text("---\n")
+    assert [d.name for d in g.setup_role_dirs(tmp_path)] == ["real"]
+
+
 def test_every_setup_and_pi_doc_carries_the_marker_under_the_heading():
     """#2096's verify-by: the heading, then the marker directly under it, on every doc."""
     docs = [d / "CLAUDE.md" for d in g.setup_role_dirs()] + [

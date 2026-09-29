@@ -33,6 +33,7 @@ from pathlib import Path
 
 from _doc_size import MAX_CHARS, char_count, recorded_count_problems
 from _helpers import CONTAINER_ROLES
+from _role_census import role_dirs
 
 MIN_NON_BLANK_LINES = 8
 
@@ -45,9 +46,13 @@ OVER_CEILING: dict[str, str] = {}
 
 
 def _role_dirs(roles_dir: Path = CONTAINER_ROLES) -> list[Path]:
-    return sorted(
-        d for d in roles_dir.iterdir() if d.is_dir() and not d.name.startswith(".")
-    )
+    """Every role under `roles_dir`, a dotted directory and a retired role's shell skipped.
+
+    A shell is a directory holding only a gitignored `__pycache__/` after the deployer's
+    fast-forward removed the role's tracked files; reading it as a role made this guard raise
+    `FileNotFoundError` on its missing `CLAUDE.md` (#2964).
+    """
+    return [d for d in role_dirs(roles_dir) if not d.name.startswith(".")]
 
 
 def _non_blank_lines(text: str) -> list[str]:

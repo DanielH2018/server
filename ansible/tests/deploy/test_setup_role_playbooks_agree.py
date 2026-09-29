@@ -19,6 +19,7 @@ import re
 
 from deploy_logic import setup_role_playbook, setup_role_tag
 from _helpers import REPO as _REPO
+from _role_census import role_dirs
 
 _ANSIBLE = _REPO / "ansible"
 _SETUP_ROLES_DIR = _ANSIBLE / "roles/setup"
@@ -64,7 +65,7 @@ def roles_declared_in_playbooks() -> dict[str, set[tuple[str, str]]]:
 def test_every_setup_role_routes_to_a_playbook_that_includes_it() -> None:
     declared = roles_declared_in_playbooks()
     problems = []
-    for role_dir in sorted(p.name for p in _SETUP_ROLES_DIR.iterdir() if p.is_dir()):
+    for role_dir in sorted(p.name for p in role_dirs(_SETUP_ROLES_DIR)):
         routed = setup_role_playbook(role_dir)
         if role_dir not in declared:
             if routed is not None:

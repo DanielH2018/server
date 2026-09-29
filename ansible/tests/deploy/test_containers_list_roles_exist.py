@@ -27,6 +27,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import ANSIBLE, load_yaml
+from _role_census import role_dirs
 
 
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
@@ -75,9 +76,13 @@ def test_inventory_has_entries():
 
 
 def service_roles(roles_dir: Path) -> set[str]:
-    return {
-        p.name for p in roles_dir.iterdir() if p.is_dir() and p.name not in NOT_SERVICES
-    }
+    """The Pi's services under `roles_dir`, a retired role's `__pycache__` shell skipped.
+
+    The skip is `role_dirs`'s job, not a name in `NOT_SERVICES`: the assertion below is a set
+    equality against `containers_list`, so a shell left by the deployer's fast-forward reads
+    as an undeclared Pi role and fails this guard in any long-lived checkout (#2964).
+    """
+    return {p.name for p in role_dirs(roles_dir) if p.name not in NOT_SERVICES}
 
 
 def declared_services(host_vars: Path) -> set[str]:
