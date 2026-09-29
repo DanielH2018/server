@@ -538,3 +538,13 @@ Webhook's
 [Uu]nmanaged
 [Uu]nreferenced
 [Rr]eparented
+
+# Role-doc prose moved to docs/ pages (#2995): homepage, volume-revert, renovate_agent.
+# Identifiers stay code spans; these are the words Vale reads as prose.
+gethomepage
+gethomepage's
+[Ww]idget's
+Emby's
+[Dd]eadman
+[Uu]nlanded
+[Ss]lugified

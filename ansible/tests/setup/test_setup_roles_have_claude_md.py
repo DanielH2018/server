@@ -64,7 +64,10 @@ MIN_NON_BLANK_LINES = 8
 # took docker_install out: the 2026-09-18 engine-upgrade incident, the pin derivations, the Go
 # runtime measurements and the uninstall behind the teardown arm moved to
 # docs/docker-engine-pins-and-runtime.md, and `## What it does` became a pointer at
-# `tasks/install.yml`.
+# `tasks/install.yml`. #2995 took renovate_agent out: the four bounds and the worktree rules,
+# the digest's before/after census, the alive tile's exit codes and token plumbing, the wrapper's
+# throwaway-config harness and the denylist marker's history moved to
+# docs/renovate-agent-bounds-and-digest.md, leaving the arming procedure and the contract.
 OVER_CEILING: dict[str, str] = {
     "gitops_deploy": (
         "29971 chars on 2026-09-29: `## Safety` is the path-rule table root CLAUDE.md routes "
@@ -87,11 +90,6 @@ OVER_CEILING: dict[str, str] = {
         "28728 chars on 2026-09-28: the container-recovery contract governs a cron that "
         "restarts what it finds dead; `## Notable` carries the Pi's measured incidents and is "
         "the trim"
-    ),
-    "renovate_agent": (
-        "18913 chars on 2026-09-28: the arming procedure and the merge-and-deploy contract "
-        "govern an agent that merges unattended; `## The digest measures effect, not "
-        "completion` can move to docs/"
     ),
 }
 
