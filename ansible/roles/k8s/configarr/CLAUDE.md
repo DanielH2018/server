@@ -1,17 +1,15 @@
 # configarr — sole Sonarr/Radarr guide-syncer
 
 The homelab's only quality-profile/custom-format syncer, using
-[Configarr](https://configarr.de) (a recyclarr-compatible syncer that ALSO supports local
-custom-format definitions — recyclarr is TRaSH-guide-only). It absorbed the retired
-`recyclarr` role's two guide-backed profiles on 2026-07-17, on top of its original job
-guarding Sonarr's bespoke "Anime" profile. See repo-root `CLAUDE.md` for shared conventions.
+[Configarr](https://configarr.de) — a recyclarr-compatible syncer that ALSO supports local
+custom-format definitions, where recyclarr is TRaSH-guide-only. It holds the two guide-backed
+profiles the retired `recyclarr` role synced, plus Sonarr's "Anime" profile.
 
 ## Why the Anime local CFs exist
-Mushoku Tensei S2 was grabbed from `[NTRX] … (BD Remux 1080p AVC …)` — a release whose title
-advertised an **AVC Blu-ray remux** but which actually ships a **long-GOP HEVC 10-bit x265
-re-encode** (250-frame GOP). That caused Jellyfin buffering + very slow seeks (2026-07-16).
-Sonarr parses quality/codec from the release **title** at grab time, so no codec custom format
-can catch a title that lies — the only pre-grab lever is **release-group reputation**.
+Sonarr parses quality and codec from the release **title** at grab time, so no codec custom
+format can catch a title that lies, and the only pre-grab lever is **release-group
+reputation**. A `[NTRX] … (BD Remux 1080p AVC …)` grab in 2026-07 shipped a long-GOP HEVC
+x265 re-encode instead, which made Jellyfin buffer and seek slowly.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -22,26 +20,24 @@ can catch a title that lies — the only pre-grab lever is **release-group reput
 - **Auto-deploy:** eligible (`k8s_autodeploy: true`)
 <!-- /generated_from -->
 
-- **Host: daniel-box (k8s CronJob), since 2026-08-08 — slice 4, B7a.** This role renders
-  `templates/config/config.yml.j2` and copies `files/configarr_status.py`. Edit configarr
-  config HERE; deploy with `--tags configarr` from daniel-box.
-- **No web UI**, no Authelia · targets the cluster sonarr/radarr
+- **Host: daniel-box (k8s CronJob).** This role renders `templates/config/config.yml.j2` and
+  copies `files/configarr_status.py`. Edit the config HERE; deploy with `--tags configarr`
+  from daniel-box.
+- **No web UI** or Authelia; it targets the cluster sonarr/radarr
 - **One-shot (ephemeral):** a nightly k8s CronJob, plus a `configarr-deploy-gate` Job the
   deploy creates from it (via `k8s/cronjob-gate`) so a config change syncs immediately. That
   gate proves the new image RUNS — a container that never starts fails the deploy; a sync that
-  runs and fails is reported and the deploy continues, deliberately, because failing over a
-  transient *arr outage is what the retired wrapper avoided. No healthcheck / AutoKuma — a batch
+  runs and fails is reported and the deploy continues, deliberately: a transient *arr outage
+  must not fail the deploy. No healthcheck / AutoKuma — a batch
   job, not a service; its health signal is a daniel-box host cron (`/opt/configarr-health`)
-  that reads the last Job's outcome via `configarr_status.py` (still owned + tested here) and
-  pushes the "Configarr Sync" Kuma monitor. The health reader counts the gate's own Job like any
-  other finished run: unlike `pi-peer-backup` (whose gate run explicitly does NOT count toward
-  its dead-man monitor), a `configarr-deploy-gate` run genuinely performs the reconcile, so
-  counting it is correct rather than a shared-role inconsistency — see
-  `ansible/roles/k8s/pi-peer-backup/CLAUDE.md` for the other side of this choice.
+  that reads the last Job's outcome via `configarr_status.py` and pushes the "Configarr Sync"
+  Kuma monitor. The health reader counts the gate's own Job like any other finished run,
+  because that run genuinely performs the reconcile — `pi-peer-backup`'s gate run does not
+  count toward its dead-man monitor, and that role's CLAUDE.md has the other side of the choice.
 
 ## Scope — what configarr manages
-`delete_unmanaged_custom_formats` is left **OFF** everywhere, so Configarr never deletes CFs it
-didn't create.
+`delete_unmanaged_custom_formats` is **OFF** everywhere: Configarr never deletes a CF it did
+not create.
 
 - **Sonarr `WEB-1080p` profile** — guide-backed, via recyclarr `include:` templates
   (`sonarr-v4-quality-profile-web-1080p` / `sonarr-v4-custom-formats-web-1080p`).
@@ -60,54 +56,44 @@ didn't create.
 
   The two English-sub CFs are **positive-only** by design: with `minFormatScore=0` a negative
   score would reject a subs-less release outright, breaking the intended "grab raw when it's the
-  only option, then let Bazarr/Whisper add subs" fallback. `delete_unmanaged_custom_formats` OFF
-  means Configarr never deletes/alters the 52 bespoke CFs or their scores — it only reconciles the
-  four local CFs above.
+  only option, then let Bazarr/Whisper add subs" fallback. Configarr reconciles the four local
+  CFs above and nothing else — the 52 bespoke CFs and their scores are untouched.
 
-  **`cutoffFormatScore` raised 0 → 400 (2026-07-17, set in Sonarr's DB — NOT Configarr).** Makes a
-  raw that slips in auto-upgrade to a subbed release: a raw loses the +300/+100 English-sub bonus so
-  it lands in the low hundreds (~305), staying below the 400 cutoff and thus upgrade-eligible until
-  Sonarr grabs a higher-scoring release. **The "clears 400" guarantee holds only for the +300
-  `Anime English-Sub Groups` path** — a listed-group sub lands ≥400 (e.g. an Erai-raws grab scores
-  705). A subbed release that trips ONLY the milder +100 `Anime Multi-Sub / Dual-Audio (title)` CF
-  (from a group NOT in the +300 list, e.g. `[Breeze] …[multisub]`) scores ~105 and stays
-  *permanently* upgrade-eligible. That's intended, not a bug: cutoff stays 400 precisely so it keeps
-  searching and upgrades to a listed-group sub when one appears. Accepted trade-off (2026-07-18
-  review): ongoing RSS/search churn for such an episode, plus a hard-delete on each upgrade (Sonarr's
-  recycle bin is off — no undo). No existing file re-grabs (on 2026-07-18 every on-disk Anime file scored
-  506 or 705, none in the 100-399 gap). Blunt total-score lever, reversible via the API; the refreshed
-  `files/baseline/anime-profile.json` snapshot is its only git record. A full read-only snapshot of the
-  current Anime profile + CF scores lives in `files/baseline/` (documentation; not applied). The
-  live CF definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2).
+  **`cutoffFormatScore` is 400, set in Sonarr's DB — NOT Configarr (2026-07-17).** A raw grab
+  loses the +300/+100 English-sub bonus, so it scores in the low hundreds, stays under the
+  cutoff and keeps upgrading until Sonarr finds a subbed release. **Only the +300
+  `Anime English-Sub Groups` path is guaranteed to clear 400** — a listed-group sub lands ≥400,
+  and a release that trips only the milder +100 title CF scores ~105 and stays *permanently*
+  upgrade-eligible. That is intended: the cutoff stays 400 so such an episode keeps searching.
+  The accepted cost (2026-07-18 review) is ongoing RSS/search churn for it plus a hard delete
+  on each upgrade — Sonarr's recycle bin is off, so an upgrade has no undo. The live CF
+  definitions stay in Sonarr's DB (on its Longhorn PVC, backed up to B2), and
+  `files/baseline/anime-profile.json` is a read-only snapshot of the Anime profile and its CF
+  scores — this repo's only git record of them, documentation rather than something applied.
 
-**Accepted trade-off from the recyclarr port:** `include:`'s `reset_unmatched_scores` behavior
-made Configarr authoritative for scores *inside the guide profiles it syncs* — on cutover it
-reset 3 Radarr CFs from a stray `-10000` to `0` that were unmanaged leftovers from recyclarr's
-old config. That's intentional: the guide profiles are the source of truth now, not whatever
-scores happened to accumulate in Sonarr/Radarr's DB. This only applies within the `WEB-1080p` /
-`HD Bluray + WEB` profiles — it does not touch the bespoke Anime scheme (`delete_unmanaged` stays
-OFF there too).
+**Accepted trade-off from the recyclarr port:** `include:`'s `reset_unmatched_scores` makes
+Configarr authoritative for scores *inside the guide profiles it syncs*, which is why the
+cutover reset 3 Radarr CFs from a stray `-10000` to `0`. The guide profiles are the source of
+truth now, and this reaches only `WEB-1080p` and `HD Bluray + WEB` — never the bespoke Anime
+scheme.
 
-**To extend the Anime defense:** add release groups to the `^(NTRX)$` alternation (or a new local
-CF) in `templates/config/config.yml.j2`. To have Configarr own MORE of the Anime profile, add a
-`quality_profiles` block for it — but that makes Configarr authoritative (UI edits get reverted),
-so weigh it against the bespoke scheme first.
-
-## Refreshing the Anime baseline snapshot
-```bash
-uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" --json \
-  | jq '.[]|select(.name=="Anime")' > ansible/roles/k8s/configarr/files/baseline/anime-profile.json
-```
+**To extend the Anime defense:** add release groups to the `^(NTRX)$` alternation, or a new
+local CF, in `templates/config/config.yml.j2`. A `quality_profiles` block for the Anime
+profile would make Configarr authoritative over it and revert UI edits, so weigh that against
+the bespoke scheme first.
 
 ## Editing
 - Sync config: `templates/config/config.yml.j2`
-- Health evaluator: `files/configarr_status.py` (pure exit-code/output verdict logic,
-  unit-tested in `tests/test_configarr_status.py`) — copied by `roles/k8s/configarr` into
-  `/opt/configarr-health` on daniel-box, where a cron reads the last Job and pushes Kuma.
-  (Its Docker-era compose wrapper `files/configarr_sync.py` was deleted 2026-08-14, with the
-  host residue it wrote to — `/opt/configarr` and `/var/lib/configarr` — removed 2026-08-09.)
+- Refresh the Anime baseline snapshot:
+  ```bash
+  uv run python scripts/diagnostics/probe.py arr sonarr "/api/v3/qualityprofile" --json \
+    | jq '.[]|select(.name=="Anime")' > ansible/roles/k8s/configarr/files/baseline/anime-profile.json
+  ```
+- Health evaluator: `files/configarr_status.py` (exit-code/output verdict logic, tested in
+  `tests/test_configarr_status.py`) — copied into `/opt/configarr-health` on
+  daniel-box, where a cron reads the last Job and pushes Kuma.
 - Deploy (from daniel-box): `./scripts/deploy.sh --tags "configarr"` —
   the k8s role also runs a one-off `configarr-deploy-gate` Job so the edit syncs immediately.
-- Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` (or the latest
-  `configarr-…` CronJob pod) — a healthy run lists the managed CFs and reports no errors.
+- Verify a sync: `kubectl -n homelab logs job/configarr-deploy-gate` — a healthy run lists
+  the managed CFs and reports no errors.
 - Unit tests: `uv run pytest ansible/roles/k8s/configarr/tests`.

@@ -328,34 +328,15 @@ it is the operator's override, not a per-entry clear. The page lists the entries
 button and names them again in the reply, because after the Clear nothing records them
 (`deploy_ui_writes.hold_cleared_message`, #2453).
 
-## A failed run's error string
-
-`run()` raises a `RuntimeError` carrying the argv, the exit code, then a bounded slice of
-**stdout followed by stderr** — stdout is where `ansible-playbook` writes the failing `TASK`,
-the `fatal:` line and the `PLAY RECAP`. `_failure_detail` puts the last un-ignored
-`fatal:`/`failed:` task first, drops profile_tasks' timing table, and spends the rest of
-`RUN_ERROR_STDOUT_CHARS` on the tail. The Discord posts trim through `_alert_excerpt`
-(`ALERT_EXCERPT_CHARS`, 700) because `host_lib.discord_post` cuts at 1900 keeping the HEAD,
-so an unbounded error evicts the remediation prose after it
-(`tests/test_gitops_deploy_failure_output.py`).
-
-A run killed at its deadline carries the same detail. `run()` re-raises the stdlib's
-`TimeoutExpired` as `deploy_failtext.py:TimedOutWithOutput`, whose `str()` appends what the
-killed process had printed — the task that was still running, not just the argv and the
-deadline. That output comes from the exception the stdlib already raises; the pipes are NOT
-re-read after the kill, which would block on a descendant that escaped the process group.
-`last_task` puts the running task first (a killed run has no `fatal:` line) and
-`alert_excerpt` heads that body, so the task reaches the Discord post too
-(`tests/test_gitops_deploy_failure_output.py`).
-
 ## Traps
 
-- **Do not wrap `initial_setup.yml --tags gitops_deploy` in `flock
-  /var/lock/server-git-tree.lock`.** The handler's own run waits 180 s on that lock, deploys
-  nothing, and reports success (`SuccessExitStatus=75`). The record page has the trap in full.
-- **Moving a config source changes which remediation the alert prescribes.** `config.env`
-  renders only from `initial_setup.yml --tags gitops_deploy`, so check which `_ACTIVE_*` regex
-  a moved value's new path matches before moving it. The record page has the trap in full.
+Three live in `docs/gitops-pipeline.md` rather than here, each in a section of its own: what a
+failed run's error string carries and how the two Discord caps bound it (*A failed run's error
+string*), why wrapping this role's own apply in the shared tree lock self-deadlocks, and why
+moving a config source changes which remediation the alert prescribes. Read those before
+editing an alert or moving a config value. The fourth has no docs home, because it is a
+standing decision rather than an incident:
+
 - **`restore_sha=origin[:8]` is a fixed slice; `git rev-parse --short=8` is a minimum
   width.** They diverge only when 8 hex chars are ambiguous in this repo's history, and then
   `k8s/volume-revert`'s no-snapshot assert fires before the scale-down — the safe failure.

@@ -55,7 +55,8 @@ MIN_NON_BLANK_LINES = 8
 # justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
 # and the section to move out next. A doc that grows past its recorded count fails (#2679),
 # so the list shrinks rather than settling. Recorded 2026-09-28 when the unit became
-# characters (#2826); trimming them is follow-on work, gitops_deploy's `## Safety` first.
+# characters (#2826); #2921 and #2982 started the trim on gitops_deploy and initial_setup,
+# and each reason names the section that goes next.
 OVER_CEILING: dict[str, str] = {
     "claude_code": (
         "17338 chars on 2026-09-28: the two Remote Control modes and the `user.slice` fleet "
@@ -67,9 +68,10 @@ OVER_CEILING: dict[str, str] = {
         "`tasks/install.yml`"
     ),
     "gitops_deploy": (
-        "31672 chars on 2026-09-28: `## Safety` is the path-rule table root CLAUDE.md routes "
+        "29971 chars on 2026-09-29: `## Safety` is the path-rule table root CLAUDE.md routes "
         "to, and the contract governs a deployer that ships to production unattended; `## "
-        "Traps` and the error-string ledger move to docs/gitops-pipeline.md next"
+        "Traps` and the error-string ledger moved to docs/gitops-pipeline.md (#2921), and "
+        "`## Safety`'s per-arm narration is the next thing to thin against that page"
     ),
     "hypervisor": (
         "15176 chars on 2026-09-29: the etcd restore drill's guest lifecycle and the reap of "
@@ -79,10 +81,11 @@ OVER_CEILING: dict[str, str] = {
         "docs/archive/staging-cluster.md next"
     ),
     "initial_setup": (
-        "32177 chars on 2026-09-29: the granular-tag list and the two autonomous-role "
-        "contracts are operating rules for the setup plane, and #2975/#2977 added two more — "
-        "the capability-flag rule for a hardware gate, and UFW's second sysctl file "
-        "overwriting this role's; `## What it does` can thin to a pointer at `tasks/main.yml`"
+        "28054 chars on 2026-09-29: the granular-tag list and the two autonomous-role "
+        "contracts are operating rules for the setup plane, as are the capability-flag rule "
+        "for a hardware gate and UFW's second sysctl file overwriting this role's; `## What "
+        "it does` became a pointer at `tasks/` carrying only its traps (#2982), and "
+        "`## Notable` is the next trim"
     ),
     "k3s": (
         "21391 chars on 2026-09-28: the crons' autonomous-role contract and the layout map "

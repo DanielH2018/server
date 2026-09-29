@@ -1324,9 +1324,15 @@ recap plus twenty timing rows filled the whole window (issue #907). stderr, and 
 no `fatal:` line in it, still get `_tail` — what ansible prints last is the diagnostic part
 there, and a head slice would pass every short-output test and carry nothing on a real run.
 
-A run killed by `BROAD_DEPLOY_TIMEOUT_S` still carries nothing. `run()` re-raises
-`TimeoutExpired` without reading the pipes, so the 2026-09-01 17:47 timeout logged only the
-argv and the 1800 s. That gap is filed as #2914.
+A run killed by `BROAD_DEPLOY_TIMEOUT_S` carries the same detail. It carried nothing until
+#2914: `run()` re-raised `TimeoutExpired` without reading the pipes, so the 2026-09-01 17:47
+timeout logged only the argv and the 1800 s. `run()` now re-raises it as
+`deploy_failtext.py:TimedOutWithOutput`, whose `str()` appends what the killed process had
+printed — the task that was still running. That output comes from the exception the stdlib
+already raises; the pipes are NOT re-read after the kill, which would block on a descendant
+that escaped the process group. `last_task` puts the running task first, since a killed run
+has no `fatal:` line, and `alert_excerpt` heads that body, so the task reaches the Discord
+post too (`tests/test_gitops_deploy_failure_output.py`).
 
 ### The deployer reads a fact cache of its own
 
