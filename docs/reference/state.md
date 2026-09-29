@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/state.py
-generated_at: 2026-09-29 06:17 UTC
-generated_sha: a3360b904
+generated_at: 2026-09-29 18:17 UTC
+generated_sha: 6155ea183
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,10 +19,10 @@ generated_sha: a3360b904
 
 | Loop | Last run | Age | Cadence | Status | Last outcome |
 |---|---|---|---|---|---|
-| gitops-deploy | 2026-09-29T06:09:30+0000 | 8m | 10m | ok | ticked, no hold |
-| renovate-agent | 2026-09-28T11:23:11+0000 | 18h54m | 1d | ok | session completed |
-| renovate-notify | 2026-09-28T22:30:26+0000 | 7h47m | 1d | ok | notified |
-| docs-refresh | 2026-09-28T18:18:00+0000 | 11h59m | 12h | ok | generators: ok |
-| secret-rotate | 2026-09-29T02:00:06+0000 | 4h17m | 7d | ok | last touched by: Retire the daniel-stage guest and reclaim its 8 GiB and 100 GB disk |
-| longhorn-restore-drill | 2026-09-29T04:10:47+0000 | 2h6m | 1d | ok | PVC restore proven |
-| etcd-restore-drill | 2026-09-28T10:20:04+0000 | 19h57m | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1790563503.zip) |
+| gitops-deploy | 2026-09-29T18:08:30+0000 | 9m | 10m | ok | ticked, no hold |
+| renovate-agent | 2026-09-29T11:09:44+0000 | 7h7m | 1d | ok | session completed |
+| renovate-notify | 2026-09-29T13:04:39+0000 | 5h12m | 1d | ok | notified |
+| docs-refresh | 2026-09-29T06:18:00+0000 | 11h59m | 12h | ok | generators: ok |
+| secret-rotate | 2026-09-29T02:00:06+0000 | 16h17m | 7d | ok | last touched by: Retire the daniel-stage guest and reclaim its 8 GiB and 100 GB disk |
+| longhorn-restore-drill | 2026-09-29T04:10:47+0000 | 14h6m | 1d | ok | PVC restore proven |
+| etcd-restore-drill | 2026-09-28T10:20:04+0000 | 1d7h | 7d | ok | list-only restore proven (snapshot offbox-daniel-box-1790563503.zip) |
