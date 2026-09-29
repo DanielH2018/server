@@ -22,9 +22,9 @@ Run: uv run pytest ansible/tests/k8s/test_script_configmaps_apply_server_side.py
 
 import pytest
 from lib import yaml_fast
-from _helpers import REPO
+from _helpers import K8S_ROLES
+from _role_census import role_dirs
 
-K8S = REPO / "ansible" / "roles" / "k8s"
 TASK_NAME = "Apply the script ConfigMap"
 ANNOTATION_CAP = 262144
 
@@ -61,7 +61,7 @@ def _roles_with_script_configmaps():
     """Every k8s role whose task files carry the apply task — derived, not listed."""
     return [
         role.name
-        for role in sorted(K8S.iterdir())
+        for role in role_dirs(K8S_ROLES)
         if (role / "tasks").is_dir() and _role_apply_tasks(role)
     ]
 
@@ -80,7 +80,7 @@ def test_the_derivation_finds_the_known_roles():
 
 @pytest.mark.parametrize("role", ROLES)
 def test_the_script_configmap_is_applied_server_side(role):
-    matches = _role_apply_tasks(K8S / role)
+    matches = _role_apply_tasks(K8S_ROLES / role)
     assert matches, f"{role}: expected a {TASK_NAME!r} task, found none"
     for task in matches:
         cmd = _apply_cmd(task)
@@ -99,7 +99,7 @@ def test_monitor_bridge_still_needs_it():
     # A JSON-escaped copy of the source lands in the annotation, so the raw byte count is a
     # lower bound on what client-side apply would store. Pin that it is within a factor of the
     # cap — if this ever fails, the source shrank and the comment in tasks/main.yml is stale.
-    files = K8S / "monitor-bridge" / "files"
+    files = K8S_ROLES / "monitor-bridge" / "files"
     # `rglob`: the modules are packages under files/, and a one-level glob summed check.py
     # alone — a seventh census that stopped seeing its subject on a move, caught here only
     # because the sum then fell under the cap.

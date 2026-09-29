@@ -26,12 +26,13 @@ from functools import cache
 import ast
 
 from _helpers import (
-    K8S_ROLES as K8S,
+    K8S_ROLES,
     import_bindings,
     imported_module_ids,
     module_of,
     python_modules,
 )
+from _role_census import role_dirs
 
 
 @cache
@@ -39,7 +40,7 @@ def _roles_with_files():
     """Role name -> {module id: path} for every k8s role that ships Python under files/."""
     return {
         role.name: python_modules(role / "files")
-        for role in sorted(K8S.iterdir())
+        for role in role_dirs(K8S_ROLES)
         if (role / "files").is_dir()
     }
 
@@ -61,7 +62,7 @@ def _consumer_roots():
                 if imported_module_ids(tree, foreign):
                     roots |= {name, other}
                     break
-    return [K8S / name / "files" for name in sorted(roots)]
+    return [K8S_ROLES / name / "files" for name in sorted(roots)]
 
 
 def _suite_files():
