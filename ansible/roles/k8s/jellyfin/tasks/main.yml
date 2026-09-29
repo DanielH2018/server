@@ -89,9 +89,8 @@
   changed_when: true
   # `k8s_no_mutate`, not `ansible_check_mode`: it covers `--check` AND `-e k8s_dry_run=true`,
   # and it is the fact ansible/tests/deploy/test_k8s_dry_run.py looks for. A role that writes
-  # to the cluster from its own tasks either carries this guard or joins
-  # k8s_dry_run_unsupported — and joining that list would make a jellyfin dry run refuse
-  # outright, which is a much worse trade than skipping one idempotent patch.
+  # to the cluster from its own tasks carries this guard; skipping one idempotent patch is
+  # the whole cost.
   when:
     - not (k8s_no_mutate | bool)
     # `| string` on the right is load-bearing. jellyfin_k8s_snapshot_max_size is a whole-string

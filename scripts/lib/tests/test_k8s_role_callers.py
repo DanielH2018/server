@@ -46,25 +46,6 @@ def test_the_include_role_form_resolves(callers):
     assert callers["arr-notification"] == {"radarr", "sonarr"}
 
 
-def test_a_sibling_import_tasks_resolves_and_an_own_file_does_not(tmp_path):
-    """`import_tasks: {{ role_path }}/../<x>/tasks/...` is a real edge; an import of the role's
-    own task file is not. No live role uses the path form since #2813 folded game-stats-lib
-    into game-stats, so a walk that lost it would otherwise go unnoticed."""
-    roles = tmp_path / "ansible" / "roles" / "k8s"
-    for role, body in {
-        "lib": "- name: Stage\n  ansible.builtin.debug:\n",
-        "game": (
-            "- name: Stage the shared module\n"
-            '  ansible.builtin.import_tasks: "{{ role_path }}/../lib/tasks/main.yml"\n'
-            "- name: Stage its own half\n"
-            "  ansible.builtin.import_tasks: own.yml\n"
-        ),
-    }.items():
-        (roles / role / "tasks").mkdir(parents=True)
-        (roles / role / "tasks" / "main.yml").write_text(body)
-    assert role_callers(tmp_path) == {"lib": {"game"}}
-
-
 def test_a_service_role_is_not_a_callee(callers):
     """The reject half: a walk matching any `k8s/` string would call sonarr a helper."""
     assert "sonarr" not in callers

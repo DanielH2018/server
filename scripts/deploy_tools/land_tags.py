@@ -52,7 +52,6 @@ sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 from deploy_logic import (
     broad_remediation,
-    expand_build_couplings,
     k8s_remediation,
     services_from_changed_paths,
     setup_role_playbook,
@@ -219,7 +218,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
 def derived_tags(files, declared: set[str] | None = None) -> set[str]:
     """The tags this PR's own file list maps to by path, before any shared-role expansion."""
     declared = declared_tags() if declared is None else declared
-    return expand_build_couplings({t for p in files if (t := tag_for(p, declared))})
+    return {t for p in files if (t := tag_for(p, declared))}
 
 
 def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set[str]]:
@@ -585,7 +584,7 @@ def main(
     # The callers of what `--plane` stopped naming, as `classify` adds them.
     if source == DeriveSource.PR:
         reached = shared_caller_tags(paths).values()
-        tags = sorted(expand_build_couplings(set(tags).union(*reached)))
+        tags = sorted(set(tags).union(*reached))
     print(f"{source} {','.join(tags)}")
     return 0
 

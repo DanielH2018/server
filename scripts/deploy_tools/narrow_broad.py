@@ -446,7 +446,7 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
     rotated secret reaches a service only when that service renders again, so narrowing a
     range that carries one would leave every service outside the tag list on the old value.
     """
-    from deploy_logic import expand_build_couplings, services_from_changed_paths
+    from deploy_logic import services_from_changed_paths
 
     cs = services_from_changed_paths(paths)
     if cs.broad_manual:
@@ -459,7 +459,7 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
         raise CannotNarrow(
             f"structural change in {sorted(cs.tasks | cs.meta)}, which no tag captures"
         )
-    roles = expand_build_couplings(cs.k8s) | cs.services
+    roles = cs.k8s | cs.services
     # A range that RETIRES a role still lists every path it owned as changed, and a retired
     # role has no entry and no caller — the shape `_role_tags` refuses (#2879).
     for role in sorted(roles):

@@ -274,8 +274,8 @@ def test_the_real_classifier_derives_a_tag_from_a_real_path(land_run):
 
     The fakes replace all five classifiers with constant lambdas, so no other pipeline test
     runs real tag derivation -- the answer is whatever `Fakes.derived` says. This one hands
-    `land.main` a real `Classifier` and a real repo path, so `role_for`, the containers_list
-    lookup and `expand_build_couplings` all actually run.
+    `land.main` a real `Classifier` and a real repo path, so `role_for` and the containers_list
+    lookup both actually run.
 
     `pull_ref_rc=1` makes `pr_range` fail to read the PR's own range, which is what keeps
     `quiet_paths` from shelling out to git: with no range it returns immediately, and every

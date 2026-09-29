@@ -46,11 +46,9 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from lib import yaml_fast
 from lib.git import git, git_stdout
 
 from lib.render_guard import (
-    ALL_VARS,
     HOST_VARS,
     REPO,
     containers_entries,
@@ -207,11 +205,6 @@ def split_shared_roles(
     return sorted(tags & declared), sorted(tags - declared)
 
 
-def dry_run_unsupported(all_vars: Path = ALL_VARS) -> set[str]:
-    loaded = yaml_fast.safe_load(all_vars.read_text()) or {}
-    return set(loaded.get("k8s_dry_run_unsupported") or [])
-
-
 def unknown_tags(
     tags: list[str], host_vars: Path = HOST_VARS, at: str = ""
 ) -> list[str]:
@@ -266,10 +259,9 @@ def _cmd_list(_args: argparse.Namespace) -> int:
 def _cmd_describe(_args: argparse.Namespace) -> int:
     """Human-facing view of `list`'s flat output.
 
-    Grouped by host/platform, dry-run-unsupported services flagged. Does not touch `list`'s own
-    shape — that stays pinned flat and sorted.
+    Grouped by host/platform. Does not touch `list`'s own shape — that stays pinned flat and
+    sorted.
     """
-    unsupported = dry_run_unsupported()
     records = service_records()
     hosts = sorted({host for host, _platform, _tag in records})
     for host in hosts:
@@ -280,8 +272,7 @@ def _cmd_describe(_args: argparse.Namespace) -> int:
         for platform in sorted(by_platform):
             print(f"{host} ({platform}):")
             for tag in sorted(set(by_platform[platform])):
-                flag = "  [dry-run: unsupported]" if tag in unsupported else ""
-                print(f"  {tag}{flag}")
+                print(f"  {tag}")
     print(f"block tags: {', '.join(sorted(BLOCK_TAGS))}")
     print(f"reserved: {', '.join(sorted(RESERVED_TAGS))}")
     return 0
@@ -296,17 +287,11 @@ def _load_deploy_logic():
     """
     from deploy_logic import (
         broad_remediation,
-        expand_build_couplings,
         k8s_remediation,
         services_from_changed_paths,
     )
 
-    return (
-        services_from_changed_paths,
-        broad_remediation,
-        expand_build_couplings,
-        k8s_remediation,
-    )
+    return services_from_changed_paths, broad_remediation, k8s_remediation
 
 
 def _git_diff_paths(ref: str, cwd: Path = REPO) -> list[str]:
@@ -343,7 +328,7 @@ def _cmd_blockers(args: argparse.Namespace) -> int:
     # the cross-directory import they are kept clear of.
     from land_changes import changes_for
 
-    _, broad_remediation, _, _ = _load_deploy_logic()
+    _, broad_remediation, _ = _load_deploy_logic()
     try:
         paths = _incoming_paths(args.ref)
     except subprocess.CalledProcessError as exc:
@@ -427,7 +412,6 @@ def changed(ref: str, cwd: Path = REPO) -> int:
     (
         services_from_changed_paths,
         broad_remediation,
-        expand_build_couplings,
         k8s_remediation,
     ) = _load_deploy_logic()
     # Calls the mapper directly, NOT through the `land_changes.changes_for` the other five
@@ -483,8 +467,7 @@ def changed(ref: str, cwd: Path = REPO) -> int:
             file=sys.stderr,
         )
 
-    # A build role whose workload lives in a different role must not deploy alone.
-    tags, shared = split_shared_roles(expand_build_couplings(cs.k8s) | cs.services)
+    tags, shared = split_shared_roles(cs.k8s | cs.services)
     if shared:
         # Emitting these as tags is what PR #617 did, and deploy.sh then refuses the whole
         # list (exit 2) — so the shared roles leave the tag list and become an instruction

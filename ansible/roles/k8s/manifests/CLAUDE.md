@@ -268,9 +268,10 @@ modules) on `not k8s_dry_run | bool`. Without that guard, an hourly dry run woul
 origin/master's host half ahead of its landing. `render_records_enabled` switches it off.
 
 Every stamped service can be dry-run since #2588. Each role that includes this one guards its
-own cluster writes on `k8s_no_mutate`, so `k8s_dry_run_unsupported` is empty. Its last entry,
-`n8n-images`, folded into n8n (#2813). n8n's image-checksum annotation reads the registry digest a deploy
-would stamp, where it used to render `unstaged` under a dry run.
+own cluster writes on `k8s_no_mutate`, so no role needs a dry run refused on its behalf: the
+`k8s_dry_run_unsupported` list and `deploy.yml`'s assert against it were deleted once empty
+(#2876), and `ansible/tests/deploy/test_k8s_dry_run.py` now holds that guard in their place. n8n's image-checksum annotation reads the registry digest a
+deploy would stamp, where it used to render `unstaged` under a dry run.
 
 `ansible/roles/k8s/manifests/tasks/release_stamp.yml:DECIDED: this digest names the bytes`
 carries the same conclusion at the line that writes the digest.

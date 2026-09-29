@@ -53,9 +53,8 @@ def test_the_primary_fallback_carries_the_same_k8s_only_subset(landing):
 
 
 def test_a_landing_that_proved_no_platform_sends_no_restriction(landing):
-    """REJECTING half: the flag is absent when `classify` proved nothing, so a tag
-    `expand_build_couplings` added -- or one whose paths span both role trees (#2730) -- keeps
-    reaching every host that declares it."""
+    """REJECTING half: the flag is absent when `classify` proved nothing, so a tag whose
+    paths span both role trees (#2730) keeps reaching every host that declares it."""
     ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at=None))
     ln.resolved_tags = ["alloy"]
     assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0

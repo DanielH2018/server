@@ -14,10 +14,9 @@ that tag keeps routing to both hosts. Narrowing host routing is the dangerous di
 issue #929 was a tag that reached no host while land.sh read `settled` and the Pi ran the old
 container -- so this answers only for a tag whose whole path set sits under one tree.
 
-A BUILD-COUPLED TAG IS NEVER IN HERE, because this reads paths rather than `derived_tags`'
-output: `expand_build_couplings` adds a tag no path named, and nothing proves which platform
-that one belongs to. `land_lib/classify.py` records the caller expansion before the same
-widening, for the same reason.
+A TAG NO PATH NAMES IS NEVER IN HERE, because this reads paths rather than `derived_tags`'
+output. Nothing proves which platform such a tag belongs to, so it keeps reaching every host
+that declares it.
 
 Its own module beside `land_tags`, for the reason `land_changes.py` gives for sitting there:
 `land_tags` is AT the 600-line cap. The import goes one way -- this reads `land_tags.tag_for`

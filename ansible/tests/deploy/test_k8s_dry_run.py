@@ -18,13 +18,12 @@ What can silently re-arm the mutation:
   * `rollout restart` losing its explicit guard — same always-changed render means it fires on
     every dry run, restarting the live Deployment;
   * `verify_secret_keys` losing its guard — it `kubectl patch`es live Secrets;
-  * k8s_dry_run_unsupported drifting behind the roles that actually mutate outside
-    roles/k8s/manifests — the refusal in deploy.yml stops covering a role that needs it, and
-    that role half-applies.
+  * a role gaining a cluster write outside roles/k8s/manifests without a `k8s_no_mutate`
+    guard, so that role half-applies under a dry run.
 
-The last one is checked by re-deriving the list from the role sources rather than by comparing
-against a copy, so adding a `kubectl delete job` to a role fails here instead of silently
-widening what dry-run claims to cover.
+The last one is checked by re-deriving the census from the role sources rather than by
+comparing against a copy, so adding a `kubectl delete job` to a role fails here instead of
+silently widening what dry-run claims to cover.
 """
 
 import re
@@ -200,19 +199,6 @@ def _k8s_play() -> dict:
     raise AssertionError("deploy.yml no longer has a k8s play")
 
 
-def test_deploy_refuses_an_uncovered_dry_run() -> None:
-    asserts = [
-        t
-        for t in _k8s_play().get("pre_tasks", [])
-        if "k8s_dry_run_unsupported" in str(t.get("vars", ""))
-    ]
-    assert asserts, (
-        "deploy.yml no longer refuses a dry run naming an uncovered role. Those roles mutate "
-        "outside roles/k8s/manifests, so the run half-applies: the manifest apply is suppressed "
-        "while the sidecar ConfigMap / probe Job / image push fires anyway."
-    )
-
-
 def test_namespace_apply_is_guarded() -> None:
     task = _named(_k8s_play()["pre_tasks"], "Apply the workload namespace")
     assert _GUARD in _when(task), (
@@ -286,8 +272,8 @@ def _unguarded_mutations(role: Path) -> list[str]:
     what this replaces, and it matched cronjob-gate's COMMENTS alone: deleting
     `when: not (k8s_no_mutate | bool)` from its `kubectl create job` left this file green while
     `./scripts/deploy.sh --tags configarr --dry-run` fired a real gate run and reconciled the
-    live *arr stack. configarr was dropped from k8s_dry_run_unsupported on the strength of that
-    guard, so this is the check the removal rests on.
+    live *arr stack. configarr stopped being refused outright on the strength of that guard,
+    so this is the check that removal rests on.
 
     Fail-closed in two directions. A trailing comment is stripped from the guard search, so a
     `# k8s_no_mutate` in prose credits nothing. And the rule is per-task: a role that guarded a
@@ -328,29 +314,38 @@ def _guarded_at_entry(role: Path) -> bool:
     return bool(_mutates_outside_manifests(role)) and not _unguarded_mutations(role)
 
 
-def test_unsupported_list_matches_the_roles_that_actually_mutate() -> None:
-    derived = {
-        role.name
-        for role in sorted(_K8S_ROLES.iterdir())
-        if role.is_dir()
-        and role.name != "manifests"
-        and (role / "tasks").is_dir()
-        and (_mutates_outside_manifests(role) or _bypasses_manifests(role))
-        and not _guarded_at_entry(role)
-    }
-    declared = set(_all_vars()["k8s_dry_run_unsupported"])
+def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
+    """This is what replaced the `k8s_dry_run_unsupported` refusal list (#2876).
 
-    # A role that includes k8s/manifests guards its writes: a listed one gets no render record.
-    roles = derived | declared
-    unguarded = [n for n in sorted(roles) if not _bypasses_manifests(_K8S_ROLES / n)]
-    assert not unguarded, f"guard {unguarded} on k8s_no_mutate, never list them (#2588)"
-    missing = sorted(derived - declared)
-    stale = sorted(declared - derived)
-    assert not missing, (
-        f"these roles apply their objects outside roles/k8s/manifests but are not in "
-        f"k8s_dry_run_unsupported: {missing}. A dry run naming one of them half-applies."
+    While the list existed, a role that mutated the cluster from its own tasks could either
+    guard those tasks on `k8s_no_mutate` or join the list and have `deploy.yml` refuse the
+    whole run. #2588 guarded the last unguarded role and #2813 folded away the last listed
+    one, so the list went empty and the refusal became dead code. Every role now takes the
+    guard, and that is the invariant to keep: a new role that mutates outside
+    `roles/k8s/manifests` half-applies under a dry run unless it guards itself.
+    """
+    scanned = [
+        role
+        for role in sorted(_K8S_ROLES.iterdir())
+        if role.is_dir() and role.name != "manifests" and (role / "tasks").is_dir()
+    ]
+    # Non-vacuity: the census must keep finding the roles this rule exists for.
+    assert {r.name for r in scanned} >= {
+        "volume-claim",
+        "image-builder",
+        "cronjob-gate",
+    }, "the role census stopped finding the roles that mutate outside manifests"
+    unguarded = sorted(
+        role.name
+        for role in scanned
+        if (_mutates_outside_manifests(role) or _bypasses_manifests(role))
+        and not _guarded_at_entry(role)
     )
-    assert not stale, f"{stale} no longer mutate unguarded; drop them from the list"
+    assert not unguarded, (
+        f"{unguarded} apply objects outside roles/k8s/manifests without a k8s_no_mutate "
+        "guard, so a dry run naming one of them half-applies. Guard tasks/main.yml on "
+        "k8s_no_mutate (#2588)."
+    )
 
 
 def _roles_included_by_other_roles() -> set[str]:
@@ -366,11 +361,12 @@ def _roles_included_by_other_roles() -> set[str]:
 
 
 def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
-    """The play-level refusal keys on --tags, so a dependency slips straight past it.
+    """A tag names one role and reaches its dependencies, which no tag-keyed check can see.
 
-    This is not hypothetical: `--tags freshrss` names no unsupported role and still ran
-    volume-claim, which started and removed a pod against freshrss's live Longhorn PVC. Any role
-    reachable as a dependency must therefore guard itself, not rely on the refusal.
+    This is not hypothetical: `--tags freshrss` named one role and still ran volume-claim,
+    which started and removed a pod against freshrss's live Longhorn PVC. Any role reachable
+    as a dependency must therefore guard itself. The refusal list this once argued against
+    (`k8s_dry_run_unsupported`) is gone for the same reason it could not help here (#2876).
     """
     assert not list(_K8S_ROLES.glob("*/meta/main.yml")), (
         "a k8s role grew a meta/main.yml — role `dependencies:` there are invisible to the "
@@ -385,8 +381,7 @@ def test_no_role_hides_a_dependency_the_tag_refusal_cannot_see() -> None:
     )
     assert not unguarded, (
         f"{unguarded} mutate the cluster and are pulled in as dependencies, so a dry run of an "
-        "unrelated service reaches them. Listing them in k8s_dry_run_unsupported does NOT help "
-        "— that check only sees --tags. Guard tasks/main.yml on k8s_no_mutate instead."
+        "unrelated service reaches them. Guard tasks/main.yml on k8s_no_mutate instead."
     )
 
 

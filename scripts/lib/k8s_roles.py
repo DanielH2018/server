@@ -150,25 +150,21 @@ def k8s_entries() -> dict[str, dict]:
     return {c["name"]: c for c in entries if c.get("platform") == "k8s"}
 
 
-# The two ways one k8s role reaches another's tasks. `include_role`/`import_role` name it as
-# `k8s/<role>`; an `import_tasks` of a sibling role's file by path
-# (`{{ role_path }}/../<role>/tasks/<file>.yml`) names no role at all. Both are real edges:
-# whoever deploys the caller runs the callee's tasks. No live role uses the path form since
-# #2813 folded game-stats-lib into its two consumers; test_k8s_role_callers.py drives it.
+# How one k8s role reaches another's tasks: `include_role`/`import_role` naming it as
+# `k8s/<role>`. Whoever deploys the caller runs the callee's tasks.
+#
+# An `import_tasks` of a sibling role's file by path
+# (`{{ role_path }}/../<role>/tasks/<file>.yml`) is the same edge spelled without a role name,
+# and the walk covered it until #2876. No role has used that form since #2813 folded
+# game-stats-lib into its two consumers, and the pattern was left driven by a synthetic test
+# alone. Restore it from git history if a role reaches a sibling by path again.
 _ROLE_KEYS = (
     "ansible.builtin.include_role",
     "include_role",
     "ansible.builtin.import_role",
     "import_role",
 )
-_TASKS_KEYS = (
-    "ansible.builtin.import_tasks",
-    "import_tasks",
-    "ansible.builtin.include_tasks",
-    "include_tasks",
-)
 _ROLE_NAME = re.compile(r"^k8s/([^/\s]+)$")
-_SIBLING_TASKS = re.compile(r"\.\./([^/]+)/tasks/")
 
 
 def _callees(node) -> set[str]:
@@ -184,11 +180,6 @@ def _callees(node) -> set[str]:
         value = node.get(key)
         name = value.get("name") if isinstance(value, dict) else value
         if isinstance(name, str) and (m := _ROLE_NAME.match(name.strip())):
-            found.add(m.group(1))
-    for key in _TASKS_KEYS:
-        value = node.get(key)
-        path = value.get("file") if isinstance(value, dict) else value
-        if isinstance(path, str) and (m := _SIBLING_TASKS.search(path)):
             found.add(m.group(1))
     for value in node.values():
         if isinstance(value, list | dict):

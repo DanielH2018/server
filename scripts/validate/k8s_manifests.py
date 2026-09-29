@@ -13,9 +13,8 @@ stub, so the port and hostname a manifest renders with are the ones a deploy wou
 
 Every parsed object is then validated against the Kubernetes OpenAPI schema for
 ``K8S_SCHEMA_VERSION`` (``strict=True``, so an undefined field is an error). That is the check
-``--dry-run`` makes against the live API server, made offline instead: no cluster, on a PR, and
-covering the roles ``k8s_dry_run_unsupported`` refuses. CRDs have no upstream schema and are
-reported as skipped rather than passed.
+``--dry-run`` makes against the live API server, made offline instead: no cluster, and on a PR.
+CRDs have no upstream schema and are reported as skipped rather than passed.
 
 Structural check only: secrets are stubbed (StubUndefined), so no SOPS access is needed. Run
 directly or via the ``validate-k8s-manifests`` prek hook. Exits non-zero on any render failure

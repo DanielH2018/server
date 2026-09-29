@@ -191,10 +191,6 @@ def refusing_paths(
       Every k8s deploy runs `k8s/manifests`, so being behind on one is being behind on
       whatever this deploy renders, whichever service it names.
 
-    Build couplings widen the fourth on purpose: a build role in the tail renders the image
-    its coupled workload runs, so deploying that workload from a tree missing the build role's
-    commit is exactly the same reversion.
-
     Args:
         paths: the incoming paths, as `git diff --name-only HEAD..<ref>` gives them.
         tags: the service tags this deploy targets.
@@ -202,11 +198,7 @@ def refusing_paths(
         declared: every tag naming a `containers_list` entry, which is how a shared k8s role
             is told from a service one.
     """
-    from deploy_logic import (
-        expand_build_couplings,
-        services_from_changed_paths,
-        shared_module_consumers,
-    )
+    from deploy_logic import services_from_changed_paths, shared_module_consumers
 
     flagged = []
     for path in paths:
@@ -223,7 +215,7 @@ def refusing_paths(
                 (path, f"the shared k8s role {shared[0]}, which every k8s deploy runs")
             )
             continue
-        reached = expand_build_couplings(
+        reached = (
             cs.services
             | cs.k8s
             | cs.k8s_deploy

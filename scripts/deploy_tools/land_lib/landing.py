@@ -79,9 +79,9 @@ class Landing:
         # every changed path naming them sits under `ansible/roles/k8s/` (#2730).
         # `deploy.deploy_by_host` routes these to a `platform: k8s` entry alone, because a tag
         # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's change
-        # is not in this PR. A tag neither provenance covers -- one `expand_build_couplings`
-        # added, or one whose paths span both role trees -- stays routed to every declaring
-        # host, which is the direction a wrong answer here must fall (issue #929).
+        # is not in this PR. A tag neither provenance covers -- one whose paths span both
+        # role trees, say -- stays routed to every declaring host, which is the direction a
+        # wrong answer here must fall (issue #929).
         self.k8s_only: list[str] = []
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary

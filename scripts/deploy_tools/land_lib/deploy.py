@@ -127,10 +127,6 @@ def record_k8s_only(ln: Landing) -> None:
     - INTERSECTED with `resolved_tags`, because `--since` bounds a range wider than this PR.
       A tag another session's merge in the range contributed would otherwise reach the
       `--k8s-only=` argv for a service this landing never deploys.
-    - `expand_build_couplings` is already applied to what `changed` printed, and a coupled tag
-      is named by no path, so the path derivation leaves it out -- the same reason
-      `classify` records the caller expansion before the widening (#2718).
-
     Every failure leaves `k8s_only` empty and routes to every declaring host, which is the
     direction a wrong answer here must fall (issue #929).
 

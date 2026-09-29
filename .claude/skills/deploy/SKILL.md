@@ -42,12 +42,11 @@ Nothing is staged, applied, patched or rolled. It runs unlocked, because it muta
 does **not** catch scheduling, PVC binding, probe or rollout behaviour — those need a real deploy.
 
 Two limits worth knowing before you trust a green dry run:
-- **It refuses the roles named in `k8s_dry_run_unsupported`** — count them with
-  `grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml`; don't
-  hand-maintain the number, it read "~17" against a real 15 for two commits. Roles that mutate
-  outside `roles/k8s/manifests` (sidecar ConfigMaps built with `kubectl create`, netpol-probe
-  Jobs, `exec -i` into a live pod) would half-apply, so `deploy.yml` fails fast and names them.
-  `ansible/tests/deploy/test_k8s_dry_run.py` re-derives the list from the role sources so it cannot drift.
+- **A role's own cluster writes are skipped, not exercised.** Sidecar ConfigMaps built with
+  `kubectl create`, netpol-probe Jobs and `exec -i` into a live pod all sit outside
+  `roles/k8s/manifests` and are guarded on `k8s_no_mutate`, so a dry run proves the manifests
+  and not those. `ansible/tests/deploy/test_k8s_dry_run.py` refuses a role that grows such a
+  write without the guard.
 - **A brand-new service is only half-checked.** `volume-claim` is skipped (it is a dependency of
   25 roles and mutates), and nothing at admission verifies that a referenced PVC exists — so
   the Deployment validates while the volume is never proven provisionable.
@@ -154,9 +153,6 @@ uv run ansible-playbook ansible/deploy.yml --tags "<service-name>" --skip-tags d
 
 # Edit encrypted secrets
 sops ansible/vars/secrets.yml
-
-# List the services --dry-run refuses to cover
-grep -A20 "^k8s_dry_run_unsupported:" ansible/inventory/group_vars/all.yml
 
 # Trigger a GitOps tick now instead of waiting for the 10-min timer (daniel-box only).
 # Runs the identical code path the timer runs — there is no dry-run mode.

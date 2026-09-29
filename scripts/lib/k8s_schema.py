@@ -143,7 +143,7 @@ def schema_error(doc: dict) -> str | None | object:
     and checked by nothing.
 
     This is the check ``--dry-run`` performs against the live API server, done offline and
-    without a cluster — so it also covers the roles k8s_dry_run_unsupported refuses.
+    without a cluster.
     """
     try:
         kubernetes_validate.validate(
