@@ -72,7 +72,8 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
 # plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
 # account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
-# subject across two docs/ pages. Each remaining reason names its own next section to move.
+# subject across two docs/ pages, and home-assistant's testing, tooling and traps moved into
+# the role's own docs/ tree. Each remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -93,11 +94,6 @@ OVER_CEILING: dict[str, str] = {
     "crowdsec": (
         "16194 chars on 2026-09-28: the two operator allowlists and the unban procedure are "
         "operating rules; the 2026-08-22 Metabase removal is dead history to cut"
-    ),
-    "home-assistant": (
-        "14137 chars on 2026-09-28: the one convention that breaks edits and the routing "
-        "table are what this role's editors need first; `## Traps` is the part with a docs/ "
-        "home"
     ),
     "homepage": (
         "19799 chars on 2026-09-28: `## Where the config lives` and the traps under `## "
