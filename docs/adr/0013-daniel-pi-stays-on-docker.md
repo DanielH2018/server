@@ -49,8 +49,8 @@ split invites, and it is silent.
 Pi is what makes remote access survive a cluster outage. That is the main reason the
 exception is worth its cost.
 
-**The Pi's services are LAN-bound, not routed.** It sets `expose_mode: lan`, so its
-containers bind the LAN address directly rather than passing through Traefik. Anything that
+**The Pi's services are LAN-bound, not routed.** Its containers publish their ports on the
+host's LAN address directly rather than passing through Traefik. Anything that
 reasons about routes has to special-case it — the networking reference page excludes Docker
 services for exactly this reason.
 

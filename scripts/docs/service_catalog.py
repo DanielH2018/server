@@ -31,9 +31,9 @@ FIELD NOTES (what is genuinely undecidable from the repo alone, and why):
     the reader is on — see scripts/docs/route_facts.py. WHICH names a service answers on is
     derivable and is stated outright; only the suffix is not.
   - Docker (Pi) routes. daniel-pi is the only Docker host and is LAN-only — its services
-    are bound to the LAN IP directly rather than routed through Traefik
-    (ansible/templates/expose.yml.j2), so "route" for a docker service is a fixed
-    LAN-direct marker, never a hostname.
+    are bound to the LAN IP directly by their own compose `ports:` list rather than routed
+    through Traefik, so "route" for a docker service is a fixed LAN-direct marker, never a
+    hostname.
   - Backup tier PVC claim names. A PVC's `metadata.name` is very often a Jinja var
     (`{{ foo_k8s_claim }}`) rather than a literal string. This script resolves a
     single-variable reference by grepping that role's own defaults/main.yml for a

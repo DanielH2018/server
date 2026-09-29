@@ -62,10 +62,10 @@ def k8s_route(
 
 
 def docker_route(entry: dict[str, Any]) -> str:
-    # daniel-pi is the only Docker host and is LAN-only: a service publishes its UI on the
-    # host's LAN IP (ansible/templates/expose.yml.j2), never behind a Traefik route. The
-    # Docker Traefik-label path and the `expose_mode` switch that chose it were deleted in
-    # #2385, so there is no other shape to derive.
+    # daniel-pi is the only Docker host and is LAN-only: a service's compose file publishes
+    # its UI on the host's LAN IP, never behind a Traefik route. The Docker Traefik-label
+    # path, and the switch that chose between it and LAN exposure, were deleted in #2385, so
+    # there is no other shape to derive.
     return "LAN-direct (no Traefik route)"
 
 

@@ -31,10 +31,10 @@ the port split only makes sense read together.
   public IP/router, so the listen ports must differ.
 
 ## Notable
-- **Exposure is host-driven** via `expose.yml.j2` + `expose_mode`. The Pi runs `expose_mode: lan`:
-  the UI is published bound to the Pi's LAN IP and emits no Traefik labels. The `traefik` branch
-  (route through Traefik behind Authelia, publish no host port) is what the server used and is
-  unreachable now that this role deploys only to the Pi. The WireGuard UDP port is always published.
+- **Exposure is LAN-bound**, written directly in this role's `ports:` list. The UI line binds the
+  Pi's LAN IP (`server_ip`) and the compose file emits no Traefik labels, because the Pi runs no
+  Traefik. Routing through Traefik behind Authelia is what the server instance used; it moved to
+  `ansible/roles/k8s/wg-easy/` with the migration. The WireGuard UDP port is always published.
 - **HISTORY — the server's bcrypt admin auth (2026-07-04, retired 2026-08-14).** The server entry
   carried `password_hash: "{{ wg_easy_password_hash }}"` → the compose `PASSWORD_HASH` env, closing
   an admin UI/API that was otherwise unauthenticated to every `monitoring`-net neighbour. That whole

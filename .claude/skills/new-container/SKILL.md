@@ -97,10 +97,6 @@ Then create the following files:
 - Use Jinja2 variables for all configurable values
 - **Use the shared macros** (in `ansible/templates/`) — don't hand-roll the boilerplate
   they cover:
-  - `expose.yml.j2` → `web_ui_ports_block(internal_port)` — publishes the UI port bound to
-    the Pi's LAN IP. The Pi has no Traefik in front of it, so a Docker service gets no routing
-    labels. Call it at column 0. A service that also publishes a non-UI port writes a
-    `server_ip`-bound UI line into its own `ports:` list instead, as wg-easy does.
   - `autokuma.yml.j2` → `labels as kuma` — Uptime Kuma monitor labels
   - `networks.yml.j2` → `service_networks()` / `external_networks()` — the per-service
     `networks:` list and the top-level external declaration. **Always use these instead
@@ -109,12 +105,16 @@ Then create the following files:
     after the macro call; declare them after `{{ '{{ external_networks() }}' }}`.
   - `resources.yml.j2` → `resources(cpu_limit, mem_limit, cpu_res, mem_res)` — the
     `deploy.resources` limits/reservations caps. Pass all four as strings.
+- **Write the `ports:` block yourself** — there is no shared exposure macro. The Pi has no
+  Traefik in front of it, so a Docker service gets no routing labels: publish the UI port
+  bound to `server_ip`, the Pi's LAN IP, so the UI is not reachable on the WireGuard tunnel
+  or any other interface. wg-easy is the worked example — it publishes its WireGuard UDP port
+  in the same list.
 - Include a healthcheck if the image supports one
 - Set `restart: unless-stopped`, PUID/PGID, TZ, and a `deploy.resources.limits` cap
 - Canonical skeleton:
   ```jinja
-  {% raw %}{% from 'expose.yml.j2' import web_ui_ports_block with context %}
-  {% from 'autokuma.yml.j2' import labels as kuma with context %}
+  {% raw %}{% from 'autokuma.yml.j2' import labels as kuma with context %}
   {% from 'networks.yml.j2' import service_networks, external_networks with context %}
   {% from 'resources.yml.j2' import resources %}
   ---
@@ -130,7 +130,10 @@ Then create the following files:
         - TZ={{ tz }}
       volumes:
         - ./config:/config
-  {{ web_ui_ports_block('<port>') }}
+      ports:
+        # Bind the UI to the Pi's LAN IP, not 0.0.0.0, so it isn't reachable on the
+        # WireGuard tunnel or other interfaces.
+        - "{{ server_ip }}:{{ container_item.port }}:<port>/tcp"
       security_opt:
         - no-new-privileges:true
       cap_drop:
