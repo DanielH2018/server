@@ -6,8 +6,8 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 > with `--tags n8n` from there. It also builds its two images in-cluster with BuildKit, from
 > `templates/Dockerfile.j2`, `templates/Dockerfile-runners.j2` and
 > `templates/config/n8n-task-runners.json.j2` — a separate `n8n-images` role until #2813
-> folded them in. The Docker role's compose template is gone (recover it from git history);
-> `containers/n8n/data` is still on disk from the migration.
+> folded them in. The Docker role's compose template is gone, and only git history has it;
+> `containers/n8n/data` is on disk.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -34,27 +34,26 @@ n8n with an external task-runner sidecar. See repo-root `CLAUDE.md`.
 - **Base images:** each Dockerfile is `FROM` the upstream `:stable` channel tag with a digest
   beside it. Renovate bumps the digest, the tag holds the channel, and no `*_image:` var names
   an upstream image — so a bump ships only through a `--tags n8n` deploy.
-- **Host:** daniel-box (k8s) · **Port:** 5678
+- **Host:** daniel-box · **Port:** 5678 · **Depends on:** traefik, authelia
 - **Network:** the cluster pod network. The broker binds `0.0.0.0:5679` (n8n has no
   per-interface bind option), so the `n8n-broker` NetworkPolicy in
   `templates/networkpolicy.yaml.j2` is what fences 5679 to `app: n8n-runners`. Since 2026-09-17
   the same policy fences 5678 to `app: traefik` and `app: monitor-bridge` (#1926); before that
   any pod could reach the web port and skip Authelia, CrowdSec and the rate-limit.
   The `n8n-netpol-probe` Job (`templates/netpol-probe-job.yaml.j2`, applied by
-  `tasks/main.yml`) verifies both fences on every deploy. `n8n_runner_auth_token` is the second
-  layer, not the only one.
-- **Depends on:** traefik, authelia
+  `tasks/main.yml`) verifies both fences on every deploy — `n8n_runner_auth_token` is the
+  second layer, not the only one.
 - **Config in:** `defaults/main.yml` — images, sizing, claims and the auto-deploy stance. The
-  `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml` selects the role and
+  `containers_list` entry in `ansible/inventory/host_vars/daniel-box.yml` selects the role, and
   carries deploy metadata only.
 
 ## Notable
 - **`n8n-runners` executes arbitrary workflow code** — the resource cap on it is the main DoS
   guard. It reaches the broker at `n8n:5679` over the pod network, using
-  `n8n_runner_auth_token` (from secrets) behind the `n8n-broker` NetworkPolicy.
-- **`/webhook/` bypasses Authelia** (public webhooks) via a dedicated higher-priority
-  Traefik router. `/webhook-test/` is intentionally NOT exposed (dev-only endpoint).
-- Both images are built — update via redeploy, not Watchtower. The runners image `COPY`s
+  `n8n_runner_auth_token` behind the `n8n-broker` NetworkPolicy.
+- **`/webhook/` bypasses Authelia** (public webhooks) via a dedicated higher-priority Traefik
+  router. `/webhook-test/` is intentionally NOT exposed (dev-only).
+- Update both images by redeploying, not through Watchtower. The runners image `COPY`s
   exactly one file, `n8n-task-runners.json.j2`, staged via `image_builder_context`; the
   ConfigMap mount key must match the `COPY` path exactly.
 - **The one npm package the n8n image adds, `fuzzball`, is pinned by exact version** (#2213).
@@ -77,7 +76,7 @@ the two sibling scope flags set beside it (#1588); the template carries the reas
 n8n npm-installs each package under `/home/node/.n8n/nodes`, a child of the `n8n-data` PVC, so
 a package survives a restart, a rebuild and a redeploy — and **nothing in this repo records
 which packages are installed**. A fresh claim starts with none, and the workflows that used
-them break at run time. Same class of state as the encryption key above.
+them break at run time — the same class of state as the encryption key above.
 
 Listing them is an operator's job, in **Settings → Community nodes**; a session cannot, because
 `kubectl exec` is refused to the read-only ServiceAccount and n8n's owner login sits on top of
@@ -90,11 +89,10 @@ no version string, and the diff cannot show which way the version moved. Renovat
 (2026-09-09) proposed the 2.37.9 digests over the running 2.37.10 — a downgrade — and passed
 all nine checks; a human resolving each digest by hand caught it (#1493).
 
-`base-pin-history.tsv` records the version behind each adopted digest, append-only, and its own
-header carries the registry commands for resolving one.
+`base-pin-history.tsv` records the version behind each adopted digest, append-only; its header
+carries the registry commands for resolving one.
 `scripts/tests/test_renovate_dockerfiles.py` fails until the row is appended, and fails again
-if a version decreases with no `DOWNGRADE-ACK:` note. An acknowledged decrease passes on
-purpose: what the guard forbids is a SILENT one.
+if a version decreases with no `DOWNGRADE-ACK:` note; what it forbids is a SILENT decrease.
 
 ## Editing
 - Images: `templates/Dockerfile*.j2` + `templates/config/n8n-task-runners.json.j2`
