@@ -56,7 +56,9 @@ MIN_NON_BLANK_LINES = 8
 # and the section to move out next. A doc that grows past its recorded count fails (#2679),
 # so the list shrinks rather than settling. Recorded 2026-09-28 when the unit became
 # characters (#2826); #2921 and #2982 started the trim on gitops_deploy and initial_setup,
-# and each reason names the section that goes next.
+# and each reason names the section that goes next. #2989 took renovate_notify out: its
+# sandbox surprises, dashboard-parser measurements and module layout moved to
+# docs/renovate-notify-internals.md.
 OVER_CEILING: dict[str, str] = {
     "claude_code": (
         "17338 chars on 2026-09-28: the two Remote Control modes and the `user.slice` fleet "
@@ -100,11 +102,6 @@ OVER_CEILING: dict[str, str] = {
         "18913 chars on 2026-09-28: the arming procedure and the merge-and-deploy contract "
         "govern an agent that merges unattended; `## The digest measures effect, not "
         "completion` can move to docs/"
-    ),
-    "renovate_notify": (
-        "11400 chars on 2026-09-28: the fingerprint gate, the two ways the stuck-pending "
-        "clock goes inert and the soak a type-erased grouped row takes (#2885) are operating "
-        "rules for a notifier that fails silent; the sandbox surprises can move to docs/"
     ),
 }
 

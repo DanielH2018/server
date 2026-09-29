@@ -71,15 +71,15 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # (#2826); #2921 started the trim, and configarr and healthchecks left the list by fitting
 # under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
 # plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
-# account each moved to a docs/ page. Each remaining reason names its own next section to move.
+# account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
+# subject across two docs/ pages, home-assistant's testing, tooling and traps moved into the
+# role's own docs/ tree, valheim's modding account moved to docs/valheim-modding.md, and
+# autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. Each remaining
+# reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
         "routed service; the second-factor and session history can move to docs/"
-    ),
-    "autofix-bridge": (
-        "14978 chars on 2026-09-28: the autonomous-role contract and the two-actuator-plane "
-        "rule govern code that deletes without a human; `## Notable` is the trim"
     ),
     "claude-otel": (
         "18339 chars on 2026-09-29: the eviction tiers and the idle-vs-broken trap are "
@@ -92,11 +92,6 @@ OVER_CEILING: dict[str, str] = {
     "crowdsec": (
         "16194 chars on 2026-09-28: the two operator allowlists and the unban procedure are "
         "operating rules; the 2026-08-22 Metabase removal is dead history to cut"
-    ),
-    "home-assistant": (
-        "14137 chars on 2026-09-28: the one convention that breaks edits and the routing "
-        "table are what this role's editors need first; `## Traps` is the part with a docs/ "
-        "home"
     ),
     "homepage": (
         "19799 chars on 2026-09-28: `## Where the config lives` and the traps under `## "
@@ -117,20 +112,11 @@ OVER_CEILING: dict[str, str] = {
         "16640 chars on 2026-09-28: the netns-reset and modcache traps are what a session "
         "must read before editing; the throughput-settings history can move to docs/"
     ),
-    "traefik": (
-        "13487 chars on 2026-09-28: `## Notable` carries the router, middleware and "
-        "rate-limit rules every routed service inherits; split it by subject rather than "
-        "trimming the rules"
-    ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
         "operating rules for every monitor, and #2802 added the maintenance window's "
         "derivation and its two Kuma API shapes; the status-page and host-check tile "
         "history is the next thing to move to docs/"
-    ),
-    "valheim": (
-        "14940 chars on 2026-09-28: the modding and world-handling rules break the server "
-        "when missed; the release history under `## Notable` is the trim"
     ),
     "volume-revert": (
         "20010 chars on 2026-09-28: every section is the caller contract or a measured "

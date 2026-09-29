@@ -487,3 +487,42 @@ localStorage
 mtail
 [Pp]repends
 supervisord
+
+# Role-doc prose moved to docs/ pages (#2989): renovate_notify
+renovate_notify
+[Ss]andboxed
+[Uu]nwritable
+stdin
+[Bb]lockquote
+[Cc]allout
+[Uu]ngrouped
+
+# traefik role doc split across two docs/ pages (#2989)
+TLSOption
+SNICheck
+startupProbe
+selfcheck
+[Uu]nban
+Yaegi
+[Dd]atafiles?
+
+# valheim role doc split to docs/valheim-modding.md (#2989)
+Thunderstore
+initContainers?
+eval'd
+install's
+Server_devcommands
+Azumatt's
+[Ii]nitializer
+[Cc]oroutines?
+Jotunn
+Serverside_Simulations
+[Cc]rossplay
+
+# autofix-bridge role doc split to docs/autofix-bridge-actuators.md (#2989)
+[Kk]eyframes?
+[Cc]odecs?
+ffprobes?
+[Dd]epreferenced
+[Tt]unables?
+host_vars

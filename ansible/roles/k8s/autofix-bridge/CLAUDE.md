@@ -1,16 +1,9 @@
 # autofix-bridge — generic auto-remediation (the writer twin of monitor-bridge)
 
-> **This IS the k8s role since the Docker uninstall (2026-08-14).** The sidecar moved
-> in-cluster at the Phase F drain; the Docker role's last piece — the disk-autoprune
-> cron — retired with the daemon it pruned, and `files/autofix.py` (+ its tests) moved
-> into this role. Sections below describing Docker-era plumbing (networks, compose,
-> containers_list) are the loop's HISTORY; the behavior and contract they document are
-> unchanged in the pod. Doc-path pointers: the Docker role was deleted in #2385 and is at
-> `git show 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/autofix-bridge/`.
-
 The homelab's **auto-remediation home** — where a read-only monitor-bridge signal earns a
 sanctioned automatic *fix*. Renamed from `arr-autoblock` (2026-07-06) to stop proliferating a
-sidecar per fix. See repo-root `CLAUDE.md`.
+sidecar per fix, and moved in-cluster at the Docker uninstall (2026-08-14) with its behaviour
+and contract unchanged.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's defaults, templates, tasks or containers_list entry, or the k3s role's Longhorn tier lists. -->
@@ -23,161 +16,83 @@ sidecar per fix. See repo-root `CLAUDE.md`.
   two independent reasons
 <!-- /generated_from -->
 
-- **Stdlib only** (no build, no extra deps) · **No web UI**, no Authelia
-- **Host:** daniel-box — pinned there by `nodeSelector`, so the drain and cold boot of
-  daniel-server cannot take the remediation loop down with it
-- **Reaches:** `sonarr:8989` / `radarr:7878` (queue read + blocklist/search writes),
-  `uptime-kuma:3001` (push), and the *arr Discord webhook (egress)
+- **Stdlib only**, no web UI, no Authelia
+- **Host:** daniel-box — pinned by `nodeSelector`, so a daniel-server drain or cold boot
+  cannot take the remediation loop down with it
+- **Reaches:** `sonarr:8989` and `radarr:7878` (queue read, blocklist and search writes),
+  `uptime-kuma:3001` (push), and the *arr Discord webhook
 - **Depends on:** sonarr, radarr, uptime-kuma (`meta/deps.yml`)
-- **Shipped in:** commit `6661c4129`
-  (historical — its disk-autoprune half retired 2026-08-14, see the host plane below)
 
 ## Autonomous-role contract (it changes state with no human in the loop)
-This is a **change-producing autonomous role** — its authority is written down so a future edit can't
-quietly widen it (harness-engineering's versioned-contract pattern). The facts below live in detail
-elsewhere in this doc; this is the governed summary a change here must satisfy.
-- **Scope / exclusions:** *arr queue remediation, host disk hygiene, fake-remux replacement — and
-  nothing else. **Never** `docker prune -a`, **never** volumes, **never** a delete before the
-  replacement is ffprobe-verified genuine, **never** a legit in-progress download. The sidecar acts
-  on a bare `trackedDownloadStatus=error`, which at Sonarr 4.0.19.2979 through 4.0.20.3014 / Radarr
-  6.3.0.10514 only `RejectedImportService` writes (a dangerous file); a client/VPN outage empties
-  the queue instead, so an in-progress download never reaches that status.
-- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) · fake-remux
-  `FAKE_REMUX_REPLACE_MODE` (off/shadow/live; template default
-  `shadow`, but **host_vars runs it `live`** — see the reconciler bullet below).
-  Returning any plane to report-only is one env flip + redeploy — preserve that.
-- **Authoritative sources:** sonarr/radarr `/api/v3/queue`, ffprobe truth (via `docker exec jellyfin`
-  on daniel-server; directly on the host wherever `JELLYFIN_CONTAINER` is empty, e.g. daniel-box),
-  `/` used-%. Never a doc or a cached guess.
-- **Abort valves:** `GRACE_CYCLES`, `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` (a mass-match = systemic
-  cause → act on **none** + alert), the disk threshold gate.
-- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file / push heartbeat monitor-bridge
-  reads; a live action is Discord-alerted. No silent mutation.
-- **Next-run review (the cumulative-judgment clause):** before widening scope or flipping a plane to
-  `live`, reconcile the last run's outcomes (`outcomes.jsonl`, the Discord log) — don't repeat a
-  class of mis-fire the previous run already surfaced.
+This is a **change-producing autonomous role**, so its authority is written down and a change
+here must satisfy this summary.
+- **Scope / exclusions:** *arr queue remediation and fake-remux replacement, and nothing else.
+  **Never** a delete before the replacement is ffprobe-verified genuine, **never** a legit
+  in-progress download — the sidecar acts on a bare `trackedDownloadStatus=error`, which at
+  the pinned *arr versions only `RejectedImportService` writes, and a client or VPN outage
+  empties the queue rather than filling it with errors.
+- **Mode (per actuator, explicit + reversible):** sidecar `DRY_RUN` (live) and fake-remux
+  `FAKE_REMUX_REPLACE_MODE` (off/shadow/live, run `live` by host_vars). Returning either
+  plane to report-only is one env flip and a redeploy — preserve that.
+- **Authoritative sources:** the *arr `/api/v3/queue` and ffprobe truth, never a cached
+  guess.
+- **Abort valves:** `GRACE_CYCLES`, plus `MAX_ACTIONS_PER_CYCLE` / `MAX_PER_SCAN` — a mass
+  match reads as a systemic cause, so it acts on **none** and alerts.
+- **Required evidence:** every cycle writes a `{ts,ok,msg}` state file or heartbeat that
+  monitor-bridge reads, and a live action is Discord-alerted. No silent mutation.
+- **Next-run review:** before widening scope or flipping a plane to `live`, read the last
+  run's outcomes (`outcomes.jsonl`, the Discord log).
 
 ## Two actuator planes (the load-bearing design point — don't merge them)
-1. **Containerized HTTP-API plane** — the zero-privilege sidecar (`files/autofix.py`). Polls
-   sonarr/radarr `/api/v3/queue` and auto-blocklists stuck/poisoned items. Fully hardened
-   (non-root, `read_only` + tmpfs `/tmp`, `cap_drop:[ALL]`, `no-new-privileges`). **LIVE
-   (`DRY_RUN=false`)** since 2026-07-06 — it actually blocklists+removes+re-searches. Blast-radius
-   valves: `GRACE_CYCLES=3` (an item must stay a candidate ~15 min first), `MAX_ACTIONS_PER_CYCLE=5`
-   (a mass-flag = systemic cause → act on NONE + alert), and `DANGEROUS_MSG_PATTERNS` (the
-   poisoned-`.exe` class). A fourth valve, `CLIENT_ERROR_PATTERNS`, exempted a bare `error` whose
-   `errorMessage` named a download-client outage; it was **retired 2026-09-18 (#1951)** because
-   it was inert at the pinned Sonarr 4.0.19.2979 and Radarr 6.3.0.10514: a client outage returns
-   no queue items rather than items at `error` (`DownloadMonitoringService.ProcessClientDownloads`
-   catches `GetItems()` and records a client failure), `trackedDownloadStatus=error` is written
-   only by `RejectedImportService`, and none of its five phrases was a string either app writes
-   into `errorMessage`. A future *arr bump re-opens the question: re-run #1951's verify-by
-   against the new tag before trusting the bare-`error` branch. Flip
-   `DRY_RUN=true` + redeploy to return to report-only.
-2. **Host plane** — two daily/hourly crons doing work the locked-down container can't (docker
-   daemon, `docker exec`, ffprobe), each reporting via a `{ts,ok,msg}` state file monitor-bridge
-   reads. Both run as `sys_user` ∈ docker group (no root).
-   - **disk-autoprune — RETIRED 2026-08-14, no successor.** It pruned daniel-server's Docker
-     daemon, which was uninstalled that day; the template survives only in git history,
-     `autofix_disk_threshold_pct`/`autofix_disk_dry_run` are set
-     nowhere, and monitor-bridge dropped the matching `disk_prune` check with it
-     (the gate loop in `ansible/roles/k8s/monitor-bridge/files/check.py`). **Nothing prunes
-     disk on the cluster nodes now**
-     — containerd's own image GC is the only reclaim, and monitor-bridge's Root Disk threshold
-     pager (`DISK_MAX_PCT=90`) is the only signal. That is alerting without remediation, which
-     is a deliberate state, not an oversight: revisit if `/` pressure ever becomes routine.
-   - **fake-remux scan** (`files/fake_remux_scan.py` + pure `fake_remux_logic.py` →
-     `/opt/autofix-fake-remux/`, daily `04:45`, config in `/etc/autofix-fake-remux/config.env`
-     0600). ffprobe-backed detection of files whose quality claims a **Remux** but whose video
-     stream is a re-encode — **long GOP** (a real remux keyframes ~every 1-2 s; > `GOP_MAX_S`=5 =
-     a re-encode) **or a consumer re-encoder ENCODER tag** (`x264`/`x265`/`*_qsv`/`*_nvenc`/`Lavc`/
-     handbrake…, the cheap metadata-only tell). This **supersedes** the old codec heuristic that
-     lived in the sidecar (`autofix.py`, removed 2026-07-17): definitive + codec/resolution/size-
-     independent, so it catches an AVC-remux-that's-really-an-AVC-reencode and needs no 2160p
-     exclusion. It runs ffprobe via **`docker exec jellyfin`** — jellyfin mounts the media
-     **read-only** at `/data/media`, so Sonarr's absolute path resolves **unchanged** (no
-     translation) and a probe can't write; jellyfin being down just SKIPS files (fail-safe, never
-     flags). It never deletes or re-searches itself — each newly found fake is **seeded into the
-     ledger** (`/var/lib/autofix-fake-remux/replacements.json`) for the reconciler below to act on.
-     `MAX_PER_SCAN`=5 blast valve (a whole-library match → act on none + alert). Pure core is
-     unit-tested (`test_fake_remux_logic.py`).
-   - **fake-remux reconcile** (`files/fake_remux_replace.py` + pure
-     `fake_remux_replace_logic.py` → `/opt/autofix-fake-remux/`, every 20 min, same config.env).
-     Search-first replacer: reads the ledger the scan seeded, interactive-searches Sonarr for a
-     clean replacement (`autofix_fake_remux_policy` → rendered `/etc/autofix-fake-remux/
-     policy.json` picks the candidate — deny/prefer release groups, preferred indexers, a
-     depreferenced-but-not-banned codec list, a size band), grabs it, waits for the download,
-     ffprobes it the same way the scan does, and only deletes the fake + lets Sonarr import once
-     the replacement is verified genuine — never before. The delete goes through Sonarr's episode-
-     file DELETE API, so whether the fake lands in the OS trash or is removed outright is entirely
-     Sonarr's own Media Management → Recycling Bin setting, not something this policy controls.
-     `FAKE_REMUX_REPLACE_MODE` is the gate: `off` = detect only, `shadow` = log intended grabs to
-     `outcomes.jsonl` with zero Sonarr mutations, `live` = grab+delete+import. **daniel-box
-     runs `live`** (`autofix_fake_remux_replace_mode` in `host_vars/daniel-box.yml`) — it deletes
-     and re-grabs for real. (It moved there with the media stack on 2026-08-08; this line said
-     daniel-server until 2026-08-16, which is a file that does not contain the key at all.) This line claimed it shipped as `shadow` until 2026-08-08; the template default is
-     `shadow`, but the inventory has overridden it to `live` and that is the intended setting,
-     confirmed by the operator. Don't "restore" it to shadow.
-     Ledger/outcome state all live under `/var/lib/autofix-fake-remux/`. Commit
-     `f99404c31` wired the reconciler.
+1. **Containerized HTTP-API plane** — the zero-privilege sidecar (`files/autofix.py`), which
+   polls the *arr queues and auto-blocklists stuck or poisoned items. **LIVE
+   (`DRY_RUN=false`)** since 2026-07-06, bounded by `GRACE_CYCLES=3`,
+   `MAX_ACTIONS_PER_CYCLE=5` and `DANGEROUS_MSG_PATTERNS`. A fourth valve,
+   `CLIENT_ERROR_PATTERNS`, was retired 2026-09-18 (#1951) as inert at the pinned *arr
+   versions, and **an *arr bump re-opens that**: re-run #1951's verify-by first.
+2. **Host plane** — the two fake-remux crons, doing work the locked-down container cannot
+   (`docker exec`, ffprobe), each reporting through a state file monitor-bridge reads. Both
+   run as `sys_user` in the docker group, never root.
+   - **The scan never deletes or re-searches**: it flags a file whose quality claims a Remux
+     but whose video stream is a re-encode, and seeds the ledger. It ffprobes through
+     jellyfin's read-only media mount, so a probe cannot write and jellyfin being down skips
+     files rather than flagging them.
+   - **The reconcile searches first and deletes last** — it grabs a candidate, waits for the
+     download, ffprobes it, and **only then** deletes the fake and lets Sonarr import.
+     `FAKE_REMUX_REPLACE_MODE` gates it; the template default is `shadow`, but **daniel-box
+     runs `live`** by inventory override and that is the intended setting. Don't "restore" it.
+   - **disk-autoprune retired 2026-08-14, with no successor.** Nothing prunes disk on the
+     cluster nodes, so monitor-bridge's Root Disk pager is alerting without remediation —
+     deliberately.
+
+`docs/autofix-bridge-actuators.md` has each actuator's mechanics, the evidence that retired
+`CLIENT_ERROR_PATTERNS`, the tunables and the policy file's selection knobs.
 
 ## Notable
-- **Two Kuma monitors, on purpose:**
-  - **docker-liveness** `{{ kuma('autofix-bridge') }}` (AutoKuma polls the socket ~60s,
-    `maxretries=2`) surfaces a hard crash in ~2-3 min — the fast dead-man for this live writer.
-  - **push** `{{ kuma('arr-autoblock', monitor_type='push', …, max_retries=0) }}` — the
-    remediation loop's per-cycle heartbeat + descriptive alert; the slower 600s backstop.
-- **RENAME GOTCHA — don't "fix" it:** the role/container/script are `autofix-bridge`/`autofix.py`,
-  but the **push monitor id + token + env are deliberately kept** `arr-autoblock` /
-  `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`. A monitor names the *check*, not the
-  container (same as monitor-bridge pushing to "Root Disk"), so keeping them preserves the Kuma
-  monitor's history. A compose grep hitting `arr-autoblock` here is CORRECT, not a missed rename.
-- **journald cap is NOT owned here.** It lives SOLELY in initial_setup's `50-homelab.conf` (1G — a
-  reasoned host-forensics window). A prior version of this role shipped a `60-` `SystemMaxUse=200M`
-  drop-in that silently won (systemd merges drop-ins last-wins-by-filename), cutting the journal 5x
-  and turning the 1G into dead config. The role now REMOVES any stale `60-autofix-journald.conf` so
-  there is one source of truth for the journald cap. Don't reintroduce a journald drop-in here.
-- **Auto-fix survey verdict (don't re-propose):** the *arr queue was the best-fit case in the
-  fleet; disk was the one other genuinely-additive one. prowlarr indexers / b2 / recyclarr / targets
-  were evaluated and REJECTED (self-heal via backoff, or autoheal/watchtower already cover
-  restarts/images, or need a human; recyclarr itself was later retired 2026-07-17, replaced by
-  configarr). See [[autofix-bridge-auto-remediation]].
-- **fake-remux deploy ordering / seed:** the state dir `/var/lib/autofix-fake-remux` is created
-  `sys_user`-owned + both state files are **seeded on first deploy** — `state.json` by running the
-  scan once (`command:` + `creates:`), `replace_state.json` by writing a neutral placeholder
-  (`copy:` + `force: false`, mirroring kopia's content-verify seed) — for the same reason as
-  disk-prune: so monitor-bridge's **Fake Remux Scan** / **Fake Remux Replace** checks don't
-  false-DOWN on a fresh host before the first tick. Deploy `autofix-bridge` before `monitor-bridge`
-  (it bind-mounts the state dir `:ro`). Both host crons import the shared `host_lib.py` (copied from
-  `roles/setup/common`) and run via `uv run --no-project --python <pin>`, the
-  `host_python_version` pin in `ansible/inventory/group_vars/all.yml`.
-- **Tunables (host_vars):** `autofix_fake_remux_gop_max_s`, `autofix_fake_remux_max_per_scan`;
-  `autofix_fake_remux_replace_mode` (off/shadow/live), `autofix_fake_remux_policy` (the
-  git-tracked selection-policy dict rendered to `policy.json`).
+- **Two Kuma monitors, on purpose:** a liveness tile as the fast dead-man for a hard crash,
+  a push monitor as the per-cycle heartbeat on a 600s backstop.
+- **RENAME GOTCHA — don't "fix" it:** the **push monitor id, token and env are deliberately
+  kept** `arr-autoblock` / `arr_autoblock_push_token` / `KUMA_PUSH_ARR_AUTOBLOCK`, because a
+  monitor names the *check* rather than the container and renaming loses its history. A grep
+  hitting `arr-autoblock` here is CORRECT, not a missed rename.
+- **journald cap is NOT owned here.** It lives in initial_setup's `50-homelab.conf`. A `60-`
+  drop-in this role once shipped silently won, because systemd merges drop-ins
+  last-wins-by-filename, so the role now REMOVES any stale one.
+- **Deploy `autofix-bridge` before `monitor-bridge`**, which bind-mounts the fake-remux
+  state dir `:ro`. Both state files are seeded on first deploy so its two checks cannot
+  false-DOWN on a fresh host.
+- **Don't re-propose the rejected auto-fix candidates** — prowlarr indexers, b2, recyclarr
+  and targets were surveyed and refused ([[autofix-bridge-auto-remediation]]).
 
 ## Editing & testing
-- Sidecar: `files/autofix.py`, staged to the node and mounted from a ConfigMap along with
-  monitor-bridge's `bridge/common.py` (`_env`/`sanitize`, imported by `autofix.py` —
-  `defaults/main.yml`'s `autofix_bridge_modules` names both, each with its own `src`). Shared
-  code means shared behavior: `bridge.common.log` carries no timestamp of its own here either —
-  see monitor-bridge's CLAUDE.md, "The runtime stamps the log lines". Never fork
-  a second copy of `bridge/common.py` here; edit monitor-bridge's. The role's
-  `checksum/autofix-script` annotation is a hash over every staged module, not just autofix.py —
-  same idiom as monitor-bridge's own script-checksum annotation, and for the same reason: a
-  mounted ConfigMap change alone does not restart a Deployment.
-- Manifests: `templates/deployment.yaml.j2`, `templates/env-secret.yaml.j2`
-- The disk-prune cron and its template are gone — they pruned daniel-server's Docker daemon,
-  uninstalled 2026-08-14, and monitor-bridge dropped the matching `disk_prune` check with them.
-- The two fake-remux crons now live in `ansible/roles/setup/fake_remux/files/`; the paths in the
-  next two bullets are relative to that role.
-- fake-remux scan cron: `files/fake_remux_scan.py` (I/O shell) + `files/fake_remux_logic.py` (pure
-  core) · config `templates/fake-remux.config.env.j2`. Run it live report-only:
-  `SONARR_API_KEY=… ARR_DISCORD_WEBHOOK_URL= STATE_FILE=/tmp/x.json
-  PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_scan.py`.
-- fake-remux reconcile cron: `files/fake_remux_replace.py` (I/O shell) + pure
-  `files/fake_remux_replace_logic.py`, same config.env. Run it shadow (no side effects):
-  `FAKE_REMUX_REPLACE_MODE=shadow SONARR_API_KEY=… LEDGER_FILE=/tmp/l.json
-  REPLACE_STATE_FILE=/tmp/rs.json OUTCOMES_FILE=/tmp/o.jsonl
-  PYTHONPATH=ansible/roles/setup/common/files /usr/local/bin/uv run --no-project --python 3.14.6 files/fake_remux_replace.py`.
-- Unit tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` (`test_autofix.py`) and
-  `uv run pytest ansible/roles/setup/fake_remux/files` (the two fake-remux logic suites).
+- Sidecar: `files/autofix.py`, mounted from a ConfigMap along with monitor-bridge's
+  `bridge/common.py` (`defaults/main.yml`'s `autofix_bridge_modules` names both). **Never
+  fork a second copy of `bridge/common.py` here** — edit monitor-bridge's. The
+  `checksum/autofix-script` annotation hashes every staged module, because a ConfigMap change
+  alone does not restart a Deployment.
+- Manifests: `templates/deployment.yaml.j2` and `templates/env-secret.yaml.j2`
+- The two fake-remux crons live in `ansible/roles/setup/fake_remux/files/`;
+  `docs/autofix-bridge-actuators.md` carries the command that runs either by hand safely.
+- Tests: `uv run pytest ansible/roles/k8s/autofix-bridge/tests` and `uv run pytest
+  ansible/roles/setup/fake_remux/files`.
 - Deploy: `./scripts/deploy.sh --tags "autofix-bridge"`
