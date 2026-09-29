@@ -22,13 +22,15 @@
 # files agree: the loop sets the live value and any later reload re-asserts the same 1.
 # Host-agnostic on purpose — the file is the distro default, identical on daniel-box.
 - name: Check for UFW's own sysctl file
-  tags: [sysctl]
+  # Dual-tagged: `--tags firewall` reloads UFW, which re-applies this file.
+  tags: [sysctl, firewall]
   ansible.builtin.stat:
     path: /etc/ufw/sysctl.conf
   register: initial_setup_ufw_sysctl
 
 - name: Stop UFW's sysctl file from disabling martian logging
-  tags: [sysctl]
+  # Dual-tagged: `--tags firewall` reloads UFW, which re-applies this file.
+  tags: [sysctl, firewall]
   ansible.builtin.lineinfile:
     path: /etc/ufw/sysctl.conf
     regexp: "^#?net/ipv4/conf/{{ item }}/log_martians="

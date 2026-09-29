@@ -56,7 +56,10 @@ EXPECTED_FLAGS = {
 # Task name -> the flag its gate must name. Named rather than counted, so a rename fails with
 # the member that went missing.
 EXPECTED_FLAG_GATES = {
+    "Gather service facts": "has_low_memory_board",
     "Stop the hardware watchdog during provisioning (Pi)": "has_low_memory_board",
+    "Secure swap file permissions (Pi)": "has_low_memory_board",
+    "Format swap file (Pi)": "has_low_memory_board",
     "Create swap file (Pi)": "has_low_memory_board",
     "Persist swap file in fstab (Pi)": "has_low_memory_board",
     "Activate swap file (Pi)": "has_low_memory_board",
@@ -113,6 +116,8 @@ def test_every_hardware_gate_names_its_capability_flag():
 
 def test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones():
     """The rejecting half: any NEW bare literal fails here.
+
+    # fact: ansible/roles/setup/initial_setup/CLAUDE.md#Hardware gates are capability flags, not host names
 
     Red-proof: adding `when: inventory_hostname == 'daniel-box'` to any task in this role
     and leaving it out of DELIBERATE_LITERALS fails this test with that task's name.
