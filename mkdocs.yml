@@ -238,6 +238,10 @@ nav:
       - homepage widgets and layout: homepage-widgets-and-layout.md
       - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
       - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
+      # And again (#2997), on k3s and authelia; volume-snapshot's share went onto its existing
+      # drill-record page rather than a second one.
+      - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
+      - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

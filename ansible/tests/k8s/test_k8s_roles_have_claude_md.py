@@ -87,20 +87,11 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # docs/volume-revert-drill-and-sizing.md. Each remaining reason names its own next section to
 # move.
 OVER_CEILING: dict[str, str] = {
-    "authelia": (
-        "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
-        "routed service; the second-factor and session history can move to docs/"
-    ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
         "operating rules for every monitor, and #2802 added the maintenance window's "
         "derivation and its two Kuma API shapes; the status-page and host-check tile "
         "history is the next thing to move to docs/"
-    ),
-    "volume-snapshot": (
-        "26334 chars on 2026-09-28: the opt-in contract and the `k8s_no_mutate` guard rule "
-        "are what a calling role needs; the drill record already moved to docs/, so what is "
-        "left is prose to tighten"
     ),
 }
 

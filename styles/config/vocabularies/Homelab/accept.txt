@@ -548,3 +548,24 @@ Emby's
 [Dd]eadman
 [Uu]nlanded
 [Ss]lugified
+
+# Role-doc prose moved to docs/ pages (#2997): k3s, authelia, volume-snapshot.
+# Identifiers stay code spans; these are the words Vale reads as prose.
+[Rr]edis
+[Cc]rontab
+[Ll]ogrotate
+[Ll]ogrus
+klog
+fd
+[Bb]usybox
+[Cc]ontainerPort
+[Ee]ntrypoint's
+[Ee]nrichers
+[Hh]asher
+[Ss]chema's
+[Ee]num
+[Rr]eadonly
+[Ff]inalizer
+[Cc]ommit's
+[Ss]napshotted
+access_control

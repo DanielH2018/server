@@ -67,7 +67,10 @@ MIN_NON_BLANK_LINES = 8
 # `tasks/install.yml`. #2995 took renovate_agent out: the four bounds and the worktree rules,
 # the digest's before/after census, the alive tile's exit codes and token plumbing, the wrapper's
 # throwaway-config harness and the denylist marker's history moved to
-# docs/renovate-agent-bounds-and-digest.md, leaving the arming procedure and the contract.
+# docs/renovate-agent-bounds-and-digest.md, leaving the arming procedure and the contract. #2997
+# took k3s out: the restore drill's three bounds, the cron-evidence checks, the read-only crons, the
+# control-plane gates and the four measured incidents moved to
+# docs/k3s-node-plane-crons-and-incidents.md, and the contract kept every `ENFORCED:` test node.
 OVER_CEILING: dict[str, str] = {
     "gitops_deploy": (
         "29971 chars on 2026-09-29: `## Safety` is the path-rule table root CLAUDE.md routes "
@@ -81,10 +84,6 @@ OVER_CEILING: dict[str, str] = {
         "for a hardware gate and UFW's second sysctl file overwriting this role's; `## What "
         "it does` became a pointer at `tasks/` carrying only its traps (#2982), and "
         "`## Notable` is the next trim"
-    ),
-    "k3s": (
-        "21391 chars on 2026-09-28: the crons' autonomous-role contract and the layout map "
-        "are what a session needs before touching the node plane; `## Notable` is the trim"
     ),
     "optimize_pi": (
         "28728 chars on 2026-09-28: the container-recovery contract governs a cron that "

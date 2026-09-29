@@ -186,3 +186,190 @@ operator removed them on 2026-09-27 by bypassing Longhorn's webhook for exactly 
 hand 2026-09-27* has the source reading and the method. Still unverified:
 
 - **`readyToUse` timing** against the 120s ceiling has not been measured.
+
+## Moved off the role doc by #2997
+
+The derivations below left `ansible/roles/k8s/volume-snapshot/CLAUDE.md` when it went back under
+the inject hook budget. The role doc keeps each one as a rule; this page keeps why it is that way.
+
+`roles/k8s/manifests` passes through only `volume_snapshot_claims` and `volume_snapshot_service`
+as call-site `vars:` (the `vars:` of the `Snapshot the stateful volumes` task in
+`ansible/roles/k8s/manifests/tasks/main.yml`); `volume_snapshot_retain` and
+`volume_snapshot_timeout` are not wired there. **Measured, not assumed: a caller CANNOT change
+them by declaring same-named defaults of its own.** `k8s/volume-snapshot`'s own
+`defaults/main.yml` sets both, and it is the role actually executing when they're read — in a
+three-level `include_role` chain (caller → `k8s/manifests` → `k8s/volume-snapshot`) built to
+match this repo's real call structure, the innermost role's own default won a same-named
+collision against an ancestor's, every time, confirmed 2026-08-21 with a throwaway play. This is
+why `k8s_autodeploy_snapshot_pvcs` reaches the include cleanly — `k8s/volume-snapshot` never
+declares that name itself, so there is no collision to lose — while `volume_snapshot_retain`
+would silently stay at this role's own default even if a caller set it as its own role default.
+`group_vars`, `host_vars` and `-e` all outrank a role default in Ansible's precedence order, so
+each of those DOES override `volume_snapshot_retain`/`volume_snapshot_timeout` — the thing a
+caller role's own `defaults/main.yml` cannot do is set them. The floor clamp described below holds
+regardless of which of those set the value, including `-e volume_snapshot_retain=0`. The two knobs
+stay at `volume_snapshot_retain: 3`, `volume_snapshot_timeout: 120` until a caller genuinely needs
+something else, at which point the fix is adding them to the `vars:` block of that
+`Snapshot the stateful volumes` task, not a role default.
+
+### Why the opt-in census is 13 of 31
+
+**Scope for this slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
+`Recreate` + rendered-RWO-claim shape this role exists for; task 3 declared
+`k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
+criteria, not from a data-migration survey. The other 18 (`authelia`, `claude-otel`, `crowdsec`,
+`healthchecks`, `karakeep`, `loki-homelab`, `mosquitto`, `n8n`, `pihole`, `registry`, `scrutiny`,
+`terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`, `valheim-stats`, `wg-easy`)
+carried the same
+manual-deploy migration risk; karakeep opted in later (`c49d5c4a4`), so 17 remain. Widening
+was deferred on 2026-08-21 because the create path had not yet run live. It has since; see
+*What is unverified* in `docs/volume-snapshot-drills.md`.
+
+### The revert needs two, not one
+
+A floor of 1 was the original design and was wrong: it protects against the wrong run. **A
+rollback redeploy takes its OWN snapshot before it prunes, and prunes BEFORE `k8s/volume-revert`
+reads the chain** — `roles/k8s/manifests/tasks/main.yml` runs "Snapshot the stateful volumes"
+(which includes this role, prune and all) immediately before "Revert the stateful volumes"
+(`k8s/volume-revert`), in that order, every time a claim is declared, whether or not
+`k8s_restore_snapshot_sha` is set. So at the moment THIS run's prune executes, the chain holds
+two snapshots that both matter: the one just taken of the current (already-migrated) data, and
+the earlier pre-deploy snapshot the revert step right after it is about to need. A floor of 1
+keeps only the newest — this run's own — and deletes the recovery point out from under the
+revert that immediately follows it in the same play. The floor is 2 so both always survive one
+run's own prune, regardless of what `volume_snapshot_retain` is set to.
+
+**The retention window holds the 3 most recent deploy runs, not the 3 most recent distinct
+commits.** The per-run token (see "The snapshot name is deterministic" above) gives every run its
+own snapshot, so redeploying the same commit three times fills the window with three snapshots of
+that one commit and prunes out whatever came before it — including a pre-migration snapshot that
+was the actual recovery point this role exists to hold. An operator who redeploys the same
+commit after a migration, to pick up an unrelated config change, loses that recovery point on the
+third redeploy without touching a different commit at all.
+
+**This is not hypothetical for a rollback specifically.** `gitops-deploy`'s hold only skips the
+exact held SHA (`skip_hold` matches `origin_head == hold_sha`); redeploying that same failed
+commit again — including a hand-run `./scripts/deploy.sh --tags <service>` while an operator
+debugs a partial revert per `k8s/volume-revert/CLAUDE.md`'s recovery steps — takes another fresh
+snapshot of it under the same commit's tag. A third such redeploy of the SAME failed SHA (at the
+default `retain: 3`) prunes the ORIGINAL pre-deploy snapshot out of the window, and any further
+automated rollback of that commit then finds no snapshot to revert to — the fail-closed "no
+snapshot matches" error in `k8s/volume-revert` is correct in that case, not a bug, but it means
+the recovery point is gone for good, not merely unreachable this run.
+
+The trade was made deliberately, not overlooked: without the token, redeploying the same commit
+named the exact same CR its own earlier deploy already created, and `apply` against a CR that
+could be `markRemoved`-but-not-gone either silently reused a stale recovery point or failed the
+deploy outright. The token fixes the collision, but a window counted in runs rather than commits
+is the cost of fixing it this way.
+
+**Known cost, not fixed here: renaming a service strands its old snapshots permanently.** The
+prune selects on `autodeploy-<service>-`, and `longhorn-reap-orphan-snapshots.sh.j2` — the
+cluster-wide orphan reaper — skips any snapshot carrying no `RecurringJob` label, which every
+`autodeploy-*` snapshot does by construction. Rename a service and its snapshots under the old
+name become invisible to both this role's own prefix filter and the reaper: nothing prunes them,
+nothing reaps them, and they pin their blocks against `filesystem trim` forever. Not touched in
+this slice.
+
+### The 13 over-long CRs the prune retries and Longhorn refuses, removed by hand 2026-09-27
+
+**They are gone.** The operator removed all thirteen on 2026-09-27 (#2734), bypassing the webhook
+for exactly those objects; *How they were removed* below has the method. Nothing refused remains,
+so the prune's tolerated-rejection branch and the `Report snapshots Longhorn refuses to delete`
+task have no live target. The rest of this section records why they could not be deleted
+through any supported route, which still holds for any future over-long name.
+
+Thirteen `autodeploy-*` Snapshot CRs created on 2026-08-22 across four volumes
+(`code-server-config`, `code-server-workspace`, `home-assistant-config`, `qbittorrent-config`)
+could not be deleted through the Kubernetes API at all. On 2026-09-26 they read
+`status.readyToUse: false`, most carrying `status.error` "lost track of the corresponding
+snapshot info inside volume engine." Issue #2686 filed them as never pruned. The prune did
+reach them; the delete was what failed. Eleven were `markRemoved: false` with the lost-track
+error. The other two, both `code-server-workspace`, carried `markRemoved: true`.
+
+**The cause is the 63-byte name ceiling, and these CRs predate its fix by hours.** `0c0317a77`
+(2026-08-22) dropped the redundant `<service>-` from the claim segment. Before it those four
+claims rendered names of 65, 68, 71 and 65 bytes; after it, 53, 56, 56 and 53.
+
+**The prune selected them on every deploy.** It filters the live listing on `markRemoved` and
+the `autodeploy-<service>-` prefix — never on `readyToUse` — so an error-state CR with
+`markRemoved` unset is in `volume_snapshot_live`, sorts oldest under the newest-first order, and
+lands in the slice past `volume_snapshot_retain`. The `kubectl delete` is issued, the webhook
+denies it, and the prune's `failed_when` tolerates exactly that one message. Retention stayed
+intact — the thirteen consumed no slot in the window — which is why this stayed invisible: the
+only signal was the `Report snapshots Longhorn refuses to delete` debug line, and under the
+GitOps deployer the play output reaches nobody. The two `markRemoved: true` CRs left the
+candidate set instead, so the prune never retried those two.
+
+**Teaching the orphan reaper the `autodeploy-` prefix would not have helped.** It skipped them
+for the reason the rename bullet above gives, and it deletes through `kubectl` as well, so it
+would have hit the same webhook.
+
+**No supported route removes an over-long CR on Longhorn v1.12.1, the manager API included.**
+Read from the `longhorn-manager` v1.12.1 source on 2026-09-27:
+
+- Only a Kubernetes DELETE sets the `deletionTimestamp` that the snapshot controller's
+  finalizer removal waits on.
+- The validator's `Delete` hook calls `IsSnapshotLinkedCloneEntrypoint`, which builds a label
+  selector from the raw snapshot name. That selector is invalid past 63 bytes, so the webhook
+  denies every DELETE, whatever client sends it.
+- The manager API's `snapshotDelete` action (`VolumeManager.DeleteSnapshot`) deletes from the
+  engine's chain and never touches the CR. The engine no longer held these snapshots, so it had
+  nothing to delete. The UI's per-volume delete makes the same call. The refused-delete report in
+  `claim.yml` still names this route; #2733 corrects it.
+- The manager API's `snapshotCRDelete` action goes through `DeleteSnapshotCR`, which is a
+  Kubernetes DELETE and hits the same webhook.
+- The controller sets the lost-track error and nothing else. It never removes such a CR itself.
+
+Upstream master still builds the selector from the raw name, so an upgrade does not fix this
+either. `claim.yml`'s name-length assert is what keeps new snapshots under the ceiling.
+
+**They pinned no blocks.** Measured 2026-09-27, before the removal: none of the thirteen names
+appeared in `status.snapshots` of any of the four volumes' running engines. The controller sets
+the lost-track error exactly when a CR's name is missing from that map. One `markRemoved` CR
+still reported `size: 344064`, which is a stale status field rather than blocks in the chain.
+
+**How they were removed.** An operator-approved scratch play, run from a direct operator session
+because the auto-mode classifier refuses a webhook bypass from an agent session:
+
+1. It asserts the targets by name, and asserts that `longhorn-webhook-validator` carries
+   `objectSelector: {}`.
+2. It labels only the targets, which is an UPDATE the validator allows.
+3. It sets that `objectSelector` to skip that label. For a DELETE, the selector matches
+   the old object, so every other object in the cluster stays validated.
+4. It deletes the targets by exact name, then restores `objectSelector: {}` in an `always` block
+   and asserts the restore.
+
+The webhook configuration is applied by longhorn-manager through wrangler's `objectset` with the
+`longhorn-webhook-ca` Secret as owner. longhorn-manager re-applies it on start or on a CA change,
+not on a short loop, so nothing raced the patch and the restore was the play's job. Two runs, both
+`failed=0` with nothing left afterwards: the eleven lost-track CRs, then the two `markRemoved`
+ones.
+
+### The maintenance-mode attach, and the two drills that made it dead code
+
+**Two drills measured it, covering both ways a volume reaches this role detached.** The
+2026-08-21 task-6 drill snapshotted a volume that had been attached before; the #2698 drill on
+2026-09-27 snapshotted a throwaway PVC no pod had ever mounted, `readyToUse=true` about 13 s
+after the PVC was created. `docs/volume-snapshot-drills.md` holds both records.
+
+**#2740 retired the maintenance-mode attach those drills made dead code.** Between 2026-08 and
+2026-09-27 a claim whose first wait timed out read the volume's `status.state`, and a state other
+than `attached` triggered an attach through `k8s/longhorn-api` with `disableFrontend: true`, a
+retake, a detach, and — when the attach itself failed — a warning that the deploy was proceeding
+with no recovery point. No deploy ever reached it. The retirement also removed the `faulted` /
+`attaching` / `detaching` ambiguity that block carried: those states were read as "detached" and
+took the same unprotected path as a genuinely detached volume.
+
+### The internal `k8s_no_mutate` guards are defence in depth
+
+The internal `k8s_no_mutate` guards on every task inside this role (the apply, the wait, the
+prune, and the two reads' own `check_mode: false`) are defence in depth for a future call site
+that includes this role unconditionally — they are not exercised by anything in this repo today,
+because the one call site that exists already keeps this role from starting under `--check` or
+`--dry-run`.
+
+This role is reached as a dependency rather than named on the command line, so a tag-keyed
+refusal could never have covered it — which is why it guards itself. `volume-claim`,
+`image-builder` and `cronjob-gate` are all in the same position. The `k8s_dry_run_unsupported`
+list that once held the alternative was deleted empty in #2876.
