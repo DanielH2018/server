@@ -46,8 +46,8 @@ from pathlib import Path
 
 import pytest
 from _k8s_render import rendered_docs
-from validate.k8s_manifests import K8S_ROLES
 from _helpers import ANSIBLE
+from _role_census import role_dirs
 
 
 DATA_RE = re.compile(r"^(\s*)(data|stringData|binaryData):\s*$")
@@ -129,7 +129,7 @@ def cases() -> list[tuple[Path, str, str, list[str]]]:
     """(template, role, template name, source keys) for every template the render covers."""
     rendered = RENDERED
     found = []
-    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
+    for role_dir in role_dirs():
         for template in sorted(role_dir.glob("templates/*.j2")):
             key = (role_dir.name, template.name)
             if key not in rendered:

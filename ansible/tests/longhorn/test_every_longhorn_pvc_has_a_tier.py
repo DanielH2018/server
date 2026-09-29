@@ -25,11 +25,11 @@ import yaml
 from lib import yaml_fast
 
 from _helpers import SETUP_ROLES, load_defaults
+from _role_census import role_dirs
 from _k8s_render import (
     ALL_VARS,
     ANSIBLE,
     BASE_CONTEXT,
-    K8S_ROLES,
     SHARED_TPL,
     k8s_entries,
     load_yaml,
@@ -121,7 +121,7 @@ def _volume_claim_longhorn_pvcs(base: dict) -> set[str]:
     env = make_env([SHARED_TPL])
     volume_claim_defaults = role_defaults("volume-claim", base)
     found = set()
-    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
+    for role_dir in role_dirs():
         role = role_dir.name
         tasks_dir = role_dir / "tasks"
         if role not in entries or not tasks_dir.is_dir():

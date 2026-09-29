@@ -15,6 +15,7 @@ Run: uv run pytest ansible/tests/deploy/test_cronjob_only_roles_include_the_gate
 from functools import cache
 
 from _autodeploy import _K8S_ROLES
+from _role_census import role_dirs
 from _autodeploy_batch import _batch_gated_names
 from diagnostics.probe_lib import health
 
@@ -33,7 +34,7 @@ def _cronjob_only_census():
     Deployment/DaemonSet/StatefulSet -- the same population `role_cronjob_targets` serves at
     runtime, derived the same way (render, not a hand-written list)."""
     out = {}
-    for role_dir in sorted(d for d in _K8S_ROLES.iterdir() if d.is_dir()):
+    for role_dir in role_dirs():
         role = role_dir.name
         try:
             workload_targets = health.role_workload_targets(role, _DEFAULT_NS)

@@ -20,6 +20,7 @@ Run: uv run pytest ansible/tests/k8s/test_manifest_roles_include_the_shared_rend
 from pathlib import Path
 
 from _helpers import K8S_ROLES, load_tasks, walk_tasks
+from _role_census import role_dirs
 
 
 from lib.k8s_roles import CALLER_RENDERED_ROLES, is_manifest_template
@@ -58,8 +59,8 @@ def includes_shared_render(role: Path) -> bool:
 def test_every_manifest_rendering_role_includes_the_shared_render():
     in_scope = {
         p.name
-        for p in K8S_ROLES.iterdir()
-        if p.is_dir() and p.name not in CALLER_RENDERED_ROLES and renders_manifests(p)
+        for p in role_dirs()
+        if p.name not in CALLER_RENDERED_ROLES and renders_manifests(p)
     }
     assert KNOWN_MANIFEST_ROLES <= in_scope
     missing = sorted(

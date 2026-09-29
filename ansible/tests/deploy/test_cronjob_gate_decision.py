@@ -60,6 +60,7 @@ from pathlib import Path
 import pytest
 from jinja2.nativetypes import NativeEnvironment
 from _helpers import K8S_ROLES, load_tasks, load_defaults
+from _role_census import role_dirs
 from _helpers import task_named
 
 _ROLE = K8S_ROLES / "cronjob-gate"
@@ -377,11 +378,7 @@ def _gate_include(role: Path) -> dict | None:
 
 def _cronjob_gate_callers() -> list[Path]:
     """Roles that actually include k8s/cronjob-gate, comments excluded."""
-    return [
-        role
-        for role in sorted(_ROLE.parent.iterdir())
-        if role.is_dir() and _gate_include(role) is not None
-    ]
+    return [role for role in role_dirs(_ROLE.parent) if _gate_include(role) is not None]
 
 
 def _effective_timeout(role: Path) -> int:
