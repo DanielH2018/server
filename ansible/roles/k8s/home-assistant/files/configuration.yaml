@@ -173,34 +173,73 @@ prometheus:
 
 http:
   use_x_forwarded_for: true
-  # Who HA honors X-Forwarded-For from. NOT the same as Traefik's forwardedHeaders.trustedIPs,
-  # which governs Traefik trusting ITS upstream (real clients arrive as Cloudflare IPs); here
-  # Traefik IS HA's proxy and legitimately needs XFF trust. Getting this WRONG in the narrow
-  # direction is what makes ip_ban ban the proxy instead of the client, so the list must cover
-  # every hop that actually reaches HA. MFA, not ip_ban, is the real gate (see below).
+  # Which X-Forwarded-For entries HA skips when it looks for the client. HA reads XFF only from a
+  # peer in this list, then walks XFF right-to-left and takes the first entry NOT in it. So the
+  # list must hold every address that can appear to the RIGHT of the client, not only the peer.
+  # NOT the same as Traefik's forwardedHeaders.trustedIPs, which governs Traefik trusting ITS
+  # upstream. MFA, not ip_ban, is the real gate (see below).
   #
-  # Trimmed to the pod CIDR alone on 2026-08-16. Two entries were carried over from the Docker
-  # era and no longer describe any live hop:
-  #   - 172.16.0.0/12 was the Docker bridge, for when HA sat on the shared `apps` bridge with an
-  #     unpinned Traefik IP. Neither cluster node has run Docker since 2026-08-14, so nothing can
-  #     connect from a bridge address at all.
-  #   - 10.0.0.161/32 (daniel-server's LAN IP) was a slice-5 B3 prereq for the chain
-  #     CF -> daniel-server Traefik -> cluster Traefik -> HA. That middle hop retired with the
-  #     Docker edge on 2026-08-13.
-  # Verified before trimming rather than inferred from the retirement dates: Traefik is a k8s
-  # LoadBalancer Service (MetalLB VIPs 10.0.0.240/215) and HA is a pod, so the connection Traefik
-  # opens to HA is pod-to-pod and arrives from 10.42.x — never SNAT'd to a node LAN IP.
-  # /16 not a /24: the pod CIDR grows a /24 per node.
-  # If a real client ever starts getting ip_ban'd after this, the hop chain gained something this
-  # list no longer covers — re-add the specific source, don't widen back to /12.
+  # What HA receives, per route (Traefik's templates/dynamic.yaml.j2, above `cloudflare-realip`):
+  #   - home-assistant.<domain>, Cloudflare-proxied. Traefik's `cloudflare-realip` Middleware
+  #     replaces XFF with CF-Connecting-IP, then Traefik appends the connection address, which is
+  #     the Cloudflare edge. HA sees XFF `client, edge` from a Traefik pod.
+  #   - home-assistant.local.<domain>, direct. Traefik discards any client-sent XFF and sends the
+  #     connection address alone. HA sees XFF `client`. A WireGuard peer arrives as the Pi's LAN
+  #     address, because wg-easy masquerades its peers.
+  #   - In-cluster callers (monitor-bridge, homelab-mcp) and the exec probes send no XFF, so HA
+  #     uses the peer address.
+  #
+  # The Cloudflare ranges are here so HA skips the edge and resolves `client`. With the pod CIDR
+  # alone (2026-08-16 to 2026-09-28) HA resolved the EDGE as the client: ip_ban could ban a
+  # Cloudflare edge and lock out everyone routed through it, and no failed login was ever
+  # attributed to its real source. The ranges are literal because this file ships verbatim
+  # (lookup('file')) and cannot template `cloudflare_ips`. Literal rather than a `!secret`
+  # because nothing validates the CIDRs before HA reads them, and a malformed entry can
+  # crash-loop HA. ENFORCED: ansible/tests/services/test_ha_trusted_proxies_cover_cloudflare.py
+  # fails when this list and group_vars/all.yml `cloudflare_ips` differ, or an entry is not a
+  # strict network. When monitor-bridge's cloudflare_ips_drift tile goes red and all.yml is
+  # updated, that test goes red until this list follows.
+  #
+  # DECIDED: the whole pod CIDR, not Traefik's pod IP. Traefik opens a pod-to-pod connection
+  # (MetalLB VIP -> Traefik pod -> HA pod, never SNAT'd to a node LAN IP), so its source is a
+  # pod IP that changes on every restart, and flannel cannot pin one. A node's /24 is no
+  # narrower in practice, since other pods share it. The cost: a pod the HA NetworkPolicy
+  # admits on 8123 (homelab-mcp, monitor-bridge) could forge XFF to dodge ip_ban or misattribute
+  # a log line. It cannot bypass auth: there is no `trusted_networks` auth provider. /16 not a
+  # /24: the pod CIDR grows a /24 per node. The Docker-era 172.16.0.0/12 and daniel-server's
+  # 10.0.0.161/32 were dropped 2026-08-16, since no live hop comes from either.
   trusted_proxies:
     - 10.42.0.0/16
+    # Cloudflare, kept equal to `cloudflare_ips` in ansible/inventory/group_vars/all.yml.
+    - 173.245.48.0/20
+    - 103.21.244.0/22
+    - 103.22.200.0/22
+    - 103.31.4.0/22
+    - 104.16.0.0/13
+    - 104.24.0.0/14
+    - 108.162.192.0/18
+    - 131.0.72.0/22
+    - 141.101.64.0/18
+    - 162.158.0.0/15
+    - 172.64.0.0/13
+    - 188.114.96.0/20
+    - 190.93.240.0/20
+    - 197.234.240.0/22
+    - 198.41.128.0/17
+    - 2400:cb00::/32
+    - 2606:4700::/32
+    - 2803:f800::/32
+    - 2405:b500::/32
+    - 2405:8100::/32
+    - 2a06:98c0::/29
+    - 2c0f:f248::/32
   # Brute-force defense for the internet-facing login. Authelia is intentionally OFF on this route
   # (it breaks the companion app), so HA's own login is the last gate — CrowdSec + per-router
   # rate-limit front it, this hardens the gate itself. Auto-bans an IP after 5 failed logins (writes
-  # config/ip_bans.yaml; delete a line to unban). Bans the REAL client IP, not Cloudflare/Traefik:
-  # Cloudflare puts it in X-Forwarded-For, Traefik trusts the CF ranges
-  # (forwardedHeaders.trustedIPs=cloudflare_ips) and forwards it, and use_x_forwarded_for honors it.
+  # config/ip_bans.yaml; delete a line to unban). The banned IP is the client the XFF walk above
+  # resolves: the real client on both routes, not a Cloudflare edge and not Traefik. Only a
+  # Cloudflare edge's CF-Connecting-IP decides the public route's client, so a client cannot
+  # choose it. An in-cluster caller with no XFF is banned by its pod IP (see docs/platform.md).
   # Only FAILED password logins count — valid long-lived tokens, the companion app, and webhooks are
   # unaffected. NOT a substitute for MFA: enrol TOTP in HA (Profile → Multi-factor Authentication).
   ip_ban_enabled: true

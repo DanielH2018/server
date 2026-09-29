@@ -167,6 +167,7 @@ spec:
             - -c
             - |
               import hashlib
+              import json
               import shutil
               import tempfile
               import urllib.request
@@ -191,64 +192,87 @@ spec:
               # The guard, and the reason a routine pod restart costs nothing: with the plugin
               # in place this container opens no socket at all. The DIRECTORY is the marker —
               # its name carries the version and it is renamed into place complete, so there is
-              # no separate marker file to disagree with what is on disk.
+              # no separate marker file to disagree with what is on disk. It guards the DOWNLOAD
+              # only. Everything below the branch runs on every start, because the work that
+              # holds the pin — sweeping a superseded directory, turning autoUpdate off — is
+              # exactly what an already-installed plugin needs (#2905).
               if (PLUGIN_DIR / DLL).exists():
                   print("ani-sync " + VERSION + " already installed")
-                  raise SystemExit(0)
+              else:
+                  print("installing ani-sync " + VERSION + " from " + URL)
+                  PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              print("installing ani-sync " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
+                  # Staged INSIDE the plugins directory, not /tmp: same filesystem, so the swap
+                  # below is a rename rather than a cross-device copy, and a half-written plugin
+                  # directory is never visible to Jellyfin.
+                  with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                      archive = Path(tmp) / "plugin.zip"
+                      with urllib.request.urlopen(URL, timeout=60) as response:
+                          with archive.open("wb") as handle:
+                              shutil.copyfileobj(response, handle)
 
-              # Staged INSIDE the plugins directory, not /tmp: same filesystem, so the swap
-              # below is a rename rather than a cross-device copy, and a half-written plugin
-              # directory is never visible to Jellyfin.
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
+                      got = hashlib.md5(archive.read_bytes()).hexdigest()
+                      if got != WANT_MD5:
+                          raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
 
-                  got = hashlib.md5(archive.read_bytes()).hexdigest()
-                  if got != WANT_MD5:
-                      raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
+                      staged = Path(tmp) / "staged"
+                      with zipfile.ZipFile(archive) as bundle:
+                          bundle.extractall(staged)
 
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
+                      # Checked rather than assumed. An archive that extracts without raising but
+                      # carries no DLL leaves a plugin directory Jellyfin silently ignores, which
+                      # presents as "the plugin does nothing" rather than as a failed deploy.
+                      if not (staged / DLL).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                  # Checked rather than assumed. An archive that extracts without raising but
-                  # carries no DLL leaves a plugin directory Jellyfin silently ignores, which
-                  # presents as "the plugin does nothing" rather than as a failed deploy.
-                  if not (staged / DLL).exists():
-                      found = sorted(path.name for path in staged.iterdir())
-                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+                      # Renamed into place COMPLETE, only once the DLL is proven present. That is
+                      # what makes a failed install retry on the next start rather than latch: a
+                      # partial extraction never becomes a directory Jellyfin can find.
+                      if PLUGIN_DIR.is_dir():
+                          shutil.rmtree(PLUGIN_DIR)
+                      shutil.move(staged, PLUGIN_DIR)
 
-                  # Renamed into place COMPLETE, only once the DLL is proven present. That is
-                  # what makes a failed install retry on the next start rather than latch: a
-                  # partial extraction never becomes a directory Jellyfin can find.
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
+                  print("installed ani-sync " + VERSION)
 
               # Older builds are their OWN directories, because the name carries the version —
-              # so a bump leaves the previous one in place and Jellyfin loads two copies of one
-              # plugin. Swept AFTER the rename above, so a failure there leaves the working
-              # version untouched.
+              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
+              # the pinned one seconds after startup (#2905). Swept UNCONDITIONALLY, so an
+              # unpinned copy goes on the start where the pinned version is already installed —
+              # the case the old `raise SystemExit(0)` exited before reaching. Still swept AFTER
+              # the install above, so a failed download leaves the working version untouched.
               for stale in sorted(PLUGINS.glob("Ani-Sync_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
 
+              # ── and stop Jellyfin fetching a newer one (#2905) ─────────────────────────────────
+              # `Update Plugins` downloaded an unpinned build seconds after startup, and the sweep
+              # above only removes it until the task runs again. Jellyfin's
+              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
+              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
+              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
+              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
+              # start rather than at install: a directory on this PVC can predate this container,
+              # and the early-exit path above is exactly the one that needs it.
+              meta_path = PLUGIN_DIR / "meta.json"
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+                  if meta.get("autoUpdate") is not False:
+                      meta["autoUpdate"] = False
+                      meta_path.write_text(json.dumps(meta, indent=4))
+                      print("autoUpdate off in " + PLUGIN_DIR.name + "/meta.json")
+
               # DECIDED: keep this, do not "tidy it away" as dead code. The 2026-08-25 first cut
               # of this container installed to /config/plugins, which Jellyfin never scans, and
               # left ~122 KB there on every config volume it ran against. Nothing else reaches
               # that path — the read-only ServiceAccount cannot exec into the pod — so this
-              # container is the only thing that can clear what it created. Inert after one run.
+              # container is the only thing that can clear what it created. It is reached on
+              # every start since #2905 took the early exit out, and is inert once it has run.
               legacy = Path("/config/plugins/ani-sync")
               if legacy.is_dir():
                   print("removing " + str(legacy) + " (never scanned; installed there in error)")
                   shutil.rmtree(legacy)
-              print("installed ani-sync " + VERSION)
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
@@ -296,63 +320,84 @@ spec:
 
               if (PLUGIN_DIR / DLL).exists():
                   print("intro-skipper " + VERSION + " already installed")
-                  raise SystemExit(0)
+              else:
+                  print("installing intro-skipper " + VERSION + " from " + URL)
+                  PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              print("installing intro-skipper " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
+                  with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                      archive = Path(tmp) / "plugin.zip"
+                      with urllib.request.urlopen(URL, timeout=60) as response:
+                          with archive.open("wb") as handle:
+                              shutil.copyfileobj(response, handle)
 
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
+                      # sha256, not the md5 the sibling install checks. Upstream's manifest
+                      # publishes an MD5, but GitHub reports a sha256 digest for the asset itself,
+                      # so the stronger one is the one that can be re-derived from the release.
+                      got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                      if got != WANT_SHA256:
+                          raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
 
-                  # sha256, not the md5 the sibling install checks. Upstream's manifest
-                  # publishes an MD5, but GitHub reports a sha256 digest for the asset itself,
-                  # so the stronger one is the one that can be re-derived from the release.
-                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
-                  if got != WANT_SHA256:
-                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+                      staged = Path(tmp) / "staged"
+                      with zipfile.ZipFile(archive) as bundle:
+                          bundle.extractall(staged)
 
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
+                      if not (staged / DLL).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                  if not (staged / DLL).exists():
-                      found = sorted(path.name for path in staged.iterdir())
-                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
-
-                  # THE DIFFERENCE FROM ani-sync: this release ships the DLL alone, with no
-                  # meta.json. Jellyfin's LoadManifest falls back to inventing one from the
-                  # directory name when the file is missing — id becomes an MD5 of the folder
-                  # name rather than the plugin's real GUID, and targetAbi becomes whatever
-                  # server happens to be running. Writing the real manifest keeps the dashboard
-                  # entry, the config page and the plugin's own configuration directory bound
-                  # to the GUID the plugin compiles against.
-                  meta = {
-                      "category": "MoviesAndShows",
-                      "description": "Analyzes the audio of television episodes and detects introduction sequences.",
-                      "guid": GUID,
-                      "name": "Intro Skipper",
-                      "overview": "Automatically detect and skip intros in television episodes",
+                      # THE DIFFERENCE FROM ani-sync: this release ships the DLL alone, with no
+                      # meta.json. Jellyfin's LoadManifest falls back to inventing one from the
+                      # directory name when the file is missing — id becomes an MD5 of the folder
+                      # name rather than the plugin's real GUID, and targetAbi becomes whatever
+                      # server happens to be running. Writing the real manifest keeps the dashboard
+                      # entry, the config page and the plugin's own configuration directory bound
+                      # to the GUID the plugin compiles against.
+                      meta = {
+                          "category": "MoviesAndShows",
+                          "description": "Analyzes the audio of television episodes and detects introduction sequences.",
+                          "guid": GUID,
+                          "name": "Intro Skipper",
+                          "overview": "Automatically detect and skip intros in television episodes",
+                          "autoUpdate": False,
                       "owner": "AbandonedCart, rlauuzo, jumoog (forked from ConfusedPolarBear)",
-                      "targetAbi": TARGET_ABI,
-                      "version": VERSION,
-                  }
-                  (staged / "meta.json").write_text(json.dumps(meta, indent=4))
+                          "targetAbi": TARGET_ABI,
+                          "version": VERSION,
+                      }
+                      (staged / "meta.json").write_text(json.dumps(meta, indent=4))
 
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
+                      if PLUGIN_DIR.is_dir():
+                          shutil.rmtree(PLUGIN_DIR)
+                      shutil.move(staged, PLUGIN_DIR)
 
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
-              # above leaves the working version untouched.
+                  print("installed intro-skipper " + VERSION)
+
+              # Older builds are their OWN directories, because the name carries the version —
+              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
+              # the pinned one seconds after startup (#2905). Swept UNCONDITIONALLY, so an
+              # unpinned copy goes on the start where the pinned version is already installed —
+              # the case the old `raise SystemExit(0)` exited before reaching. Still swept AFTER
+              # the install above, so a failed download leaves the working version untouched.
               for stale in sorted(PLUGINS.glob("Intro Skipper_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
-              print("installed intro-skipper " + VERSION)
+
+              # ── and stop Jellyfin fetching a newer one (#2905) ─────────────────────────────────
+              # `Update Plugins` downloaded an unpinned build seconds after startup, and the sweep
+              # above only removes it until the task runs again. Jellyfin's
+              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
+              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
+              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
+              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
+              # start rather than at install: a directory on this PVC can predate this container,
+              # and the early-exit path above is exactly the one that needs it.
+              meta_path = PLUGIN_DIR / "meta.json"
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+                  if meta.get("autoUpdate") is not False:
+                      meta["autoUpdate"] = False
+                      meta_path.write_text(json.dumps(meta, indent=4))
+                      print("autoUpdate off in " + PLUGIN_DIR.name + "/meta.json")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
@@ -380,6 +425,7 @@ spec:
             - -c
             - |
               import hashlib
+              import json
               import shutil
               import tempfile
               import urllib.request
@@ -399,44 +445,64 @@ spec:
 
               if (PLUGIN_DIR / DLL).exists():
                   print("webhook " + VERSION + " already installed")
-                  raise SystemExit(0)
+              else:
+                  print("installing webhook " + VERSION + " from " + URL)
+                  PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              print("installing webhook " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
+                  with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                      archive = Path(tmp) / "plugin.zip"
+                      with urllib.request.urlopen(URL, timeout=60) as response:
+                          with archive.open("wb") as handle:
+                              shutil.copyfileobj(response, handle)
 
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
+                      got = hashlib.md5(archive.read_bytes()).hexdigest()
+                      if got != WANT_MD5:
+                          raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
 
-                  got = hashlib.md5(archive.read_bytes()).hexdigest()
-                  if got != WANT_MD5:
-                      raise SystemExit("md5 mismatch: got " + got + ", want " + WANT_MD5)
+                      staged = Path(tmp) / "staged"
+                      with zipfile.ZipFile(archive) as bundle:
+                          bundle.extractall(staged)
 
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
+                      # This release ships seven bundled dependency DLLs beside the plugin's own,
+                      # so "the archive extracted" says very little. The plugin DLL is the one that
+                      # decides whether Jellyfin loads anything.
+                      if not (staged / DLL).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                  # This release ships seven bundled dependency DLLs beside the plugin's own,
-                  # so "the archive extracted" says very little. The plugin DLL is the one that
-                  # decides whether Jellyfin loads anything.
-                  if not (staged / DLL).exists():
-                      found = sorted(path.name for path in staged.iterdir())
-                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
+                      if PLUGIN_DIR.is_dir():
+                          shutil.rmtree(PLUGIN_DIR)
+                      shutil.move(staged, PLUGIN_DIR)
 
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
+                  print("installed webhook " + VERSION)
 
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
-              # above leaves the working version untouched.
+              # Older builds are their OWN directories, because the name carries the version —
+              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
+              # the pinned one seconds after startup (#2905). Swept UNCONDITIONALLY, so an
+              # unpinned copy goes on the start where the pinned version is already installed —
+              # the case the old `raise SystemExit(0)` exited before reaching. Still swept AFTER
+              # the install above, so a failed download leaves the working version untouched.
               for stale in sorted(PLUGINS.glob("Webhook_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
-              print("installed webhook " + VERSION)
+
+              # ── and stop Jellyfin fetching a newer one (#2905) ─────────────────────────────────
+              # `Update Plugins` downloaded an unpinned build seconds after startup, and the sweep
+              # above only removes it until the task runs again. Jellyfin's
+              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
+              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
+              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
+              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
+              # start rather than at install: a directory on this PVC can predate this container,
+              # and the early-exit path above is exactly the one that needs it.
+              meta_path = PLUGIN_DIR / "meta.json"
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+                  if meta.get("autoUpdate") is not False:
+                      meta["autoUpdate"] = False
+                      meta_path.write_text(json.dumps(meta, indent=4))
+                      print("autoUpdate off in " + PLUGIN_DIR.name + "/meta.json")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
@@ -489,60 +555,81 @@ spec:
 
               if (PLUGIN_DIR / DLL).exists():
                   print("merge-versions " + VERSION + " already installed")
-                  raise SystemExit(0)
+              else:
+                  print("installing merge-versions " + VERSION + " from " + URL)
+                  PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              print("installing merge-versions " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
+                  with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                      archive = Path(tmp) / "plugin.zip"
+                      with urllib.request.urlopen(URL, timeout=60) as response:
+                          with archive.open("wb") as handle:
+                              shutil.copyfileobj(response, handle)
 
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
+                      # sha256, as Intro Skipper's install checks. Upstream's published manifest
+                      # carries an MD5; GitHub reports a sha256 for the asset itself, so the
+                      # stronger digest is the one that can be re-derived from the release.
+                      got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                      if got != WANT_SHA256:
+                          raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
 
-                  # sha256, as Intro Skipper's install checks. Upstream's published manifest
-                  # carries an MD5; GitHub reports a sha256 for the asset itself, so the
-                  # stronger digest is the one that can be re-derived from the release.
-                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
-                  if got != WANT_SHA256:
-                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+                      staged = Path(tmp) / "staged"
+                      with zipfile.ZipFile(archive) as bundle:
+                          bundle.extractall(staged)
 
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
+                      if not (staged / DLL).exists():
+                          found = sorted(path.name for path in staged.iterdir())
+                          raise SystemExit("archive has no " + DLL + ": " + repr(found))
 
-                  if not (staged / DLL).exists():
-                      found = sorted(path.name for path in staged.iterdir())
-                      raise SystemExit("archive has no " + DLL + ": " + repr(found))
-
-                  # THE DIFFERENCE FROM Webhook, and the reason this container imports json at
-                  # all: the release ships the DLL alone. Writing the real manifest keeps the
-                  # dashboard entry, the config page and the plugin's configuration directory
-                  # bound to the GUID the plugin compiles against.
-                  meta = {
-                      "category": "General",
-                      "description": "Merge all repeated movies and episodes in your library into one",
-                      "guid": GUID,
-                      "name": "Merge Versions",
-                      "overview": "Merge repeated versions of a movie or episode into one entry",
+                      # THE DIFFERENCE FROM Webhook, and the reason this container imports json at
+                      # all: the release ships the DLL alone. Writing the real manifest keeps the
+                      # dashboard entry, the config page and the plugin's configuration directory
+                      # bound to the GUID the plugin compiles against.
+                      meta = {
+                          "category": "General",
+                          "description": "Merge all repeated movies and episodes in your library into one",
+                          "guid": GUID,
+                          "name": "Merge Versions",
+                          "overview": "Merge repeated versions of a movie or episode into one entry",
+                          "autoUpdate": False,
                       "owner": "danieladov",
-                      "targetAbi": TARGET_ABI,
-                      "version": VERSION,
-                  }
-                  (staged / "meta.json").write_text(json.dumps(meta, indent=4))
+                          "targetAbi": TARGET_ABI,
+                          "version": VERSION,
+                      }
+                      (staged / "meta.json").write_text(json.dumps(meta, indent=4))
 
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
+                      if PLUGIN_DIR.is_dir():
+                          shutil.rmtree(PLUGIN_DIR)
+                      shutil.move(staged, PLUGIN_DIR)
 
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin. Swept after the rename, so a failure
-              # above leaves the working version untouched.
+                  print("installed merge-versions " + VERSION)
+
+              # Older builds are their OWN directories, because the name carries the version —
+              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
+              # the pinned one seconds after startup (#2905). Swept UNCONDITIONALLY, so an
+              # unpinned copy goes on the start where the pinned version is already installed —
+              # the case the old `raise SystemExit(0)` exited before reaching. Still swept AFTER
+              # the install above, so a failed download leaves the working version untouched.
               for stale in sorted(PLUGINS.glob("Merge Versions_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
-              print("installed merge-versions " + VERSION)
+
+              # ── and stop Jellyfin fetching a newer one (#2905) ─────────────────────────────────
+              # `Update Plugins` downloaded an unpinned build seconds after startup, and the sweep
+              # above only removes it until the task runs again. Jellyfin's
+              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
+              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
+              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
+              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
+              # start rather than at install: a directory on this PVC can predate this container,
+              # and the early-exit path above is exactly the one that needs it.
+              meta_path = PLUGIN_DIR / "meta.json"
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+                  if meta.get("autoUpdate") is not False:
+                      meta["autoUpdate"] = False
+                      meta_path.write_text(json.dumps(meta, indent=4))
+                      print("autoUpdate off in " + PLUGIN_DIR.name + "/meta.json")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config
@@ -574,6 +661,7 @@ spec:
             - -c
             - |
               import hashlib
+              import json
               import shutil
               import tempfile
               import urllib.request
@@ -600,48 +688,68 @@ spec:
 
               if (PLUGIN_DIR / DLL).exists():
                   print("media-cleaner " + VERSION + " already installed")
-                  raise SystemExit(0)
+              else:
+                  print("installing media-cleaner " + VERSION + " from " + URL)
+                  PLUGINS.mkdir(parents=True, exist_ok=True)
 
-              print("installing media-cleaner " + VERSION + " from " + URL)
-              PLUGINS.mkdir(parents=True, exist_ok=True)
+                  with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
+                      archive = Path(tmp) / "plugin.zip"
+                      with urllib.request.urlopen(URL, timeout=60) as response:
+                          with archive.open("wb") as handle:
+                              shutil.copyfileobj(response, handle)
 
-              with tempfile.TemporaryDirectory(dir=PLUGINS) as tmp:
-                  archive = Path(tmp) / "plugin.zip"
-                  with urllib.request.urlopen(URL, timeout=60) as response:
-                      with archive.open("wb") as handle:
-                          shutil.copyfileobj(response, handle)
+                      # sha256, the digest GitHub reports for the asset. Upstream's published
+                      # manifest carries an MD5; the stronger digest is the one that can be
+                      # re-derived from the release itself.
+                      got = hashlib.sha256(archive.read_bytes()).hexdigest()
+                      if got != WANT_SHA256:
+                          raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
 
-                  # sha256, the digest GitHub reports for the asset. Upstream's published
-                  # manifest carries an MD5; the stronger digest is the one that can be
-                  # re-derived from the release itself.
-                  got = hashlib.sha256(archive.read_bytes()).hexdigest()
-                  if got != WANT_SHA256:
-                      raise SystemExit("sha256 mismatch: got " + got + ", want " + WANT_SHA256)
+                      staged = Path(tmp) / "staged"
+                      with zipfile.ZipFile(archive) as bundle:
+                          bundle.extractall(staged)
 
-                  staged = Path(tmp) / "staged"
-                  with zipfile.ZipFile(archive) as bundle:
-                      bundle.extractall(staged)
+                      for needed in (DLL, DEP_DLL):
+                          if not (staged / needed).exists():
+                              found = sorted(path.name for path in staged.iterdir())
+                              raise SystemExit(
+                                  "archive has no " + needed + ": " + repr(found)
+                              )
 
-                  for needed in (DLL, DEP_DLL):
-                      if not (staged / needed).exists():
-                          found = sorted(path.name for path in staged.iterdir())
-                          raise SystemExit(
-                              "archive has no " + needed + ": " + repr(found)
-                          )
+                      if PLUGIN_DIR.is_dir():
+                          shutil.rmtree(PLUGIN_DIR)
+                      shutil.move(staged, PLUGIN_DIR)
 
-                  if PLUGIN_DIR.is_dir():
-                      shutil.rmtree(PLUGIN_DIR)
-                  shutil.move(staged, PLUGIN_DIR)
+                  print("installed media-cleaner " + VERSION)
 
-              # The name carries the version, so a bump leaves the old directory behind and
-              # Jellyfin loads two copies of one plugin — which for a plugin that deletes media
-              # would mean two rule engines acting on one library. Swept after the rename, so a
-              # failure above leaves the working version untouched.
+              # Older builds are their OWN directories, because the name carries the version —
+              # and Jellyfin's `Update Plugins` task writes one too, dropping a NEWER build beside
+              # the pinned one seconds after startup (#2905). Swept UNCONDITIONALLY, so an
+              # unpinned copy goes on the start where the pinned version is already installed —
+              # the case the old `raise SystemExit(0)` exited before reaching. Still swept AFTER
+              # the install above, so a failed download leaves the working version untouched.
+              # Two directories here would mean two rule engines deleting from one library.
               for stale in sorted(PLUGINS.glob("Media Cleaner_*")):
                   if stale != PLUGIN_DIR:
                       print("removing superseded " + stale.name)
                       shutil.rmtree(stale)
-              print("installed media-cleaner " + VERSION)
+
+              # ── and stop Jellyfin fetching a newer one (#2905) ─────────────────────────────────
+              # `Update Plugins` downloaded an unpinned build seconds after startup, and the sweep
+              # above only removes it until the task runs again. Jellyfin's
+              # InstallationManager.GetAvailablePluginUpdates skips a plugin whose manifest carries
+              # `autoUpdate: false` (read from Emby.Server.Implementations/Updates/
+              # InstallationManager.cs at v10.11.11), and PluginManager preserves the local value
+              # when it rewrites the manifest. The flag defaults to TRUE, so it is written on every
+              # start rather than at install: a directory on this PVC can predate this container,
+              # and the early-exit path above is exactly the one that needs it.
+              meta_path = PLUGIN_DIR / "meta.json"
+              if meta_path.is_file():
+                  meta = json.loads(meta_path.read_text())
+                  if meta.get("autoUpdate") is not False:
+                      meta["autoUpdate"] = False
+                      meta_path.write_text(json.dumps(meta, indent=4))
+                      print("autoUpdate off in " + PLUGIN_DIR.name + "/meta.json")
 {{ hardened_security_context(non_root=true, run_as_user=puid, run_as_group=pgid) }}
           volumeMounts:
             - name: jellyfin-config

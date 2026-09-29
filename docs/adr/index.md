@@ -43,15 +43,17 @@ wrong is worth more than the record of one that did not.
 | [0015](0015-d2-for-hand-authored-diagrams.md) | A hand-drawn diagram is D2 source in the repo, not Mermaid in the page | Accepted | 2026-08-24 |
 | [0016](0016-code-scanning-stays-on-default-setup.md) | Code scanning stays on default setup, and false positives are removed in code | Accepted | 2026-09-02 |
 | [0017](0017-the-tree-lock-guards-the-tree-not-the-cluster.md) | The tree lock guards the tree, and per-service locks guard the cluster | Accepted | 2026-09-11 |
+| [0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) | The repository stays public, and CI stays on GitHub-hosted runners | Accepted | 2026-09-28 |
 
 ## The long-form behind a record
 
-Four decisions were worked out at length before they were compressed into a record. Those
-documents stay live under *Background* in the site navigation, because the record states the
-decision and the document holds the evidence for it:
+Five decisions were worked out at length before they were compressed into a record. Two of
+those documents stay live under *Background* in the site navigation, and two sit in the
+archive, because the record states the decision and the document holds the evidence for it:
 
 | Document | Record |
 |---|---|
 | [Longhorn backup tiering](../longhorn-backup-tiering.md) | [ADR-0007](0007-backup-tiering-r2-daily-b2-weekly.md), [ADR-0008](0008-16-mib-longhorn-blocks.md) |
 | [NetworkPolicy default-deny](../networkpolicy-default-deny.md) | [ADR-0009](0009-networkpolicy-default-deny-ingress.md) |
 | [Argo and Flux evaluation](../archive/gitops-argo-flux-evaluation.md) | [ADR-0010](0010-pull-based-gitops-over-argo-and-flux.md) |
+| [Self-hosted runner spike](../archive/self-hosted-runner-spike.md) | [ADR-0018](0018-the-repository-stays-public-and-ci-stays-hosted.md) |

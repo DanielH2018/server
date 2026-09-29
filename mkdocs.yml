@@ -166,6 +166,7 @@ nav:
       - "ADR-0015 D2 for hand-authored diagrams": adr/0015-d2-for-hand-authored-diagrams.md
       - "ADR-0016 Code scanning stays on default setup": adr/0016-code-scanning-stays-on-default-setup.md
       - "ADR-0017 The tree lock guards the tree": adr/0017-the-tree-lock-guards-the-tree-not-the-cluster.md
+      - "ADR-0018 The repository stays public, CI stays hosted": adr/0018-the-repository-stays-public-and-ci-stays-hosted.md
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
@@ -223,13 +224,10 @@ nav:
   # Work that shipped, a spike that concluded and an incident that closed: kept as the record,
   # not as instructions. Operations holds only pages that describe the lab as it runs.
   # The archive index lists every archived plan and names where its live documentation went;
-  # the pages under it stay off the nav (see not_in_nav above). The two pages after it are
-  # history as well but keep their docs/ path, and the index's *History outside this
-  # directory* section says why for each.
+  # the pages under it stay off the nav (see not_in_nav above). The page after it is history
+  # as well but keeps its docs/ path, and the index's *History outside this directory*
+  # section says why. The #2245 runner spike used to sit beside it; ADR-0018 recorded the
+  # repository-visibility decision its verdict waited on, so the page moved into the archive.
   - History:
       - Archive index: archive/README.md
       - "B2 transaction cap incident, 2026-08-02": b2-transaction-cap-monitoring-gaps.md
-      # The #2245 spike: measured CI wall clock, billed minutes and peak memory for carrying
-      # this repo's CI on daniel-server. The issue closed, but its verdict still turns on a
-      # repository-visibility decision the operator has to make.
-      - Self-hosted runner spike: self-hosted-runner-spike.md

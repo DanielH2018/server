@@ -120,9 +120,12 @@ def plugins(tmp_path):
     for name in (
         "configurations",
         "Ani-Sync_4.4.0.0",
-        "Media Cleaner_3.4.0.101109",
-        # Jellyfin's own Update Plugins task writes a newer version between restarts.
         "Media Cleaner_3.7.0.101109",
+        # Jellyfin's own Update Plugins task writes a newer version between restarts. This
+        # sweep keeps both on purpose — it matches the NAME — and the installer's own
+        # superseded sweep removes the version the pin does not name
+        # (test_jellyfin_plugin_pins_hold_across_a_restart.py, #2905).
+        "Media Cleaner_99.0.0.0",
         "Trakt_30.0.0.0",
         "SSO Authentication_4.0.0.4",
         "tmpk2j9x",
@@ -140,8 +143,8 @@ def _assert_report(out: str) -> None:
     lines = set(out.splitlines())
     for kept in (
         "Ani-Sync_4.4.0.0",
-        "Media Cleaner_3.4.0.101109",
         "Media Cleaner_3.7.0.101109",
+        "Media Cleaner_99.0.0.0",
     ):
         assert "keep " + kept in lines, out
     assert "keep configurations (plugin settings, never swept)" in lines, out
@@ -155,8 +158,8 @@ def test_the_sweep_removes_only_unlisted_plugin_directories(plugins):
     _assert_report(_run(_script(DEPLOYMENT.read_text()), plugins))
     assert sorted(p.name for p in plugins.iterdir()) == [
         "Ani-Sync_4.4.0.0",
-        "Media Cleaner_3.4.0.101109",
         "Media Cleaner_3.7.0.101109",
+        "Media Cleaner_99.0.0.0",
         "configurations",
         "stray.dll",
     ]
