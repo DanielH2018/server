@@ -35,12 +35,12 @@ first** and scope with `--tags` when iterating.
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
 
 ## Hardware gates are capability flags, not host names
-A gate names the HARDWARE fact it reads, never the host that has it —
+A hardware gate names the FACT it reads, not the host that has it —
 `ansible/inventory/group_vars/all.yml:has_low_memory_board`,
 `ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
 `ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false there and is true in
-every carrying host's `host_vars` — two for `has_ample_ram` (#2981). Replacing a
-machine is a `host_vars` edit. They sit in `group_vars` because
+every carrying host's `host_vars`, one or more of them (#2981). Replacing a machine is a
+`host_vars` edit. They sit in `group_vars` because
 `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against `group_vars` +
 `host_vars` only, and an unknown name reads as every host.
 
