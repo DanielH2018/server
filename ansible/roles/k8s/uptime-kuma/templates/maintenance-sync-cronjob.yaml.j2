@@ -1,0 +1,284 @@
+{#
+  Keeps ONE Kuma maintenance window — the weekly reboot's — matching the schedule
+  group_vars/all.yml declares. Five stages, because only kuma-cli can talk to Kuma, only
+  python can decide what to say, and Kuma answers the membership question in a second call:
+
+    dump     read the live monitors, the maintenance list and the page   (kuma-cli)
+    select   find our window's numeric id in that list, if it exists     (python)
+    detail   read THAT window, the only call that carries its monitors   (kuma-cli)
+    render   compute the window, write /work/desired.json when it moved  (python)
+    apply    add or edit it                                              (kuma-cli)
+
+  `apply` is the one non-init container, so the pod is Complete only when every stage before
+  it succeeded — the same ordering the status-page sync gets from its heartbeat container.
+
+  NO DEADMAN TILE, unlike the status-page sync beside it. That job's failure is silent: the
+  page freezes at its last good grouping and every other signal stays green. This job's
+  failure announces itself — no window means the Sunday reboot pages Discord for every
+  monitor it takes down, which is the noise #2802 exists to stop. A tile here would be a
+  second, quieter copy of a signal that already arrives.
+
+  Why a CronJob at all, when AutoKuma reconciles every other Kuma entity: AutoKuma has no
+  Maintenance entity at the pinned tag — `autokuma/src/entity.rs` at 2.1.0-rc.2 declares
+  DockerHost, Notification, Monitor, Tag and StatusPage and nothing else.
+#}
+---
+apiVersion: batch/v1
+kind: CronJob
+metadata:
+  name: kuma-maintenance-sync
+  namespace: {{ k8s_namespace }}
+spec:
+  schedule: "{{ kuma_maintenance_sync_schedule }}"
+{# The WINDOW's clock, not `tz`. The schedule here and the window it declares are compared in one
+   clock by test_the_sync_never_runs_inside_the_window_it_declares, and two clocks five hours
+   apart would make that comparison say nothing. #}
+  timeZone: {{ kuma_maintenance_window_timezone }}
+  concurrencyPolicy: Forbid
+  successfulJobsHistoryLimit: 1
+  failedJobsHistoryLimit: 2
+  jobTemplate:
+    spec:
+      backoffLimit: 1
+      ttlSecondsAfterFinished: {{ kuma_maintenance_sync_job_ttl_seconds }}
+      activeDeadlineSeconds: {{ kuma_maintenance_sync_deadline_seconds }}
+      template:
+        metadata:
+          labels:
+            app: kuma-maintenance-sync
+            netpol-baseline: enforced
+        spec:
+          restartPolicy: Never
+          enableServiceLinks: false
+          automountServiceAccountToken: false
+          priorityClassName: homelab-best-effort
+          securityContext:
+            runAsUser: {{ puid }}
+            runAsGroup: {{ pgid }}
+            fsGroup: {{ pgid }}
+          initContainers:
+{# The kuma-cli image is distroless (Dockerfile.cli builds on gcr.io/distroless/cc-debian13:debug),
+   so /busybox/sh is the only shell and /usr/local/bin/kuma the only binary — neither is on a PATH
+   worth trusting, hence the absolute paths.
+   The retry WAITS OUT a Kuma restart rather than failing through it: kube-router's source-pod
+   lookup lags pod creation, and Kuma's Service has no endpoint for ~100s of a deploy rollout.
+   The attempt count is DERIVED from the two budget variables, so the loop and the job deadline
+   cannot drift apart — the measurements are on those variables in this role's defaults. #}
+            - name: dump
+              image: {{ kuma_cli_k8s_image }}
+              command: ["/busybox/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  attempt=1
+                  while [ "$attempt" -le {{ (kuma_maintenance_sync_dump_budget_seconds // kuma_maintenance_sync_dump_attempt_seconds) | int }} ]; do
+                    if /usr/local/bin/kuma monitor list > /work/monitors.json &&
+                       /usr/local/bin/kuma maintenance list > /work/maintenances.json &&
+                       /usr/local/bin/kuma status-page get "$SLUG" > /work/page.json; then
+                      exit 0
+                    fi
+                    echo "kuma read failed (attempt $attempt)" >&2
+                    attempt=$((attempt + 1))
+                    sleep 5
+                  done
+                  exit 1
+              env:
+                - name: SLUG
+                  value: "{{ kuma_status_page_slug }}"
+                - name: KUMA__URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+{# `@/path` is kuma-client's own file reference (resolve_file_ref) — it reads the file and strips
+   one trailing newline — so the admin password never appears as an env VALUE in a pod spec. #}
+                - name: KUMA__PASSWORD
+                  value: "@/etc/kuma/kuma_password"
+                - name: KUMA__USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: username
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
+                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
+                  memory: {{ kuma_maintenance_sync_mem_request }}
+            - name: select
+              image: {{ kuma_status_page_sync_image }}
+              command:
+                - python3
+                - /config/render_maintenance.py
+                - --phase=select
+                - --window=/config/window.json
+                - --maintenances=/work/maintenances.json
+                - --out=/work/live-id.txt
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-config
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
+                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
+                  memory: {{ kuma_maintenance_sync_mem_request }}
+{# `maintenance list` carries the schedule and NOT the monitors: Kuma's getMaintenanceList emits
+   toPublicJSON(), and only getMaintenance fills in monitors and statusPages (server/model/
+   maintenance.js, 2.5.5). Membership is the field that decays, so the detail read is the one
+   that makes the comparison honest. An empty id file is the first-run case — there is nothing
+   to read, and `null` is what the render stage reads as "no live window". #}
+            - name: detail
+              image: {{ kuma_cli_k8s_image }}
+              command: ["/busybox/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  id=$(cat /work/live-id.txt)
+                  if [ -n "$id" ]; then
+                    /usr/local/bin/kuma maintenance get "$id" > /work/live.json
+                  else
+                    echo null > /work/live.json
+                  fi
+              env:
+                - name: KUMA__URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                - name: KUMA__PASSWORD
+                  value: "@/etc/kuma/kuma_password"
+                - name: KUMA__USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: username
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
+                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
+                  memory: {{ kuma_maintenance_sync_mem_request }}
+            - name: render
+              image: {{ kuma_status_page_sync_image }}
+              command:
+                - python3
+                - /config/render_maintenance.py
+                - --phase=plan
+                - --window=/config/window.json
+                - --monitors=/work/monitors.json
+                - --page=/work/page.json
+                - --live=/work/live.json
+                - --out=/work/desired.json
+                - --mode-out=/work/mode
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-config
+                  mountPath: /config
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
+                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
+                  memory: {{ kuma_maintenance_sync_mem_request }}
+          containers:
+{# No desired.json means the live window already says what the reboot schedule implies, which
+   is the steady state. Kuma's editMaintenance rewrites the row AND deletes and reinserts every
+   monitor_maintenance row, so writing anyway would be a per-run churn of ~85 rows in the SQLite
+   on Kuma's Longhorn volume. #}
+            - name: apply
+              image: {{ kuma_cli_k8s_image }}
+              command: ["/busybox/sh", "-c"]
+              args:
+                - |
+                  set -eu
+                  if [ -f /work/desired.json ]; then
+                    /usr/local/bin/kuma maintenance "$(cat /work/mode)" /work/desired.json
+                  else
+                    echo "no change to apply"
+                  fi
+              env:
+                - name: KUMA__URL
+                  value: http://uptime-kuma.{{ k8s_namespace }}.svc.cluster.local:3001
+                - name: KUMA__PASSWORD
+                  value: "@/etc/kuma/kuma_password"
+                - name: KUMA__USERNAME
+                  valueFrom:
+                    secretKeyRef:
+                      name: autokuma-credentials
+                      key: username
+              securityContext:
+                allowPrivilegeEscalation: false
+                readOnlyRootFilesystem: true
+                runAsNonRoot: true
+                capabilities:
+                  drop:
+                    - ALL
+              volumeMounts:
+                - name: maintenance-sync-work
+                  mountPath: /work
+                - name: maintenance-sync-credentials
+                  mountPath: /etc/kuma
+                  readOnly: true
+              resources:
+                limits:
+                  cpu: "{{ kuma_maintenance_sync_cpu_limit }}"
+                  memory: {{ kuma_maintenance_sync_mem_limit }}
+                requests:
+                  cpu: "{{ kuma_maintenance_sync_cpu_request }}"
+                  memory: {{ kuma_maintenance_sync_mem_request }}
+          volumes:
+            - name: maintenance-sync-work
+              emptyDir: {}
+            - name: maintenance-sync-config
+              configMap:
+                name: kuma-maintenance-sync
+            - name: maintenance-sync-credentials
+              secret:
+                secretName: autokuma-credentials
+                items:
+                  - key: kuma_password
+                    path: kuma_password

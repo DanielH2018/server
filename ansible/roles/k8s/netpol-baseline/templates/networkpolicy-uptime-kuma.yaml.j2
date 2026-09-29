@@ -9,6 +9,8 @@
 #   pi-peer-backup          — push_url (pi-peer-backup/templates/secret.yaml.j2), a CronJob
 #   kuma-status-page-sync   — KUMA__URL and the deadman push, the second CronJob
 #                             (uptime-kuma/templates/status-page-sync-cronjob.yaml.j2)
+#   kuma-maintenance-sync   — KUMA__URL, the third CronJob: it reconciles the weekly-reboot
+#                             maintenance window (uptime-kuma/templates/maintenance-sync-cronjob.yaml.j2)
 #
 # pi-peer-backup was missed when this policy first landed: the census read Deployments, and it is
 # the namespace's only CronJob. Its 2026-08-21 03:30 UTC run pulled its two peer files and exited
@@ -58,6 +60,9 @@ spec:
         - podSelector:
             matchLabels:
               app: kuma-status-page-sync
+        - podSelector:
+            matchLabels:
+              app: kuma-maintenance-sync
       ports:
         - port: 3001
           protocol: TCP

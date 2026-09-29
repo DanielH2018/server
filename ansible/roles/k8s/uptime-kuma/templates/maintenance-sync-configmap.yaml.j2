@@ -1,0 +1,38 @@
+{#
+  Inputs for the maintenance-sync CronJob: the derived-window parameters and the script that
+  turns them into a Kuma maintenance.
+
+  render_maintenance.py lives in files/, not templates/, for the reason the status-page sync's
+  script does: validate/k8s_manifests.py renders every *.j2 under templates/ and parses it as
+  YAML, and a Python script is not a manifest.
+
+  window.json carries the reboot schedule AS DECLARED — the four weekly_reboot_* values out of
+  group_vars/all.yml, which initial_setup installs the cron from — plus this role's lead and
+  recovery allowance. The cron expression and the duration are computed from them by the
+  script, so the window cannot say one thing while the reboot does another.
+
+  Keep comments at column 0 and above the document, never indented between two keys: an
+  indented comment leaves its leading spaces behind and pushes the following key inside the
+  preceding block scalar, which still parses as valid YAML.
+#}
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: kuma-maintenance-sync
+  namespace: {{ k8s_namespace }}
+data:
+  window.json: |
+    {{ {
+         "title": kuma_maintenance_window_title,
+         "description": kuma_maintenance_window_description | trim,
+         "reboot_minute": weekly_reboot_minute | int,
+         "reboot_hour": weekly_reboot_hour | int,
+         "reboot_weekday": weekly_reboot_weekday | int,
+         "shutdown_delay_minutes": weekly_reboot_shutdown_delay_minutes | int,
+         "lead_minutes": kuma_maintenance_window_lead_minutes | int,
+         "recovery_allowance_minutes": kuma_maintenance_recovery_allowance_minutes | int,
+         "timezone": kuma_maintenance_window_timezone,
+       } | tojson }}
+  render_maintenance.py: |
+{{ lookup('file', playbook_dir + '/roles/k8s/uptime-kuma/files/render_maintenance.py') | indent(4, true) }}

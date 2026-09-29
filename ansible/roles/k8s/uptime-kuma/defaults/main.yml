@@ -274,3 +274,66 @@ kuma_status_page_sync_cpu_limit: "200m"
 kuma_status_page_sync_mem_limit: 128Mi
 kuma_status_page_sync_cpu_request: "10m"
 kuma_status_page_sync_mem_request: 32Mi
+
+# ── weekly-reboot maintenance window ───────────────────────────────────────────────────────
+# Kuma suppresses a monitor's notifications while a maintenance window covering it is open.
+# The `Weekly system restart` cron takes every host down on Sunday morning, and until #2802
+# each of the ~85 monitors paged Discord for it. One blanket window over every monitor is the
+# operator's decision of 2026-09-28, with its cost accepted in the same breath: a REAL outage
+# starting inside the window is silent until the window closes.
+#
+# AutoKuma cannot declare it. `autokuma/src/entity.rs` at the pinned 2.1.0-rc.2 has
+# DockerHost, Notification, Monitor, Tag and StatusPage and no Maintenance variant, so the
+# window is reconciled over the API by the CronJob below — the same shape, and the same
+# kuma-cli image, as the status-page sync above.
+kuma_maintenance_window_title: Weekly system restart
+kuma_maintenance_window_description: >-
+  Declared from Ansible by the kuma-maintenance-sync CronJob (roles/k8s/uptime-kuma), derived
+  from the weekly_reboot_* schedule in group_vars/all.yml. It covers every monitor, so a real
+  outage that starts inside it is silent until it closes.
+# How long before the reboot cron fires the window opens. The hosts do not go down until
+# `shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}`, so this is not the time to the
+# outage — it is slack for a monitor that flips in the seconds around the cron, and for a
+# heartbeat window that was already half-spent when the shutdown landed.
+kuma_maintenance_window_lead_minutes: 5
+# The window's timezone, which must be the reboot cron's clock — `weekly_reboot_timezone`, UTC.
+# It cannot be spelled `UTC`. kuma-client parses the identifier against its own 424-entry
+# timezones.json (kuma-client/build.rs generates the enum from it) and that list carries neither
+# `UTC` nor `Etc/UTC`, so a file saying either fails to load with `invalid value ... a valid
+# timezone identifier` and the apply stage writes nothing. Atlantic/Reykjavik is in the list and
+# is +00:00 all year with no DST, so it IS the hosts' clock; Europe/London and Europe/Dublin are
+# +00:00 in winter only and would drift an hour every summer.
+# `test_the_window_is_declared_on_the_reboot_cron_s_clock` holds the offset.
+kuma_maintenance_window_timezone: Atlantic/Reykjavik
+# How long after the reboot itself the window stays open. Measured on 2026-09-06: daniel-server
+# was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
+# records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
+# for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,
+# whose 1200s window means a tile can flip DOWN up to 20 minutes after the last missed push.
+# With the 5-minute lead and the 5-minute shutdown delay this is a 50-minute window: 07:25 to
+# 08:15 at the committed schedule. render_maintenance.py does that sum; nothing here repeats it.
+kuma_maintenance_recovery_allowance_minutes: 40
+# Hourly, so a deploy that adds a monitor is covered within the hour rather than at the next
+# reboot. The MINUTE is not free: an `edit` lands `bean.run(true)` in Kuma
+# (server/socket-handlers/maintenance-socket-handler.js), which restarts the window's own cron
+# job, so a run inside the open window could lift the suppression it exists to provide.
+# `test_maintenance_window.py::test_the_sync_never_runs_inside_the_window_it_declares` holds
+# the separation against a move of either schedule.
+kuma_maintenance_sync_schedule: "20 * * * *"
+# Same three-part retry budget as the status-page sync, and for the same reason: Kuma's Service
+# has no endpoint for ~100s of a deploy rollout, so a dump that gives up early turns a routine
+# rollout into a failed Job. This job does not straddle the Sunday reboot the way that one does
+# — both of its neighbouring runs fall outside the window — so the budget only has to cover a
+# rollout, and it is carried at the same value rather than tuned down to the minimum that fits.
+kuma_maintenance_sync_deadline_seconds: 800
+kuma_maintenance_sync_dump_budget_seconds: 350
+kuma_maintenance_sync_dump_attempt_seconds: 15
+# Long enough that a failed Job's logs outlive the hour to the next run, short enough that a
+# red row does not sit in Headlamp for days — the reasoning under
+# kuma_status_page_sync_job_ttl_seconds, at this job's slower cadence.
+kuma_maintenance_sync_job_ttl_seconds: 7200
+
+kuma_maintenance_sync_cpu_limit: "200m"
+kuma_maintenance_sync_mem_limit: 128Mi
+kuma_maintenance_sync_cpu_request: "10m"
+kuma_maintenance_sync_mem_request: 32Mi

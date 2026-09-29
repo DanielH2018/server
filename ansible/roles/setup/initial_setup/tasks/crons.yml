@@ -158,14 +158,17 @@
   # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
   # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
   # the reboot must happen even if the ping fails. UUID = the check's dashed code.
+  # The schedule and the `-r +N` delay come from group_vars/all.yml, not from literals here:
+  # roles/k8s/uptime-kuma derives its Kuma maintenance window from the same four values, and a
+  # reboot moved without that window pages Discord for every monitor it takes down.
   # Both stages go to the journal (#2487): on a healthy run curl prints the ping's `OK` and
   # shutdown prints "Shutdown scheduled for ...", which cron mailed to root every week.
   ansible.builtin.cron:
     name: "Weekly system restart"
-    minute: "30"
-    hour: "7"
-    weekday: "0"
-    job: "{ curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +5; } 2>&1 | logger -t weekly-restart"
+    minute: "{{ weekly_reboot_minute }}"
+    hour: "{{ weekly_reboot_hour }}"
+    weekday: "{{ weekly_reboot_weekday }}"
+    job: "{ curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}; } 2>&1 | logger -t weekly-restart"
     user: root
   become: true
 

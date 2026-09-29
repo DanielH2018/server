@@ -141,8 +141,8 @@ SLICE_45A_WORKLOADS = {
 SLICE_45A_ROLES = {role for role, _name in SLICE_45A_WORKLOADS}
 
 # Slice 4.5 stage B: the standalone apps. Each renders exactly one workload — except uptime-kuma,
-# which added the kuma-status-page-sync CronJob, and is why these are named per workload rather
-# than per role in the first place.
+# which added the kuma-status-page-sync and kuma-maintenance-sync CronJobs, and is why these are
+# named per workload rather than per role in the first place.
 SLICE_45B_WORKLOADS = {
     ("homepage", "homepage"),
     ("homelab-mcp", "homelab-mcp"),
@@ -154,6 +154,7 @@ SLICE_45B_WORKLOADS = {
     ("home-assistant", "home-assistant"),
     ("uptime-kuma", "uptime-kuma"),
     ("uptime-kuma", "kuma-status-page-sync"),
+    ("uptime-kuma", "kuma-maintenance-sync"),
 }
 
 SLICE_45B_ROLES = {role for role, _name in SLICE_45B_WORKLOADS}
