@@ -44,6 +44,7 @@ from _doc_size import (
     recorded_count_problems,
 )
 from _helpers import REPO
+from _role_census import role_dirs
 
 K8S_ROLES_DIR = REPO / "ansible" / "roles" / "k8s"
 
@@ -169,8 +170,8 @@ OVER_CEILING: dict[str, str] = {
 def _role_dirs() -> list[Path]:
     return sorted(
         d
-        for d in K8S_ROLES_DIR.iterdir()
-        if d.is_dir() and d.name not in EXCLUDED_DIRS and not d.name.startswith(".")
+        for d in role_dirs(K8S_ROLES_DIR)
+        if d.name not in EXCLUDED_DIRS and not d.name.startswith(".")
     )
 
 

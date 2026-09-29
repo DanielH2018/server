@@ -24,6 +24,7 @@ import re
 
 import pytest
 from _helpers import ANSIBLE, K8S_ROLES
+from _role_census import role_dirs
 
 
 METALLB_POOL = (
@@ -119,9 +120,7 @@ def _workload_templates(role_dir):
 def _vip_service_roles():
     """Roles owning a Service that is both type: LoadBalancer and ETP Local."""
     found = []
-    for role_dir in sorted(K8S_ROLES.iterdir()):
-        if not role_dir.is_dir():
-            continue
+    for role_dir in role_dirs():
         for tpl in sorted(role_dir.glob("templates/*.j2")):
             text = tpl.read_text()
             if "type: LoadBalancer" in text and "externalTrafficPolicy: Local" in text:

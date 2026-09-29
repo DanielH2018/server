@@ -9,6 +9,7 @@ what a test considers a manifest cannot drift from what that validator does.
 """
 
 from lib import yaml_fast
+from _role_census import role_dirs
 from lib.repo_paths import HOST_VARS as HOST_VARS_DIR
 from validate.k8s_manifests import (
     ALL_VARS,
@@ -47,7 +48,7 @@ def _render_all():
     base = resolve_vars(base, base)
     entries = k8s_entries()
 
-    for role_dir in sorted(d for d in K8S_ROLES.iterdir() if d.is_dir()):
+    for role_dir in role_dirs():
         role = role_dir.name
         if role in SKIP_ROLES or role not in entries:
             continue

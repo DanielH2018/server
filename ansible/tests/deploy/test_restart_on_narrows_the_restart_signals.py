@@ -24,6 +24,7 @@ cannot see, because both leave every rendered branch intact.
 """
 
 from _helpers import REPO, load_defaults, load_tasks
+from _role_census import role_dirs
 
 
 _MANIFESTS = REPO / "ansible/roles/k8s/manifests"
@@ -43,9 +44,7 @@ def _default_triggers():
 def _narrowing_roles():
     """{role: {workload name: restart_on}} for every k8s role that narrows an entry."""
     found = {}
-    for role_dir in sorted((REPO / "ansible/roles/k8s").iterdir()):
-        if not role_dir.is_dir():
-            continue
+    for role_dir in role_dirs():
         narrowed = {
             entry["name"]: entry["restart_on"]
             for value in (load_defaults(role_dir) or {}).values()

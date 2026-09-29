@@ -44,6 +44,7 @@ from lib import yaml_fast
 
 from _autodeploy import _denylist
 from _helpers import REPO
+from _role_census import role_dirs
 
 _RENOVATE = REPO / "renovate.json"
 
@@ -107,9 +108,7 @@ def roles_reading(var: str, roles_dir: Path = _K8S_ROLES) -> set[str]:
     """The k8s roles whose files reference `var` from inside a Jinja tag."""
     pattern = re.compile(_JINJA_REF_PREFIX + re.escape(var) + r"\b")
     readers: set[str] = set()
-    for role in roles_dir.iterdir():
-        if not role.is_dir():
-            continue
+    for role in role_dirs(roles_dir):
         for f in role.rglob("*"):
             if f.is_file() and f.suffix in {".j2", ".yml", ".yaml"}:
                 if pattern.search(f.read_text(errors="replace")):
@@ -189,8 +188,8 @@ def roles_with_dockerfiles(roles_dir: Path = _K8S_ROLES) -> set[str]:
     """The k8s roles with at least one `templates/Dockerfile*.j2` — the built-in manager's reach."""
     return {
         role.name
-        for role in roles_dir.iterdir()
-        if role.is_dir() and any((role / "templates").glob("Dockerfile*.j2"))
+        for role in role_dirs(roles_dir)
+        if any((role / "templates").glob("Dockerfile*.j2"))
     }
 
 

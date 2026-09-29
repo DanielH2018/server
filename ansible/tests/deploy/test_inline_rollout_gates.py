@@ -73,6 +73,7 @@ assertions.
 import re
 
 from _helpers import rollout_seconds
+from _role_census import role_dirs
 from _role_tasks import _K8S_ROLES, _Task, _tasks
 from _inline_rollout_targets import (
     _UNRESOLVED,
@@ -220,7 +221,7 @@ _UNRESOLVED_TARGETS = {
 def _self_pod_roles() -> dict[str, list[tuple[int, _Task, set[str]]]]:
     """role -> its inspections that name a workload the role itself renders."""
     found: dict[str, list[tuple[int, _Task, set[str]]]] = {}
-    for role_dir in sorted(_K8S_ROLES.iterdir()):
+    for role_dir in role_dirs():
         role = role_dir.name
         if not (role_dir / "tasks" / "main.yml").is_file() or not _owned(role):
             continue
@@ -273,7 +274,7 @@ def test_every_role_that_inspects_its_own_pod_gates_on_its_rollout() -> None:
 def test_no_pod_inspection_has_an_unexplained_target() -> None:
     """An unresolvable target is excused in writing or it fails. It is never skipped."""
     unexplained = []
-    for role_dir in sorted(_K8S_ROLES.iterdir()):
+    for role_dir in role_dirs():
         role = role_dir.name
         if not (role_dir / "tasks" / "main.yml").is_file() or not _owned(role):
             continue
@@ -295,7 +296,7 @@ def test_the_unresolved_exceptions_are_all_still_needed() -> None:
     """A stale excuse is worse than none — it reads as coverage of a task that changed."""
     live = {
         (role_dir.name, task.raw_name)
-        for role_dir in sorted(_K8S_ROLES.iterdir())
+        for role_dir in role_dirs()
         if (role_dir / "tasks" / "main.yml").is_file() and _owned(role_dir.name)
         for _index, task, targets in _inspections(role_dir.name)
         if targets is _UNRESOLVED
@@ -408,7 +409,7 @@ def _inline_gate_budgets() -> dict[str, set[int]]:
     existing instead of by somebody remembering to add it.
     """
     found: dict[str, set[int]] = {}
-    for role_dir in sorted(_K8S_ROLES.iterdir()):
+    for role_dir in role_dirs():
         if not (role_dir / "tasks" / "main.yml").is_file():
             continue
         for task in _tasks(role_dir.name):

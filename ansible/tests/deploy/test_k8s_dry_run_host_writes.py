@@ -25,6 +25,7 @@ import re
 from pathlib import Path
 
 from _helpers import REPO
+from _role_census import role_dirs
 from _k8s_guards import (
     _GUARD_FACT,
     _guard_covered_files,
@@ -134,10 +135,8 @@ def _unguarded_host_writes(role: Path) -> list[str]:
 def _roles_with_host_writes() -> list[Path]:
     return [
         role
-        for role in sorted(_K8S_ROLES.iterdir())
-        if role.is_dir()
-        and (role / "tasks").is_dir()
-        and role.name not in _HOST_WRITE_EXEMPT
+        for role in role_dirs()
+        if (role / "tasks").is_dir() and role.name not in _HOST_WRITE_EXEMPT
     ]
 
 

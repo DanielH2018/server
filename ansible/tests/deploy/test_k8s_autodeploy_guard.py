@@ -74,6 +74,7 @@ from _autodeploy import (
     _role_defaults,
     _roles,
 )
+from _role_census import role_dirs
 from _autodeploy_claims import (
     _claim_name_refs,
     _deployment_strategy_is_recreate,
@@ -448,9 +449,7 @@ def test_auto_deployable_roles_account_for_every_claim_they_mount() -> None:
     `media-data` — fails this test by name.
     """
     offenders = []
-    for role in sorted(_K8S_ROLES.iterdir()):
-        if not role.is_dir():
-            continue
+    for role in role_dirs():
         defaults = _role_defaults(role)
         if not defaults.get("k8s_autodeploy"):
             continue

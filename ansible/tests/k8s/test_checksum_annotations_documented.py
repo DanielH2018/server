@@ -14,6 +14,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO
+from _role_census import role_dirs
 
 
 K8S_ROLES = REPO / "ansible" / "roles" / "k8s"
@@ -34,9 +35,7 @@ MACRO_CALL_RE = re.compile(r"checksum_annotation\(\s*['\"]([a-zA-Z0-9._-]+)['\"]
 
 
 def _role_dirs():
-    return sorted(
-        d for d in K8S_ROLES.iterdir() if d.is_dir() and (d / "CLAUDE.md").is_file()
-    )
+    return sorted(d for d in role_dirs() if (d / "CLAUDE.md").is_file())
 
 
 def _annotations_in_templates(role: Path) -> set[str]:
@@ -80,9 +79,8 @@ def test_root_claude_md_checksum_names_exist_somewhere():
     if not documented:
         pytest.skip("root CLAUDE.md names no checksum annotation")
     actual = set()
-    for role in K8S_ROLES.iterdir():
-        if role.is_dir():
-            actual |= _annotations_in_templates(role)
+    for role in role_dirs():
+        actual |= _annotations_in_templates(role)
     missing = documented - actual
     assert not missing, (
         "repo-root CLAUDE.md names checksum annotation(s) %s that exist in no k8s role template"
