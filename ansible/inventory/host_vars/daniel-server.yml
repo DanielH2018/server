@@ -3,6 +3,10 @@ server_ip: 10.0.0.161
 ssh_config_path: /etc/ssh/sshd_config
 # Intel XE iGPU present — enables /dev/dri passthrough for jellyfin/tdarr hardware transcode.
 has_igpu: true
+# 30 GB of RAM with swap sitting unused, so initial_setup lowers vm.swappiness to 10 here —
+# reclaiming page cache beats swapping service heaps. daniel-pi runs the OPPOSITE tuning
+# (swappiness 130, zram-eager) in optimize_pi. group_vars/all.yml defaults this false.
+has_ample_ram: true
 # Dissolves docker-proxy-codeserver and the `codeserver` net from the docker-proxy compose.
 has_code_server: false
 # Empty since Docker was uninstalled here on 2026-08-14. This host now runs the k3s agent,

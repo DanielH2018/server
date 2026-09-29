@@ -131,6 +131,11 @@
 # the i5-1135G7, pinning cores at 3.5-3.8 GHz at idle → 92°C package at load 0.5,
 # 217k package-throttle events in 18 h, fan at full tilt. powersave + HWP still
 # turbos to 4.2 GHz on demand; the pinned clocks bought only heat and throttling.
+# DECIDED: the four governor tasks below keep a HOST LITERAL rather than a capability flag
+# (#2975). They read host history, not hardware: `cpu-governor-performance.service` was
+# installed on daniel-server by commit 8074318 and nowhere else, so the gate means "the one
+# machine that ever carried that unit", which no capability names. They delete themselves once
+# every host that ran 8074318 has converged; a flag would outlive the tasks it gates.
 - name: Check for the legacy performance-governor unit (daniel-server)
   ansible.builtin.stat:
     path: /etc/systemd/system/cpu-governor-performance.service
@@ -185,7 +190,7 @@
     state: present
     sysctl_set: true
   become: true
-  when: inventory_hostname == 'daniel-server'
+  when: has_ample_ram
   tags: [tuning]
 
 # ── Debloat (daniel-server) ──────────────────────────────────────────────────
@@ -194,6 +199,9 @@
 # inactive and no system containers exist (operator confirmed removal 2026-06-11);
 # core20/core22 are its base snaps, needed by nothing else. snapd itself stays —
 # zero-regret subset; purging it would block any future snap-packaged tool.
+# DECIDED: a host literal, not a capability flag (#2975). The subject is a snap the Ubuntu
+# Server installer seeded on this one machine, so the gate reads "the host whose installer did
+# that" — host history again, not hardware. See the governor block above.
 - name: Remove the unused LXD snap and its orphaned bases (daniel-server)
   # One snap per call, ordered (lxd before the bases it uses): passing the list in
   # a single call made community.general.snap (11.x) mangle its snap-remove argv

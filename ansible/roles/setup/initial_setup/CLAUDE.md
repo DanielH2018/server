@@ -34,6 +34,21 @@ first** and scope with `--tags` when iterating.
   [[docker_install]] — **every host** (Pi-specific tasks self-guard, see below).
 - `uv run ansible-playbook ansible/initial_setup.yml --tags "initial_setup"`.
 
+## Hardware gates are capability flags, not host names
+A task that runs on one machine gates on a flag naming the HARDWARE fact it reads —
+`ansible/inventory/group_vars/all.yml:has_low_memory_board`,
+`ansible/inventory/group_vars/all.yml:has_raspi_kernel`,
+`ansible/inventory/group_vars/all.yml:has_ample_ram`. Each defaults false in `group_vars/all.yml`
+and is true in one host's `host_vars`, so replacing a machine is a `host_vars` edit. They sit in
+`group_vars` because `scripts/deploy_tools/land_reach.py:_eval_when` resolves a gate against
+`group_vars` + `host_vars` only, and an unresolvable name reads as every host.
+
+Three gates keep a host literal behind a `DECIDED:` comment: the CPU-governor cleanup, the
+LXD-snap debloat and the stale WireGuard UFW rule. They read HOST HISTORY, which no capability
+names, and they delete themselves once the host converges.
+`ansible/tests/setup/test_initial_setup_host_gates.py::test_a_surviving_host_literal_is_one_of_the_recorded_deliberate_ones`
+refuses a new bare literal.
+
 ## Granular tags (run one block without the whole role)
 Every task carries a block tag (placed right under `name:`), so e.g.
 `--tags fail2ban` or `--tags "ssh,firewall"` runs just that slice:
@@ -53,9 +68,10 @@ consumers' tags (e.g. the home-dir resolver is `[tooling, git-hooks]`) — keep 
 invariant when adding tasks, or tag-scoped runs die on undefined variables.
 
 ## What it does (`tasks/main.yml`, grouped)
-- **Pi bring-up (guarded `inventory_hostname == 'daniel-pi'`):** stop the hardware watchdog
+- **Pi bring-up (guarded `has_low_memory_board`):** stop the hardware watchdog
   during provisioning, then create/secure/format/persist/activate a swap file — disk swap so
-  heavy apt on the 512 MB Zero 2 W doesn't OOM. Also installs Pi-only packages.
+  heavy apt on the 512 MB Zero 2 W doesn't OOM. Pi-only packages install behind
+  `has_raspi_kernel`: the board and its memory are two facts.
 - **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
   24.04+) and the Python CLI tooling as uv tools. **All of it is pinned** (#2148): uv is
   `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_uv_version`, fetched as
@@ -143,7 +159,12 @@ invariant when adding tasks, or tag-scoped runs die on undefined variables.
   Claude Code `!` command re-prompts. Written with `validate: visudo -cf %s` — a malformed
   drop-in locks sudo out, and sudo is the only write path to the cluster.
 - **Kernel/network hardening:** IPv4 forwarding, sysctl security knobs, blacklist rare network
-  modules, load + persist the WireGuard module.
+  modules, load + persist the WireGuard module. **UFW owns a SECOND sysctl file**,
+  `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in `/etc/default/ufw`), re-applied on every `ufw
+  enable`/`reload`. Ubuntu ships it with `log_martians=0`, so before #2977 the loop wrote 1 and
+  `Enable UFW firewall` wrote 0 back twenty tasks later. The role rewrites UFW's copy first.
+  **A sysctl this role sets that UFW's file also names must be set there too**, or the run ends
+  with UFW's value live.
 - **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
   process accounting.
 - **Integrity & malware:** **AIDE** (install, init DB, weekly check; the package's own
