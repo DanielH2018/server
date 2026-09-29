@@ -42,7 +42,17 @@ rendering attacker-supplied pages in a headless browser.
   `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_limit` carries the
   measurements, and why
   `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_mem_request` deliberately stays
-  far below it. Upstream exposes no concurrency cap, so sizing is the only lever.
+  far below it. Upstream exposes no concurrency cap, so sizing is the only lever on how many
+  browsers run at once.
+- **`prowlarr_k8s_fs_disable_media` is the second lever — on how expensive each browser is.**
+  It sets FlareSolverr's `DISABLE_MEDIA`, so the browser loads no images, CSS or other media
+  while it solves a challenge (#2893). Upstream documents it as a bandwidth saving, not a
+  memory one, and nothing here has measured the memory effect — `prowlarr_k8s_fs_mem_limit`
+  therefore stays at 2048Mi until the 7d working-set peak is re-measured. The failure mode it
+  risks lands on the indexers rather than on this pod: a challenge type needing an image or a
+  stylesheet stops solving, and monitor-bridge's `prowlarr_indexers` check pages. Revert by
+  setting `ansible/roles/k8s/prowlarr/defaults/main.yml:prowlarr_k8s_fs_disable_media` false and
+  deploying, then record the refutation beside it.
 - **Log churn, not log size, drives PVC growth.** `prowlarr_k8s_log_level`/`_log_rotate`
   override upstream's noisier defaults; see `roles/k8s/sonarr/defaults/main.yml` for the full
   rationale, shared across the *arr roles.

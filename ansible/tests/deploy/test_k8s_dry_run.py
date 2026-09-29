@@ -31,6 +31,7 @@ from pathlib import Path
 
 from lib import yaml_fast
 from _helpers import REPO, load_tasks
+from _role_census import role_dirs
 
 # The `when:`-coverage scanners, shared with test_k8s_dry_run_host_writes.py beside this file.
 from _k8s_guards import (
@@ -326,8 +327,8 @@ def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
     """
     scanned = [
         role
-        for role in sorted(_K8S_ROLES.iterdir())
-        if role.is_dir() and role.name != "manifests" and (role / "tasks").is_dir()
+        for role in role_dirs()
+        if role.name != "manifests" and (role / "tasks").is_dir()
     ]
     # Non-vacuity: the census must keep finding the roles this rule exists for.
     assert {r.name for r in scanned} >= {
@@ -351,7 +352,7 @@ def test_every_role_that_mutates_outside_manifests_guards_itself() -> None:
 def _roles_included_by_other_roles() -> set[str]:
     """Roles reachable as a dependency rather than by name on the command line."""
     included: set[str] = set()
-    for role in sorted(_K8S_ROLES.iterdir()):
+    for role in role_dirs():
         if not (role / "tasks").is_dir():
             continue
         for task_file in sorted((role / "tasks").glob("*.yml")):

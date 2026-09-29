@@ -18,7 +18,14 @@ Run: uv run pytest ansible/tests/deploy/test_manifests_prune.py
 
 import re
 
-from _helpers import K8S_ROLES, ROLES, jinja_env, load_tasks, task_named, walk_tasks
+from _role_census import role_dirs
+from _helpers import (
+    ROLES,
+    jinja_env,
+    load_tasks,
+    task_named,
+    walk_tasks,
+)
 from lib import yaml_fast
 
 _MANIFESTS_TASKS = ROLES / "k8s" / "manifests" / "tasks" / "main.yml"
@@ -129,7 +136,7 @@ def test_prune_selector_is_keyed_on_the_calling_role_not_a_constant() -> None:
 def _prune_kinds_by_role() -> dict[str, list[str]]:
     """manifests_prune_kinds as declared by every k8s role's tasks/main.yml, keyed by role."""
     declared: dict[str, list[str]] = {}
-    for role in sorted(K8S_ROLES.iterdir()):
+    for role in role_dirs():
         main = role / "tasks" / "main.yml"
         if not main.is_file():
             continue
