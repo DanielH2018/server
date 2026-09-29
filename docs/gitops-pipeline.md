@@ -1020,12 +1020,12 @@ stay).
     failed rollback, and the seed pod of the next deploy mounts the same RWO claim.** If
     `k8s/volume-revert` stops partway (a wait exhausts, an API call fails) the volume can be left
     attached with `disableFrontend: true` and the workload at zero replicas — see
-    `k8s/volume-revert/CLAUDE.md`'s manual-recovery steps. `k8s/volume-claim` runs ahead of
+    `docs/volume-revert-drill-and-sizing.md`'s hand-recovery steps. `k8s/volume-claim` runs ahead of
     `k8s/manifests` on every one of the 13 opted-in roles' NEXT deploy and mounts the same claim
     to seed it; whether that mount succeeds, hangs, or fails against a volume already attached in
     maintenance mode by a different (non-pod) attachment is untested — nothing in this repo
-    exercises a real Longhorn revert (see `k8s/volume-revert/CLAUDE.md`'s "What is not covered by
-    tests"). Treat a stuck maintenance-mode attach as blocking the affected service's next deploy
+    exercises a real Longhorn revert (see `docs/volume-revert-drill-and-sizing.md`'s "What is not
+    covered by tests"). Treat a stuck maintenance-mode attach as blocking the affected service's next deploy
     until cleared by hand, not as something the pipeline routes around on its own.
   - **The pilot list is empty, so the denylist alone decides.** `gitops_deploy_k8s_autodeploy_pilot`
     scoped eligibility to `speedtest` from 2026-08-14 until slice 3 cleared it. An empty list means
@@ -1539,7 +1539,7 @@ manifest, which starts the pod — but the reset tree (from `git reset --hard lo
 `manifests_render` register as `changed` for every role in the batch, so the "Roll the
 deployment after a config change" task ALSO fires and tears that just-started pod straight back
 down for a `rollout restart`. Roughly a minute (see the scale-down/attach cycle timings in
-`ansible/roles/k8s/volume-revert/CLAUDE.md`), charged exactly when the budget is tightest —
+`docs/volume-revert-drill-and-sizing.md`), charged exactly when the budget is tightest —
 right after the worst-case cost of the revert itself. Folded into the 60s stabilisation term above only
 by coincidence of rounding, not by design; not separately budgeted.
 
@@ -1570,8 +1570,8 @@ not a compounding-failure risk, but a slow-full-success risk, and it is still op
 
 **The reachable failure mode is bounded by the first exhausted wait, and the timeout was never
 what stood between it and partial state.** When a wait does exhaust, the play stops right there
-— workload at zero, that claim's revert incomplete — which is exactly the manual-recovery case
-`k8s/volume-revert/CLAUDE.md` already documents. Raising or shrinking
+— workload at zero, that claim's revert incomplete — which is exactly the hand-recovery case
+`docs/volume-revert-drill-and-sizing.md` already documents. Raising or shrinking
 `gitops_deploy_k8s_rollback_timeout_s` does not change whether that failure happens; it only
 changes whether a SLOW SUCCESS gets cut short.
 

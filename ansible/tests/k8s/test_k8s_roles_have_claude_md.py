@@ -80,27 +80,22 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # docs/jellyfin-plugins.md. #2993 took claude-otel and monitor-bridge out: the OIDC
 # measurements, the idle-vs-broken diagnosis and the verification commands moved to
 # docs/claude-otel-oidc-and-idle-diagnosis.md, and the module table, gate-set membership,
-# operator prerequisites and test seams to docs/monitor-bridge-internals.md. Each remaining
-# reason names its own next section to move.
+# operator prerequisites and test seams to docs/monitor-bridge-internals.md. #2995 took homepage
+# and volume-revert out: the grid and stat-block derivations, the browser measurements and the
+# per-widget record moved to docs/homepage-widgets-and-layout.md, and volume-revert's drill
+# timings, timeout derivation, longhorn-manager findings and hand-recovery steps to
+# docs/volume-revert-drill-and-sizing.md. Each remaining reason names its own next section to
+# move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
         "routed service; the second-factor and session history can move to docs/"
-    ),
-    "homepage": (
-        "19799 chars on 2026-09-28: `## Where the config lives` and the traps under `## "
-        "Notable` are editing rules; the per-widget history in that same section is the trim"
     ),
     "uptime-kuma": (
         "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
         "operating rules for every monitor, and #2802 added the maintenance window's "
         "derivation and its two Kuma API shapes; the status-page and host-check tile "
         "history is the next thing to move to docs/"
-    ),
-    "volume-revert": (
-        "20010 chars on 2026-09-28: every section is the caller contract or a measured "
-        "invariant of a destructive revert; the 2026-08-21 drill timings are the part with a "
-        "docs/ home"
     ),
     "volume-snapshot": (
         "26334 chars on 2026-09-28: the opt-in contract and the `k8s_no_mutate` guard rule "

@@ -234,6 +234,10 @@ nav:
       - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
       - claude-otel OIDC and idle diagnosis: claude-otel-oidc-and-idle-diagnosis.md
       - monitor-bridge internals: monitor-bridge-internals.md
+      # And again (#2995), on the three smallest of the ten role docs still over the budget.
+      - homepage widgets and layout: homepage-widgets-and-layout.md
+      - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
+      - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md
