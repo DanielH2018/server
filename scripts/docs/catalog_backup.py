@@ -36,6 +36,7 @@ __all__ = [
     "autodeploy_stance",
     "backup_tier",
     "claim_index",
+    "role_dirs",
     "claim_names",
     "claim_tiers",
     "load_longhorn_tier_lists",
@@ -325,6 +326,18 @@ def _role_claims(role_dir: Path, k8s_roles: Path) -> list[ClaimDecl]:
     return seen
 
 
+def role_dirs(k8s_roles: Path) -> list[Path]:
+    """Every role directory under `k8s_roles`, sorted, a retired role's debris excluded.
+
+    A retired role's gitignored `__pycache__/` keeps its directory on disk after the
+    deployer's fast-forward removes the tracked files. That shell declares no claims, so
+    walking it is harmless today, but it is not a role (#2888).
+    """
+    return sorted(
+        p for p in k8s_roles.iterdir() if p.is_dir() and not is_leftover_dir(str(p))
+    )
+
+
 def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:
     """Every resolvable claim name declared under `k8s_roles`, mapped to its StorageClass.
 
@@ -335,11 +348,7 @@ def claim_index(k8s_roles: Path = K8S_ROLES) -> dict[str, str | None]:
     index: dict[str, str | None] = {}
     if not k8s_roles.is_dir():
         return index
-    # A retired role's `__pycache__`-only shell is skipped: it declares nothing (#2888).
-    role_dirs = (
-        p for p in k8s_roles.iterdir() if p.is_dir() and not is_leftover_dir(str(p))
-    )
-    for role_dir in sorted(role_dirs):
+    for role_dir in role_dirs(k8s_roles):
         for claim in _declared_claims(role_dir, k8s_roles):
             if claim.resolved and index.get(claim.name) is None:
                 index[claim.name] = claim.storage_class
