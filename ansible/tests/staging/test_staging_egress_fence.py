@@ -1,4 +1,9 @@
-"""The staging guest must be fenced off the production LAN, by a filter of the right shape.
+"""Every guest on the staging network must be fenced off the production LAN, by a filter of
+the right shape.
+
+Since daniel-stage was retired (#2941) the only guest wearing the fence is the etcd restore
+drill's throwaway one, which holds the cluster token and the R2 write credentials for the
+whole backup bucket — so the fence matters at least as much as it did.
 
 The libvirt staging network is `<forward mode='nat'/>` with no destination constraint, so
 without an explicit rule the guest reaches the whole production LAN — and reaches it
@@ -13,10 +18,10 @@ it was inert, because libvirt's own FORWARD accept is reached first. The whole h
 roles/setup/initial_setup/tasks/network.yml, where the rule used to live.
 
 These tests check the filter's SHAPE and its ATTACHMENT, which is all a repo-side check can
-see. Whether it fires is a property of the running host —
-`scripts/diagnostics/staging_egress_probe.py`, run on daniel-server, is the gate for that half.
-Neither check subsumes the other: a correct filter can be unattached, and an attached filter
-can be pointed at the wrong network. The inert ufw rule passed a whole file of shape tests.
+see. Whether it fires is a property of the running host, and the probe that measured that ran
+inside the persistent daniel-stage guest; it was deleted with the guest (#2941) and re-pointing
+it at the drill's transient guest is filed, not done. So a correct filter that is unattached
+now reads green here — the inert ufw rule passed a whole file of shape tests.
 
 The pair that matters most is the two CIDR tests at the end. A fence keyed to a network that
 does not contain the guest is not a weaker fence, it is no fence at all, and it reads green
@@ -26,20 +31,18 @@ in every listing the host offers.
 import ipaddress
 import re
 import xml.etree.ElementTree as ET
-from urllib.parse import urlparse
 
 from lib import yaml_fast
-from diagnostics import staging_egress_probe
 
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
 K3S_DEFAULTS = ROLES / "setup" / "k3s" / "defaults" / "main.yml"
 NWFILTER_TEMPLATE = HYPERVISOR / "templates" / "staging-nwfilter.xml.j2"
-DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "staging-vm.xml.j2"
+NETWORK_TEMPLATE = HYPERVISOR / "templates" / "staging-network.xml.j2"
+DOMAIN_TEMPLATE = HYPERVISOR / "templates" / "etcd-drill-vm.xml.j2"
 HYPERVISOR_DEFAULTS = HYPERVISOR / "defaults" / "main.yml"
 NETWORK_TASKS = HYPERVISOR / "tasks" / "network.yml"
-GUEST_TASKS = HYPERVISOR / "tasks" / "guest.yml"
 FIREWALL_TASKS = ROLES / "setup" / "initial_setup" / "tasks" / "network.yml"
 
 CIDR_VAR = "staging_net_cidr"
@@ -221,26 +224,24 @@ def test_the_cluster_dns_ip_falls_inside_the_fenced_service_cidr():
     )
 
 
-def test_fencing_the_clusters_own_ranges_still_assumes_a_single_staging_node():
+def test_fencing_the_clusters_own_ranges_still_assumes_one_node_on_this_bridge():
     """The trade-off the CIDR rules make, tied to the fact that would end it.
 
-    The pod and Service CIDRs are k3s defaults, so STAGING's ranges are the same two. Dropping
-    them is safe only because staging's own pod and Service traffic is delivered on the guest's
-    internal cni0 and by its own kube-proxy rules, never crossing the tap device this filter
-    attaches to. A second staging node would put pod-to-pod traffic on the wire, where the /16
-    drop would break it — so the fence would then need a source- or interface-scoped exception.
+    The pod and Service CIDRs are k3s defaults, so a k3s guest on this bridge would carry the
+    same two ranges. Dropping them is safe only because such a guest's own pod and Service
+    traffic is delivered on its internal cni0 and by its own kube-proxy rules, never crossing
+    the tap device this filter attaches to. A second node on this bridge would put pod-to-pod
+    traffic on the wire, where the /16 drop would break it — so the fence would then need a
+    source- or interface-scoped exception.
 
-    daniel-stage carrying no k3s_agent_node_ips override is what says that has not happened.
+    The network declaring exactly one DHCP reservation is what says that has not happened.
     """
-    staging_agents = _load_host_vars("daniel-stage").get(
-        "k3s_agent_node_ips",
-        yaml_fast.safe_load(K3S_DEFAULTS.read_text())["k3s_agent_node_ips"],
-    )
-    assert not staging_agents, (
-        f"daniel-stage now declares agent nodes {staging_agents}, so staging is no longer a "
-        f"single node. Pod-to-pod traffic crosses the tap device the fence attaches to, and "
-        f"the {POD_CIDR_VAR}/{SERVICE_CIDR_VAR} drop rules in {NWFILTER_TEMPLATE} will break "
-        f"it. Scope those rules before adding the node."
+    reservations = re.findall(r"<host\b[^>]*>", NETWORK_TEMPLATE.read_text())
+    assert len(reservations) == 1, (
+        f"{NETWORK_TEMPLATE} declares {len(reservations)} DHCP reservations, so more than one "
+        f"guest shares this bridge. Pod-to-pod traffic between them crosses the tap device the "
+        f"fence attaches to, and the {POD_CIDR_VAR}/{SERVICE_CIDR_VAR} drop rules in "
+        f"{NWFILTER_TEMPLATE} will break it. Scope those rules before adding the guest."
     )
 
 
@@ -255,7 +256,7 @@ def test_the_fence_does_not_block_the_staging_network_itself():
             assert not blocked.overlaps(staging), (
                 f"{NWFILTER_TEMPLATE} drops traffic to {blocked}, which overlaps the staging "
                 f"network {staging}. The guest reaches daniel-server on that network, so this "
-                f"would break ssh, Ansible and the acceptance probe itself."
+                f"would break the drill orchestrator's ssh."
             )
 
 
@@ -280,29 +281,9 @@ def test_the_filter_is_defined_before_the_guest_that_references_it():
         if "nwfilter-define" in str(t.get("ansible.builtin.command", ""))
     ]
     assert defines, (
-        f"no `virsh nwfilter-define` in {NETWORK_TASKS}. network.yml runs before guest.yml "
+        f"no `virsh nwfilter-define` in {NETWORK_TASKS}. network.yml runs before etcd_drill.yml "
         f"(roles/setup/hypervisor/tasks/install.yml), which is the ordering the domain's "
-        f"<filterref> depends on; moving the define into guest.yml breaks a cold build."
-    )
-
-
-def test_a_running_guest_with_an_unfenced_interface_is_restarted():
-    """`virsh define` writes config only, so a running guest keeps its unfenced interface."""
-    corrections = [
-        t
-        for t in yaml_fast.safe_load(GUEST_TASKS.read_text())
-        if "destroy" in str(t.get("ansible.builtin.command", ""))
-    ]
-    assert len(corrections) == 1, (
-        f"expected exactly one `virsh destroy` in {GUEST_TASKS}, found {len(corrections)}. "
-        f"Without it, adding the fence to the domain template updates the persistent config "
-        f"and the live guest keeps running unfenced — a deploy that reports changed and "
-        f"changes nothing the probe can see."
-    )
-    guard = str(corrections[0].get("when", ""))
-    assert "filterref" in guard, (
-        f"the destroy in {GUEST_TASKS} is guarded by {guard!r}, which does not test the live "
-        f"interface for a filterref. Ungated, this restarts the guest on every run."
+        f"<filterref> depends on; moving the define later breaks a cold build."
     )
 
 
@@ -324,10 +305,10 @@ def test_the_staging_cidr_contains_the_guest():
     """The failure this catches reads green everywhere: a fence around an empty network."""
     all_vars = _all_vars()
     net = ipaddress.ip_network(all_vars[CIDR_VAR])
-    guest = ipaddress.ip_address(all_vars["staging_vm_ip"])
+    guest = ipaddress.ip_address(_hypervisor_defaults()["hypervisor_etcd_drill_vm_ip"])
     assert guest in net, (
-        f"{CIDR_VAR} is {net}, which does not contain staging_vm_ip {guest}. Every check here "
-        f"would pass and the guest would sit outside the network they describe."
+        f"{CIDR_VAR} is {net}, which does not contain the drill guest's address {guest}. Every "
+        f"check here would pass and the guest would sit outside the network they describe."
     )
 
 
@@ -346,68 +327,4 @@ def test_the_staging_cidr_agrees_with_the_network_the_hypervisor_builds():
         f"{CIDR_VAR} has netmask {net.netmask} but {HYPERVISOR_DEFAULTS} builds the network "
         f"with {netmask}. A wider CIDR here fences addresses libvirt never hands out; a "
         f"narrower one leaves part of the guest network unfenced."
-    )
-
-
-def _probe_url_host(url: str):
-    host = urlparse(url).hostname
-    assert host is not None, f"no host in {url}"
-    return ipaddress.ip_address(host)
-
-
-def test_the_probe_dials_the_service_cidr_it_now_fences():
-    """A rule with no probe leg is a rule nothing has ever seen fire.
-
-    The checks above read the template; only the probe reads the running host, and the Service
-    CIDR is the range the LAN-only fence missed.
-    """
-    service_cidr = ipaddress.ip_network(_all_vars()[SERVICE_CIDR_VAR])
-    probed = _probe_url_host(staging_egress_probe.LONGHORN_PROBE_URL)
-    assert probed in service_cidr, (
-        f"the probe's cluster target {probed} is not inside {SERVICE_CIDR_VAR} "
-        f"({service_cidr}), so a run of it says nothing about the Service-CIDR drop rule."
-    )
-
-
-def test_the_probe_does_not_dial_an_address_that_already_answers_nothing():
-    """The rejecting half, and the mistake it rejects was the obvious first draft.
-
-    k8s_registry_cluster_ip and dns_k8s_cluster_ip are the two ClusterIPs pinned in inventory,
-    so they are what a probe author reaches for. Both were measured from inside the guest on
-    2026-08-28 returning 000 BEFORE any cluster rule existed — the registry behind an ingress
-    NetworkPolicy, the DNS Service on a port nothing forwards. Either would read as a held
-    fence on the day it shipped and could never go red afterwards.
-    """
-    all_vars = _all_vars()
-    launderers = {all_vars["k8s_registry_cluster_ip"], all_vars["dns_k8s_cluster_ip"]}
-    probed = str(_probe_url_host(staging_egress_probe.LONGHORN_PROBE_URL))
-    assert probed not in launderers, (
-        f"the probe dials {probed}, which answers nothing from the guest with or without the "
-        f"fence. Pick a target measured reachable from inside the guest while unfenced."
-    )
-
-
-def test_every_unpinned_probe_target_carries_a_control_leg():
-    """An allocated address that moved answers nothing, which reads exactly like a fence.
-
-    The cluster targets are not read from inventory, so nothing stops them going stale in
-    place. Their second dial from daniel-server is what turns that into exit 2.
-    """
-    _, targets = staging_egress_probe._targets()
-    inventory_backed = {
-        "INTERNET",
-        "PRODVIP",
-        "K3SAPI",
-        "WGEASY",
-        "HOSTKUBELET",
-        "LANKUBELET",
-    }
-    uncontrolled = sorted(
-        label
-        for label, _command, control in targets
-        if label not in inventory_backed and not control
-    )
-    assert not uncontrolled, (
-        f"probe targets {uncontrolled} are neither read from inventory nor given a host-side "
-        f"control command, so a stale address among them would report a passing fence."
     )

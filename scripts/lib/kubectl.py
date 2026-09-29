@@ -49,10 +49,21 @@ from typing import Any
 # without parsing Ansible — and pinned to it by
 # scripts/diagnostics/tests/test_probe_health_cluster.py, which fails if a name here stops
 # appearing in ansible/inventory/hosts.ini.
+#
+# DECIDED: `stage` stays after daniel-stage was retired (#2941). What it buys does not depend
+# on a staging cluster existing: a `--cluster stage` request against this prod kubectl has to
+# REFUSE rather than answer a healthy prod verdict, which is the #1663 failure. Drop the entry
+# and that request becomes an unknown-cluster ValueError instead, and `cluster_of` degenerates
+# to a one-entry lookup that can never disagree with itself. `daniel-stage` is therefore the
+# one name here that is deliberately not an inventory host — the exemption is named in
+# scripts/lib/tests/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory.
 CLUSTER_NODES = {
     "prod": frozenset({"daniel-box", "daniel-server"}),
     "stage": frozenset({"daniel-stage"}),
 }
+# Names CLUSTER_NODES may carry that no inventory host line declares. Retiring a cluster's
+# hosts must not silently license a TYPO in a live one.
+RETIRED_CLUSTER_NODES = frozenset({"daniel-stage"})
 DEFAULT_CLUSTER = "prod"
 
 

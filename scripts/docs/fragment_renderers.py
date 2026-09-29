@@ -124,22 +124,6 @@ def render_traefik_ports(http_port: int, https_port: int) -> str:
     )
 
 
-def render_staging_vm_sizing(memory_mib: int, vcpus: int, disk: str) -> str:
-    """Renders the staging VM's resource budget.
-
-    Args:
-        memory_mib: `hypervisor_staging_vm_memory_mib`.
-        vcpus: `hypervisor_staging_vm_vcpus`.
-        disk: `hypervisor_staging_vm_disk_size`.
-    """
-    gib = memory_mib // 1024
-    return (
-        f"The staging VM is sized {gib} GB RAM (`hypervisor_staging_vm_memory_mib` = "
-        f"{memory_mib}), {vcpus} vCPU (`hypervisor_staging_vm_vcpus`), {disk} disk "
-        f"(`hypervisor_staging_vm_disk_size`).\n"
-    )
-
-
 def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int]) -> str:
     """Renders the secret-rotation tier table fragment.
 

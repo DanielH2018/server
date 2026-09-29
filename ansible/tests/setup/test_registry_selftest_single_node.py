@@ -3,7 +3,7 @@
 `selftest-pull-job.yaml.j2` renders two Jobs. The first proves the registry node's own
 containerd resolves the mirror; the second proves an AGENT node's does, over the vxlan and
 through the NetworkPolicy's flannel.1 ipBlock. The second is pinned to a node that exists only
-on a multi-node cluster, so on the staging cluster (one node, docs/staging-cluster.md Decision 3)
+on a multi-node cluster, so on the staging cluster (one node, docs/archive/staging-cluster.md Decision 3)
 it is unschedulable and the role's `kubectl wait` sits there until its 180s timeout.
 
 That is a check that can neither pass nor usefully fail — the shape this repo warns about,

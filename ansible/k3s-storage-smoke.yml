@@ -6,7 +6,7 @@
 #   uv run ansible-playbook ansible/k3s-storage-smoke.yml -e storage_smoke=daniel-stage
 #
 # For daniel-stage, run this ON daniel-server: the guest sits on a libvirt NAT network
-# internal to that host, so daniel-box cannot route to it (docs/staging-cluster.md,
+# internal to that host, so daniel-box cannot route to it (docs/archive/staging-cluster.md,
 # Decision 2).
 #
 # ITS OWN PLAYBOOK, not a fourth play in k3s-bringup.yml, which is where it first lived.

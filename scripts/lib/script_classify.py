@@ -188,11 +188,12 @@ def _literal_segments(node: ast.AST) -> list[str]:
 def _constructed_path_references(text: str) -> set[str]:
     """Script filenames an expression assembles out of separate path segments.
 
-    `deploy_io.staging_expect_script` builds `os.path.join(repo, "scripts", "deploy_tools",
-    "staging_expectations.py")`, so no string literal in the file spells the filename next to
-    its directory and `_argv_references` cannot see it. The GitOps deployer runs both staging
+    `deploy_io.staging_expect_script` built `os.path.join(repo, "scripts", "deploy_tools",
+    "staging_expectations.py")`, so no string literal in the file spelled the filename next to
+    its directory and `_argv_references` could not see it. The GitOps deployer ran both staging
     scripts that way, and the generated page called one of them "no automated caller in the
-    tree" (#2424).
+    tree" (#2424). Those callers and those scripts are retired (#2859, #2941); the shape is not
+    specific to them, and this reader is what stops the next assembled path repeating it.
     """
     try:
         tree = ast.parse(text)

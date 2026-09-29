@@ -1,9 +1,17 @@
 # Staging Cluster — a second k3s the GitOps pipeline must pass through
 
-Stands up a **single-node k3s VM on daniel-server** and teaches the repo to deploy to it, so a
-bad merge fails on staging before prod ever renders it.
+> **ARCHIVED 2026-09-29 (#2941). The staging cluster is retired and nothing here describes a
+> running system.** The operator decided no manual staging sessions continue, so the
+> `daniel-stage` guest is undefined and its disk reclaimed, the gate that deployed to it is
+> deleted, and its inventory entry, secrets file and ssh identity are gone. What survives is
+> the libvirt substrate underneath it — `ansible/roles/setup/hypervisor`, the `staging`
+> network and its egress fence — which the monthly etcd restore drill's throwaway guest runs
+> in. Read this page for why the cluster was shaped the way it was, not for how to reach it.
 
-This is **Tier 2** of the staging spike. [Tier 1](deploying.md#checking-a-change-without-deploying-it)
+Stood up a **single-node k3s VM on daniel-server** and taught the repo to deploy to it, so a
+bad merge failed on staging before prod ever rendered it.
+
+This is **Tier 2** of the staging spike. [Tier 1](../deploying.md#checking-a-change-without-deploying-it)
 landed on 2026-08-16 as `k8s_dry_run` (PR #237): it validates manifests against the live API
 server without applying them. Tier 1 catches bad apiVersions, schema drift and CRD ordering. It
 cannot catch scheduling, PVC binding, probe or rollout behaviour, because nothing is ever
@@ -12,11 +20,9 @@ actually run. Tier 2 is what runs it.
 Covers **Phase A** (the cluster exists) and **Phase B** (Ansible can deploy to it).
 
 **Phase C — gating the GitOps tick on a staging deploy — was built and then retired** (#2859,
-2026-09-29). The deployer no longer consults staging; `docs/archive/staging-phase-c.md` is the
-record. What stays live is this cluster and the way in by hand:
-`uv run python scripts/deploy_tools/staging_gate.py <sha> --tags <svc>` from daniel-box, then
-`scripts/deploy_tools/staging_expectations.py`. The guest and its network also carry the
-monthly etcd restore drill (`roles/setup/hypervisor`).
+2026-09-29). `staging-phase-c.md` is that record. The cluster itself followed it
+out a day later (#2941): with no tick consulting the guest and no manual sessions continuing,
+8 GiB of daniel-server's RAM and a 100 GB qcow2 were allocated to a host nothing drove.
 
 ---
 
@@ -65,11 +71,9 @@ A VM rather than the lighter container options, because of what else lives on th
 A VM gets its own kernel and its own network stack. That isolation is the entire reason staging
 is safe to break, and it is worth the RAM.
 
-**Sizing:**
-
-<!-- Generated from hypervisor_staging_vm_memory_mib, _vcpus and _disk_size in the
-     hypervisor role's defaults; edit those. -->
---8<-- "assets/generated/fragments/staging-vm-sizing.md"
+**Sizing:** the guest was 8 GB RAM, 4 vCPU, 100G disk. Those numbers were a generated fragment
+read out of the hypervisor role's defaults until #2941 removed the guest and them with it, so
+they are written out here as the historical record.
 
 Leaves daniel-server ~17 GB, which is above its current 4 GB working set with room for the
 k3s agent's own growth.
@@ -467,7 +471,7 @@ of the one that role creates.
 Skipping is the right shape because seeding is a one-shot migration mechanism and staging has
 nothing to migrate.
 
-That hazard is structurally gone as of 2026-09-01: `volume-claim` no longer seeds, and
+That hazard was structurally gone on 2026-09-01: `volume-claim` no longer seeds, and
 `seed_volume_source_host` no longer exists. Every source path pointed into
 `/home/ubuntu/server/containers/<svc>/` on daniel-server, a tree that stopped existing when
 Docker was uninstalled there on 2026-08-14, so the copy could no longer have a source. The role
@@ -503,7 +507,7 @@ any genuinely remote target and has 13 callers; the fix is `delegate_to: localho
 
 ## Sequencing
 
-Vertical slices; each leaves something exercisable. Status as of 2026-08-28.
+Vertical slices; each leaves something exercisable. Status on 2026-08-28.
 
 1. **Node-pin variables** (*Decision 7*) — DONE. Repo-only, verified against prod.
 2. **Hypervisor + VM** (*Decisions 1, 2*) — DONE. `virsh list` shows a running guest; ssh reaches it. The egress fence landed here and was corrected twice; *Decision 2* carries both.
@@ -593,7 +597,7 @@ and retired on 2026-09-29 (#2859) because the arm stopped no deploy. **Letting t
 was not, on its own, how the false-failure rate got measured** — that was this spec's
 assumption and it did not survive contact: only about one tick a month could reach the gate,
 so the rate was gathered by a deliberate backfill.
-[archive/staging-phase-c.md](archive/staging-phase-c.md) carries the whole record; do not
+[staging-phase-c.md](staging-phase-c.md) carries the whole record; do not
 restate it here, because a second copy is what made this paragraph assert an unmet
 precondition for a day after the gate was already running — and what made it assert a
 measurement plan for two days after that plan was known not to work. The mode was the third:
@@ -601,7 +605,7 @@ this paragraph called the gate advisory for the hours after it started blocking.
 
 ## Questions Phase C had to answer
 
-Answered, or at least given a recommendation, in [archive/staging-phase-c.md](archive/staging-phase-c.md).
+Answered, or at least given a recommendation, in [staging-phase-c.md](staging-phase-c.md).
 The three below are kept because they are what that document had to resolve, and because it
 added a fourth the spike had not surfaced: **the deployer runs on daniel-box and staging is
 reachable only from daniel-server**, so gating could not be a step added to `main()`. They

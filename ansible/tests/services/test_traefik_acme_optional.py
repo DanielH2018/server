@@ -2,7 +2,7 @@
 
 Prod issues certificates through the `cloudflare` ACME DNS-01 resolver. A staging cluster has
 no Cloudflare token and must never issue against the real domain's account or rate limit, so
-`traefik_k8s_manage_acme` is false there (docs/staging-cluster.md, Decision 4).
+`traefik_k8s_manage_acme` is false there (docs/archive/staging-cluster.md, Decision 4).
 
 ACME is not one block. It spans a resolver in the static config, a `fix-acme-permissions` init
 container, the `CF_*` env pair, two volumeMounts, two volumes, a PVC and a Secret — so the

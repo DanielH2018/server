@@ -1,17 +1,36 @@
 ---
 # The etcd restore drill's throwaway guest and the cron that drives it (issue #1175, path 1).
-# Runs after network.yml (the domain's interface names the staging network and its DHCP carries
-# this guest's reservation) and after guest.yml (which downloaded the base image this guest is
-# built from). Ansible prepares what a run needs — the seed, the domain XML, the pinned host key,
-# the credentials, the two scripts — and never starts the guest itself: etcd-restore-drill-vm
+# Runs after network.yml: the domain's interface names the staging network and its DHCP carries
+# this guest's reservation. Ansible prepares what a run needs — the base image, the seed, the
+# domain XML, the pinned host key, the credentials, the two scripts — and never starts the guest
+# itself: etcd-restore-drill-vm
 # creates it transiently on every run and destroys it on the way out, so nothing here defines a
 # domain and teardown.yml's "no guest defined" refusal is never in its way. See the
 # hypervisor_etcd_drill_* block in defaults/main.yml for the decisions.
 
+- name: Download the Ubuntu cloud image
+  tags: [hypervisor]
+  # Checksum-pinned. cloud-images.ubuntu.com rotates `current` roughly monthly, so this WILL
+  # eventually fail on a host that has not downloaded it yet — that is deliberate. A drill guest
+  # silently built from a different image than the one reviewed is worse than a download that
+  # stops and asks to be re-pinned.
+  #
+  # The orchestrator converts this into the guest's per-run disk (etcd-restore-drill-vm.sh.j2);
+  # ansible only ensures the base image is present. It lived in the retired guest.yml until
+  # 2026-09-29 (#2941), when daniel-stage was removed and the drill became its only reader.
+  ansible.builtin.get_url:
+    url: "{{ hypervisor_base_image_url }}"
+    dest: "{{ hypervisor_base_image_path }}"
+    checksum: "sha256:{{ hypervisor_base_image_sha256 }}"
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+
 - name: Read the deploy user's public key for the drill guest
   tags: [hypervisor]
-  # The same key the staging guest trusts (guest.yml), for the same reason: the thing that has to
-  # reach this guest is a root cron on this host, which reads sys_user's key.
+  # The thing that has to reach this guest is a root cron on this host, which reads sys_user's
+  # key.
   ansible.builtin.slurp:
     src: "/home/{{ sys_user }}/.ssh/id_ed25519.pub"
   register: hypervisor_etcd_drill_vm_pubkey
@@ -35,9 +54,9 @@
 - name: Generate the drill guest's pinned ssh host key
   tags: [hypervisor]
   # Once. The guest boots from a fresh disk every run, so a guest-generated host key would be new
-  # every run and the orchestrator could pin nothing — and the staging guest sits on the same
-  # bridge. Seeded into the guest by cloud-init (etcd-drill-user-data.j2); the public half is what
-  # the orchestrator's known_hosts carries.
+  # every run and the orchestrator could pin nothing, so anything else that ever lands on this
+  # bridge could answer for the address. Seeded into the guest by cloud-init
+  # (etcd-drill-user-data.j2); the public half is what the orchestrator's known_hosts carries.
   ansible.builtin.command:
     cmd: ssh-keygen -q -t ed25519 -N "" -C "{{ hypervisor_etcd_drill_vm_hostname }} host key" -f {{ hypervisor_etcd_drill_vm_hostkey }}
     creates: "{{ hypervisor_etcd_drill_vm_hostkey }}"
@@ -78,7 +97,9 @@
 
 - name: Build the drill guest's cloud-init seed ISO  # noqa: no-handler
   tags: [hypervisor]
-  # Same construction as the staging guest's seed (guest.yml): xorriso, volume id `cidata`.
+  # xorriso rather than cloud-localds: cloud-image-utils is not in this host's package set, and
+  # xorriso already is. The volume id MUST be `cidata` — that string is how cloud-init's NoCloud
+  # datasource finds the disk.
   when: hypervisor_etcd_drill_vm_seed_files is changed
   ansible.builtin.command:
     cmd: >-
@@ -91,7 +112,7 @@
 
 - name: Restrict the drill guest's seed ISO
   tags: [hypervisor]
-  # The ISO carries the private host key, so unlike the staging seed it is not world-readable.
+  # The ISO carries the private host key, so it is not world-readable.
   # root:kvm 0640 — libvirt relabels the file to its qemu user at domain start regardless, so
   # the guest can still read it; this only closes it to other local accounts.
   ansible.builtin.file:

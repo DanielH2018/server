@@ -36,7 +36,7 @@
       # daniel-box is the prod control-plane node. daniel-server is an AGENT — running the
       # server role against it would stand up a second control plane on a node that already
       # belongs to this cluster. daniel-stage is the staging cluster's own single node
-      # (docs/staging-cluster.md); it is a server for a DIFFERENT cluster, not a second one
+      # (docs/archive/staging-cluster.md); it is a server for a DIFFERENT cluster, not a second one
       # for this.
       #
       # DECIDED: an allowlist, not `inventory_hostname not in k3s_agent_hosts`. Inverting it

@@ -1,10 +1,11 @@
 """Every setup-plane task that reads the repo checkout ON THE TARGET is gated.
 
-`daniel-stage` is the one host Ansible drives over ssh that holds no checkout of this repo, so
-`{{ playbook_dir }}` and `~/server/...` name paths that exist on the controller and not on the
-target. `docs/staging-cluster.md` audited this by hand and found two such tasks; this census
-finds five, and the two it added are ones nobody would have hit until the setup plane was first
-pointed at staging.
+`daniel-stage` was the one host Ansible drove over ssh that held no checkout of this repo, so
+`{{ playbook_dir }}` and `~/server/...` named paths that exist on the controller and not on the
+target. It is retired (#2941) and every host in the inventory now holds a checkout, so the gate
+is latent rather than live — kept because adding such a host again is meant to be a var, and
+because these five tasks are exactly the ones that would break on the day it happened. The
+staging audit found two of them by hand; this census finds five.
 
 WHICH SIDE READS THE PATH IS THE WHOLE QUESTION. `template.src` and `copy.src` are read by
 Ansible on the CONTROLLER and shipped as content, so naming the checkout there is fine whatever
@@ -192,7 +193,8 @@ def test_every_target_side_checkout_read_is_gated(entry):
     tasks_file, name, when, hits = entry
     assert _gated(when), (
         f"{tasks_file}: {name!r} reads the repo checkout on the TARGET via {hits}, "
-        f"but its `when` is {when!r}. daniel-stage has no checkout. Add `{GATE}`."
+        f"but its `when` is {when!r}, so it would run on a host that holds no checkout. "
+        f"Add `{GATE}`."
     )
 
 
@@ -248,7 +250,7 @@ def test_the_gate_is_accepted_in_both_when_forms():
 
 def test_a_pinned_host_allowlist_counts_as_a_gate():
     """`Install Git hooks` moved onto `dev_tooling_hosts` in #1726. Both members hold a
-    checkout, so the task still cannot reach daniel-stage."""
+    checkout, so the task still cannot reach a host that has none."""
     assert _gated("inventory_hostname in dev_tooling_hosts")
 
 
@@ -258,10 +260,19 @@ def test_an_unpinned_host_allowlist_does_not():
     assert not _gated("inventory_hostname in some_other_hosts")
 
 
-def test_daniel_stage_is_the_host_that_declares_no_checkout():
-    """The gate is worthless if no host sets it false."""
-    stage = yaml_fast.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
-    assert stage[GATE] is False
+def test_the_gate_defaults_true_and_no_host_declares_itself_checkout_free():
+    """The census half. No host sets it false since daniel-stage was retired (#2941), so a
+    host appearing here is the point at which these five tasks start being skipped for real."""
+    declared = {
+        f.stem: value
+        for f in sorted(HOST_VARS.glob("*.yml"))
+        if (value := yaml_fast.safe_load(f.read_text()).get(GATE)) is False
+    }
+    assert not declared, (
+        f"{sorted(declared)} declare {GATE} false. That is supported, but the five tasks the "
+        f"census below finds are now skipped there — check each one still has a path that "
+        f"works, or is meant not to run."
+    )
     defaults = yaml_fast.safe_load(ALL_VARS.read_text())
     assert defaults[GATE] is True, (
         "the default must stay true, or every host skips these"

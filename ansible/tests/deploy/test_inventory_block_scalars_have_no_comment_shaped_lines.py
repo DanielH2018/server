@@ -33,7 +33,6 @@ MUST_SCAN = frozenset(
         "host_vars/daniel-box.yml",
         "host_vars/daniel-server.yml",
         "host_vars/daniel-pi.yml",
-        "host_vars/daniel-stage.yml",
     }
 )
 

@@ -117,8 +117,9 @@ Each arm below is a rule and the function that holds it. The record page has the
     `name:` exactly; an empty list disarms the gate with a log line.
 - **The tick does not consult staging.** It did from 2026-09-02 until #2859 retired the arm on
   2026-09-29, over which the gate stopped no deploy. `docs/archive/staging-phase-c.md` is the
-  record. The cluster is still live and driven by hand (`docs/staging-cluster.md`), and the
-  staging-backfill ratchet that used to exercise the gate is retired too (#2414, 2026-09-24;
+  record. The cluster itself followed a day later (#2941,
+  `docs/archive/staging-cluster.md`), and the staging-backfill ratchet that used to exercise the
+  gate is retired too (#2414, 2026-09-24;
   the `DECIDED:` above the retirement tasks in `tasks/install.yml`).
 - Read-only against the repo (no push); rollback is local-only + self-guarding.
 - **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True) ->

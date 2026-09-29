@@ -16,12 +16,10 @@
   <ip address='{{ hypervisor_staging_net_gateway }}' netmask='{{ hypervisor_staging_net_netmask }}'>
     <dhcp>
       <range start='{{ hypervisor_staging_net_dhcp_start }}' end='{{ hypervisor_staging_net_dhcp_end }}'/>
-      <!-- The guest's address is reserved here rather than left to a lease, so the
-           inventory entry that reaches it in a later slice names a fixed address. The
-           reservation deliberately sits OUTSIDE the dynamic range above. -->
-      <host mac='{{ staging_vm_mac }}' name='{{ staging_vm_hostname }}' ip='{{ staging_vm_ip }}'/>
-      <!-- The etcd restore drill's throwaway guest (etcd_drill.yml). Reserved for the same
-           reason: the orchestrator waits for ssh at a fixed address and pins its host key. -->
+      <!-- The etcd restore drill's throwaway guest (etcd_drill.yml), and the only reservation
+           left since daniel-stage was retired (#2941). Reserved rather than left to a lease
+           because the orchestrator waits for ssh at a fixed address and pins its host key. It
+           deliberately sits OUTSIDE the dynamic range above. -->
       <host mac='{{ hypervisor_etcd_drill_vm_mac }}' name='{{ hypervisor_etcd_drill_vm_hostname }}' ip='{{ hypervisor_etcd_drill_vm_ip }}'/>
     </dhcp>
   </ip>

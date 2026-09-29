@@ -71,10 +71,11 @@ OVER_CEILING: dict[str, str] = {
         "Traps` and the error-string ledger move to docs/gitops-pipeline.md next"
     ),
     "hypervisor": (
-        "28532 chars on 2026-09-28: the gate's edge-reconcile leg and its PREP_FAILED "
-        "semantics are an operating rule an operator needs before touching the gate (#2797), "
-        "and the staging-guest lifecycle has no docs/ page of its own; the M-2 history under "
-        "`## The staging gate's checkout` moves to docs/staging-cluster.md next"
+        "15176 chars on 2026-09-29: the etcd restore drill's guest lifecycle and the reap of "
+        "the retired staging guest "
+        "are operating rules an operator needs before touching the role, and neither has a "
+        "docs/ page of its own; the egress-fence history can thin to a pointer at "
+        "docs/archive/staging-cluster.md next"
     ),
     "initial_setup": (
         "30677 chars on 2026-09-28: the granular-tag list and the two autonomous-role "

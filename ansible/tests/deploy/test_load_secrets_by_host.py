@@ -7,11 +7,15 @@ to the whole play. Every play in this repo is single-host today, but `hosts:` is
 `{{ target | default(hostname) }}` in five of them and `target` takes a group as readily as a
 host name — so `-e target=homeservers` is one flag away from a mixed play.
 
-The dangerous direction is not symmetric. A staging host that picked up the production file
-would put every production credential in scope on the host whose stated purpose is being broken
-(docs/staging-cluster.md, Decision 5). So the preamble asserts the hosts agree rather than
-picking a winner, and these tests pin both halves: the file is a variable, and the assert that
-makes the variable safe is still there.
+The dangerous direction is not symmetric. A non-production host that picked up the production
+file would put every production credential in scope on the host whose stated purpose is being
+broken. So the preamble asserts the hosts agree rather than picking a winner, and these tests
+pin both halves: the file is a variable, and the assert that makes the variable safe is still
+there.
+
+Every host reads `secrets.yml` since daniel-stage and `secrets-staging.yml` were retired
+(#2941), so no host exercises the override today. The guard stays because re-adding such a host
+is meant to be a var rather than a code change, and because the assert is what makes that safe.
 """
 
 import re
@@ -25,7 +29,6 @@ VARS_DIR = ANSIBLE / "vars"
 
 VAR_NAME = "secrets_file"
 PRODUCTION_FILE = "secrets.yml"
-STAGING_FILE = "secrets-staging.yml"
 
 
 def _tasks():
@@ -46,8 +49,8 @@ def test_the_load_names_a_variable_and_not_a_literal_file():
     loaded = _task_with("community.sops.load_vars")["community.sops.load_vars"]["file"]
     assert re.fullmatch(r"\{\{\s*%s\s*\}\}" % VAR_NAME, loaded.strip()), (
         f"{PREAMBLE} loads {loaded!r}. It must be `{{{{ {VAR_NAME} }}}}` — a literal filename "
-        f"here loads production secrets on every host, staging included, which is exactly what "
-        f"docs/staging-cluster.md Decision 5 rules out."
+        f"here loads production secrets on every host, including any host added later whose "
+        f"whole purpose is not to hold them."
     )
 
 
@@ -64,8 +67,8 @@ def test_a_mixed_play_is_refused_before_anything_is_loaded():
     ]
     assert mine, (
         f"{PREAMBLE} has no assert guarding the load. `community.sops.load_vars` runs "
-        f"`run_once: true`, so a play spanning a staging host and a production one loads ONE "
-        f"of their files for both. Read this file's docstring before removing the guard."
+        f"`run_once: true`, so a play spanning hosts that named different files loads ONE of "
+        f"them for both. Read this file's docstring before removing the guard."
     )
     # Selecting by content narrowed the subject; it did not make it unique. A second assert
     # mentioning `secrets_file` would land here silently and this test would go on checking
@@ -100,11 +103,18 @@ def test_production_is_the_default():
     )
 
 
-def test_staging_overrides_it():
-    stage = yaml_fast.safe_load((HOST_VARS / "daniel-stage.yml").read_text())
-    assert stage.get(VAR_NAME) == STAGING_FILE, (
-        f"daniel-stage sets {VAR_NAME} to {stage.get(VAR_NAME)!r}, expected {STAGING_FILE!r}. "
-        f"Without the override the staging play loads every production credential into scope."
+def test_no_host_overrides_it_today():
+    """The census half. daniel-stage was the only host that ever set this, and it is retired
+    (#2941), so a value appearing here again means a second secrets file arrived with it —
+    and `test_every_file_any_host_names_exists` below is what then has to find that file."""
+    overriding = {
+        f.stem: value
+        for f in sorted(HOST_VARS.glob("*.yml"))
+        if (value := (yaml_fast.safe_load(f.read_text()) or {}).get(VAR_NAME))
+    }
+    assert not overriding, (
+        f"{overriding} override {VAR_NAME}. That is supported, but the mixed-play assert in "
+        f"{PREAMBLE} is now load-bearing rather than latent — re-read this file's docstring."
     )
 
 
@@ -122,15 +132,17 @@ def test_every_file_any_host_names_exists():
     )
 
 
-def test_no_host_shares_a_secrets_file_with_a_host_in_a_different_cluster():
-    """daniel-stage's file is its own. If another host adopts it, the isolation is gone."""
-    sharers = [
-        f.stem
-        for f in HOST_VARS.glob("*.yml")
-        if (yaml_fast.safe_load(f.read_text()) or {}).get(VAR_NAME) == STAGING_FILE
-    ]
-    assert sharers == ["daniel-stage"], (
-        f"{sharers} all load {STAGING_FILE}, expected only daniel-stage. That file is encrypted "
-        f"to daniel-server's key alone and holds generated values — a production host loading "
-        f"it would run with fake credentials, not with none."
+def test_only_the_production_secrets_file_is_tracked():
+    """The other half of the census above: one file in vars/ means one file to reason about.
+
+    `secrets-staging.yml` was encrypted to daniel-server's key alone and held generated values,
+    so a production host that adopted it would have run with fake credentials rather than with
+    none. It went with daniel-stage (#2941). A second file returning is the point at which the
+    per-host variable stops being latent.
+    """
+    tracked = sorted(p.name for p in VARS_DIR.glob("secrets*.y*ml"))
+    assert tracked == [PRODUCTION_FILE], (
+        f"{VARS_DIR} holds {tracked}, expected only [{PRODUCTION_FILE!r}]. A second secrets "
+        f"file needs a host that names it, a .sops.yaml rule above the production one, and a "
+        f"re-read of this file's docstring."
     )

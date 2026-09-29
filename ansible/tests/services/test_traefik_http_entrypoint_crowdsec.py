@@ -42,29 +42,35 @@ from validate.k8s_manifests import (
 )
 
 _ROLE = "traefik"
-# daniel-box runs the bouncer plugin. daniel-stage sets traefik_k8s_manage_crowdsec false and
-# so renders no chain at all on either entrypoint — covered by its own test below.
+# daniel-box runs the bouncer plugin. A cluster with traefik_k8s_manage_crowdsec false renders
+# no chain at all on either entrypoint — covered by its own test below. daniel-stage was that
+# cluster until #2941 retired it, so the case is now an override rather than a host.
 _HOST = "daniel-box"
-_HOST_WITHOUT_CROWDSEC = "daniel-stage"
+_WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
 
-def _context(host: str) -> dict:
+def _context(host: str, overrides: dict | None = None) -> dict:
     host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
     base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
     base["playbook_dir"] = str(ANSIBLE)
     base = resolve_vars(base, base)
     entry = next(c for c in base["containers_list"] if c["name"] == _ROLE)
     # Role defaults FIRST: Ansible ranks host_vars above them. Same ordering as the sibling.
-    return {**role_defaults(_ROLE, base), **base, "container_item": entry}
+    return {
+        **role_defaults(_ROLE, base),
+        **base,
+        "container_item": entry,
+        **(overrides or {}),
+    }
 
 
-def _static_config(host: str) -> dict:
+def _static_config(host: str, overrides: dict | None = None) -> dict:
     """The Traefik config itself, not the ConfigMap wrapping it.
 
     static-config.yaml.j2's data value is a block scalar, so the config is a STRING at the
     manifest level and has to be parsed a second time.
     """
-    ctx = _context(host)
+    ctx = _context(host, overrides)
     env = make_env([K8S_ROLES / _ROLE / "templates", SHARED_TPL])
     env.globals["lookup"] = make_lookup(ctx)
     register_ansible_filters(env)
@@ -76,8 +82,8 @@ def _static_config(host: str) -> dict:
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])
 
 
-def _chains(host: str) -> dict[str, list[str]]:
-    config = _static_config(host)
+def _chains(host: str, overrides: dict | None = None) -> dict[str, list[str]]:
+    config = _static_config(host, overrides)
     return {
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and the comparison below
@@ -95,8 +101,8 @@ def crowdsec_chain_gaps(
 
     Returns one message per way the http entrypoint has stopped enforcing crowdsec; empty
     means the posture holds. The https entrypoint is the reference rather than a hardcoded
-    expectation: turning the bouncer off entirely is a supported configuration
-    (daniel-stage), and this guard must say nothing about that case.
+    expectation: turning the bouncer off entirely is a supported configuration, and this
+    guard must say nothing about that case.
     """
     out = []
     for entrypoint in ("http", "https"):
@@ -135,15 +141,15 @@ def test_the_http_entrypoint_enforces_crowdsec() -> None:
     assert not problems, f"{_HOST}: " + " ".join(problems)
 
 
-def test_a_host_without_the_bouncer_is_not_flagged() -> None:
+def test_a_cluster_without_the_bouncer_is_not_flagged() -> None:
     """traefik_k8s_manage_crowdsec false renders no chain on either entrypoint, and that is
     a supported configuration rather than a gap."""
-    chains = _chains(_HOST_WITHOUT_CROWDSEC)
+    chains = _chains(_HOST, _WITHOUT_CROWDSEC)
     crowdsec_ref = (
-        f"{_context(_HOST_WITHOUT_CROWDSEC)['k8s_namespace']}-crowdsec@kubernetescrd"
+        f"{_context(_HOST, _WITHOUT_CROWDSEC)['k8s_namespace']}-crowdsec@kubernetescrd"
     )
     assert crowdsec_ref not in chains["https"], (
-        f"{_HOST_WITHOUT_CROWDSEC} now runs the bouncer; this test's premise is stale"
+        "the flag no longer removes the chain; this test's premise is stale"
     )
     assert not crowdsec_chain_gaps(chains, crowdsec_ref)
 

@@ -1,8 +1,7 @@
 # Homelab docs
 
 Reference and runbooks for this homelab: `daniel-box` (k3s server), `daniel-server` (k3s
-agent), and `daniel-pi` (the one remaining Docker host). `daniel-stage` is a fourth host in
-the inventory and is not one of these — it is the staging cluster, and the
+agent), and `daniel-pi` (the one remaining Docker host). The
 [Hosts reference](reference/hosts.md) lists every host the inventory declares.
 
 ## Where to start

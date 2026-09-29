@@ -73,7 +73,6 @@ from fragment_renderers import (
     render_lan_addresses,
     render_longhorn_tiers,
     render_secret_tiers,
-    render_staging_vm_sizing,
     render_traefik_ports,
 )
 from lib.docs_provenance import write_if_body_changed
@@ -96,7 +95,6 @@ FAIL2BAN_CONF = (
 GROUP_VARS = REPO / "ansible/inventory/group_vars/all.yml"
 HOST_VARS = REPO / "ansible/inventory/host_vars"
 TRAEFIK_DEFAULTS = REPO / "ansible/roles/k8s/traefik/defaults/main.yml"
-HYPERVISOR_DEFAULTS = REPO / "ansible/roles/setup/hypervisor/defaults/main.yml"
 
 
 def header(sources: list[str]) -> str:
@@ -157,15 +155,6 @@ def _traefik_ports() -> tuple[str, list[str]]:
     ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
 
 
-def _staging_vm_sizing() -> tuple[str, list[str]]:
-    d = role_defaults(HYPERVISOR_DEFAULTS)
-    return render_staging_vm_sizing(
-        d["hypervisor_staging_vm_memory_mib"],
-        d["hypervisor_staging_vm_vcpus"],
-        d["hypervisor_staging_vm_disk_size"],
-    ), ["ansible/roles/setup/hypervisor/defaults/main.yml"]
-
-
 def _deadman() -> tuple[str, list[str]]:
     return render_deadman_cadences(
         role_defaults(K3S_DEFAULTS),
@@ -216,7 +205,6 @@ FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "node-agent-liveness": _crowdsec_agent_liveness,
     "etcd-offbox-retention": _etcd_offbox_retention,
     "traefik-ports": _traefik_ports,
-    "staging-vm-sizing": _staging_vm_sizing,
     "secret-tiers": _secrets,
     "deadman-cadences": _deadman,
     "fail2ban-jails": _fail2ban,

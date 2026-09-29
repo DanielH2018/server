@@ -163,9 +163,10 @@ whatever the volume's state.
 - It carries `delegate_to: localhost`, added 2026-08-28. The SHA is a property of the
   **controller's** checkout — it names the commit whose templates the run is rendering — and
   reading it on the target only ever coincided with that, because `hosts.ini` pins both cluster
-  nodes to `ansible_connection=local`. `daniel-stage` is the first genuinely remote target in
-  this repo; it has no checkout, and the task failed there with "Unable to change directory
-  before execution" for all thirteen callers. ENFORCED by
+  nodes to `ansible_connection=local`. `daniel-stage` — the staging guest, retired 2026-09-29
+  (#2941) — was the first genuinely remote target in this repo; it had no checkout, and the
+  task failed there with "Unable to change directory before execution" for all thirteen
+  callers. ENFORCED by
   `ansible/tests/longhorn/test_volume_snapshot_reads_the_controller_checkout.py`, whose rejecting half is
   the pre-fix task verbatim.
 - Ansible role-defaults precedence for a same-named variable across an `include_role` chain: the

@@ -97,10 +97,10 @@ def task_gates_naming(role_dir: Path, basename: str) -> list[tuple] | None:
 def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]:
     """Every `when:` chain on a task that ships `repo_path`, a file OUTSIDE this role.
 
-    Three setup-role tasks copy a file from the repo checkout rather than from the role's
-    own `templates/`/`files/`, with `src: "{{ playbook_dir }}/../<repo-relative path>"`:
-    hypervisor's staging-gate runner (`scripts/deploy_tools/staging_gate_remote.sh`) and its
-    etcd drill script, and `common`'s release pruner. `setup_file_hosts` cannot see any of
+    Two setup-role tasks copy a file from the repo checkout rather than from the role's own
+    `templates/`/`files/`, with `src: "{{ playbook_dir }}/../<repo-relative path>"`:
+    hypervisor's etcd drill script and `common`'s release pruner. (A third, hypervisor's
+    staging-gate runner, went with the gate in #2941.) `setup_file_hosts` cannot see either of
     them, because it keys on the path being under `ansible/roles/setup/<role>/`.
 
     The match is the repo-relative PATH, not the basename `task_gates_naming` uses. A

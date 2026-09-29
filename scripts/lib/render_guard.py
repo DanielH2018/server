@@ -370,13 +370,18 @@ def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
     return {host: sorted(by_host[host]) for host in sorted(by_host)}
 
 
-# DECIDED: land.sh never deploys to daniel-stage. The staging guest sits on daniel-server's
-# libvirt NAT network, which daniel-box cannot route to, and the deployer's staging gate
-# owns every deploy there (``staging_gate.py``). ``hosts_for_tags`` still lists it, because it
-# answers "who declares this tag" and staging does; only the landing shape drops it. Without
-# this, landing any of the six STAGING_SUBSET tags (traefik, authelia, node-exporter, ...)
+# Hosts that DECLARE a tag but that land.sh must not deploy to.
+#
+# DECIDED: land.sh never deploys to daniel-stage, and the entry stays after #2941 retired that
+# guest. The guest sat on daniel-server's libvirt NAT network, which daniel-box cannot route
+# to, so landing any of the six staging-subset tags (traefik, authelia, node-exporter, ...)
 # ran ``deploy.sh -e target=daniel-stage`` from daniel-box after the box's own deploy had
-# succeeded, and the unreachable host turned a good landing into ``deploy-failed``.
+# succeeded, and the unreachable host turned a good landing into ``deploy-failed``. The host
+# declares no tag now, so the filter is inert against the live inventory — it is kept because
+# what it names is "a host land.sh must not deploy to", the retired guest is still the worked
+# example of one, and it is what gives both reads (``deploy_tags.landing_hosts`` over the
+# working tree and ``land_tags.landing_hosts_at`` over a merge commit) a shared answer. #935
+# is about those two disagreeing.
 HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
 
 

@@ -10,12 +10,13 @@ rare and newsworthy. The base images are the opposite case on both counts. `alpi
 and they are the init containers, probes and sidecars nobody watches — 20 of the 56 tag-only
 references on the k8s plane, measured 2026-08-29.
 
-WHAT THAT COSTS, concretely. `gitops_deploy_staging_gate` asks daniel-stage about a COMMIT and
-then deploys prod. A base image re-pushed between the staging run and the prod run is invisible
-to that gate: staging validated one set of bytes and prod ran another, and nothing in the
-pipeline can tell. The gate's guarantee is only as strong as the weakest pin in the manifests
-it validates, so leaving the most-frequently-re-pushed images unpinned undercuts the whole
-mechanism.
+WHAT THAT COSTS, concretely. A tag-only reference means the bytes a run validates are not the
+bytes a later run gets. The staging gate made that concrete — it asked daniel-stage about a
+COMMIT and then deployed prod, so a base image re-pushed between the two runs was invisible to
+it — and both the gate and the guest are retired (#2859, #2941). What remains is the same
+weakness against every read that assumes a name identifies bytes: a `--dry-run`, a digest in a
+rollback, an image the deployer thinks it already pinned. Leaving the most-frequently-re-pushed
+images unpinned undercuts all of them.
 
 WHY A DENYLIST OF REPOS rather than a rule about tag shape. "Is this tag an exact release?"
 has no textual answer — `2.9` is a stream for influxdb and `v1.7.8` is exact for crowdsec, and

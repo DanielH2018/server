@@ -76,10 +76,8 @@ lab as it runs.
   join the deployer's changed set for a comment. That is the same trade the `slice-` decision
   above records.
 
-One spec stays in Operations and is not history: `docs/staging-cluster.md`. It is written as
-a plan, but what it plans is built — the live staging cluster, which an operator drives by
-hand — and inventory, role defaults and shipped role files cite it by path.
-
 `staging-phase-c.md` is here because #2859 retired what it specced: the GitOps tick's staging
-arm. The cluster it gated is still live, so the page keeps its banner pointing at
-`docs/staging-cluster.md` rather than reading as though staging itself went away.
+arm. `staging-cluster.md` followed it a day later — #2941 retired the cluster the arm gated,
+on the operator's decision that no manual staging sessions continue. Both pages describe a
+system that no longer runs; what survives out of them is the libvirt substrate in
+`ansible/roles/setup/hypervisor`, which the monthly etcd restore drill uses.

@@ -203,13 +203,12 @@ boot.
 Codes still expire in ~5 min, the Authelia elevated-session default. Resend in the browser if
 one goes stale.
 
-**daniel-stage rehearses this branch on a credential that authenticates nothing.** It rendered
-the filesystem notifier until #1464, which left the SMTP branch with no boot check anywhere.
-The startup check being off is what makes the rehearsal possible: Authelia opens no SMTP
-connection at boot, so a literal stand-in in `host_vars/daniel-stage.yml` proves the half that
-bites — the config parses and the pod comes up on it. Staging sends nothing, and its `email` is
-a generated fake. `ansible/tests/staging/test_staging_rehearses_the_smtp_notifier.py` holds
-both facts.
+**Nothing rehearses this branch any more.** daniel-stage did, on a credential that
+authenticated nothing: the startup check being off is what made that possible — Authelia opens
+no SMTP connection at boot, so a literal stand-in in its host_vars proved the half that bites,
+that the config parses and the pod comes up on it. That guest was retired on 2026-09-29
+(#2941), and its rehearsal went with it. The branch now has no boot check anywhere, which is
+the state #1464 created and the rehearsal covered for.
 
 If mail is down and you need the break-glass path, the file notifier is one edit away in
 `templates/config-secret.yaml.j2`; reading it back needs `sudo k3s kubectl` on **daniel-box**

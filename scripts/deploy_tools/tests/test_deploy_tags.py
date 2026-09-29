@@ -353,13 +353,17 @@ def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
     assert deploy_tags.tag_platforms("alloy") == {"docker"}
 
 
-def test_landing_hosts_drops_the_staging_guest_but_keeps_the_pi(tmp_path):
-    """Issue #935's follow-through: `hosts` must not route a tag to daniel-stage.
+def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):
+    """Issue #935's follow-through: `hosts` must not route a tag to a host land.sh cannot reach.
 
-    daniel-stage declares the STAGING_SUBSET tags, and land.sh runs `deploy.sh -e target=<host>`
-    for every host `hosts` prints. daniel-box cannot route to the staging guest, so that deploy
-    fails unreachable after the box's own succeeded. `tags_by_host` keeps listing staging (it
-    answers who declares the tag); only the landing shape drops it.
+    daniel-stage declared the staging-subset tags, and land.sh runs `deploy.sh -e target=<host>`
+    for every host `hosts` prints. daniel-box could not route to the staging guest, so that
+    deploy failed unreachable after the box's own succeeded. `tags_by_host` keeps listing such a
+    host (it answers who declares the tag); only the landing shape drops it.
+
+    daniel-stage declares no tag in the live inventory since #2941, so this synthetic
+    host_vars tree is what makes the filter fire at all — and a filter that stopped filtering
+    would otherwise pass every test in this file.
     """
     (tmp_path / "daniel-box.yml").write_text(
         "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
@@ -381,18 +385,19 @@ def test_landing_hosts_drops_the_staging_guest_but_keeps_the_pi(tmp_path):
     }
 
 
-def test_hosts_never_prints_the_staging_guest(capsys):
-    """Non-vacuity against the live inventory: the staging guest declares tags, and none of
-    them may reach land.sh's per-host deploy loop under that host."""
-    staged = {
-        host
-        for host, _platform, _tag in deploy_tags.service_records()
-        if host in render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS
-    }
-    assert staged == {"daniel-stage"}, "the staging guest no longer declares any tag"
+def test_no_undeployable_host_reaches_the_landing_loop(capsys):
+    """The filter is at zero members since daniel-stage was retired (#2941), so this pins the
+    premise rather than the filtering: every host that declares a tag is one land.sh may
+    deploy to. A host added to the constant without being added to the inventory, or the
+    reverse, is the drift #935 is about."""
+    declaring = {host for host, _platform, _tag in deploy_tags.service_records()}
+    assert declaring, "no host declares any tag — this test would pass over nothing"
+    assert not (declaring & render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS), (
+        f"{sorted(declaring & render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS)} declare tags that "
+        f"land.sh must not deploy; the synthetic test above is what covers that filtering."
+    )
     assert deploy_tags.main(["hosts", "wg-easy,traefik,authelia"]) == 0
     out = capsys.readouterr().out
-    assert "daniel-stage" not in out
     assert out.startswith("daniel-box\t")
     assert "daniel-pi\twg-easy\n" in out
 

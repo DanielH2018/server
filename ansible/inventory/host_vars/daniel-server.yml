@@ -16,9 +16,9 @@ containers_list: []
 has_docker: false
 has_gitops: false
 
-# The staging-cluster VM host. This is the only host with VT-x, spare RAM and no
-# control-plane role, so the second k3s runs here as a KVM guest rather than beside prod.
-# See docs/staging-cluster.md, Decision 1.
+# The VM host. This is the only host with VT-x, spare RAM and no control-plane role. It built
+# the retired daniel-stage guest until 2026-09-29 (#2941); what it runs now is the monthly etcd
+# restore drill's throwaway guest — see roles/setup/hypervisor/CLAUDE.md.
 has_hypervisor: true
 
 # Claude Code session host for issue-fanout agents (spec 2026-09-06). The Remote Control unit
@@ -31,8 +31,10 @@ claude_code_rc_enabled: false
 # Measured on daniel-server 2026-09-09. Re-derive all of it if you change this:
 #   RAM: MemTotal 32,478,080 kB = 31.0 GiB.
 #   Unreclaimable footprint, as cgroup anon: kubepods.slice 4.98 GiB + machine.slice (the
-#     daniel-stage KVM guest) 4.75 GiB + system.slice 0.58 GiB = 10.3 GiB. Budgeted at
-#     14.4 GiB (+40%) so k3s and the guest can grow without racing the fleet.
+#     daniel-stage KVM guest, retired 2026-09-29 — #2941) 4.75 GiB + system.slice 0.58 GiB =
+#     10.3 GiB. Budgeted at 14.4 GiB (+40%) so k3s and the guest can grow without racing the
+#     fleet. The measurement is left as taken: re-derive it from a fresh reading rather than
+#     subtracting the retired guest on paper.
 #   Kernel: SUnreclaim 0.48 GiB. Page cache left free for Longhorn I/O: ~3 GiB.
 #   31.0 - 14.4 - 0.5 - 3 = 13.1 GiB available to the fleet. The cap was 10G until
 #     2026-09-26, leaving ~3 GiB unspent. It was raised to 13G at user request to fit one

@@ -42,84 +42,63 @@ hypervisor_staging_net_bridge: virbr-stage
 hypervisor_staging_nwfilter_name: staging-egress-fence
 hypervisor_staging_net_gateway: 192.168.140.1
 hypervisor_staging_net_netmask: 255.255.255.0
-# The dynamic range deliberately excludes staging_vm_ip, which is a reservation.
+# The dynamic range deliberately excludes the drill guest's reservation.
 hypervisor_staging_net_dhcp_start: 192.168.140.50
 hypervisor_staging_net_dhcp_end: 192.168.140.99
 
-# The staging guest. Sizing from docs/staging-cluster.md, Decision 1, re-checked against the
-# host on 2026-08-27: 24.7 GB of 31.7 GB RAM available and 312 GB free on /.
-hypervisor_staging_vm_memory_mib: 8192
-hypervisor_staging_vm_vcpus: 4
-hypervisor_staging_vm_disk_size: 100G
-
-# The base image and the guest's own copy. The base is kept so a rebuild does not re-download.
+# The Ubuntu cloud image every guest on this host is built from, and the local copy that is
+# kept so a rebuild does not re-download it. Only the etcd restore drill's throwaway guest
+# reads these now; until 2026-09-29 the retired `daniel-stage` guest shared them, which is why
+# the download lived in a task file of its own.
 # The path deliberately does NOT end in `_image`: in a setup role's defaults that suffix means
 # a container image pin, and scripts/tests/test_renovate_managers.py reads every such key as one
 # Renovate must be able to bump. This is a file on disk, so naming it `_image` made it fail a
 # guard that was reading it correctly.
-hypervisor_staging_vm_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
+hypervisor_base_image_url: https://cloud-images.ubuntu.com/noble/current/noble-server-cloudimg-amd64.img
 # DECIDED: pin the checksum even though `current` rotates (2026-08-27). Upstream moves this
 # roughly monthly, so a host that has not downloaded the image yet WILL eventually fail here
-# — which is the intended failure. A staging substrate silently built from a different image
-# than the one reviewed defeats the point of having a reviewed substrate. Re-pin from
+# — which is the intended failure. A drill guest silently built from a different image than the
+# one reviewed defeats the point of having a reviewed substrate. Re-pin from
 # https://cloud-images.ubuntu.com/noble/current/SHA256SUMS when it fails.
-hypervisor_staging_vm_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
-hypervisor_staging_vm_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
-hypervisor_staging_vm_disk: /var/lib/libvirt/images/{{ staging_vm_hostname }}.qcow2
+hypervisor_base_image_sha256: d0fe84bb5f80853425fa6be28e2c106f30104c3cfe8611933f2e65c9b63f0e30
+hypervisor_base_image_path: /var/lib/libvirt/images/noble-server-cloudimg-amd64.img
 
-# The cloud-init NoCloud seed.
-hypervisor_staging_vm_seed_dir: /var/lib/libvirt/seed/{{ staging_vm_hostname }}
-hypervisor_staging_vm_seed: /var/lib/libvirt/images/{{ staging_vm_hostname }}-seed.iso
-# Bump to make cloud-init re-run its per-instance modules on the next start, without
-# rebuilding the guest's disk.
-hypervisor_staging_vm_instance_id: "01"
+# ── Reaping the retired daniel-stage guest ───────────────────────────────────────────────
+#
+# The staging guest was removed on 2026-09-29 (#2941): no tick consults it and no manual
+# staging sessions continue, so 8 GiB of RAM and a 100 GB qcow2 sat allocated for a guest
+# nothing drives. The hypervisor role stays for the monthly etcd restore drill.
+#
+# DECIDED: reap the domain from install.yml rather than leave it to teardown.yml. teardown.yml
+# runs only when has_hypervisor goes false, and that flag stays TRUE on daniel-server for the
+# drill — so deleting guest.yml alone would leave daniel-stage running as an orphan Ansible no
+# longer manages, which is the docker_install failure tasks/main.yml documents. The reap is
+# guarded on the domain existing, so it is a permanent no-op once the host has converged; it
+# stays for the same reason files/staging-gate-retired/ stays, so a host that has not run this
+# role yet still converges.
+hypervisor_retired_staging_vm_hostname: daniel-stage
+# Its qcow2 and cloud-init seed, named here so the reap can reclaim them. `virsh undefine
+# --remove-all-storage` destroys the disk libvirt knows about; the seed ISO and its directory
+# are not domain storage and are removed by path.
+hypervisor_retired_staging_vm_disk: /var/lib/libvirt/images/{{ hypervisor_retired_staging_vm_hostname }}.qcow2
+hypervisor_retired_staging_vm_seed: /var/lib/libvirt/images/{{ hypervisor_retired_staging_vm_hostname }}-seed.iso
+hypervisor_retired_staging_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_retired_staging_vm_hostname }}
+hypervisor_retired_staging_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hypervisor_retired_staging_vm_hostname }}.xml"
 
-# First boot runs cloud-init, grows the root filesystem and generates host keys, so ssh
-# answers well after the guest is up. Generous because that work happens once.
-hypervisor_staging_vm_boot_timeout: 300
-
-# The checkout the staging gate deploys FROM, and the lock that serialises it.
+# What the retired staging GATE left on this host: the checkout it deployed from, the lock
+# that serialised it, the forced command behind its restricted ssh key, and the verdict-bearing
+# runner that command exec'd. The gate itself (`scripts/deploy_tools/staging_gate.py`) went with
+# the guest — nothing consults staging any more — so these are reap targets, named here because
+# both reap_staging.yml and teardown.yml remove them by path.
 #
-# It exists because the gate used to render from /home/ubuntu/server — this host's own
-# checkout — which it fast-forwarded to the SHA under test, unlocked, and never restored
-# (2026-08-29 review M-2). Three things were wrong with that, and only the first is obvious:
-# an operator's tree jumped to arbitrary commits behind their back; two gate runs could
-# interleave on one tree; and a dirty tree there made the gate answer PREP_FAILED for every
-# commit until someone noticed, because a NO VERDICT is silent by design.
-#
-# A dedicated clone fixes all three by giving the gate a tree it owns. The gate moving its
-# OWN tree forward is the point, not a defect — what M-2 objects to is it moving someone
-# else's.
-#
-# Deliberately NOT a git worktree of the primary checkout: that shares .git, so the two
-# trees' fates are coupled again through the object store and `git worktree list` on this
-# host stops being about Claude sessions. A separate clone costs one working tree and
-# nothing else. `ansible.builtin.git` is set `update: no` below, so Ansible creates this
-# once and then never fights the gate for the branch it is sitting on.
-hypervisor_staging_gate_repo: /home/ubuntu/server-staging
-hypervisor_staging_gate_repo_url: https://github.com/DanielH2018/server.git
-# Serialises two gate runs against that one tree — the timer's, and an operator driving
-# staging_gate.py by hand. NOT /var/lock/server-git-tree.lock: deploy.sh takes that one
-# inside the gate, and a lock is not reentrant across a fresh open, so sharing it would
-# deadlock the gate against itself.
-hypervisor_staging_gate_lock: /var/lock/staging-gate.lock
-
-# The forced command behind the staging gate's restricted ssh key, and the key itself.
-#
-# The gate reaches this host over ssh (daniel-box cannot route to the staging guest's NAT
-# network, so something has to cross a host boundary — docs/archive/staging-phase-c.md, Decision 1).
-# Until 2026-08-29 that hop authenticated with the operator's own unrestricted key, so anything
-# able to invoke the gate had a full shell here (review M-3). A dedicated key pinned to one
-# forced command replaces it.
-#
-# The public half is committed; the private half is `staging_gate_ssh_key` in SOPS and is
-# deployed to daniel-box by roles/setup/gitops_deploy, which is where the gate runs from.
-hypervisor_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
-hypervisor_staging_gate_pubkey_file: staging-gate.pub
-
-# The verdict-bearing half, installed here rather than executed from the gate's checkout so the
-# gate that runs is not chosen by the commit it is judging.
-hypervisor_staging_gate_runner_path: /usr/local/bin/staging-gate-run
+# The key's public half moved to files/staging-gate-retired/, so the withdrawal task in
+# install.yml deauthorizes it on the next apply. Swapping the live file alone would have left the
+# key authorized forever: `authorized_key` here runs `state: present` with `exclusive` false, so
+# it only ever ADDS. That directory is the other half of every rotation this role has done.
+hypervisor_retired_staging_gate_repo: /home/ubuntu/server-staging
+hypervisor_retired_staging_gate_lock: /var/lock/staging-gate.lock
+hypervisor_retired_staging_gate_dispatch_path: /usr/local/bin/staging-gate-dispatch
+hypervisor_retired_staging_gate_runner_path: /usr/local/bin/staging-gate-run
 
 # ── The etcd restore drill guest ─────────────────────────────────────────────────────────
 #
@@ -149,27 +128,27 @@ hypervisor_etcd_drill_armed: true
 # (`etcd_drill_full_kuma_interval_s`) live in group_vars/all.yml: k8s/uptime-kuma sizes the push
 # tile from the same numbers this role schedules the cron with.
 
-# Guest identity. The MAC is a second reservation in the staging network's DHCP (the guest shares
+# Guest identity. The MAC is the staging network's one DHCP reservation (the guest attaches to
 # that NAT network and its egress fence — it needs internet for R2 and nothing on the LAN), fixed
-# so the orchestrator can name the address it waits for. Outside the dynamic range, like the
-# staging guest's, and never in the inventory: nothing but the orchestrator ever reaches it.
+# so the orchestrator can name the address it waits for. Outside the dynamic range, and never in
+# the inventory: nothing but the orchestrator ever reaches it.
 hypervisor_etcd_drill_vm_hostname: etcd-drill
 hypervisor_etcd_drill_vm_mac: "52:54:00:5a:11:e1"
 hypervisor_etcd_drill_vm_ip: 192.168.140.11
 hypervisor_etcd_drill_vm_memory_mib: 2048
 hypervisor_etcd_drill_vm_vcpus: 2
 hypervisor_etcd_drill_vm_disk_size: 20G
-# Same base image as the staging guest, same pin. The disk is the per-run copy; the orchestrator
-# creates and deletes it, ansible never touches it.
+# Built from hypervisor_base_image_path, the one pinned cloud image on this host. The disk is the
+# per-run copy; the orchestrator creates and deletes it, ansible never touches it.
 hypervisor_etcd_drill_vm_disk: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}.qcow2
 hypervisor_etcd_drill_vm_xml: "{{ hypervisor_net_source_dir }}/{{ hypervisor_etcd_drill_vm_hostname }}.xml"
 hypervisor_etcd_drill_vm_seed_dir: /var/lib/libvirt/seed/{{ hypervisor_etcd_drill_vm_hostname }}
 hypervisor_etcd_drill_vm_seed: /var/lib/libvirt/images/{{ hypervisor_etcd_drill_vm_hostname }}-seed.iso
 # The guest's ssh HOST key is generated once here and seeded through cloud-init, so the
 # orchestrator can pin it. Every run is a fresh disk, so a guest-generated host key would change
-# every run and the orchestrator would have to accept any key — and the staging guest sits on the
-# same bridge, so "any key" would let a compromised daniel-stage answer for this address and be
-# handed the cluster token and the R2 credentials. Pinning closes that.
+# every run and the orchestrator would have to accept any key — and anything else that ever lands
+# on this bridge could then answer for this address and be handed the cluster token and the R2
+# credentials. Pinning closes that.
 hypervisor_etcd_drill_vm_hostkey: "{{ hypervisor_etcd_drill_vm_seed_dir }}/ssh_host_ed25519_key"
 hypervisor_etcd_drill_vm_boot_timeout: 300
 

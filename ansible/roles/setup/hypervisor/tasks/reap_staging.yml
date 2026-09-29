@@ -1,0 +1,128 @@
+---
+# Removes everything the retired staging cluster left on this host: the `daniel-stage` guest
+# and its disk, and the staging gate's checkout, lock, dispatcher and runner (#2941, decided
+# 2026-09-29). Runs on every apply of this role and is a no-op once the host has converged.
+#
+# It lives here rather than in teardown.yml because teardown.yml runs only when
+# has_hypervisor goes false, and that flag stays TRUE on daniel-server for the monthly etcd
+# restore drill. Deleting guest.yml alone would leave the guest running as an orphan Ansible
+# no longer manages — the docker_install failure tasks/main.yml documents. See the
+# hypervisor_retired_staging_vm_* block in defaults/main.yml.
+
+- name: Check whether the retired staging guest is still defined
+  tags: [hypervisor]
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system dominfo {{ hypervisor_retired_staging_vm_hostname }}
+  register: hypervisor_retired_staging_vm_info
+  changed_when: false
+  failed_when: false
+  # A read of libvirt's own state, so it runs under --check too: skipped, it leaves no rc or
+  # stdout and every decision below errors on the attribute instead of skipping (#2323).
+  check_mode: false
+  become: true
+
+- name: Stop the retired staging guest
+  tags: [hypervisor]
+  # Destroy before undefine, so the tap device and its egress-fence reference go now rather
+  # than at the next host reboot. libvirt refuses to undefine an nwfilter a running domain
+  # references, so a guest left running would also pin a filter nothing needs.
+  when:
+    - hypervisor_retired_staging_vm_info.rc == 0
+    - hypervisor_retired_staging_vm_info.stdout is search('State:\s+running')
+  ansible.builtin.command:
+    cmd: virsh --connect qemu:///system destroy {{ hypervisor_retired_staging_vm_hostname }}
+  changed_when: true
+  become: true
+
+- name: Undefine the retired staging guest and reclaim its disk
+  tags: [hypervisor]
+  # DECIDED: `--remove-all-storage`, which destroys the 100 GB qcow2 rather than orphaning it
+  # (2026-09-29, #2941). The issue's verify-by is "undefined with its disk reclaimed", and an
+  # image left in /var/lib/libvirt/images with nothing that knows how to start it is the state
+  # teardown.yml's guest assert exists to prevent. This is the one place in the role that
+  # deletes a disk image, and it deletes exactly one named domain's.
+  when: hypervisor_retired_staging_vm_info.rc == 0
+  ansible.builtin.command:
+    cmd: >-
+      virsh --connect qemu:///system undefine
+      {{ hypervisor_retired_staging_vm_hostname }} --remove-all-storage
+  changed_when: true
+  become: true
+
+- name: Remove what the retired staging guest left outside libvirt's storage
+  tags: [hypervisor]
+  # The cloud-init seed ISO, its source directory and the rendered domain XML are not domain
+  # storage, so `--remove-all-storage` does not reach them. Unconditional and idempotent: a
+  # host that never had the guest has none of these paths.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ hypervisor_retired_staging_vm_disk }}"
+    - "{{ hypervisor_retired_staging_vm_seed }}"
+    - "{{ hypervisor_retired_staging_vm_seed_dir }}"
+    - "{{ hypervisor_retired_staging_vm_xml }}"
+  become: true
+
+- name: Check whether the retired staging-gate checkout exists
+  tags: [hypervisor]
+  ansible.builtin.stat:
+    path: "{{ hypervisor_retired_staging_gate_repo }}/.git"
+  register: hypervisor_reap_gate_repo
+  become: true
+
+- name: Read whether the retired staging-gate checkout has uncommitted work # noqa command-instead-of-module
+  tags: [hypervisor]
+  # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
+  # mode that REPORTS working-tree status. There is nothing to switch to here.
+  #
+  # `--ignore-submodules=all` for the same reason the gate itself carried it (#2777): the gate
+  # fast-forwarded this tree, `git merge --ff-only` never moves a submodule's working tree, so
+  # every commit that bumped the `Email-to-RSS` gitlink left a ` M Email-to-RSS` line here that
+  # no one wrote. Without the flag the refusal below reads that as someone's uncommitted work
+  # and blocks the reap on a tree that holds none.
+  when: hypervisor_reap_gate_repo.stat.exists
+  ansible.builtin.command:
+    cmd: git status --porcelain --ignore-submodules=all
+    chdir: "{{ hypervisor_retired_staging_gate_repo }}"
+  register: hypervisor_reap_gate_dirty
+  changed_when: false
+  failed_when: false
+  # A read, and the refusal below judges a one-way door on its output — a dry run that cannot
+  # evaluate it proves nothing about whether the reap would stop (#2353).
+  check_mode: false
+  become: true
+  become_user: "{{ sys_user }}"
+
+- name: Refuse to remove a retired staging-gate checkout with uncommitted work in it
+  tags: [hypervisor]
+  # Same reasoning that leaves /var/lib/libvirt alone in teardown.yml: this tree is
+  # reproducible from the remote, so removing a CLEAN one costs a re-clone, while an edit that
+  # exists only here is not reproducible from anywhere. Retiring the gate is not a decision to
+  # discard someone's work.
+  when:
+    - hypervisor_reap_gate_repo.stat.exists
+    - hypervisor_reap_gate_dirty.rc == 0
+  ansible.builtin.assert:
+    that: hypervisor_reap_gate_dirty.stdout | trim | length == 0
+    fail_msg: >-
+      {{ hypervisor_retired_staging_gate_repo }} has uncommitted changes
+      ({{ hypervisor_reap_gate_dirty.stdout_lines | select | join(', ') }}), so it is not being
+      removed. The staging gate is retired and never leaves this tree dirty, so an edit here is
+      someone's — commit or discard it deliberately, then re-run.
+
+- name: Remove what the retired staging gate left on this host
+  tags: [hypervisor]
+  # The dispatcher goes with the rest rather than first: its key's public half moved to
+  # files/staging-gate-retired/, so install.yml has already withdrawn the authorization by the
+  # time this runs. The window where a key is authorized but its forced command is missing
+  # therefore never exists.
+  ansible.builtin.file:
+    path: "{{ item }}"
+    state: absent
+  loop:
+    - "{{ hypervisor_retired_staging_gate_repo }}"
+    - "{{ hypervisor_retired_staging_gate_lock }}"
+    - "{{ hypervisor_retired_staging_gate_dispatch_path }}"
+    - "{{ hypervisor_retired_staging_gate_runner_path }}"
+  become: true

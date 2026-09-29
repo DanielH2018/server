@@ -43,26 +43,31 @@ from validate.k8s_manifests import (
 _ROLE = "freshrss"
 _TASKS = K8S_ROLES / _ROLE / "tasks" / "main.yml"
 _CLAIM = "freshrss-config"
-_HOSTS = ("daniel-box", "daniel-stage")
+_HOST = "daniel-box"
+# The unseeded cluster, as an override rather than a host. daniel-stage carried
+# `freshrss_k8s_manage_claim: false` until it was retired (#2941), and every host in the
+# inventory now seeds — so without this the guard below has no False to observe and a
+# detector stuck on "seeded" would agree with every host.
+_UNSEEDED = {"freshrss_k8s_manage_claim": False}
 
 
-def _context(host: str) -> dict:
+def _context(host: str, overrides: dict | None = None) -> dict:
     host_vars = ANSIBLE / "inventory" / "host_vars" / f"{host}.yml"
     base = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **load_yaml(host_vars)}
     base["playbook_dir"] = str(ANSIBLE)
     base = resolve_vars(base, base)
-    # Role defaults FIRST: Ansible ranks host_vars above them, and a staging host exists to
-    # override them.
-    return {**role_defaults(_ROLE, base), **base}
+    # Role defaults FIRST: Ansible ranks host_vars above them, and an override ranks above
+    # both, the way `-e` does.
+    return {**role_defaults(_ROLE, base), **base, **(overrides or {})}
 
 
 def _include(task: dict) -> dict:
     return task.get("ansible.builtin.include_role") or task.get("include_role") or {}
 
 
-def seed_runs(host: str) -> bool:
+def seed_runs(host: str, overrides: dict | None = None) -> bool:
     """Whether the k8s/volume-claim include's `when:` holds for this host."""
-    ctx = _context(host)
+    ctx = _context(host, overrides)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
     for task in load_tasks(_TASKS):
@@ -75,9 +80,9 @@ def seed_runs(host: str) -> bool:
     return False
 
 
-def manifest_files(host: str) -> list[str]:
+def manifest_files(host: str, overrides: dict | None = None) -> list[str]:
     """The manifest list k8s/manifests is handed, with this host's variables applied."""
-    ctx = _context(host)
+    ctx = _context(host, overrides)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
     for task in load_tasks(_TASKS):
@@ -90,12 +95,12 @@ def manifest_files(host: str) -> list[str]:
     return []
 
 
-def creators(host: str) -> list[str]:
+def creators(host: str, overrides: dict | None = None) -> list[str]:
     """Every path that would create the claim on this host."""
     out = []
-    if seed_runs(host):
+    if seed_runs(host, overrides):
         out.append("k8s/volume-claim")
-    if "pvc.yaml" in manifest_files(host):
+    if "pvc.yaml" in manifest_files(host, overrides):
         out.append("freshrss/templates/pvc.yaml.j2")
     return out
 
@@ -118,25 +123,25 @@ def creator_problem(found: list[str]) -> str:
     return ""
 
 
-@pytest.mark.parametrize("host", _HOSTS)
-def test_the_claim_has_exactly_one_creator(host: str) -> None:
-    problem = creator_problem(creators(host))
-    assert not problem, f"{host}: {problem}"
+@pytest.mark.parametrize("overrides", [None, _UNSEEDED], ids=["seeded", "unseeded"])
+def test_the_claim_has_exactly_one_creator(overrides: dict | None) -> None:
+    problem = creator_problem(creators(_HOST, overrides))
+    assert not problem, f"{_HOST} with {overrides}: {problem}"
 
 
-def test_prod_seeds_and_staging_does_not() -> None:
-    """Pins which creator each host gets, so a flipped default is not silently absorbed by
+def test_a_seeded_cluster_and_an_unseeded_one_get_different_creators() -> None:
+    """Pins which creator each side gets, so a flipped default is not silently absorbed by
     the count check above — one creator is one creator either way round."""
-    assert creators("daniel-box") == ["k8s/volume-claim"]
-    assert creators("daniel-stage") == ["freshrss/templates/pvc.yaml.j2"]
+    assert creators(_HOST) == ["k8s/volume-claim"]
+    assert creators(_HOST, _UNSEEDED) == ["freshrss/templates/pvc.yaml.j2"]
 
 
-@pytest.mark.parametrize("host", _HOSTS)
-def test_the_two_creators_agree_on_the_claim(host: str) -> None:
+@pytest.mark.parametrize("overrides", [None, _UNSEEDED], ids=["seeded", "unseeded"])
+def test_the_two_creators_agree_on_the_claim(overrides: dict | None) -> None:
     """The claim is one object under one name, so the seeded and unseeded clusters must not
     differ in storage class or size. Nothing else compares them — they live in different
     roles, and only one renders per host."""
-    ctx = _context(host)
+    ctx = _context(_HOST, overrides)
     seed_pvc = yaml_fast.safe_load(
         (K8S_ROLES / "volume-claim" / "templates" / "pvc.yaml.j2")
         .read_text()
@@ -160,7 +165,7 @@ def test_the_deployment_references_the_claim_the_flag_creates() -> None:
 
     A rename on one side alone passes every check above.
     """
-    ctx = _context("daniel-stage")
+    ctx = _context(_HOST, _UNSEEDED)
     env = Environment(undefined=StrictUndefined)
     register_ansible_filters(env)
     pvc = yaml_fast.safe_load(

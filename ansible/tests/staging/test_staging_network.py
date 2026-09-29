@@ -1,6 +1,9 @@
 #!/usr/bin/env python3
 """The staging libvirt network must render, parse, and not collide with anything.
 
+It outlived the daniel-stage guest (#2941): the etcd restore drill's throwaway guest attaches
+to it, so "the guest" below is that one.
+
 WHY THIS RENDERS RATHER THAN GREPS. Two bugs in this role reached a real host in one
 afternoon, both structurally valid and both invisible to every check that only parses the
 file they live in: an assert on `ansible_processor_flags` (not an Ansible fact), and a
@@ -45,15 +48,9 @@ RESERVED = [
 
 
 def _vars():
-    """Role defaults plus the group_vars the template reads, as Ansible would resolve them."""
-    merged = yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
-    all_vars = yaml_fast.safe_load(
-        (ANSIBLE / "inventory" / "group_vars" / "all.yml").read_text()
-    )
-    for key in ("staging_vm_hostname", "staging_vm_mac", "staging_vm_ip"):
-        assert key in all_vars, f"{key} is not defined in group_vars/all.yml"
-        merged[key] = all_vars[key]
-    return merged
+    """The role defaults the template reads. Every name it needs is one of them since
+    daniel-stage was retired (#2941) and the drill guest's reservation became the only one."""
+    return yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
 
 def _rendered():

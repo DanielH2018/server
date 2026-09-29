@@ -1367,7 +1367,7 @@ k3s_agent_node_ips: []
 # dynamic include would hide those tags from selection and break the tag-based deploys.
 
 # Longhorn's B2/R2 backup targets and RecurringJobs. Off on a cluster that holds no real
-# credentials — staging has none by design (docs/staging-cluster.md, Decision 5).
+# credentials — staging has none by design (docs/archive/staging-cluster.md, Decision 5).
 k3s_manage_backup_targets: true
 
 # The host heartbeat crons: Kuma push URLs, Healthchecks.io ping keys, the backup-plane and

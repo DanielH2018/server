@@ -13,7 +13,6 @@ import os
 import subprocess
 from pathlib import Path
 
-
 import land_platform
 import land_tags
 from lib.render_guard import HOST_VARS_IN_TREE
@@ -78,8 +77,8 @@ def test_the_same_role_is_on_no_host_at_the_commit_before(tmp_path):
     assert land_tags.landing_hosts_at(["newpi"], shas[0], tmp_path) == {}
 
 
-def test_the_staging_guest_is_dropped_the_way_the_tree_read_drops_it(tmp_path):
-    """Issue #935's exclusion holds on this path too: land.sh never deploys to daniel-stage."""
+def test_an_undeployable_host_is_dropped_the_way_the_tree_read_drops_it(tmp_path):
+    """Issue #935's exclusion holds on this path too, and the two reads must drop the same host."""
     shas = _repo(tmp_path)
     assert land_tags.landing_hosts_at(["sonarr"], shas[1], tmp_path) == {
         "daniel-box": ["sonarr"]

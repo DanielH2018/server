@@ -32,16 +32,20 @@ from lib import yaml_fast
 from _k8s_render import render_role_template
 
 _ROLE = "traefik"
-_HOSTS = ("daniel-box", "daniel-stage")
+_HOST = "daniel-box"
+# A cluster that watches a narrower set, as an override rather than a host. daniel-stage
+# narrowed the list until it was retired (#2941); the pair below is what shows both readings
+# follow the variable rather than the template text.
+_NARROWED = {"traefik_k8s_watched_namespaces": ["homelab", "longhorn-system"]}
 
 
-def _render(host: str, template: str) -> str:
-    return render_role_template(_ROLE, template, host=host)
+def _render(host: str, template: str, overrides: dict | None = None) -> str:
+    return render_role_template(_ROLE, template, overrides, host=host)
 
 
-def _role_namespaces(host: str) -> list[str]:
+def _role_namespaces(host: str, overrides: dict | None = None) -> list[str]:
     """Every namespace rbac.yaml.j2 renders a Role for, in order."""
-    docs = yaml_fast.safe_load_all(_render(host, "rbac.yaml.j2"))
+    docs = yaml_fast.safe_load_all(_render(host, "rbac.yaml.j2", overrides))
     return [
         d["metadata"]["namespace"]
         for d in docs
@@ -49,14 +53,14 @@ def _role_namespaces(host: str) -> list[str]:
     ]
 
 
-def _provider_namespaces(host: str) -> list[str]:
+def _provider_namespaces(host: str, overrides: dict | None = None) -> list[str]:
     """The provider list, read out of the ConfigMap's embedded Traefik config.
 
     static-config.yaml.j2 is a ConfigMap whose data value is a block scalar, so the config is
     a STRING at the manifest level and has to be parsed a second time. Parsing the manifest
     alone compares comments, not configuration.
     """
-    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2"))
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
     config = yaml_fast.safe_load(doc["data"]["traefik.yml"])
     return config["providers"]["kubernetesCRD"]["namespaces"]
 
@@ -81,15 +85,17 @@ def disagreements(watched: list[str], granted: list[str]) -> list[str]:
     return out
 
 
-@pytest.mark.parametrize("host", _HOSTS)
-def test_the_two_namespace_lists_agree(host: str) -> None:
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_the_two_namespace_lists_agree(overrides: dict | None) -> None:
     """Both halves at once, on the rendered manifests."""
-    problems = disagreements(_provider_namespaces(host), _role_namespaces(host))
-    assert not problems, f"{host}: " + " ".join(problems)
+    problems = disagreements(
+        _provider_namespaces(_HOST, overrides), _role_namespaces(_HOST, overrides)
+    )
+    assert not problems, f"{_HOST} with {overrides}: " + " ".join(problems)
 
 
-@pytest.mark.parametrize("host", _HOSTS)
-def test_the_variable_renders_as_a_list_not_a_string(host: str) -> None:
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_the_variable_renders_as_a_list_not_a_string(overrides: dict | None) -> None:
     """A single-string default would iterate CHARACTERS, one Role per letter.
 
     `{% for ns in traefik_k8s_watched_namespaces %}` is happy to walk a string, so a default
@@ -97,14 +103,14 @@ def test_the_variable_renders_as_a_list_not_a_string(host: str) -> None:
     namespaces. Counting the Roles is what distinguishes the two; eyeballing the render does
     not.
     """
-    namespaces = _role_namespaces(host)
-    assert namespaces, f"{host} renders no Roles at all"
+    namespaces = _role_namespaces(_HOST, overrides)
+    assert namespaces, f"{_HOST} with {overrides} renders no Roles at all"
     assert len(namespaces) == len(set(namespaces)), (
-        f"{host} renders duplicate Role namespaces: {namespaces}"
+        f"{_HOST} with {overrides} renders duplicate Role namespaces: {namespaces}"
     )
     assert all(len(ns) > 1 for ns in namespaces), (
-        f"{host}: single-character namespaces mean the variable is a string being iterated "
-        f"character by character, not a list: {namespaces}"
+        f"{_HOST} with {overrides}: single-character namespaces mean the variable is a string "
+        f"being iterated character by character, not a list: {namespaces}"
     )
 
 
@@ -117,10 +123,16 @@ def test_prod_still_watches_the_three_namespaces() -> None:
     ]
 
 
-def test_staging_does_not_watch_observability() -> None:
-    """The cluster has no claude-otel to create it; naming it aborts the RBAC apply."""
-    assert "observability" not in _provider_namespaces("daniel-stage")
-    assert "observability" not in _role_namespaces("daniel-stage")
+def test_a_narrowed_list_reaches_both_readings() -> None:
+    """The rejecting half. A cluster with no claude-otel must not name `observability` — that
+    aborts the RBAC apply — and both readings have to follow the variable to say so.
+
+    daniel-stage was the live example of such a cluster until #2941 retired it, so the narrowed
+    list is now supplied as an override. Without this pair, a reading hardcoded to prod's three
+    namespaces would agree with every host.
+    """
+    assert "observability" not in _provider_namespaces(_HOST, _NARROWED)
+    assert "observability" not in _role_namespaces(_HOST, _NARROWED)
 
 
 def test_the_comparison_accepts_a_matching_pair() -> None:
@@ -169,15 +181,15 @@ def empty_services_problem(provider: dict) -> str | None:
     return None
 
 
-def _provider(host: str) -> dict:
-    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2"))
+def _provider(host: str, overrides: dict | None = None) -> dict:
+    doc = yaml_fast.safe_load(_render(host, "static-config.yaml.j2", overrides))
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])["providers"]["kubernetesCRD"]
 
 
-@pytest.mark.parametrize("host", _HOSTS)
-def test_empty_services_keep_their_router_is_clean(host: str) -> None:
+@pytest.mark.parametrize("overrides", [None, _NARROWED], ids=["prod", "narrowed"])
+def test_empty_services_keep_their_router_is_clean(overrides: dict | None) -> None:
     # fact: ansible/roles/k8s/traefik/CLAUDE.md#Notable
-    assert empty_services_problem(_provider(host)) is None
+    assert empty_services_problem(_provider(_HOST, overrides)) is None
 
 
 @pytest.mark.parametrize("provider", [{}, {"allowEmptyServices": False}])

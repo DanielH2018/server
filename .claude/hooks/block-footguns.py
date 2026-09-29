@@ -33,10 +33,9 @@ a gate the repo requires, so nothing downstream notices either way.
      `origin/master` (exit 4, nothing deployed) because a stale tree renders stale templates
      and reverts live config while every repo-side check reads green — and the flag makes that
      deploy succeed with a green recap. The deploy skill and `docs/deploying.md` said "never";
-     `auto-mode-bridge.py` nudged in prose; nothing denied it (#2170). The one correct use is
-     INSIDE `scripts/deploy_tools/staging_gate_remote.sh`, whose tree is pinned behind master
-     by construction: that flag is in the script's own text, never in a Bash tool command, so
-     the script's invocation needs no exemption here.
+     `auto-mode-bridge.py` nudged in prose; nothing denied it (#2170). There is no correct use
+     left: the one exemption was inside the staging gate's runner, whose tree was pinned behind
+     master by construction, and that runner went with the daniel-stage guest (#2941).
 
   6. `gh workflow run ci.yml` with no `--ref`. gh resolves an empty ref to the default branch,
      so the dispatch sweeps master's HEAD — and `deploy_git.ci_verdict` applies worst-wins over
@@ -204,8 +203,7 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
 
     Keyed on the command word's basename so `./scripts/deploy.sh`, `scripts/deploy.sh` and
     the absolute path all match, and so a `grep`/`sed` naming the flag as an argument stays
-    clean. `staging_gate_remote.sh` passes the flag from inside its own text; a session's
-    invocation of it carries no flag, so it never reaches this rule.
+    clean.
     """
     words = strip_shell_keywords(stage)
     names = [word.rsplit("/", 1)[-1] for word in words]
@@ -224,9 +222,7 @@ def skip_staleness_problem(stage: list[str]) -> str | None:
     return (
         f"`deploy.sh {_STALENESS_FLAG}` deploys a tree behind origin/master: stale templates "
         "render and live config reverts while every check reads green. Pull first (a landing "
-        "goes through `land.sh --at <sha>`), then deploy without the flag. The only sanctioned "
-        "use is inside scripts/deploy_tools/staging_gate_remote.sh, whose tree is pinned "
-        "behind master on purpose."
+        "goes through `land.sh --at <sha>`), then deploy without the flag."
     )
 
 

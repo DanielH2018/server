@@ -344,7 +344,18 @@ def test_every_named_node_is_a_host_in_the_inventory():
     }
     named = set().union(*kubectl_lib.CLUSTER_NODES.values())
     assert named, "CLUSTER_NODES is empty — every cluster check would pass vacuously"
-    assert named <= declared, (
-        f"CLUSTER_NODES names {sorted(named - declared)}, which is in no inventory host line; "
-        "the identity check would call the real cluster unknown and refuse every call"
+    retired = kubectl_lib.RETIRED_CLUSTER_NODES
+    assert retired <= named, (
+        f"RETIRED_CLUSTER_NODES names {sorted(retired - named)}, which CLUSTER_NODES no longer "
+        "carries — the exemption outlived its subject and now licenses a typo"
+    )
+    assert not (retired & declared), (
+        f"{sorted(retired & declared)} is exempted as retired but IS an inventory host. Drop it "
+        "from RETIRED_CLUSTER_NODES so the drift check covers it again."
+    )
+    assert named - retired <= declared, (
+        f"CLUSTER_NODES names {sorted(named - retired - declared)}, which is in no inventory "
+        "host line; the identity check would call the real cluster unknown and refuse every "
+        "call. A deliberately retired name goes in RETIRED_CLUSTER_NODES, with the reason at "
+        "the constant."
     )
