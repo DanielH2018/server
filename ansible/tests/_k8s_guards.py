@@ -66,8 +66,8 @@ def _guard_covered_files(role: Path) -> set[str]:
     `import_tasks: seed.yml` under `when: not k8s_no_mutate`, and the import propagates that
     `when` to every task in seed.yml — and on to copy.yml, which seed.yml includes. Nothing in
     either file names the guard, so a per-task rule alone would call the role unguarded and
-    demand it be added to k8s_dry_run_unsupported, where it would do nothing (the refusal reads
-    --tags, and volume-claim is reached as a dependency of 25 roles).
+    demand a fix it does not need — volume-claim is reached as a dependency of 25 roles, so
+    nothing keyed on --tags could have covered it either.
 
     Only main.yml is scanned for the guarded include; from there the closure is transitive and
     unconditional, because a file whose caller is guarded is guarded whatever it does next.

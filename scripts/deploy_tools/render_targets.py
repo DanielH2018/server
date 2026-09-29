@@ -3,13 +3,12 @@
 
 `render_records` (roles/setup/render_records) runs `deploy.sh --dry-run -e
 manifests_render_record=true` hourly, and this module is its `--tags` list (#2587). A service
-qualifies when three things hold:
+qualifies when two things hold:
 
   * the host's `containers_list` declares it with `platform: k8s`, because a deploy reaches
     only the host it runs on, and a record's `host` must equal the release record's;
   * its role includes `k8s/manifests`, because render_record.yml runs inside that role and a
-    role that applies its objects some other way writes no record;
-  * it is not in `k8s_dry_run_unsupported`, which deploy.yml refuses under a dry run.
+    role that applies its objects some other way writes no record.
 
 Derived rather than listed. A list goes stale the day a service is added, and a service missing
 from it reads to the staleness reader as one with nothing to compare.
@@ -30,9 +29,8 @@ import sys as _sys
 from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
-from lib import yaml_fast
 from lib.render_guard import containers_entries, entry_platform, entry_tags
-from lib.repo_paths import ALL_VARS, HOST_VARS, K8S_ROLES
+from lib.repo_paths import HOST_VARS, K8S_ROLES
 
 # The role name of an `include_role`/`import_role`, as every includer spells it:
 # `name: k8s/manifests` on its own line. A task NAME is prose and never exactly this string.
@@ -51,7 +49,6 @@ def render_targets(
     host: str,
     host_vars: Path = HOST_VARS,
     roles: Path = K8S_ROLES,
-    all_vars: Path = ALL_VARS,
 ) -> list[str]:
     """The sorted service names a render-record run on `host` renders, each its own tag.
 
@@ -60,15 +57,13 @@ def render_targets(
     path = host_vars / f"{host}.yml"
     if not path.exists():
         return []
-    loaded = yaml_fast.safe_load(all_vars.read_text()) or {}
-    unsupported = set(loaded.get("k8s_dry_run_unsupported") or [])
     # The entry NAME, not every tag it carries: the name is the role, the role's
     # `manifests_service`, and so the record's filename, which is what the producer reads
     # back. It also selects the entry, since `entry_tags` defaults to it.
     names: set[str] = set()
     for entry in containers_entries(path):
         name = entry["name"]
-        if entry_platform(entry) != "k8s" or name in unsupported:
+        if entry_platform(entry) != "k8s":
             continue
         if name in entry_tags(entry) and includes_manifests(roles / name):
             names.add(name)

@@ -83,10 +83,6 @@ fails on one that does not.
 pod and inline restarts all sit outside the shared manifests path. Each is guarded on
 `k8s_no_mutate`, so a dry run proves the manifests and not the probes.
 
-**It refuses the roles in `k8s_dry_run_unsupported` outright.** Those apply their objects some
-other way than the shared manifests path, so a dry run would half-apply them. The playbook fails
-fast and names them.
-
 **A brand-new service is only half-checked.** `volume-claim` is skipped because it is a
 dependency of many roles and mutates, and nothing at admission verifies that a referenced PVC
 exists. So the Deployment validates while the volume is never proven provisionable.

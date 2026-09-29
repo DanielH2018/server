@@ -31,9 +31,9 @@ from lib.repo_paths import ANSIBLE, REPO
 
 # ── schema validation ────────────────────────────────────────────────────────────────────
 # Every object the guard renders is checked against the upstream Kubernetes OpenAPI schema,
-# which is what `kubectl apply --dry-run=server` does — offline, and covering the ~17 roles
-# k8s_dry_run_unsupported refuses. These tests pin the two ways that check goes wrong: a false
-# positive from PyYAML's octal parsing, and a schema version that drifts from the cluster.
+# which is what `kubectl apply --dry-run=server` does, offline. These tests pin the two ways
+# that check goes wrong: a false positive from PyYAML's octal parsing, and a schema version
+# that drifts from the cluster.
 
 VALID_DEPLOYMENT: dict[str, Any] = {
     "apiVersion": "apps/v1",

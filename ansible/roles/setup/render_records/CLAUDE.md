@@ -31,8 +31,8 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
    The render reads that tree, so it takes no tree lock and cannot read a half fast-forwarded
    primary checkout. The script creates the worktree itself when it is missing.
 4. It asks that tree for the service list (`scripts/deploy_tools/render_targets.py`): every
-   k8s service `containers_list` declares on this host whose role includes `k8s/manifests`,
-   minus `k8s_dry_run_unsupported`. The list is derived at the commit being rendered.
+   k8s service `containers_list` declares on this host whose role includes `k8s/manifests`.
+   The list is derived at the commit being rendered.
 5. It runs `deploy.sh --dry-run --skip-staleness-check -e manifests_render_record=true` over
    that list. The staleness gate is skipped because the chosen commit may sit below the tip;
    the record names its own commit, which is what the reader compares.

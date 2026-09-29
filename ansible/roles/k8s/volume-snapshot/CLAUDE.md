@@ -351,10 +351,10 @@ that includes this role unconditionally — they are not exercised by anything i
 because the one call site that exists already keeps this role from starting under `--check` or
 `--dry-run`.
 
-This role is **not** in `k8s_dry_run_unsupported`, and should not be added. That refusal keys on
-`ansible_run_tags`, so it only reaches roles an operator names on the command line — a role
-reached as a dependency is invisible to it. `volume-claim`, `image-builder` and `cronjob-gate` are
-all in the same position and are guarded internally instead.
+This role is reached as a dependency rather than named on the command line, so a tag-keyed
+refusal could never have covered it — which is why it guards itself. `volume-claim`,
+`image-builder` and `cronjob-gate` are all in the same position. The `k8s_dry_run_unsupported`
+list that once held the alternative was deleted empty in #2876.
 
 ## Reverting: automated via k8s/volume-revert
 

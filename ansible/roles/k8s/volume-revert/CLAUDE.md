@@ -181,14 +181,14 @@ the volume's snapshot chain before retrying rather than assuming nothing changed
 applied twice to the same snapshot is harmless, but a revert applied to a volume that already
 moved on is not what the operator thinks they are doing.
 
-## This role is deliberately absent from `k8s_dry_run_unsupported`
+## This role guards itself against a dry run
 
-It mutates outside `roles/k8s/manifests`, which is normally what puts a role on that list. The
-list keys on `ansible_run_tags`, so it only reaches roles an operator names on the command line
-— a role reached as a dependency is invisible to it. `volume-claim`, `image-builder`,
-`cronjob-gate` and `volume-snapshot` are all in the same position and guard themselves
-internally instead. This role does the same: every mutating task and every wait carries
-`when: not (k8s_no_mutate | bool)`, which is `ansible_check_mode or (k8s_dry_run | bool)`.
+It mutates outside `roles/k8s/manifests`, and it is reached as a dependency rather than named
+on the command line — so no tag-keyed refusal could ever have covered it. `volume-claim`,
+`image-builder`, `cronjob-gate` and `volume-snapshot` are all in the same position. Every
+mutating task and every wait carries `when: not (k8s_no_mutate | bool)`, which is
+`ansible_check_mode or (k8s_dry_run | bool)`. The `k8s_dry_run_unsupported` list that once
+held the alternative was deleted empty in #2876.
 
 Guarding on either half alone is the bug that guard exists to prevent. `ansible/tests/longhorn/test_volume_revert.py`
 pins the whole census of mutating tasks against it.

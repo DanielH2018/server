@@ -20,7 +20,7 @@ def _role(roles, name, tasks):
     (roles / name / "tasks" / "main.yml").write_text(tasks)
 
 
-def test_only_local_k8s_manifests_includers_outside_the_unsupported_list(tmp_path):
+def test_only_local_k8s_manifests_includers(tmp_path):
     host_vars, roles = tmp_path / "host_vars", tmp_path / "roles"
     host_vars.mkdir()
     (host_vars / "box.yml").write_text(
@@ -28,8 +28,6 @@ def test_only_local_k8s_manifests_includers_outside_the_unsupported_list(tmp_pat
             """\
             containers_list:
               - name: sonarr
-                platform: k8s
-              - name: n8n-images
                 platform: k8s
               - name: raw-apply
                 platform: k8s
@@ -40,16 +38,12 @@ def test_only_local_k8s_manifests_includers_outside_the_unsupported_list(tmp_pat
     (host_vars / "pi.yml").write_text(
         "containers_list:\n  - name: remote\n    platform: k8s\n"
     )
-    all_vars = tmp_path / "all.yml"
-    all_vars.write_text("k8s_dry_run_unsupported:\n  - n8n-images\n")
-    for name in ("sonarr", "n8n-images", "remote"):
+    for name in ("sonarr", "remote"):
         _role(roles, name, _INCLUDER)
     # A task NAME mentioning the role is not an include of it.
     _role(roles, "raw-apply", "- name: Apply like k8s/manifests does\n  command: x\n")
 
-    assert render_targets.render_targets("box", host_vars, roles, all_vars) == [
-        "sonarr"
-    ]
+    assert render_targets.render_targets("box", host_vars, roles) == ["sonarr"]
 
 
 def test_real_inventory_renders_stamped_services_and_skips_a_shared_role():

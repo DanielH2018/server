@@ -157,13 +157,12 @@ created two tasks above, which the same guard skips; reading the previous deploy
 calling it "this run finished" would be a lie, and left unguarded every dry run burned the whole
 timeout budget and then failed.
 
-## Why it is not in `k8s_dry_run_unsupported`
+## Why the internal guard is the only option here
 
-That list makes `deploy.yml` refuse a dry run rather than half-apply, but the refusal keys on
-`ansible_run_tags` — so it only ever reaches roles the operator NAMES on the command line. A
-shared role reached as a dependency is invisible to it. `volume-claim` and `image-builder` are in
-exactly this position and are guarded internally on `k8s_no_mutate` instead of listed; this role
-is the same shape.
+A role reached as a dependency is invisible to anything keyed on `ansible_run_tags`, so it
+must guard itself on `k8s_no_mutate`. `volume-claim` and `image-builder` are in exactly this
+position; this role is the same shape. The `k8s_dry_run_unsupported` refusal list, the
+alternative for a NAMED role, went empty and was deleted in #2876.
 
 ## Provenance
 
