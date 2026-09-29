@@ -8,6 +8,11 @@ k3s_agent_node_ips:
 # /etc/ssh/sshd_config. The SSH-hardening tasks have no `create:` fallback, so a wrong
 # value here fails initial_setup.yml outright.
 ssh_config_path: /etc/ssh/sshd_config.d/50-cloud-init.conf
+# 28 GiB of RAM on the control-plane node — etcd, Longhorn and Prometheus hold heaps that
+# must not be swapped, so initial_setup lowers vm.swappiness to 10 here. Measured
+# 2026-09-29 before the change: swappiness 60, 18 GiB available, 15 GiB page cache,
+# 166 MiB already in swap (#2981). group_vars/all.yml defaults this false.
+has_ample_ram: true
 # Reconciler mode: live = grab a genuine replacement, verify (host ffprobe), delete the
 # fake + import. off/shadow also available.
 autofix_fake_remux_replace_mode: live

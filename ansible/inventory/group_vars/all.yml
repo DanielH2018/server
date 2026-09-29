@@ -89,10 +89,10 @@ has_low_memory_board: false
 # two facts, and a 4 GB Pi would carry this one alone.
 has_raspi_kernel: false
 # Whether this host has enough RAM that reclaiming page cache beats swapping service heaps,
-# so initial_setup lowers vm.swappiness to 10. False by default; daniel-server (30 GB)
-# overrides it true. daniel-box also has ample RAM, and it stays FALSE here because the
-# literal this flag replaced excluded it — arming it is a live tuning change rather than a
-# refactor, tracked separately.
+# so initial_setup lowers vm.swappiness to 10. False by default; daniel-server (30 GB) and
+# daniel-box (28 GiB, the control plane) override it true. daniel-box was armed by #2981,
+# which is why the flag reads true on two hosts while the host literal it replaced named
+# only daniel-server.
 has_ample_ram: false
 # AutoKuma id of the managed notification provider (a static entity defined in the
 # uptime-kuma role); the kuma() macro links every monitor to it via notification_name_list.
