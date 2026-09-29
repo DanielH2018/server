@@ -137,11 +137,14 @@ The dispatcher writes the brief (issue bodies verbatim, the claim note, the firs
 the landing path or the stop-at-PR rule, and the session-health output of every host a batch
 was actually placed on) and starts a headless Opus agent as a transient user
 service in a fresh worktree on whichever host has the
-most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means neither
-host has a reservation's worth
-of headroom, or a placement would put more than three batches on one remote host: narrow the
-fan-out, do not queue. `--host daniel-box` pins a batch that must land in the same run or that
-only daniel-box can verify.
+most memory headroom under the tighter of its fleet and login-plane caps. Exit 3 means one of
+three things: neither host has a reservation's worth of headroom; the placement would put more
+than three batches on one remote host in this run (the ssh budget); or it would leave a host
+holding more than three LIVE batches counting every earlier run not yet cleaned (the memory
+cap — a five-minute-old agent still holds its 2.5 GiB while the headroom read underprices it).
+Narrow the fan-out, do not queue. For the third, `clean <run-id>` the finished runs first — an
+uncleaned worktree counts against its host. `--host daniel-box` pins a batch that must land in
+the same run or that only daniel-box can verify.
 
 Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
 batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed

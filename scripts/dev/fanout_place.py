@@ -16,8 +16,9 @@ Usage::
     fanout_place.py stop <run-id> [batch]
     fanout_place.py clean <run-id>
 
-Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, or a placement
-puts more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host · 4 no host readable
+Exit codes: 0 ok · 1 usage or launch failure · 3 no headroom on any host, a placement puts
+more than MAX_BATCHES_PER_REMOTE_HOST batches on one remote host, or it would leave a host
+holding more than MAX_LIVE_BATCHES_PER_HOST live batches across runs · 4 no host readable
 · 5 a batch reports failed (`status` only) · 6 no candidate host signs commits GitHub
 verifies, or the account's registered signing keys could not be read.
 
@@ -73,6 +74,13 @@ LOCAL_HOST = "daniel-box"
 # headroom and health reads, leaving room for at most this many batch launches — each its
 # own ssh connection — before the run risks the 6th.
 MAX_BATCHES_PER_REMOTE_HOST = 3
+# The memory cap, which is a DIFFERENT constraint that happens to share the number. An agent
+# reserves RESERVATION_BYTES (2.5 GiB) and daniel-server's login plane is capped at 11 GiB
+# (`claude_code_rc_memory_high`), so four live agents fit and five do not. Unlike the ssh
+# budget above, this one stacks ACROSS runs: a second launch minutes after the first measures
+# a memory.current the first run's agents have not yet grown into, so headroom alone underprices
+# them (issue #2889). Counted from the run manifests, which cost no ssh to read.
+MAX_LIVE_BATCHES_PER_HOST = 3
 # The SessionStart hook reads `payload["source"]` from stdin, so it needs a JSON payload
 # rather than `</dev/null`; --no-python-downloads/--python match the version session-health.sh
 # itself pins so this reading is taken by the same interpreter a real session would use.
@@ -202,6 +210,46 @@ def _over_ssh_budget(placed: list[tuple[str, str]]) -> bool:
     return over
 
 
+def _over_live_batch_cap(placed: list[tuple[str, str]], root: Path) -> bool:
+    """Print and return True when a host would end up holding too many live batches.
+
+    `_over_ssh_budget` above counts only THIS run, which is right for an ssh rate limit that
+    refills in 30 seconds. Memory does not refill: a batch launched five minutes ago still
+    holds its 2.5 GiB reservation, and `placement.headroom` cannot see the part of that
+    reservation the agent has not yet grown into. So this counts the batches every manifest
+    still shows live — no `removed_at` — and adds this run's placements to them.
+
+    That makes `clean <run-id>` load-bearing: a batch whose worktree is still standing counts
+    against the host whether or not its agent is still running, so a run left uncleaned
+    eventually refuses the next launch. The message names `clean` for that reason.
+
+    Args:
+        placed: `place`'s (batch, host) pairs for this run.
+        root: the manifest directory to read every run under.
+    """
+    live: dict[str, list[str]] = {}
+    for run_id, b in manifest_mod.live_batches(root).values():
+        live.setdefault(b.host, []).append(f"{b.batch} in run {run_id}")
+    new: dict[str, int] = {}
+    for _, host in placed:
+        new[host] = new.get(host, 0) + 1
+    over = False
+    for host, n in sorted(new.items()):
+        standing = live.get(host, [])
+        if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
+            continue
+        held = ", ".join(sorted(standing)) or "none"
+        print(
+            f"launch: {host} already holds {len(standing)} live batch(es) ({held}) and this "
+            f"run would place {n} more, over the {MAX_LIVE_BATCHES_PER_HOST} that host's "
+            "memory cap fits — run `clean <run-id>` on the finished ones, or split the "
+            "fan-out",
+            file=sys.stderr,
+        )
+        over = True
+    return over
+
+
 def _live_elsewhere(batches: dict[str, list[int]], root: Path) -> bool:
     """Print and return True when a new batch shares an issue with one still live.
 
@@ -275,7 +323,7 @@ def cmd_launch(args, tools: Tools) -> int:
     except NoHeadroom as exc:
         print(str(exc), file=sys.stderr)
         return 3
-    if _over_ssh_budget(placed):
+    if _over_ssh_budget(placed) or _over_live_batch_cap(placed, args.manifest_root):
         return 3
     # Only the hosts a batch actually landed on. Reading every host placement looked at
     # spends an ssh connection — against the 5-per-30s `ufw limit ssh` budget — on a host
