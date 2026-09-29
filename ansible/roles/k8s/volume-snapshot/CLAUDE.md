@@ -31,7 +31,7 @@ k8s_autodeploy_snapshot_pvcs:
 ```
 
 A role that declares nothing gets `length == 0` and the include never runs. Fourteen roles are
-opted in of the 31 carrying the shape this role exists for.
+opted in, of the 31 carrying this shape.
 
 - **A caller cannot change `volume_snapshot_retain` or `volume_snapshot_timeout` from its own
   `defaults/main.yml`** — this role's own default wins that collision, measured. `group_vars`,
@@ -47,20 +47,22 @@ opted in of the 31 carrying the shape this role exists for.
 autodeploy-<service>-<sha8>-<claim>-<token>
 ```
 
-`<sha8>` is `git rev-parse --short=8 HEAD` and `<token>` a UTC timestamp, both resolved once in
-`tasks/main.yml` before the per-claim loop, so every claim in one run shares them and the wait
+`<sha8>` is `git rev-parse --short=8 HEAD`'s output **used verbatim** — `--short=8` is a minimum
+width, not a fixed one, and truncating a longer abbreviation back to 8 would build a prefix that no
+longer matches. `<token>` is a UTC timestamp. Both are resolved once in `tasks/main.yml` before the
+per-claim loop, so every claim in one run shares them and the wait
 polls for the name the apply just created. `autodeploy-<service>-<sha8>-<claim>` survives as a **prefix**,
 which `k8s/volume-revert` reconstructs and matches on.
 
-- **The token keeps a rollback deploy from being refused by its own protection step**, and it makes
-  the prefix a non-unique lookup — so the revert picks the NEWEST match. Two runs in one
-  wall-clock second are the case it does not separate.
+- **The token keeps a rollback deploy from being refused by its own protection step**, and makes
+  the prefix a non-unique lookup — so the revert picks the NEWEST match. Two runs in one second
+  are the case it does not separate.
 - **Renaming a service strands its old snapshots permanently**: the prune selects on
   `autodeploy-<service>-`, and the cluster-wide reaper skips a snapshot with no `RecurringJob`
-  label, which no `autodeploy-*` snapshot carries.
+  label — which no `autodeploy-*` snapshot carries.
 - **A name must stay under 63 bytes.** Past that, Longhorn's webhook denies every DELETE through
-  every route and no supported path removes the CR; `claim.yml`'s length assert is what keeps a new
-  snapshot deletable. Thirteen needed a webhook bypass by hand (#2734).
+  every route and nothing removes the CR; `claim.yml`'s length assert is what keeps a new snapshot
+  deletable. Thirteen needed a webhook bypass by hand (#2734).
 
 ## Pruning is asynchronous, and a lingering CR is normal
 
@@ -103,8 +105,7 @@ spec.volumeName" assert failing before the apply.
 ## Reverting: automated via k8s/volume-revert
 
 A rollback is not a manual operation. `roles/k8s/manifests` includes `k8s/volume-revert` between
-this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha`, which gitops-deploy sets
-only when it redeploys a failed auto-deploy's prior good commit and which carries the FAILED
+this role's snapshot and the apply, gated on `k8s_restore_snapshot_sha` — which gitops-deploy sets
+only when it redeploys a failed auto-deploy's prior good commit, and which carries the FAILED
 commit's SHA. The claim list comes from the rolled-back-to tree, so a claim the failed commit
-renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves. Its
-own CLAUDE.md is the source of truth for the sequence and the recovery steps.
+renamed makes that role's "no snapshot matches this deploy" assert fire before anything moves.

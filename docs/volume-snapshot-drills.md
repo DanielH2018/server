@@ -346,7 +346,7 @@ not on a short loop, so nothing raced the patch and the restore was the play's j
 `failed=0` with nothing left afterwards: the eleven lost-track CRs, then the two `markRemoved`
 ones.
 
-### The maintenance-mode attach, and the two drills that made it dead code
+### The two drills behind the ordinary detached path
 
 **Two drills measured it, covering both ways a volume reaches this role detached.** The
 2026-08-21 task-6 drill snapshotted a volume that had been attached before; the #2698 drill on
