@@ -1,11 +1,12 @@
 # monitor-bridge checks: the per-check record
 
 The measurements, incidents and retirements behind every threshold check the
-`monitor-bridge` pod pushes to Uptime Kuma. The operating rule for each check — what it
-reads, the threshold, the gate and the hysteresis — is in
-`ansible/roles/k8s/monitor-bridge/CLAUDE.md`, which is what a session loads before touching
-the role. This page is where the numbers came from and what each arm was added after, kept
-out of that file so the rule stays short and the evidence stays findable.
+`monitor-bridge` pod pushes to Uptime Kuma. The per-check rule — what it reads, the threshold
+and the arms — lives in `files/registry.py` and the `verdicts/` function each entry names;
+`ansible/roles/k8s/monitor-bridge/CLAUDE.md` carries what holds across all of them (the gates,
+the hysteresis, the module layout) and is what a session loads before touching the role. This
+page is where the numbers came from and what each arm was added after, and its *Live checks*
+walks the registry in order.
 
 `files/registry.py`'s `build_checks()` is the authority on which checks exist. Nothing tests
 this page: a bullet here can describe a check that has since moved or been retired, and the

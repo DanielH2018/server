@@ -68,121 +68,70 @@ consumers' tags (e.g. the home-dir resolver is `[tooling, git-hooks]`) — keep 
 invariant when adding tasks, or tag-scoped runs die on undefined variables.
 
 ## What it does (`tasks/main.yml`, grouped)
-- **Pi bring-up (guarded `has_low_memory_board`):** stop the hardware watchdog
-  during provisioning, then create/secure/format/persist/activate a swap file — disk swap so
-  heavy apt on the 512 MB Zero 2 W doesn't OOM. Pi-only packages install behind
-  `has_raspi_kernel`: the board and its memory are two facts.
-- **Packages & tooling:** apt upgrade; base packages; install **uv per-user** (PEP 668-safe on
-  24.04+) and the Python CLI tooling as uv tools. **All of it is pinned** (#2148): uv is
-  `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_uv_version`, fetched as
-  the versioned installer with a sha256 (that script verifies the tarball it downloads, so one
-  hash pins the binary). Version, URL and digest sit together in `defaults/main.yml` so that
-  `scripts/validate/asset_pins.py` can render the URL and fetch it — `--only
-  initial_setup_uv_installer` is how a bump's hash is produced, and an unattended
-  renovate_agent run has no raw `curl` to produce it with (#2301). The tools are
-  `ansible-core==`, `ansible-lint==`, `prek==` loop items — each equal to a twin elsewhere
-  (pyproject.toml's dev group, prek.toml's rev, ci.yml's `pip install`), which
-  `ansible/tests/repo/test_host_tool_pins_match_their_twins.py` holds. Before the pins, the
-  two hosts ran ansible-core 2.21.0 and 2.21.2 against a 2.21.4 lock. Every install is
-  version-gated, not `creates:`-gated, so a bump actually replaces the tool on the next
-  `--tags tooling` run. Also installs the **Vale** binary into
-  `/usr/local/bin`, pinned to the version `.github/workflows/ci.yml` installs — the prek `vale`
-  hook is `language = "system"`, so a host without it fails every docs commit with exit 127
-  while CI reads green (#1703). Version-gated rather than `creates:`-gated, so a Renovate bump
-  actually replaces the binary; the two pins agreeing is enforced by
-  `ansible/tests/repo/test_vale_matches_the_ci_pin.py`.
-  **Every task under the `tooling` tag is gated on `dev_tooling_hosts`** (daniel-box and
-  daniel-server), and so is `git-hooks`, which runs the `prek` this tag installs. The gate was
-  `has_repo_checkout` — or nothing at all — until #1726, which admitted daniel-pi: the Pi holds
-  a checkout but is driven remotely over ssh and nobody commits from it, so the tag implied
-  installing uv and a pinned Python 3.14 on a 512 MB Zero 2 W that never wanted them.
-  Membership is enforced by `ansible/tests/setup/test_dev_tooling_hosts.py`.
-- **Unattended upgrades:** `20auto-upgrades` turns the periodic timers on;
-  `52unattended-upgrades-local` sets no-automatic-reboot (the Sunday 07:30 restart cron owns
-  reboots) plus obsolete-kernel cleanup, and **appends** `unattended_upgrades_origins_patterns`
-  (`group_vars/all.yml`) as `Origins-Pattern::` entries. Since 2026-08-24 that list adds the
-  `-updates` pocket and the GitHub CLI repo, so the "N updates can be applied immediately" MOTD
-  line no longer accrues a permanent backlog. Set the var to `[]` on a host for security-only.
-  Two traps, both of which look correct at every stage except the one that matters:
-  - **Use `Origins-Pattern`, not `Allowed-Origins`.** The latter is the legacy `origin:archive`
-    form and is rewritten to `o=X,a=Y`, so it only matches a repo publishing a `Suite:` field.
-    The gh repo has none (`origin='gh', archive='', codename='stable'`), so `gh:stable` matched
-    nothing while `apt-config dump` listed it. ENFORCED by
-    `ansible/tests/setup/test_unattended_origins_pattern.py`.
-  - **Use the `::` append syntax.** A `{ ... }` block reads as a replacement, and a replacement
-    drops the `-security` and ESM pockets.
 
-  Verify with `apt-config dump Unattended-Upgrade::Allowed-Origins` (must still list
-  `-security`) **and** `apt-config dump Unattended-Upgrade::Origins-Pattern` (must list the
-  extras). Note `unattended-upgrade --dry-run` needs root, so the only unprivileged proof that
-  a pattern matches is reading `archive`/`codename` off the package file via python-apt.
-- **SSH:** `.ssh` perms (**absolute paths only** — this play becomes root, so `~` means `/root`;
-  #2413, ratcheted by `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py`), an `ssh-users`
-  group, sshd hardening, and a `Match` block re-enabling forwarding for `sys_user` (the global
-  config disables agent/X11/TCP forwarding). Since #397
-  that block sets `AllowTcpForwarding all`, not `local` — **both** directions, plus
+`tasks/` is the inventory: one file per block tag, named for its subject, and the tag list
+above says which file a tag runs. Read the file for what a block does. What follows is only
+what a task file does not say on its own — the rules and traps an operator needs before
+editing one.
+
+- **Every `tooling` and `git-hooks` task is gated on `dev_tooling_hosts`** (daniel-box and
+  daniel-server). daniel-pi holds a checkout but nobody commits from it, and the tag would put
+  uv and a pinned Python on a 512 MB Zero 2 W (#1726). Membership is enforced by
+  `ansible/tests/setup/test_dev_tooling_hosts.py`.
+- **Every tool this role installs is pinned, and a bump needs its digest regenerated** (#2148).
+  uv's version, installer URL and sha256 sit together at
+  `ansible/roles/setup/initial_setup/defaults/main.yml:initial_setup_uv_version`, so
+  `scripts/validate/asset_pins.py` can render the URL and produce the hash an unattended
+  renovate_agent run has no `curl` to produce — `--only initial_setup_uv_installer` (#2301). `ansible-core`,
+  `ansible-lint`, `prek` and Vale each equal a twin in `pyproject.toml`, `prek.toml` or CI
+  (`ansible/tests/repo/test_host_tool_pins_match_their_twins.py`,
+  `ansible/tests/repo/test_vale_matches_the_ci_pin.py`), and every install is version-gated
+  rather than `creates:`-gated, so a bump replaces the tool.
+- **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413, ratcheted
+  by `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py`). The home-dir resolver task
+  exists for the same reason, and its `register:` is why it carries every consumer's tag.
+- **The `Match sys_user` block sets `AllowTcpForwarding all`, not `local`** (#397), plus
   `AllowStreamLocalForwarding remote` and `StreamLocalBindUnlink yes`, for the clipboard
-  bridge's reverse unix-socket forward. `local` alone does not work and the reason is not
-  guessable: sshd builds the channel layer from `AllowTcpForwarding` alone, so excluding
-  `FORWARD_REMOTE` refuses every remote forward — unix-domain included — before
-  `AllowStreamLocalForwarding` is ever read. The comment above the `Match` block in `tasks/access.yml` carries
-  the full derivation and the log line that distinguishes the two refusals.
-
-  It is a real widening. It is acceptable because `sys_user` already has a full shell and can
-  run `ssh -R` itself, so this restricts nothing that account could not already do —
-  `AllowTcpForwarding` bounds a key used purely as a tunnel, not an interactive account.
-  `GatewayPorts` stays at its default `no`, so a reverse forward binds loopback only.
-  → `notify: Restart SSH`.
-- **Firewall (UFW):** default-deny incoming / allow outgoing, an SSH allow for `lan_subnet`,
-  **rate-limited** SSH for everything else (both replace a plain allow), then enable. No
-  WireGuard allow: Docker-published ports (incl. wg-easy's UDP port) bypass UFW INPUT via
-  Docker's own chains; a stale Pi-only `51820/udp` allow from the pre-port-split era is
-  actively deleted (the Pi listens on 51822).
-
-  **The LAN allow must sort above the limit rule, and the task declares `insert: 0` /
-  `insert_relative_to: first-ipv4` to make sure of it.** ufw takes the first matching rule, so
-  an allow appended below the limiter is inert — the same present-but-does-nothing shape #508
-  cost this role. `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py` pins both the exemption and
-  its ordering.
-
-  The exemption exists because `limit` REJECTs a source IP at 6 connections in 30 seconds on a
-  **rolling** window, counting successful connections. Retries therefore sustain the block
-  rather than ride it out. Several Claude sessions work this repo at once over ssh; twice that
-  quorum crossed the threshold, was misread as sshd being down, and was answered with retry
-  loops that held the host locked. Brute-force cover is unchanged — fail2ban's sshd jail
-  (bantime 1h, triggered by auth *failures*) is what actually answers a credential attack, and
-  it still covers the LAN. Non-LAN sources, WireGuard peers included, keep the limiter, so this
-  removes no access from anyone.
-- **sudo credential cache:** `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global`
-  (+ a 60-min timeout), so one authentication covers every tmux pane and every shell with no
-  tty. Without it, sudo keys the ticket on its parent pid when no terminal is present and each
-  Claude Code `!` command re-prompts. Written with `validate: visudo -cf %s` — a malformed
-  drop-in locks sudo out, and sudo is the only write path to the cluster.
-- **Kernel/network hardening:** IPv4 forwarding, sysctl security knobs, blacklist rare network
-  modules, load + persist the WireGuard module. **UFW owns a SECOND sysctl file**,
-  `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in `/etc/default/ufw`), re-applied on every `ufw
-  enable`/`reload`. Ubuntu ships it with `log_martians=0`, so before #2977 the loop wrote 1 and
-  `Enable UFW firewall` wrote 0 back twenty tasks later. The role rewrites UFW's copy first.
-  **A sysctl this role sets that UFW's file also names must be set there too**, or the run ends
-  with UFW's value live.
-- **Auditing & accounting:** `auditd` + rules (`notify: Reload audit rules`), `sysstat`,
-  process accounting.
-- **Integrity & malware:** **AIDE** (install, init DB, weekly check; the package's own
-  `dailyaidecheck.timer` is masked — it duplicated the weekly cron nightly with broken
-  mail alerting, ~1h20m CPU/night on the Pi) and **rkhunter**
-  (install, baseline, post-apt refresh, weekly scan). Both weekly scans run
-  `nice -n19 ionice -c3` and are staggered (AIDE Mon 03:00, rkhunter Wed 02:00) — they
-  used to overlap Monday mornings at full priority, >1h each on the Pi's 4 slow cores.
-- **Login/password policy:** console + network login banners, umask `027`, password hash
-  rounds, password-age policy, core dumps disabled (login.defs + systemd).
-- **Postfix:** bind `inet_interfaces = loopback-only` (send-only local mailer — drops the
-  `0.0.0.0:25` listener off the network surface; `notify: Restart Postfix`, a reload won't
-  rebind sockets), hide the OS banner, disable `VRFY` (`notify: Reload Postfix`).
-- **Cron/maintenance:** weekly reboot, Docker image cleanup, ansible.log rotation, weekly
-  autoremove + config-remnant purge, install of the repo Git hooks, and (daniel-box only) the
-  15-minute infrastructure-map refresh that regenerates the HTML artifact from
-  `scripts/infra_map/gen_infra_map.py`.
-- **Unattended upgrades:** enable periodic security upgrades + local policy.
+  bridge's reverse unix-socket forward: sshd builds the channel layer from
+  `AllowTcpForwarding` alone, so `local` refuses every remote forward before
+  `AllowStreamLocalForwarding` is read. The comment above the block in `tasks/access.yml`
+  carries the derivation and the log line that tells the two refusals apart.
+- **The UFW LAN allow must sort above the SSH limit rule**, which is why its task declares
+  `insert: 0` / `insert_relative_to: first-ipv4`: ufw takes the first matching rule, so an
+  allow appended below the limiter is inert (#508).
+  `ansible/tests/setup/test_ssh_rate_limit_lan_exempt.py` pins the exemption and its ordering.
+  The exemption exists because `limit` REJECTs a source at 6 connections in 30 seconds on a
+  rolling window, counting SUCCESSFUL ones, so retries sustain the block — parallel Claude
+  sessions over ssh crossed it twice. fail2ban's sshd jail is what answers a credential attack.
+- **UFW owns a SECOND sysctl file**, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in
+  `/etc/default/ufw`), re-applied on every `ufw enable`/`reload`. Ubuntu ships it with
+  `log_martians=0`, so before #2977 this role's loop wrote 1 and `Enable UFW firewall` wrote 0
+  back twenty tasks later. **A sysctl this role sets that UFW's file also names must be set
+  there too**, or the run ends with UFW's value live.
+- **Unattended upgrades: two traps, both of which look correct until they matter.** Use
+  `Origins-Pattern`, not `Allowed-Origins` — the legacy form is rewritten to `o=X,a=Y` and
+  matches only a repo publishing a `Suite:` field, which the gh repo does not
+  (`ansible/tests/setup/test_unattended_origins_pattern.py`). And use the `::` append syntax: a
+  `{ ... }` block reads as a replacement and drops the `-security` and ESM pockets. Verify both
+  `apt-config dump` keys — `Allowed-Origins` must still list `-security`, `Origins-Pattern` the
+  extras from `unattended_upgrades_origins_patterns`, which is `[]` for security-only.
+- **The credential cache is what stops every `!` command re-prompting.**
+  `/etc/sudoers.d/10-timestamp` sets `timestamp_type=global` with a 60-minute timeout, so one
+  authentication covers every pane and every tty-less shell. It is written with
+  `validate: visudo -cf %s`, because a malformed drop-in locks the escalation path out, and
+  that path is the only write path to the cluster.
+- **AIDE and rkhunter are scheduled against each other, and the package's own timer is
+  masked.** `dailyaidecheck.timer` duplicated the weekly cron nightly with broken mail
+  alerting, at about 1h20m of CPU per night on the Pi. Both weekly scans run
+  `nice -n19 ionice -c3`, staggered to AIDE Monday 03:00 and rkhunter Wednesday 02:00, because
+  they used to overlap at full priority for over an hour each on the Pi. The AIDE database
+  init is the slow part of a first run on any host.
+- **Postfix binds `inet_interfaces = loopback-only`** and needs `notify: Restart Postfix`: a
+  reload does not rebind the socket, so the `0.0.0.0:25` listener would survive it.
+- **The Pi's swap file is bring-up, not tuning.** It is gated on `has_low_memory_board` and the
+  hardware watchdog is stopped around it, because heavy apt on a 512 MB Zero 2 W OOMs without
+  disk swap. Pi-only packages gate on `has_raspi_kernel` instead — the board and its memory are
+  two separate facts.
 
 ## Setup-plane drift reader (`setup_drift` tag)
 `setup-drift-check.sh` answers two questions daily on the hosts named in

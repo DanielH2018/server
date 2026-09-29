@@ -66,9 +66,10 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
 # and the section to move out next. An entry for a doc that has since shrunk fails, so a
 # stale waiver cannot survive the trim that earned it, and a doc that GROWS past its recorded
-# count fails too (#2679) — the ratchet is what makes these 20 entries a shrinking list
-# rather than 20 permanent exemptions. Recorded 2026-09-28 when the unit became characters
-# (#2826); trimming them is follow-on work, monitor-bridge's `## Checks` first.
+# count fails too (#2679) — the ratchet is what makes these entries a shrinking list rather
+# than a set of permanent exemptions. Recorded 2026-09-28 when the unit became characters
+# (#2826); #2921 started the trim, and configarr and healthchecks left the list by fitting
+# under the ceiling. Each remaining reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
@@ -85,11 +86,6 @@ OVER_CEILING: dict[str, str] = {
         "moved to docs/claude-otel-dashboards.md (#2925), and the OIDC section's two "
         "`/api/user/orgs` measurements and the unconfirmed claim-delivery hypothesis are the "
         "next thing to move there"
-    ),
-    "configarr": (
-        "8223 chars on 2026-09-28: `## Why the Anime local CFs exist` and the scope rule keep "
-        "an operator from re-adding recyclarr; the baseline-snapshot procedure can move to "
-        "docs/"
     ),
     "cronjob-gate": (
         "11548 chars on 2026-09-28: every section answers why the gate is shaped as it is, "
@@ -109,10 +105,6 @@ OVER_CEILING: dict[str, str] = {
         "10358 chars on 2026-09-28: the two-identities grant and the OIDC login rules are "
         "operating rules; `## Plugins` is the next thing to move"
     ),
-    "healthchecks": (
-        "8277 chars on 2026-09-28: just over the budget: `## Notable` and `## Editing` are "
-        "operating rules and the doc holds no history section to move — tighten the prose"
-    ),
     "home-assistant": (
         "14137 chars on 2026-09-28: the one convention that breaks edits and the routing "
         "table are what this role's editors need first; `## Traps` is the part with a docs/ "
@@ -129,9 +121,9 @@ OVER_CEILING: dict[str, str] = {
         "title that it is history"
     ),
     "monitor-bridge": (
-        "32593 chars on 2026-09-28: the gates-and-hysteresis rules govern a check that pages, "
-        "and `## Checks` restates `files/registry.py`, which supersedes it — cut that section "
-        "first"
+        "18492 chars on 2026-09-29: the gates-and-hysteresis rules govern a check that pages, "
+        "and the module-layout rule governs the code it ships; `## Checks` was cut to a "
+        "pointer at `files/registry.py` (#2921), and `## Module layout` is the next trim"
     ),
     "n8n": (
         "9427 chars on 2026-09-28: the PVC-state warning and the digest-pin ledger rule are "
