@@ -23,12 +23,14 @@ from _release_fixtures import (
 
 _SHARED = frozenset({"game-stats-lib", "manifests"})
 
-# terraria-stats reaches game-stats-lib the way it did before #2813 merged the three roles: an
-# `import_tasks` of the sibling role's file by path, which names no role at all. sonarr reaches
-# only the renderer.
+# terraria-stats reaches game-stats-lib by name, the way every live consumer of a shared role
+# does. sonarr reaches only the renderer. (Before #2813 merged the three roles, the reach here
+# was an `import_tasks` of the sibling role's file by path; `lib.k8s_roles` stopped walking
+# that form in #2876, once no role had used it for a release.)
 _CONSUMER_TASKS = """\
 - name: Stage the shared stats module
-  ansible.builtin.import_tasks: "{{ role_path }}/../game-stats-lib/tasks/stage.yml"
+  ansible.builtin.include_role:
+    name: k8s/game-stats-lib
 """
 
 _NON_CONSUMER_TASKS = """\
