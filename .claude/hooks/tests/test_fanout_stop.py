@@ -14,6 +14,7 @@ import json
 import os
 
 from fanout_lib import status
+from fanout_lib.brief import Issue, render_brief
 
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "fanout-stop.py"
@@ -143,3 +144,12 @@ def test_a_landing_batch_may_still_stop_on_a_blocker_line(tmp_path):
     """A blocker is a finish on either host; the verdict rule must not trap one."""
     root = _fanout_tree(tmp_path, LANDING_BRIEF)
     assert _stop(root, "needs input: master CI is red") is None
+
+
+def test_the_landing_marker_is_a_line_the_real_daniel_box_brief_carries():
+    """Non-vacuity: a reworded brief would silently stop the hook asking for a verdict."""
+    issues = [Issue(1, "one", "body")]
+    box = render_brief(issues, "daniel-box", "1", "worktree-orch", [])
+    server = render_brief(issues, "daniel-server", "1", "worktree-orch", [])
+    assert _mod.LANDING_MARKER in box
+    assert _mod.LANDING_MARKER not in server
