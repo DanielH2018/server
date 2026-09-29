@@ -13,7 +13,10 @@ same shape, #1291 and #2683, were closed with brief text only.
 
 WHAT IT CHECKS. The completion condition the brief states in its *Finishing* section: the final
 message carries a PR URL, or a line that starts with `needs input:` or `failed:` and names the
-blocker. Both patterns mirror `scripts/dev/fanout_lib/status.py`, which reads the same final
+blocker. A batch whose brief tells it to land — the daniel-box brief, which carries the
+`land.sh` command — owes a `VERDICT:` line with that PR URL, in the message or in a
+`.fanout/land<n>.log`; a PR URL alone there means `gh pr create` returned and nothing more
+(issue #2890). All three patterns mirror `scripts/dev/fanout_lib/status.py`, which reads the same final
 text to decide `done`. A hook that let a session stop on a text `status` then reads as
 unfinished would be checking a different condition from the one reported.
 `test_the_hook_and_status_read_the_same_patterns` holds the pair equal. The hooks stay
@@ -49,9 +52,15 @@ MARKER = Path(".fanout") / "brief.md"
 COUNTER = Path(".fanout") / "stop-blocks"
 MAX_BLOCKS = 3
 
-# Mirrors `status.PR_URL` and `status.BLOCKER`.
+# Mirrors `status.PR_URL`, `status.BLOCKER` and `status.VERDICT`.
 PR_URL = re.compile(r"https://github\.com/[\w.-]+/[\w.-]+/pull/\d+")
 BLOCKER = re.compile(r"(?im)^(?:needs input|failed):")
+VERDICT = re.compile(r"(?m)^VERDICT:")
+# The command only a landing brief carries. A batch placed on daniel-server is told to stop at
+# `gh pr create`, so its brief does not hold this line. Keying on the brief rather than on the
+# hostname asks what THIS batch was told to do, which is the thing the hook is checking.
+LANDING_MARKER = "./scripts/deploy_tools/land.sh"
+LAND_LOGS = "land*.log"
 
 
 def fanout_root(cwd: str) -> Path | None:
@@ -63,14 +72,61 @@ def fanout_root(cwd: str) -> Path | None:
     return None
 
 
-def open_item(message: str) -> str | None:
-    """What the final message still owes, or None when it meets the completion condition."""
-    if PR_URL.search(message) or BLOCKER.search(message):
+def _landed(root: Path) -> bool:
+    """Whether any `land<n>.log` in the batch's `.fanout/` holds a VERDICT line.
+
+    The log is the landing's own record, so a batch that landed correctly and then reported
+    tersely is finished even though its final message omits the verdict. Without this
+    fallback the verdict rule would be a new way to trap a batch that did the work.
+    """
+    try:
+        logs = sorted((root / ".fanout").glob(LAND_LOGS))
+    except OSError:
+        return False
+    for log in logs:
+        try:
+            if VERDICT.search(log.read_text(errors="replace")):
+                return True
+        except OSError:
+            continue
+    return False
+
+
+def open_item(
+    message: str, root: Path | None = None, lands: bool = False
+) -> str | None:
+    """What the final message still owes, or None when it meets the completion condition.
+
+    Args:
+        message: the session's final assistant message.
+        root: the fan-out worktree, read for a `land<n>.log` when a landing is owed.
+        lands: whether this batch's brief tells it to land the PR with `land.sh`. On the
+            landing host a PR URL alone is not a finish — `gh pr create` returning says
+            nothing about whether the PR merged and deployed (issue #2890).
+    """
+    if BLOCKER.search(message):
+        return None
+    if not PR_URL.search(message):
+        return (
+            "your final message carries neither a PR URL nor a line starting `needs input:` "
+            "or `failed:`"
+        )
+    if not lands:
+        return None
+    if VERDICT.search(message) or (root is not None and _landed(root)):
         return None
     return (
-        "your final message carries neither a PR URL nor a line starting `needs input:` "
-        "or `failed:`"
+        "your final message names a PR but no `VERDICT:` line, and no `land<n>.log` in "
+        "`.fanout/` holds one — the PR is open and the landing is not finished"
     )
+
+
+def owes_a_landing(root: Path) -> bool:
+    """Whether this batch's brief tells it to land its PR (the daniel-box brief)."""
+    try:
+        return LANDING_MARKER in (root / MARKER).read_text(errors="replace")
+    except OSError:
+        return False
 
 
 def _blocks_so_far(root: Path) -> int:
@@ -85,7 +141,9 @@ def decide(payload: dict) -> str | None:
     root = fanout_root(str(payload.get("cwd") or "."))
     if root is None:
         return None
-    item = open_item(str(payload.get("last_assistant_message") or ""))
+    item = open_item(
+        str(payload.get("last_assistant_message") or ""), root, owes_a_landing(root)
+    )
     if item is None:
         return None
     count = _blocks_so_far(root)
@@ -99,9 +157,11 @@ def decide(payload: dict) -> str | None:
     return (
         f"This is a headless fan-out batch, and ending the turn ends the batch. The open item: "
         f"{item}. That text reads as a progress report, not a finish. If work remains, "
-        "continue it now with tool calls: open the PR, and on daniel-box land it as the brief "
-        "says. When you are done, end with the PR URL as the last line. If you cannot finish, "
-        "end with one line starting `needs input:` or `failed:` that names the blocker. "
+        "continue it now with tool calls: open the PR, and where the brief says to land it, "
+        "run `land.sh` and wait for its verdict. When you are done, end with the PR URL as "
+        "the last line, quoting the `VERDICT:` line where the brief asks for it. If you "
+        "cannot finish, end with one line starting `needs input:` or `failed:` that names "
+        "the blocker. "
         f"(Automatic continuation {count + 1} of {MAX_BLOCKS}.)"
     )
 

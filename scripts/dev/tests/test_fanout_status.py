@@ -31,7 +31,16 @@ B = Batch(
 HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+# `B` runs on the landing host, so a finished batch carries `land.sh`'s verdict as well as
+# the PR url — the `--- verdict` section `_one` greps out of the batch's land log (#2890).
+LANDED = "--- verdict\nVERDICT: settled\n"
 DONE = (
+    "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
+    '{"type":"result","result":"Opened https://github.com/DanielH2018/server/pull/1500 for #1."}\n'
+    + LANDED
+)
+# The same batch, stopped the moment `gh pr create` returned: a PR and no verdict anywhere.
+OPENED_BUT_NOT_LANDED = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Opened https://github.com/DanielH2018/server/pull/1500 for #1."}\n'
 )
@@ -48,11 +57,12 @@ FINISHED_AND_TIDIED = (
 DONE_WITH_EQUALS_IN_RESULT = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Fixed the === marker parsing bug; opened https://github.com/o/r/pull/9"}\n'
+    + LANDED
 )
 DONE_WITH_STRAY_MARKER_IN_STDERR = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n"
     "--- stderr\n=== 12 boom\n--- report\n"
-    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
+    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n' + LANDED
 )
 # The same shape as DONE — the unit exited 0 and systemd calls it a success — but the
 # session itself reports failure, the way renovate_agent's agent_logic reads that stream.
@@ -65,6 +75,7 @@ DONE_SHAPED_BUT_ERRORED = (
 DONE_WITH_MULTILINE_RESULT = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9.\\nThen filed #2."}\n'
+    + LANDED
 )
 # A property whose own value carries a section marker. The `=== ` and `--- ` siblings are
 # already anchored at start-of-line for this shape; the property split was not.
@@ -72,7 +83,7 @@ DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
     "=== b\nActiveState=inactive\nResult=success\n"
     "Description=fanout --- stderr sink\nExecMainStatus=0\n"
     "--- stderr\n--- report\n"
-    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n'
+    '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n' + LANDED
 )
 
 # Issue #2816: a turn that ended on a progress report exits the process as cleanly as a
@@ -410,3 +421,32 @@ def test_cli_status_reports_a_cleaned_batch_without_reading_the_host(tmp_path, c
         "b on daniel-box: cleaned (2026-09-10T12:00:00+00:00)"
         in capsys.readouterr().out
     )
+
+
+def test_a_landing_host_batch_with_a_pr_and_no_verdict_is_not_done(tmp_path, capsys):
+    """#2890's flagged half; DONE is the clean half with the same unit properties."""
+    stopped = parse_status([B], OPENED_BUT_NOT_LANDED)[0]
+    assert stopped.state == "no-verdict"
+    assert stopped.pr_url == "https://github.com/DanielH2018/server/pull/1500"
+    line, tier = status_line(stopped, "daniel-box", B.branch, lambda _b: "", str)
+    assert tier == 1
+    assert stopped.pr_url in line and "land.sh printed no VERDICT" in line
+    assert parse_status([B], DONE)[0].state == "done"
+
+
+def test_the_agents_own_verdict_line_finishes_a_batch_whose_land_log_was_unreadable():
+    echoed = OPENED_BUT_NOT_LANDED.replace('for #1."}', 'for #1.\\nVERDICT: settled"}')
+    assert parse_status([B], echoed)[0].state == "done"
+
+
+def test_a_daniel_server_batch_is_done_on_the_pr_url_alone():
+    """It is told to stop at `gh pr create`, so there is no verdict for it to owe."""
+    remote = Batch(
+        "b", "daniel-server", "/w/b", "worktree-fanout-b", "fanout-b", [1], "t"
+    )
+    assert parse_status([remote], OPENED_BUT_NOT_LANDED)[0].state == "done"
+
+
+def test_status_reads_the_land_log_over_the_same_call():
+    cmd = status_command([B])
+    assert "land*.log" in cmd and "'^VERDICT:'" in cmd

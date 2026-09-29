@@ -148,13 +148,20 @@ the same run or that only daniel-box can verify.
 
 Poll with `uv run python scripts/dev/fanout_place.py status <run-id>`. It prints one line per
 batch, `<batch> on <host>: <state> …`, where state is `running`, `done <PR URL>`, `landed
-<PR URL>`, `needs-input`, `no-pr`, `no-report`, or `failed` (`permission_denials=N` is
+<PR URL>`, `needs-input`, `no-pr`, `no-verdict`, `no-report`, or `failed`
+(`permission_denials=N` is
 appended when the agent hit classifier denials). `done` requires a PR URL in the agent's final
 text. A clean finish without one reads `needs-input` when the text names a blocker line
 (`needs input:` or `failed:`) and `no-pr` otherwise. `no-pr` means the agent stopped on a
 progress report and the Stop hook's three continuations ran out. Both print the final text
 and exit 1, because no PR exists to land. A daniel-server batch reports `done <PR URL>` and stops there: land that
-PR from this session with `land.sh`. A `failed` batch keeps its worktree — `status` already
+PR from this session with `land.sh`.
+
+**`no-verdict` is a daniel-box batch that opened its PR and never finished landing it.** On
+that host `done` needs a `VERDICT:` line too — in the final text, or in the batch's
+`.fanout/land<n>.log`, which `status` reads over the same ssh call. Without it the PR is open
+and nothing says it merged or deployed, so the line exits 1 and carries the PR URL to land by
+hand. A `failed` batch keeps its worktree — `status` already
 shows the last 300 bytes of `<worktree>/.fanout/stderr.log`; read the full file there for more
 before deciding what to do.
 
