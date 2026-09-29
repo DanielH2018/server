@@ -79,7 +79,7 @@ def test_a_semicolon_joined_later_stage_is_still_matched():
 
 
 def test_a_flag_between_gh_and_the_subcommand_is_ignored():
-    assert _mod.classify("gh --repo o/r run watch 1") == "watch"
+    assert _mod.classify("gh --repo DanielH2018/server run watch 1") == "watch"
 
 
 def test_the_subcommand_words_must_be_adjacent():
@@ -105,6 +105,48 @@ def test_a_missing_segmenter_is_declined_rather_than_asked():
 
 def test_a_word_merely_containing_gh_is_not_matched():
     assert _mod.classify("highlight run watch") is None
+
+
+# --- classify: repository scope (#2901) ---------------------------------------------------
+
+
+def test_another_repos_checks_are_out_of_scope():
+    """land.sh lands only this repo's PRs, so its advice is wrong for the dotfiles repo."""
+    assert _mod.classify("gh pr checks 5 --repo DanielH2018/dotfiles") is None
+    assert _mod.classify("gh pr checks 5 --watch -R DanielH2018/dotfiles") is None
+
+
+def test_this_repo_named_explicitly_is_still_in_scope():
+    assert _mod.classify("gh pr checks 5 --repo DanielH2018/server --watch") == "watch"
+    assert _mod.classify("gh pr checks 5 --repo=danielh2018/Server") == "status"
+
+
+def test_the_attached_and_host_prefixed_repo_forms_are_read():
+    assert _mod.classify("gh run list -RDanielH2018/dotfiles") is None
+    assert _mod.classify("gh run list --repo=github.com/DanielH2018/dotfiles") is None
+    assert _mod.classify("gh run list --repo github.com/DanielH2018/server") == "status"
+
+
+def test_a_github_url_names_the_repo_too():
+    assert (
+        _mod.classify("gh pr checks https://github.com/DanielH2018/dotfiles/pull/5")
+        is None
+    )
+    assert (
+        _mod.classify("gh pr checks https://github.com/DanielH2018/server/pull/5")
+        == "status"
+    )
+
+
+def test_another_repo_in_one_stage_does_not_hide_this_repos_poll_in_the_next():
+    command = "gh pr checks 5 -R DanielH2018/dotfiles; gh run watch 1"
+    assert _mod.classify(command) == "watch"
+
+
+def test_a_failed_runs_log_is_a_one_shot_read_not_a_poll():
+    assert _mod.classify("gh run view 123 --log-failed") is None
+    assert _mod.classify("gh run view 123 --log") is None
+    assert _mod.classify("gh run view 123") == "status"
 
 
 # --- the session counter -------------------------------------------------------------------
@@ -202,6 +244,21 @@ def test_an_unrelated_command_never_consumes_a_read(monkeypatch, capsys, tmp_pat
     for _ in range(5):
         _run(monkeypatch, capsys, "git status", "s4", tmp_path)
     assert _run(monkeypatch, capsys, "gh pr checks 1", "s4", tmp_path) is None
+
+
+def test_another_repos_reads_never_consume_a_read(monkeypatch, capsys, tmp_path):
+    for _ in range(5):
+        assert (
+            _run(
+                monkeypatch,
+                capsys,
+                "gh pr checks 5 --repo DanielH2018/dotfiles",
+                "s7",
+                tmp_path,
+            )
+            is None
+        )
+    assert _run(monkeypatch, capsys, "gh pr checks 1", "s7", tmp_path) is None
 
 
 def test_empty_payload_is_ignored(monkeypatch, capsys):

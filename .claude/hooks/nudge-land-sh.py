@@ -22,7 +22,10 @@ WHAT IT REFUSES, AND WHAT IT LEAVES ALONE. Two shapes, for two different reasons
      lives in a per-session file, so a fresh session starts with its two free reads back.
 
 Everything else passes untouched -- `gh pr view`, `gh pr merge`, `gh api`, and the first two
-status reads. The hook can only ever DENY; it never approves, so it cannot widen what the
+status reads. So does a read aimed at another repository (`--repo`/`-R` or a GitHub URL naming
+one), since land.sh lands only this repo's PRs and its advice is wrong elsewhere (#2901). So
+does `gh run view --log`/`--log-failed`, which reads a finished run's log rather than polling
+a running one. The hook can only ever DENY; it never approves, so it cannot widen what the
 classifier would otherwise allow.
 
 Reads the hook JSON on stdin. Emits a PreToolUse "deny" decision naming the land.sh form to
@@ -46,6 +49,15 @@ _STATUS_COMMANDS = (
     ("gh", "run", "view"),
 )
 
+# The repository land.sh lands. A read that names any other one is out of this hook's scope:
+# on 2026-09-28 it refused `gh pr checks` and `gh run view --log-failed` against the dotfiles
+# repo, and the refused agents switched to `gh api` poll loops the hook cannot see (#2901).
+_THIS_REPO = ("danielh2018", "server")
+
+# `gh run view` flags that read a finished run's log. Neither polls: gh refuses them while
+# the run is still in progress.
+_LOG_FLAGS = ("--log", "--log-failed")
+
 # Commands whose whole purpose is to block until CI finishes.
 _WATCH_COMMANDS = (("gh", "run", "watch"),)
 
@@ -65,6 +77,41 @@ _LAND = (
 )
 
 
+def _repo_of(value: str) -> tuple[str, str] | None:
+    """The lower-cased `(owner, repo)` a `--repo` value or a GitHub URL names, or None.
+
+    `--repo` takes `[HOST/]OWNER/REPO`; a URL is `https://github.com/OWNER/REPO/...`.
+    """
+    value = re.sub(r"^https?://", "", value)
+    parts = [p for p in value.split("/") if p]
+    if value.startswith("github.com/") or "." in (parts[0] if parts else ""):
+        parts = parts[1:]
+    if len(parts) < 2:
+        return None
+    return parts[0].lower(), parts[1].lower()
+
+
+def names_another_repo(stage: list[str]) -> bool:
+    """True when `stage` targets a repository other than this one.
+
+    Reads `--repo X`, `--repo=X`, `-R X`, `-RX`, and a `https://github.com/...` argument
+    (`gh pr checks` and `gh run view` both take a URL). A stage naming no repo is this
+    repo's: gh resolves it from the working directory, which is here.
+    """
+    named: list[str] = []
+    for i, word in enumerate(stage):
+        if word in ("--repo", "-R") and i + 1 < len(stage):
+            named.append(stage[i + 1])
+        elif word.startswith("--repo="):
+            named.append(word.split("=", 1)[1])
+        elif word.startswith("-R") and len(word) > 2 and not word.startswith("--"):
+            named.append(word[2:])
+        elif word.startswith(("https://github.com/", "http://github.com/")):
+            named.append(word)
+    repos = {r for r in map(_repo_of, named) if r is not None}
+    return any(r != _THIS_REPO for r in repos)
+
+
 def classify(command: str, split=split_stages) -> str | None:
     """What kind of CI polling this command is: "watch", "status", or None.
 
@@ -78,9 +125,15 @@ def classify(command: str, split=split_stages) -> str | None:
     except Unsplittable:
         return None
     for stage in stages:
+        if names_another_repo(stage):
+            continue
         if any(invokes(stage, p) for p in _WATCH_COMMANDS):
             return "watch"
         if any(invokes(stage, p) for p in _STATUS_COMMANDS):
+            if invokes(stage, ("gh", "run", "view")) and any(
+                w in _LOG_FLAGS for w in stage
+            ):
+                continue
             # `--watch` turns a one-shot read into a blocking wait.
             if "--watch" in stage or "-w" in stage:
                 return "watch"
