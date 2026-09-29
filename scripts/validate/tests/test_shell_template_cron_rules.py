@@ -1,9 +1,9 @@
 """The cron rules `scripts/validate/shell_templates.py` composes, over the real roles tree.
 
 Split out of `test_validate_shell_templates.py`, which keeps the validator machinery. Three
-rules and one resolver live here: `lib.cron_targets.cron_job_scripts` (which templates a cron
-actually installs), `lib.cron_checks.cron_path_error` (cron inherits no PATH) and
-`lib.cron_checks.cron_kubeconfig_error` (cron inherits no KUBECONFIG, and k3s.yaml is
+rules and one resolver live here: `validate.validate_lib.cron_targets.cron_job_scripts` (which templates a cron
+actually installs), `validate.validate_lib.cron_checks.cron_path_error` (cron inherits no PATH) and
+`validate.validate_lib.cron_checks.cron_kubeconfig_error` (cron inherits no KUBECONFIG, and k3s.yaml is
 root-only), plus the crowdsec home-allowlist curl-retry pins.
 
 The module-scoped `cron_map` fixture is why these four guards stay in ONE file: pytest runs
@@ -18,9 +18,9 @@ from pathlib import Path
 
 import pytest
 from validate import shell_templates as v
-from lib import cron_checks as cc
-from lib import cron_targets as ct
-from lib import shell_lint as sl
+from validate.validate_lib import cron_checks as cc
+from validate.validate_lib import cron_targets as ct
+from validate.validate_lib import shell_lint as sl
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 

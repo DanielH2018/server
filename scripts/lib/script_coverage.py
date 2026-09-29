@@ -150,7 +150,7 @@ def _name_rank(test: Path, name: str, callers: list[Path]) -> int:
     convention). Carrying the stem anywhere in the name is therefore the signal.
 
     A leaf with exactly ONE non-test importer takes its importer's name as a second signal:
-    `lib/shell_lint.py` is imported only by `shell_templates.py`, and the suite named after
+    `validate/validate_lib/shell_lint.py` is imported only by `shell_templates.py`, and the suite named after
     that facade is where its coverage lives. The single-importer gate is what keeps this from
     reshuffling `repo_paths.py`, which 45 scripts import and no one suite is canonical for.
     """

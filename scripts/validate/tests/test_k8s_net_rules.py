@@ -8,10 +8,10 @@ no traffic, which is why each needs a rule rather than a schema.
 Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
 code it covers.
 
-Run: uv run pytest scripts/lib/tests/test_k8s_net_rules.py
+Run: uv run pytest scripts/validate/tests/test_k8s_net_rules.py
 """
 
-from lib.k8s_net_rules import (
+from validate.validate_lib.k8s_net_rules import (
     https_route_without_tls,
     netpol_port_mismatches,
     service_port_translations,

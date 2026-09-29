@@ -9,7 +9,7 @@ they do not.
 Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
 code it covers.
 
-Run: uv run pytest scripts/lib/tests/test_k8s_schema.py
+Run: uv run pytest scripts/validate/tests/test_k8s_schema.py
 """
 
 import json
@@ -17,8 +17,8 @@ import re
 
 from typing import Any
 
-from lib.k8s_net_rules import https_route_without_tls
-from lib.k8s_schema import (
+from validate.validate_lib.k8s_net_rules import https_route_without_tls
+from validate.validate_lib.k8s_schema import (
     K8S_SCHEMA_VERSION,
     NO_SCHEMA,
     crd_schema_error,

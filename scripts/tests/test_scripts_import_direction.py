@@ -56,6 +56,13 @@ FACADE_EDGES = frozenset(
         ("lib.script_coverage", "lib.script_classify"),
         # scripts/validate/k8s_manifests.py re-exports every name in lib/k8s_pvc.py.
         ("validate.k8s_manifests", "lib.k8s_pvc"),
+        # The rule modules only one validator imports sit in validate/validate_lib/ (#2865).
+        ("validate.k8s_manifests", "validate.validate_lib.k8s_net_rules"),
+        ("validate.k8s_manifests", "validate.validate_lib.k8s_schema"),
+        ("validate.shell_templates", "validate.validate_lib.cron_checks"),
+        ("validate.shell_templates", "validate.validate_lib.cron_targets"),
+        ("validate.shell_templates", "validate.validate_lib.shell_lint"),
+        ("validate.validate_lib.cron_checks", "validate.validate_lib.cron_targets"),
         # scripts/docs/service_catalog.py over the four catalogue modules; catalog_model is the
         # one leaf with no first-party dependency beyond lib.repo_paths.
         ("docs.service_catalog", "docs.catalog_backup"),

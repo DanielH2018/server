@@ -2,7 +2,7 @@
 """Resolve which source files a `release_bin.yml` group deploys.
 
 Shared because two checks need the same answer and must not be able to disagree about it:
-`scripts/lib/cron_targets.py` derives the cron rules that apply to a versioned
+`scripts/validate/validate_lib/cron_targets.py` derives the cron rules that apply to a versioned
 script, and `ansible/tests/setup/test_release_bin_groups_have_no_secrets.py` refuses a group holding a
 script that renders a credential inline. A group they resolve differently is a group one of them
 silently stops covering — the same failure the shared template list inside release_bin.yml was

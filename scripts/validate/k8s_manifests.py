@@ -27,11 +27,12 @@ live). Reported as ``[WARN]``, not folded into the exit code: added 2026-08-17, 
 the real tree yet. Promote to a hard failure (fold `unresolved` into `failures` in main()) once
 it has run clean — no false positive — for a while.
 
-The rendering, parsing and rule pieces live under ``scripts/lib/`` since 2026-09-04 —
+The rendering and parsing pieces live under ``scripts/lib/`` since 2026-09-04 —
 ``k8s_roles`` (which roles are rendered and which are exempt), ``k8s_context`` (Ansible's
 variable semantics), ``k8s_yaml`` (the strict loaders and the ``lookup()`` stub), ``k8s_pvc``
-(claim names), ``k8s_schema`` (the OpenAPI and vendored-CRD checks) and ``k8s_net_rules`` (the
-two semantic rules no schema can make). The filter registration every render guard shares is
+(claim names). The two rule modules only this validator imports sit in ``validate_lib/``:
+``k8s_schema`` (the OpenAPI and vendored-CRD checks) and ``k8s_net_rules`` (the two semantic
+rules no schema can make). The filter registration every render guard shares is
 ``lib.ansible_jinja_env``. This module keeps the per-template render and ``main()``, and
 re-exports every moved name so an existing importer keeps working.
 """
@@ -56,7 +57,7 @@ from lib.k8s_context import (
     resolve_vars,
     role_defaults,
 )
-from lib.k8s_net_rules import (
+from validate.validate_lib.k8s_net_rules import (
     HTTPS_ENTRYPOINT,
     https_route_without_tls,
     netpol_port_mismatches,
@@ -80,7 +81,7 @@ from lib.k8s_roles import (
     misplaced_template_lookups,
     non_manifest_documents,
 )
-from lib.k8s_schema import (
+from validate.validate_lib.k8s_schema import (
     K8S_SCHEMA_VERSION,
     NO_SCHEMA,
     crd_schema_error,

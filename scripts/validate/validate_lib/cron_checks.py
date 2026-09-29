@@ -9,7 +9,7 @@ health check built on it goes green while seeing nothing at all. One check canno
 A third, `cron_uv_interpreter_error`, covers the HOME a root cron does not share with the
 user whose uv installed the pinned interpreter. All three take a rendered script plus the
 cron resolution from
-`scripts/lib/cron_targets.py`, and return an error string or None.
+`scripts/validate/validate_lib/cron_targets.py`, and return an error string or None.
 `scripts/validate/shell_templates.py` runs them over every template it renders.
 """
 
@@ -20,9 +20,9 @@ from pathlib import Path
 # A directly-invoked script gets only its own directory on sys.path, and pyproject's
 # `pythonpath` is a pytest setting — so the cross-directory imports below need the
 # scripts/ root here, the same way its siblings reach it.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
-from lib.cron_targets import (
+from validate.validate_lib.cron_targets import (
     BARE_K8S_INVOCATION,
     CRON_ROOT_USER,
     CRONTAB_KUBECONFIG_ENV,

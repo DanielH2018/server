@@ -74,7 +74,7 @@ def test_a_stem_matches_as_a_whole_word_not_a_substring():
 
 
 def test_a_single_importers_suite_breaks_a_tie_the_stem_cannot(tmp_path):
-    """`lib/shell_lint.py` is imported only by `shell_templates.py`.
+    """`validate/validate_lib/shell_lint.py` is imported only by `shell_templates.py`.
 
     No suite carries `shell_lint`, so without this signal the credit fell to whichever
     sibling sorted first. The facade's own suite is where the leaf's coverage lives.

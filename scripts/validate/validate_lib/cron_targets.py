@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Resolve which shell templates under `ansible/roles/` are scheduled as cron `job:` targets.
 
-The cron rules in `scripts/lib/cron_checks.py` only apply to a script cron actually runs, so
+The cron rules in `scripts/validate/validate_lib/cron_checks.py` only apply to a script cron actually runs, so
 the hard part is not the rule but the resolution: a cron `job:` names a path under
 `/usr/local/bin/`, and the template that produced it may have a different basename, may be
 deployed by a `loop:`, or may reach the host through `release_bin.yml`'s group indirection.
@@ -22,7 +22,7 @@ import yaml
 # A directly-invoked script gets only its own directory on sys.path, and pyproject's
 # `pythonpath` is a pytest setting — so the cross-directory imports below need the
 # scripts/ root here, the same way its siblings reach it.
-sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+sys.path.insert(0, str(Path(__file__).resolve().parents[2]))
 
 from lib import release_bin_groups, yaml_fast
 from lib.repo_paths import REPO, ROLES
