@@ -1,7 +1,7 @@
 """The cross-file timeout sums nothing else pins.
 
 "The rollback survives max flock contention" is split across defaults/main.yml (the k8s deploy,
-rollback and staging budgets) and gitops-deploy.service.j2 (the flock wait and
+rollback budgets) and gitops-deploy.service.j2 (the flock wait and
 TimeoutStartSec). Four other jobs wait on the same
 lock, so every one of their waits must clear the deployer's worst hold, and
 K8S_ROLLBACK_TIMEOUT_S must cover one full revert cycle for the worst promoted service. Every
@@ -62,13 +62,13 @@ _DEFAULTS = pathlib.Path(__file__).parents[1] / "defaults" / "main.yml"
 
 
 def _worst_lock_hold(defaults: dict) -> int:
-    """The four k8s-path terms of the git-tree lock hold, EXCLUDING this unit's own flock wait
+    """The two k8s-path terms of the git-tree lock hold, EXCLUDING this unit's own flock wait
     (which is spent before the lock is held).
 
-    All four terms are on the SAME path and are additive, not alternative: consult_staging runs
-    inside `if cs.k8s_deploy:` in main(), ahead of deploy_k8s, so an activation that stalls the
-    staging gate and then stalls both playbook budgets spends all four in sequence. The BROAD arm
-    returns before that block and so cannot stack with any of them.
+    Both terms are on the SAME path and are additive, not alternative: a failed forward deploy
+    is followed by its rollback redeploy inside one activation, so an activation that stalls
+    both playbook budgets spends both in sequence. The BROAD arm returns before that block and
+    so cannot stack with either.
 
     Each term bounds its phase WHOLE: since ADR-0017 a k8s phase also waits for one service lock
     per tag, and it waits while this unit holds the git-tree lock. `deploy_locks.locked_budget`
@@ -79,16 +79,14 @@ def _worst_lock_hold(defaults: dict) -> int:
     `ansible/tests/deploy/test_deploy_runs_from_a_snapshot_under_service_locks.py::test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run`
     is the guard that fails instead.
 
-    The staging terms are counted even though gitops_deploy_staging_gate is false by default. The
-    host that has the gate ON is the one whose budget has to fit, and a budget that only holds
-    while a feature is off is not a budget — that reading is exactly how the 2026-08-29 review's
-    H-1 got in: 1200 + 180 sat unsummed inside a 2700s ceiling and every check read green.
+    EVERY phase budget on this path is counted, whether or not the feature that spends it is
+    on today. A budget that only holds while a feature is off is not a budget — that reading is
+    exactly how the 2026-08-29 review's H-1 got in: the staging gate's 1200 + 180 sat unsummed
+    inside a 2700s ceiling and every check read green. The staging terms themselves are gone
+    with the gate (#2859).
     """
-    return (
-        int(defaults["gitops_deploy_staging_gate_timeout_s"])
-        + int(defaults["gitops_deploy_staging_expect_timeout_s"])
-        + int(defaults["gitops_deploy_k8s_timeout_s"])
-        + int(defaults["gitops_deploy_k8s_rollback_timeout_s"])
+    return int(defaults["gitops_deploy_k8s_timeout_s"]) + int(
+        defaults["gitops_deploy_k8s_rollback_timeout_s"]
     )
 
 
@@ -103,36 +101,33 @@ def test_k8s_deploy_timeout_budget_survives_max_flock_contention():
     timeout_start = _systemd_seconds(_search1(r"^TimeoutStartSec=(\S+)", unit))
     hold = _worst_lock_hold(defaults)
     assert _budget_fits(defaults, flock_wait, timeout_start), (
-        f"flock -w {flock_wait} + the worst-case lock hold {hold}s (staging gate + staging "
-        f"expectations + K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S) = "
+        f"flock -w {flock_wait} + the worst-case lock hold {hold}s "
+        f"(K8S_DEPLOY_TIMEOUT_S + K8S_ROLLBACK_TIMEOUT_S) = "
         f"{flock_wait + hold}s must fit inside TimeoutStartSec {timeout_start}s, or a stalled "
         f"forward deploy followed by a stalled rollback gets SIGTERMed mid-rollback, stranding "
         f"the bad commit live with the volume revert possibly half-done (task 6b)."
     )
 
 
-def test_an_uncounted_staging_budget_is_caught():
+def test_a_budget_that_outgrows_the_ceiling_is_caught():
     # Red proof for the three budget tests that share _worst_lock_hold. They can only ever be
-    # observed passing, so this drives the same verdict function with the pre-fix numbers: the
-    # 2026-08-29 review's H-1, where a 1200s gate and a 180s expectation check sat inside a
-    # 2700s ceiling that nothing summed them into.
+    # observed passing, so this drives the same verdict function with a shape that must fail:
+    # the 2026-08-29 review's H-1, where two phase budgets sat inside a 2700s ceiling that
+    # nothing summed them into.
     sized = {
-        "gitops_deploy_staging_gate_timeout_s": 600,
-        "gitops_deploy_staging_expect_timeout_s": 120,
         "gitops_deploy_k8s_timeout_s": 900,
         "gitops_deploy_k8s_rollback_timeout_s": 1320,
     }
-    assert _worst_lock_hold(sized) == 2940
+    assert _worst_lock_hold(sized) == 2220
     assert _budget_fits(sized, 180, 3600)
 
-    h1 = {
-        **sized,
-        "gitops_deploy_staging_gate_timeout_s": 1200,
-        "gitops_deploy_staging_expect_timeout_s": 180,
+    over = {
+        "gitops_deploy_k8s_timeout_s": 1800,
+        "gitops_deploy_k8s_rollback_timeout_s": 1800,
     }
-    assert _worst_lock_hold(h1) == 3600
-    assert not _budget_fits(h1, 180, 2700), (
-        "the budget check must REJECT the H-1 shape (180 + 1200 + 180 + 900 + 1320 = 3780s "
+    assert _worst_lock_hold(over) == 3600
+    assert not _budget_fits(over, 180, 2700), (
+        "the budget check must REJECT a shape that overruns (180 + 1800 + 1800 = 3780s "
         "against TimeoutStartSec 2700s); a check that passes it is measuring nothing."
     )
 
@@ -189,15 +184,15 @@ def test_the_lock_waiter_census_is_non_vacuous():
 @pytest.mark.parametrize("name", sorted(_LOCK_WAITERS))
 def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     # gitops-deploy.service wraps its whole ExecStart in /var/lock/server-git-tree.lock, and one
-    # activation runs the staging gate, the expectation check, the forward deploy budget and
-    # then, in the failure path, the rollback budget — sequentially, inside that one hold. A
+    # activation runs the forward deploy budget and then, in the failure path, the rollback
+    # budget — sequentially, inside that one hold. A
     # waiter that gives up early does not fail safe: it fires its unit's OnFailure= alert for
     # ordinary contention AND skips that run. For the weekly secret-rotate that means the next
     # attempt is +7 days, and ROTATE_LEAD_DAYS=8 against a 7-day cadence means a token usually
     # gets exactly one eligible run, so a skipped week can put a token overdue.
     #
-    # Derived from the same defaults the deployer reads, so bumping any of the four budgets
-    # fails this instead of silently shortening every waiter at once.
+    # Derived from the same defaults the deployer reads, so bumping either budget fails this
+    # instead of silently shortening every waiter at once.
     path, pattern = _LOCK_WAITERS[name]
     defaults = yaml.safe_load(_DEFAULTS.read_text())
     worst_hold = _worst_lock_hold(defaults)
@@ -205,8 +200,8 @@ def test_every_git_tree_lock_waiter_clears_the_deployers_worst_case_hold(name):
     wait = int(_search1(pattern, path.read_text()))
     assert wait >= worst_hold, (
         f"{name}'s git-tree lock wait of {wait}s must clear gitops-deploy's worst-case lock "
-        f"hold ({worst_hold}s: the staging gate and expectation check, then K8S_DEPLOY_TIMEOUT_S "
-        f"and K8S_ROLLBACK_TIMEOUT_S), or a legitimate long rollback makes this job skip a run "
+        f"hold ({worst_hold}s: K8S_DEPLOY_TIMEOUT_S then K8S_ROLLBACK_TIMEOUT_S), or a "
+        f"legitimate long rollback makes this job skip a run "
         f"and page for ordinary contention."
     )
 
@@ -459,7 +454,7 @@ def test_the_forward_cap_covers_the_worst_promoted_role():
 
 def test_a_forward_ceiling_past_the_cap_is_caught():
     # Red proof for the fit check above, which can only ever be observed passing. Driven on the
-    # verdict function the way `test_an_uncounted_staging_budget_is_caught` drives
+    # verdict function the way `test_a_budget_that_outgrows_the_ceiling_is_caught` drives
     # `_budget_fits`. The pre-#2397 shape is the real one: prowlarr's 1260s against a 900s cap.
     assert _forward_fits(1260, 1440)
     assert not _forward_fits(1260, 900), (

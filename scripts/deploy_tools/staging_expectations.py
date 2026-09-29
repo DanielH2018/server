@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Check that staging's services ANSWER the way they are supposed to, not just that they start.
 
-SLICE 2 OF PHASE C (docs/staging-phase-c.md, Decision 2). The GitOps deployer runs it:
+SLICE 2 OF PHASE C (docs/archive/staging-phase-c.md, Decision 2). The GitOps deployer runs it:
 `deploy_io.run_staging_scripts` calls it with `--services <tags>` after a staging deploy exits
 0, and its exit code is the `expect_rc` that `deploy_staging.staging_verdict` folds into the
 verdict `staging_blocks` gates prod on. It pipes `staging_expect_remote.sh` to daniel-server.

@@ -93,15 +93,6 @@ def test_module_constant_rejects_a_name_that_is_not_assigned():
         readers.module_constant(g.DEPLOY_CHANGES, "_NO_SUCH_CONSTANT")
 
 
-def test_config_default_reads_the_fallback_string():
-    assert "traefik" in readers.config_default(g.GITOPS_DEPLOY, "STAGING_SUBSET")
-
-
-def test_config_default_rejects_a_key_nothing_reads():
-    with pytest.raises(KeyError):
-        readers.config_default(g.GITOPS_DEPLOY, "NO_SUCH_KEY")
-
-
 def test_registry_counts_cover_every_registered_secret():
     counts = readers.registry_counts(g.SECRET_REGISTRY)
     assert sum(counts.values()) > 100
@@ -151,26 +142,6 @@ def test_gitops_prefixes_lists_every_prefix_under_its_constant():
     assert "`m.yml` (`_BROAD_MANUAL_PREFIXES`)" in out
 
 
-def test_staging_subset_sorts_and_counts():
-    out = renderers.render_staging_subset("traefik, authelia,freshrss")
-    assert "`authelia`, `freshrss`, `traefik` — 3 services" in out
-
-
-def test_staging_coverage_counts_gated_and_lists_ungated_eligible():
-    out = renderers.render_staging_coverage(
-        ["a", "b", "c", "d"], {"a", "b"}, ["a", "c", "d"]
-    )
-    assert "2 of 4 k8s roles are staging-gated" in out
-    assert "2 auto-deploy-eligible role(s) sit outside the gate" in out
-    assert "`c`, `d`" in out
-
-
-def test_staging_coverage_says_nothing_when_the_gate_covers_every_eligible_role():
-    out = renderers.render_staging_coverage(["a", "b"], {"a", "b"}, ["a", "b"])
-    assert "0 auto-deploy-eligible role(s) sit outside the gate" in out
-    assert "`a`, `b` — 2" not in out  # nothing left to name
-
-
 def test_autodeploy_coverage_renders_counts_and_denylist():
     out = renderers.render_autodeploy_coverage(["a", "b"], ["c"], ["d"])
     assert "| Eligible | 2 |" in out
@@ -183,19 +154,6 @@ def test_autodeploy_coverage_with_an_empty_denylist():
     out = renderers.render_autodeploy_coverage(["a"], [], [])
     assert "| Denied | 0 |" in out
     assert "Denylisted (`k8s_autodeploy: false`): ." in out
-
-
-def test_staging_timeouts_sums_both_budgets():
-    out = renderers.render_staging_timeouts(600, 120)
-    assert "Worst case the staging gate adds 720s" in out
-    assert "`STAGING_GATE_TIMEOUT_S` = 600s" in out
-    assert "`STAGING_EXPECT_TIMEOUT_S` = 120s" in out
-
-
-def test_staging_timeouts_reflects_a_different_budget():
-    out = renderers.render_staging_timeouts(60, 30)
-    assert "adds 90s" in out
-    assert "720s" not in out
 
 
 def test_crowdsec_agent_liveness_names_the_period():

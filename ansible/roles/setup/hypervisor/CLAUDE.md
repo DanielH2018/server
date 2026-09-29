@@ -284,10 +284,10 @@ answer NO_VERDICT rather than fail.
 
 ## The staging gate's restricted ssh key
 
-The gate runs on daniel-box and has to reach the staging guest, which only daniel-server routes
-to — so it hops here over ssh (`docs/staging-phase-c.md`, Decision 1). Until 2026-08-29 that hop
-authenticated with **the operator's own unrestricted key**, so anything able to invoke the gate
-had a full shell on this host (review M-3).
+An operator drives the gate from daniel-box, and only daniel-server routes to the staging
+guest, so it hops here over ssh (`docs/archive/staging-phase-c.md`, Decision 1); until
+2026-08-29 that hop used **the operator's unrestricted key**, so anyone able to invoke
+the gate had a full shell here (M-3). The tick no longer runs it (#2859).
 
 `install.yml` now also deploys a dedicated ed25519 identity:
 
@@ -311,7 +311,7 @@ than escaped; nothing is interpolated into a shell string.
 
 `ansible/tests/staging/test_staging_gate_dispatch.py` drives the dispatcher's own `validate_request`
 (the file guards `main` on `BASH_SOURCE` so the test can source it) and pins both properties.
-Its rejecting half covers `bash -s`, an empty command, a ref name in place of a SHA, and shell
+Its rejecting half covers `bash -s`, an empty command, a ref name for a SHA, and shell
 metacharacters in the tags; two tests feed a script body on stdin and assert it does not run.
 
 **The dispatcher does no git work and takes no lock**, on purpose. All of that stays in

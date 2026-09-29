@@ -41,8 +41,6 @@
     - deploy_inventory.py
     - deploy_k8s.py
     - deploy_locks.py
-    - deploy_staging.py
-    - deploy_staging_io.py
     - deploy_broad_k8s.py
     - deploy_toolbox.py
     - deploy_tick_types.py
@@ -141,7 +139,7 @@
 # prod through without blocking anything. What remains to notice that is `consult_staging`'s
 # own Discord alert on every non-PASS of a real tick. The ratchet did not alarm on a NO_VERDICT
 # either (#2455), so the exercise it provided had no alarm attached. The long form is
-# docs/staging-phase-c.md, *After the flip: the ratchet is retired*.
+# docs/archive/staging-phase-c.md, *After the flip: the ratchet is retired*.
 #
 # These tasks converge daniel-box, the only host that ran it. `teardown.yml` reaps the same
 # units on a host that is not the deployer. They stop the timer before the service so an
@@ -274,8 +272,6 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_k8s.py
       - live: /opt/gitops-deploy/deploy_locks.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_locks.py
-      - live: /opt/gitops-deploy/deploy_staging.py
-        src: ansible/roles/setup/gitops_deploy/files/deploy_staging.py
       - live: /opt/gitops-deploy/deploy_toolbox.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_toolbox.py
       - live: /opt/gitops-deploy/deploy_tick_types.py
@@ -288,8 +284,6 @@
         src: ansible/roles/setup/gitops_deploy/files/deploy_defer.py
       - live: /opt/gitops-deploy/deploy_release.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_release.py
-      - live: /opt/gitops-deploy/deploy_staging_io.py
-        src: ansible/roles/setup/gitops_deploy/files/deploy_staging_io.py
       - live: /opt/gitops-deploy/deploy_broad_k8s.py
         src: ansible/roles/setup/gitops_deploy/files/deploy_broad_k8s.py
       - live: /opt/gitops-deploy/deploy_narrow.py

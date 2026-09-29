@@ -6,11 +6,9 @@ deployer, so the suite imports the same module in CI and on a host, and never op
 host's /etc copy (0600, it carries the Discord webhook). The `gitops_deploy` fixture is
 that import; `state_dir` repoints every /var/lib/gitops-deploy marker at tmp_path.
 
-The AST fixtures below remain for the guards that pin a function's shape at the source
-(test_staging_gate_cannot_break_prod.py). One per module those guards read: `gitops_fn` for
-the entry module, `deploy_io_fn`, and `handlers_fn` for `deploy_handlers.py`, which holds both
-the handlers and the staging gate's I/O shell. `tick` runs main() itself against a scripted
-checkout
+The AST fixtures below remain for the guards that pin a function's shape at the source. One
+per module those guards read: `gitops_fn` for the entry module, `deploy_io_fn`, and
+`handlers_fn` for `deploy_handlers.py`. `tick` runs main() itself against a scripted checkout
 (test_gitops_deploy_main_branches.py).
 
 `settings` is the `Config` a phase takes. It is a fixture rather than a constant because
@@ -38,11 +36,6 @@ FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 GITOPS_SRC = FILES / "gitops_deploy.py"
 IO_SRC = FILES / "deploy_io.py"
 HANDLERS_SRC = FILES / "deploy_handlers.py"
-STAGING_IO_SRC = FILES / "deploy_staging_io.py"
-# What the `tick` fixture arms the staging gate over. The production literal stays in
-# gitops_deploy.py, where scripts/docs/gen_doc_fragments.py reads it; this is only what puts the
-# scripted k8s service in scope so the real consult_staging has something to gate.
-STAGING_SUBSET = frozenset({"sonarr"})
 
 # At import, not in a fixture: a test module's own `import gitops_deploy` runs at collection,
 # before any fixture. pytest imports a directory's conftest.py ahead of its test modules.
@@ -119,7 +112,7 @@ def deploy_io_tree() -> ast.Module:
 def deploy_io_fn(
     deploy_io_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
-    """`deploy_io_fn("run_staging_scripts")` is that FunctionDef; a missing name fails."""
+    """`deploy_io_fn("deploy_k8s")` is that FunctionDef; a missing name fails."""
     return _fn_finder(deploy_io_tree, "deploy_io.py")
 
 
@@ -160,12 +153,6 @@ def handlers_fn(
 
 
 @pytest.fixture(scope="session")
-def staging_io_fn() -> Callable[[str, ast.AST | None], ast.FunctionDef]:
-    """`staging_io_fn("consult_staging")` is that FunctionDef in deploy_staging_io.py."""
-    return _fn_finder(ast.parse(STAGING_IO_SRC.read_text()), "deploy_staging_io.py")
-
-
-@pytest.fixture(scope="session")
 def gitops_fn(
     gitops_tree: ast.Module,
 ) -> Callable[[str, ast.AST | None], ast.FunctionDef]:
@@ -194,7 +181,7 @@ def ast_calls() -> Callable[[ast.AST, str], bool]:
 def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> ScriptedTick:
     """Run main() against a scripted checkout.
 
-    git, ansible-playbook, the CI verdict, the health gate, the staging scripts, the clock and
+    git, ansible-playbook, the CI verdict, the health gate, the clock and
     Discord all answer from the ScriptedTick through the `DeployTools` on `tick.tools`, and the
     state files live under `state_dir`. Nothing reaches a shell or the network.
 
@@ -206,21 +193,12 @@ def tick(gitops_deploy: ModuleType, monkeypatch, state_dir, tmp_path) -> Scripte
     three of them costs deploy_io.py more lines than its entry in
     ansible/tests/repo/module_length_allowlist.txt allows, and lands with the split that lowers
     it.
-
-    The staging gate is ARMED here, and `STAGING_SUBSET` widened to cover the scripted
-    services, so the real `consult_staging` runs: its verdict, its alert and its ledger write
-    are the ones under test, and `tick.staging_verdict` only says what exit codes the scripts
-    hand back.
     """
     repo = tmp_path / "repo"
     repo.mkdir()
-    scripted = ScriptedTick(
-        repo, pathlib.Path(gitops_deploy.STATE.path("staging_override"))
-    )
+    scripted = ScriptedTick(repo)
     monkeypatch.setattr(gitops_deploy, "REPO", str(repo))
     monkeypatch.setattr(deploy_io, "run", scripted.run)
-    monkeypatch.setattr(gitops_deploy, "STAGING_GATE", True)
-    monkeypatch.setattr(gitops_deploy, "STAGING_SUBSET", STAGING_SUBSET)
     scripted.tools = build_tools(scripted)
     return scripted
 
@@ -230,8 +208,7 @@ def settings(gitops_deploy: ModuleType, tick: ScriptedTick):
     """The `Config` a phase takes, snapshotted AFTER every fixture patch is in place.
 
     It depends on `tick`, not on `state_dir`, and that is the whole point: `tick` repoints
-    `REPO`, `STAGING_GATE` and `STAGING_SUBSET` on the entry module, and `tick_config()` reads
-    those globals ONCE. A snapshot taken before them would silently describe the host's
+    `REPO` on the entry module, and `tick_config()` reads those globals ONCE. A snapshot taken before them would silently describe the host's
     settings instead of the scripted ones, and pytest orders sibling fixtures by the test's
     parameter list — which is not something a test should have to get right.
     """

@@ -27,7 +27,7 @@ ssh_config_path: /etc/ssh/sshd_config
 # ansible/filter_plugins/toposort.py) rather than deploying it in list order — traefik gets
 # an incoming edge from every role rendering a Traefik CRD automatically, derived from the
 # role's own templates, so list position here is only the toposort's tiebreak.
-# `staging_expect` on an entry below is Phase C slice 2 (docs/staging-phase-c.md, Decision 2):
+# `staging_expect` on an entry below is Phase C slice 2 (docs/archive/staging-phase-c.md, Decision 2):
 # what this service must ANSWER, not merely that its pod came up. Every value was measured
 # against the live cluster, never inferred — an expectation nobody checked is a second thing that
 # can be wrong. The original set was measured 2026-08-28; traefik's three were re-measured

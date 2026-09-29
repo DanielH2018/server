@@ -4,10 +4,13 @@ Makes `gitops-deploy` deploy a merged change to `daniel-stage` first, and touch 
 that succeeded. Phases A and B (`staging-cluster.md`) built a cluster and taught the repo to
 deploy to it. This is the phase where the cluster starts refusing things.
 
-**Status as of 2026-09-02: slices 1-4 are built, and the gate BLOCKS on daniel-box.** It asks
-daniel-stage about every commit that would auto-deploy a k8s service, logs and alerts the
-verdict, and — since `gitops_deploy_staging_gate_blocking` was armed on 2026-09-02 — holds the
-SHA and skips prod on a REJECTION. NO VERDICT still deploys prod.
+**RETIRED 2026-09-29 (#2859). The deployer no longer consults staging.** Everything below
+describes the arm as it stood, and is kept as the record of what it cost and what it caught.
+The gate blocked on daniel-box from 2026-09-02; over its life it stopped no deploy, while the
+two faults staging did catch came through a backfill replay and a manual session. The staging
+cluster itself stays — `docs/staging-cluster.md` — driven by hand with
+`scripts/deploy_tools/staging_gate.py`, and `roles/setup/hypervisor` still builds the guest and
+the network the monthly etcd drill needs.
 
 **The entry condition below was met in full before the flip**, which is the whole reason it
 exists: 20 consecutive clean gate runs (the ledger read 23/20 with zero needing triage), two

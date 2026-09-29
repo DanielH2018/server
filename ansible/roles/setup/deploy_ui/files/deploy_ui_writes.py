@@ -115,18 +115,6 @@ def hold_cleared_message(dropped: list[str]) -> str:
     )
 
 
-def set_override(state_dir: Path, action: str) -> str | None:
-    """Set or clear the `staging_gate_override` marker; refuse any other action."""
-    p = state_dir / MARKERS["staging_override"]
-    if action == "set":
-        p.touch()
-    elif action == "clear":
-        p.unlink(missing_ok=True)
-    else:
-        return f"action must be set or clear, not {action!r}"
-    return None
-
-
 def spawn_logged(argv: list[str], cwd: Path, log_dir: Path, action: str) -> Path:
     """Start argv detached with stdout+stderr in `<log_dir>/<action>-<ts>-<rand>.log`.
 

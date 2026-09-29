@@ -255,63 +255,10 @@ gitops_deploy_k8s_rollback_timeout_s: 1620
 # deploy_remediation.py carries why.
 gitops_deploy_broad_timeout_s: 1800
 
-# The staging gate (Phase C slice 3, docs/staging-phase-c.md). ADVISORY: the deployer asks
-# daniel-stage about the commit, logs and alerts the verdict, and deploys prod either way.
-# Blocking is slice 4 and is a separate change.
-#
-# False everywhere by default. Enabling it costs every k8s-deploying tick the staging deploy's
-# wall-clock, and it only works on a host that can reach daniel-server over ssh — which today
-# means daniel-box, the only host running this deployer. It is a switch rather than a given
-# because the point of the slice is to measure a false-failure rate against real merges before
-# anything depends on the answer.
-gitops_deploy_staging_gate: false
-
-# Slice 4: whether a staging REJECTION stops the prod deploy. A second switch rather than a
-# widening of the one above, because the code and the evidence arrive at different times —
-# docs/staging-phase-c.md's entry condition is 20 clean gate runs plus two real gated ticks, and
-# the flip is justified by that measurement rather than by the code being written.
-#
-# Only a REJECTION blocks. NO VERDICT — a wedged guest, an ssh outage, a timeout, a bug in the
-# gate — deploys prod as before and alerts, because blocking there would park prod behind the
-# availability of one guest on a NAT network covering six services of fifty-four. `staging_blocks` carries
-# the full reasoning.
-#
-# The escape hatch is `touch /var/lib/gitops-deploy/staging_gate_override` on the deployer host:
-# it lets exactly one blocking tick through, posts to Discord when it is spent, and removes
-# itself. `rm` disarms it before it is used.
-gitops_deploy_staging_gate_blocking: false
-
-# How long one staging consultation may take. Both are rendered into config.env AND duplicated
-# as the `C.get(...)` fallbacks in gitops_deploy.py, because a host whose config predates the
-# render falls back to the literal — the two are pinned equal by
-# test_staging_timeout_fallbacks_match_the_ansible_defaults.
-#
-# MEASURED, not derived from K8S_DEPLOY_TIMEOUT_S, and measured twice. A full six-service
-# staging deploy of the whole STAGING_SUBSET on 2026-08-29 took 130s cold and 53s warm against
-# 0c0b03d1, then 54s and 52s against 7781d7b9 — four runs, all PASS. The 130s is a genuinely
-# cold cache (image pulls); steady state is ~53s. Six services is the upper bound by
-# construction: the gated set is the change intersected with the subset, and
-# gitops_deploy_k8s_autodeploy_max_per_tick caps a tick at 3 anyway. Since #2797 a gate run is
-# TWO sequential deploy.sh legs — traefik and authelia to re-render the stage edge, then the
-# gated set — so the upper bound is at most a six-service run plus a two-service one, under
-# 2x the 130s cold figure. 600s is ~4.6x the cold run
-# and ~11x steady state. Do not shrink it back toward the steady-state figure on a warm reading
-# alone — the cold run is the one a real tick pays after an image bump.
-#
-# Sizing UP is not free and sizing DOWN is not safe:
-#   - Every second here is inside the unit's TimeoutStartSec and inside the git-tree lock, so
-#     it lengthens the worst case an operator's ./scripts/deploy.sh waits on. See the budget
-#     arithmetic in gitops-deploy.service.j2 and the two flock waits derived from it.
-#   - A gate that times out reports NO VERDICT, which is indistinguishable from a staging that
-#     is down. Slice 4's entry condition is a measured false-failure rate, so an under-sized
-#     timeout does not fail safe — it manufactures the number the decision depends on.
-gitops_deploy_staging_gate_timeout_s: 600
-# The expectation check is a handful of HTTP probes against services staging has just rolled
-# out; it answered in seconds in every drill. 120s is slack for a cold first request, not a
-# budget anything is expected to approach.
-gitops_deploy_staging_expect_timeout_s: 120
-
 # The staging gate's dedicated ssh identity, deployed from SOPS (`staging_gate_ssh_key`).
+#
+# The deployer no longer consults staging (#2859); the key stays because an operator drives
+# `scripts/deploy_tools/staging_gate.py` by hand from this host.
 #
 # The gate hops to daniel-server to reach the staging guest. That hop used to authenticate with
 # the operator's own unrestricted key, so anything able to invoke the gate had a full shell on

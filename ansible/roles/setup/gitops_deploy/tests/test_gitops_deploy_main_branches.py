@@ -6,7 +6,7 @@ whether its post was delivered, the diverged marker is written ahead of the acti
 branching, drain_pending() runs ahead of the short-circuits, the rollback redeploy passes the
 FAILED commit's short SHA under its own budget, and a secrets change bundled with an image
 bump is still flagged. The `tick` fixture in conftest.py answers git, ansible-playbook, the
-CI verdict, the health gate, the staging gate and Discord from a script and records every
+CI verdict, the health gate and Discord from a script and records every
 call in order, so each guard is now an assertion on what main() did.
 """
 
@@ -280,110 +280,16 @@ DEPLOY_SONARR = [
 ]
 
 
-def test_an_image_bump_consults_staging_then_merges_then_deploys(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
+def test_an_image_bump_merges_then_deploys(gitops_deploy, monkeypatch, tick, state_dir):
     _image_bump(gitops_deploy, monkeypatch, tick)
     assert gitops_deploy.main(tick.tools) == 0
     assert tick.merges == [ORIGIN]
     assert tick.playbooks == [DEPLOY_SONARR]
-    staging = tick.log.index(("staging", {"sonarr"}))
-    assert staging < tick.index("git", "merge") < tick.index("playbook", "sonarr")
+    assert tick.index("git", "merge") < tick.index("playbook", "sonarr")
     deployed = tick.log[tick.index("playbook", "sonarr")][2]
     assert fits_budget(deployed, gitops_deploy.K8S_DEPLOY_TIMEOUT_S)
     assert ("annotation", {"sonarr"}) in tick.log
     assert _marker(state_dir, "hold_sha") is None
-
-
-# ── the staging gate, blocking (slice 4) ──────────────────────────────────────────────────────
-def _blocking(gitops_deploy, monkeypatch, tick, verdict: str) -> None:
-    """An image bump whose staging consultation returns `verdict`, with blocking armed."""
-    _image_bump(gitops_deploy, monkeypatch, tick)
-    monkeypatch.setattr(gitops_deploy, "STAGING_GATE_BLOCKING", True)
-    tick.staging_verdict = verdict
-
-
-def test_a_staging_rejection_holds_and_never_touches_prod(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
-    """The whole point of the slice: prod is not applied, so there is nothing to roll back.
-
-    No merge, no playbook and no volume revert — consult_staging runs before the ff-merge, so
-    the tree is still on `local` when the verdict arrives.
-    """
-    _blocking(gitops_deploy, monkeypatch, tick, "rejected")
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.merges == [] and tick.playbooks == []
-    assert _marker(state_dir, "hold_sha") == ORIGIN
-    # Two posts, in this order. posts[0] is consult_staging's own verdict alert — it fires on
-    # every non-PASS, before the branch below decides what to do about it. posts[1] is the
-    # block's page, the one that says prod was never touched. Positional and counted: the two
-    # retired `any()` predicates both matched posts[1] alone (the verdict summary spells it
-    # `staging: REJECTED`), so posts[0] was never asserted. The substrings below are each
-    # unique to one body.
-    assert len(tick.posts) == 2, tick.posts
-    assert "staging: REJECTED" in tick.posts[0]
-    assert "This gate BLOCKS" in tick.posts[0]
-    assert "nothing to roll back" in tick.posts[1]
-
-
-def test_a_staging_rejection_deploys_prod_while_the_gate_is_advisory(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
-    """The rejecting half of the switch: the same verdict with blocking off changes nothing."""
-    _image_bump(gitops_deploy, monkeypatch, tick)
-    tick.staging_verdict = "rejected"
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [DEPLOY_SONARR]
-    assert _marker(state_dir, "hold_sha") is None
-
-
-def test_no_verdict_deploys_prod_even_with_blocking_armed(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
-    """A staging outage must not park prod. The pass-through is the part-3 decision."""
-    _blocking(gitops_deploy, monkeypatch, tick, "no_verdict")
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [DEPLOY_SONARR]
-    assert _marker(state_dir, "hold_sha") is None
-
-
-def test_an_armed_override_lets_one_rejected_tick_through_and_is_spent(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
-    """The escape hatch: prod deploys, the use is posted, and the marker is consumed."""
-    _blocking(gitops_deploy, monkeypatch, tick, "rejected")
-    tick.staging_override = True
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.merges == [ORIGIN]
-    assert tick.playbooks == [DEPLOY_SONARR]
-    assert _marker(state_dir, "hold_sha") is None
-    assert any("staging override used" in post for post in tick.posts)
-    assert not tick.staging_override, (
-        "the override was not spent, so it is not one-shot"
-    )
-
-
-def test_the_override_is_only_read_when_the_gate_would_block(
-    gitops_deploy, monkeypatch, tick, state_dir
-):
-    """Arming it before a passing tick must not burn it.
-
-    Consuming on entry would spend the hatch on whatever tick came next — usually not the one
-    the operator armed it for — and leave their actual push facing the block with nothing left.
-    """
-    _blocking(gitops_deploy, monkeypatch, tick, "pass")
-    tick.staging_override = True
-    assert gitops_deploy.main(tick.tools) == 0
-    assert tick.staging_override, "a passing tick spent the override"
-    # The rest of the block's machinery never ran either: `staging_override` is a property over
-    # this same file, so re-reading it would assert the line above twice.
-    assert _marker(state_dir, "hold_sha") is None, "a passing tick wrote a hold"
-    assert not any("staging override used" in post for post in tick.posts), tick.posts
-    # And the tick itself went through: a blocked tick leaves merges empty.
-    assert tick.merges == [ORIGIN]
 
 
 def test_a_failed_rollout_rolls_back_to_the_failed_shas_snapshot_under_its_own_budget(

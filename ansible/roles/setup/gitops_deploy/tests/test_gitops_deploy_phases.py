@@ -383,9 +383,7 @@ def test_a_failed_broad_apply_holds_the_plane_and_does_not_reset(
 
 
 # ── handle_k8s() ──────────────────────────────────────────────────────────────────────────
-def test_handle_k8s_gates_then_merges_then_deploys(
-    gitops_deploy, tick, state_dir, settings
-):
+def test_handle_k8s_merges_then_deploys(gitops_deploy, tick, state_dir, settings):
     plan = _plan(gitops_deploy, ChangeSet(k8s_deploy={"sonarr"}))
     assert (
         deploy_handlers.handle_k8s(
@@ -393,7 +391,6 @@ def test_handle_k8s_gates_then_merges_then_deploys(
         )
         == 0
     )
-    assert tick.index("staging", "sonarr") < tick.index("git", "merge")
     assert tick.merges == [ORIGIN]
     assert tick.playbooks[0][-2:] == ["--tags", "sonarr"]
     assert ("annotation", {"sonarr"}) in tick.log

@@ -324,14 +324,6 @@ class App:
         )
         return 200, writes.hold_cleared_message(dropped)
 
-    def staging_override(self, body: dict) -> tuple[int, str]:
-        action = str(body.get("action", ""))
-        refusal = writes.set_override(self.cfg.state_dir, action)
-        if refusal:
-            return 400, refusal
-        writes.audit(f"action=staging-override value={action}")
-        return 200, f"staging override {action}"
-
     # ---- routing ----
     READS: ClassVar[dict[str, str]] = {
         "/api/inflight": "inflight",
@@ -344,7 +336,6 @@ class App:
         "/api/deploy": "deploy",
         "/api/cancel": "cancel",
         "/api/hold/clear": "hold_clear",
-        "/api/staging-override": "staging_override",
     }
 
     def get(self, path: str) -> tuple[int, str]:

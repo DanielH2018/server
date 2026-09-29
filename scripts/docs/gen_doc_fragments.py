@@ -4,7 +4,7 @@
 WHY FRAGMENTS. The reference pages under docs/reference/ are generated whole, so a tunable
 they show is re-read from the tree on every docs-refresh run. The operations pages are
 prose, and prose quotes the same tunables: a retain count, the broad-prefix classes, the
-staging subset. Nothing regenerated those, and on 2026-09-02 five such figures were stale.
+subset. Nothing regenerated those, and on 2026-09-02 five such figures were stale.
 Moving a whole runbook into a generator would put its prose in Python; leaving it alone
 leaves the tables to rot. A fragment is the seam between the two: the generator emits ONLY
 the table, and the page pulls it in with a `pymdownx.snippets` include::
@@ -55,9 +55,8 @@ from pathlib import Path as _Path
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
-from dev.k8s_autodeploy_counts import all_role_names, autodeploy_stances
+from dev.k8s_autodeploy_counts import autodeploy_stances
 from fragment_readers import (
-    config_default,
     container_udp_port,
     module_constant,
     parse_jails,
@@ -74,9 +73,6 @@ from fragment_renderers import (
     render_lan_addresses,
     render_longhorn_tiers,
     render_secret_tiers,
-    render_staging_coverage,
-    render_staging_subset,
-    render_staging_timeouts,
     render_staging_vm_sizing,
     render_traefik_ports,
 )
@@ -128,39 +124,12 @@ def _gitops() -> tuple[str, list[str]]:
     ), ["ansible/roles/setup/gitops_deploy/files/deploy_changes.py"]
 
 
-def _staging() -> tuple[str, list[str]]:
-    return render_staging_subset(config_default(GITOPS_DEPLOY, "STAGING_SUBSET")), [
-        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"
-    ]
-
-
-def _staging_coverage() -> tuple[str, list[str]]:
-    eligible, _denied, _not_declaring = autodeploy_stances()
-    subset = {
-        n.strip()
-        for n in config_default(GITOPS_DEPLOY, "STAGING_SUBSET").split(",")
-        if n.strip()
-    }
-    return render_staging_coverage(all_role_names(), subset, eligible), [
-        "ansible/roles/k8s/ (role directories)",
-        "ansible/roles/setup/gitops_deploy/files/gitops_deploy.py",
-        "ansible/filter_plugins/k8s_autodeploy.py",
-    ]
-
-
 def _autodeploy_coverage() -> tuple[str, list[str]]:
     eligible, denied, not_declaring = autodeploy_stances()
     return render_autodeploy_coverage(eligible, denied, not_declaring), [
         "scripts/dev/k8s_autodeploy_counts.py",
         "ansible/filter_plugins/k8s_autodeploy.py",
     ]
-
-
-def _staging_timeouts() -> tuple[str, list[str]]:
-    return render_staging_timeouts(
-        int(config_default(GITOPS_DEPLOY, "STAGING_GATE_TIMEOUT_S")),
-        int(config_default(GITOPS_DEPLOY, "STAGING_EXPECT_TIMEOUT_S")),
-    ), ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
 
 
 def _crowdsec_agent_liveness() -> tuple[str, list[str]]:
@@ -243,10 +212,7 @@ def _secrets() -> tuple[str, list[str]]:
 FRAGMENTS: dict[str, Callable[[], tuple[str, list[str]]]] = {
     "longhorn-tiers": _longhorn,
     "broad-prefixes": _gitops,
-    "staging-subset": _staging,
-    "staging-coverage": _staging_coverage,
     "autodeploy-coverage": _autodeploy_coverage,
-    "staging-timeouts": _staging_timeouts,
     "node-agent-liveness": _crowdsec_agent_liveness,
     "etcd-offbox-retention": _etcd_offbox_retention,
     "traefik-ports": _traefik_ports,

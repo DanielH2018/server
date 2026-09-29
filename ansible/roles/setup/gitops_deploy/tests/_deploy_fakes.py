@@ -1,7 +1,7 @@
 """Fakes for every `DeployTools` boundary, so the deployer's suite patches almost nothing.
 
-`ScriptedTick` is the whole scenario for one `main()` call: what git, ansible-playbook, GitHub,
-the staging scripts and Discord answer, and what the tick did to them. Set the
+`ScriptedTick` is the whole scenario for one `main()` call: what git, ansible-playbook, GitHub
+and Discord answer, and what the tick did to them. Set the
 attributes before the call, then read `log` (every call, oldest first) afterwards. `build_tools`
 turns one into the `DeployTools` `main(tools)` takes.
 
@@ -10,10 +10,6 @@ WHAT IS DELIBERATELY NOT A FIELD. `deploy_io.deploy_k8s` and `deploy_broad` buil
 them here would retire the assertion rather than fake the process. The `tick` fixture patches
 `deploy_io.run` — one module attribute, the last one — and conftest.py says why threading a
 runner into those two is deferred.
-
-`staging_verdict` is a word, not a return value: `run_staging_scripts` maps it to the exit-code
-pair `deploy_staging.staging_verdict` reads, so the real `consult_staging` produces the verdict
-and every alert, ledger write and block that follows from it.
 """
 
 import pathlib
@@ -28,10 +24,6 @@ ORIGIN = "2" * 40
 # A fixed, tz-aware clock: `handle_dirty` reads it to pick the throttle slot, so a real
 # `datetime.now` would make that branch depend on the hour the suite runs at.
 CLOCK = datetime(2026, 9, 1, 12, 0, tzinfo=ZoneInfo("America/Chicago"))
-# The (deploy_rc, expect_rc) pair each verdict word comes from. Read `staging_verdict` for the
-# branch order; these are the three pairs it maps onto, and SKIPPED is not one of them — that
-# word comes from the gate being off or nothing being in scope, never from a script's exit.
-STAGING_RCS = {"pass": (0, 0), "rejected": (1, 0), "no_verdict": (2, 2)}
 
 
 class ScriptedTick:
@@ -42,8 +34,8 @@ class ScriptedTick:
     relate, whether the tree is dirty, the CI verdict, the paths origin adds, the file
     contents and diffs git would show, the outcome of each playbook run in order, and whether
     Discord accepts a post. `log` then holds every call in the
-    order main() made it, so a test asserts ordering (hold before reset, staging before merge)
-    by reading it, not the source.
+    order main() made it, so a test asserts ordering (hold before reset) by reading it, not
+    the source.
 
     Attributes:
         local: the SHA the checkout is on; `head` follows it through merges and resets.
@@ -61,19 +53,13 @@ class ScriptedTick:
             clean, and the list running out means every later run is clean.
         run_error: raised by every `run()` call instead of answering, for the paths that must
             survive a git failure.
-        staging_verdict: the word the staging scripts' exit codes stand for — "pass",
-            "rejected" or "no_verdict". "skipped" is not settable here; it is what the real
-            `consult_staging` returns when the gate is off or nothing is in scope.
         discord_ok: whether Discord accepts each post.
         log: every call, oldest first, as ("git", argv), ("playbook", argv, kwargs),
-            ("staging", services), ("annotation", services) or ("post", content).
+            ("annotation", services) or ("post", content).
         repo: the fake checkout REPO points at; `declare()` and `render()` populate it.
-        override_file: the staging override marker, at the path `state_dir` repointed it to.
     """
 
-    def __init__(
-        self, repo: pathlib.Path, override_file: pathlib.Path | None = None
-    ) -> None:
+    def __init__(self, repo: pathlib.Path) -> None:
         self.local = LOCAL
         self.origin = ORIGIN
         self.head = LOCAL
@@ -97,7 +83,6 @@ class ScriptedTick:
         self.diffs: dict[str, str] = {}
         self.playbook_outcomes: list[Exception | None] = []
         self.run_error: Exception | None = None
-        self.staging_verdict = "pass"
         # What `deploy_tags.py narrow` answers: (exit code, stdout). The production
         # default is a refusal, so a test that does not script it gets today's full
         # `deploy.yml` — the behaviour every pre-narrowing test was written against.
@@ -113,7 +98,6 @@ class ScriptedTick:
         self.discord_ok = True
         self.log: list[tuple] = []
         self.repo = repo
-        self.override_file = override_file or repo / "staging_override"
         # The DeployTools built from this object; the `tick` fixture fills it in, and every
         # test passes it to main() rather than the fixture injecting it behind their back.
         self.tools: DeployTools | None = None
@@ -124,23 +108,6 @@ class ScriptedTick:
         path = self.repo / "ansible" / "inventory" / "host_vars" / "test-host.yml"
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(hostvars)
-
-    @property
-    def staging_override(self) -> bool:
-        """Whether the operator's one-tick override is armed — the marker file itself.
-
-        A property over the real file, not a flag: `consume_staging_override` spends the
-        override by REMOVING it, so reading the file is what proves it was one-shot.
-        """
-        return self.override_file.exists()
-
-    @staging_override.setter
-    def staging_override(self, armed: bool) -> None:
-        if armed:
-            self.override_file.parent.mkdir(parents=True, exist_ok=True)
-            self.override_file.write_text("")
-        elif self.override_file.exists():
-            self.override_file.unlink()
 
     # ── what main() sees ──────────────────────────────────────────────────────────────────────
     def run(self, argv: list[str], *, cwd: str | None = None, **kwargs) -> str:
@@ -280,12 +247,6 @@ class ScriptedTick:
             raise self.narrow_setup_error
         return self.narrow_setup.get(role, (1, ""))
 
-    def run_staging_scripts(
-        self, _repo: str, _sha: str, tags: str, _gate_s: float, _expect_s: float
-    ) -> tuple[int, int]:
-        self.log.append(("staging", set(tags.split(","))))
-        return STAGING_RCS[self.staging_verdict]
-
     def emit_deploy_annotation(self, services: set[str], _sha: str) -> None:
         self.log.append(("annotation", set(services)))
 
@@ -349,7 +310,6 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         fetch_ci_verdict=scripted.fetch_ci_verdict,
         github_authenticated=lambda: scripted.authenticated,
         discord_post=scripted.discord_post,
-        run_staging_scripts=scripted.run_staging_scripts,
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
         emit_deploy_annotation=scripted.emit_deploy_annotation,

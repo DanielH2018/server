@@ -66,37 +66,6 @@ def render_gitops_prefixes(setup: tuple, deploy: tuple, manual: tuple) -> str:
     return "\n".join(lines) + "\n"
 
 
-def render_staging_subset(csv: str) -> str:
-    names = sorted(n.strip() for n in csv.split(",") if n.strip())
-    return (
-        f"The subset as the deployer defaults it (`STAGING_SUBSET` in `gitops_deploy.py`; a "
-        f"host's `config.env` can override it): {_code_list(names)} — {len(names)} services.\n"
-    )
-
-
-def render_staging_coverage(
-    all_roles: list[str], subset: set[str], eligible: list[str]
-) -> str:
-    """Renders how much of the fleet the staging gate covers, and who it leaves unprotected.
-
-    Args:
-        all_roles: every role name under `ansible/roles/k8s/`.
-        subset: `STAGING_SUBSET`, the roles the staging gate actually runs.
-        eligible: role names declaring `k8s_autodeploy: true` — an image-pin bump can
-            reach these unattended, so they are the ones a staging run would protect.
-    """
-    ungated_eligible = sorted(set(eligible) - subset)
-    lines = [
-        f"{len(subset)} of {len(all_roles)} k8s roles are staging-gated (`STAGING_SUBSET` "
-        f"against every directory under `ansible/roles/k8s/`).",
-        "",
-        f"{len(ungated_eligible)} auto-deploy-eligible role(s) sit outside the gate — an "
-        f"image-pin bump to any of these reaches production unattended with no staging run "
-        f"first: {_code_list(ungated_eligible)}.",
-    ]
-    return "\n".join(lines) + "\n"
-
-
 def render_autodeploy_coverage(
     eligible: list[str], denied: list[str], not_declaring: list[str]
 ) -> str:
@@ -118,20 +87,6 @@ def render_autodeploy_coverage(
         f"Denylisted (`k8s_autodeploy: false`): {_code_list(denied)}.",
     ]
     return "\n".join(lines) + "\n"
-
-
-def render_staging_timeouts(gate_s: int, expect_s: int) -> str:
-    """Renders the advisory wall-clock the staging gate can add to a tick.
-
-    Args:
-        gate_s: `STAGING_GATE_TIMEOUT_S`, staging's own deploy budget.
-        expect_s: `STAGING_EXPECT_TIMEOUT_S`, the wait for the manifest queue.
-    """
-    return (
-        f"Worst case the staging gate adds {gate_s + expect_s}s to a tick: "
-        f"`STAGING_GATE_TIMEOUT_S` = {gate_s}s for staging's own deploy, plus "
-        f"`STAGING_EXPECT_TIMEOUT_S` = {expect_s}s waiting for the manifest queue.\n"
-    )
 
 
 def render_crowdsec_agent_liveness(period_s: int) -> str:

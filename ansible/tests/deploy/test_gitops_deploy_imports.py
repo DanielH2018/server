@@ -77,17 +77,7 @@ ALLOWED: dict[str, set[str] | None] = {
         "gitops_markers",
     },
     "deploy_tick_types": {"deploy_changes"},
-    # The staging gate's I/O shell: it runs the scripts deploy_staging only decides about.
-    "deploy_staging_io": {
-        "deploy_alert_text",
-        "deploy_alerts",
-        "deploy_config",
-        "deploy_io",
-        "deploy_staging",
-        "deploy_state",
-        "deploy_toolbox",
-    },
-    # The k8s half of a broad range: the gate's verdict on it, and applying it (#2348).
+    # The k8s half of a broad range: applying the promoted bumps a plane did not (#2348).
     "deploy_broad_k8s": {
         "deploy_alert_text",
         "deploy_alerts",
@@ -96,8 +86,6 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_defer",
         "deploy_io",
         "deploy_locks",
-        "deploy_staging",
-        "deploy_staging_io",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
@@ -151,10 +139,6 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_tick_types",
         "deploy_toolbox",
     },
-    # Import-pure by contract, not by accident: `deploy_logic` re-exports it and the
-    # scripts/deploy_tools/ tools import that index with only files/ on sys.path.
-    # test_deploy_logic_imports_without_the_common_files_path is the executable half.
-    "deploy_staging": set(),
     "deploy_phases": {
         "deploy_alert_text",
         "deploy_alerts",
@@ -181,8 +165,6 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_io",
         "deploy_k8s",
         "deploy_locks",
-        "deploy_staging",
-        "deploy_staging_io",
         "deploy_state",
         "deploy_tick_types",
         "deploy_toolbox",
@@ -195,7 +177,6 @@ ALLOWED: dict[str, set[str] | None] = {
         "deploy_inventory",
         "deploy_k8s",
         "deploy_remediation",
-        "deploy_staging",
     },
     ENTRY: None,
 }
@@ -356,8 +337,8 @@ def test_deploy_logic_imports_without_the_common_files_path():
     `sys.path`. `host_lib` lives in `roles/setup/common/files`, which those tools never add, so
     any module-level import chain from `deploy_logic` down to `deploy_config` breaks `land.sh`
     with a `ModuleNotFoundError` five frames from anything the tool is about. That happened when
-    the staging gate's I/O shell was moved into `deploy_staging.py`, and the suite only caught it
-    because `test_land_shim.py` shells out. This asserts it directly.
+    the staging gate's I/O shell was moved into a module `deploy_logic` re-exported, and the
+    suite only caught it because `test_land_shim.py` shells out. This asserts it directly.
 
     A subprocess rather than an import: the in-process `sys.path` already carries every role's
     files/ by the time this test runs, so nothing checked in-process can see the difference.

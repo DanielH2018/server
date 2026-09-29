@@ -3,7 +3,7 @@
 
 `deploy_logic.py` and the `deploy_*` modules behind it hold the decisions, which are pure.
 This module holds their I/O counterparts, which until now sat in `gitops_deploy.py` beside
-`main()` — `consult_staging`'s subprocess half next to `deploy_staging`, `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
+`main()` — `deploy_k8s()` next to `deploy_k8s.py`. Splitting them out is what lets
 `gitops_deploy.main()` be a sequence of named phases a test can drive one at a time.
 
 Three boundaries are leaves of their own: `deploy_config` (the config file, `Config`, `log`),
@@ -24,12 +24,10 @@ Two rules hold this module's shape:
 Stdlib only: the unit runs under `uv run --no-project` and the host is still on Python 3.12.
 """
 
-import json
 import os
 import pathlib
 import signal
 import subprocess
-from datetime import tzinfo
 
 from deploy_config import (  # noqa: F401 — re-exported for `deploy_io.<name>` callers
     Config,
@@ -262,159 +260,6 @@ def read_local_k8s_default(repo: str, role: str) -> str | None:
         return path.read_text()
     except FileNotFoundError:
         return None
-
-
-# ── the staging gate's transport ──────────────────────────────────────────────────────────────
-
-# How much sooner each child times out than the subprocess.run wrapping it, so the CHILD wins
-# the race. Both children map their own timeout to NO VERDICT and say which stage wedged; the
-# outer subprocess.run raises TimeoutExpired instead, which the broad `except` in the caller
-# logs and returns on — BEFORE the alert. Without this margin a slow or wedged staging is the
-# one failure mode that pages nobody, while a staging that is merely down pages normally. The
-# outer timeout stays as the backstop for a child that cannot honour its own.
-INNER_TIMEOUT_MARGIN_S = 30
-
-# Both staging scripts import yaml and jinja2, so they need the repo's pinned env — the same one
-# deploy_k8s already runs ansible-playbook in. NOT sys.executable: this unit's ExecStart is
-# `uv run --no-project`, which never creates or syncs a venv, so sys.executable is whatever
-# venv happens to sit in WorkingDirectory. It resolves to the repo's today, and a missing or
-# unsynced one would make the expectation script die at import with exit 1 — which
-# staging_verdict_summary reads as REJECTED. An infrastructure fault would then report as a
-# rejection on every gated tick, poisoning the one number this slice exists to collect.
-#
-# Both call sites pass cwd=repo, and that is load-bearing rather than tidiness: `uv run` picks
-# its project from the working directory, so outside one it falls back to a bare interpreter and
-# reproduces the same ModuleNotFoundError this constant exists to avoid. Observed 2026-08-28
-# driving consult_staging from a scratch directory, which is exactly how a caller with a
-# different cwd would hit it. The unit's WorkingDirectory happens to be REPO today; relying on
-# that is what made the first version of this fix incomplete.
-UV_PYTHON = ("uv", "run", "--frozen", "python")
-
-
-def staging_gate_script(repo: str) -> str:
-    """The staging gate's own path inside the repo the deployer renders from.
-
-    In the repo rather than a deployed copy, so the gate is always the version under test.
-    """
-    return os.path.join(repo, "scripts", "deploy_tools", "staging_gate.py")
-
-
-def staging_expect_script(repo: str) -> str:
-    """The expectation checker's path, in the repo for the same reason as the gate's."""
-    return os.path.join(repo, "scripts", "deploy_tools", "staging_expectations.py")
-
-
-def run_staging_scripts(
-    repo: str, sha: str, tags: str, gate_timeout_s: float, expect_timeout_s: float
-) -> tuple[int, int]:
-    """Deploy `tags` to staging at `sha`, then check its expectations. (deploy_rc, expect_rc).
-
-    2 is "no verdict", and both codes start there: nothing about this function may break a prod
-    deploy, so every failure — a missing script, an ssh outage, a wedged guest, a bug here —
-    comes back as no verdict rather than as a rejection or an exception.
-
-    The expectation check only means anything against what was just deployed, so it is skipped
-    (left at no verdict) when the deploy itself produced no verdict.
-    """
-    deploy_rc = expect_rc = 2
-    try:
-        deploy_rc = subprocess.run(
-            [
-                *UV_PYTHON,
-                staging_gate_script(repo),
-                sha,
-                "--tags",
-                tags,
-                "--timeout",
-                str(gate_timeout_s - INNER_TIMEOUT_MARGIN_S),
-            ],
-            cwd=repo,
-            timeout=gate_timeout_s,
-            check=False,
-        ).returncode
-        if deploy_rc == 0:
-            expect_rc = subprocess.run(
-                [
-                    *UV_PYTHON,
-                    staging_expect_script(repo),
-                    # Measure only what this tick deployed. Unscoped, a broken staging traefik
-                    # made the summary reject the service that WAS gated, since the summary
-                    # names the gated set and not the failing one.
-                    "--services",
-                    tags,
-                    "--timeout",
-                    str(expect_timeout_s - INNER_TIMEOUT_MARGIN_S),
-                ],
-                cwd=repo,
-                timeout=expect_timeout_s,
-                check=False,
-            ).returncode
-    except Exception as exc:
-        # Reported as NO VERDICT rather than raised, so the caller alerts on it like every other
-        # non-PASS. A bug in this function must not become a silent way past the gate, and the
-        # pass-through is only acceptable on the strength of every NO VERDICT being loud.
-        log(f"staging gate errored ({exc}); continuing to prod unchecked")
-        return 2, 2
-    return deploy_rc, expect_rc
-
-
-def consume_override(path: str) -> bool:
-    """Spend the operator's one-tick staging override, if it is armed. True when it was.
-
-    Armed by creating the file, disarmed by removing it, and spent here — at the point the gate
-    would block, never on entry, so arming it before a quiet tick does not burn it on a tick
-    that needed nothing.
-
-    One-shot by removal rather than by expiry: an override left armed is an override nobody
-    remembers turning off, and Decision 4 asks for one that is easy and VISIBLE to use rather
-    than hard. The visibility is the Discord post at the call site.
-    """
-    try:
-        os.remove(path)
-    except FileNotFoundError:
-        return False
-    except OSError as exc:
-        # A marker that cannot be removed must not become a permanent override.
-        log(f"staging override at {path} could not be consumed ({exc})")
-        return False
-    return True
-
-
-def record_staging_tick(
-    ledger: str, tz: tzinfo, now, sha: str, gated: set[str], verdict: str, outcome: str
-) -> None:
-    """Append this tick's verdict to the tick ledger. Never raises.
-
-    Args:
-        ledger: the JSONL file to append to.
-        tz: the timezone the `at` stamp is rendered in (America/Chicago on the host).
-        now: the clock, as a callable taking a tzinfo — `datetime.datetime.now` in production.
-        sha: the commit the gate was asked about.
-        gated: the services it was asked about, which is the promoted set, not the changed set.
-        verdict: one of `staging_verdict`'s words, or STAGING_SKIPPED.
-        outcome: `deploy_staging.staging_tick_outcome`'s word for that verdict.
-
-    The caller decides whether there is anything to record: `deploy_staging_io.record_staging_tick`
-    drops a verdict that measured nothing — `staging_tick_outcome` returns None for SKIPPED —
-    and only then calls this. Taking the word as an argument rather than deriving it here also
-    keeps this module from importing `deploy_staging`.
-
-    Every failure is swallowed. This runs inside the staging consultation, which may not break a
-    prod deploy for any reason; a full disk or a bad permission on the ledger must cost the
-    measurement, never the deploy.
-    """
-    record = {
-        "at": now(tz).isoformat(timespec="seconds"),
-        "sha": sha,
-        "tags": ",".join(sorted(gated)),
-        "verdict": verdict,
-        "outcome": outcome,
-    }
-    try:
-        with open(ledger, "a") as handle:
-            handle.write(json.dumps(record) + "\n")
-    except OSError as exc:
-        log(f"could not record the staging tick in {ledger}: {exc}")
 
 
 # ── deploying ─────────────────────────────────────────────────────────────────────────────────

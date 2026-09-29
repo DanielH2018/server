@@ -115,17 +115,6 @@ def test_hold_cleared_message_with_no_plane_says_only_that_is_flagged():
     assert w.hold_cleared_message([]) == "hold cleared (hold_sha and hold_plane)"
 
 
-def test_set_override_round_trip_is_clean(state_dir):
-    assert w.set_override(state_dir, "set") is None
-    assert (state_dir / "staging_gate_override").exists()
-    assert w.set_override(state_dir, "clear") is None
-    assert not (state_dir / "staging_gate_override").exists()
-
-
-def test_set_override_unknown_action_is_flagged(state_dir):
-    assert "action" in w.set_override(state_dir, "toggle")
-
-
 def test_spawn_logged_writes_output_and_returns_log(tmp_path):
     log = w.spawn_logged(["sh", "-c", "echo hi"], tmp_path, tmp_path / "logs", "land")
     assert wait_for_exit(int(log.with_suffix(".pid").read_text())), (

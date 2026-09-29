@@ -40,7 +40,7 @@ def test_install_removes_every_unit_and_liveness_file():
 
 
 def test_the_part_1_ledger_is_kept():
-    """docs/staging-phase-c.md keeps the ledger as the raw evidence behind Part 1: MET."""
+    """docs/archive/staging-phase-c.md keeps the ledger as the raw evidence behind Part 1: MET."""
     removal = task_named(load_tasks(INSTALL), REMOVE)
     assert KEPT_LEDGER not in removal["loop"]
 

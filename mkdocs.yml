@@ -193,11 +193,6 @@ nav:
       # exists on daniel-server and serves freshrss, so a reader arriving from Operations now
       # finds what the label promises.
       - Staging cluster: staging-cluster.md
-      # Phase C is the staging gate, built in slices 1-4 and blocking prod on a rejection
-      # since 2026-09-02. Both staging pages stay here rather than in History: they are
-      # written as specs, but they describe the live cluster and gate, and the gitops_markers
-      # copies four roles ship cite them by path.
-      - Staging gate (Phase C): staging-phase-c.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Claude tooling reference: claude-tooling.md

@@ -175,7 +175,7 @@ main() {
   # Before this flag, any merge inside the run's window turned a good change into exit 4, which
   # classify() maps to NO_VERDICT. Two of four hand-runs on 2026-08-29 died that way, and every
   # one of them feeds the false-failure rate slice 4's entry condition is waiting on. See
-  # docs/staging-phase-c.md, Decision 4.
+  # docs/archive/staging-phase-c.md, Decision 4.
   ./scripts/deploy.sh --tags "$TAGS" -e target=daniel-stage --skip-staleness-check
 }
 

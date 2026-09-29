@@ -1,6 +1,6 @@
 """The staging gate must say "staging rejected this" and "staging could not be asked" apart.
 
-Decision 4 of docs/staging-phase-c.md turns on that distinction: a guest that will not boot, a
+Decision 4 of docs/archive/staging-phase-c.md turns on that distinction: a guest that will not boot, a
 dirty tree on daniel-server, an expired ssh key and a genuine bad manifest all look identical if
 they collapse into one non-zero exit, and an operator who cannot tell them apart learns to
 override the gate on reflex.
