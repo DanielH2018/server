@@ -13,7 +13,8 @@ The original guard checked only two files (the repo CLAUDE.md and the `/new-cont
 which is why it stayed green while `.claude/agents/homelab-container-reviewer.md` went on
 naming the same deleted macro in a live agent brief (2026-08-27 review). DOCS is now every
 `CLAUDE.md` in the tree plus every `*.md` under `.claude/`, excluding retired trees whose docs
-describe code that no longer runs.
+describe code that no longer runs, and excluding the generated findings register (see
+`GENERATED_REGISTER` below).
 """
 
 import re
@@ -22,7 +23,15 @@ from _helpers import REPO, discover_docs
 
 MACROS = REPO / "ansible" / "templates"
 
-DOCS = discover_docs()
+# `docs/reference/backlog.md` renders the open-findings register, so its rows are GitHub issue
+# titles rather than prose this repo wrote. An issue that proposes deleting a macro names that
+# macro in its title, which reddened this guard from the moment the issue was filed until it
+# closed (#2973, the issue that deleted `expose.yml.j2`). Nothing is copyable from a register
+# row, which is the harm this guard exists to catch. Same shape and same reason as
+# `test_documented_paths_exist.py::test_node_corpus_excludes_the_generated_decisions_page`.
+GENERATED_REGISTER = "docs/reference/backlog.md"
+
+DOCS = [d for d in discover_docs() if not d.as_posix().endswith(GENERATED_REGISTER)]
 
 # THE CORPUS FLOOR LIVES IN test_documented_paths_exist.py, not here.
 # `discover_docs()` is shared, and that module's `test_the_corpus_covers_the_whole_doc_tree`
@@ -76,3 +85,14 @@ def test_every_macro_named_in_the_docs_exists():
         "the docs name a shared macro that no longer exists in ansible/templates/; a "
         "skeleton copied from there cannot render: " + "; ".join(missing)
     )
+
+
+def test_the_corpus_skips_the_generated_register_and_nothing_else():
+    """The register is skipped; an ordinary doc still is not.
+
+    Without the positive control, a corpus that stopped being built at all would pass the
+    first assertion.
+    """
+    posix = [d.as_posix() for d in DOCS]
+    assert not any(p.endswith(GENERATED_REGISTER) for p in posix)
+    assert any(p.endswith("docs/adr/index.md") for p in posix)

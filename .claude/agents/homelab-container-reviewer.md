@@ -32,12 +32,15 @@ highest-signal findings.
   `ansible/roles/containers/<svc>/templates/docker-compose.yml.j2` + `tasks/main.yml`. Always cite
   the ansible path, never `containers/`.
 - **Shared macros** (`ansible/templates/`) are the house style — new services USE them, don't
-  hand-roll: `expose.yml.j2` `web_ui_ports_block()`, `autokuma.yml.j2` `kuma()`,
+  hand-roll: `autokuma.yml.j2` `kuma()`,
   `networks.yml.j2` `service_networks()`/`external_networks()`, `resources.yml.j2`
   `resources(cpu_limit, mem_limit, cpu_res, mem_res)`. There is **no shared healthcheck
   macro** — it was deleted, and the one compose file that still inlined its jittered-interval
   body (`roles/containers/dozzle/`) retired 2026-08-29, so no live template uses it at all;
-  write the `healthcheck:` block directly.
+  write the `healthcheck:` block directly. There is **no shared port-exposure macro** either —
+  it was deleted once no compose file called it; write the `ports:` block directly, publishing
+  a UI port bound to `{{ server_ip }}` (the Pi's LAN IP, never `0.0.0.0`) with no Traefik
+  labels, since the Pi has no Traefik in front of it.
 - **The service set + per-service shape** (port/use_authelia/networks) live in
   `ansible/inventory/host_vars/<host>.yml` `containers_list`.
 - **Pinning:** **Watchtower is retired** — nothing auto-updates any more. Every image is
