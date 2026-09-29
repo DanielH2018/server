@@ -72,6 +72,10 @@ def over_live_batch_cap(placed: list[tuple[str, str]], root: Path) -> bool:
     for _, host in placed:
         new[host] = new.get(host, 0) + 1
     over = False
+    # DECIDED: no LOCAL_HOST exemption, unlike `over_ssh_budget` above. daniel-box is exempt
+    # there because its launches go over `bash -c` and spend no ssh connection at all; that
+    # reason does not transfer to memory, which a local agent consumes exactly as a remote one
+    # does. The two caps share the number 3 and nothing else.
     for host, n in sorted(new.items()):
         standing = live.get(host, [])
         if len(standing) + n <= MAX_LIVE_BATCHES_PER_HOST:
