@@ -519,3 +519,11 @@ Azumatt's
 Jotunn
 Serverside_Simulations
 [Cc]rossplay
+
+# autofix-bridge role doc split to docs/autofix-bridge-actuators.md (#2989)
+[Kk]eyframes?
+[Cc]odecs?
+ffprobes?
+[Dd]epreferenced
+[Tt]unables?
+host_vars

@@ -73,16 +73,13 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
 # account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
 # subject across two docs/ pages, home-assistant's testing, tooling and traps moved into the
-# role's own docs/ tree, and valheim's modding account moved to docs/valheim-modding.md. Each
-# remaining reason names its own next section to move.
+# role's own docs/ tree, valheim's modding account moved to docs/valheim-modding.md, and
+# autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. Each remaining
+# reason names its own next section to move.
 OVER_CEILING: dict[str, str] = {
     "authelia": (
         "24174 chars on 2026-09-28: the access-control and OIDC-client rules govern every "
         "routed service; the second-factor and session history can move to docs/"
-    ),
-    "autofix-bridge": (
-        "14978 chars on 2026-09-28: the autonomous-role contract and the two-actuator-plane "
-        "rule govern code that deletes without a human; `## Notable` is the trim"
     ),
     "claude-otel": (
         "18339 chars on 2026-09-29: the eviction tiers and the idle-vs-broken trap are "
