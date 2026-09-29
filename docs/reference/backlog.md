@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-29 12:02 UTC
-generated_sha: c7d78bbc9
+generated_at: 2026-09-29 18:17 UTC
+generated_sha: 6155ea183
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,13 +24,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2853](https://github.com/DanielH2018/server/issues/2853) | medium | improvement | cicd | Make deploy.sh, land.sh and the GitOps tick print their own contract, and delete the prose copies | 2026-09-28 | 0 | - | ✓ |
 | [#2855](https://github.com/DanielH2018/server/issues/2855) | medium | improvement | container | Scaffold a new k8s service with a deterministic generator instead of copying a sibling role | 2026-09-28 | 0 | - | ✓ |
 | [#2857](https://github.com/DanielH2018/server/issues/2857) | medium | improvement | cicd | Replace 31 hand-rolled git fixtures and 27 bare Jinja environments in tests with the shared helpers | 2026-09-28 | 0 | - | ✓ |
-| [#2861](https://github.com/DanielH2018/server/issues/2861) | medium | gap | - | bring-up.sh --continue skips k3s-bringup.yml, so a rebuilt cluster node reaches deploy.yml with no cluster | 2026-09-28 | 0 | - | ✓ |
-| [#2889](https://github.com/DanielH2018/server/issues/2889) | medium | gap | cicd | fanout_place launch stacks more than three batches on one remote host across successive runs | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
-| [#2890](https://github.com/DanielH2018/server/issues/2890) | medium | gap | - | fanout-stop lets a daniel-box batch stop on a PR URL before land.sh prints a VERDICT | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
-| [#2892](https://github.com/DanielH2018/server/issues/2892) | medium | gap | cicd | Backlog render's whole-register fetch times out before its truncation warning fires | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
-| [#2901](https://github.com/DanielH2018/server/issues/2901) | medium | gap | cicd | Scope nudge-land-sh to this repo's CI reads | 2026-09-28 | 0 | - | - |
-| [#2912](https://github.com/DanielH2018/server/issues/2912) | medium | gap | backup-observability | fetch_grafana_dashboards.py reverts hand edits and live variable defaults on every re-run | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
-| [#2921](https://github.com/DanielH2018/server/issues/2921) | medium | improvement | docs | Trim the 29 role CLAUDE.md files over the inject hook's character budget | 2026-09-28 | 0 | - | ✓ |
+| [#2921](https://github.com/DanielH2018/server/issues/2921) | medium | improvement | docs | Trim the 29 role CLAUDE.md files over the inject hook's character budget | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2943](https://github.com/DanielH2018/server/issues/2943) | medium | gap | security | Restore a reachability gate for the staging egress fence | 2026-09-29 | 0 | - | ✓ |
 | [#2947](https://github.com/DanielH2018/server/issues/2947) | medium | gap | cicd | Nothing notices when one of the four classes #2876 deleted gains a member again | 2026-09-29 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
@@ -47,25 +41,21 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2854](https://github.com/DanielH2018/server/issues/2854) | low | improvement | cicd | Share one exit-code and --help convention across every scripts/ entry point | 2026-09-28 | 0 | - | ✓ |
 | [#2860](https://github.com/DanielH2018/server/issues/2860) | low | improvement | backup-observability | Six Prometheus/Loki HTTP clients: route homelab-mcp and postflight through probe_lib | 2026-09-28 | 0 | - | ✓ |
 | [#2864](https://github.com/DanielH2018/server/issues/2864) | low | improvement | cicd | Measure whether deploy-ui and renovate_agent are used before keeping them | 2026-09-28 | 0 | - | ✓ |
-| [#2865](https://github.com/DanielH2018/server/issues/2865) | low | improvement | - | Delete or relocate dead and single-caller code: expose.yml.j2, unused scripts/lib modules, longhorn_reap | 2026-09-28 | 0 | - | ✓ |
 | [#2872](https://github.com/DanielH2018/server/issues/2872) | low | improvement | container | Render a default Service from the containers_list entry when a k8s role ships none | 2026-09-28 | 0 | - | ✓ |
 | [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2888](https://github.com/DanielH2018/server/issues/2888) | low | gap | cicd | Three more roles/k8s walkers still count a retired role's __pycache__ leftover as a role | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
-| [#2893](https://github.com/DanielH2018/server/issues/2893) | low | improvement | container | flaresolverr loads media in every challenge solve, inflating the memory limit #2883 had to raise | 2026-09-28 | 0 | - | ✓ |
 | [#2897](https://github.com/DanielH2018/server/issues/2897) | low | gap | backup-observability | Patch the stale monitor-bridge and scrutiny Secret keys out of the live cluster after #2825/#2832 deploy | 2026-09-28 | 0 | - | ✓ |
-| [#2899](https://github.com/DanielH2018/server/issues/2899) | low | gap | cicd | A pihole deploy records no digest for its second instance's manifest — *no vetted remediation* | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
-| [#2902](https://github.com/DanielH2018/server/issues/2902) | low | gap | cicd | probe.py health holds no roll expectation for pihole-2 — *no vetted remediation* | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | - |
-| [#2906](https://github.com/DanielH2018/server/issues/2906) | low | improvement | docs | Drop the deploy-tag line from the pihole and prowlarr Editing sections | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2911](https://github.com/DanielH2018/server/issues/2911) | low | improvement | backup-observability | claude-otel holds the cluster monitoring plane its name does not mention | 2026-09-28 | 0 | - | ✓ |
-| [#2914](https://github.com/DanielH2018/server/issues/2914) | low | gap | cicd | A timed-out broad apply discards the playbook output that would name the stuck task | 2026-09-28 | 0 | - | ✓ |
-| [#2920](https://github.com/DanielH2018/server/issues/2920) | low | gap | docs | No size guard covers ansible/roles/containers/*/CLAUDE.md | 2026-09-28 | 0 | - | ✓ |
-| [#2925](https://github.com/DanielH2018/server/issues/2925) | low | improvement | docs | Trim claude-otel CLAUDE.md back under the role-doc ceiling instead of re-recording it | 2026-09-28 | 0 | - | ✓ |
 | [#2933](https://github.com/DanielH2018/server/issues/2933) | low | improvement | cicd | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | 2026-09-28 | 0 | - | ✓ |
 | [#2944](https://github.com/DanielH2018/server/issues/2944) | low | improvement | cicd | Decide whether the retired staging cluster's two shared-machinery constants stay | 2026-09-29 | 0 | - | ✓ |
 | [#2945](https://github.com/DanielH2018/server/issues/2945) | low | gap | cicd | Authelia's SMTP notifier branch lost its only rehearsal with daniel-stage | 2026-09-29 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
-| [#2952](https://github.com/DanielH2018/server/issues/2952) | low | gap | cicd | Eight ansible/tests/deploy guards still walk a retired role's __pycache__ shell as a k8s role | 2026-09-29 | 0 | - | ✓ |
+| [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
+| [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
+| [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
+| [#2979](https://github.com/DanielH2018/server/issues/2979) | low | improvement | cicd | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | 2026-09-29 | 0 | - | ✓ |
+| [#2981](https://github.com/DanielH2018/server/issues/2981) | low | improvement | cicd | has_ample_ram reads false on daniel-box, which has ample RAM | 2026-09-29 | 0 | - | ✓ |
+| [#2982](https://github.com/DanielH2018/server/issues/2982) | low | improvement | docs | initial_setup CLAUDE.md grew past its recorded ceiling instead of taking the named trim | 2026-09-29 | 0 | worktree-fanout-2026-09-29 | ✓ |
 
 ## Settled findings — do not re-flag
 
