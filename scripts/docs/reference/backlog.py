@@ -13,9 +13,11 @@ reviewer agents under .claude/agents/ point at that table instead of carrying a 
 (#2169). `findings.py open` refuses to re-file either outcome; this table is where a reviewer
 reads the same ruling before it spends a pass re-deriving it.
 
-WHAT IT READS. `findings_lib/issue_model.py`'s row model over the `gh issue list --label
-claude --state all` that `gh_calls.load_issues` runs; the open rows feed the backlog table
-and the closed rows carrying an `accepted` or `refuted` label feed the settled one.
+WHAT IT READS. `findings_lib/issue_model.py`'s row model over the three narrow `gh issue
+list` calls `gh_calls.load_backlog_issues` runs — the open findings, the closed `refuted`
+ones and the closed `accepted` ones. The open rows feed the backlog table and the two
+settled sets feed the settled one. It does NOT read the whole register: that fetch grew past
+its own timeout and left this page silently stale behind a bare `gh failed` (#2892).
 The docs-refresh cron runs as the user whose gh is already authenticated to open the docs
 PR, so this generator needs nothing it does not already have. A gh failure fails THIS
 generator loudly; build_docs.py keeps rendering the others and exits non-zero, which is the
@@ -36,7 +38,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
-from dev.findings_lib.gh_calls import load_issues
+from dev.findings_lib.gh_calls import load_backlog_issues
 from dev.findings_lib.issue_model import DOMAINS, issue_rows, sort_key
 from lib.docs_provenance import finish_generator, generated_banner, md_cell
 
@@ -146,8 +148,9 @@ def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")
     args = parser.parse_args(argv)
-    # `all`, not `open`: the settled table below the backlog reads the closed rows.
-    rows = issue_rows(load_issues("all"))
+    # Not `open` alone: the settled table below the backlog reads closed rows too. The
+    # fetch that gets both without reading the whole register is `load_backlog_issues`.
+    rows = issue_rows(load_backlog_issues())
     return finish_generator(
         "docs.reference.backlog", args.out, rows, render_markdown, "finding"
     )

@@ -156,7 +156,7 @@ def test_render_shows_a_dash_for_a_settled_row_whose_close_recorded_no_reason():
 
 
 def test_main_writes_the_page_with_a_provenance_banner(tmp_path, monkeypatch):
-    monkeypatch.setattr(g, "load_issues", lambda state="open": [])
+    monkeypatch.setattr(g, "load_backlog_issues", lambda: [])
     out = tmp_path / "backlog.md"
     assert g.main(["--out", str(out)]) == 0
     text = out.read_text()
