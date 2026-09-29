@@ -111,12 +111,26 @@ def test_docker_install_is_gated_on_has_docker():
     )
 
 
-def test_has_docker_defaults_true_fleet_wide():
-    """Existing Docker hosts must keep working without a per-host opt-in."""
+def test_has_docker_defaults_false_fleet_wide():
+    """A host nobody thought about must inherit no engine (#2861).
+
+    The default was true while every host but daniel-pi overrode it false, so the
+    inventory layer described above depended on someone remembering the override. The
+    teardown arm this default selects is a no-op on a host that never had Docker.
+    """
     all_vars = _load(ANSIBLE / "inventory" / "group_vars" / "all.yml")
-    assert all_vars.get("has_docker") is True, (
-        "has_docker must default true in group_vars/all.yml — the containers_list "
-        "plane depends on it."
+    assert all_vars.get("has_docker") is False, (
+        "has_docker must default false in group_vars/all.yml — daniel-pi is the only "
+        "Docker host, and it opts in."
+    )
+
+
+def test_daniel_pi_opts_in_to_docker():
+    """The one host the containers_list plane still runs on says so itself."""
+    host_vars = _load(ANSIBLE / "inventory" / "host_vars" / "daniel-pi.yml")
+    assert host_vars.get("has_docker") is True, (
+        "daniel-pi runs every remaining Compose service and must set `has_docker: true` "
+        "now that the fleet default is false."
     )
 
 

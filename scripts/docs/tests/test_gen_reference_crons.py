@@ -174,3 +174,42 @@ def test_markdown_ends_with_exactly_one_newline(tmp_path):
     out = g.render_markdown(g.build_rows(_basic(tmp_path)))
     assert out.endswith("\n")
     assert not out.endswith("\n\n")
+
+
+def _var_gated_role(tmp_path, gate: str):
+    _role(
+        tmp_path,
+        "zeta",
+        f"""\
+        ---
+        - name: Schedule a var-gated job
+          when: inventory_hostname == {gate}
+          ansible.builtin.cron:
+            name: "Var gated"
+            minute: "5"
+            user: root
+            job: "/bin/true"
+        """,
+    )
+    defaults = tmp_path / "zeta" / "defaults" / "main.yml"
+    defaults.parent.mkdir(parents=True, exist_ok=True)
+    defaults.write_text("---\ncron_host: some-host\n")
+    return tmp_path
+
+
+def test_a_variable_host_gate_resolves_to_the_host_it_names(tmp_path):
+    """`inventory_hostname == ops_cron_host` names a host as surely as a quoted literal.
+
+    Reading only the literal form degraded every converted gate to `conditional (...)`,
+    which is the column this page exists to answer.
+    """
+    rows = {r["name"]: r for r in g.build_rows(_var_gated_role(tmp_path, "cron_host"))}
+    assert rows["Var gated"]["host"] == "some-host"
+
+
+def test_a_variable_the_resolver_cannot_settle_is_printed_as_written(tmp_path):
+    """A name with no fleet-wide value is left as the template, never guessed at."""
+    rows = {
+        r["name"]: r for r in g.build_rows(_var_gated_role(tmp_path, "no_such_host"))
+    }
+    assert rows["Var gated"]["host"] == "{{ no_such_host }}"
