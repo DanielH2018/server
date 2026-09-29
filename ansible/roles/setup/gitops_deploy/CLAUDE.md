@@ -339,6 +339,15 @@ the `fatal:` line and the `PLAY RECAP`. `_failure_detail` puts the last un-ignor
 so an unbounded error evicts the remediation prose after it
 (`tests/test_gitops_deploy_failure_output.py`).
 
+A run killed at its deadline carries the same detail. `run()` re-raises the stdlib's
+`TimeoutExpired` as `deploy_failtext.py:TimedOutWithOutput`, whose `str()` appends what the
+killed process had printed — the task that was still running, not just the argv and the
+deadline. That output comes from the exception the stdlib already raises; the pipes are NOT
+re-read after the kill, which would block on a descendant that escaped the process group.
+`last_task` puts the running task first (a killed run has no `fatal:` line) and
+`alert_excerpt` heads that body, so the task reaches the Discord post too
+(`tests/test_gitops_deploy_failure_output.py`).
+
 ## Traps
 
 - **Do not wrap `initial_setup.yml --tags gitops_deploy` in `flock

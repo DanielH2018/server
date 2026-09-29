@@ -15,7 +15,7 @@ Reach these functions qualified (`deploy_alert_text.crash_alert(...)`), never by
 see `deploy_io.py`'s docstring for why.
 """
 
-from deploy_failtext import failing_task, head, tail
+from deploy_failtext import TimedOutWithOutput, failing_task, head, tail
 from deploy_remediation import k8s_remediation
 
 # Per-alert budget for an embedded error string. host_lib.discord_post cuts a post at
@@ -39,6 +39,11 @@ def alert_excerpt(exc: BaseException, limit: int = ALERT_EXCERPT_CHARS) -> str:
     if not newline:
         return first
     budget = max(limit - len(first), 0)
+    if isinstance(exc, TimedOutWithOutput):
+        # A killed run has no `fatal:` line for failing_task to find, and its body is already
+        # ordered running-task-first by `running_task_detail`. Head, not tail: a tail here
+        # would post the end of stderr's deprecation warnings and drop the task header.
+        return f"{first}\n{head(body, budget)}"
     found = failing_task(body)
     if found is None:
         return f"{first}\n{tail(body, budget)}"

@@ -6,6 +6,7 @@ CompletedProcess would prove the formatting and not the capture.
 """
 
 import pathlib
+import subprocess
 
 import pytest
 
@@ -328,3 +329,34 @@ def test_the_alert_excerpt_keeps_the_failing_task_ahead_of_a_long_stderr(
         len(excerpt)
         <= deploy_alert_text.ALERT_EXCERPT_CHARS + len(deploy_io.TRUNCATED) + 1
     )
+
+
+# ── a timed-out run's alert ──────────────────────────────────────────────────────────────────
+# The journal keeps the whole error string, but the Discord post keeps only its HEAD: the
+# broad-failure alert trims through `alert_excerpt` (ALERT_EXCERPT_CHARS) and
+# host_lib.discord_post cuts at 1900 from the front. So the task that was running has to come
+# FIRST in a timeout's detail, the way the failing task does in a non-zero exit's. RED proof:
+# with `timeout_detail` emitting a plain tail of stdout, the header below sits ~2000 characters
+# past the excerpt window and this assertion fails while the journal-level test still passes.
+WEDGED_HEADER = "TASK [k8s/manifests : Apply the rendered manifests] ****"
+
+_WEDGED_WITH_CHATTER = f"""echo '{WEDGED_HEADER}'
+awk 'BEGIN {{ for (i = 0; i < 400; i++) print "changed: [daniel-box] => (item=manifest-" i ")" }}'
+sleep 300
+"""
+
+
+def test_a_timed_out_run_puts_the_running_task_in_the_discord_excerpt(
+    gitops_deploy, tmp_path: pathlib.Path
+) -> None:
+    path = tmp_path / "wedged.sh"
+    path.write_text(_WEDGED_WITH_CHATTER)
+    with pytest.raises(subprocess.TimeoutExpired) as excinfo:
+        deploy_io.run(["sh", str(path)], cwd=str(tmp_path), timeout=1.0)
+
+    excerpt = deploy_alert_text.alert_excerpt(excinfo.value)
+    assert WEDGED_HEADER in excerpt, (
+        f"the running task must survive the {deploy_alert_text.ALERT_EXCERPT_CHARS}-char "
+        f"Discord excerpt; got: {excerpt!r}"
+    )
+    assert len(excerpt) <= deploy_alert_text.ALERT_EXCERPT_CHARS
