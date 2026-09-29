@@ -13,11 +13,6 @@ def _ctx(callers: dict[str, set[str]], declared: set[str]) -> Context:
     return Context(Path("."), "HEAD", declared, callers, lambda _m: None)
 
 
-def _entry_tags(declared: set[str], **overrides: set[str]) -> dict[str, set[str]]:
-    """`render_guard.entry_tags_at`'s answer for a fleet where only `overrides` set `tags:`."""
-    return {name: overrides.get(name, {name}) for name in declared}
-
-
 def test_a_caller_reached_through_another_shared_role_is_counted():
     """A first-hop-only walk would miss this, and then `longhorn-api`
     — called only by shared roles — could never discharge."""
@@ -29,9 +24,9 @@ def test_a_caller_reached_through_another_shared_role_is_counted():
         },
         {"web"},
     )
-    assert shared_role_callers.recorded_callers(
-        ["longhorn-api"], ctx, _entry_tags({"web"})
-    ) == {"longhorn-api": ["web"]}
+    assert shared_role_callers.recorded_callers(["longhorn-api"], ctx) == {
+        "longhorn-api": ["web"]
+    }
 
 
 def test_a_caller_that_never_runs_manifests_is_dropped():
@@ -39,55 +34,20 @@ def test_a_caller_that_never_runs_manifests_is_dropped():
     ctx = _ctx(
         {"manifests": {"web"}, "image-builder": {"web", "images"}}, {"web", "images"}
     )
-    assert shared_role_callers.recorded_callers(
-        ["image-builder"], ctx, _entry_tags({"web", "images"})
-    ) == {"image-builder": ["web"]}
+    assert shared_role_callers.recorded_callers(["image-builder"], ctx) == {
+        "image-builder": ["web"]
+    }
 
 
 def test_a_role_nobody_calls_reaches_no_tag():
     ctx = _ctx({"manifests": {"web"}}, {"web"})
-    assert shared_role_callers.recorded_callers(
-        ["orphan"], ctx, _entry_tags({"web"})
-    ) == {"orphan": []}
+    assert shared_role_callers.recorded_callers(["orphan"], ctx) == {"orphan": []}
 
 
 def test_a_manifests_caller_no_tag_applies_leaves_the_other_writers_standing():
     """A role committed ahead of its entry calls `manifests` with no tag to apply it."""
     ctx = _ctx({"manifests": {"web", "new-role"}, "arr": {"web"}}, {"web"})
-    assert shared_role_callers.recorded_callers(["arr"], ctx, _entry_tags({"web"})) == {
-        "arr": ["web"]
-    }
-
-
-# ── an entry's other declared tag is a recording caller the role graph cannot see (#2666) ──
-def test_a_builder_entrys_other_tag_is_the_caller_whose_record_stands_in():
-    """GREEN half. `images` renders no manifest, but its entry is also tagged `web`, so a
-    `--tags web` deploy runs it and `web.json` records the run (#2666)."""
-    ctx = _ctx({"manifests": {"web"}}, {"web", "images"})
-    assert shared_role_callers.recorded_callers(
-        ["images"], ctx, _entry_tags({"web", "images"}, images={"images", "web"})
-    ) == {"images": ["web"]}
-
-
-def test_an_entry_declaring_only_its_own_name_reaches_no_other_tag():
-    """RED half. Drop the shared tag and the same role is back to no recording caller, so
-    its line stands — the answer this file recorded before #2666."""
-    ctx = _ctx({"manifests": {"web"}}, {"web", "images"})
-    assert shared_role_callers.recorded_callers(
-        ["images"], ctx, _entry_tags({"web", "images"})
-    ) == {"images": []}
-
-
-def test_a_merely_overlapping_entry_is_not_a_record_that_stands_in():
-    """`web`'s own entry is also tagged `other`, so a `--tags other` deploy writes
-    `web.json` without running `images`. Only a subset of `images`'s tags stands in."""
-    ctx = _ctx({"manifests": {"web"}}, {"web", "images", "other"})
-    entry_tags = _entry_tags(
-        {"web", "images", "other"}, images={"images", "web"}, web={"web", "other"}
-    )
-    assert shared_role_callers.recorded_callers(["images"], ctx, entry_tags) == {
-        "images": []
-    }
+    assert shared_role_callers.recorded_callers(["arr"], ctx) == {"arr": ["web"]}
 
 
 # DECIDED: this drives the real tree through the argv the deployer builds. The tick's fakes
