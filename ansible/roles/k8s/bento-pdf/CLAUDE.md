@@ -21,9 +21,9 @@ conventions.
 
 ## Notable
 - `bento_pdf_k8s_uid: 101` matches the upstream nginx-unprivileged image's own UID, and is
-  also used as `fsGroup` for the container's tmpfs scratch dirs — `emptyDir` mounts
-  `0755` root-owned with no equivalent of the Compose template's `tmpfs mode=1777`, so
-  without the matching `fsGroup` the container hits `EPERM` on write.
+  also used as `fsGroup` for nginx's `emptyDir` scratch dirs. An `emptyDir` has no mode
+  setting and mounts `0755` root-owned, so without the matching `fsGroup` the container hits
+  `EPERM` on write.
 - Pinned the same image tag as the retired Docker role while both existed, so a behavior
   difference between the two was never the image. #2385 deleted that role from the tree.
 

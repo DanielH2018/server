@@ -25,9 +25,10 @@ UPS state of its own; the physical UPS is USB-attached to daniel-server via the 
 ## Notable
 - **`alpine` init container, not the app image**, seeds `/config/settings.yml` from the
   Secret — PeaNUT's own image has no `cp` binary (`StartError` at first deploy, 2026-08-12).
-- **`fsGroup: 1000`, no `runAsUser` pin.** The compose template never set a `user:` either, so
-  pinning a UID here would be a silent behavior change; `fsGroup` makes `/app/config` writable
-  as a supplementary group regardless of which UID the image runs as.
+- **`fsGroup: 1000`, no `runAsUser` pin.** The image's own non-root `node` user serves the
+  page, so pinning a UID here would be an unrelated behavior change. `fsGroup` makes the
+  `/app/config` `emptyDir` writable as a supplementary group regardless of which UID the image
+  runs as.
 - **`auth.yaml` is regenerated every boot** from `WEB_USERNAME`/`WEB_PASSWORD` into the
   `peanut-app-config` `emptyDir` — it's absent from the image, not part of the seeded mount.
 
