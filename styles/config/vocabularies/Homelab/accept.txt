@@ -569,3 +569,34 @@ fd
 [Cc]ommit's
 [Ss]napshotted
 access_control
+
+# Role-doc prose moved to docs/ pages (#2999): optimize_pi, initial_setup, gitops_deploy and
+# uptime-kuma. The Pi's OS-tuning vocabulary is the bulk of it.
+[Zz]ram
+[Ss]wapfile
+[Ss]wapoff
+[Ss]wapoffs
+[Ee]arlyoom
+[Ee]arlyoom's
+[Dd]ockerd
+[Dd]ockerd's
+dbus
+[Dd]ebloat
+snapd
+vSwitch
+wpa_supplicant
+[Ee]thernet
+conffile
+pacct
+savelog
+gzip
+[Ss]ysctls
+[Rr]eadahead
+Azlux
+Comcast
+node_exporter
+libsystemd
+[Nn]ameservers
+[Uu]pstreams
+[Cc]ompose's
+resolved's

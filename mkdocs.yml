@@ -242,6 +242,8 @@ nav:
       # drill-record page rather than a second one.
       - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
       - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
+      # And the last of them (#2999), which empties both OVER_CEILING dicts.
+      - Pi host tuning record: pi-host-tuning-record.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

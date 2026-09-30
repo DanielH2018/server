@@ -85,11 +85,6 @@ OVER_CEILING: dict[str, str] = {
         "it does` became a pointer at `tasks/` carrying only its traps (#2982), and "
         "`## Notable` is the next trim"
     ),
-    "optimize_pi": (
-        "28728 chars on 2026-09-28: the container-recovery contract governs a cron that "
-        "restarts what it finds dead; `## Notable` carries the Pi's measured incidents and is "
-        "the trim"
-    ),
 }
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
