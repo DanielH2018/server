@@ -15,8 +15,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from jinja2 import Environment
+from jinja2 import Undefined
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE
 
@@ -72,7 +73,11 @@ def render(stamp_dir: Path) -> str:
     defaults = yaml_fast.safe_load((K3S / "defaults" / "main.yml").read_text())
     defaults["k3s_longhorn_restore_drill_stamp_dir"] = str(stamp_dir)
     defaults["sys_user"] = "ubuntu"
-    return Environment().from_string(DRILL.read_text()).render(**defaults)
+    return (
+        make_ansible_env(undefined_cls=Undefined)
+        .from_string(DRILL.read_text())
+        .render(**defaults)
+    )
 
 
 def harness(

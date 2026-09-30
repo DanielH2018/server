@@ -23,8 +23,6 @@ together with `self_applied`, and only their combination decides between `nothin
 Run: uv run pytest scripts/deploy_tools/tests/test_land_role_tests_reach_no_cluster.py
 """
 
-from pathlib import Path
-
 import pytest
 
 
@@ -33,7 +31,7 @@ from _land_fakes import MERGE_SHA
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 _ROLE_TESTS = "ansible/roles/k8s/arr-notification/tests/test_seed_arr_notification.py"
 _ROLE_FILES = "ansible/roles/k8s/arr-notification/files/seed_arr_notification.py"

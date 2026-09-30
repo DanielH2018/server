@@ -12,13 +12,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases.py
 
 import json
 import re
-from pathlib import Path
 
 from diagnostics.probe_lib import releases as pr
 
 from _release_fixtures import _record
 
-REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO
 
 # ── the reader agrees with the writer about where records live ───────────────────────────────
 

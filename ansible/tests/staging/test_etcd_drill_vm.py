@@ -21,7 +21,8 @@ import re
 import xml.etree.ElementTree as ET
 
 from lib import yaml_fast
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Undefined
+from lib.ansible_jinja_env import make_ansible_env, template_env
 from _helpers import ANSIBLE, load_yaml
 
 
@@ -48,7 +49,7 @@ def _vars() -> dict:
         "-----BEGIN OPENSSH PRIVATE KEY-----\nstub\n-----END OPENSSH PRIVATE KEY-----"
     )
     merged["hypervisor_etcd_drill_vm_hostkey_public"] = STUB_SSH_KEY
-    env = Environment()
+    env = make_ansible_env(undefined_cls=Undefined)
     for key in (
         "hypervisor_etcd_drill_vm_disk",
         "hypervisor_etcd_drill_vm_xml",
@@ -61,9 +62,7 @@ def _vars() -> dict:
 
 
 def _render(name: str) -> str:
-    env = Environment(
-        loader=FileSystemLoader(str(ROLE / "templates")), keep_trailing_newline=True
-    )
+    env = template_env(ROLE / "templates", undefined_cls=Undefined)
     return env.get_template(name).render(**_vars())
 
 

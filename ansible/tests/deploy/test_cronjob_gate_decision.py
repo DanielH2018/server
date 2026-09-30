@@ -58,8 +58,7 @@ import subprocess
 from pathlib import Path
 
 import pytest
-from jinja2.nativetypes import NativeEnvironment
-from _helpers import K8S_ROLES, load_tasks, load_defaults
+from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults
 from _role_census import role_dirs
 from _helpers import task_named
 
@@ -85,7 +84,7 @@ def _classify(stdout_lines: list[str]) -> dict:
     the "inject past the step you are supposed to be testing" mistake this module already made
     once, one layer further out.
     """
-    env = NativeEnvironment()
+    env = jinja_env()
     context = {
         "cronjob_gate_states": {"stdout_lines": stdout_lines},
         **{
@@ -182,7 +181,7 @@ def test_start_failure_reasons_only_choose_the_message_never_the_outcome() -> No
     has already been bitten by a rule that appeared to narrow a verb and did not.
     """
     facts = _task(_CLASSIFY)["ansible.builtin.set_fact"]
-    env = NativeEnvironment()
+    env = jinja_env()
     for payload in (["ImagePullBackOff", ""], ["", "StartError"], ["", "OOMKilled"]):
         rendered = env.from_string(str(facts["cronjob_gate_fatal"])).render(
             cronjob_gate_states={"stdout_lines": payload},

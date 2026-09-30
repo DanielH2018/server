@@ -8,7 +8,6 @@ scraped node-exporter job appear).
 """
 
 import re
-from pathlib import Path
 
 from dataclasses import replace
 
@@ -24,7 +23,7 @@ from _check_gate_helpers import mk
 from bridge.types import Check
 from gates import Gates
 
-_REPO = Path(__file__).resolve().parents[5]
+from lib.repo_paths import REPO as _REPO
 
 
 # ── Exporter-reachability gate (node-exporter / cadvisor) — Backups M3 ───────

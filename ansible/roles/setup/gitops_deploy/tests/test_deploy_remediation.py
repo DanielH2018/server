@@ -13,6 +13,8 @@ import pathlib
 
 import deploy_remediation
 
+from lib.repo_paths import REPO
+
 from deploy_changes import services_from_changed_paths, shared_module_consumers
 from deploy_remediation import (
     broad_budget_ok,
@@ -214,9 +216,8 @@ def test_a_shared_module_edit_names_every_consumer_role():
     `--tags monitor-bridge` alone and autofix-bridge's ConfigMap kept the old copy with
     nothing reporting it (2026-08-25 review M-2).
     """
-    repo = pathlib.Path(__file__).resolve().parents[5]
     paths = ["ansible/roles/k8s/monitor-bridge/files/bridge/common.py"]
-    consumers = shared_module_consumers(paths, repo)
+    consumers = shared_module_consumers(paths, REPO)
     assert "autofix-bridge" in consumers, (
         "the deployer cannot see that autofix-bridge imports bridge.common, so a shared "
         "edit ff-merges leaving its ConfigMap stale: %s" % sorted(consumers)

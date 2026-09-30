@@ -6,13 +6,13 @@ Run: uv run pytest scripts/deploy_tools/tests/test_k3s_etcd_restore_gates.py
 
 import io
 import subprocess
-from pathlib import Path
 
 import pytest
 from _gates_fakes import failing_read, fake_tools
 from deploy_tools import k3s_etcd_restore_gates as gates
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _RUNBOOK = _REPO / "docs" / "k3s-etcd-restore.md"
 
 NOW = 1_800_000_000.0

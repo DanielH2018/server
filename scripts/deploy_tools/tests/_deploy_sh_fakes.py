@@ -25,7 +25,8 @@ from pathlib import Path
 
 from lib.git_testing import git, init_repo, scrub_process_git_env
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 # The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
 # `make_snapshot_repo` copies it into every throwaway repo, so the wrapper's `uv run python
 # ansible/.../deploy_locks.py plan` resolves there the way it does in a real checkout.

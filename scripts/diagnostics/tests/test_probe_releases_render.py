@@ -8,7 +8,6 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_render.py
 
 import json
 import re
-from pathlib import Path
 
 import pytest
 
@@ -17,7 +16,7 @@ from diagnostics.probe_lib import releases_render as rr
 
 from _release_fixtures import _commit, _init_repo, _record, _set_origin_master
 
-REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO
 
 
 def test_render_dir_matches_the_ansible_default():

@@ -14,9 +14,10 @@ Run: uv run pytest ansible/tests/services/test_code_server_build_is_pinned.py
 import re
 
 import pytest
-from jinja2 import Environment
+from jinja2 import Undefined
 
 from _helpers import K8S_ROLES, load_defaults
+from lib.ansible_jinja_env import make_ansible_env
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 
 ROLE = K8S_ROLES / "code-server"
@@ -90,12 +91,12 @@ def floating_pip_packages(dockerfile: str) -> list[str]:
 def _rendered_dockerfile() -> str:
     """The Dockerfile as image-builder's `template` lookup renders it.
 
-    `trim_blocks=True` is Ansible's default and a bare `Environment()` is not; the block
-    loop's line endings are the one place the two differ. A default that references another
+    `make_ansible_env` carries Ansible's `trim_blocks=True`, which a bare `Environment()`
+    does not; the block loop's line endings are the one place the two differ. A default that references another
     (`code_server_k8s_node_url` names the version key) is resolved first, as Ansible's lazy
     templating does — a one-pass render would leave the inner `{{ }}` in the output.
     """
-    env = Environment(trim_blocks=True)
+    env = make_ansible_env(undefined_cls=Undefined)
     # `code_server_k8s_image` reads `k8s_built_image_tags`, a play fact k8s/image-builder
     # publishes at deploy time. The Dockerfile never touches it, but the loop below resolves
     # EVERY default, so it has to be defined. `BUILT_IMAGE_TAG_STUBS` is the same map the

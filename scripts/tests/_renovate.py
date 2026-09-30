@@ -8,13 +8,14 @@ matches something. The `tracked` fixture in conftest.py is the file list they ru
 import json
 import re
 import subprocess
-from pathlib import Path
 from typing import NamedTuple
 
+from lib.repo_paths import REPO
 
-_REPO = Path(__file__).resolve().parents[2]
+# Re-export for modules that import _REPO from this module
+_REPO = REPO
 
-_RENOVATE_CONFIG = json.loads((_REPO / "renovate.json").read_text())
+_RENOVATE_CONFIG = json.loads((REPO / "renovate.json").read_text())
 
 _MANAGERS = _RENOVATE_CONFIG["customManagers"]
 
@@ -23,7 +24,7 @@ _PACKAGE_RULES = _RENOVATE_CONFIG["packageRules"]
 
 def _tracked_files() -> list[str]:
     out = subprocess.run(
-        ["git", "ls-files"], cwd=_REPO, text=True, capture_output=True, check=True
+        ["git", "ls-files"], cwd=REPO, text=True, capture_output=True, check=True
     ).stdout
     return out.splitlines()
 
@@ -169,7 +170,7 @@ def render_auto_replace(template: str, **values: str | None) -> str:
 # #1440 proposed a lockstep DOWNGRADE that way and passed every check (issue #1493). The
 # ledger beside the Dockerfiles records the version each adopted digest carries; the helpers
 # here parse it, and the guards in test_renovate_dockerfiles.py assert against it.
-N8N_ROLE_DIR = _REPO / "ansible/roles/k8s/n8n"
+N8N_ROLE_DIR = REPO / "ansible/roles/k8s/n8n"
 N8N_PIN_HISTORY = N8N_ROLE_DIR / "base-pin-history.tsv"
 
 # image -> the Dockerfile whose FROM must equal that image's last ledger entry. Named rather

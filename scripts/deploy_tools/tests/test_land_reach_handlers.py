@@ -22,14 +22,12 @@ once`, and `tasks/teardown.yml` notifies `Reload systemd` under `when: not has_g
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_handlers.py
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 import land_reach
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 # Every setup role that defines handlers, so a rename or a new role cannot leave the live
 # cases below checking nothing.

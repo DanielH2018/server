@@ -6,7 +6,6 @@ banned infra IP 403'd the probes into a crash loop, which the heartbeat alone co
 """
 
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 from dataclasses import replace
 
@@ -16,7 +15,6 @@ import bridge.config
 import bridge.net
 import checks.service
 
-_REPO = Path(__file__).resolve().parents[5]
 
 # ── HA automation-engine heartbeat (input_datetime stamped by a 1-min automation) ──
 # ha_heartbeat_fresh reads last_changed off the /api/states/input_datetime.ha_heartbeat

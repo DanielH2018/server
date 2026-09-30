@@ -35,7 +35,8 @@ from _deploy_sh_fakes import (
 from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 

@@ -19,7 +19,8 @@ Run: uv run pytest ansible/tests/services/test_strangler_bridge.py
 """
 
 from lib import yaml_fast
-from jinja2 import ChainableUndefined, Environment, FileSystemLoader
+from jinja2 import ChainableUndefined
+from lib.ansible_jinja_env import template_env
 from _helpers import ANSIBLE
 
 
@@ -38,11 +39,7 @@ def _containers(host: str) -> list[dict]:
 
 def _gate_config() -> dict:
     """The livesync token gate as rendered into the k8s traefik's file provider."""
-    env = Environment(
-        loader=FileSystemLoader(str(GATE.parent)),
-        undefined=ChainableUndefined,
-        keep_trailing_newline=True,
-    )
+    env = template_env(GATE.parent, undefined_cls=ChainableUndefined)
     rendered = env.get_template(GATE.name).render(
         domain=DOMAIN,
         k8s_namespace="homelab",

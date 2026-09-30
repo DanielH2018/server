@@ -10,7 +10,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_k3s_upgrade_gates.py
 
 import io
 import subprocess
-from pathlib import Path
 
 import pytest
 from _gates_fakes import fake_tools
@@ -18,7 +17,8 @@ from deploy_tools import k3s_upgrade_gates as gates
 from lib import kubectl
 from lib.gitops_markers import MARKERS
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _RUNBOOK = _REPO / "docs" / "k3s-upgrade.md"
 
 

@@ -16,9 +16,9 @@ lock — is `scripts/validate/tests/test_vale_sync_guard.py`.
 
 import re
 import tomllib
-from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
+
 VALE_INI = REPO / ".vale.ini"
 PREK_TOML = REPO / "prek.toml"
 

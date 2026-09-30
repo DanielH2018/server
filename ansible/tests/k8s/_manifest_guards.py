@@ -8,11 +8,11 @@ serve. Split from `test_k8s_manifests.py` on 2026-09-02.
 from pathlib import Path
 
 from lib import yaml_fast
-from lib.ansible_jinja_compat import ansible_bool
+from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Undefined
 
-from validate.k8s_manifests import make_lookup, register_ansible_filters
+from validate.k8s_manifests import make_lookup
 from _helpers import ANSIBLE
 
 
@@ -40,15 +40,9 @@ def _render(path: Path, **ctx) -> str:
     `deployment.yaml.j2` generically, not just the ones a caller anticipated.
     """
     ctx.setdefault("playbook_dir", str(ANSIBLE))
-    env = Environment(
-        loader=FileSystemLoader([str(path.parent), str(ANSIBLE / "templates")]),
-        trim_blocks=True,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-    )
+    env = template_env(path.parent, undefined_cls=Undefined)
     env.globals.update(ctx)
     env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
     return env.get_template(path.name).render(**ctx)
 
 
@@ -74,11 +68,11 @@ def _role_defaults(role: str) -> dict:
         **ALL_VARS,
         **yaml_fast.safe_load((K8S / role / "defaults" / "main.yml").read_text()),
     }
-    env = Environment(loader=FileSystemLoader([str(ANSIBLE / "templates")]))
     # `bool` is an Ansible filter, not a Jinja builtin — a group_var using it (k8s_no_mutate)
-    # would fail this loop with "No filter named 'bool'". The same shim `lib.k8s_context`
-    # registers — its DECIDED marker says why this is not ansible-core's `to_bool`.
-    env.filters["bool"] = ansible_bool
+    # would fail this loop with "No filter named 'bool'". `make_ansible_env` registers
+    # ansible-core's own `to_bool`; `lib.k8s_context`'s shim exists for a latency budget a
+    # test does not have.
+    env = make_ansible_env([ANSIBLE / "templates"], undefined_cls=Undefined)
     for _ in range(5):
         pending = {k: v for k, v in values.items() if isinstance(v, str) and "{{" in v}
         if not pending:

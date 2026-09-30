@@ -12,13 +12,11 @@ Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_d
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_documents.py
 
-import pathlib
-
 import yaml
 
-from deploy_changes import ChangeSet, services_from_changed_paths
+from lib.repo_paths import REPO as _REPO_ROOT
 
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+from deploy_changes import ChangeSet, services_from_changed_paths
 
 
 def test_a_setup_roles_document_is_clean():

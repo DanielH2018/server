@@ -100,8 +100,14 @@ def register_ansible_filters(env: Environment) -> Environment:
     return env
 
 
-def make_ansible_env(dirs, undefined_cls=StubUndefined) -> Environment:
-    """``render_guard.make_env`` over ``dirs``, with the Ansible filters registered."""
+def make_ansible_env(dirs=(), undefined_cls=StubUndefined) -> Environment:
+    """``render_guard.make_env`` over ``dirs``, with the Ansible filters registered.
+
+    With no ``dirs`` the environment has an empty loader, which is the form a test takes to
+    render a template's text or a task's expression through ``from_string``. That is still
+    Ansible's whitespace flags and filters: a bare ``jinja2.Environment()`` has neither, and
+    ``scripts/tests/test_tests_share_render_and_path_helpers.py`` refuses one in a test.
+    """
     return register_ansible_filters(make_env(dirs, undefined_cls=undefined_cls))
 
 

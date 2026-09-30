@@ -6,15 +6,14 @@ gate, and they carry the two halves that must agree: the anchors injected into t
 page, and the links pointed at them.
 """
 
-from pathlib import Path
-
 import markdown
 import pytest
 import yaml
 
 import _mkdocs_repo_links as hook
 
-REPO = Path(__file__).resolve().parent.parent.parent.parent
+from lib.repo_paths import REPO
+
 DOCS = REPO / "docs"
 SCRIPTS_MD = DOCS / "reference/scripts.md"
 

@@ -24,11 +24,12 @@ import re
 import shutil
 import subprocess
 import tomllib
-from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[3]
+from pathlib import Path
+from lib.repo_paths import REPO
+
 GUARD = REPO / "scripts" / "validate" / "vale.sh"
 PREK_TOML = REPO / "prek.toml"
 

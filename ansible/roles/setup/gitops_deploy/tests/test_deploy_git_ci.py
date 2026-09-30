@@ -12,9 +12,9 @@ import pathlib
 
 import yaml
 
-from deploy_git import ci_verdict, ci_walk_candidates, next_action
+from lib.repo_paths import REPO as _REPO_ROOT
 
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
+from deploy_git import ci_verdict, ci_walk_candidates, next_action
 
 
 # ── CI gate ───────────────────────────────────────────────────────────────────────────────────

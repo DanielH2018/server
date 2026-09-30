@@ -20,14 +20,12 @@ var resolved by textual search says nothing about the next one.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_vars_files.py
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 import land_reach
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 # PR #2553's `gitops_deploy` paths, verbatim (`gh pr view 2553 --json files`). The
 # `defaults/main.yml` entry is the one that widened the note.

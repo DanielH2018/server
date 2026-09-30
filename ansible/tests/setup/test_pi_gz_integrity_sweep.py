@@ -25,6 +25,7 @@ import subprocess
 
 import jinja2
 import pytest
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 from _pi_health import OPTIMIZE_PI_DEFAULTS, run
 
@@ -37,7 +38,7 @@ FLOOR = OPTIMIZE_PI_DEFAULTS["optimize_pi_gz_integrity_min_files"]
 
 def _render(roots, state_file, floor=FLOOR):
     return (
-        jinja2.Environment(undefined=jinja2.StrictUndefined)
+        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
         .from_string(SWEEP.read_text())
         .render(
             optimize_pi_gz_integrity_roots=[str(root) for root in roots],

@@ -11,9 +11,9 @@ The assertion reads git's index rather than the working tree, because an on-disk
 import json
 import re
 import subprocess
-from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO
+
 SETTINGS = REPO / ".claude" / "settings.json"
 
 # Only the command's FIRST token is executed, so only it needs the exec bit. A repo path

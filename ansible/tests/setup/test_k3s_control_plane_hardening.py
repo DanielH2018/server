@@ -29,6 +29,7 @@ import re
 
 import jinja2
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 from _helpers import load_yaml, load_defaults
 
@@ -49,12 +50,7 @@ def _env() -> jinja2.Environment:
     renders correctly under plain Jinja produces `name: observability  # comment` under a
     real deploy. Rendering with different flags than production tests a file nobody ships.
     """
-    return jinja2.Environment(
-        undefined=jinja2.StrictUndefined,
-        trim_blocks=True,
-        lstrip_blocks=False,
-        keep_trailing_newline=True,
-    )
+    return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 
 def _rendered_server_args(**overrides) -> str:

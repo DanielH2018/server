@@ -6,7 +6,6 @@ success and reprobes after a failure, so an R2 outage cannot storm the API.
 """
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 from dataclasses import replace
 
@@ -16,7 +15,7 @@ import bridge.config
 import bridge.net
 import checks.r2
 
-_REPO = Path(__file__).resolve().parents[5]
+
 # A fixed epoch, not the live clock: the verdict must not move with wall time (#2158).
 R2_NOW = 1_780_000_000.0
 

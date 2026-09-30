@@ -5,12 +5,12 @@ failure arrives late and reads as a build error rather than a broken link. This
 asserts the same property directly against the tree.
 """
 
-from pathlib import Path
 from urllib.parse import urlparse
 
 import yaml
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
+
 MKDOCS = REPO / "mkdocs.yml"
 
 

@@ -12,11 +12,12 @@ Run: uv run pytest scripts/z2m/tests/test_set_device_option.py
 import json
 import os
 import subprocess
-from pathlib import Path
 
 import pytest
 
-_REPO = Path(__file__).resolve().parents[3]
+from pathlib import Path
+from lib.repo_paths import REPO as _REPO
+
 _SCRIPT = _REPO / "scripts" / "z2m" / "set_device_option.sh"
 
 _SOPS = """#!/bin/bash
