@@ -26,6 +26,12 @@ import urllib.error
 import urllib.request
 from pathlib import Path
 
+# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its
+# own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import answer_help
+
 # datreeio/CRDs-catalog publishes one JSON Schema per CRD kind, laid out by API group. It is the
 # schema source kubeconform's own docs point at, so the layout is a de-facto convention rather
 # than one project's choice.
@@ -67,6 +73,9 @@ def main() -> int:
     Returns:
         0 if every schema downloaded, 1 if any failed.
     """
+    # Before any download: `--help` ran a full refresh until this line, so the entry-point
+    # help test rewrote the vendored schemas on every run and failed on any refused fetch.
+    answer_help(__doc__)
     SCHEMA_DIR.mkdir(exist_ok=True)
     failures = 0
     targets = [
