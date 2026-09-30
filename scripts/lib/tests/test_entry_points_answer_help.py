@@ -15,8 +15,8 @@ alone; it used to re-check the main guard itself because thirteen guardless modu
 `adhoc`.
 
 RUNTIME. Each script runs under this interpreter with `scripts/` on `PYTHONPATH`, not under
-`uv run` -- 89 `uv run` calls cost a minute and a half where direct invocation costs ten
-seconds. The environment is otherwise the caller's, which is the point: a `--help` that needs
+`uv run` -- one `uv run` per entry point cost a minute and a half where direct invocation
+costs ten seconds, over a census this size. The environment is otherwise the caller's, which is the point: a `--help` that needs
 a kubeconfig, a cluster or a lock is the failure this catches.
 
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
