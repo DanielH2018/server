@@ -101,8 +101,7 @@ jellyfin_k8s_dri_resource: devic.es/dri
 # jellyfin_k8s_lan_ip moved to group_vars/all.yml (cross-role: the uptime-kuma VIP tile
 # reads it, and role defaults are invisible across roles).
 
-# What the server advertises to clients as its own address. Was `{{ server_ip }}` (daniel-server)
-# under Compose; the LAN VIP above is the same idea on the new host.
+# What the server advertises to clients as its own address — the LAN VIP above.
 jellyfin_k8s_published_url: "http://{{ jellyfin_k8s_lan_ip }}:8096"
 
 # ── jellyfin-ani-sync (AniList watch-status sync) ───────────────────────────────────────────

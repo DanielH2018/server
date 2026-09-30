@@ -2,16 +2,15 @@
 # Slice 4, B6 — the heaviest transcode consumer, and the workload that will find VAAPI's edges.
 # B5 proved the device is reachable and that a 3-second synthetic encode succeeds; this one runs
 # real files through it for minutes at a time.
-# Pinned by DIGEST, carried across from the compose template along with its reason: tdarr is
-# stateful AND rewrites library files in place. Upstream ships dev-tagged builds Renovate
+# Pinned by DIGEST because tdarr is stateful AND rewrites library files in place. Upstream ships dev-tagged builds Renovate
 # cannot track by version (this digest = dev_2.78.01, 2026-06-12), so a VERSION bump stays
 # manual: pull :latest, take the new digest, redeploy. That is NOT the same as a DIGEST bump
 # staying manual — renovate.json's k8s digest-bump packageRule automerges a re-push of this
 # same tag after a 3-day soak (see the k8s_autodeploy_reason below), so this pin alone does not
 # keep tdarr off auto-update.
 #
-# The `:latest` prefix is NOT redundant with the digest, and the compose copy does without it
-# only because a different lint governs there. The digest is what pins; the tag is what
+# The `:latest` prefix is NOT redundant with the digest. The digest is what pins; the tag is
+# what
 # Renovate's k8s-defaults manager matches on, and a digest-only pin slips its regex and would
 # age forever with no update signal — which test_every_k8s_role_image_is_renovate_tracked
 # refuses. Same shape as the dri-device-plugin role's pin, for the same reason.
@@ -47,8 +46,8 @@ k8s_autodeploy_snapshot_pvcs: [tdarr-configs, tdarr-server]  # noqa var-naming[n
 
 # ── two config claims, not one ──────────────────────────────────────────────────────────────
 # /app/server is the 204 M database (library state, transcode history, node registrations) and
-# /app/configs is 20 K of flow/plugin definitions. They are separate mounts in the compose file
-# and stay separate here: seeding one claim from the tdarr directory root would drag logs/ and
+# /app/configs is 20 K of flow/plugin definitions. They stay two claims rather than one:
+# seeding one claim from the tdarr directory root would drag logs/ and
 # transcode_cache/ onto Longhorn as well, which is precisely the write-heavy churn the volumes
 # below keep off it.
 tdarr_k8s_server_claim: tdarr-server
@@ -69,8 +68,8 @@ tdarr_k8s_storage_class: longhorn
 # READ-WRITE, unlike jellyfin's two read-only mounts, and that asymmetry is the point: tdarr
 # rewrites library files IN PLACE. It is the one media consumer that must be able to.
 #
-# subPath `media` at /media, NOT the whole tree at /data. That reproduces the compose mount
-# (containers/data/media -> /media) exactly, and the path matters for the same reason it does
+# subPath `media` at /media, NOT the whole tree at /data. The path matters for the same reason
+# it does
 # for the *arrs (D4): tdarr's database stores absolute in-container paths, so a library rooted
 # anywhere else loads fine and then fails to match a single file. It gets no access to
 # torrents/ — nothing in tdarr's job reaches into an in-flight download.

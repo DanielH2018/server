@@ -1,12 +1,8 @@
 ---
-# These were kept identical to the Docker role's images, digests included, so that during
-# coexistence a difference in behaviour between the two was never the image. Coexistence ended with
-# the migration (2026-08-14) and the Docker role was deleted by #2385 — `git show
-# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/karakeep/` reads it.
-# This file is the only live source — it is free to move ahead of that compose template
-# and has (see the tagger's move to an in-cluster build below). The pins that stay here keep their
-# repo:tag@sha256 form so Renovate's docker manager still tracks them; see the compose template for
-# why the tag must be kept alongside the digest.
+# The pins here keep their repo:tag@sha256 form so Renovate's docker manager still tracks them
+# and opens digest-bump PRs. A bare repo@sha256 with NO tag is DIGEST_PINNED_EXEMPT
+# (scripts/tests/test_renovate_managers.py) and gets ZERO Renovate tracking — the fully-manual
+# pull-digest-redeploy loop tdarr is on.
 karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06ea06d16989c6861c30a1ff208568be44ed5fb5d422cd3e950c
 # karakeep's own headless-shell build, taken 2026-09-01. It replaces zenika/alpine-chrome:124,
 # which this pin had already been moved off gcr.io/zenika-hub once and whose upstream last saw a
@@ -55,7 +51,7 @@ karakeep_k8s_cpu_limit: "2"
 karakeep_k8s_mem_limit: 2048Mi
 karakeep_k8s_cpu_request: "100m"
 karakeep_k8s_mem_request: 128Mi
-# Headless Chrome spikes; same generous cap the compose template gives it.
+# Headless Chrome spikes, so a generous cap.
 karakeep_k8s_chrome_cpu_limit: "2"
 karakeep_k8s_chrome_mem_limit: 2048Mi
 karakeep_k8s_chrome_cpu_request: "100m"
@@ -80,11 +76,8 @@ karakeep_k8s_storage_class: longhorn
 karakeep_k8s_size: 4Gi
 
 # The Meilisearch index: 286M today, and deliberately NOT seeded and NOT backed up. It is a
-# derived artifact — the compose template calls it "rebuildable by reindexing from this data"
-# and keeps it in a named volume outside Kopia for the same reason. Copying it would mean
-# reading a root-owned Docker volume out of /var/lib/docker, to reproduce state that karakeep
-# regenerates from db.db on request. The upgrade runbook in the role's CLAUDE.md already ends
-# in "Reindex All Bookmarks"; a migration is the same situation.
+# derived artifact: karakeep rebuilds it by reindexing from db.db, which IS seeded and backed
+# up. The upgrade runbook in the role's CLAUDE.md already ends in "Reindex All Bookmarks".
 karakeep_k8s_meili_claim: karakeep-meili
 karakeep_k8s_meili_storage_class: longhorn-nobackup
 karakeep_k8s_meili_size: 2Gi

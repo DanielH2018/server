@@ -32,10 +32,9 @@ spec:
           image: {{ tdarr_k8s_image }}
           ports:
             - containerPort: {{ tdarr_k8s_webui_port }}
-          # The compose template's cap_drop/cap_add pair, unchanged. FOWNER and DAC_OVERRIDE
-          # stay here, unlike jellyfin where they were dropped with the Intel mod: this image
-          # chowns its own mounts on startup before dropping to PUID/PGID, and the compose
-          # comment records that they were established by watching it fail without them.
+          # FOWNER and DAC_OVERRIDE stay here, unlike jellyfin where they were dropped with
+          # the Intel mod: this image chowns its own mounts on startup before dropping to
+          # PUID/PGID. The set was established by watching the container fail without them.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
           env:
             - name: PUID
@@ -56,7 +55,7 @@ spec:
               value: "true"
             - name: maxLogSizeMB
               value: "10"
-            # Follows the host, as it did under Compose — so it now registers as `daniel-box`
+            # Follows the host — so it registers as `daniel-box`
             # where the seeded database was written by a node called `daniel-server`.
             # Measured after the move: `/api/v2/get-nodes` returns exactly ONE node, unpaused, so
             # the rename did not strand a second registration. Worth re-checking if node-assigned
@@ -91,9 +90,8 @@ spec:
             periodSeconds: 10
 {# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
    not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
-          # 120s before the first liveness check, against the compose healthcheck's 60s
-          # start_period: this pod also has to attach a 400 G RWX volume and let the internal
-          # node register itself before the API answers.
+          # 120s before the first liveness check: this pod has to attach a 400 G RWX volume
+          # and let the internal node register itself before the API answers.
           livenessProbe:
             httpGet:
               path: /api/v2/status

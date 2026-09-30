@@ -51,8 +51,8 @@ spec:
           image: {{ homepage_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair: docker-entrypoint.sh chowns
-          # /app/config and /app/config/logs to PUID/PGID (best-effort — it warns and
+          # docker-entrypoint.sh chowns /app/config and /app/config/logs to PUID/PGID
+          # (best-effort — it warns and
           # continues on failure, which is what happens against the read-only Secret mount
           # below) before su-exec'ing down to that uid.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID']) }}

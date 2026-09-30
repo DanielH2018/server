@@ -24,11 +24,11 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       initContainers:
-        # The compose template's `depends_on: {karakeep-chrome, karakeep-meilisearch}:
-        # condition: service_healthy`, which k8s has no equivalent for. Milder than the
-        # time-tagger's version of this — karakeep starts either way — but its comment is
-        # explicit that the gate is on health rather than start order, because meili's index
-        # must be ready or the app logs search errors on a cold start until it catches up.
+        # A start gate on karakeep-chrome and karakeep-meilisearch being READY, which k8s has
+        # no `depends_on` equivalent for. Milder than the time-tagger's version of this —
+        # karakeep starts either way — but the gate is on readiness rather than start order,
+        # because meili's index must be ready or the app logs search errors on a cold start
+        # until it catches up.
         #
         # Connecting to the Services rather than the pods is what makes this a gate on
         # readiness: a Service has no endpoints until its probe passes.
@@ -65,8 +65,8 @@ spec:
           image: {{ karakeep_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop: ALL with no cap_add — a Node app on a high
-          # port. The seeded tree is root-owned and this image runs as root, so nothing
+          # Drop ALL with no cap_add — a Node app on a high port. The seeded tree is
+          # root-owned and this image runs as root, so nothing
           # here needs CHOWN or DAC_OVERRIDE.
           #
           # DECIDED: no readOnlyRootFilesystem here, unlike the chrome sidecar and the
@@ -93,8 +93,7 @@ spec:
               value: "{{ tz }}"
             - name: DATA_DIR
               value: /data
-            # Service names, not container names. These resolve through the cluster's DNS the
-            # same way Compose's service keys resolved on the shared network.
+            # Service names, resolved through the cluster's DNS.
             - name: MEILI_ADDR
               value: http://karakeep-meilisearch:7700
             - name: BROWSER_WEB_URL
@@ -174,11 +173,10 @@ spec:
         - name: karakeep-data
           persistentVolumeClaim:
             claimName: {{ karakeep_k8s_claim }}
-        # The compose template's tmpfs, same 256 MiB. Next.js's image-optimisation cache: the
-        # image dir is node-owned but the container runs as root with no DAC_OVERRIDE, so
-        # thumbnail writes EACCESed and every request re-optimised. medium: Memory reproduces
-        # tmpfs, and the pages count against the container's memory limit exactly as they did
-        # against the compose mem cap.
+        # 256 MiB of in-memory scratch for Next.js's image-optimisation cache: the image dir
+        # is node-owned but the container runs as root with no DAC_OVERRIDE, so thumbnail
+        # writes EACCESed and every request re-optimised. The pages count against the
+        # container's memory limit.
         - name: karakeep-next-cache
           emptyDir:
             medium: Memory

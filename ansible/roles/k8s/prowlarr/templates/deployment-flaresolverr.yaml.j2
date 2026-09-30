@@ -4,8 +4,8 @@
 {% from 'workload-shell.yml.j2' import spec_shell, pod_shell with context %}
 ---
 # Its own Deployment rather than a container in prowlarr's pod, deliberately: a sidecar shares the
-# pod's network namespace, and "reachable only on localhost by its own pod" would be tighter than
-# Compose but would also mean prowlarr and a headless browser rendering hostile pages share a
+# pod's network namespace, and "reachable only on localhost by its own pod" would be tighter
+# still but would also mean prowlarr and a headless browser rendering hostile pages share a
 # netns and a lifecycle. Kept separate, with the NetworkPolicy beside it doing the isolation.
 apiVersion: apps/v1
 kind: Deployment
@@ -60,8 +60,8 @@ spec:
           # no config chown means no root phase to preserve. PID 1 (`dumb-init`) measured at
           # uid 1000 on 2026-08-31. It renders untrusted pages, so pinning the uid is worth
           # more here than on a passive workload.
-          # cap_drop: ALL with nothing added back, matching the compose template. Unlike the
-          # LSIO images this one does not chown a config tree on startup, so it needs none of
+          # Drop ALL with nothing added back. Unlike the LSIO images this one does not chown a
+          # config tree on startup, so it needs none of
           # the s6 privilege-drop set.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:

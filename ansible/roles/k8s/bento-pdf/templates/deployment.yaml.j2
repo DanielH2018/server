@@ -29,8 +29,9 @@ spec:
             - containerPort: {{ container_item.port }}
 {{ hardened_security_context(read_only=true, non_root=true) }}
           volumeMounts:
-            # The compose template's tmpfs entries. Everything else the image writes is
-            # either cosmetic in-place /etc/nginx edits that fail soft, or nothing — it is a
+            # The scratch directories nginx needs under a read-only rootfs. Everything else
+            # the image writes is either cosmetic in-place /etc/nginx edits that fail soft, or
+            # nothing — it is a
             # static SPA with its config baked in, so there is no state to persist.
             - name: nginx-cache
               mountPath: /var/cache/nginx

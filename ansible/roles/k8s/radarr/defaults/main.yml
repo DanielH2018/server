@@ -47,7 +47,7 @@ radarr_k8s_size: 2Gi
 # /data/torrents into /data/media, and that link() only works if one mount spans both.
 radarr_k8s_media_claim: media-data
 
-# radarr-striptracks, the same mod the compose template runs.
+# TheCaptain989's striptracks mod.
 radarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M').

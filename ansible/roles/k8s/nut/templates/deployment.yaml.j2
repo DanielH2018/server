@@ -42,8 +42,8 @@ spec:
               hostPort: 3493
           securityContext:
             # privileged, and the Docker posture was cap-list + udev MODE=0666 with NO
-            # privileged — k8s cannot express that: there is no equivalent of compose's
-            # `devices:` whitelist, so a hostPath'd /dev/bus/usb node is refused by the
+            # privileged — k8s cannot express that: it has no `devices:` whitelist, so a
+            # hostPath'd /dev/bus/usb node is refused by the
             # non-privileged pod's device cgroup regardless of file permissions. The
             # containment that remains: our own built image, pinned to one node, with
             # only a loopback hostPort exposed. A generic USB device plugin could

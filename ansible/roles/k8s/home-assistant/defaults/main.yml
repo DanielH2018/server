@@ -76,8 +76,8 @@ home_assistant_script_files:
   - test-harness.yaml
   - wake-and-sleep.yaml
 
-# Mirrors resources('1.0', '1536M', '0.10', '256M') in the compose template, except the memory
-# limit. Raised 1536Mi -> 2Gi on 2026-08-16: over the preceding week and 9 pod generations the
+# Memory limit raised 1536Mi -> 2Gi on 2026-08-16: over the preceding week and 9 pod
+# generations the
 # working set ran 949Mi-1414Mi, i.e. 62-92% of the old limit, with the then-current pod peaking
 # at 1387Mi (90.3%). No OOMKill ever fired — `kube_pod_container_status_last_terminated_reason`
 # returned no data at all — so 1536Mi had held, but with no deliberate margin and no documented

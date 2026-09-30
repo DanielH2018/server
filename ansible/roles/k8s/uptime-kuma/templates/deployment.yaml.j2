@@ -53,7 +53,7 @@ spec:
           image: {{ uptime_kuma_k8s_image }}
           ports:
             - containerPort: 3001
-          # The daniel-pi-host monitor is a real ICMP ping — compose parity.
+          # NET_RAW is what lets the daniel-pi-host monitor send a real ICMP ping.
 {{ hardened_security_context(add=['NET_RAW']) }}
           volumeMounts:
             - name: uptime-kuma-data
@@ -84,8 +84,8 @@ spec:
           env:
             - name: AUTOKUMA__KUMA__URL
               value: http://localhost:3001
-            # The Kuma ADMIN password is read from a file mount rather than given inline (same
-            # H1 discipline as the compose entrypoint wrapper): an env VALUE is visible to
+            # The Kuma ADMIN password is read from a file mount rather than given inline: an
+            # env VALUE is visible to
             # anything that can read the pod spec or /proc, and this credential can silence the
             # whole fleet's alerting. `@/path` is AutoKuma's own file reference — it reads the
             # file and strips exactly one trailing newline (resolve_file_ref, kuma-client), so
@@ -132,8 +132,8 @@ spec:
             # (audited name-by-name against `kuma-cli monitor list`; the only file-only
             # entries are the two notification objects). From here, removing an entity's
             # .json file DELETES the live monitor and its history — that is the intended
-            # semantic; the interim `keep` existed only while declarations still sat as
-            # inert labels on Docker composes this instance can't read.
+            # semantic; the interim `keep` existed only while some declarations still sat
+            # outside this Secret.
             #
             # A variable rather than a literal so that a risky sidecar upgrade can be deployed
             # once with `-e autokuma_k8s_on_delete=keep`, checked, and then redeployed at the

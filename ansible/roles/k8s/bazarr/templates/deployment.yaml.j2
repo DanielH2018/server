@@ -31,8 +31,8 @@ spec:
           image: {{ bazarr_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set. No
-          # NET_BIND_SERVICE: bazarr listens on {{ container_item.port }} (>1024), which needs no
+          # The s6 privilege-drop set. No NET_BIND_SERVICE: bazarr listens on
+          # {{ container_item.port }} (>1024), which needs no
           # privilege. Interpolated rather than written out: this comment said 8989 — sonarr's port, from
           # the role it was copied from — until 2026-08-23b L6.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
@@ -46,8 +46,8 @@ spec:
           volumeMounts:
             - name: bazarr-config
               mountPath: /config
-            # /data/media ONLY, via subPath — narrower than the \*arrs on purpose, and it is
-            # what the compose template mounts. bazarr writes subtitle files beside the media it
+            # /data/media ONLY, via subPath — narrower than the \*arrs on purpose. bazarr
+            # writes subtitle files beside the media it
             # subtitles; it never imports, so it has no reason to see /data/torrents and no
             # hardlink seam to preserve.
             - name: media

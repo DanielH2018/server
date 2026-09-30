@@ -47,10 +47,8 @@ spec:
           containers:
             - name: configarr
               image: {{ configarr_k8s_image }}
-              # Read-only root since 2026-09-28. The Docker-era compose left it off with "write
-              # footprint unverified; revisit", and the k8s port dropped that note. Configarr
-              # writes its guide clones to /app/repos; /tmp is the one other path Node or git
-              # may touch.
+              # Read-only root since 2026-09-28: configarr writes its guide clones to
+              # /app/repos, and /tmp is the one other path Node or git may touch.
               securityContext:
                 allowPrivilegeEscalation: false
                 readOnlyRootFilesystem: true

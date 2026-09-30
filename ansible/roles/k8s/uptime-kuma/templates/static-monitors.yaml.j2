@@ -3,12 +3,10 @@
 # here MUST equal the label-derived id it replaces — the seeded entity map is keyed by id,
 # and a mismatch makes AutoKuma create a duplicate instead of adopting (KD5 gate finding).
 #
-# Scope at cutover: the two notifications plus every monitor whose label home was the
-# RETIRING uptime-kuma compose. Declarations still living as inert labels on other Docker
-# composes (monitor-bridge's push fleet, autofix-bridge, cloudflare-ddns, loki/tempo/
-# otel-collector) are protected by AUTOKUMA__ON_DELETE=keep and transcribe in here as each
-# of those roles retires. A Secret, not a ConfigMap: push tokens, the Discord webhook and
-# the SMTP password are values, not references, once rendered.
+# This Secret is the single declaration home for every monitor and both notifications; the
+# transcription from the pre-migration label declarations finished with the migration. A
+# Secret, not a ConfigMap: push tokens, the Discord webhook and the SMTP password are values,
+# not references, once rendered.
 #
 # Field names are v2.0.0 serde: `maxretries` (http/port/dns/ping), `max_retries` and
 # `push_token` accepted as aliases on push, `accepted_statuscodes`, `notification_name_list`.
@@ -177,11 +175,11 @@ stringData:
     {"type": "keyword", "name": "k3s homelab-mcp (edge gate)", "url": "https://mcp.local.{{ domain }}/health", "keyword": "ok", "interval": 60, "maxretries": 2, "max_redirects": 0, "notification_name_list": ["{{ kuma_notification_id }}"]}
   home-assistant-k8s.json: |
     {"type": "http", "name": "k3s Home Assistant", "url": "https://home-assistant.local.{{ domain }}", "interval": 60, "maxretries": 2, "notification_name_list": ["{{ kuma_notification_id }}"]}
-  # Transcribed 2026-08-10 (Phase D.2 step 3): id `loki` was the grafana compose's
-  # kuma('loki') label; the tile now probes the CLUSTER loki-homelab through its
+  # Transcribed 2026-08-10 (Phase D.2 step 3): the tile probes the CLUSTER loki-homelab
+  # through its
   # ClientIP-gated route (this pod's CIDR is admitted; hostAliases pin the -k8s name to
   # the VIP). /ready 503s ~15s after a restart while the ingester warms — brief PENDING
-  # after a deploy is normal, carried over from the Docker tile's notes.
+  # after a deploy is normal.
   # ClusterIP, not the edge route, since 2026-08-24 — see networkpolicy-loki-homelab.yaml.j2.
   # Probing through the route is what forced that route to admit the whole pod CIDR, and with
   # PathPrefix(`/`) on an auth_enabled:false Loki that handed every pod the full API. /ready
@@ -465,9 +463,8 @@ stringData:
   etcd-restore-drill-fence.json: |
     {"type": "push", "name": "etcd Restore Drill (egress fence)", "description": "The same monthly daniel-server cron dials every range the staging nwfilter drops, plus an internet control target, from inside the throwaway guest before that guest is handed the cluster token and the R2 write credentials. DOWN means the fence LEAKED, or that a range could not be measured at all and so is unproven — the message says which, and names the targets. Read egress-fence.log in the newest run directory under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_drill_fence_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-  # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
-  # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
-  # Ids must keep matching the kuma() first arguments at those call sites.
+  # ── Transcribed 2026-08-10: the LIVE push fleet. Ids must keep matching the push-token
+  # names monitor-bridge and autofix-bridge push to.
   # monitor-bridge-restarts/oom/cpu removed 2026-08-14 with the Docker cadvisor — the
   # apply prunes the keys (baseline exists since the kubectl-replace reset) and the live
   # monitors were kuma-cli-deleted at the same cutover.
