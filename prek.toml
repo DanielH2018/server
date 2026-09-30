@@ -589,9 +589,10 @@ types = ["shell"]
 # hook reported "no files to check" and both pages went ungated while reading green. Adding
 # a page to .vale.ini alone does not lint it — it has to be in both.
 #
-# NEVER widen this to docs/reference/. That cron stages those paths and commits with hooks
-# running, so a style error there aborts the commit and alerts on every run until someone
-# fixes the generator. ENFORCED by the same test.
+# DECIDED: never widen this hook to docs/reference/; the docs-refresh cron commits those paths
+# with hooks running, so a strict failure stops every refresh.
+# A style error there aborts the commit and alerts on every run until someone fixes the
+# generator. ENFORCED by the same test.
 #
 # The Google package is fetched, not tracked: .vale.ini pins its release URL and .gitignore
 # excludes styles/Google/, so a fresh checkout — every new worktree — has the tracked Homelab

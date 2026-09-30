@@ -195,6 +195,8 @@ def bearer_token_valid(header: str | None, expected: str) -> bool:
     prefix = "Bearer "
     if not expected or not header or not header.startswith(prefix):
         return False
+    # DECIDED: the app validates its own bearer; the Traefik Header() rule is defence in depth,
+    # not the only gate.
     return hmac.compare_digest(header[len(prefix) :], expected)
 
 

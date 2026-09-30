@@ -107,6 +107,8 @@ def check_disk(cfg: Config) -> tuple[bool, str]:
         )
         if not vec:
             return False, "metric unavailable for %s" % mp
+        # DECIDED: the per-host coverage floor runs AFTER the breach scan, so a lone reporting
+        # host's disk-full page is never replaced by a coverage complaint.
         # Collected, not returned, so a host that IS reporting and IS full still pages ahead of
         # the coverage complaint — a real breach on the survivor outranks the absent host.
         short = _host_origin_shortfall(cfg, "disk:%s" % mp, vec, "disk %s" % mp)

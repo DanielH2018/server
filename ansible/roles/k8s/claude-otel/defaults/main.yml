@@ -16,9 +16,11 @@ claude_otel_prometheus_image: prom/prometheus:v3.14.0
 # 11.6.16 -> 13.2.0 (2026-08-22), crossing the Grafana 12 removal of Angular. Safe only
 # because the 19 `graph` panels this repo shipped were converted to `timeseries` first and
 # deployed against 11.6.16 — do that before any future major, not alongside it.
-# grafana-data is longhorn-nobackup and Grafana's schema migrations are one-way, which is
-# tolerable here precisely because dashboards and datasources are provisioned from git: the
-# DB holds only preferences, version history and annotations. Recovery is deleting the PVC.
+#
+# DECIDED: grafana-data stays on longhorn-nobackup (operator declined a backup 2026-08-21);
+# dashboards and datasources are provisioned from git.
+# Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
+# only preferences, version history and annotations. Recovery is deleting the PVC.
 claude_otel_grafana_image: grafana/grafana:13.2.2
 # Slice 3 (D8). Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
@@ -126,6 +128,9 @@ claude_otel_loki_homelab_uid: bf4q19tuivta8e
 claude_otel_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
 
 claude_otel_prometheus_retention: 30d
+# DECIDED: the size cap binds before the 30d time cap; read
+# (time() - prometheus_tsdb_lowest_timestamp_seconds)/86400 before any retention claim.
+#
 # Deliberately well under claude_otel_prometheus_storage (12Gi), not close to it. What the cap
 # counts is persisted blocks PLUS the WAL and the m-mapped head chunks; what it does NOT cover is
 # compaction, which needs room for the output block alongside its inputs. (This comment said

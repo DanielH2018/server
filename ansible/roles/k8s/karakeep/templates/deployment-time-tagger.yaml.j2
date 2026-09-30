@@ -72,6 +72,8 @@ spec:
           # rotated-log prune: the script's loguru sink rotates into the working directory, which
           # on Docker was the container's writable layer that nothing cleaned. Here the working
           # directory is an emptyDir that dies with the pod, so the prune has nothing to do.
+{# DECIDED: a plain (non-subPath) ConfigMap mount under a re-exec loop, so an edited script
+   takes effect after kubelet syncs, with no rollout. #}
           command:
             - bash
             - -c
