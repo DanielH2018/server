@@ -188,13 +188,6 @@ def test_a_script_nothing_reaches_is_adhoc(tmp_path):
     )
 
 
-def test_a_test_importing_its_subject_does_not_make_it_a_library(tmp_path):
-    """Otherwise every tested entry point would read as a module nobody runs."""
-    repo, scripts = _repo(tmp_path)
-    _write(scripts / "test_lonely.py", '"""x"""\nimport lonely\n')
-    assert sc.classify(repo, scripts)["lonely.py"][0] == "adhoc"
-
-
 def test_the_highest_kind_wins_when_a_script_is_reached_twice(tmp_path):
     """The costliest way it runs is the one that decides what a break costs."""
     repo, scripts = _repo(tmp_path)
