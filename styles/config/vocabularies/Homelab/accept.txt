@@ -612,3 +612,13 @@ git's
 timesyncd's
 veth
 initramfs
+[Rr]esends
+[Dd]istroless
+readinessProbe
+AutoKuma's
+liquidjs
+Tera
+[Oo]neshot
+[Uu]nrouted
+serde
+[Dd]eserializer
