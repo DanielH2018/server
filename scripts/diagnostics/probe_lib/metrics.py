@@ -164,7 +164,10 @@ def format_loki(data):
     if not rows:
         return "no logs"
     rows.sort(key=lambda r: r[0])
-    return "\n".join(line for _, line in rows)
+    # HA's `_handle_signal_show_view` records carry the cast refresh_token, and Loki keeps the
+    # ones shipped before the Alloy redaction stage for its 744h retention (issue #3015). `--json`
+    # streams the raw body through curl and never reaches here, so it stays unredacted.
+    return core.redact_log_secrets("\n".join(line for _, line in rows))
 
 
 def run_query(ns):

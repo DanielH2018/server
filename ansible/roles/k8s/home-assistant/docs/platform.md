@@ -95,6 +95,15 @@ logs `_connect_hass failed` and raises `PyChromecastError` into
   silenced, and its message carries the cast user's `refresh_token` in plaintext. A cast that
   runs into a blocked `Thread-5` fails differently: it returns early, its callback later
   receives `False`, and it logs nothing.
+
+  **Two seams redact that token, and neither stops HA writing it (issue #3015).** Alloy's
+  `stage.replace` in `roles/k8s/loki-homelab` strips it on the way into Loki, and
+  `redact_log_secrets` in `scripts/diagnostics/probe_lib/core.py` strips it out of `probe.py ha
+  get` and `probe.py loki-query`. Both leave the `_handle_signal_show_view` marker intact. HA
+  still writes the token to its own `system_log` and `/api/error_log`, and the records Loki took
+  before the stage shipped keep it until the 744h retention expires — so rotating the cast user's
+  refresh token is the only thing that ends the exposure. `probe.py loki-query --json` streams the
+  raw body and is NOT redacted.
 - **The fault is episodic.** The 197 warnings fall in 11 hour-buckets across 4 of the 7 days
   (09-21, 09-22, 09-23, 09-26), and 3 days have none. The longest clean gap inside the window
   is about 56 h, so a quiet day or two is not evidence the fault has cleared. Inside a burst,
@@ -147,7 +156,9 @@ unfalsifiable. The query that still works:
 It fires only while the loop keeps resending `connect` to a receiver showing the `nest_dark`
 view, so it misses a single blocked cycle. The 2026-09-29 failure left no `frontend.js` record.
 Query `|= "_handle_signal_show_view"` as well to catch a cast that timed out on a worker
-thread, and redact its output: the record prints the cast `refresh_token`.
+thread. `probe.py loki-query` redacts the cast `refresh_token` out of that record and keeps the
+marker, so the query still works — but `--json`, `logcli` and Grafana Explore read the stored
+line, which carries the token for anything shipped before the Alloy redaction stage.
 
 Nothing in `files/configuration.yaml` silences `frontend.js`, and
 `ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py` fails if a future
