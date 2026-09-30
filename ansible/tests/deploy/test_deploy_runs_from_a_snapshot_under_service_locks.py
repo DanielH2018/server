@@ -10,7 +10,9 @@ which runs it with the snapshot as its cwd, called by `deploy_under_locks.run` a
 `take_service_locks`; `deploy_detach.run` takes the same locks before it forks the child
 that calls `run_playbook`. `--check` and `--dry-run` are the exceptions: `deploy_run.py`
 execs them above the lock, from the working tree on purpose, and names ansible-playbook
-nowhere else.
+nowhere else. `deploy_flags.py` names it too and must never RUN it: the pre-lock gate
+hands the string to ansible's own parser, and a module saying "ansible-playbook" outside the
+service locks is the shape this file exists to catch.
 
 `deploy_io.py`: every function that runs a playbook wraps it in `service_locks`. The set of
 such functions is asserted by name, so one added later without a lock fails here rather than
@@ -26,6 +28,7 @@ from _helpers import REPO
 
 # deploy.sh's Python halves.
 _DEPLOY_RUN = REPO / "scripts/deploy_tools/deploy_run.py"
+_DEPLOY_FLAGS = REPO / "scripts/deploy_tools/deploy_flags.py"
 _DEPLOY_UNDER_LOCKS = REPO / "scripts/deploy_tools/deploy_under_locks.py"
 _DEPLOY_PLAYBOOK = REPO / "scripts/deploy_tools/deploy_playbook.py"
 _DEPLOY_DETACH = REPO / "scripts/deploy_tools/deploy_detach.py"
@@ -73,6 +76,38 @@ def test_deploy_run_execs_ansible_playbook_only_for_check_and_dry_run():
     assert _unlocked_playbook_calls(_DEPLOY_RUN.read_text()) == [
         "plan.check or plan.dry_run"
     ]
+
+
+# How a module starts a process. The gate must use none of them: it parses in process.
+_PROCESS_STARTERS = (
+    "subprocess",
+    "os.exec",
+    "os.spawn",
+    "os.system",
+    "os.popen",
+    "pty.",
+)
+
+
+def test_the_pre_lock_gate_parses_ansible_playbook_without_running_one():
+    """The gate names "ansible-playbook" above the lock, which is allowed only because it
+    never starts one -- it hands the argv to `PlaybookCLI.parse()` (issue #3024).
+
+    Asserted on the source rather than by calling it: a gate that grew a `--syntax-check`
+    subprocess would deploy nothing and still pass every behavioural test in
+    `scripts/deploy_tools/tests/test_deploy_flags.py`, while running a playbook command
+    from outside the service locks.
+    """
+    source = _DEPLOY_FLAGS.read_text()
+    assert '"ansible-playbook"' in source, (
+        "the gate stopped naming the command it parses"
+    )
+    assert ".parse()" in source
+    body = "\n".join(
+        line for line in source.splitlines() if not line.lstrip().startswith("#")
+    )
+    found = [starter for starter in _PROCESS_STARTERS if starter in body]
+    assert not found, f"the pre-lock gate starts a process: {found}"
 
 
 def test_an_unguarded_playbook_call_is_flagged():

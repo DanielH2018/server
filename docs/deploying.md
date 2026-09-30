@@ -53,6 +53,12 @@ time a test was written for it (#2853).
 `DEPLOY_PLAYBOOK_FAILED` is the exception the set excludes: the playbook ran and a task
 failed, so whatever applied before it is live.
 
+`DEPLOY_BAD_FLAGS` (64) is outside the set for a different reason: nothing was deployed, and
+re-running the same command line changes nothing. It covers a flag this wrapper refuses and a
+pass-through argument ansible-playbook's own parser refuses, which the wrapper asks about
+before it takes the lock. `land.sh` exits 64 on a bad argument too, so one number means "you
+typed it wrong" for both entry points (#3024).
+
 Being *ahead* of master is normal branch work and is never refused.
 
 ## Checking a change without deploying it

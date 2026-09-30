@@ -252,3 +252,9 @@ a failed host, 3 on an unreachable one and 4 on a parse error. `deploy.sh` retur
 verbatim until 2026-09-02, so a play that applied its manifests and then failed on a post-apply
 assert exited 2 and read as the tag miss (issue #840). Every non-zero playbook status is now
 collapsed onto 20; ansible's own number is printed on stderr rather than returned.
+
+One shape never reaches 20. ansible-playbook exits 2 on a USAGE error too -- an unknown flag,
+or `--tags` with no value -- and there argparse refused before the first play, so nothing is
+live. `deploy.sh` asks ansible's own parser before it takes the lock
+(`scripts/deploy_tools/deploy_flags.py`) and refuses with 64, the code `land.sh` also exits on
+a bad argument (issue #3024).

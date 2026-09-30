@@ -24,7 +24,8 @@ passes through to ansible-playbook in order.
 
 Exit codes are ``scripts/lib/exit_codes.py``'s ``DEPLOY_*``. The ones this half
 returns: 2 (a tag matched no service), 3 (``--changed`` found a broad change), 4 (the tree is
-behind origin/master), 64 (arguments refused). Each means nothing was deployed.
+behind origin/master), 64 (arguments refused -- this wrapper's own flags, and any pass-through
+argument ``ansible-playbook``'s parser rejects). Each means nothing was deployed.
 
 WHICH CHECKOUT. The run deploys the checkout containing the CALLER's working directory, not
 the one this file lives in, which is why the shim does not ``cd``. The helpers imported here
@@ -45,6 +46,7 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from deploy_tools.deploy_flags import Refused, check_passthrough
 from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
@@ -66,14 +68,6 @@ DETACH_NOTIFIER = "scripts/deploy_tools/deploy_detach_notify.py"
 
 # host_vars relative to a checkout root, for asking the CALLER's checkout rather than REPO.
 HOST_VARS_REL = HOST_VARS.relative_to(REPO)
-
-
-class Refused(Exception):
-    """A gate refused the run; nothing was deployed. `code` is the exit status."""
-
-    def __init__(self, code: int):
-        super().__init__(code)
-        self.code = code
 
 
 @dataclass
@@ -529,6 +523,11 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
                 ["uv", "run", "python", "scripts/deploy_tools/deploy_tags.py", "list"]
             )
         check_mode_conflicts(plan)
+        # An argument ansible-playbook's parser refuses, asked before the fact cache, the
+        # staleness gate and the tag validation: no play can run, so it must not cost a
+        # subprocess, a lock wait or a snapshot, and it must read as a bad command line on
+        # every path out of here rather than as a playbook that failed mid-deploy (#3024).
+        check_passthrough(plan.args)
         expand_shared_roles(plan)
         # The fact cache is shared by host across every worktree on this machine and pins
         # the interpreter of whichever session gathered facts first. A cache naming a gone
