@@ -72,22 +72,29 @@ logs `_connect_hass failed` and raises `PyChromecastError` into
 - **All 197 failures in the window take that path.** Every traceback reads
   `socket_client.py` `new_cast_status` → `receiver.py` `_process_get_status` →
   `homeassistant.py` `channel_connected` → `get_status` → `_send_connected_message` →
-  `_connect_hass`, with the line numbers of pychromecast 14.0.10. Every warning is logged on
-  `Thread-5`.
+  `_connect_hass`, with the line numbers of pychromecast 14.0.10. All 197 warnings and all 197
+  listener exceptions are logged on `Thread-5`.
 - **The live test cast shows why most casts escape it.** On 2026-09-30 at 07:50:56 the
   operator-approved test turned the Hub off, and `bedroom_display_show` re-cast at once.
   `SyncWorker_7` entered `_connect_hass` first and cleared the event. At 07:50:59 `Thread-5`
   ran `channel_connected` → `_connect_hass` and hit the early return
   `_hass_connecting_event not set`, so it went back to reading. At 07:51:00 it read
   `receiver_status connected: True`, and the Hub showed the dashboard. The deadlock fires only
-  when `Thread-5` reaches `_connect_hass` with no HA-initiated cast already waiting. That
-  happens when HA re-joins an HA app already running on the Hub without casting, for example
-  after a socket drop.
-- **A blocked `Thread-5` also fails a concurrent cast.** On 2026-09-29 at 14:23:36 a
-  `Connection reset by peer` on the Hub's socket was followed within 20 ms by
-  `bedroom_display_show` casting. At 14:24:06, 30.03 s later, the cast failed with
-  `Exception in _handle_signal_show_view` on `homeassistant.util.logging`. That record is not
-  silenced, and its message carries the cast user's `refresh_token` in plaintext.
+  when `Thread-5` reaches `_connect_hass` with no HA-initiated cast already waiting, that is,
+  when the socket thread sees the HA app on a new channel that HA did not cast. What starts that
+  on the Hub is not established. A socket drop is a candidate, but the 09-21 10:15 burst began
+  6 minutes after the 10:09 socket failure, not at it.
+- **A second, separate failure: a `connect` lost across a socket reconnect.** On 2026-09-29
+  at 14:23:36.520 the Hub's socket reset (`Connection reset by peer`), which runs
+  `channel_disconnected` and clears the controller's status. At 14:23:36.552
+  `bedroom_display_show` cast, and `SyncWorker_23` sent `connect` across the reconnect. At
+  14:24:06, 30.03 s later, that cast failed with `Exception in _handle_signal_show_view` on
+  `homeassistant.util.logging`. The traceback ends at the `raise` in `_connect_hass`, which only
+  the thread that sent `connect` and waited can reach. So the worker, not `Thread-5`, held the
+  wait, and no reply arrived. Why that reply was lost is not established. The record is not
+  silenced, and its message carries the cast user's `refresh_token` in plaintext. A cast that
+  runs into a blocked `Thread-5` fails differently: it returns early, its callback later
+  receives `False`, and it logs nothing.
 - **The fault is episodic.** The 197 warnings fall in 11 hour-buckets across 4 of the 7 days
   (09-21, 09-22, 09-23, 09-26), and 3 days have none. The longest clean gap inside the window
   is about 56 h, so a quiet day or two is not evidence the fault has cleared. Inside a burst,
@@ -139,8 +146,8 @@ unfalsifiable. The query that still works:
 
 It fires only while the loop keeps resending `connect` to a receiver showing the `nest_dark`
 view, so it misses a single blocked cycle. The 2026-09-29 failure left no `frontend.js` record.
-Query `|= "_handle_signal_show_view"` as well to catch a cast that collided with a blocked
-`Thread-5`, and redact its output: the record prints the cast `refresh_token`.
+Query `|= "_handle_signal_show_view"` as well to catch a cast that timed out on a worker
+thread, and redact its output: the record prints the cast `refresh_token`.
 
 Nothing in `files/configuration.yaml` silences `frontend.js`, and
 `ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py` fails if a future
