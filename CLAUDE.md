@@ -110,12 +110,10 @@ run less than it looks are in the **`deploy` skill**.
 
 **The default is that a merge is followed through to a verified deploy, in the same session,
 without asking.** Merging is not shipping here. The GitOps deployer applies three planes on its
-own: an image-pin bump to a non-denylisted k8s service; a setup-role change, as
-`initial_setup.yml --tags <role>`; and a deploy-plane change (shared templates, inventory,
-`deploy.yml`), as a narrowed or full `deploy.yml` that also applies denylisted roles. An
-ordinary manifest or template change to one k8s role is in none of the three, so it is
-fast-forwarded onto the primary checkout and never applied. The *Safety* section of
-`ansible/roles/setup/gitops_deploy/CLAUDE.md` has the path rules for each plane. Left there it sits
+own: an image-pin bump, a setup-role change and a deploy-plane change. The *Safety* section of
+`ansible/roles/setup/gitops_deploy/CLAUDE.md` owns which paths fall in each plane and how the
+deployer applies it. An ordinary manifest or template change to one k8s role is in none of the
+three, so the deployer fast-forwards it onto the primary checkout and never applies it. Left there it sits
 undeployed behind a green master until someone notices, and the next session to deploy that
 service ships it as a side effect of unrelated work.
 
@@ -130,9 +128,10 @@ output redirected to a file. The exact commands, the `VERDICT:` values and what 
 with the tick are in the **`land-after-merge` skill**. **Do not hand-poll CI and do not
 hand-merge.**
 
-`cancelled`, `stale` and `skipped_by_concurrency` mean *no verdict for this SHA*, never *this
-SHA is bad* — `ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS`
-is the list, and the **`land-after-merge` skill** owns the rule (ENFORCED:
+A `cancelled` CI run means *no verdict for this SHA*, never *this SHA is bad*.
+`docs/landing.md` owns the rule, and
+`ansible/roles/setup/gitops_deploy/files/deploy_git.py:_CI_NO_VERDICT_CONCLUSIONS` is the full
+list of conclusions it covers (ENFORCED:
 `ansible/tests/deploy/test_ci_cancelled_is_not_a_verdict.py::test_cancelled_is_declared_no_verdict`).
 
 **Verify the change, not just the workload.** The `VERDICT:` line cannot see whether *your
@@ -142,8 +141,8 @@ change* took effect, so exercise the thing you actually changed as well.
 
 **The tick pulls all of master, not just your commit.** Another session's merged work
 fast-forwards with yours. `land.sh` already scopes to your PR's own files; if you override with
-`--tags`, keep it to your own services. The exit codes that mean another session got there
-first are in the **`land-after-merge` skill**.
+`--tags`, keep it to your own services. `land.sh --help` lists the exit codes, including the
+ones that mean another session got there first.
 
 ### When to wait
 
