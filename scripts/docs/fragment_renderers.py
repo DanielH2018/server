@@ -34,7 +34,11 @@ def render_longhorn_tiers(d: dict) -> str:
         f"| `{minute} {hour} * * <index mod 7>` | {d['k3s_longhorn_weekly_backup_retain']} |",
         f"| None | — | {len(nobackup)} listed, plus the `longhorn-nobackup` StorageClass | — | — |",
         "",
-        f"Daily-tier volumes (`k3s_longhorn_r2_volumes`): {_code_list(r2)}.",
+        # "Daily tier", not "Daily-tier": Google.LyHyphens reads any `\w+ly-` as a hyphenated
+        # adverb and errors. Vale lints this fragment only on a hand run over the whole tree
+        # (prek's `vale` hook regex stops at docs/*.md), so the gate that catches a regression
+        # here is review, not CI.
+        f"Daily tier volumes (`k3s_longhorn_r2_volumes`): {_code_list(r2)}.",
         "",
         f"B2 backups are {armed} (`k3s_longhorn_backup_armed`); the daily B2 budget is "
         f"{d['k3s_longhorn_daily_backup_budget']} backups (`k3s_longhorn_daily_backup_budget`).",
