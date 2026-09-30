@@ -116,6 +116,39 @@ def test_the_hook_regex_matches_the_documents_on_disk():
     assert not [name for name in adrs if not pattern.match(f"docs/adr/{name}")]
 
 
+FRAGMENTS = REPO / "docs" / "assets" / "generated" / "fragments"
+# Named members, so a move of the fragment directory fails here instead of globbing nothing.
+KNOWN_FRAGMENTS = frozenset(
+    {"traefik-ports.md", "secret-tiers.md", "longhorn-tiers.md"}
+)
+
+
+def test_the_hook_covers_every_generated_fragment_on_disk():
+    """The operator put the transcluded fragments in CI's Vale scope on 2026-09-30 (#3008).
+
+    Before that, `.vale.ini` matched them and the hook regex did not, so a fragment was
+    linted by a hand `vale docs` run and never by CI.
+    """
+    pattern = re.compile(vale_hook_regex())
+    names = {p.name for p in FRAGMENTS.glob("*.md")}
+    assert KNOWN_FRAGMENTS <= names, (
+        f"fragments missing: {sorted(KNOWN_FRAGMENTS - names)}"
+    )
+    unmatched = sorted(
+        n
+        for n in names
+        if not pattern.match(f"docs/assets/generated/{FRAGMENTS.name}/{n}")
+    )
+    assert not unmatched, f"generated fragments the Vale hook would skip: {unmatched}"
+
+
+def test_the_hook_still_skips_the_rest_of_the_generated_assets():
+    """Only the prose fragments are in scope; the rest of docs/assets/generated/ is not prose."""
+    pattern = re.compile(vale_hook_regex())
+    assert not pattern.match("docs/assets/generated/infra-map.md")
+    assert not pattern.match("docs/assets/generated/fragments/nested/sample.md")
+
+
 def test_the_hook_never_covers_generated_reference_pages():
     """docs/reference/ is written by the docs-refresh cron, which commits with hooks running.
 

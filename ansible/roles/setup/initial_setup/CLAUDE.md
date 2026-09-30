@@ -93,7 +93,7 @@ the diff through a PR that auto-merges.
 - **Required evidence:** `status=<up|down> <msg>` in the log and a push to "Docs Refresh".
   `PUSH_STATUS` defaults to `down`, so a later path that forgets to set it reports a failure.
 - **Next-run review:** before adding a fourth staged path, check no prek hook matching it can
-  fail on generator output — one that can wedges this cron.
+  fail on generator output — one that can wedges this cron. `vale` can, on purpose (#3008).
 
 ## Autonomous-role contract — Homelab eval sweep (`evals` tag)
 Weekly (Sunday 02:00, daniel-box only): grades every case under `evals/cases/`, rolls the result
