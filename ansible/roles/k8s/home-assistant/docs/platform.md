@@ -116,12 +116,14 @@ the same 11 buckets are all one exception, `TypeError: Cannot read properties of
 (reading 'themes')`. Every one carries the same stack: `hui-view-container`
 `_setUpMediaQuery` → `media_query` `listener` → `_applyTheme` → `applyThemesOnElement`, at
 `src/common/dom/apply_themes_on_element.ts:117`. That line reads `themes.themes[themeToApply]`.
-`themeToApply` is `nest_dark`, because `files/ui-lovelace.yaml` pins that theme to the view.
+`themeToApply` was `nest_dark`, because `files/ui-lovelace.yaml` pinned that theme to the view.
 `themes` is `hass.themes`, which is null on the fresh `hass` the receiver builds for each
 `connect`. The receiver's `_handleConnectMessage` sends `receiver_status` before that render
 runs, so the throw does not block the reply. Each loop iteration resends `connect`, and the
-per-cycle JS error count grows by about one. The frontend bug is real, but it is upstream in
-`home-assistant/frontend` and only cosmetic here.
+per-cycle JS error count grows by about one. The frontend bug is upstream in
+`home-assistant/frontend` and only cosmetic here. The operator unpinned the theme on
+2026-09-30 (#2800), so `themeToApply` is empty and the throw no longer fires. The cast display
+renders light as a result.
 
 **Three candidate causes from #2800 are refuted.** The LAN hairpin through Cloudflare, the
 receiver rejecting the served certificate, and CrowdSec or the CF-only-origin allowlist
@@ -132,8 +134,9 @@ simply cannot read it while it waits.
 **Nothing in this repo's config fixes it.** The fix belongs in
 `home-assistant-libs/pychromecast`: `channel_connected` must not block the socket thread. It
 could send `get_status` without waiting for the connect ack, or `_connect_hass` could refuse to
-wait when called on the socket thread. Issue #3014 tracks filing that report upstream and
-carries the draft.
+wait when called on the socket thread. The operator decided on 2026-09-30 not to report it
+upstream (#3014, closed as accepted, keeps the drafts) and to live with the fault (#2800,
+closed as accepted). Casting works; the cost is an occasional 30 s stall.
 
 **`external_url` is not the thing to change either.** HA's cast integration resolves the URL
 itself: `hass_url = get_url(hass, require_ssl=True, prefer_external=True)` in
@@ -143,26 +146,23 @@ to hand the receiver `internal_url` is to remove or downgrade `external_url`. Th
 path, the companion app and the Cloudflare route all depend on it. There is no
 per-integration override.
 
-**Verify with the `frontend.js` channel, never with `_connect_hass failed`.** #2781 silenced
-both records the fault emits, because `Exception thrown when calling cast status listener` is
-logged on `pychromecast.controllers` too. A query for `_connect_hass failed` therefore returns
-nothing on a cluster where the fault is firing, which is why issue #2800's own verify-by was
-unfalsifiable. The query that still works:
+**Only a failed cast still leaves a record.** #2781 silenced both records the connect-back
+loop emits, because `Exception thrown when calling cast status listener` is logged on
+`pychromecast.controllers` too, so a query for `_connect_hass failed` returns nothing whether
+or not the loop is firing. The receiver's `Uncaught error from Chrome` records were the
+channel that survived, and they came from the pinned theme's TypeError above. With the theme
+unpinned they stop, so the loop itself now has no audible signal. That is accepted with #2800,
+and the guard that kept the channel audible was retired with the pin.
+
+A cast that timed out on a worker thread still logs `_handle_signal_show_view`:
 
 ```logql
-{job="k8s", container="home-assistant"} |= "Uncaught error from Chrome"
+{job="k8s", container="home-assistant"} |= "_handle_signal_show_view"
 ```
 
-It fires only while the loop keeps resending `connect` to a receiver showing the `nest_dark`
-view, so it misses a single blocked cycle. The 2026-09-29 failure left no `frontend.js` record.
-Query `|= "_handle_signal_show_view"` as well to catch a cast that timed out on a worker
-thread. `probe.py loki-query` redacts the cast `refresh_token` out of that record and keeps the
+`probe.py loki-query` redacts the cast `refresh_token` out of that record and keeps the
 marker, so the query still works — but `--json`, `logcli` and Grafana Explore read the stored
 line, which carries the token for anything shipped before the Alloy redaction stage.
-
-Nothing in `files/configuration.yaml` silences `frontend.js`, and
-`ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py` fails if a future
-`logger:` entry takes that channel away as quietly as #2781 took the first one.
 
 ### Browser Mod does not extend the cast display (investigated 2026-09-10, issue #1454)
 

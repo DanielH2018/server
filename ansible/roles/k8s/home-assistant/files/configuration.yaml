@@ -12,12 +12,12 @@ homeassistant:
   external_url: !secret external_url
   internal_url: !secret internal_url
 
-# Frontend theme — a compact dark theme PINNED to the Bedroom dashboard (ui-lovelace.yaml sets
-# `theme: nest_dark` on the view) so it renders dark when cast to the Nest Hub. The cast receiver
-# runs with NO logged-in user, so it ignores the app/browser dark-mode profile and would otherwise
-# show light; pinning an explicit theme to the view forces dark regardless of device/user. Static
-# color values only (no HA Jinja), so it is safe in this verbatim-copied file; one `frontend:` key,
-# compatible with default_config. Tune the hex values to taste.
+# Frontend theme — a compact dark theme for the Bedroom dashboard. It is defined but NOT pinned
+# to the view since 2026-09-30 (#2800): the pin made the cast receiver throw on every
+# connect-back cycle, and the operator chose a light cast display over that noise. ui-lovelace.yaml
+# says how to re-pin it. Selectable per user in the profile meanwhile. Static color values only
+# (no HA Jinja), so it is safe in this verbatim-copied file; one `frontend:` key, compatible with
+# default_config. Tune the hex values to taste.
 frontend:
   themes:
     nest_dark:
@@ -338,9 +338,9 @@ logger:
     #
     # The cost is that a genuine cast-controller failure is silenced too, and BOTH records the
     # fault emits sit on this logger, so no query for `_connect_hass failed` can tell "not
-    # firing" from "silenced" — which is why issue #2800's own verify-by was unfalsifiable. The
-    # signal that survives is the `frontend.js` channel above, silenced by nothing here
-    # (ENFORCED: ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py). The
+    # firing" from "silenced". The operator accepted the fault on 2026-09-30 (#2800) and
+    # unpinned the view theme whose receiver TypeError was the `frontend.js` signal above, so
+    # that signal is gone too. A failed cast still logs `_handle_signal_show_view`. The
     # rejected alternative is monitor-bridge's LOG_ERROR_IGNORE, whose own comment says a
     # growing ignore list means the arm is decaying. `pychromecast.socket_client` keeps its
     # default level: its connect-retry lines carry no traceback, so the arm never counted them.
