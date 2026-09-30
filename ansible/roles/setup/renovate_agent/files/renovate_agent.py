@@ -37,6 +37,7 @@ from agent_logic import (
     parse_run,
     render_digest,
     render_skip,
+    run_record,
 )
 from gitops_markers import MARKERS, STATE_DIR
 from host_lib import atomic_write, discord_post, parse_env_file
@@ -53,6 +54,8 @@ EXIT_WORKTREE_BLOCKED = 2
 RENOVATE_AUTHOR = "app/renovate"
 # The census lists every open PR and filters locally, so the cap covers all authors.
 OPEN_PR_LIMIT = 200
+# One JSON line per tick under STATE_DIR, from agent_logic.run_record.
+RUNS_FILE = "runs.jsonl"
 
 # Written by gitops_deploy.py. Read, never written, here; the directory and basenames come
 # from `gitops_markers`, the deployer's own table copied beside this file.
@@ -462,6 +465,16 @@ def run_session(cfg: dict[str, str], cwd: str, log_path: str) -> tuple[str, int,
     return p.stdout or "", p.returncode, False
 
 
+def record_run(state_dir: str, line: str) -> None:
+    """Append one tick's record to `runs.jsonl`; a failed write must not cost the digest."""
+    try:
+        os.makedirs(state_dir, exist_ok=True)
+        with open(os.path.join(state_dir, RUNS_FILE), "a", encoding="utf-8") as f:
+            f.write(line + "\n")
+    except OSError as exc:
+        log(f"could not record the run: {exc}")
+
+
 def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     cfg = parse_env_file(config_path)
     missing = [k for k in ("REPO", "REPO_DIR", "PROMPT_FILE") if not cfg.get(k)]
@@ -481,6 +494,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     gate = decide(before, tools.read_file(HOLD_FILE), tools.read_file(HOLD_PLANE_FILE))
     if not gate.run:
         log(f"skipping: {gate.reason}")
+        record_run(state_dir, run_record(int(time.time()), "skipped", gate.reason))
         if not gate.quiet:
             tools.discord_post(webhook, render_skip(gate, host), USER_AGENT, log=log)
         return 0
@@ -495,6 +509,7 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         msg = f"renovate-agent: skipped on {host} — {why}. Clear it, then the next tick runs."
         log(msg)
         tools.discord_post(webhook, msg, USER_AGENT, log=log)
+        record_run(state_dir, run_record(int(time.time()), "blocked", why))
         return EXIT_WORKTREE_BLOCKED
 
     log(f"{gate.reason}; preparing {path}")
@@ -515,7 +530,10 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
         webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log
     )
 
-    atomic_write(os.path.join(state_dir, "last_run"), str(int(time.time())))
+    now = int(time.time())
+    result = "ran" if outcome.ok else "failed"
+    record_run(state_dir, run_record(now, result, outcome.error, moved, outcome))
+    atomic_write(os.path.join(state_dir, "last_run"), str(now))
     # A session that failed is a unit failure, so OnFailure pages as well as the digest.
     return 0 if outcome.ok else 1
 
@@ -541,6 +559,10 @@ def report_crash(
         cfg = parse_env_file(config_path)
     except OSError:
         cfg = {}
+    record_run(
+        cfg.get("STATE_DIR", "/var/lib/renovate-agent"),
+        run_record(int(time.time()), "crashed", text[:200]),
+    )
     push_url = cfg.get("KUMA_PUSH_URL", "")
     if push_url:
         sep = "&" if "?" in push_url else "?"

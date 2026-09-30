@@ -104,6 +104,34 @@ session's writes is the assumption the whole design rests on; it was measured ag
 `permission_denials: []`), but a Claude Code upgrade can change it, and the failure mode is a
 session that reads green and does nothing.
 
+## The run record
+
+Every tick appends one JSON line to `runs.jsonl` in `STATE_DIR` (`/var/lib/renovate-agent`), so
+whether the agent is worth its cost is a count over one file rather than a read of 30 digests
+(#2864). `run_record` in `files/agent_logic.py` builds the line, and each exit path writes one:
+
+- `skipped` — the gate spent no session. `reason` says why, including the quiet empty-backlog
+  skip that posts nothing to Discord.
+- `blocked` — the run worktree still holds unlanded work.
+- `ran` or `failed` — a session ran. The line carries `merged`, `closed`, `handed_off`,
+  `unread`, `left_open` and `opened` from the measured delta, plus `cost_usd`, `turns` and the
+  denial count. `handed_off` is `null` when its census failed.
+- `crashed` — the wrapper threw. `report_crash` writes this line before its Kuma push.
+
+The PR fields come from the census, not from the session's summary, so a triage that only
+comments on a PR leaves no trace in them. `left_open` is the PRs the session skipped, whether
+by the `k8s_autodeploy: false` denylist or by the PR cap. A 30-day count:
+
+```bash
+jq -s --argjson since "$(date -d '-30 days' +%s)" '[.[] | select(.ts >= $since)]
+  | {ticks: length, sessions: map(select(.result == "ran" or .result == "failed")) | length,
+     merged: map(.merged // [] | length) | add, closed: map(.closed // [] | length) | add,
+     handed_off: map(.handed_off // [] | length) | add, cost_usd: map(.cost_usd // 0) | add}' \
+  /var/lib/renovate-agent/runs.jsonl
+```
+
+The file gains one line a day and is never rotated.
+
 ## The alive monitor
 
 `renovate_agent_kuma_push_token` (SOPS, tier auto) is the one token behind two halves: the unit's

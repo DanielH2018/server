@@ -203,6 +203,40 @@ def handed_off(
     )
 
 
+def run_record(
+    ts: int,
+    result: str,
+    reason: str = "",
+    moved: Delta | None = None,
+    outcome: Outcome | None = None,
+) -> str:
+    """One JSON line for `runs.jsonl`, the per-tick record the usage count reads (#2864).
+
+    Written on every exit path, skips included, so "how many ticks spent a session" and
+    "how many PRs each one merged, closed, handed off or left open" are both a count over
+    one file. `result` is `skipped`, `blocked`, `ran`, `failed` or `crashed`. The PR fields
+    come from the measured delta, never the session's summary; a triage that only comments
+    on a PR leaves no trace in them. `handed_off` stays null when its census failed.
+    """
+    rec: dict = {"ts": ts, "result": result, "reason": reason}
+    if moved is not None:
+        rec |= {
+            "merged": list(moved.resolved),
+            "closed": list(moved.closed),
+            "handed_off": None if moved.handed_off is None else list(moved.handed_off),
+            "unread": list(moved.unread),
+            "left_open": list(moved.remaining),
+            "opened": list(moved.opened),
+        }
+    if outcome is not None:
+        rec |= {
+            "cost_usd": round(outcome.cost_usd, 4),
+            "turns": outcome.turns,
+            "denials": len(outcome.denials),
+        }
+    return json.dumps(rec, sort_keys=True)
+
+
 def _nums(numbers: tuple[int, ...]) -> str:
     return ", ".join(f"#{n}" for n in numbers)
 

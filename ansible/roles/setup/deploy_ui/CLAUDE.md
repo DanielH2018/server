@@ -93,6 +93,25 @@ Log names carry a `mkstemp` suffix as well as the second-granular timestamp. Two
 one second used to name the same file, and the second open truncated a log the first process
 still held.
 
+## Usage count
+
+The daemon writes one logfmt line per request to its unit journal (#2864):
+`request method=GET path=/ status=200 user=<Remote-User>`. `user` is the Authelia login
+Traefik forwards, and `-` for a caller that reached the port around Authelia. The query
+string is dropped, so a log path never reaches the journal.
+
+The page polls four panels and the log tail every 10 seconds, so an open tab writes about
+25 lines a minute. Those polls show a tab was open, not that anyone used it. Count page
+loads and writes instead:
+
+```bash
+journalctl -u deploy-ui --since -30d | grep -cE 'request method=GET path=/ |request method=POST'
+```
+
+journald on daniel-box is capped at 1G (`SystemMaxUse`), which held entries back to
+2026-07-31 on 2026-09-30, so a 30-day window fits. `request_line` in `files/deploy_ui.py`
+formats the line and is unit-tested.
+
 ## Deploy
 
 `uv run ansible-playbook ansible/initial_setup.yml --tags deploy_ui` (a setup-plane role;
