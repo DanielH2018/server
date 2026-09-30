@@ -13,8 +13,6 @@ from pathlib import Path
 
 import checks.b2
 
-_REPO = Path(__file__).resolve().parents[5]
-
 
 # ── the B2 storage line is a dashboard contract, not just a message ────────────────────────────
 #

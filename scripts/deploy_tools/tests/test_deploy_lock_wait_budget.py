@@ -16,14 +16,13 @@ which both the foreground and `--detach` wait with.
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_lock_wait_budget.py
 """
 
-from pathlib import Path
-
 import pytest
 
 from deploy_tools import deploy_under_locks
 from lib import yaml_fast
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _DEFAULTS = (
     _REPO / "ansible" / "roles" / "setup" / "gitops_deploy" / "defaults" / "main.yml"
 )

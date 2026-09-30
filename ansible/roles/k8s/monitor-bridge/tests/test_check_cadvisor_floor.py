@@ -7,16 +7,12 @@ all three logging OK, found by reading the code rather than by an alert.
 """
 
 from dataclasses import replace
-
 from pathlib import Path
-
 
 import bridge.config
 import bridge.net
 import checks.cluster
 import check
-
-_REPO = Path(__file__).resolve().parents[5]
 
 
 # --- cAdvisor coverage floor -------------------------------------------------------------

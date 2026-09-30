@@ -5,8 +5,6 @@ drive them end to end. The log-shipper dropped-entries watchdog rides along beca
 same shape — a counter that must be read over a window rather than instantaneously.
 """
 
-from pathlib import Path
-
 from dataclasses import replace
 
 import pytest
@@ -30,9 +28,6 @@ def _unread_clock():
     `skipped` instead of the verdict under test.
     """
     return None
-
-
-_REPO = Path(__file__).resolve().parents[5]
 
 
 @pytest.mark.parametrize(

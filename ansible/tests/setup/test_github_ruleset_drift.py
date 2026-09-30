@@ -17,6 +17,7 @@ import subprocess
 
 import jinja2
 import pytest
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 
 TEMPLATE = ANSIBLE / "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2"
@@ -95,7 +96,7 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
         # trim_blocks matches Ansible's own template defaults. Without it the `{% for %}` around
         # the declared contexts leaves a blank line per iteration, which is NOT how the deployed
         # script renders — the harness would be testing a file the host never sees.
-        jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True)
+        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
         .from_string(TEMPLATE.read_text())
         .render(
             domain="example.test",

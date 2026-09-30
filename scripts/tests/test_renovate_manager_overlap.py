@@ -16,10 +16,10 @@ Run: uv run pytest scripts/tests/test_renovate_manager_overlap.py
 """
 
 import json
-from pathlib import Path
 
-_REPO = Path(__file__).resolve().parents[2]
-_CONFIG = json.loads((_REPO / "renovate.json").read_text())
+from lib.repo_paths import REPO
+
+_CONFIG = json.loads((REPO / "renovate.json").read_text())
 _MANAGERS = _CONFIG["customManagers"]
 
 # (built-in manager) -> the file its default patterns claim, which a custom manager already owns.

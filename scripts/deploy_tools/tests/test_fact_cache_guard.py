@@ -194,5 +194,6 @@ def test_cache_dir_falls_back_without_ansible_cfg(tmp_path: Path):
 
 def test_the_real_repo_cfg_still_names_a_cache_dir():
     """The guard is worthless if ansible.cfg stops setting fact_caching_connection."""
-    repo_root = Path(__file__).resolve().parents[3]
+    from lib.repo_paths import REPO as repo_root
+
     assert g.cache_dir_from_cfg(repo_root).name == "facts"

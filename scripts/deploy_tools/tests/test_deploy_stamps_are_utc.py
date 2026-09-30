@@ -16,8 +16,9 @@ from pathlib import Path
 
 import pytest
 
-_REPO = Path(__file__).resolve().parents[3]
-_SCRIPTS = (_REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",)
+from lib.repo_paths import REPO
+
+_SCRIPTS = (REPO / "scripts" / "deploy_tools" / "gitops_tick.sh",)
 # A `date` invocation that formats or converts a time: `date +FMT`, `date -d @N +FMT`, and
 # the `-u` form of each. Comment lines are skipped so prose naming the flag does not count.
 # A flag's argument may not start with `-`, `'` or `+`, so each token has exactly one reading:
@@ -65,8 +66,8 @@ def test_the_pattern_stays_linear_on_a_run_of_flags():
 
 # deploy.sh stamps its snapshot and its --detach log in Python since #2412.
 _PYTHON_STAMPERS = (
-    _REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
-    _REPO / "scripts" / "deploy_tools" / "deploy_detach.py",
+    REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
+    REPO / "scripts" / "deploy_tools" / "deploy_detach.py",
 )
 _NOW_CALL = re.compile(r"\bdatetime\.now\(([^)]*)\)")
 

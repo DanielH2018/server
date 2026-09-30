@@ -1,4 +1,4 @@
-"""Guard: only `_helpers.py` derives a repo root from `__file__`.
+"""Guard: no module in `ansible/tests/` derives a repo root from `__file__`.
 
 Every guard in this directory reads the repo's own sources, so 50 of them each re-derived the
 same roots with a hardcoded `Path(__file__).resolve().parents[N]`. The duplication is the small
@@ -8,8 +8,11 @@ asserts inside the loop then passes on an empty glob, reporting green while chec
 That is the same silent-coverage-loss shape as monitor-bridge's monkeypatch rule, so it gets a
 check rather than a paragraph.
 
-`_helpers.py` is the one place the anchor is allowed, and it publishes REPO, ANSIBLE, ROLES,
-K8S_ROLES, SETUP_ROLES and CONTAINER_ROLES for everyone else to import.
+`_helpers.py` publishes REPO, ANSIBLE, ROLES, K8S_ROLES, SETUP_ROLES and CONTAINER_ROLES for
+everyone else to import, and takes REPO itself from `lib.repo_paths` (#2857), so no module here
+holds the anchor any more. `scripts/tests/test_tests_share_render_and_path_helpers.py` holds the
+same line for the repo root across every test root; this guard is narrower in scope and wider in
+shape, since it also flags a `parents[N]` that stops short of the root.
 
 Clean/flagged pairs below, per the repo rule that a new check ships with a proof it can go RED.
 
@@ -22,10 +25,8 @@ from _helpers import ANSIBLE
 
 TESTS = ANSIBLE / "tests"
 
-# The owner of the anchor. Nothing else in this directory may re-derive it — except this
-# module, whose red-proof cases below hold the offending spelling as fixture text.
-ANCHOR_OWNER = "_helpers.py"
-EXEMPT = {ANCHOR_OWNER, "test_path_anchors_come_from_helpers.py"}
+# This module's red-proof cases below hold the offending spelling as fixture text.
+EXEMPT = {"test_path_anchors_come_from_helpers.py"}
 
 # `Path(__file__).resolve().parents[N]` in any of the spellings this directory has used:
 # `Path`, `_Path`, `pathlib.Path`. `parents[0]` is the file's own directory, which is a local
@@ -42,7 +43,7 @@ def _offenders(text: str) -> list[str]:
     return [line.strip() for line in text.splitlines() if _ANCHOR.search(line)]
 
 
-def test_no_module_but_helpers_re_derives_a_root():
+def test_no_module_re_derives_a_root():
     flagged = {
         path.name: _offenders(path.read_text())
         for path in sorted(TESTS.rglob("*.py"))
@@ -53,11 +54,6 @@ def test_no_module_but_helpers_re_derives_a_root():
         "these modules re-derive a repo root from __file__ instead of importing it from "
         f"_helpers, which breaks silently if the file ever moves: {flagged}"
     )
-
-
-def test_helpers_still_owns_an_anchor():
-    """The exemption is only sound while `_helpers` actually defines the roots."""
-    assert _offenders((TESTS / ANCHOR_OWNER).read_text())
 
 
 def test_a_module_importing_from_helpers_is_clean():

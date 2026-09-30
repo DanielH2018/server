@@ -10,6 +10,8 @@ import json
 import pathlib
 import sys
 
+from lib.repo_paths import REPO
+
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import notify_logic as nl
 import pending_logic as pl
@@ -165,8 +167,7 @@ def test_grouped_marker_appears_in_renovate_json():
     Named-member guard for a pattern-based classifier: reword those group names and this fails,
     rather than silently restoring the four-day-late alert the marker exists to fix.
     """
-    repo_root = pathlib.Path(__file__).resolve().parents[5]
-    rules = json.loads((repo_root / "renovate.json").read_text())["packageRules"]
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
     grouped = [
         r["groupName"]
         for r in rules
@@ -183,8 +184,7 @@ def test_soak_constants_match_renovate_json():
     A minimumReleaseAge change there must fail here rather than silently leave notify_logic
     measuring against a soak that no longer applies.
     """
-    repo_root = pathlib.Path(__file__).resolve().parents[5]
-    rules = json.loads((repo_root / "renovate.json").read_text())["packageRules"]
+    rules = json.loads((REPO / "renovate.json").read_text())["packageRules"]
     digest = {
         r["minimumReleaseAge"]
         for r in rules

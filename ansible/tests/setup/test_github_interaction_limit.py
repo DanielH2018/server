@@ -13,6 +13,7 @@ import subprocess
 
 import jinja2
 import pytest
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 
 TEMPLATE = (
@@ -40,7 +41,7 @@ def _run(
 ):
     """Render, stub, run. Returns (exit_code, status, message, curl_argv)."""
     body = (
-        jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True)
+        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
         .from_string(TEMPLATE.read_text())
         .render(
             domain="example.test",

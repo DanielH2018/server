@@ -18,6 +18,8 @@ import importlib.util
 import os
 import sys
 
+from lib.repo_paths import REPO as REPO_PATH
+
 _HOOK = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
     "block-protected-edits.py",
@@ -33,13 +35,11 @@ classify = _mod.classify
 is_sops_encrypted = _mod.is_sops_encrypted
 find_repo_root = _mod.find_repo_root
 
-# Repo root derived from THIS file's location (.claude/hooks/tests/), NOT hardcoded — the test
-# must work in any checkout, incl. CI's /home/runner/work/... A hardcoded /home/ubuntu/server made
-# classify() read a nonexistent secrets.yml in CI -> None -> a false `test_blocks_the_real_secrets_file`
-# failure. Mirrors the hook's own repo_root computation in block-protected-edits.py.
-REPO = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+# The checkout this file lives in, NOT hardcoded — the test must work in any checkout, incl.
+# CI's /home/runner/work/... A hardcoded /home/ubuntu/server made classify() read a nonexistent
+# secrets.yml in CI -> None -> a false `test_blocks_the_real_secrets_file` failure. A str,
+# because the hook's classify() joins paths with os.path.
+REPO = str(REPO_PATH)
 
 
 ALLOW_ORDINARY_FILES = [

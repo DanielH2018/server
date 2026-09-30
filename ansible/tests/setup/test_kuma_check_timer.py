@@ -27,6 +27,7 @@ from pathlib import Path
 
 import jinja2
 import pytest
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import SETUP_ROLES, leaf_tasks, load_tasks
 
 COMMON = SETUP_ROLES / "common"
@@ -76,7 +77,7 @@ def directive(unit_text: str, key: str) -> list[str]:
 
 
 def _render(template, **overrides) -> str:
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined, trim_blocks=True)
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     return env.from_string(template.read_text()).render({**BASE_VARS, **overrides})
 
 

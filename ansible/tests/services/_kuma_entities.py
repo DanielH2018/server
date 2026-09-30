@@ -9,8 +9,9 @@ bare name without it being collected as a test itself.
 import json
 
 from lib import yaml_fast
-from jinja2 import Environment, FileSystemLoader
-from validate.k8s_manifests import make_lookup, register_ansible_filters
+from jinja2 import Undefined
+from lib.ansible_jinja_env import template_env
+from validate.k8s_manifests import make_lookup
 from _helpers import ANSIBLE
 
 
@@ -85,16 +86,11 @@ ROLE_DEFAULTS = yaml_fast.safe_load(
 
 
 def _entities() -> dict[str, dict]:
-    env = Environment(
-        loader=FileSystemLoader([str(TEMPLATE.parent), str(ANSIBLE / "templates")]),
-        trim_blocks=True,
-        keep_trailing_newline=True,
-    )
+    env = template_env(TEMPLATE.parent, undefined_cls=Undefined)
     ctx = {**ROLE_DEFAULTS, **STUBS, "playbook_dir": str(ANSIBLE)}
     # The real lookup, because discord.json embeds files/discord-message.liquid with
     # lookup('file') | to_json and a stub would let a broken embed through.
     env.globals["lookup"] = make_lookup(ctx)
-    register_ansible_filters(env)
     rendered = env.get_template(TEMPLATE.name).render(**ctx)
     doc = yaml_fast.safe_load(rendered)
     return {name: json.loads(body) for name, body in doc["stringData"].items()}

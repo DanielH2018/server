@@ -31,15 +31,13 @@ must keep every host, beside the gated one that must not.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_block_gate.py
 """
 
-from pathlib import Path
-
 import pytest
 import yaml
 
 import land_reach
 from lib import yaml_fast
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 _ROLE = "deploy_ui"
 _MAIN = "ansible/roles/setup/deploy_ui/tasks/main.yml"

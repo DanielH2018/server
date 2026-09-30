@@ -11,14 +11,13 @@ bug otherwise). Step 6 is untouched -- the gate still runs over every tag.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_skips_a_deploy_the_tick_already_applied.py
 """
 
-from pathlib import Path
-
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
 from deploy_tools.land_lib import deploy
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _DEPLOY_NARROW = _REPO / "ansible/roles/setup/gitops_deploy/files/deploy_narrow.py"
 
 APPLIED_AT = "f" * 40

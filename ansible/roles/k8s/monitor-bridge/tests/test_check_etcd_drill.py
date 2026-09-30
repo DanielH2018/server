@@ -8,9 +8,8 @@ restore path is unproven, which is the only failure mode that matters here.
 """
 
 import os
-from pathlib import Path
-
 from dataclasses import replace
+from pathlib import Path
 
 import pytest
 import yaml
@@ -19,7 +18,7 @@ import checks.service
 import check
 import registry
 
-_REPO = Path(__file__).resolve().parents[5]
+
 # Stamps are dated against this epoch and the check reads the same one, so "1.0 days ago"
 # is exact rather than a rounding of wall time (#2158).
 DRILL_NOW = 1_780_000_000.0

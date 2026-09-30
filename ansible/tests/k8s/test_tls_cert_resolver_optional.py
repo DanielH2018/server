@@ -18,8 +18,9 @@ which is the one where the mistake is reachable.
 """
 
 from lib import yaml_fast
-from jinja2 import Environment
+from jinja2 import Undefined
 
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ALL_VARS, ANSIBLE
 
 MACRO = ANSIBLE / "templates" / "ingressroute.yml.j2"
@@ -41,7 +42,7 @@ _CALLS = {
 def _routes(macro_call: str, resolver: str) -> list[dict]:
     source = MACRO.read_text() + "\n" + macro_call
     rendered = (
-        Environment(autoescape=False)
+        make_ansible_env(undefined_cls=Undefined)
         .from_string(source)
         .render({**_CONTEXT, RESOLVER_VAR: resolver})
     )

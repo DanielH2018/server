@@ -26,6 +26,8 @@ import re
 import pytest
 import yaml
 
+from lib.repo_paths import REPO as _REPO
+
 from _helpers import manifests_rollout_timeout_s
 from _role_tasks import in_role_wait_s
 
@@ -136,7 +138,6 @@ _INITIAL_SETUP_TEMPLATES = (
     pathlib.Path(__file__).parents[2] / "initial_setup" / "templates"
 )
 _SECRET_ROTATE = _INITIAL_SETUP_TEMPLATES / "secret-rotate.sh.j2"
-_REPO = pathlib.Path(__file__).parents[5]
 
 # Every job that waits for /var/lock/server-git-tree.lock, with the regex that reads its wait.
 #

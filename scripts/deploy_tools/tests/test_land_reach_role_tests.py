@@ -20,13 +20,10 @@ answer either way, so a later narrowing of `tasks/` cannot silence it.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
 """
 
-from pathlib import Path
-
-
 import land_reach
 import land_tags
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 _ROLE = "gitops_deploy"
 _FILES = "ansible/roles/setup/gitops_deploy/files/deploy_state.py"

@@ -21,10 +21,11 @@ Run: uv run pytest ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight
 import re
 
 import pytest
-from jinja2 import Environment
+from jinja2 import Undefined
 from jinja2.exceptions import UndefinedError
 
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
 
@@ -199,7 +200,7 @@ _MACRO_CTX = {
 
 def _render_monitoring_call(call: str) -> str:
     return (
-        Environment(autoescape=False)
+        make_ansible_env(undefined_cls=Undefined)
         .from_string(_MACRO_SRC + "\n" + call)
         .render(_MACRO_CTX)
     )

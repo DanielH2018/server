@@ -16,8 +16,9 @@ from pathlib import Path as _Path
 import yaml
 from validate.k8s_manifests import make_env, make_lookup, register_ansible_filters
 
+from lib.repo_paths import REPO
+
 ROLE = _Path(__file__).resolve().parents[1]
-REPO = ROLE.parents[3]
 _sys.path.insert(0, str(ROLE / "files"))
 
 from render_maintenance import window_cron  # noqa: E402

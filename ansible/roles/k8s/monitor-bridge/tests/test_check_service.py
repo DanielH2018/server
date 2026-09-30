@@ -5,7 +5,6 @@ API and decides, where a host check reads a sensor.
 """
 
 from datetime import datetime, timezone, timedelta
-from pathlib import Path
 
 from dataclasses import replace
 
@@ -15,7 +14,6 @@ import bridge.config
 import bridge.net
 import checks.service
 
-_REPO = Path(__file__).resolve().parents[5]
 
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
 N8N_ISO = N8N_NOW.isoformat()  # check_n8n gets the same instant, not wall time (#2158)

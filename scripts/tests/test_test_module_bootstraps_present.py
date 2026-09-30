@@ -53,7 +53,7 @@ from test_script_bootstraps_present import (
     is_pytest_only,
 )
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
 
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())
 _INI = _PYPROJECT["tool"]["pytest"]["ini_options"]

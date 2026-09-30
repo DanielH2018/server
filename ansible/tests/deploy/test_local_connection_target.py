@@ -22,6 +22,7 @@ import pytest
 from lib import yaml_fast
 
 from _helpers import ANSIBLE
+from lib.ansible_jinja_env import make_ansible_env
 
 PREAMBLE = ANSIBLE / "pre_tasks" / "load_secrets.yml"
 INVENTORY = ANSIBLE / "inventory" / "hosts.ini"
@@ -55,7 +56,7 @@ def _evaluate(expression, *, inventory_hostname, connection, running_on):
     Ansible evaluates `that:` as a Jinja expression, so this is the same decision the play
     makes — not a re-implementation of it.
     """
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     env.globals["lookup"] = lambda kind, arg: (
         running_on
         if (kind, arg) == ("pipe", "hostname")

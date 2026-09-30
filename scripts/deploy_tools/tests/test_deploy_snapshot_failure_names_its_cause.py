@@ -24,7 +24,8 @@ from _deploy_sh_fakes import (
     make_snapshot_repo,
 )
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 _SNAPSHOT_FAILED = 77
 

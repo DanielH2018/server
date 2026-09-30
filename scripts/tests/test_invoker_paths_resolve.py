@@ -49,7 +49,7 @@ from lib.invocation_sites import (
     workflow_run_steps as _shared_workflow_run_steps,
 )
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
 
 _TOKEN_RE = re.compile(r"scripts/[\w./-]+\.(?:py|sh)")
 
