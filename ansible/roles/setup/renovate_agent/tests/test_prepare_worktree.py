@@ -15,12 +15,12 @@ import json
 import os
 import pathlib
 import re
-import subprocess
 import sys
 
 sys.path.insert(0, str(pathlib.Path(__file__).resolve().parents[1] / "files"))
 import pytest
 import renovate_agent
+from lib.git_testing import commit, git_out, init_repo, scrub_process_git_env
 
 # Mirrors scripts/dev/prune_worktrees.py's LOCK_OWNER — the lock reason must parse the same way
 # session_is_alive() parses it, or a live run's lock reads as "unrecognized format" there too
@@ -183,20 +183,6 @@ class TestReusabilityDoesNotReadThePrimaryCheckout:
         assert not reusable and "uncommitted changes" in why
 
 
-def _git(repo: pathlib.Path, *args: str) -> str:
-    """Run git in `repo` with every inherited GIT_* variable removed.
-
-    Same reason as scripts/dev/tests/test_prune_worktrees.py: under a pre-commit hook git
-    exports GIT_DIR into the process, and `-C` does not override it.
-    """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args], cwd=repo, env=env, check=True, capture_output=True, text=True
-    ).stdout
-
-
 def _repo_with_run_worktree(tmp_path, monkeypatch) -> tuple[pathlib.Path, pathlib.Path]:
     """A scratch repo whose `origin/master` holds two commits, plus the run worktree on
     `worktree-renovate-auto` at the second one. The worktree's branch starts level with master.
@@ -204,19 +190,13 @@ def _repo_with_run_worktree(tmp_path, monkeypatch) -> tuple[pathlib.Path, pathli
     Scrubs GIT_* from the environment for the code under test too: worktree_is_reusable's
     own git calls take no environment and would otherwise resolve to the live repository.
     """
-    for var in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(var, raising=False)
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(repo, "init", "-q", "--initial-branch=master")
-    (repo / "a.txt").write_text("one\n")
-    _git(repo, "add", "a.txt")
-    _git(repo, "commit", "-q", "-m", "init", "--no-gpg-sign")
-    (repo / "a.txt").write_text("two\n")
-    _git(repo, "commit", "-q", "-am", "base", "--no-gpg-sign")
-    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    scrub_process_git_env(monkeypatch)
+    repo = init_repo(tmp_path / "repo")
+    commit(repo, "init", **{"a.txt": "one\n"})
+    commit(repo, "base", **{"a.txt": "two\n"})
+    git_out(repo, "update-ref", "refs/remotes/origin/master", "master")
     wt = repo / ".claude" / "worktrees" / "renovate-auto"
-    _git(
+    git_out(
         repo, "worktree", "add", "-q", "-b", "worktree-renovate-auto", str(wt), "master"
     )
     return repo, wt
@@ -232,15 +212,15 @@ class TestReusabilityAsksAboutContentNotAncestry:
     def test_a_squash_landed_branch_is_reusable(self, tmp_path, monkeypatch) -> None:
         repo, wt = _repo_with_run_worktree(tmp_path, monkeypatch)
         (wt / "a.txt").write_text("three\n")
-        _git(wt, "commit", "-q", "-am", "bump one", "--no-gpg-sign")
+        git_out(wt, "commit", "-q", "-am", "bump one", "--no-gpg-sign")
         (wt / "b.txt").write_text("new\n")
-        _git(wt, "add", "b.txt")
-        _git(wt, "commit", "-q", "-m", "bump two", "--no-gpg-sign")
-        _git(repo, "merge", "--squash", "-q", "worktree-renovate-auto")
-        _git(repo, "commit", "-q", "-m", "squash of both", "--no-gpg-sign")
-        _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+        git_out(wt, "add", "b.txt")
+        git_out(wt, "commit", "-q", "-m", "bump two", "--no-gpg-sign")
+        git_out(repo, "merge", "--squash", "-q", "worktree-renovate-auto")
+        git_out(repo, "commit", "-q", "-m", "squash of both", "--no-gpg-sign")
+        git_out(repo, "update-ref", "refs/remotes/origin/master", "master")
         # The stuck state itself: ancestry still counts the two commits as unlanded.
-        ahead = _git(
+        ahead = git_out(
             repo, "rev-list", "--count", "origin/master..worktree-renovate-auto"
         )
         assert ahead.strip() == "2"
@@ -254,7 +234,7 @@ class TestReusabilityAsksAboutContentNotAncestry:
     def test_a_revert_only_branch_is_refused(self, tmp_path, monkeypatch) -> None:
         """Merging a revert changes master's tree, so the branch still holds work."""
         repo, wt = _repo_with_run_worktree(tmp_path, monkeypatch)
-        _git(wt, "revert", "--no-edit", "--no-gpg-sign", "HEAD")
+        git_out(wt, "revert", "--no-edit", "--no-gpg-sign", "HEAD")
 
         reusable, why = renovate_agent.worktree_is_reusable(
             str(repo), str(wt), "worktree-renovate-auto"

@@ -5,17 +5,20 @@ Both the `hooks` and the `ansible_lint` job decide `mode=full|scoped|none` in a 
 (an empty merge fails) and `test_hook_config_changes_run_the_hook.py` (a hook-config edit forces
 the full sweep). The harness lives here, at the `pythonpath` root, so neither imports the other.
 
+The scratch repository itself comes from `lib.git_testing`; `leakguard.py` names this
+module's old private copy of that scrub as the shape the shared one was promoted from.
+
 The script is extracted from the workflow and run with the step's own `env:` block, so a
 variable the step declares (`FULL_SWEEP_PATHS`) reaches it the way the runner supplies it, and
 a `${{ }}` expression in that block is replaced by the caller's value rather than passed raw.
 """
 
-import os
 import subprocess
 from pathlib import Path
 
 from _helpers import REPO
 from lib import yaml_fast
+from lib.git_testing import commit, git, init_repo, scrubbed_env
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
@@ -46,53 +49,13 @@ def full_sweep_paths(workflow_text: str, job: str) -> list[str]:
     return [line for line in block.splitlines() if line.strip()]
 
 
-def scrubbed_env() -> dict[str, str]:
-    """The real environment minus every GIT_* variable, plus a scratch identity.
-
-    `prek`'s pytest hook runs with `GIT_DIR` set, and git resolves that before `cwd`, so an
-    unscrubbed call reads and writes the real checkout. `GIT_CONFIG_GLOBAL` goes to /dev/null
-    because this host configures SSH commit signing globally, which a scratch commit cannot
-    satisfy."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    env["GIT_CONFIG_GLOBAL"] = env["GIT_CONFIG_SYSTEM"] = os.devnull
-    return env
-
-
-def git(cwd: Path, *args: str) -> str:
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        env=scrubbed_env(),
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout.strip()
-
-
-def commit(repo: Path, message: str, **files: str | None) -> str:
-    """Write (or delete, for None) each file, commit, return the SHA."""
-    for name, content in files.items():
-        path = repo / name
-        if content is None:
-            path.unlink()
-        else:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            path.write_text(content)
-    git(repo, "add", "-A")
-    git(repo, "commit", "-q", "-m", message)
-    return git(repo, "rev-parse", "HEAD")
-
-
 def make_clone(tmp_path: Path) -> Path:
     """A clone of a bare `origin` whose master holds one commit, checked out on master.
 
     A plain function rather than a fixture: a fixture imported into a test module is a
     redefinition to ruff (F811) once a test names it as a parameter, so each module wraps
     this in its own three-line `clone` fixture instead."""
-    origin = tmp_path / "origin.git"
-    git(tmp_path, "init", "-q", "--bare", "-b", "master", str(origin))
+    origin = init_repo(tmp_path / "origin.git", bare=True)
     repo = tmp_path / "clone"
     git(tmp_path, "clone", "-q", str(origin), str(repo))
     git(repo, "checkout", "-q", "-b", "master")

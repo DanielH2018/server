@@ -1,44 +1,20 @@
 """fact_status.py: exit codes and the text a CI failure prints."""
 
-import subprocess
-
 from fact_status import _USAGE, main
+from lib.git_testing import git, init_repo
 from lib.facts.lock import read_lock
 
 
 def _repo(tmp_path):
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
+    init_repo(tmp_path)
     (tmp_path / "t").mkdir()
     (tmp_path / "t" / "m.py").write_text("LIMIT = 85\nOTHER = 1\n")
     (tmp_path / "CLAUDE.md").write_text(
         "## Gate\n`t/m.py:LIMIT` bounds it.\n\n## Style\nwhy, not what.\n"
     )
     (tmp_path / "docs").mkdir()
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
-    subprocess.run(
-        [
-            "git",
-            "-c",
-            "user.name=t",
-            "-c",
-            "user.email=t@x",
-            "commit",
-            "-q",
-            "-m",
-            "i",
-            "--no-gpg-sign",
-        ],
-        cwd=tmp_path,
-        check=True,
-        env=env,
-    )
+    git(tmp_path, "add", "-A")
+    git(tmp_path, "commit", "-q", "-m", "i", "--no-gpg-sign")
     return tmp_path
 
 

@@ -7,7 +7,6 @@ Its siblings in test_fanout_clean.py drive `clean_one` through its seams, which 
 Run: uv run pytest scripts/dev/tests/test_fanout_clean_real_git.py
 """
 
-import os
 import shutil
 import subprocess
 from pathlib import Path
@@ -15,45 +14,20 @@ from pathlib import Path
 import pytest
 
 from fanout_lib.clean import clean_one
+from lib.git_testing import git, init_repo, scrub_process_git_env
 from prune_worktrees import Worktree, parse_worktree_list, remove
 
 
-def _git(repo: Path, *args: str, capture: bool = False) -> subprocess.CompletedProcess:
-    """Run git in `repo` with every inherited GIT_* variable removed.
-
-    Same identity-in-env approach as test_prune_worktrees.py's own `_git` helper: a bare
-    `git config user.email` resolves GIT_DIR before `-C`, which would write the test
-    identity into the real repository under a pre-commit hook rather than this scratch
-    one — `prek`'s own `pytest` hook runs with `GIT_DIR` set, and every read here needs the
-    same scrubbing as every write, or `git -C <repo>` silently reads the real checkout
-    instead (confirmed: `prek run --all-files` failed both missing-directory tests below on
-    exactly this before the reads were routed through here too).
-    """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        env=env,
-        check=True,
-        capture_output=capture,
-        text=capture,
-    )
-
-
 def _init_scratch_repo(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    _git(path, "init", "-q", "--initial-branch=master")
-    _git(path, "commit", "-q", "-m", "init", "--allow-empty", "--no-gpg-sign")
+    init_repo(path, initial_commit="init")
 
 
 def _worktree_list(repo: Path) -> str:
-    return _git(repo, "worktree", "list", "--porcelain", capture=True).stdout
+    return git(repo, "worktree", "list", "--porcelain").stdout
 
 
 def _branches(repo: Path) -> str:
-    return _git(repo, "branch", "--list", capture=True).stdout
+    return git(repo, "branch", "--list").stdout
 
 
 def _scrub_git_env(monkeypatch) -> None:
@@ -62,11 +36,9 @@ def _scrub_git_env(monkeypatch) -> None:
     `remove()` and `clean_one`'s own `git branch -D` call take no environment argument, so
     this is the only way to keep their subprocess calls off the real repository: under
     `prek`'s own `pytest` hook, `GIT_DIR` is set in the environment, and `-C <scratch repo>`
-    does not override an inherited `GIT_DIR`. Same approach as
-    test_prune_worktrees.py's own `test_remove_actually_deletes_a_locked_worktree_on_disk`.
+    does not override an inherited `GIT_DIR`.
     """
-    for var in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(var, raising=False)
+    scrub_process_git_env(monkeypatch)
 
 
 def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_dropped(
@@ -81,7 +53,7 @@ def test_a_missing_worktree_directory_is_deregistered_and_its_merged_branch_drop
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
     shutil.rmtree(wt)
     porcelain = _worktree_list(repo)
     assert "prunable" in porcelain  # the scenario this test exists to cover
@@ -105,7 +77,7 @@ def test_a_present_merged_worktree_is_removed_and_its_branch_dropped(
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "done-branch", str(wt))
+    git(repo, "worktree", "add", "-q", "-b", "done-branch", str(wt))
     tree = next(
         t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
     )
@@ -122,7 +94,7 @@ def test_a_missing_worktree_directory_keeps_its_unmerged_branch(tmp_path, monkey
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
     shutil.rmtree(wt)
     tree = next(
         t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
@@ -146,7 +118,7 @@ def test_a_failed_branch_delete_on_a_missing_tree_is_reported_as_kept(
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
+    git(repo, "worktree", "add", "-q", "-b", "gone-branch", str(wt))
     shutil.rmtree(wt)
     registered = next(
         t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
@@ -183,8 +155,8 @@ def test_a_worktree_whose_submodule_gitdir_dangles_is_kept_and_names_the_git_err
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "broken-sub", str(wt))
-    _git(
+    git(repo, "worktree", "add", "-q", "-b", "broken-sub", str(wt))
+    git(
         wt,
         "-c",
         "protocol.file.allow=always",
@@ -194,11 +166,11 @@ def test_a_worktree_whose_submodule_gitdir_dangles_is_kept_and_names_the_git_err
         str(upstream),
         "sub",
     )
-    _git(wt, "commit", "-q", "-m", "add sub", "--no-gpg-sign")
+    git(wt, "commit", "-q", "-m", "add sub", "--no-gpg-sign")
     (wt / "sub" / ".git").write_text("gitdir: ../../nowhere/modules/sub\n")
     # The scenario this test exists to cover: git itself cannot read the tree.
     with pytest.raises(subprocess.CalledProcessError):
-        _git(wt, "status", "--porcelain", capture=True)
+        git(wt, "status", "--porcelain")
     tree = next(
         t for t in parse_worktree_list(_worktree_list(repo)) if t.path == str(wt)
     )

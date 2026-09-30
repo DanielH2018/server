@@ -67,10 +67,14 @@ appear in zero child environments, and all twelve `clone`/`fetch` calls name a l
 
 `git commit` exports `GIT_DIR` and `GIT_INDEX_FILE` to its hooks, and git resolves those
 before `-C` or `cwd`. So a test that `prek`'s pytest hook runs, and that runs `git -C
-<tmp_path> commit`, writes the REAL repository. Fourteen tests each scrub the variables for
-themselves (`_ci_scoping.scrubbed_env` is the shared shape); this plugin does it once, for
-every test, at load. `GIT_HOOK_VARS` is the set and `strip_git_hook_env` the seam
-`test_leakguard.py` drives.
+<tmp_path> commit`, writes the REAL repository. This plugin strips them once, for every test,
+at load. `GIT_HOOK_VARS` is the set and `strip_git_hook_env` the seam `test_leakguard.py`
+drives.
+
+A test that BUILDS a scratch repository needs two things this plugin cannot supply: a commit
+identity, and `GIT_CONFIG_GLOBAL` pointed at the null device so this host's global SSH commit
+signing stays out. `lib.git_testing` is that helper, and
+`scripts/tests/test_scratch_repos_go_through_git_testing.py` refuses a hand-rolled one.
 
 `ansible-playbook` — six tests in `ansible/tests/longhorn/` deliberately run a real play
 against `localhost`, and a stub returning a fixed exit code fails all six. Their remaining

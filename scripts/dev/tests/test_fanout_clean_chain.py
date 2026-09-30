@@ -26,46 +26,30 @@ import subprocess
 
 from fanout_lib.clean import remote_clean_command
 from fanout_lib.manifest import Batch
+from lib.git_testing import git, git_out, init_repo, scrubbed_env
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
 
 
 def _scrubbed_env(extra_path=None):
-    """The real environment minus every GIT_* variable, plus a scratch identity.
+    """`lib.git_testing.scrubbed_env`, with `extra_path` prepended to PATH.
 
-    `prek`'s pytest hook runs with `GIT_DIR` set, and git resolves that before `-C`, so an
-    unscrubbed call reads and writes the real checkout however carefully `-C` is aimed —
-    the same trap `test_fanout_clean.py`'s own `_git` documents. `GIT_CONFIG_GLOBAL` goes to
-    /dev/null because this host configures SSH commit signing globally, which a scratch
-    commit inheriting it cannot satisfy.
+    The chain under test runs through a stub `bin` directory, which is the one thing the
+    shared scrub does not know about.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    env["GIT_CONFIG_GLOBAL"] = env["GIT_CONFIG_SYSTEM"] = os.devnull
+    env = scrubbed_env()
     if extra_path:
         env["PATH"] = f"{extra_path}{os.pathsep}{env['PATH']}"
     return env
 
 
-def _git(cwd, *args, capture=False):
-    return subprocess.run(
-        ["git", *args],
-        cwd=cwd,
-        env=_scrubbed_env(),
-        check=True,
-        capture_output=capture,
-        text=capture,
-    )
-
-
 def _branches(repo):
-    return _git(repo, "branch", "--list", capture=True).stdout
+    return git(repo, "branch", "--list").stdout
 
 
 def _registrations(repo):
-    return _git(repo, "worktree", "list", "--porcelain", capture=True).stdout
+    return git(repo, "worktree", "list", "--porcelain").stdout
 
 
 def _scratch_with_a_gone_worktree(tmp_path):
@@ -79,19 +63,15 @@ def _scratch_with_a_gone_worktree(tmp_path):
     Returns:
         `(repo, worktree path, the branch's tip SHA)`.
     """
-    origin = tmp_path / "origin.git"
-    _git(tmp_path, "init", "-q", "--bare", str(origin))
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    _git(repo, "init", "-q", "--initial-branch=master")
-    _git(repo, "commit", "-q", "-m", "init", "--allow-empty", "--no-gpg-sign")
-    _git(repo, "remote", "add", "origin", str(origin))
-    _git(repo, "push", "-q", "origin", "master")
+    origin = init_repo(tmp_path / "origin.git", bare=True)
+    repo = init_repo(tmp_path / "repo", initial_commit="init")
+    git(repo, "remote", "add", "origin", str(origin))
+    git(repo, "push", "-q", "origin", "master")
     worktree = tmp_path / "w"
-    _git(repo, "worktree", "add", "-q", "-b", BRANCH, str(worktree))
-    _git(worktree, "commit", "-q", "-m", "work", "--allow-empty", "--no-gpg-sign")
-    tip = _git(repo, "rev-parse", f"refs/heads/{BRANCH}", capture=True).stdout.strip()
-    _git(repo, "worktree", "lock", "--reason", UNIT, str(worktree))
+    git(repo, "worktree", "add", "-q", "-b", BRANCH, str(worktree))
+    git(worktree, "commit", "-q", "-m", "work", "--allow-empty", "--no-gpg-sign")
+    tip = git_out(repo, "rev-parse", f"refs/heads/{BRANCH}")
+    git(repo, "worktree", "lock", "--reason", UNIT, str(worktree))
     shutil.rmtree(worktree)
     return repo, worktree, tip
 
@@ -191,7 +171,7 @@ def test_the_chain_deregisters_only_this_batchs_worktree(tmp_path):
     """
     repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
     sibling = tmp_path / "sibling"
-    _git(repo, "worktree", "add", "-q", "-b", "worktree-other", str(sibling))
+    git(repo, "worktree", "add", "-q", "-b", "worktree-other", str(sibling))
     shutil.rmtree(sibling)
     _run_chain(repo, worktree, _stub_bin(tmp_path, f"{tip}\n"))
     registrations = _registrations(repo)
@@ -277,9 +257,9 @@ def test_a_directory_that_is_no_longer_a_checkout_reads_as_gone(tmp_path):
 def test_a_directory_that_is_still_a_checkout_reaches_clean_one(tmp_path):
     """The reject half: a live worktree is judged by `clean-one`, never by the shell chain."""
     repo, worktree, tip = _scratch_with_a_gone_worktree(tmp_path)
-    _git(repo, "worktree", "unlock", str(worktree))
-    _git(repo, "worktree", "remove", "--force", str(worktree))
-    _git(repo, "worktree", "add", "-q", str(worktree), BRANCH)
+    git(repo, "worktree", "unlock", str(worktree))
+    git(repo, "worktree", "remove", "--force", str(worktree))
+    git(repo, "worktree", "add", "-q", str(worktree), BRANCH)
     stub_bin = _stub_uv(_stub_bin(tmp_path, f"{tip}\n"))
     proc = _run_chain(repo, worktree, stub_bin)
     assert proc.stdout.strip() == "kept: by-uv"

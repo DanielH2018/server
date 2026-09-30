@@ -5,8 +5,6 @@ non-mapping file to ``{}``; the shared one must keep doing so, or a host_vars fi
 top level is a list reaches a ``.get`` several calls later.
 """
 
-import os
-import subprocess
 from pathlib import Path
 
 from render_guard import (
@@ -20,6 +18,7 @@ from render_guard import (
     service_tags_at_or_none,
 )
 from repo_paths import ANSIBLE, INVENTORY, ROLES
+from lib.git_testing import commit, init_repo
 
 # One commit declaring a service, and one adding a second. `deploy.sh --at <sha>` validates
 # its tags against the commit it renders, so the answer must move with the ref.
@@ -33,33 +32,25 @@ def _tags_repo(tmp_path: Path, *texts: str | dict[str, str]) -> list[str]:
     A str is `daniel-box.yml`'s text; a dict is `{file name: text}` for a commit that writes
     several hosts at once.
 
-    Every ``GIT_*`` variable is scrubbed: under a prek hook an inherited ``GIT_DIR`` beats
-    ``cwd``, and these commits would land in the real repository.
+    `lib.git_testing` scrubs every ``GIT_*`` variable: under a prek hook an inherited
+    ``GIT_DIR`` beats ``cwd``, and these commits would land in the real repository.
     """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env |= {
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.invalid",
-        "GIT_COMMITTER_EMAIL": "t@example.invalid",
-    }
-
-    def run(*args: str) -> str:
-        return subprocess.run(
-            args, cwd=tmp_path, env=env, check=True, capture_output=True, text=True
-        ).stdout.strip()
-
-    run("git", "init", "-q", "-b", "master")
+    init_repo(tmp_path)
     host_vars = tmp_path / HOST_VARS_IN_TREE
     host_vars.mkdir(parents=True)
     shas = []
     for n, text in enumerate(texts):
         files = text if isinstance(text, dict) else {"daniel-box.yml": text}
-        for name, content in files.items():
-            (host_vars / name).write_text(content)
-        run("git", "add", "-A")
-        run("git", "commit", "-q", "-m", f"c{n}", "--no-gpg-sign")
-        shas.append(run("git", "rev-parse", "HEAD"))
+        shas.append(
+            commit(
+                tmp_path,
+                f"c{n}",
+                **{
+                    f"{HOST_VARS_IN_TREE}/{name}": content
+                    for name, content in files.items()
+                },
+            )
+        )
     return shas
 
 

@@ -10,8 +10,6 @@ environment: when pytest runs from a pre-commit hook, GIT_DIR/GIT_INDEX_FILE are
 That failure is invisible standalone — the run that can't see it is the one that causes it.
 """
 
-import os
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -25,40 +23,22 @@ from deploy_staleness import (
     unscoped_reason,
 )
 from lib.deployer_park import BEHIND_PARK_SECONDS
+from lib.git_testing import commit, git_out, init_repo
 from lib.gitops_markers import MARKERS
 
 
-def _git(repo: Path, *args: str) -> str:
-    """Run git in `repo` with every inherited GIT_* variable removed."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args],
-        cwd=repo,
-        env=env,
-        check=True,
-        capture_output=True,
-        text=True,
-    ).stdout
-
-
 def _commit(repo: Path, name: str) -> None:
-    (repo / name).write_text(name)
-    _git(repo, "add", name)
-    _git(repo, "commit", "-m", name, "--no-gpg-sign")
+    commit(repo, name, **{name: name})
 
 
 @pytest.fixture
 def repos(tmp_path):
     """An 'origin' with one commit, and a clone tracking it. Returns (origin, clone)."""
-    origin = tmp_path / "origin"
-    origin.mkdir()
-    _git(origin, "init", "-q", "-b", "master")
+    origin = init_repo(tmp_path / "origin")
     _commit(origin, "base")
 
     clone = tmp_path / "clone"
-    _git(tmp_path, "clone", "-q", str(origin), str(clone))
+    git_out(tmp_path, "clone", "-q", str(origin), str(clone))
     return origin, clone
 
 
@@ -80,7 +60,7 @@ def test_a_tree_ahead_only_is_not_behind(repos):
 def test_a_tree_behind_is_detected(repos):
     origin, clone = repos
     _commit(origin, "theirs")
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     assert behind_ahead(clone, "origin/master") == (1, 0)
 
 
@@ -89,7 +69,7 @@ def test_the_incident_shape_is_behind_and_ahead(repos):
     origin, clone = repos
     _commit(origin, "theirs")
     _commit(clone, "mine")
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     behind, ahead = behind_ahead(clone, "origin/master")
     assert behind == 1
     assert ahead == 1
@@ -109,7 +89,7 @@ def test_main_exits_zero_when_only_ahead(repos):
 def test_main_refuses_when_behind(repos):
     origin, clone = repos
     _commit(origin, "theirs")
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     assert main(["--repo", str(clone), "--no-fetch"]) == STALE_EXIT
 
 
@@ -132,18 +112,14 @@ SECRETS = "ansible/vars/secrets.yml"
 
 def _commit_path(repo: Path, path: str) -> None:
     """Commit one file at `path`, directories and all, so the mapper sees a real repo path."""
-    target = repo / path
-    target.parent.mkdir(parents=True, exist_ok=True)
-    target.write_text(path)
-    _git(repo, "add", path)
-    _git(repo, "commit", "-m", path, "--no-gpg-sign")
+    commit(repo, path, **{path: path})
 
 
 def _behind_on(repos, path: str) -> Path:
     """The clone, one commit behind an origin whose new commit touches `path`."""
     origin, clone = repos
     _commit_path(origin, path)
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     return clone
 
 
@@ -249,7 +225,7 @@ def test_exit_four_names_the_parked_deployer_when_one_is_parked(
     """
     origin, clone = repos
     _commit(origin, "theirs")
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     state = _behind_marker(tmp_path, BEHIND_PARK_SECONDS + 600, now=1_700_000_000.0)
     rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
     err = capsys.readouterr().err
@@ -263,7 +239,7 @@ def test_exit_four_says_nothing_extra_when_the_deployer_is_converged(
 ):
     origin, clone = repos
     _commit(origin, "theirs")
-    _git(clone, "fetch", "-q", "origin")
+    git_out(clone, "fetch", "-q", "origin")
     state = tmp_path / "gitops-state"
     state.mkdir()
     rc = main(["--repo", str(clone), "--no-fetch", "--state-dir", str(state)])
@@ -293,7 +269,7 @@ def test_an_unresolvable_ref_does_not_refuse(repos):
 def test_a_deploy_of_the_incoming_commit_is_not_behind_on_it(repos, capsys):
     """The landing shape: the primary is behind, but the commit being deployed is the tip."""
     clone = _behind_on(repos, SONARR)
-    tip = _git(clone, "rev-parse", "origin/master").strip()
+    tip = git_out(clone, "rev-parse", "origin/master")
     rc = main(["--repo", str(clone), "--no-fetch", "--sha", tip, "--tags", "sonarr"])
     assert rc == 0, capsys.readouterr().err
 
@@ -302,7 +278,7 @@ def test_a_sha_that_is_itself_behind_still_refuses(repos, capsys):
     """The rejecting half: naming a commit is not a way past the guard, and the refusal
     names the commit rather than calling it 'this tree'."""
     clone = _behind_on(repos, SONARR)
-    head = _git(clone, "rev-parse", "HEAD").strip()
+    head = git_out(clone, "rev-parse", "HEAD")
     rc = main(["--repo", str(clone), "--no-fetch", "--sha", head, "--tags", "sonarr"])
     err = capsys.readouterr().err
     assert rc == STALE_EXIT

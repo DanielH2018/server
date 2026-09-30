@@ -23,7 +23,6 @@ attached path completes. A rendered-expression test cannot catch this class: the
 Ansible assigns a register, not in any expression's text.
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -32,6 +31,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO as _REPO_ROOT
+from lib.git_testing import init_repo, scrubbed_env
 
 
 # The stub stands in for `k3s kubectl`. It answers each call this role makes, and it learns the
@@ -117,7 +117,7 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
         playbook = play_dir / "play.yml"
         playbook.write_text(_PLAY.format(become_exe=fake_become))
 
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env = scrubbed_env()
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["STUB_STATE"] = str(state_dir)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
@@ -130,18 +130,7 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
         # and shared by every worktree, so a pruned tree's .venv fails this play with rc 127.
         env["ANSIBLE_PYTHON_INTERPRETER"] = sys.executable
 
-        git_env = dict(env)
-        git_env["GIT_AUTHOR_NAME"] = "drill"
-        git_env["GIT_AUTHOR_EMAIL"] = "drill@example.invalid"
-        git_env["GIT_COMMITTER_NAME"] = "drill"
-        git_env["GIT_COMMITTER_EMAIL"] = "drill@example.invalid"
-        for args in (
-            ["git", "init", "-q"],
-            ["git", "commit", "-q", "--allow-empty", "-m", "drill"],
-        ):
-            subprocess.run(
-                args, cwd=tmp_path, env=git_env, check=True, capture_output=True
-            )
+        init_repo(tmp_path, initial_commit="drill")
 
         return subprocess.run(
             ["ansible-playbook", str(playbook), "-i", "localhost,"],

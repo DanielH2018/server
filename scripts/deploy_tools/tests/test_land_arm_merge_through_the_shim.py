@@ -19,6 +19,7 @@ no service tag and no plane. That is far enough to prove `LAND_PRIMARY` reaches 
 import os
 import subprocess
 from pathlib import Path
+from lib.git_testing import scrubbed_env
 
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
@@ -66,7 +67,7 @@ def _run(tmp_path: Path, state: str) -> subprocess.CompletedProcess[str]:
     """
     bin_dir = _stub_bin(tmp_path, state)
     env = {
-        **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        **scrubbed_env(),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "LAND_PRIMARY": str(tmp_path),
     }

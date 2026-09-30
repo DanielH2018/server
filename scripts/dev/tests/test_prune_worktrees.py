@@ -15,6 +15,14 @@ import subprocess
 import sys
 from pathlib import Path
 
+from lib.git_testing import (
+    commit,
+    git,
+    git_out,
+    init_repo,
+    scrub_process_git_env,
+    scrubbed_env,
+)
 from prune_worktrees import (
     KEEP,
     REMOVABLE,
@@ -162,27 +170,9 @@ def test_remove_never_passes_force(monkeypatch):
     assert not any("-f" in c or "--force" in c for c in calls)
 
 
-def _git(repo: Path, *args: str) -> None:
-    """Run git in `repo` with every inherited GIT_* variable removed.
-
-    The identity goes in the environment rather than into `git config`, because a
-    `git config user.email` call resolves GIT_DIR before it resolves `-C` — under a
-    pre-commit hook that writes the test identity into the real repository, which is
-    how t@t.com came to author 170 real commits (2026-08-17). Same pattern as
-    scripts/deploy_tools/tests/test_deploy_staleness.py.
-    """
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    subprocess.run(["git", *args], cwd=repo, env=env, check=True)
-
-
 def _init_scratch_repo(path: Path) -> None:
-    path.mkdir(parents=True, exist_ok=True)
-    _git(path, "init", "-q", "--initial-branch=master")
-    (path / "a.txt").write_text("one\n")
-    _git(path, "add", "a.txt")
-    _git(path, "commit", "-q", "-m", "init", "--no-gpg-sign")
+    init_repo(path)
+    commit(path, "init", **{"a.txt": "one\n"})
 
 
 def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch):
@@ -195,15 +185,15 @@ def test_remove_actually_deletes_a_locked_worktree_on_disk(tmp_path, monkeypatch
     # is the only way to keep them off the real repository. git exports GIT_DIR and
     # GIT_INDEX_FILE into hook processes and `git -C <path>` does NOT override them, so
     # under the prek pre-commit hook an unscrubbed remove() unlocks and deletes worktrees
-    # of the live repo. The fixture's own calls go through _git, which scrubs for itself.
-    for var in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(var, raising=False)
+    # of the live repo. The fixture's own calls go through lib.git_testing, which scrubs
+    # for itself.
+    scrub_process_git_env(monkeypatch)
 
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
     wt = tmp_path / "wt"
-    _git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
-    _git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
+    git(repo, "worktree", "add", "-q", "-b", "feature", str(wt))
+    git(repo, "worktree", "lock", str(wt), "--reason", "test lock")
 
     ok, err = remove(
         str(repo), Worktree(path=str(wt), head="x", branch="feature", locked=True)
@@ -358,45 +348,30 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
 # whole reason the dotfiles hook swept so few, and a mock would happily accept it.
 
 
-def _scrub_git_env(monkeypatch) -> None:
-    """Drop every inherited GIT_* variable, as the on-disk removal test does and why."""
-    for var in [name for name in os.environ if name.startswith("GIT_")]:
-        monkeypatch.delenv(var, raising=False)
-
-
 def _branch_names(repo: Path) -> list[str]:
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    out = subprocess.run(
-        ["git", "branch", "--format=%(refname:short)"],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
-    return out.stdout.split()
+    return git_out(repo, "branch", "--format=%(refname:short)").split()
 
 
 def _repo_with_branches(tmp_path: Path) -> Path:
     """A scratch repo carrying one branch of each class the sweep has to tell apart."""
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
-    _git(
+    git(
         repo, "branch", "worktree-ancestry"
     )  # tip IS master: `git branch -d` accepts it
-    _git(repo, "branch", "feature-landed")  # merged, but not a session branch
-    _git(repo, "checkout", "-q", "-b", "worktree-open")
+    git(repo, "branch", "feature-landed")  # merged, but not a session branch
+    git(repo, "checkout", "-q", "-b", "worktree-open")
     (repo / "b.txt").write_text("two\n")
-    _git(repo, "add", "b.txt")
-    _git(repo, "commit", "-q", "-m", "open work", "--no-gpg-sign")
-    _git(repo, "checkout", "-q", "master")
-    _git(repo, "worktree", "add", "-q", "-b", "worktree-live", str(tmp_path / "live"))
-    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    git(repo, "add", "b.txt")
+    git(repo, "commit", "-q", "-m", "open work", "--no-gpg-sign")
+    git(repo, "checkout", "-q", "master")
+    git(repo, "worktree", "add", "-q", "-b", "worktree-live", str(tmp_path / "live"))
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
     return repo
 
 
 def test_the_sweep_sees_only_session_branches_no_worktree_holds(tmp_path, monkeypatch):
-    _scrub_git_env(monkeypatch)
+    scrub_process_git_env(monkeypatch)
     repo = _repo_with_branches(tmp_path)
 
     # feature-landed is excluded by the prefix though it is merged; worktree-live is excluded
@@ -407,7 +382,7 @@ def test_the_sweep_sees_only_session_branches_no_worktree_holds(tmp_path, monkey
 def test_an_unmerged_session_branch_is_never_swept(tmp_path, monkeypatch):
     # The RED half. worktree-open carries a commit master does not have, so no local layer
     # settles it and it must survive a sweep that deletes its neighbour.
-    _scrub_git_env(monkeypatch)
+    scrub_process_git_env(monkeypatch)
     repo = _repo_with_branches(tmp_path)
 
     landed = landed_orphan_branches(str(repo), deep=True)
@@ -423,16 +398,16 @@ def test_a_rebase_landed_branch_is_deleted_though_git_branch_d_refuses_it(
 ):
     # The case the dotfiles hook could not sweep: the commit's content is on master under a
     # different sha, so the tip is not an ancestor and `-d` says "not fully merged".
-    _scrub_git_env(monkeypatch)
+    scrub_process_git_env(monkeypatch)
     repo = _repo_with_branches(tmp_path)
-    _git(repo, "checkout", "-q", "-b", "worktree-rebased")
+    git(repo, "checkout", "-q", "-b", "worktree-rebased")
     (repo / "c.txt").write_text("three\n")
-    _git(repo, "add", "c.txt")
-    _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
-    _git(repo, "checkout", "-q", "master")
+    git(repo, "add", "c.txt")
+    git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
+    git(repo, "checkout", "-q", "master")
     # -x forces a new SHA: a same-second cherry-pick otherwise reproduces the original's.
-    _git(repo, "cherry-pick", "-x", "worktree-rebased")
-    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    git(repo, "cherry-pick", "-x", "worktree-rebased")
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
     assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
     ok, err = delete_branch(str(repo), "worktree-rebased")
@@ -446,16 +421,16 @@ def test_the_shallow_sweep_stops_at_the_bulk_ancestry_layer(tmp_path, monkeypatc
     # settles what one `git branch --merged` settles and nothing more. Asserted by what it
     # MISSES: a rebase-landed branch is exactly the case only the per-branch layers reach, so
     # deep=False returning it would mean it paid for them.
-    _scrub_git_env(monkeypatch)
+    scrub_process_git_env(monkeypatch)
     repo = _repo_with_branches(tmp_path)
-    _git(repo, "checkout", "-q", "-b", "worktree-rebased")
+    git(repo, "checkout", "-q", "-b", "worktree-rebased")
     (repo / "c.txt").write_text("three\n")
-    _git(repo, "add", "c.txt")
-    _git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
-    _git(repo, "checkout", "-q", "master")
+    git(repo, "add", "c.txt")
+    git(repo, "commit", "-q", "-m", "rebased work", "--no-gpg-sign")
+    git(repo, "checkout", "-q", "master")
     # -x forces a new SHA: a same-second cherry-pick otherwise reproduces the original's.
-    _git(repo, "cherry-pick", "-x", "worktree-rebased")
-    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    git(repo, "cherry-pick", "-x", "worktree-rebased")
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
     assert landed_orphan_branches(str(repo), deep=False) == ["worktree-ancestry"]
     assert "worktree-rebased" in landed_orphan_branches(str(repo), deep=True)
@@ -471,16 +446,16 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
     # A subprocess, so main() resolves the checkout itself from cwd: the alternative is
     # patching primary_checkout, and the monkeypatch ratchet in ansible/tests/repo/ only ever
     # falls. CLAUDE_WORKTREE_HOME is inherited, which is how the stand-in reaches it in CI.
-    _scrub_git_env(monkeypatch)
+    scrub_process_git_env(monkeypatch)
     repo = tmp_path / "repo"
     _init_scratch_repo(repo)
-    _git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
-    _git(repo, "update-ref", "refs/remotes/origin/master", "master")
+    git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
+    git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
     run = subprocess.run(
         [sys.executable, str(PRUNER), "--prune"],
         cwd=repo,
-        env={k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        env=scrubbed_env(),
         capture_output=True,
         text=True,
     )

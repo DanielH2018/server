@@ -10,9 +10,9 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_grace.py
 import subprocess
 
 from diagnostics.probe_lib import releases as pr
+from lib.git_testing import git, git_out, scrubbed_env
 
 from _release_fixtures import (
-    _GIT_CLEAN_ENV,
     _commit,
     _init_repo,
     _record,
@@ -21,15 +21,7 @@ from _release_fixtures import (
 
 
 def _committer_time(repo, sha):
-    out = subprocess.run(
-        ["git", "show", "-s", "--format=%ct", sha],
-        cwd=repo,
-        env=_GIT_CLEAN_ENV,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
-    return int(out.strip())
+    return int(git_out(repo, "show", "-s", "--format=%ct", sha))
 
 
 def _stale_role_repo(tmp_path):
@@ -81,15 +73,12 @@ def _commit_dated(repo, files, message, epoch):
         path = repo / rel
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text(content)
-    env = {
-        **_GIT_CLEAN_ENV,
-        "GIT_AUTHOR_DATE": f"@{epoch} +0000",
-        "GIT_COMMITTER_DATE": f"@{epoch} +0000",
-    }
-    subprocess.run(["git", "add", "-A"], cwd=repo, env=env, check=True)
-    subprocess.run(
-        ["git", "commit", "-q", "-m", message], cwd=repo, env=env, check=True
+    env = scrubbed_env(
+        GIT_AUTHOR_DATE=f"@{epoch} +0000",
+        GIT_COMMITTER_DATE=f"@{epoch} +0000",
     )
+    git(repo, "add", "-A", env=env)
+    git(repo, "commit", "-q", "-m", message, env=env)
     return subprocess.run(
         ["git", "rev-parse", "HEAD"],
         cwd=repo,

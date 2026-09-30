@@ -12,12 +12,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_check_mode.py
 """
 
 from diagnostics.probe_lib import releases as pr
+from lib.git_testing import git
 
 from _release_fixtures import (
     _commit,
     _init_repo,
     _record,
-    _run_git,
     _set_origin_master,
 )
 
@@ -210,7 +210,7 @@ def test_the_diff_context_is_pinned_against_a_hosts_git_config(tmp_path):
     """
     repo = tmp_path / "repo"
     _init_repo(repo)
-    _run_git(repo, "config", "diff.context", "0")
+    git(repo, "config", "diff.context", "0")
     path = "ansible/roles/k8s/authelia/tasks/main.yml"
     base = _commit(repo, {path: _AUTHELIA_TASKS}, "baseline")
     tip = _commit(repo, {path: _AUTHELIA_TASKS_CHECK_MODE_GATED}, "gate the reads")

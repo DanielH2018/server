@@ -15,7 +15,8 @@ import pytest
 import narrow_broad
 from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 
-from _narrow_fixtures import DECLARED, GROUP_VARS, Tree, _refs, _repo_git, build_tree
+from _narrow_fixtures import DECLARED, GROUP_VARS, Tree, _refs, build_tree
+from lib.git_testing import git_out
 
 
 @pytest.fixture
@@ -62,7 +63,7 @@ def test_the_command_exits_three_when_a_ref_cannot_be_read(tree: Tree, capsys):
 
     `declared` is left unset on purpose: that is what sends `service_tags_at` at the ref.
     """
-    old = _repo_git(tree.root, "rev-parse", "HEAD")
+    old = git_out(tree.root, "rev-parse", "HEAD")
     rc = narrow_broad.narrow_cmd(old, "0" * 40, cwd=tree.root, callers={})
     assert rc == DEPLOY_BROAD
     assert "could not read the range" in capsys.readouterr().err

@@ -22,6 +22,7 @@ import pytest
 
 import deploy_tags
 import land_tags
+from lib.git_testing import git_out, init_repo
 from deploy_tools.land_lib import tools
 
 # THE RETIREMENT CONVENTION, settled in #2432: a retired role is DELETED, and the same PR
@@ -38,23 +39,6 @@ RETIRED_TAGS: frozenset[str] = frozenset(
 # ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
 
 
-def _repo_git(repo, *args: str) -> str:
-    """Run one git command in `repo` with every inherited GIT_* variable removed.
-
-    Unscrubbed, GIT_DIR/GIT_INDEX_FILE from a prek hook redirect these writes at the real
-    repository — the failure that is invisible from the run that causes it.
-    """
-    import os
-    import subprocess
-
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args], cwd=repo, env=env, check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
 @pytest.fixture
 def two_commit_repo(tmp_path):
     """A repo whose SECOND commit registers `pihole-exporter`; yields (repo, first, second).
@@ -67,15 +51,15 @@ def two_commit_repo(tmp_path):
     inventory.mkdir(parents=True)
     box = inventory / "daniel-box.yml"
     (inventory / "_example.yml").write_text("containers_list:\n  - name: not-a-host\n")
-    _repo_git(repo, "init", "-q", "-b", "master")
+    init_repo(repo)
     box.write_text("containers_list:\n  - name: sonarr\n")
-    _repo_git(repo, "add", "-A")
-    _repo_git(repo, "commit", "-q", "-m", "before", "--no-gpg-sign")
-    first = _repo_git(repo, "rev-parse", "HEAD")
+    git_out(repo, "add", "-A")
+    git_out(repo, "commit", "-q", "-m", "before", "--no-gpg-sign")
+    first = git_out(repo, "rev-parse", "HEAD")
     box.write_text("containers_list:\n  - name: sonarr\n  - name: pihole-exporter\n")
-    _repo_git(repo, "add", "-A")
-    _repo_git(repo, "commit", "-q", "-m", "register it", "--no-gpg-sign")
-    return repo, first, _repo_git(repo, "rev-parse", "HEAD")
+    git_out(repo, "add", "-A")
+    git_out(repo, "commit", "-q", "-m", "register it", "--no-gpg-sign")
+    return repo, first, git_out(repo, "rev-parse", "HEAD")
 
 
 def test_a_tag_registered_at_the_ref_is_declared_there(two_commit_repo):
@@ -108,8 +92,8 @@ def test_an_empty_read_reaches_the_landing_as_none_not_as_an_empty_set(tmp_path)
     """The seam `land_lib` actually reads. `set()` says no service exists anywhere."""
     empty = tmp_path / "empty"
     empty.mkdir()
-    _repo_git(empty, "init", "-q", "-b", "master")
-    _repo_git(empty, "commit", "-q", "--allow-empty", "-m", "nothing", "--no-gpg-sign")
+    init_repo(empty)
+    git_out(empty, "commit", "-q", "--allow-empty", "-m", "nothing", "--no-gpg-sign")
     assert tools.declared_tags_at("HEAD", empty) is None
 
 

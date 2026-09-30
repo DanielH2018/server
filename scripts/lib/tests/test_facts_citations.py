@@ -1,9 +1,8 @@
 """The closed citation grammar: a backticked span is support, rejected, or not a citation."""
 
-import subprocess
-
 import pytest
 
+from lib.git_testing import git, init_repo
 from lib.facts.citations import (
     FORMS,
     REJECT_REASONS,
@@ -178,40 +177,32 @@ fenced code block:
 
 
 def _init(tmp_path):
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
-    return env
+    init_repo(tmp_path)
 
 
 def test_tracked_files_lists_only_tracked(tmp_path):
-    env = _init(tmp_path)
+    _init(tmp_path)
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "x.txt").write_text("x\n")
     (tmp_path / "a" / "untracked.txt").write_text("y\n")
-    subprocess.run(["git", "add", "a/x.txt"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", "a/x.txt")
     assert tracked_files(tmp_path) == frozenset({"a/x.txt"})
 
 
 def test_in_tree_tracked_file_is_clean(tmp_path):
-    env = _init(tmp_path)
+    _init(tmp_path)
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "x.txt").write_text("x\n")
-    subprocess.run(["git", "add", "a/x.txt"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", "a/x.txt")
     tracked = tracked_files(tmp_path)
     assert in_tree(Citation("path", "a/x.txt", "a/x.txt", ""), tracked)
 
 
 def test_in_tree_directory_with_a_tracked_member_is_clean(tmp_path):
-    env = _init(tmp_path)
+    _init(tmp_path)
     (tmp_path / "a" / "sub").mkdir(parents=True)
     (tmp_path / "a" / "sub" / "y.txt").write_text("y\n")
-    subprocess.run(["git", "add", "a"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", "a")
     tracked = tracked_files(tmp_path)
     assert in_tree(Citation("path", "a/sub/", "a/sub/", ""), tracked)
 
@@ -226,11 +217,11 @@ def test_in_tree_untracked_file_is_flagged(tmp_path):
 
 
 def test_in_tree_gitignored_file_is_flagged(tmp_path):
-    env = _init(tmp_path)
+    _init(tmp_path)
     (tmp_path / ".gitignore").write_text("a/ignored.md\n")
     (tmp_path / "a").mkdir()
     (tmp_path / "a" / "ignored.md").write_text("spec\n")
-    subprocess.run(["git", "add", ".gitignore"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", ".gitignore")
     tracked = tracked_files(tmp_path)
     assert not in_tree(Citation("path", "a/ignored.md", "a/ignored.md", ""), tracked)
 
@@ -252,23 +243,14 @@ def test_probe_is_always_in_tree():
 
 
 def test_repo_docs_lists_every_tracked_claude_md(tmp_path):
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
+    init_repo(tmp_path)
     (tmp_path / "CLAUDE.md").write_text("# root\n")
     (tmp_path / "role").mkdir()
     (tmp_path / "role" / "CLAUDE.md").write_text("# role\n")
     (tmp_path / "role" / "README.md").write_text("not a store\n")
     (tmp_path / "untracked").mkdir()
     (tmp_path / "untracked" / "CLAUDE.md").write_text("# not added\n")
-    subprocess.run(
-        ["git", "add", "CLAUDE.md", "role"], cwd=tmp_path, check=True, env=env
-    )
+    git(tmp_path, "add", "CLAUDE.md", "role")
     assert repo_docs(tmp_path) == [
         tmp_path / "CLAUDE.md",
         tmp_path / "role" / "CLAUDE.md",

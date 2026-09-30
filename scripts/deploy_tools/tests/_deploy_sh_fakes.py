@@ -20,9 +20,10 @@ Typical usage example:
 import os
 import re
 import shutil
-import subprocess
 import sys
 from pathlib import Path
+
+from lib.git_testing import git, init_repo, scrub_process_git_env
 
 _REPO = Path(__file__).resolve().parents[3]
 # The module `deploy.sh` reads its service locks from, at the path the wrapper runs it by.
@@ -95,11 +96,15 @@ FAKE_RECAP = (
 
 
 def git_free_env(**overrides: str) -> dict[str, str]:
-    """`os.environ` with every `GIT_*` variable removed, plus `overrides`.
+    """The environment a `deploy.sh` child runs under: no `GIT_*`, plus `overrides`.
 
     Under a prek hook the environment carries `GIT_DIR` and `GIT_INDEX_FILE` pointing at the
     REAL repository, and those beat the child's working directory — so a run that looks scoped
     to a tmp_path would snapshot, and create worktrees in, this checkout.
+
+    This is `lib.git_testing.scrubbed_env` without the scratch commit identity: the subject
+    here is a shell script's whole environment rather than one git call, and `deploy.sh` runs
+    read-only git verbs that an author name would only add noise to.
     """
     env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
     env.update(overrides)
@@ -143,15 +148,9 @@ def make_snapshot_repo(path: Path) -> Path:
     pointing the fact cache at a sibling directory, so the fact-cache preflight clears
     nothing in the real `~/.cache/ansible/facts`.
     """
-    path.mkdir(parents=True, exist_ok=True)
-    env = git_free_env()
-    for args in (
-        ("git", "init", "-q", "-b", "main"),
-        ("git", "config", "user.email", "deploy-sh-tests@example.invalid"),
-        ("git", "config", "user.name", "deploy.sh tests"),
-        ("git", "config", "commit.gpgsign", "false"),
-    ):
-        subprocess.run(args, cwd=path, env=env, check=True, capture_output=True)
+    # `lib.git_testing.init_repo` carries the identity and the signing-off config in the
+    # environment, so none of it has to be written into the scratch repository's own config.
+    init_repo(path, branch="main")
     (path / "ansible").mkdir(exist_ok=True)
     (path / "ansible" / "deploy.yml").write_text("---\n[]\n")
     host_vars = path / "ansible" / "inventory" / "host_vars"
@@ -165,16 +164,8 @@ def make_snapshot_repo(path: Path) -> Path:
     )
     (path / DEPLOY_LOCKS_REL).parent.mkdir(parents=True, exist_ok=True)
     shutil.copy(_REPO / DEPLOY_LOCKS_REL, path / DEPLOY_LOCKS_REL)
-    subprocess.run(
-        ("git", "add", "-A"), cwd=path, env=env, check=True, capture_output=True
-    )
-    subprocess.run(
-        ("git", "commit", "-q", "-m", "seed", "--no-gpg-sign"),
-        cwd=path,
-        env=env,
-        check=True,
-        capture_output=True,
-    )
+    git(path, "add", "-A")
+    git(path, "commit", "-q", "-m", "seed", "--no-gpg-sign")
     return path
 
 
@@ -241,8 +232,7 @@ def run_front_half(
     import deploy_run
 
     # Under a prek hook GIT_DIR points at the REAL repository and beats the working directory.
-    for key in [k for k in os.environ if k.startswith("GIT_")]:
-        monkeypatch.delenv(key)
+    scrub_process_git_env(monkeypatch)
     monkeypatch.chdir(repo)
     calls: list[tuple] = []
 
