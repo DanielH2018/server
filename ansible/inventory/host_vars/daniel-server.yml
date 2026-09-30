@@ -18,6 +18,10 @@ containers_list: []
 # No engine, so no deployer to run. The gitops watchdog lives on — the cluster bridge
 # watches daniel-box's deployer instead.
 has_docker: false
+# Kept explicit even though group_vars/all.yml now defaults it false: the deployer's own refusal
+# (`deploy_inventory.declares_no_gitops`) greps THIS file's text for a top-level
+# `has_gitops: false` and fails open when the key is absent, so deleting the line would disarm
+# the code-side half of the gate a stale payload tripped in #1733.
 has_gitops: false
 
 # The VM host. This is the only host with VT-x, spare RAM and no control-plane role. It built

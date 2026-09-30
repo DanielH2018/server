@@ -65,6 +65,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import argparse
 import sys
 
+from deploy_tools import narrow_paths
 from lib.git import git
 from lib.narrow_git import CannotNarrow, changed_mapping_keys, mapping_at, show_at
 from narrow_setup_index import SETUP_TREE, RoleIndex, foreign_tags
@@ -86,9 +87,17 @@ NARROWABLE = ("tasks/", "templates/", "files/", "defaults/", "vars/")
 # A `.md` under `files/` or `templates/` is NOT prose: a task can copy or render it onto a
 # host, so it narrows like any other file there.
 def _reaches_no_host(rel: str) -> bool:
+    """Whether one role-relative path applies nothing, so the narrowing can skip it.
+
+    Prose is asked FIRST, and `narrow_paths.is_prose` is the one answer the tick uses too
+    (#2810): a README under `files/` used to fall through to `path_tags`, which refuses a path
+    no task names and cost the whole playbook for a file no role ships.
+    """
+    if narrow_paths.is_prose(rel):
+        return True
     if rel.startswith(("files/", "templates/")):
         return False
-    return rel.endswith(".md") or rel.startswith("tests/")
+    return rel.startswith("tests/")
 
 
 def changed_keys(path: str, old: str, new: str, repo: str) -> set[str]:

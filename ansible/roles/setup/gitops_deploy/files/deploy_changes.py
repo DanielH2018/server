@@ -383,6 +383,23 @@ def _import_re(module_id: str) -> re.Pattern:
     return re.compile(r"^\s*(?:" + "|".join(forms) + ")", re.M)
 
 
+# DECIDED: every `.md` in this repo is prose no playbook applies, with no carve-out for one
+# under a role's `files/` or `templates/` directory (issue #2810). There were two answers before:
+# this function's rule, and `scripts/deploy_tools/narrow_paths.is_prose`, which read a `.md`
+# under those two directories as shippable because a task CAN copy or render one. Nothing does —
+# the three that exist (`configarr/files/baseline/README.md` and two under
+# `home-assistant/files/`) are named by no task, no template and no file list, because the roles
+# that own them ship a NAMED list rather than a directory (issue #1715). So the carve-out cost a
+# whole `ansible/deploy.yml` for a README nobody deploys, and bought nothing.
+# `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py` is what makes it safe to assert
+# rather than derive: a task that starts shipping a `.md` fails that guard instead of silently
+# landing a file the deployer skipped. `narrow_paths.is_prose` now calls this, so there is one
+# definition; the reach across the role boundary is the one `narrow_broad` already makes.
+def is_doc(path: str) -> bool:
+    """Whether a changed path is documentation that reaches no host."""
+    return path.endswith(".md")
+
+
 def services_from_changed_paths(paths: list[str]) -> ChangeSet:
     """Classify one push's changed paths into a ChangeSet.
 
@@ -416,11 +433,9 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
         # _BROAD_SETUP_PREFIXES and routed prose to an `initial_setup.yml --tags <role>` apply
         # or a defer-and-alert, and `roles/containers/common/CLAUDE.md` matched what was then a
         # broad-deploy prefix and routed prose to a full `ansible/deploy.yml` (issue #1714).
-        # A `.md` under a role is never role content a playbook applies: the three under a
-        # `files/` directory are shipped by no task, because both roles copy a NAMED list of
-        # files rather than the directory (issue #1715). _BROAD_MANUAL_PREFIXES is three exact
-        # `.yml` paths, so hoisting past it cannot change what parks the tick.
-        if p.endswith(".md"):
+        # _BROAD_MANUAL_PREFIXES is three exact `.yml` paths, so hoisting past it cannot change
+        # what parks the tick.
+        if is_doc(p):
             continue
         if p == _SECRETS_FILE:
             cs.secrets = True
