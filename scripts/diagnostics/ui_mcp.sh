@@ -20,6 +20,14 @@
 
 set -euo pipefail
 
+# `--help` answers from any environment, ahead of every step below — the repo-wide convention
+# `scripts/lib/tests/test_entry_points_answer_help.py` checks (#2854). The awk prints this
+# file's leading comment block, which is the usage, with the `#` markers stripped.
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
+  exit 0
+fi
+
 NODE_BIN="${NODE_BIN:-/home/ubuntu/.local/share/fnm/aliases/default/bin}"
 REPO_ROOT="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/../.." && pwd)"
 RUNTIME_DIR="${XDG_RUNTIME_DIR:-/tmp}/claude-ui-mcp"

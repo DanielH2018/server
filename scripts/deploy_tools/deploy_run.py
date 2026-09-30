@@ -45,6 +45,7 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+from lib.cli_help import answer_help
 from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
     DEPLOY_STALE,
@@ -506,6 +507,10 @@ def prepare_stdio() -> None:
 
 def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
     """Resolve and gate one invocation; exec the locked half, or return a refusal's code."""
+    # Ahead of `git rev-parse` and every gate below it: `--help` used to reach the staleness
+    # gate and be answered with exit 4 and a `git rebase` remedy, on the one question an
+    # operator asks a script they have not run before (#2854).
+    answer_help(__doc__, argv)
     top = git("rev-parse", "--show-toplevel", check=False)
     if top.returncode != 0:
         sys.stderr.write(top.stderr)

@@ -49,6 +49,7 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.docs_provenance import md_cell as _md_cell
+from lib.exit_codes import CONTRACTS as _EXIT_CONTRACTS, contract as _exit_contract
 from lib.repo_paths import REPO, SCRIPTS
 from lib.script_classify import RUNS, candidates, classify, importers
 from lib.script_coverage import candidate_test_files, indirect_test
@@ -100,6 +101,20 @@ def _usage(doc: str) -> str:
             break
         block.append(line.strip())
     return "\n".join(block)
+
+
+def _exit_codes_cell(rel_path: str) -> str:
+    """The codes `rel_path` declares in `lib.exit_codes`, or "" when it declares none.
+
+    Only the numbers, linked to the per-script table below: a meaning per code does not fit a
+    row, and the point of the column is to say at a glance whether a non-zero exit from this
+    script means anything more than "it failed".
+    """
+    codes = _exit_contract(rel_path)
+    if not codes:
+        return ""
+    anchor = re.sub(r"[^a-z0-9]", "", rel_path.lower())
+    return f"[{', '.join(str(c.value) for c in codes)}](#{anchor})"
 
 
 def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str]]:
@@ -156,6 +171,7 @@ def build_rows(scripts: Path = SCRIPTS, repo: Path = REPO) -> list[dict[str, str
                 "indirect_via": via,
                 "run": run,
                 "evidence": evidence,
+                "exit_codes": _exit_codes_cell(str(path.relative_to(scripts.parent))),
             }
         )
     return rows
@@ -239,8 +255,10 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
         # Script stays the first cell: _mkdocs_repo_links.py finds each row's anchor target
         # there. Directory repeats a prefix of the path so the page's table filter
         # (docs/assets/table-filter.js) can offer it as a choice.
-        parts.append("| Script | Directory | What it does | Reached by | Tests |")
-        parts.append("|---|---|---|---|---|")
+        parts.append(
+            "| Script | Directory | What it does | Reached by | Tests | Exit codes |"
+        )
+        parts.append("|---|---|---|---|---|---|")
         for row in section:
             if row["tests"]:
                 test = f"`{row['tests']}`"
@@ -250,13 +268,32 @@ def render_markdown(rows: list[dict[str, str]]) -> str:
                 test = "—"
             parts.append(
                 f"| `{row['path']}` | {row['directory']} | {_md_cell(row['summary'])} | "
-                f"{_md_cell(row['evidence'])} | {test} |"
+                f"{_md_cell(row['evidence'])} | {test} | {row['exit_codes'] or '—'} |"
+            )
+
+    parts.append("\n## Exit codes\n")
+    parts.append(
+        f"{len(_EXIT_CONTRACTS)} entry point(s) declare a contract in "
+        "`scripts/lib/exit_codes.py`, which is where these tables are rendered from. Every "
+        "other script here exits 0 or non-zero and says nothing more; 64 is a usage error and "
+        "75 a temporary failure wherever they appear, because each family names the same "
+        "spine.\n"
+    )
+    for entry_point, codes in _EXIT_CONTRACTS.items():
+        parts.append(f"\n### `{entry_point}`\n")
+        parts.append("| Exit | Name | Meaning | What to do |")
+        parts.append("|---|---|---|---|")
+        for code in codes:
+            parts.append(
+                f"| {code.value} | `{code.const}` | {_md_cell(code.meaning)} | "
+                f"{_md_cell(code.remedy) or '—'} |"
             )
 
     documented = [r for r in rows if r["usage"]]
     parts.append(
         f"\n## Usage\n\n{len(documented)} script(s) document how to invoke themselves. "
-        "The rest take `--help`.\n"
+        "The rest take `--help`, which every catalogued entry point answers with exit 0 "
+        "(`scripts/lib/tests/test_entry_points_answer_help.py`).\n"
     )
     for row in documented:
         parts.append(f"\n### `{row['path']}`\n")
