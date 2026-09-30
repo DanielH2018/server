@@ -600,3 +600,15 @@ libsystemd
 [Uu]pstreams
 [Cc]ompose's
 resolved's
+[Aa]utoremove
+[Ss]wappiness
+renovate_agent
+sysctl
+[Rr]eimplemented
+git's
+[Pp]rober
+[Uu]nstaged
+[Ee]val
+timesyncd's
+veth
+initramfs

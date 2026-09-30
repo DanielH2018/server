@@ -244,6 +244,7 @@ nav:
       - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
       # And the last of them (#2999), which empties both OVER_CEILING dicts.
       - Pi host tuning record: pi-host-tuning-record.md
+      - Host baseline record: host-baseline-record.md
       - Email to RSS: email-to-rss.md
       - AniList integration: anilist-integration.md
       - k3s control-plane upgrade: k3s-upgrade.md

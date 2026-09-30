@@ -78,13 +78,6 @@ OVER_CEILING: dict[str, str] = {
         "Traps` and the error-string ledger moved to docs/gitops-pipeline.md (#2921), and "
         "`## Safety`'s per-arm narration is the next thing to thin against that page"
     ),
-    "initial_setup": (
-        "28054 chars on 2026-09-29: the granular-tag list and the two autonomous-role "
-        "contracts are operating rules for the setup plane, as are the capability-flag rule "
-        "for a hardware gate and UFW's second sysctl file overwriting this role's; `## What "
-        "it does` became a pointer at `tasks/` carrying only its traps (#2982), and "
-        "`## Notable` is the next trim"
-    ),
 }
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
