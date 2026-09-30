@@ -86,14 +86,7 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # timings, timeout derivation, longhorn-manager findings and hand-recovery steps to
 # docs/volume-revert-drill-and-sizing.md. Each remaining reason names its own next section to
 # move.
-OVER_CEILING: dict[str, str] = {
-    "uptime-kuma": (
-        "30691 chars on 2026-09-29: the traps and the one-Discord-template contract are "
-        "operating rules for every monitor, and #2802 added the maintenance window's "
-        "derivation and its two Kuma API shapes; the status-page and host-check tile "
-        "history is the next thing to move to docs/"
-    ),
-}
+OVER_CEILING: dict[str, str] = {}
 
 
 def _role_dirs() -> list[Path]:
