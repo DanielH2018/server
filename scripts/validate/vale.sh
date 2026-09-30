@@ -35,6 +35,14 @@
 # Run: scripts/validate/vale.sh [file ...]
 set -euo pipefail
 
+# `--help` answers from any environment, ahead of the sync below, which needs the `vale`
+# binary that a CI pytest shard does not install (#2854's convention). The awk prints this
+# file's leading comment block, which is the usage, with the `#` markers stripped.
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
+  exit 0
+fi
+
 repo="$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)"
 styles="$repo/styles"
 stamp="$styles/Google/.synced"
