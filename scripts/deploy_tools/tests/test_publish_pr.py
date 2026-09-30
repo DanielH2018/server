@@ -408,9 +408,8 @@ def _run_cli(
     log = tmp_path / "calls.log"
     _stub(bin_dir, "git", log, fail_on)
     _stub(bin_dir, "gh", log, fail_on)
-    # Every GIT_* stripped. The stubs above answer instead of git, but an inherited GIT_DIR
-    # from a hook or a parent worktree points at a REAL repository, and one of these arguments
-    # is `reset --hard`. A git-driving fixture under prek has already written the real repo once.
+    # The stubs above answer instead of git, but an inherited GIT_DIR from a hook or a parent
+    # worktree points at a REAL repository and one of these arguments is `reset --hard`.
     env = scrubbed_env()
     env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
     proc = subprocess.run(
