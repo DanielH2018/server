@@ -33,9 +33,21 @@ Flux is the better technical fit: its controllers run about 30 MiB each and it d
 SOPS/age natively. The evaluation recommends augmenting with Flux in narrow slices while
 keeping Ansible as the renderer, the host-config plane and the secret plane.
 
-What stopped a wholesale replacement is the deployer's own content. `gitops_deploy.py` is
-roughly 784 lines of decision logic encoding about ten recorded incidents, and most of them
-have no controller-native equivalent.
+What stopped a wholesale replacement is the deployer's own content: decision logic encoding
+about ten recorded incidents, most of them with no controller-native equivalent.
+
+**The line count in this premise was wrong when it was written, and it has since grown.** The
+evaluation cited "roughly 784 lines" of `gitops_deploy.py`. The day after this ADR was
+accepted, at `f542693ac` (2026-08-22), the deployer was 1,928 lines across two modules —
+`gitops_deploy.py` (1,086) and `deploy_logic.py` (842). On 2026-09-30 it is 7,256 lines across
+25 modules under `ansible/roles/setup/gitops_deploy/files/`, none of them test files. Measure
+it with `cat ansible/roles/setup/gitops_deploy/files/*.py | wc -l` rather than reading a number
+here.
+
+The decision below is unchanged, and the growth does not weaken it: what grew is the incident
+logic a controller has no equivalent for. It does raise a separate question — how much of that
+logic is a proxy for something cheaper to derive — which issue #2810 asks about the five path
+narrowings, and which is a refactor of this deployer rather than a reason to replace it.
 
 ## Decision
 

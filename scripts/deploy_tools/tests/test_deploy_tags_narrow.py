@@ -339,11 +339,16 @@ def test_a_doc_under_a_play_prefix_narrows_to_nothing(tree: Tree):
     assert tree.narrow(*_refs(tree)) == set()
 
 
-def test_a_doc_under_a_play_prefix_templates_dir_is_still_flagged(tree: Tree):
-    """FLAGGED half: a `.md` under `templates/` is rendered onto a host, not prose."""
+def test_a_doc_under_a_play_prefix_templates_dir_is_prose_too(tree: Tree):
+    """A `.md` under `templates/` reads as prose as well, since #2810 decided it once.
+
+    It used to refuse here, because a task CAN render a `.md` onto a host. None does — the
+    invariant is `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py`, which goes red
+    the day a task starts shipping one, and whoever trips it restores a carve-out rather than
+    discovering the skip from a service that stayed stale.
+    """
     tree.write("ansible/tasks/templates/motd.md", "hello\n")
-    with pytest.raises(narrow_broad.CannotNarrow, match="read by every deploy"):
-        tree.narrow(*_refs(tree))
+    assert tree.narrow(*_refs(tree)) == set()
 
 
 # ── the non-broad half is the mapper `changed` already uses ─────────────────────────────

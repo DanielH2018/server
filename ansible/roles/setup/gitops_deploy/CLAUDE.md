@@ -28,6 +28,9 @@ state write, and **fails OPEN on any shape but a top-level `false`** — a wrong
 daniel-box parks every landing in the fleet. ENFORCED:
 `ansible/tests/setup/test_gitops_deploy_reaps_on_non_deployer.py`.
 
+**`ansible/inventory/group_vars/all.yml:has_gitops` defaults to `false`** (#2810); a
+non-deployer still writes `has_gitops: false`, because this gate reads host_vars TEXT.
+
 ## Autonomous-role contract (it deploys to production with no human in the loop)
 
 Every 10 minutes this role may fast-forward the primary checkout, run `deploy.yml` against the

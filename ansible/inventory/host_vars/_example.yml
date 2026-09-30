@@ -32,10 +32,12 @@ containers_list: []
 
 # Bring-up: revert once the host is established
 
-# Default: true. Keep it false until this host's first `deploy.yml` succeeds by hand. The
-# gitops_deploy role's "Run gitops-deploy once" handler shells a full deploy at the end of
-# initial_setup.yml and fails the play if it fails, so on a fresh host one bad service takes
-# down the OS-hardening run. Flip to true and re-run `--tags gitops_deploy` afterwards.
+# Default: false since 2026-09-30 (#2810), so a new host is not a deployer until it says it is.
+# Leave it false until this host's first `deploy.yml` succeeds by hand: the gitops_deploy role's
+# "Run gitops-deploy once" handler shells a full deploy at the end of initial_setup.yml and fails
+# the play if it fails, so on a fresh host one bad service takes down the OS-hardening run. Write
+# `has_gitops: true` here and re-run `--tags gitops_deploy` afterwards. Keep the explicit false
+# on a host that stays a non-deployer: `deploy_inventory.declares_no_gitops` reads this text.
 has_gitops: false
 
 # Whether this host holds a checkout of THIS repo at ~/server.

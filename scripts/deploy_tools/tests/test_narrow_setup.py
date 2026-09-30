@@ -278,8 +278,17 @@ def test_a_template_cycle_reaching_no_task_file_is_flagged(tree):
         narrow(tree, old, tree.commit("touch a"))
 
 
-def test_a_markdown_file_a_task_renders_narrows_like_any_template(tree):
-    """A `.md` under `templates/` reaches a host; skipping it as prose dropped it."""
+def test_a_markdown_file_under_templates_is_prose_and_reaches_no_tag(tree):
+    """A `.md` is prose wherever it sits, which is the one answer #2810 decided on.
+
+    This used to narrow to `alpha`, because the planted task renders the file onto a host. No
+    role in the repo ships a `.md`, and
+    `ansible/tests/deploy/test_no_role_ships_a_markdown_file.py` is what holds that — so the
+    carve-out only cost the deploy-plane tick a full play for a README nobody deploys. A range
+    of nothing but prose reaches no host, which is the refusal below rather than a tag; the
+    tick never gets here for one, because `deploy_logic.is_doc` drops it before the plane
+    branches.
+    """
     tree.write(
         f"{ROLE}/tasks/alpha.yml",
         ALPHA
@@ -289,7 +298,8 @@ def test_a_markdown_file_a_task_renders_narrows_like_any_template(tree):
     tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes\n")
     old = tree.commit("notes")
     tree.write(f"{ROLE}/templates/alpha-notes.md", "# notes, edited\n")
-    assert narrow(tree, old, tree.commit("edit notes")) == frozenset({"alpha"})
+    with pytest.raises(narrow_setup.CannotNarrow, match="reaches no host"):
+        narrow(tree, old, tree.commit("edit notes"))
 
 
 def test_a_binary_file_under_files_does_not_block_the_narrowing(tree):

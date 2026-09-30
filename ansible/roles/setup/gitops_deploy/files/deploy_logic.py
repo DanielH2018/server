@@ -21,6 +21,21 @@ instead. `ansible/tests/deploy/test_gitops_deploy_imports.py` holds this file at
 definitions, and holds every module's sibling imports to its declared set.
 """
 
+# DECIDED: this index stays, and its callers keep importing `deploy_logic` rather than the leaf
+# modules (issue #2810 asked whether a pure re-export facade should be dissolved). It IS a pure
+# facade — `ansible/tests/deploy/test_gitops_deploy_imports.py` holds it at zero definitions —
+# and that is the design rather than an accident. Three things pay for its 105 lines. The table
+# above is the only place the deployer's decisions are listed by the question each one answers,
+# and a reader who starts at `gitops_deploy.py` reaches it through the single import that module
+# makes. About 120 places name `deploy_logic.<symbol>` — docs prose, this role's CLAUDE.md, the
+# test suites, and four other roles' copies of `gitops_markers.py` — so dissolving the index
+# rewrites every one of them to name whichever leaf a symbol lives in today, which is exactly
+# the churn the index absorbs when a symbol moves between leaves. The monkeypatch trap in the
+# docstring is the third: a test that patches `deploy_logic.<name>` rebinds a re-export no
+# function reads and passes against unpatched code, so this file defining nothing is what keeps
+# the injected `DeployTools` the only seam. Contradict this with a measurement that the index
+# cost something, not with a line count.
+
 from deploy_changes import (  # noqa: F401
     _ACTIVE_CONFIG,
     _ACTIVE_K8S,
@@ -38,6 +53,7 @@ from deploy_changes import (  # noqa: F401
     _is_test_only_path,
     _note_setup_role,
     comment_only_broad_changes,
+    is_doc,
     services_from_changed_paths,
     setup_role_playbook,
     setup_role_tag,

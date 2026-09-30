@@ -17,23 +17,30 @@ from pathlib import Path
 
 from lib.git import git
 from lib.narrow_git import CannotNarrow
+from lib.repo_paths import GITOPS_DEPLOY_FILES
+
+# The deployer's own `files/`, for the one rule this module shares with the tick itself. Reached
+# as a path entry rather than a copy, the way `narrow_broad` reaches `deploy_logic`; the import
+# stays inside `is_prose`, because only the path entry is free at module import.
+_sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 
 def is_prose(path: str) -> bool:
-    """Whether a changed broad-plane path is documentation no playbook applies.
+    """Whether a changed path is documentation no playbook applies.
 
     `narrow_broad.PLAY_PREFIXES` matches by DIRECTORY, so `roles/containers/common/CLAUDE.md`
     refused under "is read by every deploy" and widened the tick to a full `ansible/deploy.yml`
-    -- 14 minutes for prose (#2448). `land_tags.role_for` drops a `.md` for the same reason,
+    — 14 minutes for prose (#2448). `land_tags.role_for` drops a `.md` for the same reason,
     and so does `narrow_broad._sort_hits` for a grep hit.
 
-    A `.md` under `files/` or `templates/` is NOT prose: a task can copy or render it onto a
-    host. That carve-out is `narrow_setup._reaches_no_host`'s, restated because the two walk
-    different trees.
+    The rule itself is the deployer's `deploy_changes.is_doc`, reached through the index, so the
+    tick and this derivation cannot disagree about what a `.md` is (#2810). It used to carve out
+    a `.md` under `files/` or `templates/` as shippable; the `DECIDED:` on `is_doc` says why that
+    carve-out went, and which guard replaced it. `narrow_setup._reaches_no_host` calls this too.
     """
-    if not path.endswith(".md"):
-        return False
-    return not {"files", "templates"} & set(path.split("/")[:-1])
+    from deploy_logic import is_doc
+
+    return is_doc(path)
 
 
 def role_is_gone(role: str, ref: str, cwd: Path, trees: Iterable[str]) -> bool:

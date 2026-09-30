@@ -1166,7 +1166,12 @@ what it recorded.
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
 
 `tasks/main.yml` dispatches on `has_gitops`: `install.yml` on the deployer, `teardown.yml`
-everywhere else. The role was gated at the playbook level until 2026-09-09, so a host flipped
+everywhere else. `group_vars/all.yml` defaults the var **false** since 2026-09-30 (#2810), which
+is the same safe direction `has_docker` takes: a host nobody has thought about yet gets the
+teardown arm rather than a timer that deploys to production on its own, and daniel-box's
+`host_vars` carries the one `has_gitops: true`. The three non-deployers keep their explicit
+`has_gitops: false` because the code gate below reads host_vars TEXT and fails open on an absent
+key. The role was gated at the playbook level until 2026-09-09, so a host flipped
 to false skipped the role and kept whatever an earlier true run installed — daniel-server ran
 a live timer that way for three weeks (#1733). `teardown.yml` removes the six units, the polkit
 rule, the two GitHub crons and their scripts, and the three directories `install.yml` creates

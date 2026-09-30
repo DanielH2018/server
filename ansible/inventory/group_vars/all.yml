@@ -696,11 +696,13 @@ weekly_reboot_shutdown_delay_minutes: 5
 # or six hours, so a maintenance window derived from these values in `tz` would open at an
 # arbitrary Sunday midday and page straight through the reboot.
 weekly_reboot_timezone: UTC
-# Whether this host runs its own gitops_deploy pull-based auto-deployer. True by default —
-# every full host redeploys its own containers_list independently on a git push (see
-# gitops_deploy CLAUDE.md). daniel-pi overrides this false: it is memory-constrained and
-# driven manually over SSH, not by GitOps, by design.
-has_gitops: true
+# Whether this host runs its own gitops_deploy pull-based auto-deployer. FALSE by default since
+# 2026-09-30 (#2810): daniel-box is the one deployer, and the other three hosts in the inventory
+# each carried `has_gitops: false` to say so. The default now matches `has_docker` below — a host
+# nobody has thought about yet gets the teardown arm rather than a timer that deploys to
+# production on its own. Arming a host is `has_gitops: true` in its host_vars plus
+# `initial_setup.yml --tags gitops_deploy`; see gitops_deploy CLAUDE.md.
+has_gitops: false
 # Whether this host runs Docker. FALSE by default since the 2026-08-14 k3s migration, which
 # left daniel-pi as the only Docker host: both cluster nodes run k3s's own containerd, and a
 # bare initial_setup.yml run once installed Docker on daniel-box and tripped the k3s role's
