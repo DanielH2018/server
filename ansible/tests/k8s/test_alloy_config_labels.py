@@ -21,6 +21,10 @@ REQUIRED_FRAGMENTS = (
     'selector = "{container=\\"access-log-rotate\\"}"',
     'drop_counter_reason = "traefik_routine_access_log"',
     '"DownstreamStatus\\":(200|204|304),.*\\"Duration\\":[0-9]{1,9},',
+    # The HA cast refresh_token redaction, scoped the same way (issue #3015). Its behaviour —
+    # token gone, `_handle_signal_show_view` marker intact — is test_alloy_redacts_ha_refresh_token.
+    'selector = "{container=\\"home-assistant\\"}"',
+    "stage.replace {",
     # Node scoping: Alloy has no __host__ filter, so this is what stops every node tailing
     # every pod's path.
     'field = "spec.nodeName=" + sys.env("HOSTNAME")',

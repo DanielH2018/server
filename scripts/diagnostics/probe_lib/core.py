@@ -362,6 +362,39 @@ def sops_extract(key_name):
     return out.stdout.strip()
 
 
+# --- log-secret redaction -------------------------------------------------------------------
+#
+# Home Assistant writes the Google Cast system user's `refresh_token` in plaintext into its own
+# log whenever a cast fails in `_handle_signal_show_view` (issue #3015): the record formats the
+# `cast_show_view` signal args, which carry the token. That record reaches HA's `system_log` and
+# `/api/error_log`, so `probe.py ha get error_log` prints a live HA API credential into whatever
+# reads its stdout — measured 2026-09-30, when it landed in an agent transcript.
+#
+# Redaction happens HERE rather than upstream because probe.py cannot fix HA's logger. The Alloy
+# stage in `roles/k8s/loki-homelab` keeps the token out of Loki from now on; this keeps it out of
+# THIS tool's output, including for the records Loki already holds until its 744h retention
+# expires.
+#
+# Only the token is replaced, never the surrounding record: `docs/platform.md` tells the operator
+# to query `|= "_handle_signal_show_view"` to catch a timed-out cast, and a redaction that ate the
+# marker would break the one detection query that still works.
+#
+# `{32,}` is a floor, not the token's length (64 hex), so a longer token still matches while
+# `'refresh_token': None` does not.
+_LOG_SECRET_RE = re.compile(r"(refresh_token[\"']?:\s*[\"']?)[0-9a-f]{32,}")
+
+REDACTED = "<redacted>"
+
+
+def redact_log_secrets(text):
+    """Return `text` with credential values that HA logs replaced by `<redacted>`.
+
+    Pure, so a test asserts what reaches stdout without stubbing the HTTP call. Operates on raw
+    text rather than a parsed body, because `/api/error_log` is a plain-text log, not JSON.
+    """
+    return _LOG_SECRET_RE.sub(rf"\g<1>{REDACTED}", text)
+
+
 def _rows_from_loki(data: dict) -> list[tuple[int, str]]:
     """Flatten a Loki query_range response into a time-sorted list of rows.
 

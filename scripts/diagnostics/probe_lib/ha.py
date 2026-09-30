@@ -544,7 +544,7 @@ def run_ha(ns):
         return 0
     body = ha_get(_ha_url(ha_base(), ns), ha_token(), resolve=ha_resolve())
     if ns.ha_cmd == "get":
-        print(body, end="")
+        print(core.redact_log_secrets(body), end="")  # #3015: see redact_log_secrets
         return 0
     if ns.ha_cmd == "state":
         if ns.json:

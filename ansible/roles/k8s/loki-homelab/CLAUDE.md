@@ -27,6 +27,11 @@ separate from the `claude-otel` Loki (decision KL1, `docs/archive/.../slice-7-ph
 - The Alloy shipper (`manifests_extra_rollouts`, kind `daemonset`) rolls whenever this role's
   ConfigMap changes, alongside the primary `loki-homelab` Deployment `manifests_rollout` names.
 - Alloy replaced Promtail on 2026-09-02 (Promtail reached end of life 2026-03-02).
+- **One `stage.replace` redacts a credential on the way in:** Home Assistant's cast
+  `refresh_token`, which HA logs in plaintext on a failed cast (issue #3015). It substitutes the
+  capture group only, so the `_handle_signal_show_view` marker the fault is detected by survives.
+  `ansible/tests/k8s/test_alloy_redacts_ha_refresh_token.py` fails on either half. The stage is
+  prospective: a record shipped before it still carries the token for the 744h retention window.
 
 ## A departed pod's logs survive it — an empty result is usually the query
 

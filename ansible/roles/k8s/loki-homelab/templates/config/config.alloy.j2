@@ -106,6 +106,32 @@ loki.process "pods" {
       drop_counter_reason = "traefik_routine_access_log"
     }
   }
+
+  // Redact the Google Cast user's refresh_token out of Home Assistant's lines (issue #3015).
+  // HA formats the `cast_show_view` signal args into the message whenever a cast fails in
+  // `_handle_signal_show_view`, and those args carry the cast system user's refresh_token in
+  // plaintext. `homeassistant.util.logging` is not silenced, so the record reaches Loki, where
+  // anyone with the LAN route can read a live HA API credential out of a 744h store.
+  //
+  // This REPLACES, it does not drop: `stage.replace` substitutes only the CAPTURE GROUP, so the
+  // rest of the record survives intact. That is load-bearing — `docs/platform.md` tells the
+  // operator to query `|= "_handle_signal_show_view"` to catch a cast that timed out on a worker
+  // thread, and a stage that ate the marker would break the one detection query that still
+  // works. No line is dropped, so no dropped-lines counter moves.
+  //
+  // The key appears as a Python dict repr (`'refresh_token': '<64 hex>'`); the class also
+  // accepts the JSON spelling. The `{32,}` floor keeps `'refresh_token': None` unmatched.
+  //
+  // Prospective only. Records already in Loki keep the token until the 744h retention window
+  // expires, and HA's own `system_log` / `/api/error_log` are upstream of this stage —
+  // `probe.py` redacts those on the way out (probe_lib/core.py:redact_log_secrets).
+  stage.match {
+    selector = "{container=\"home-assistant\"}"
+    stage.replace {
+      expression = "refresh_token[\"']?: ?[\"']?([0-9a-f]{32,})"
+      replace    = "<redacted>"
+    }
+  }
 }
 
 // ---- Host files. Root + DAC_READ_SEARCH in the DaemonSet exist for these. ---------------
