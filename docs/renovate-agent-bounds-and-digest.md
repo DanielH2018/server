@@ -114,19 +114,30 @@ whether the agent is worth its cost is a count over one file rather than a read 
   skip that posts nothing to Discord.
 - `blocked` — the run worktree still holds unlanded work.
 - `ran` or `failed` — a session ran. The line carries `merged`, `closed`, `handed_off`,
-  `unread`, `left_open` and `opened` from the measured delta, plus `cost_usd`, `turns` and the
-  denial count. `handed_off` is `null` when its census failed.
+  `unread`, `left_open`, `touched` and `opened` from the measured delta, plus `cost_usd`,
+  `turns` and the denial count. `handed_off` is `null` when its census failed.
 - `crashed` — the wrapper threw. `report_crash` writes this line before its Kuma push.
 
-The PR fields come from the census, not from the session's summary, so a triage that only
-comments on a PR leaves no trace in them. `left_open` is the PRs the session skipped, whether
-by the `k8s_autodeploy: false` denylist or by the PR cap. A 30-day count:
+The PR fields come from the census, not from the session's summary. `left_open` is the PRs
+still open after the run, whether the session skipped them for the `k8s_autodeploy: false`
+denylist, for the PR cap, or after triaging them.
+
+`touched` is the subset of `left_open` whose `updatedAt` moved between the before-census and
+the after-census, and it is the only field a comment-only triage reaches (#3032): commenting
+on or labelling a PR moves it out of no set. **Read it as evidence, not as proof.** A Renovate
+rebase during the session moves `updatedAt` too, and so does anyone else who touches the PR
+while the session runs. A PR whose `updatedAt` either census could not read counts as
+untouched, because an unreadable timestamp is no evidence. The digest names the same PRs on a
+`left open but updated during the run` line.
+
+A 30-day count:
 
 ```bash
 jq -s --argjson since "$(date -d '-30 days' +%s)" '[.[] | select(.ts >= $since)]
   | {ticks: length, sessions: map(select(.result == "ran" or .result == "failed")) | length,
      merged: map(.merged // [] | length) | add, closed: map(.closed // [] | length) | add,
-     handed_off: map(.handed_off // [] | length) | add, cost_usd: map(.cost_usd // 0) | add}' \
+     handed_off: map(.handed_off // [] | length) | add,
+     touched: map(.touched // [] | length) | add, cost_usd: map(.cost_usd // 0) | add}' \
   /var/lib/renovate-agent/runs.jsonl
 ```
 

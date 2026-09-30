@@ -32,6 +32,10 @@ class OpenPR:
     title: str
     url: str = ""
     branch: str = ""
+    # GitHub's `updatedAt` for the PR, as the census read it. Comparing the before-census
+    # value with the after-census one is the only signal a comment-only triage leaves on a PR
+    # that stays open (#3032). "" when the census could not read it.
+    updated_at: str = ""
 
 
 @dataclass(frozen=True)
@@ -70,6 +74,11 @@ class Delta:
     was closed without merging, and `unread` is one whose state lookup failed (#2755).
     `handed_off` is the superseding PRs the run opened, from `handed_off()`; None means that
     census failed, which must not read as "none opened" (#2769).
+
+    `touched` is the subset of `remaining` whose `updatedAt` moved during the run — the only
+    census-visible trace of a session that commented on or labelled a PR and left it open
+    (#3032). A Renovate rebase during the session moves `updatedAt` too, so it is evidence
+    something touched the PR, not proof the session did.
     """
 
     resolved: tuple[int, ...]
@@ -78,6 +87,7 @@ class Delta:
     closed: tuple[int, ...] = ()
     unread: tuple[int, ...] = ()
     handed_off: tuple[int, ...] | None = ()
+    touched: tuple[int, ...] = ()
 
 
 def decide(open_prs: list[OpenPR], hold_sha: str, hold_plane: str) -> Gate:
@@ -176,6 +186,28 @@ def delta(
         closed=tuple(n for n in gone if states.get(n) == "CLOSED"),
         unread=tuple(n for n in gone if states.get(n) not in ("MERGED", "CLOSED")),
         handed_off=handed,
+        touched=_touched(before, after),
+    )
+
+
+def _touched(before: list[OpenPR], after: list[OpenPR]) -> tuple[int, ...]:
+    """The still-open PRs whose `updatedAt` moved between the two censuses (#3032).
+
+    Both timestamps must be present and different. An empty one means the census could not
+    read it, and a PR whose timestamp is unreadable must read as no evidence rather than as
+    evidence of a touch — the whole point of the field is that a comment-only triage is
+    otherwise invisible.
+    """
+    was = {p.number: p.updated_at for p in before}
+    return tuple(
+        sorted(
+            p.number
+            for p in after
+            if p.number in was
+            and was[p.number]
+            and p.updated_at
+            and was[p.number] != p.updated_at
+        )
     )
 
 
@@ -215,8 +247,11 @@ def run_record(
     Written on every exit path, skips included, so "how many ticks spent a session" and
     "how many PRs each one merged, closed, handed off or left open" are both a count over
     one file. `result` is `skipped`, `blocked`, `ran`, `failed` or `crashed`. The PR fields
-    come from the measured delta, never the session's summary; a triage that only comments
-    on a PR leaves no trace in them. `handed_off` stays null when its census failed.
+    come from the measured delta, never the session's summary. A triage that only comments on
+    or labels a PR moves nothing out of the open set, so `touched` — the left-open PRs whose
+    `updatedAt` moved during the run — is the only field that records it, and a Renovate
+    rebase mid-session moves `updatedAt` as well. `handed_off` stays null when its census
+    failed.
     """
     rec: dict = {"ts": ts, "result": result, "reason": reason}
     if moved is not None:
@@ -226,6 +261,7 @@ def run_record(
             "handed_off": None if moved.handed_off is None else list(moved.handed_off),
             "unread": list(moved.unread),
             "left_open": list(moved.remaining),
+            "touched": list(moved.touched),
             "opened": list(moved.opened),
         }
     if outcome is not None:
@@ -280,6 +316,13 @@ def render_digest(outcome: Outcome, moved: Delta, host: str, log_path: str) -> s
         )
     if moved.remaining:
         lines.append("still open: " + _nums(moved.remaining))
+    if moved.touched:
+        # A rebase by Renovate moves updatedAt too, so this line says the PR changed during
+        # the run, never that the session is what changed it.
+        lines.append(
+            "left open but updated during the run (a triage comment, or a Renovate rebase): "
+            + _nums(moved.touched)
+        )
     if moved.opened:
         lines.append("opened during the run: " + _nums(moved.opened))
     if outcome.denials:
