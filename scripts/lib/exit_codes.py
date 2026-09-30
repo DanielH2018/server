@@ -56,7 +56,10 @@ TEMP_FAIL = 75
 # a resume point. Read the frozenset rather than this sentence: it enumerated five of them
 # until 77 was added. 20 is the inverse -- the playbook RAN and a task failed, so whatever
 # applied before it is live. ansible-playbook's own 2/3/4 are collapsed onto 20 by the wrapper
-# for exactly that reason; `tests/test_deploy_exit_codes.py` pins the disjointness.
+# for exactly that reason; `tests/test_deploy_exit_codes.py` pins the disjointness. One case
+# never reaches 20: ansible-playbook exits 2 on a USAGE error too, and
+# `deploy_flags.check_passthrough` asks its parser before the lock and refuses with 64,
+# because there no play ran and nothing is live (issue #3024).
 DEPLOY_OK = OK
 DEPLOY_TAG_MISS = 2
 DEPLOY_BROAD = 3
