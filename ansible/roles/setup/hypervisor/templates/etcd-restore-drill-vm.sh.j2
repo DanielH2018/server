@@ -14,13 +14,15 @@
 #   2. destroy any guest a previous run left    — an aborted run must not block the next
 #   3. fresh disk from the base image, `virsh create` (transient: never a defined domain)
 #   4. wait for ssh against the PINNED host key — the staging guest shares this bridge
-#   5. stage binary + token + env + scripts in one tar over ssh, then delete the staging dir
-#   6. run the guest-side script; pull restore.log / server.log out as evidence
-#   7. destroy the guest and delete its disk    — also from the EXIT trap, pass or fail
-#   8. stamp on success, push the verdict to Kuma, log it unconditionally
-# Evidence (the drill's stdout plus k3s's two logs) is the only thing that outlives a run, under
-# LOG_ROOT/<utc-run-id>/, and it is pruned at LOG_RETENTION_DAYS. The restored etcd database,
-# the token copy and the R2 credentials live on the guest's disk, which step 7 deletes.
+#   5. probe the egress fence FROM the guest     — before it is handed any credential
+#   6. stage binary + token + env + scripts in one tar over ssh, then delete the staging dir
+#   7. run the guest-side script; pull restore.log / server.log out as evidence
+#   8. destroy the guest and delete its disk    — also from the EXIT trap, pass or fail
+#   9. stamp on success, push the verdict to Kuma, log it unconditionally
+# Evidence (the drill's stdout, k3s's two logs and the fence leg's report) is the only thing that
+# outlives a run, under LOG_ROOT/<utc-run-id>/, and it is pruned at LOG_RETENTION_DAYS. The
+# restored etcd database, the token copy and the R2 credentials live on the guest's disk, which
+# step 8 deletes.
 #
 # Exit 0 = the drill passed. Non-zero = it did not, or this script could not get as far as running
 # it; the Kuma message and the syslog line say which.
@@ -63,6 +65,16 @@ LOCK="{{ hypervisor_etcd_drill_lock }}"
 # Whole-run ceiling. The drill's own stages are bounded (600 s restore, 180 s ready) and the
 # boot at BOOT_TIMEOUT; this catches a hung ssh or a download that never finishes.
 RUN_TIMEOUT=1800
+# The egress-fence leg's own bounds. It sits OUTSIDE RUN_TIMEOUT (that deadline starts once the
+# drill is launched), so without one of its own a wedged dial would hang the monthly cron. A
+# dropped packet burns the whole per-target timeout, so the deadline is sized for every target
+# timing out at once with ssh setup on top.
+FENCE_PROBE_TIMEOUT="{{ hypervisor_etcd_drill_fence_probe_timeout }}"
+FENCE_DEADLINE="{{ hypervisor_etcd_drill_fence_deadline }}"
+FENCE_LONGHORN_URL="{{ hypervisor_etcd_drill_fence_longhorn_url }}"
+# What the run reports about the fence. "not-checked" until the leg runs, so a failure BEFORE it
+# does not claim a verdict it never took.
+FENCE_VERDICT=not-checked
 TAG=etcd-restore-drill-vm
 
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
@@ -148,6 +160,152 @@ ssh_guest() {
   "${argv[@]}" "$@"
 }
 
+# ── The egress-fence leg ─────────────────────────────────────────────────────────────────────
+# Dials every production range the staging nwfilter drops, plus an internet control target, from
+# INSIDE the guest — in the window between "the guest answers ssh" and "the guest is handed the
+# cluster token and the R2 write credentials", which is the only point where a broken fence can
+# still be acted on.
+#
+# WHY IT RUNS FROM INSIDE THE GUEST. A filter that is present and INERT reads exactly like a
+# working one from the host: `virsh nwfilter-dumpxml` lists it either way, and whether it is
+# attached to the live tap device is not in that output. Reachability from the far side is the
+# only signal that separates the two — which is the failure the fence was added after (the inert
+# ufw `route deny`, #508). ansible/tests/staging/test_staging_egress_fence.py holds the filter's
+# SHAPE; this leg is the half that measures whether it FIRES. It replaces
+# scripts/diagnostics/staging_egress_probe.py, which dialled these same targets from the
+# persistent daniel-stage guest and was retired with it (#2941, restored here as #2943).
+#
+# WHY THE CONTROL TARGET IS LOAD-BEARING. A fence that severed all egress makes every production
+# target fail too, and that reads as a pass to anyone skimming. INTERNET must stay REACHABLE for
+# a refused production target to mean anything, so a lost control is a FAILURE of the fence's
+# design rather than a success of its blocking.
+#
+# WHY SOME TARGETS CARRY A HOST-SIDE CONTROL LEG. A ClusterIP and a pod IP are allocated, not
+# pinned in the inventory. A target that has simply MOVED answers from nowhere, which is
+# indistinguishable from a fence that holds. Each allocated target is therefore dialled from
+# daniel-server too, where kube-proxy's DNAT makes it reachable at all.
+#
+# DECIDED: a leak aborts the run before any credential is staged; a target that answers from
+# NEITHER side is reported and not fatal. Staleness only degrades the meaning of a NEGATIVE — a
+# target answering from inside the guest is a leak whether or not it is stale, so leak detection
+# survives it — and losing a month of restore-drill coverage because a ClusterIP moved is the
+# worse trade. An unproven target rides along in this run's own Kuma message as
+# `fence=hold,unproven=<labels>` and is named per-target in egress-fence.log. There is no
+# separate Kuma tile for the fence verdict; the drill's own tile carries it.
+
+fence_curl() { printf 'curl -sk --max-time %s -o /dev/null %s' "$FENCE_PROBE_TIMEOUT" "$1"; }
+
+# One `label|what the guest runs|what THIS host runs as the control leg` row per target; an
+# empty third field means the address is pinned in the inventory and cannot go stale without a
+# commit, so a second dial would prove nothing. Read ONCE per run — `ip neigh` is live, and a
+# table built twice could name two different pod IPs.
+fence_targets() {
+  # The control, and the only row that is not a production address.
+  printf '%s|%s|\n' INTERNET "$(fence_curl https://1.1.1.1)"
+  # lan_subnet: the cluster edge, the API server, and daniel-pi's wg-easy admin UI — which is
+  # unauthenticated, and whose only protection is the LAN-only premise this guest sits outside.
+  printf '%s|%s|\n' PRODVIP "$(fence_curl http://{{ k3s_metallb_ingress_vip }})"
+  printf '%s|%s|\n' K3SAPI "$(fence_curl https://{{ hostvars['daniel-box'].server_ip }}:6443/version)"
+  printf '%s|%s|\n' WGEASY "$(fence_curl http://{{ hostvars['daniel-pi'].server_ip }}:51821)"
+  # k3s_service_cidr. Longhorn's frontend Service is the thing actually found exposed on
+  # 2026-08-28, answering unauthenticated with a mutating `diskUpdate` action in its payload.
+  printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"
+  # k3s_pod_cidr. Discovered rather than pinned, because a pod IP is ephemeral: whichever pod on
+  # this host's CNI bridge is currently reachable. Read from `ip neigh` and not kubectl, because
+  # daniel-server is an agent node with no kubeconfig — kubectl here dials localhost:8080 and is
+  # refused. ICMP rather than HTTP: the neighbour is whichever pod happens to be up and its
+  # listening port is unknown, while the nwfilter rule carries no protocol, so a ping proves the
+  # same rule an HTTP dial would.
+  local pod_ip
+  pod_ip="$(ip -4 neigh show dev cni0 2>/dev/null | awk '/REACHABLE/ {print $1; exit}')"
+  [[ -n "$pod_ip" ]] && printf '%s|%s|%s\n' PODNET "ping -c1 -W3 $pod_ip" "ping -c1 -W3 $pod_ip"
+  return 0
+}
+
+# Every dial in ONE ssh session, reading the table on stdin and printing `LABEL rc` per target.
+# Not one session per target: six sessions are six chances to hang, and this orchestrator has
+# already paid for a hung session once (run 20260911T135526Z). `na` is printed when the dial
+# needs a tool the guest does not have — a missing tool must never read as `refused`, which is
+# the same bug shape as an inert fence.
+fence_dial_guest() {
+  local -a argv script
+  mapfile -t argv < <(ssh_argv)
+  # Single-quoted on purpose: every expansion in here belongs to the guest's shell, not this
+  # one, so the text has to travel unexpanded.
+  # shellcheck disable=SC2016
+  script=(
+    'dial() { label="$1"; shift; command -v "$1" >/dev/null 2>&1 || { echo "$label na"; return; };'
+    '         if "$@" >/dev/null 2>&1; then echo "$label 0"; else echo "$label $?"; fi; }'
+  )
+  local label probe _control
+  while IFS='|' read -r label probe _control; do
+    [[ -n "$label" ]] && script+=("dial $label $probe")
+  done
+  printf '%s\n' "${script[@]}" | timeout "$FENCE_DEADLINE" "${argv[@]}" bash -s
+}
+
+# Reads the table, dials it, writes the evidence file, and sets FENCE_VERDICT. Fatal on a leak
+# or a lost control target, both through `fail` — so the EXIT trap still destroys the guest.
+fence_check() {
+  local fence_log="$LOG_DIR/egress-fence.log" table
+  table="$(fence_targets)"
+
+  local -A dialled=()
+  local label code
+  while read -r label code; do
+    [[ -n "$label" ]] && dialled["$label"]="$code"
+  done < <(printf '%s\n' "$table" | fence_dial_guest)
+
+  local -a leaked=() unproven=()
+  local probe control state
+  : >"$fence_log"
+  while IFS='|' read -r label probe control; do
+    [[ -n "$label" ]] || continue
+    code="${dialled[$label]-}"
+    case "$code" in
+      0)  state=REACHABLE ;;
+      "") state="UNPROVEN (the guest reported no result for this target)" ;;
+      na) state="UNPROVEN (the dial needs a tool the guest does not have)" ;;
+      127) state="UNPROVEN (the dial exited 127: it could not be run in the guest)" ;;
+      *)  state="refused (exit $code)" ;;
+    esac
+    if [[ -n "$control" && "$code" != 0 ]] \
+      && ! timeout $((FENCE_PROBE_TIMEOUT + 4)) bash -c "$control" >/dev/null 2>&1; then
+      state="UNPROVEN (stale: answered from neither the guest nor this host)"
+    fi
+    printf '%-12s %-58s %s\n' "$label" "$state" "$probe" >>"$fence_log"
+    case "$state" in
+      REACHABLE) [[ "$label" == INTERNET ]] || leaked+=("$label") ;;
+      UNPROVEN*) unproven+=("$label") ;;
+    esac
+  done <<<"$table"
+
+  log "egress fence, dialled from inside the guest:"
+  cat "$fence_log"
+
+  [[ "${dialled[INTERNET]-}" == 0 ]] || fail "egress fence UNPROVEN: the internet control target did \
+not answer from the guest, so every production target refused below did so only because nothing \
+can leave at all. That is a broken fence, not a working one; nothing was staged into the guest. \
+See $fence_log"
+  # Emptiness tested with -z rather than the array-length form, here and below: a literal
+  # dollar-brace-hash in a .j2 opens a Jinja comment, and the template then never renders.
+  [[ -z "${leaked[*]}" ]] || fail "egress fence BROKEN: ${leaked[*]} answered from inside guest \
+$NAME, which is about to be handed the cluster token and the R2 write credentials. Nothing was \
+staged. Traffic arrives at production SNATed as daniel-server, so source-IP controls do not see \
+the guest as foreign. Check the LIVE tap device carries the filter — a defined-but-unreferenced \
+filter reads identical from the host: virsh -c qemu:///system dumpxml $NAME | grep -A2 filterref. \
+See $fence_log"
+
+  if [[ -n "${unproven[*]}" ]]; then
+    FENCE_VERDICT="hold,unproven=$(IFS=,; printf '%s' "${unproven[*]}")"
+    log "fence verdict: $FENCE_VERDICT — those targets were not tested, so the fence was not \
+proven against their range. The run continues: a leak is still detected whether or not a target \
+is stale, and a moved address is not worth a skipped restore drill."
+  else
+    FENCE_VERDICT=hold
+  fi
+}
+
 main() {
   if [[ "$ARMED" != "1" ]]; then
     logger -t "$TAG" "disarmed (hypervisor_etcd_drill_armed=false); nothing run"
@@ -206,6 +364,10 @@ main() {
     sleep 5
   done
   log "guest is up"
+
+  # Before the token and the R2 credentials go in, not after: this is the last point at which a
+  # guest that can reach production has not yet been handed anything to reach it with.
+  fence_check
 
   # Stage everything the drill reads, at the paths it reads them, as one tar. Root-owned here
   # so the modes and owners land as-is on the far side. The token is read from the agent env
@@ -273,14 +435,14 @@ main() {
       full "${snapshot:-unknown}" "$(date -u +%Y-%m-%dT%H:%M:%SZ)" "$(date -u +%s)" "$NAME" \
       > "$STAMP_DIR/last-success-full"
     chmod 0644 "$STAMP_DIR/last-success-full"
-    report up "full restore drill passed in guest $NAME: snapshot=${snapshot:-unknown} ${counts} k3s=${k3s_version}"
+    report up "full restore drill passed in guest $NAME: snapshot=${snapshot:-unknown} ${counts} k3s=${k3s_version} fence=${FENCE_VERDICT}"
     exit 0
   fi
   local reason
   reason="$(grep -m1 -E 'etcd-restore-drill: |etcd-drill-guest-run: ' "$LOG_DIR/drill.out" | tail -c 200)"
   [[ $rc -eq 124 ]] && reason="run exceeded ${RUN_TIMEOUT}s and was killed"
   [[ $rc -eq 125 ]] && reason="guest exited during the drill"
-  fail "full restore drill FAILED (exit $rc): ${reason:-see $LOG_DIR/drill.out} snapshot=${snapshot:-unknown}"
+  fail "full restore drill FAILED (exit $rc): ${reason:-see $LOG_DIR/drill.out} snapshot=${snapshot:-unknown} fence=${FENCE_VERDICT}"
 }
 
 trap teardown EXIT

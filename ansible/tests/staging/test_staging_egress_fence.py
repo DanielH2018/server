@@ -17,11 +17,17 @@ ufw `route deny`: that was the first attempt, it deployed cleanly, `ufw status` 
 it was inert, because libvirt's own FORWARD accept is reached first. The whole history is at
 roles/setup/initial_setup/tasks/network.yml, where the rule used to live.
 
-These tests check the filter's SHAPE and its ATTACHMENT, which is all a repo-side check can
-see. Whether it fires is a property of the running host, and the probe that measured that ran
-inside the persistent daniel-stage guest; it was deleted with the guest (#2941) and re-pointing
-it at the drill's transient guest is filed, not done. So a correct filter that is unattached
-now reads green here — the inert ufw rule passed a whole file of shape tests.
+Two halves live here. The first checks the filter's SHAPE and its ATTACHMENT, which is all a
+check that never leaves the repo can see: a correct filter that is unattached reads green in
+every listing the host offers, and the inert ufw rule passed a whole file of shape tests.
+
+The second half is the reachability gate. It measures the leg the drill orchestrator runs from
+INSIDE the guest — the only place a fence's firing can be measured — by rendering that
+orchestrator and running the leg under bash against stub dials. It replaces
+scripts/diagnostics/staging_egress_probe.py, which ran on demand inside the persistent
+daniel-stage guest and was deleted with it (#2941, restored as a drill leg in #2943). The leg
+itself runs once per monthly drill, before the guest is handed the cluster token or the R2
+write credentials; these tests are what proves its four verdicts can each go red.
 
 The pair that matters most is the two CIDR tests at the end. A fence keyed to a network that
 does not contain the guest is not a weaker fence, it is no fence at all, and it reads green
@@ -34,6 +40,16 @@ import xml.etree.ElementTree as ET
 
 from lib import yaml_fast
 
+from _fence_probe import (
+    CONTROL,
+    ORCHESTRATOR,
+    POD_IP,
+    fence_targets_block,
+    dialled_addresses,
+    host_reaches,
+    run_fence,
+    state,
+)
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
@@ -328,3 +344,153 @@ def test_the_staging_cidr_agrees_with_the_network_the_hypervisor_builds():
         f"with {netmask}. A wider CIDR here fences addresses libvirt never hands out; a "
         f"narrower one leaves part of the guest network unfenced."
     )
+
+
+def test_the_leg_dials_every_range_the_filter_fences():
+    """Non-vacuity, tied to the filter rather than to a count.
+
+    A leg that lost a target reads exactly like a fence that holds: every remaining dial still
+    comes back refused. So each network the nwfilter drops must have a dial aimed inside it. The
+    pod CIDR's is the one address that cannot be a literal — a pod IP is ephemeral, so the leg
+    discovers it from the host's neighbour table, and the runs below exercise that path.
+    """
+    block = fence_targets_block()
+    dialled = dialled_addresses(block)
+    assert dialled, f"no dialled addresses parsed out of fence_targets(): {block}"
+    assert "cni0" in block, (
+        "the leg no longer discovers a pod IP from the host's neighbour table, so nothing dials "
+        f"{POD_CIDR_VAR} at all"
+    )
+    pod_cidr = ipaddress.ip_network(_all_vars()[POD_CIDR_VAR])
+    for network in _expected_networks() - {pod_cidr}:
+        assert any(address in network for address in dialled), (
+            f"no dial in fence_targets() falls inside the fenced network {network}. "
+            f"{NWFILTER_TEMPLATE.name} drops that range and nothing measures it: every other "
+            f"dial still comes back refused, so the leg reads green."
+        )
+    control = ipaddress.ip_address(CONTROL.split("//")[1])
+    assert not any(control in network for network in _expected_networks()), (
+        f"the control target {control} sits inside a fenced range, so it cannot prove the guest "
+        f"kept its egress — a working fence would refuse it and the leg would call the fence "
+        f"broken on every run."
+    )
+
+
+def test_a_fence_that_holds_reports_hold_and_records_its_evidence(tmp_path):
+    """The input it must ACCEPT: the control answers, every production target is refused.
+
+    This is #2943's Verify-by in miniature — the evidence names each fenced range refused and
+    the internet control target reachable.
+    """
+    verdict, lines = run_fence(
+        tmp_path, guest_reachable=[CONTROL], host_reachable=host_reaches()
+    )
+
+    assert verdict == "VERDICT hold", verdict
+    assert state(lines, "INTERNET").startswith("REACHABLE"), lines
+    for line in (l for l in lines if not l.startswith("INTERNET")):
+        assert "refused" in line, f"a production target was not refused: {line}"
+    assert {l.split()[0] for l in lines} == {
+        "INTERNET",
+        "PRODVIP",
+        "K3SAPI",
+        "WGEASY",
+        "LONGHORNSVC",
+        "PODNET",
+    }, f"the evidence does not name the targets this leg is supposed to dial: {lines}"
+
+
+def test_a_production_target_answering_from_the_guest_aborts_the_run(tmp_path):
+    """REJECT: the 2026-08-27 measurement, which is what the fence was added for.
+
+    wg-easy's admin UI is unauthenticated and LAN-only, so reaching it from the guest is the
+    leak. It has to abort rather than note it — the next thing the orchestrator does is hand
+    that guest the cluster token and the R2 write credentials.
+    """
+    pi = _load_host_vars("daniel-pi")["server_ip"]
+    verdict, lines = run_fence(
+        tmp_path,
+        guest_reachable=[CONTROL, f"http://{pi}:51821"],
+        host_reachable=host_reaches(),
+    )
+
+    assert verdict.startswith("FAIL egress fence BROKEN"), verdict
+    assert "WGEASY" in verdict, verdict
+    assert "Nothing was staged" in verdict, verdict
+    assert state(lines, "WGEASY").startswith("REACHABLE"), lines
+
+
+def test_a_guest_with_no_egress_at_all_is_a_broken_fence_not_a_pass(tmp_path):
+    """REJECT: the shape that makes every other assertion here meaningless.
+
+    A rule that lost its destination drops everything, so every production target is refused and
+    the run reads like a perfect pass. The control target is the only thing telling the two
+    apart, which is why a lost control is a failure rather than a clean sweep.
+    """
+    verdict, lines = run_fence(tmp_path, guest_reachable=[])
+
+    assert verdict.startswith("FAIL egress fence UNPROVEN"), verdict
+    assert "internet control target" in verdict, verdict
+    assert state(lines, "INTERNET").startswith("refused"), lines
+
+
+def test_a_target_that_answers_from_neither_side_is_named_and_not_fatal(tmp_path):
+    """A ClusterIP that moved is a probe-maintenance fault, not a leak and not a drill failure.
+
+    Staleness only degrades the meaning of a NEGATIVE: a target answering from inside the guest
+    is a leak whether or not it is stale. So the run continues with the label in its verdict,
+    and the orchestrator's DECIDED comment carries the trade.
+    """
+    vip = _all_vars()["k3s_metallb_ingress_vip"]
+    verdict, lines = run_fence(
+        tmp_path,
+        guest_reachable=[CONTROL],
+        # Everything daniel-server can still reach EXCEPT the Longhorn ClusterIP, which is what
+        # a Service that moved to a new address looks like from this host.
+        host_reachable=[CONTROL, f"http://{vip}", POD_IP],
+    )
+
+    assert verdict == "VERDICT hold,unproven=LONGHORNSVC", verdict
+    assert "stale" in state(lines, "LONGHORNSVC"), lines
+    assert "refused" in state(lines, "PRODVIP"), (
+        "a target the host itself can still reach was proven, so it must read as refused rather "
+        f"than stale: {lines}"
+    )
+
+
+def test_a_dial_whose_tool_is_missing_reads_as_unproven_not_refused(tmp_path):
+    """This issue's own bug shape, one level down.
+
+    A guest without `ping` refuses nothing — it cannot dial at all. Counting that as a block is
+    how a gate reports a fence it never tested, so it lands in the same `unproven` list as a
+    stale address rather than in the refused column.
+    """
+    verdict, lines = run_fence(
+        tmp_path,
+        guest_reachable=[CONTROL],
+        host_reachable=host_reaches(),
+        guest_tools=("curl",),
+    )
+
+    assert verdict == "VERDICT hold,unproven=PODNET", verdict
+    assert "UNPROVEN" in state(lines, "PODNET"), lines
+
+
+def test_the_leg_runs_before_the_guest_is_handed_any_credential():
+    """Placement is the half of this that cannot be measured from inside the guest.
+
+    A leg that ran after the staging tar would report the leak correctly and a minute too late:
+    the cluster token and the R2 write credentials for the whole backup bucket would already be
+    on a guest that can reach production.
+    """
+    body = ORCHESTRATOR.read_text()
+    main = body.index("main() {")
+    leg = body.index("\n  fence_check\n", main)
+    for marker, what in (
+        ('. "$AGENT_ENV"', "the cluster token is read"),
+        ("etcd-s3.env", "the R2 credentials are staged"),
+        ("etcd-drill-guest-run --detached", "the drill is started"),
+    ):
+        assert leg < body.index(marker, main), (
+            f"the fence leg runs after {what} in {ORCHESTRATOR.name}"
+        )
