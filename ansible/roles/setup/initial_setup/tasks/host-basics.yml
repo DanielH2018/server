@@ -266,7 +266,7 @@
   ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool install --python 3.14 {{ item }}"
   loop:
     - ansible-core==2.21.4
-    - ansible-lint==26.8.0
+    - ansible-lint==26.9.0
     - prek==0.5.3
   become: false
   when:
