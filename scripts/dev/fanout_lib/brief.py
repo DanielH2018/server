@@ -60,23 +60,21 @@ def _issue_block(issue: Issue) -> str:
 
 def _landing(host: str, batch: str) -> str:
     if host == LANDS:
-        # $CLAUDE_JOB_DIR may be unset for a headless `claude -p` under systemd-run, which
-        # would silently fall back to /tmp. The worktree's own git-ignored .fanout/ dir is
-        # always there.
-        log = f"{_worktree_path(batch)}/.fanout/land<n>.log"
+        # `--log-dir` rather than $CLAUDE_JOB_DIR, which may be unset for a headless
+        # `claude -p` under systemd-run and would silently fall back to /tmp. The worktree's
+        # own git-ignored .fanout/ dir is always there, and is where `status.py` greps for the
+        # verdict.
+        log_dir = f"{_worktree_path(batch)}/.fanout"
         return f"""## Landing
-Land with `land.sh` (the `land-after-merge` skill); a hook denies hand-polling CI:
+Land with ONE `land.sh` command (the `land-after-merge` skill); a hook denies hand-polling CI.
+It names its own logfile, forks into it, and blocks until the landing prints its verdict:
 
 ```bash
-git rev-parse origin/master
-./scripts/deploy_tools/land.sh --pr <n> --since <pre-merge-sha> --arm-merge --await-merge \\
-  > "{log}" 2>&1
+./scripts/deploy_tools/land.sh --pr <n> --arm-merge --await-merge --detach --await-verdict \\
+  --log-dir "{log_dir}"
 ```
-Run that backgrounded, then wait in the foreground, once, instead of ending your turn:
-```bash
-timeout 1200 tail -f -n +1 "{log}" | grep -m1 '^VERDICT:'
-```
-It prints the verdict at once and returns at the timeout; that is not a failure.
+Do not background it, do not redirect it, and do not end your turn on it — it returns with the
+landing's own exit code once the `VERDICT:` line is printed, and prints that line for you.
 `deploy.sh` exit 75 is a resume point to retry, not a failure to report.
 Close a fixed issue with exactly `findings.py close <n> --fixed --pr <n>`; `--refuted` and
 `--accepted` are operator-only.

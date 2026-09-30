@@ -186,6 +186,10 @@ nav:
   # section, ordered day-to-day first and recovery last.
   - Operations:
       - Deploying by hand: deploying.md
+      # The long form behind the `land-after-merge` skill. The skill carries the invocation
+      # and the verdict decoder; this page carries the measurement behind each rule, which is
+      # what kept the skill at 418 lines and 47 commits (#2853).
+      - Landing a merged PR: landing.md
       - The GitOps pipeline: gitops-pipeline.md
       # The "(drafted)" suffix was dropped when the claim protocol and the /issue-fanout
       # skill landed: the page now describes a system that exists, not one still specced.

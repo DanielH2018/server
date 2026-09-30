@@ -623,3 +623,8 @@ Tera
 serde
 [Dd]eserializer
 mixin
+
+# Landing a merged PR (docs/landing.md)
+[Ll]ogfile
+logfmt
+[Hh]eredocs
