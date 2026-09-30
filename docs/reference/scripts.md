@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-30 13:04 UTC
-generated_sha: 83d464903
+generated_at: 2026-09-30 13:16 UTC
+generated_sha: 4075831e4
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,13 +20,10 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**1 of the 49 scripts that run unattended have no test; 7 of all 214 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 49 scripts that run unattended have no test; 6 of all 214 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
-
-
-- `scripts/deploy_tools/land.sh` — Claude hook: fanout-stop.py
 
 
 ## Run automatically, on a schedule
@@ -66,7 +63,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/config_templates.py` | validate | Render the high-value NON-compose YAML config templates (monitoring) and assert they parse. | prek hook (every commit) | `test_validate_config_templates.py` *(indirect)* | — |
 | `scripts/deploy.sh` | (top level) | the entry point every doc, skill, hook and consumer names; it execs deploy_run.py. | deploy: ansible/roles/k8s/monitor-bridge/files/gitops_markers.py | `test_deploy_at_sha.py` *(indirect)* | [0, 2, 3, 4, 20, 64, 75, 76, 77, 78, 79](#scriptsdeploysh) |
 | `scripts/deploy_tools/deploy_detach_notify.py` | deploy_tools | Post-deploy notifier for `scripts/deploy.sh --detach`. | deploy_run.py (every commit, CI run, deploy or Claude session runs it) | `test_deploy_detach_notify.py` | — |
-| `scripts/deploy_tools/deploy_run.py` | deploy_tools | Run an interactive Ansible deploy under the locks the automated deployers take. | every deploy (deploy.sh) | `test_deploy_staleness_precedes_tag_validation.py` *(indirect)* | — |
+| `scripts/deploy_tools/deploy_run.py` | deploy_tools | Run an interactive Ansible deploy under the locks the automated deployers take. | every deploy (deploy.sh) | `test_deploy_exit_codes.py` *(indirect)* | — |
 | `scripts/deploy_tools/deploy_staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | deploy_run.py (every commit, CI run, deploy or Claude session runs it) | `test_deploy_staleness.py` | — |
 | `scripts/deploy_tools/deploy_tags.py` | deploy_tools | Validate the --tags a deploy was given, before Ansible silently accepts them. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_deploy_tags.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | `test_etcd_restore_drill_cron.py` *(indirect)* | — |
@@ -79,7 +76,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/validate/jinja_bash_collisions.py` | validate | Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. | prek hook (every commit) | `test_validate_jinja_bash_collisions.py` *(indirect)* | — |
 | `scripts/validate/k8s_manifests.py` | validate | Render every k8s manifest template with stubbed vars and assert each parses as valid YAML. | prek hook (every commit) | `test_validate_k8s_manifests.py` *(indirect)* | — |
 | `scripts/deploy_tools/land.py` | deploy_tools | Follow a merged PR through to a verified deploy, in one invocation. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_land_options.py` *(indirect)* | — |
-| `scripts/deploy_tools/land.sh` | deploy_tools | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: fanout-stop.py | — | [0, 1, 64, 75](#scriptsdeploytoolslandsh) |
+| `scripts/deploy_tools/land.sh` | deploy_tools | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: fanout-stop.py | `test_deploy_exit_codes.py` *(indirect)* | [0, 1, 64, 75](#scriptsdeploytoolslandsh) |
 | `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_narrow_setup.py` | — |
 | `scripts/deploy_tools/prune_releases.py` | deploy_tools | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` | — |
 | `scripts/deploy_tools/render_targets.py` | deploy_tools | The k8s services a render-record run renders on one host, derived from the tree. | deploy: ansible/roles/setup/render_records/files/render_records.py | `test_render_targets.py` | — |
@@ -243,7 +240,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/findings.py` | dev | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | no automated caller in the tree | `test_findings.py` | — |
 | `scripts/dev/gen_gitops_markers.py` | dev | Copy the deployer's `gitops_markers.py` into every tree that reads its markers. | no automated caller in the tree | `test_gitops_markers_copies.py` *(indirect)* | — |
 | `scripts/docs/gen_role_glance.py` | docs | Generate the mechanical half of every role's `## At a glance` block, in place. | no automated caller in the tree | `test_gen_role_glance.py` | — |
-| `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | `test_gitops_manual_trigger.py` *(indirect)* | [0, 3, 4, 75](#scriptsdeploytoolsgitopsticksh) |
+| `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | `test_gitops_manual_trigger.py` *(indirect)* | [0, 1, 2, 3, 4, 64, 75](#scriptsdeploytoolsgitopsticksh) |
 | `scripts/diagnostics/grafana_panel_report.py` | diagnostics | Classify what a Grafana dashboard page actually rendered. | no automated caller in the tree | `test_grafana_panel_report.py` | — |
 | `scripts/deploy_tools/k3s_etcd_restore_gates.py` | deploy_tools | Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_etcd_restore_gates.py` | — |
 | `scripts/deploy_tools/k3s_upgrade_gates.py` | deploy_tools | Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_upgrade_gates.py` | — |
@@ -305,10 +302,13 @@ The sections below split them by **how each one is run**, which is derived from 
 
 | Exit | Name | Meaning | What to do |
 |---|---|---|---|
-| 0 | `TICK_OK` | the tick ran to completion; read its journal for what it did. | — |
-| 3 | `TICK_LOCK_CONTENTION` | the tick was skipped for lock contention, so nothing deployed and nothing alerted. | — |
-| 4 | `TICK_JOINED` | --no-wait joined a run already in flight and started none. That run fetched before this request, so a commit merged since is not in it. | — |
-| 75 | `TICK_STILL_RUNNING` | the wait budget elapsed and the wrapper stopped watching a run still in flight. | — |
+| 0 | `TICK_OK` | the tick ran to completion; read its journal for what it did. A noop, a deferral and a real deploy all complete successfully. | — |
+| 1 | `TICK_FAILED` | the unit failed, or it could not be started at all. | gitops-deploy-alert.service has already posted to Discord via OnFailure. An `Interactive authentication required` on the start means the polkit rule is missing: apply it with `initial_setup.yml --tags gitops_deploy`. |
+| 2 | `TICK_NOT_INSTALLED` | gitops-deploy.service is not installed on this host. | The deployer runs only where `has_gitops` is true (daniel-box). Run it there. |
+| 3 | `TICK_LOCK_CONTENTION` | the tick was skipped for lock contention, so nothing deployed and nothing alerted. | Re-run once the other deploy or the secret-rotate cron finishes; `last_run` is untouched, and no alert fires for this. |
+| 4 | `TICK_JOINED` | --no-wait joined a run already in flight and started none. That run fetched before this request, so a commit merged since is not in it. | Re-run once it ends, or wait for the timer. |
+| 64 | `TICK_BAD_ARGS` | the command line is wrong. | `--wait <seconds>` and `--no-wait` are the only flags. |
+| 75 | `TICK_STILL_RUNNING` | the wait budget elapsed and the wrapper stopped watching a run still in flight. | The run itself is fine. Follow it with `journalctl -u gitops-deploy.service`. |
 
 ### `scripts/deploy_tools/await_ci.py`
 

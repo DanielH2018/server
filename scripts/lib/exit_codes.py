@@ -107,8 +107,13 @@ DEPLOY_SH_NO_VERDICT = frozenset(
 #     fresh run on the same budget and exits by THAT run's outcome (issue #1879).
 # 75 = the wrapper stopped watching a run still in flight, which is not a failure.
 TICK_OK = OK
+TICK_FAILED = FAILED
+# The unit is not installed on this host -- the deployer runs only where `has_gitops` is true.
+# Its own code because the remedy is a different host, not a different command line.
+TICK_NOT_INSTALLED = 2
 TICK_LOCK_CONTENTION = 3
 TICK_JOINED = 4
+TICK_BAD_ARGS = USAGE_ERROR
 TICK_STILL_RUNNING = TEMP_FAIL
 
 # -- scripts/deploy_tools/await_ci.py ---------------------------------------------------
@@ -153,17 +158,22 @@ class Code:
     `meaning` is the one line `docs/reference/scripts.md` renders. `remedy` is the operator's
     next step, printed by the entry point itself on a non-zero exit — it was the
     `_DEPLOY_EXITS` table in `.claude/hooks/auto-mode-bridge.py` until 2026-09-30, where it
-    only reached Claude and never a human at a terminal (issue #2853).
+    only reached Claude and never a human at a terminal (issue #2853). `verdict` is the
+    one-token name of this outcome for the verdict line below, empty where the entry point
+    prints none.
     """
 
     value: int
     const: str
     meaning: str
     remedy: str = ""
+    verdict: str = ""
 
 
-def _c(value: int, const: str, meaning: str, remedy: str = "") -> Code:
-    return Code(value, const, meaning, remedy)
+def _c(
+    value: int, const: str, meaning: str, remedy: str = "", verdict: str = ""
+) -> Code:
+    return Code(value, const, meaning, remedy, verdict)
 
 
 # Keyed by the entry point's path relative to the repo root — the name every doc, skill and
@@ -174,12 +184,14 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             DEPLOY_OK,
             "DEPLOY_OK",
             "deployed, and the play reached PLAY RECAP naming a host.",
+            verdict="deployed",
         ),
         _c(
             DEPLOY_TAG_MISS,
             "DEPLOY_TAG_MISS",
             "a --tags value matched no service in containers_list, so NOTHING was deployed.",
             "--list-services prints every valid value.",
+            verdict="tag-miss",
         ),
         _c(
             DEPLOY_BROAD,
@@ -187,6 +199,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the change is broad (shared templates, inventory, the setup plane) and maps to no "
             "single service, so NOTHING was deployed.",
             "--changed refuses it by design; apply the plane by hand.",
+            verdict="broad",
         ),
         _c(
             DEPLOY_STALE,
@@ -194,6 +207,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "the tree is behind origin/master, so NOTHING was deployed.",
             "A stale tree renders stale templates and reverts live config while every "
             "repo-side check still reads green. Pull first; never --skip-staleness-check.",
+            verdict="stale",
         ),
         _c(
             DEPLOY_PLAYBOOK_FAILED,
@@ -202,12 +216,14 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "ARE live — everything applied before the failing task took effect.",
             "Read the PLAY RECAP and the failing TASK. Do not treat it as a tag, staleness or "
             "lock refusal, and do not assume a re-run is safe.",
+            verdict="playbook-failed",
         ),
         _c(
             DEPLOY_BAD_FLAGS,
             "DEPLOY_BAD_FLAGS",
             "the command line is wrong, so NOTHING was deployed and a retry changes nothing.",
             "Read the usage above; fix the flags rather than re-running.",
+            verdict="bad-flags",
         ),
         _c(
             DEPLOY_LOCK_BUSY,
@@ -217,6 +233,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "/var/lock/server-deploy-<tag>.lock files.",
             "The GitOps timer or another session holds it. This is a resume point, not a "
             "playbook failure — re-run the same command shortly.",
+            verdict="lock-busy",
         ),
         _c(
             DEPLOY_LOCK_UNAVAILABLE,
@@ -225,6 +242,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "contention — no deploy holds the lock.",
             "Check that /var/lock/server-git-tree.lock exists and is writable by this user; "
             "retrying alone changes nothing.",
+            verdict="lock-unavailable",
         ),
         _c(
             DEPLOY_SNAPSHOT_FAILED,
@@ -233,6 +251,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "The playbook renders from a detached worktree of HEAD under "
             "/tmp/homelab-deploy-snapshots; the message above carries the failing command's "
             "own stderr (the `fatal:` line), so fix what it names — retrying changes nothing.",
+            verdict="snapshot-failed",
         ),
         _c(
             DEPLOY_NO_HOSTS,
@@ -241,6 +260,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "ansible exits 0 for a run where no play matched, so the wrapper reads the PLAY "
             "RECAP itself. Read the [WARNING] lines above — an inventory that failed to "
             "parse, or a host pattern that matched nothing — fix that, then re-run.",
+            verdict="no-hosts",
         ),
         _c(
             DEPLOY_LOCK_PLAN_FAILED,
@@ -250,6 +270,7 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
             "It never falls back to a lock order of its own. Run `uv run python "
             "ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to "
             "see why, fix that, then re-run; nothing was held while it ran.",
+            verdict="lock-plan-failed",
         ),
     ),
     "scripts/deploy_tools/land.sh": (
@@ -277,23 +298,55 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         _c(
             TICK_OK,
             "TICK_OK",
-            "the tick ran to completion; read its journal for what it did.",
+            "the tick ran to completion; read its journal for what it did. A noop, a deferral "
+            "and a real deploy all complete successfully.",
+            verdict="ticked",
+        ),
+        _c(
+            TICK_FAILED,
+            "TICK_FAILED",
+            "the unit failed, or it could not be started at all.",
+            "gitops-deploy-alert.service has already posted to Discord via OnFailure. An "
+            "`Interactive authentication required` on the start means the polkit rule is "
+            "missing: apply it with `initial_setup.yml --tags gitops_deploy`.",
+            verdict="failed",
+        ),
+        _c(
+            TICK_NOT_INSTALLED,
+            "TICK_NOT_INSTALLED",
+            "gitops-deploy.service is not installed on this host.",
+            "The deployer runs only where `has_gitops` is true (daniel-box). Run it there.",
+            verdict="not-installed",
         ),
         _c(
             TICK_LOCK_CONTENTION,
             "TICK_LOCK_CONTENTION",
             "the tick was skipped for lock contention, so nothing deployed and nothing alerted.",
+            "Re-run once the other deploy or the secret-rotate cron finishes; `last_run` is "
+            "untouched, and no alert fires for this.",
+            verdict="contention",
         ),
         _c(
             TICK_JOINED,
             "TICK_JOINED",
             "--no-wait joined a run already in flight and started none. That run fetched "
             "before this request, so a commit merged since is not in it.",
+            "Re-run once it ends, or wait for the timer.",
+            verdict="joined",
+        ),
+        _c(
+            TICK_BAD_ARGS,
+            "TICK_BAD_ARGS",
+            "the command line is wrong.",
+            "`--wait <seconds>` and `--no-wait` are the only flags.",
+            verdict="bad-args",
         ),
         _c(
             TICK_STILL_RUNNING,
             "TICK_STILL_RUNNING",
             "the wait budget elapsed and the wrapper stopped watching a run still in flight.",
+            "The run itself is fine. Follow it with `journalctl -u gitops-deploy.service`.",
+            verdict="still-running",
         ),
     ),
     "scripts/deploy_tools/await_ci.py": (
@@ -330,6 +383,38 @@ CONTRACTS: dict[str, tuple[Code, ...]] = {
         ),
     ),
 }
+
+
+# -- the verdict line an entry point ends with ------------------------------------------
+#
+# `land.sh` prints `VERDICT: <verdict> (<detail>)` as its last line. `fanout_status.py` and the
+# `land-after-merge` wait both find a landing's outcome by grepping `^VERDICT:`.
+#
+# DECIDED: deploy.sh and the tick print that same shape under their OWN prefix rather than
+# under `VERDICT:`. A landing runs both as subprocesses with stdout INHERITED
+# (`land_lib/tools.py:run_deploy`), so their lines reach the landing's own logfile ABOVE its
+# verdict -- and `grep -m1 '^VERDICT:'` takes the FIRST match, which would report the deploy's
+# outcome as the landing's on every landing, with nothing failing. One format, three prefixes,
+# one renderer. Issue #2853 asked for a bare `VERDICT:` from all three; the PR that closed it
+# carries the measurement.
+VERDICT_PREFIXES = {
+    "scripts/deploy.sh": "DEPLOY-VERDICT",
+    "scripts/deploy_tools/gitops_tick.sh": "TICK-VERDICT",
+    "scripts/deploy_tools/land.sh": "VERDICT",
+}
+
+
+def verdict_line(entry_point: str, rc: int, detail: str) -> str | None:
+    """`<PREFIX>: <verdict> (<detail>)` for `rc`, or None when the code names no verdict.
+
+    The outermost tool an operator ran is the one whose prefix is bare `VERDICT`; see the
+    DECIDED note above for why the inner two are not.
+    """
+    prefix = VERDICT_PREFIXES.get(entry_point)
+    for code in contract(entry_point):
+        if code.value == rc and prefix and code.verdict:
+            return f"{prefix}: {code.verdict} ({detail})"
+    return None
 
 
 def contract(entry_point: str) -> tuple[Code, ...]:

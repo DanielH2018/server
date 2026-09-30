@@ -180,24 +180,17 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Every member of `DEPLOY_SH_NO_VERDICT` (`scripts/lib/exit_codes.py`) means
-**nothing was deployed**, and each is a resume point rather than a failure. 64 also ran
-nothing, but is a bad command line rather than a resume point. 20 is the inverse: the
-playbook ran and changes are live. The table is pinned to that module by
-`ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`.
+**`deploy.sh` prints what its exit code means, on every non-zero exit.** Two lines, last:
+`deploy.sh: <NAME> (<code>): <meaning> <what to do>`, then
+`DEPLOY-VERDICT: <verdict> (<the arguments>)`. Read those rather than looking the number up --
+`scripts/lib/exit_codes.py` is where the wrapper reads them from, and
+`docs/reference/scripts.md` renders the same table per entry point. This skill carried a copy
+until 2026-09-30, alongside four others, and 77 and 78 reached only some of the five (#2853).
 
-| Exit | Meaning | What to do |
-|---|---|---|
-| 79 | `deploy_locks.py plan` did not print this run's service locks — it exited non-zero, timed out, or printed nothing — so the wrapper had nothing to take; it never falls back to an order of its own | run `uv run python ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand, fix what it says, then retry; nothing was held while it ran |
-| 78 | the playbook matched no host — the `PLAY RECAP` names none, and ansible exits 0 for that | read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing; fix it and retry |
-| 77 | the snapshot worktree could not be created, or a full run could not list its deploy tags from it (the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second) | the message carries the failing command's own stderr (the `fatal:` line from `git worktree add --detach`, or `mkdir`'s) — fix what it names, under `/tmp/homelab-deploy-snapshots/`; for the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
-| 76 | flock failed on the lock file itself — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
-| 75 | a lock stayed busy — the tree lock, or one of this run's services' | retry |
-| 64 | the flags contradict each other, or `--at` named no commit (or none at all) | fix the command line; nothing ran |
-| 4 | the tree is behind `origin/master` | `git pull`, never `--skip-staleness-check` (`block-footguns` denies it typed against `deploy.sh`) |
-| 3 | the change is broad and maps to no single service | deploy by hand, or see *When to wait* |
-| 2 | a `--tags` value matched no service | `--list-services` prints every valid value |
-| 20 | the playbook ran and a task failed — **changes before it are live** | read the PLAY RECAP and the failing TASK; a re-run is not automatically safe |
+Every member of `DEPLOY_SH_NO_VERDICT` means **nothing was deployed**, and each is a resume
+point rather than a failure. `DEPLOY_BAD_FLAGS` also ran nothing, but is a bad command line
+rather than a resume point. `DEPLOY_PLAYBOOK_FAILED` is the inverse: the playbook ran and
+changes are live, so a re-run is not automatically safe.
 
 Exit 3 is `--changed`'s answer, and it is the operator path: `--changed` refuses a broad
 change rather than guessing. The TICK asks a second question first --

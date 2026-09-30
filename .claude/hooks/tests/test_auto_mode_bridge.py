@@ -187,31 +187,55 @@ def test_main_says_nothing_on_an_unrelated_event(capsys):
     assert capsys.readouterr().out == ""
 
 
-def test_the_hooks_exit_code_table_matches_the_shared_contract():
-    """`_DEPLOY_EXITS` is the last decoder of deploy.sh's contract outside `exit_codes.py`.
+def test_every_refusal_code_is_named_a_refusal_and_points_at_the_wrappers_own_lines():
+    """The hook decoded the whole table until 2026-09-30, as the fifth copy of it.
 
-    The hook cannot import it: it is deliberately stdlib-only, because it runs under
-    `uv run --no-sync` on the per-command hot path. So the two are tied here instead, where
-    `scripts/` is on pytest's `pythonpath`. Every other decoder was consolidated into
-    `lib.exit_codes`; this table kept the bare integers 75/4/3/2/20 with nothing
-    holding them to the source, and it is the surface an operator reads when a deploy refuses.
+    `deploy_run.py:report` now prints the name, meaning and remedy, so what is left here is
+    the framing an exit code cannot carry: this was a refusal, and the wrapper already said
+    which one.
     """
+    from lib.exit_codes import DEPLOY_SH_NO_VERDICT
+
+    for rc in sorted(DEPLOY_SH_NO_VERDICT):
+        note = _mod.deploy_exit_note(_deploy_failure(rc))
+        assert f"deploy.sh exit {rc} is a refusal" in note
+        assert "DEPLOY-VERDICT:" in note
+
+
+def test_the_one_exit_where_changes_are_live_is_not_called_a_refusal():
+    """The reject half, and the fix for issue #840: 20 means the playbook RAN."""
+    from lib.exit_codes import DEPLOY_PLAYBOOK_FAILED
+
+    note = _mod.deploy_exit_note(_deploy_failure(DEPLOY_PLAYBOOK_FAILED))
+    assert "changes ARE live" in note
+    assert "is a refusal" not in note
+
+
+def test_the_codes_the_hook_holds_are_exactly_the_ones_the_contract_declares():
+    """The hook keeps two integers of deploy.sh's contract and no prose. These are they."""
     from lib.exit_codes import DEPLOY_PLAYBOOK_FAILED, DEPLOY_SH_NO_VERDICT
 
-    assert set(_mod._DEPLOY_EXITS) == DEPLOY_SH_NO_VERDICT | {DEPLOY_PLAYBOOK_FAILED}
+    assert _mod._REFUSALS == DEPLOY_SH_NO_VERDICT
+    assert _mod._PLAYBOOK_FAILED == DEPLOY_PLAYBOOK_FAILED
+    assert _mod._PLAYBOOK_FAILED not in _mod._REFUSALS
 
 
-def test_a_drifted_exit_code_table_is_flagged():
+def test_a_drifted_refusal_set_is_flagged():
     """Red proof for the check above, which can only ever be observed passing."""
-    from lib.exit_codes import DEPLOY_PLAYBOOK_FAILED, DEPLOY_SH_NO_VERDICT
+    from lib.exit_codes import DEPLOY_SH_NO_VERDICT
 
-    expected = DEPLOY_SH_NO_VERDICT | {DEPLOY_PLAYBOOK_FAILED}
-    dropped = dict(_mod._DEPLOY_EXITS)
-    del dropped[75]
-    assert set(dropped) != expected, (
-        "removing deploy.sh's lock-busy code must make the table disagree with the contract; "
+    assert (_mod._REFUSALS - {75}) != DEPLOY_SH_NO_VERDICT, (
+        "removing deploy.sh's lock-busy code must make the set disagree with the contract; "
         "if it does not, the comparison above is measuring nothing."
     )
+
+
+def _deploy_failure(rc: int) -> dict:
+    return {
+        "tool_name": "Bash",
+        "tool_input": {"command": "./scripts/deploy.sh --tags sonarr"},
+        "error": f"Exit code {rc}\nsomething the harness printed",
+    }
 
 
 class _StringIO:

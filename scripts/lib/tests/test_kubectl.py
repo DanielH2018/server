@@ -318,11 +318,17 @@ def test_no_script_outside_the_invoker_builds_a_kubectl_argv():
 
 
 def test_every_known_caller_imports_the_invoker():
-    """Non-vacuity for the guard above: the callers it replaced still go through here."""
+    """Non-vacuity for the guard above: the callers it replaced still go through here.
+
+    The match is indented-tolerant: `export_grafana_dashboards.py` imports inside `gapi`
+    rather than at module scope, because this module resolves a kubeconfig on import and that
+    made `--help` die on every host but the cluster's (#2854). A lazy import is still an
+    import, and an anchored `^from lib` read it as a caller that had left.
+    """
     importers = {
         path.relative_to(SCRIPTS).as_posix()
         for path in _non_test_scripts()
-        if re.search(r"^from lib(\.kubectl| import kubectl)", path.read_text(), re.M)
+        if re.search(r"^\s*from lib(\.kubectl| import kubectl)", path.read_text(), re.M)
     }
     missing = KNOWN_CALLERS - importers
     assert not missing, (

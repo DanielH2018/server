@@ -11,13 +11,15 @@ to widen anything: `retry: true` tells it the call may be reissued, and the clas
 reissue exactly as it judged the first. Two retries per session cap it, so a command the
 classifier means to refuse still stops.
 
-`PostToolUseFailure` — decodes the deploy wrapper's exit codes. Every code in `_DEPLOY_EXITS`
-below means NOTHING WAS DEPLOYED, and each is a different next step, but they reach Claude as a
-bare `Exit code N` line that reads like a playbook failure. 20 is the one inverse case, added
-2026-09-02 for issue #840: the playbook ran and failed, so changes ARE live. The dict is the
-list — enumerating it in prose here and in CLAUDE.md is what went stale when 77 and 76 were
-added. CLAUDE.md says the same in prose; this says it at the moment it happens, which is the
-difference between reading the runbook and being told.
+`PostToolUseFailure` — names the deploy wrapper's non-zero exit as a refusal rather than a
+playbook failure, and points at the wrapper's own output for what it was. It carried a copy of
+the exit-code table until 2026-09-30: `deploy.sh` exited with a bare number, so the meaning was
+written out here, in the root CLAUDE.md, in the `deploy` skill, in `docs/deploying.md` and in
+`docs/claude-tooling.md`, and 77 and 78 reached only some of the five. `deploy_run.py:report`
+now prints the name, the meaning and the remedy from `scripts/lib/exit_codes.py` on every
+non-zero exit, so this hook has nothing left to decode (issue #2853). What it still adds is
+the framing: a `DEPLOY_SH_NO_VERDICT` code is a resume point, and 20 is the one where changes
+ARE live.
 
 `classifierContext` is deliberately not used here. It is a PostToolUse field, and every fact
 worth sending the classifier from this repo is either a failure (which lands on
@@ -51,63 +53,13 @@ _NO_VERDICT_PREFIXES = (
 
 MAX_RETRIES_PER_SESSION = 2
 
-# Every key below except 20 means the deploy refused BEFORE touching anything; 20 is the
-# opposite and says so in its own words. Adding a key is the whole edit -- this comment
-# enumerated four of them and went stale the day 77 and 76 were added. The text is the
-# wrapper's own contract, kept in the same words CLAUDE.md uses so the two don't drift into
-# two stories.
-_DEPLOY_EXITS = {
-    79: (
-        "deploy.sh exit 79: `deploy_locks.py plan` did not print this run's service locks, so "
-        "the wrapper had nothing to take and NOTHING was deployed. It never falls back to a lock "
-        "order of its own. Run `uv run python "
-        "ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand to see "
-        "why, fix that, then re-run; nothing was held while it ran."
-    ),
-    78: (
-        "deploy.sh exit 78: the playbook matched NO host, so NOTHING was deployed. ansible "
-        "exits 0 for a run where no play matched, so the wrapper reads the PLAY RECAP itself. "
-        "Read the [WARNING] lines in the output — an inventory that failed to parse, or a host "
-        "pattern that matched nothing — fix that, then re-run; no task ran."
-    ),
-    77: (
-        "deploy.sh exit 77: the snapshot worktree could not be created, so NOTHING was "
-        "deployed. The playbook renders from a detached worktree of HEAD under "
-        "/tmp/homelab-deploy-snapshots; the message carries the failing command's own "
-        "stderr (the `fatal:` line), so fix what it names — retrying alone changes nothing."
-    ),
-    76: (
-        "deploy.sh exit 76: flock failed on the lock file ITSELF, so NOTHING was deployed. "
-        "This is not contention — no deploy holds the lock. Check that "
-        "/var/lock/server-git-tree.lock exists and is writable by this user; retrying alone "
-        "changes nothing."
-    ),
-    75: (
-        "deploy.sh exit 75: a deploy lock stayed busy, so NOTHING was deployed — either "
-        "/var/lock/server-git-tree.lock or one of this run's own "
-        "/var/lock/server-deploy-<tag>.lock files. The GitOps timer or another session holds "
-        "it. This is a resume point, not a playbook failure — re-run the same command shortly."
-    ),
-    4: (
-        "deploy.sh exit 4: the tree is behind origin/master, so NOTHING was deployed. A stale "
-        "tree renders stale templates and reverts live config while every repo-side check still "
-        "reads green. Pull first; never --skip-staleness-check."
-    ),
-    3: (
-        "deploy.sh exit 3: the change is broad (shared templates, inventory, the setup plane) "
-        "and maps to no single service, so NOTHING was deployed. --changed refuses it by design."
-    ),
-    2: (
-        "deploy.sh exit 2: a --tags value matched no service in containers_list, so NOTHING was "
-        "deployed. --list-services prints every valid value."
-    ),
-    20: (
-        "deploy.sh exit 20: the playbook RAN and a task failed, so this is the one deploy exit "
-        "where changes ARE live — everything applied before the failing task took effect. Read "
-        "the PLAY RECAP and the failing TASK; do not treat it as a tag, staleness or lock "
-        "refusal, and do not assume a re-run is safe."
-    ),
-}
+# The split, and the only part of deploy.sh's contract this hook still holds: 20 means the
+# playbook RAN, every other code here means it refused first. Integers rather than the prose
+# table that used to be here -- the prose is `scripts/lib/exit_codes.py`'s and the wrapper
+# prints it. The hook cannot import that module (stdlib-only, on the per-command hot path
+# under `uv run --no-sync`), so `tests/test_auto_mode_bridge.py` holds these against it.
+_REFUSALS = frozenset({2, 3, 4, 75, 76, 77, 78, 79})
+_PLAYBOOK_FAILED = 20
 
 _DEPLOY_CMD = re.compile(r"(?:^|[\s;&|])(?:\./|/[^\s]*/)?scripts/deploy\.sh(?:\s|$)")
 _EXIT_CODE = re.compile(r"^Exit code (\d+)", re.MULTILINE)
@@ -171,10 +123,12 @@ def should_retry(payload: dict) -> bool:
 
 
 def deploy_exit_note(payload: dict) -> str | None:
-    """The resume-point meaning of a failed deploy.sh, or None when this isn't one.
+    """Why a failed deploy.sh is not a playbook failure, or None when this isn't one.
 
     Keyed on the `Exit code N` first line, which the hook docs name as the stable part of the
-    error string; everything after it is display text.
+    error string; everything after it is display text. The meaning of the code is
+    `deploy.sh`'s own to print, so this says only what an exit code cannot: where to read it,
+    and that 20 is the one exit where changes are live.
     """
     if payload.get("tool_name") != "Bash":
         return None
@@ -185,7 +139,22 @@ def deploy_exit_note(payload: dict) -> str | None:
     match = _EXIT_CODE.search(payload.get("error", "") or "")
     if not match:
         return None
-    return _DEPLOY_EXITS.get(int(match.group(1)))
+    rc = int(match.group(1))
+    if rc not in _REFUSALS and rc != _PLAYBOOK_FAILED:
+        return None
+    if rc == _PLAYBOOK_FAILED:
+        return (
+            "deploy.sh exit 20: the playbook RAN and a task failed, so this is the one deploy "
+            "exit where changes ARE live -- everything applied before the failing task took "
+            "effect. Read the PLAY RECAP and the failing TASK; do not assume a re-run is safe."
+        )
+    return (
+        f"deploy.sh exit {rc} is a refusal, not a playbook failure: NOTHING was deployed, "
+        "because the wrapper stopped before it applied anything. It printed the code's name, "
+        "what it means and the next step on "
+        "its own last two lines (`deploy.sh: <NAME> (<code>): ...` and `DEPLOY-VERDICT:`) -- "
+        "read those rather than treating this as a failed deploy."
+    )
 
 
 def main() -> None:

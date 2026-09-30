@@ -50,6 +50,8 @@ from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,
+    describe as describe_exit,
+    verdict_line,
 )
 from lib.git import git
 from lib.repo_paths import GITOPS_DEPLOY_FILES, HOST_VARS, REPO
@@ -549,9 +551,48 @@ def run(argv: list[str], tools: Tools = REAL_TOOLS) -> int:
     return 1  # the exec does not return; reached only when a test replaces it
 
 
+ENTRY_POINT = "scripts/deploy.sh"
+
+
+def report(rc: int, argv: list[str], out=None) -> None:
+    """Print what `rc` means and the run's one-line verdict, both from `lib.exit_codes`.
+
+    The wrapper exited with a bare number until 2026-09-30. Claude was told what it meant by
+    a table inside a hook (`auto-mode-bridge.py`'s `_DEPLOY_EXITS`) and an operator at a
+    terminal was told nothing at all, so the same contract was written out in the hook, the
+    root CLAUDE.md, the `deploy` skill, `docs/deploying.md` and `docs/claude-tooling.md` --
+    five copies, of which 77 and 78 reached only some. The script that exits is the one place
+    that cannot go stale (issue #2853).
+
+    Args:
+      rc: the code `run` returned.
+      argv: this invocation's arguments, quoted in the verdict's detail so a log holding
+        several runs says which one each verdict belongs to.
+      out: where to write. Resolved at call time rather than bound as a default, so it is
+        `sys.stderr` as replaced by whoever redirected it. stderr, so a caller parsing
+        stdout for a tag list is unaffected.
+
+    A run that reached `--check`, `--dry-run` or `--list-services` never gets here: those
+    exec ansible-playbook or `deploy_tags.py list` in place, and the exit code is that
+    command's rather than one of these.
+    """
+    out = out if out is not None else sys.stderr
+    # Only on a non-zero exit: a successful deploy has already printed a PLAY RECAP, and its
+    # meaning is "it worked".
+    note = describe_exit(ENTRY_POINT, rc) if rc else None
+    if note:
+        print(f"deploy.sh: {note}", file=out)
+    verdict = verdict_line(ENTRY_POINT, rc, " ".join(argv) or "no arguments")
+    if verdict:
+        print(verdict, file=out)
+
+
 def main() -> int:
     prepare_stdio()
-    return run(sys.argv[1:])
+    argv = sys.argv[1:]
+    rc = run(argv)
+    report(rc, argv)
+    return rc
 
 
 if __name__ == "__main__":

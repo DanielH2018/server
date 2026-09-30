@@ -20,6 +20,9 @@ from pathlib import Path
 
 import pytest
 
+import deploy_run
+from lib import exit_codes as ec
+
 from _deploy_sh_fakes import (
     FAKE_RECAP,
     FLOCK_STUB,
@@ -194,3 +197,41 @@ def test_a_real_tag_miss_is_still_exit_2():
         check=False,
     )
     assert result.returncode == 2, result.stdout + result.stderr
+
+
+# -- what the wrapper says about its own exit (issue #2853) --------------------------------
+
+
+@pytest.mark.parametrize(
+    "rc", sorted(ec.DEPLOY_SH_NO_VERDICT | {ec.DEPLOY_PLAYBOOK_FAILED})
+)
+def test_every_failing_exit_prints_its_name_meaning_and_verdict(rc, capsys):
+    """The wrapper exited with a bare number until 2026-09-30, and five prose copies of the
+    table said what it meant. This is the copy that cannot go stale."""
+    deploy_run.report(rc, ["--tags", "sonarr"])
+    err = capsys.readouterr().err
+    row = next(c for c in ec.contract("scripts/deploy.sh") if c.value == rc)
+    assert f"deploy.sh: {row.const} ({rc}):" in err
+    assert row.remedy.split(".")[0] in err
+    assert f"DEPLOY-VERDICT: {row.verdict} (--tags sonarr)" in err
+
+
+def test_a_successful_run_prints_the_verdict_and_no_meaning(capsys):
+    """The reject half. A PLAY RECAP has already said what happened, so the row's meaning is
+    noise; the verdict line stays, because a log holding several runs is read by grep."""
+    deploy_run.report(ec.DEPLOY_OK, [])
+    err = capsys.readouterr().err
+    assert err == "DEPLOY-VERDICT: deployed (no arguments)\n"
+
+
+def test_a_code_outside_the_contract_prints_nothing_rather_than_a_wrong_meaning(capsys):
+    """200 is not deploy.sh's; inventing a meaning for it is worse than the bare number."""
+    deploy_run.report(200, ["--tags", "sonarr"])
+    assert capsys.readouterr().err == ""
+
+
+def test_the_verdict_prefix_is_not_the_bare_one_a_landing_greps_for():
+    """A landing runs deploy.sh with stdout inherited and finds its own outcome with
+    `grep -m1 '^VERDICT:'`, so a bare `VERDICT:` here would be read as the landing's."""
+    assert ec.VERDICT_PREFIXES["scripts/deploy.sh"] == "DEPLOY-VERDICT"
+    assert ec.VERDICT_PREFIXES["scripts/deploy_tools/land.sh"] == "VERDICT"
