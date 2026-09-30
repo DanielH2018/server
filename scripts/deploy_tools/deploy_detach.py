@@ -31,7 +31,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
 from deploy_tools.deploy_playbook import annotate, run_playbook
-from deploy_tools.exit_codes import (
+from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
 )

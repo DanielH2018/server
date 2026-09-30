@@ -67,8 +67,12 @@ def test_the_shim_runs_from_any_cwd(tmp_path):
     assert "Verdicts printed on stdout" in r.stdout
 
 
-def test_a_bad_argument_exits_2_through_the_shim():
+def test_a_bad_argument_exits_with_the_shared_usage_error_through_the_shim():
+    """64, not argparse's 2: every entry point under `scripts/` answers a bad command line
+    with `USAGE_ERROR` since issue #2854, and the shim must not swallow the renumbering."""
+    from lib.exit_codes import LAND_BAD_ARGS
+
     r = subprocess.run(
         ["bash", str(_SH), "--pr"], capture_output=True, text=True, timeout=120
     )
-    assert r.returncode == 2
+    assert r.returncode == LAND_BAD_ARGS

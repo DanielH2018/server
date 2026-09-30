@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-09-29 18:17 UTC
-generated_sha: 6155ea183
+generated_at: 2026-09-30 12:57 UTC
+generated_sha: 5bcf89046
 ---
 
 !!! warning "Generated file — do not edit"
@@ -78,7 +78,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/grafana/inject_dashboard_annotations.py` | grafana | Add the deploy-annotation query to every provisioned Grafana dashboard, from one place. | deploy: ansible/roles/k8s/claude-otel/tasks/dashboards.yml | `test_inject_dashboard_annotations.py` |
 | `scripts/validate/jinja_bash_collisions.py` | validate | Flag bash's `${#var}` length expansion in a Jinja template, before anything renders it. | prek hook (every commit) | `test_validate_jinja_bash_collisions.py` *(indirect)* |
 | `scripts/validate/k8s_manifests.py` | validate | Render every k8s manifest template with stubbed vars and assert each parses as valid YAML. | prek hook (every commit) | `test_validate_k8s_manifests.py` *(indirect)* |
-| `scripts/deploy_tools/land.py` | deploy_tools | Follow a merged PR through to a verified deploy, in one invocation. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_land_pipeline.py` *(indirect)* |
+| `scripts/deploy_tools/land.py` | deploy_tools | Follow a merged PR through to a verified deploy, in one invocation. | land.sh (every commit, CI run, deploy or Claude session runs it) | `test_land_options.py` *(indirect)* |
 | `scripts/deploy_tools/land.sh` | deploy_tools | the entry point every doc, skill and hook names; it execs land.py beside it. | Claude hook: fanout-stop.py | — |
 | `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_narrow_setup.py` |
 | `scripts/deploy_tools/prune_releases.py` | deploy_tools | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` |
@@ -132,7 +132,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/infra_map/diagram.py` | infra_map | The architecture figure: how a request reaches a workload, and on what it runs. | imported by render.py | `test_infra_map_render.py` *(indirect)* |
 | `scripts/lib/doc_freshness.py` | lib | How old a hand-written doc is, and whether the files it names have moved under it. | imported by _mkdocs_freshness.py, freshness.py | `test_doc_freshness.py` |
 | `scripts/lib/docs_provenance.py` | lib | The provenance banner every generated documentation page opens with. | imported by backlog.py, catalog_render.py, crons.py, decisions.py, freshness.py, gen_doc_fragments.py, gen_infra_map.py, hosts.py, networking.py, scripts.py, secrets.py, service_catalog.py, state.py | `test_docs_provenance.py` |
-| `scripts/deploy_tools/exit_codes.py` | deploy_tools | Every exit-code contract the deploy tools share, named once. | imported by _land_fakes.py, ci.py, deploy.py, deploy_detach.py, deploy_detach_notify.py, deploy_playbook.py, deploy_run.py, deploy_tags.py, deploy_under_locks.py, merge.py, narrow_broad.py, publish_pr.py, tick.py, tools.py | `test_exit_codes.py` |
+| `scripts/lib/exit_codes.py` | lib | Every exit-code contract this repo's entry points share, named once. | imported by _land_fakes.py, ci.py, deploy.py, deploy_detach.py, deploy_detach_notify.py, deploy_playbook.py, deploy_run.py, deploy_tags.py, deploy_under_locks.py, land.py, merge.py, narrow_broad.py, publish_pr.py, tick.py, tools.py | `test_exit_codes.py` |
 | `scripts/dev/foreign_owned.py` | dev | Find the paths under a directory that another uid owns, and say how to clear them. | imported by prune_worktrees.py | `test_foreign_owned.py` |
 | `scripts/docs/fragment_readers.py` | docs | The readers behind the doc fragments: the tree, parsed, never imported. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
 | `scripts/docs/fragment_renderers.py` | docs | The renderers behind the doc fragments: pure functions from plain values to markdown. | imported by gen_doc_fragments.py | `test_gen_doc_fragments.py` *(indirect)* |
@@ -242,7 +242,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/findings.py` | dev | File, re-observe, escalate and close Claude's unfixed findings as GitHub Issues. | no automated caller in the tree | `test_findings.py` |
 | `scripts/dev/gen_gitops_markers.py` | dev | Copy the deployer's `gitops_markers.py` into every tree that reads its markers. | no automated caller in the tree | `test_gitops_markers_copies.py` *(indirect)* |
 | `scripts/docs/gen_role_glance.py` | docs | Generate the mechanical half of every role's `## At a glance` block, in place. | no automated caller in the tree | `test_gen_role_glance.py` |
-| `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | no automated caller in the tree | `test_gitops_manual_trigger.py` *(indirect)* |
+| `scripts/deploy_tools/gitops_tick.sh` | deploy_tools | trigger a GitOps deploy tick by hand and report what it did. | exit_codes.py (a person runs it) | `test_gitops_manual_trigger.py` *(indirect)* |
 | `scripts/diagnostics/grafana_panel_report.py` | diagnostics | Classify what a Grafana dashboard page actually rendered. | no automated caller in the tree | `test_grafana_panel_report.py` |
 | `scripts/deploy_tools/k3s_etcd_restore_gates.py` | deploy_tools | Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_etcd_restore_gates.py` |
 | `scripts/deploy_tools/k3s_upgrade_gates.py` | deploy_tools | Run the four stop conditions of `docs/k3s-upgrade.md` in order, exit code naming the first failure. | no automated caller in the tree | `test_k3s_upgrade_gates.py` |

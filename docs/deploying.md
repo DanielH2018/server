@@ -40,7 +40,7 @@ want none of the above.
 ## Exit codes are resume points
 
 Each of these means **nothing was deployed**. None is a playbook failure. The table is
-pinned to `DEPLOY_SH_NO_VERDICT` in `scripts/deploy_tools/exit_codes.py` by
+pinned to `DEPLOY_SH_NO_VERDICT` in `scripts/lib/exit_codes.py` by
 `ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`; 20, the one code that
 means the playbook ran, is in the `deploy` skill's table.
 

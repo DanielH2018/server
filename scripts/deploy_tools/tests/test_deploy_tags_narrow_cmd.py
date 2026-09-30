@@ -13,7 +13,7 @@ import pytest
 
 
 import narrow_broad
-from deploy_tools.exit_codes import DEPLOY_BROAD, DEPLOY_OK
+from lib.exit_codes import DEPLOY_BROAD, DEPLOY_OK
 
 from _narrow_fixtures import DECLARED, GROUP_VARS, Tree, _refs, _repo_git, build_tree
 

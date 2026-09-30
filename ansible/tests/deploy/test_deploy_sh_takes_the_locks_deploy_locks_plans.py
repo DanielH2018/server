@@ -39,7 +39,7 @@ import deploy_locks
 import deploy_under_locks
 import pytest
 from _helpers import REPO
-from deploy_tools.exit_codes import (
+from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_PLAN_FAILED,
     DEPLOY_SH_NO_VERDICT,

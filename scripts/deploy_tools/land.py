@@ -37,7 +37,7 @@ Exit codes:
   0   deployed and settled, or there was nothing to deploy
   1   CI red, blocked by a change needing a hand, deploy failed, the health gate failed, or
       the PR was closed unmerged, conflicts with master, or its own CI is red
-  2   bad arguments
+  64  bad arguments
   75  gave up waiting -- the merge budget or CI budget elapsed, the deploy lock stayed busy,
       the tick was skipped for lock contention every time, master merged faster than one
       tick-and-deploy cycle, or the tick has not yet crossed origin
@@ -65,6 +65,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))  # scripts/
+from lib.exit_codes import LAND_BAD_ARGS
 from deploy_tools.land_lib import pipeline
 from deploy_tools.land_lib.landing import Landing
 from deploy_tools.land_lib.ledger import annotation_line
@@ -104,9 +105,17 @@ def main(
     # `pr=unknown verdict=aborted` -- a row meaning "you typed the command wrong" in the same
     # stream the Landings board counts. The bash original annotated it because its EXIT trap
     # was installed before the arg loop, and this port reproduced that until issue #1304
-    # measured 592 such rows in Loki's 744h window. `--help` (exit 0) never annotated.
-    # Nothing wraps parse_args now: its SystemExit propagates untouched.
-    opts = parse_args(argv, __doc__ or "")
+    # measured 592 such rows in Loki's 744h window. The wrapper below still annotates
+    # nothing: it only renumbers the code, and `--help` (exit 0) passes through untouched.
+    #
+    # WHY IT IS WRAPPED AGAIN. argparse's 2 collided with three other meanings a caller sees
+    # through this same pipeline -- `CI_DISARMED`, `DEPLOY_TAG_MISS` and `PUBLISH_PUSHED_NO_PR`
+    # -- so `land.sh` alone answered a bad command line with a different number from every
+    # other entry point here (issue #2854). `LAND_BAD_ARGS` is now the shared 64.
+    try:
+        opts = parse_args(argv, __doc__ or "")
+    except SystemExit as exc:
+        raise SystemExit(LAND_BAD_ARGS if exc.code == 2 else exc.code) from None
     _prepare_stdio()
     ln = Landing(opts, tools, classifier)
     rc = 1

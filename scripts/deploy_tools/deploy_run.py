@@ -22,7 +22,7 @@ Usage::
 ``--skip-staleness-check`` deploys from a tree behind origin/master. Every other argument
 passes through to ansible-playbook in order.
 
-Exit codes are ``scripts/deploy_tools/exit_codes.py``'s ``DEPLOY_*``. The ones this half
+Exit codes are ``scripts/lib/exit_codes.py``'s ``DEPLOY_*``. The ones this half
 returns: 2 (a tag matched no service), 3 (``--changed`` found a broad change), 4 (the tree is
 behind origin/master), 64 (arguments refused). Each means nothing was deployed.
 
@@ -45,7 +45,7 @@ from pathlib import Path
 # Reach the sibling package directories: a directly-invoked script gets only its own
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from deploy_tools.exit_codes import (
+from lib.exit_codes import (
     DEPLOY_BAD_FLAGS,
     DEPLOY_STALE,
     DEPLOY_TAG_MISS,

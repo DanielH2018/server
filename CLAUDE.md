@@ -91,7 +91,7 @@ on the run says so. Commit first. `--check` and `--dry-run` still read the worki
 is where an uncommitted edit is meant to be exercised.
 
 Its non-zero exits arrive as a bare `Exit code N`. Every member of `DEPLOY_SH_NO_VERDICT`
-(`scripts/deploy_tools/exit_codes.py`) means **nothing was deployed** — a resume point rather
+(`scripts/lib/exit_codes.py`) means **nothing was deployed** — a resume point rather
 than a playbook failure. `DEPLOY_BAD_FLAGS` (64) also ran nothing, but the fix is the command
 line rather than a retry. `DEPLOY_PLAYBOOK_FAILED` (20) is the inverse: the playbook ran, a
 task failed, and changes before it are live — not a safe re-run. The per-code table, the fact-cache

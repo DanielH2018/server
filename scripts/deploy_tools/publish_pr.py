@@ -62,7 +62,7 @@ from typing import Callable
 # directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from deploy_tools.exit_codes import (
+from lib.exit_codes import (
     PUBLISH_PUBLISHED,
     PUBLISH_PUSHED_NO_PR,
     PUBLISH_STILL_LOCAL,
@@ -79,7 +79,7 @@ from lib import git as git_mod
 FAILURE_TAIL = 400
 
 # Two contracts over the same integers -- `publish` says what state the tree is in, `unlanded`
-# says what it found on origin. Both are defined in `deploy_tools/exit_codes.py`, whose
+# says what it found on origin. Both are defined in `lib/exit_codes.py`, whose
 # prefixes are what tell a reader which of the two a value belongs to; the old names here were
 # `RC_*` for both, so 2 read as one number with two meanings.
 

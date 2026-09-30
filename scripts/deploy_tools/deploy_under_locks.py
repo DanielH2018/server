@@ -38,7 +38,7 @@ from pathlib import Path
 # Reach the sibling package directories: an importer that did not bootstrap them itself (a
 # test, a REPL) finds only this module's own directory, and `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-from deploy_tools.exit_codes import (
+from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_PLAN_FAILED,
     DEPLOY_LOCK_UNAVAILABLE,

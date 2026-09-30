@@ -18,7 +18,7 @@ from pathlib import Path
 from typing import Any
 
 from deploy_tools.deploy_detach_notify import GateResult
-from deploy_tools.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import landing as landing_mod
 from deploy_tools.land_lib.options import Options
 from deploy_tools.land_lib.tools import Classifier, CiVerdict, Tools

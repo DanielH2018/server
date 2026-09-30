@@ -1,6 +1,6 @@
 """The deploy skill's exit table lists exactly the codes `deploy.sh` can exit with.
 
-`scripts/deploy_tools/exit_codes.py` is the one source for `deploy.sh`'s contract in code, and
+`scripts/lib/exit_codes.py` is the one source for `deploy.sh`'s contract in code, and
 `auto-mode-bridge.py`'s `_DEPLOY_EXITS` is set-equality tested against it. The table in
 `.claude/skills/deploy/SKILL.md` is the copy an operator reads when a bare `Exit code N`
 arrives, and until this file nothing read it: 77 and 78 each landed as a new row by hand, and
@@ -17,8 +17,8 @@ the docs name `DEPLOY_SH_NO_VERDICT` rather than a numeral that rots on the next
 import re
 
 import pytest
-from deploy_tools import exit_codes
-from deploy_tools.exit_codes import DEPLOY_OK, DEPLOY_SH_NO_VERDICT
+from lib import exit_codes
+from lib.exit_codes import DEPLOY_OK, DEPLOY_SH_NO_VERDICT
 
 from _helpers import REPO
 

@@ -18,7 +18,7 @@ import subprocess
 from pathlib import Path
 
 from _deploy_sh_fakes import stub_path as _stub_path
-from deploy_tools import exit_codes as ec
+from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
 _REPO = Path(__file__).resolve().parents[3]

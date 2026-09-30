@@ -6,7 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_deploy.py
 import pytest
 
 from _land_fakes import MERGE_SHA, PRIMARY, Fakes
-from deploy_tools.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 

@@ -180,7 +180,7 @@ Before it takes the lock it clears an Ansible fact cache pinning another worktre
 pruned worktree used to fail EVERY deploy at Gathering Facts for the full 7200s TTL — with an
 error naming a module rather than the cache, after the ~9-minute wait on the lock.
 
-Every member of `DEPLOY_SH_NO_VERDICT` (`scripts/deploy_tools/exit_codes.py`) means
+Every member of `DEPLOY_SH_NO_VERDICT` (`scripts/lib/exit_codes.py`) means
 **nothing was deployed**, and each is a resume point rather than a failure. 64 also ran
 nothing, but is a bad command line rather than a resume point. 20 is the inverse: the
 playbook ran and changes are live. The table is pinned to that module by
