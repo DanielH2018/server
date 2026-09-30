@@ -7,11 +7,12 @@ its staleness gate first and answered with exit 4 and a `git rebase` remedy. A s
 `add_argument` passes on all five. Issue #2854 filed the class.
 
 WHAT COUNTS AS AN ENTRY POINT. `lib.script_classify.classify` reads the tree for how each
-script is reached, and everything it does not call a library is one -- except a Python module
-with no `if __name__ == "__main__"` guard, which cannot be run at all. Thirteen of those are
-misclassified `adhoc` because they sit in a package whose siblings import them relatively, so
-the catalog cannot see the importer (filed as #3020); they are excluded here rather than given
-a `--help` they have no way to print.
+script is reached, and everything it does not call a library is one. A Python module with no
+`if __name__ == "__main__"` guard cannot be run at all, and the classifier now calls every one
+of those a library -- through the importing package's own directory, through a relative import,
+or by naming the tests that are its only importers (#3020). So this test filters on the verdict
+alone; it used to re-check the main guard itself because thirteen guardless modules read
+`adhoc`.
 
 RUNTIME. Each script runs under this interpreter with `scripts/` on `PYTHONPATH`, not under
 `uv run` -- 89 `uv run` calls cost a minute and a half where direct invocation costs ten
@@ -29,8 +30,7 @@ import pytest
 
 from lib.cli_help import HELP_FLAGS, answer_help, wants_help
 from lib.repo_paths import REPO, SCRIPTS
-from lib.script_classify import by_name, classify, file_text
-from lib.script_classify import _has_main_guard as has_main_guard
+from lib.script_classify import by_name, classify
 
 # Non-vacuity: the census reads the tree, so a classifier change or a directory move can empty
 # it, and `all(...)` over nothing passes. These five are the shapes the census must keep --
@@ -55,15 +55,11 @@ HELP_TIMEOUT_S = 60
 def _entry_points():
     """`{name: path}` for every catalogued, runnable entry point under `scripts/`."""
     paths = by_name(SCRIPTS)
-    found = {}
-    for name, (kind, _why) in classify().items():
-        if kind == "library":
-            continue
-        path = paths[name]
-        if name.endswith(".py") and not has_main_guard(file_text(path)):
-            continue
-        found[name] = path
-    return found
+    return {
+        name: paths[name]
+        for name, (kind, _why) in classify().items()
+        if kind != "library"
+    }
 
 
 ENTRY_POINTS = _entry_points()

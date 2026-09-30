@@ -290,48 +290,113 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     return sites
 
 
-def importers(scripts: Path) -> dict[str, set[str]]:
-    """Module stem -> the non-test scripts that import it.
+def _resolve(parts: list[str], root: Path) -> str:
+    """The module stem `parts` names under `root`, or "" when it names no module there.
 
-    A test importing its subject does not make the subject a library, so `test_*` and
-    `conftest` are not importers here.
+    Walks past EVERY leading segment that is a real directory rather than assuming one:
+    `diagnostics.probe_lib.core` has two, and stopping at the second reported a module twelve
+    scripts import as something nobody runs. The segment has to be a real `.py` beside those
+    directories for this to answer — `from diagnostics.probe_lib import core` names only
+    directories in its module part, and the caller reads the aliases instead.
+    """
+    here = root
+    for part in parts:
+        if (here / part).is_dir():
+            here /= part
+            continue
+        return part if (here / f"{part}.py").is_file() else ""
+    return ""
+
+
+def _loose(parts: list[str], scripts: Path) -> str:
+    """The stem `parts` names when no root under `scripts/` holds the file itself.
+
+    A script may put a directory OUTSIDE `scripts/` on `sys.path` and import from there:
+    `cert_expiry.py` inserts `scripts/docs` and writes `from route_facts import PUBLIC`, and
+    `gitops_state.py` inserts an Ansible role's `files/`. Falling back to the bare segment
+    keeps those edges, at the cost of matching on basename alone — which is safe here because
+    `candidates` enforces one basename per script (`test_no_two_scripts_share_a_basename`).
+    """
+    here = scripts
+    for part in parts:
+        if (here / part).is_dir():
+            here /= part
+            continue
+        return part
+    return ""
+
+
+def _roots(path: Path, scripts: Path) -> list[Path]:
+    """The directories an import in `path` can resolve against, nearest first.
+
+    This is the runtime answer rather than a guess. A module reaching outside its own
+    directory inserts an ancestor of its own on `sys.path` (`.claude/rules/python-layout.md`),
+    and pytest's `pythonpath` lists `scripts/` and its subdirectories. So a sibling inside
+    `scripts/dev/fanout_lib` spells the import `from fanout_lib.manifest import Batch` — a head
+    naming its OWN package directory, which resolves against `scripts/dev` and against no other
+    root. Resolving against `scripts/` alone read those ten modules as imported by nobody
+    (#3020). The roots stop at `scripts/`: looking further up would let a directory outside the
+    tree manufacture an edge.
+    """
+    roots = [path.parent]
+    while roots[-1] != scripts and scripts in roots[-1].parents:
+        roots.append(roots[-1].parent)
+    return roots
+
+
+def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
+    """The module stem an absolute import names: the nearest root that holds it, else loosely."""
+    for root in roots:
+        stem = _resolve(dotted.split("."), root)
+        if stem:
+            return stem
+    return _loose(dotted.split("."), scripts)
+
+
+def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
+    """Module stem -> the filenames satisfying `keep` that import it.
+
+    `keep` decides which files count as importers; the two callers below split test files
+    from the rest, because the answer to "is this a library" and the answer to "is this
+    reachable at all" do not take the same importers.
     """
     stems = {p.stem for p in _all_py(scripts)}
-
-    def _module(dotted: str) -> str:
-        """The module stem inside a dotted import path, or "" if it names only directories.
-
-        A cross-directory import is spelled `from lib.docs_provenance import ...` — the module
-        sought is not the first segment, which names a directory. Walk past EVERY leading
-        segment that is a real directory rather than assuming one: `diagnostics.probe_lib.core`
-        has two, and stopping at the second reported a module twelve scripts import as
-        something nobody runs.
-        """
-        parts = dotted.split(".")
-        here, i = scripts, 0
-        while i < len(parts) and (here / parts[i]).is_dir():
-            here /= parts[i]
-            i += 1
-        return parts[i] if i < len(parts) else ""
-
     found: dict[str, set[str]] = {}
     for path in _all_py(scripts):
-        if path.name.startswith("test_") or path.name in _EXCLUDED_NAMES:
+        if not keep(path):
             continue
         try:
             tree = ast.parse(path.read_text())
         except SyntaxError, ValueError, UnicodeDecodeError:
             continue
+        roots = _roots(path, scripts)
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
-                names = [_module(alias.name) for alias in node.names]
+                names = [_head(alias.name, roots, scripts) for alias in node.names]
             elif isinstance(node, ast.ImportFrom):
-                if node.level or not node.module:
+                # A relative import resolves against the package directory `node.level` says,
+                # and against nothing else. `from .citations import Citation` in
+                # `scripts/lib/facts/atoms.py` is how a package's own members reach each other,
+                # and skipping those read `citations.py` as a script nobody runs (#3020).
+                if node.level:
+                    base = path.parent
+                    for _ in range(node.level - 1):
+                        base = base.parent
+                    head = _resolve(node.module.split("."), base) if node.module else ""
+                    if head:
+                        names = [head]
+                    else:
+                        names = [
+                            alias.name
+                            for alias in node.names
+                            if (base / f"{alias.name}.py").is_file()
+                        ]
+                elif not node.module:
                     names = []
                 else:
+                    head = _head(node.module, roots, scripts)
                     # `from diagnostics.probe_lib import core` names only directories in the
                     # module part, so the modules imported are the aliases.
-                    head = _module(node.module)
                     names = [head] if head else [alias.name for alias in node.names]
             else:
                 continue
@@ -339,6 +404,29 @@ def importers(scripts: Path) -> dict[str, set[str]]:
                 if name in stems and name != path.stem:
                     found.setdefault(name, set()).add(path.name)
     return found
+
+
+def _is_test_file(path: Path) -> bool:
+    return path.name.startswith("test_") or path.name in _EXCLUDED_NAMES
+
+
+def importers(scripts: Path) -> dict[str, set[str]]:
+    """Module stem -> the non-test scripts that import it.
+
+    A test importing its subject does not make the subject a library, so `test_*` and
+    `conftest` are not importers here.
+    """
+    return _import_graph(scripts, lambda path: not _is_test_file(path))
+
+
+def _test_importers(scripts: Path) -> dict[str, set[str]]:
+    """Module stem -> the test files that import it.
+
+    A module only a test imports is not a library by the rule above, but a Python module with
+    no `__main__` guard is not something a person runs either: there is nothing to run.
+    `classify` uses this to say which tests reach it instead of calling it uninvoked.
+    """
+    return _import_graph(scripts, _is_test_file)
 
 
 def _has_main_guard(text: str) -> bool:
@@ -414,6 +502,22 @@ def classify(repo: Path = REPO, scripts: Path = SCRIPTS) -> dict[str, tuple[str,
                     settled = False
         if settled:
             break
+
+    # A Python module with no `__main__` guard that only a test imports is not a library by
+    # the rule above, and it is not something a person runs either -- there is nothing to run.
+    # `grafana_panel_report.py` is the live case: its classifier is unit-tested without a
+    # browser, and the page called it "no automated caller in the tree" (#3020).
+    tested = _test_importers(scripts)
+    for path in candidates(scripts):
+        if path.suffix != ".py" or path.name in verdicts:
+            continue
+        callers = tested.get(path.stem)
+        if callers and not _has_main_guard(file_text(path)):
+            record(
+                path.name,
+                "library",
+                f"no `__main__` guard; imported by {', '.join(sorted(callers))}",
+            )
 
     for path in candidates(scripts):
         verdicts.setdefault(path.name, ("adhoc", "no automated caller in the tree"))
