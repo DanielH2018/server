@@ -16,7 +16,7 @@ Terraria names the player on both join and leave and has no death/SteamID bookke
 where Valheim names a player only on spawn, resolves a disconnect by SteamID, and tracks
 deaths (see valheim_stats.py's docstring).
 
-Design: docs/superpowers/specs/2026-06-15-terraria-player-stats-design.md
+Design: docs/game-stats-internals.md.
 """
 
 import re

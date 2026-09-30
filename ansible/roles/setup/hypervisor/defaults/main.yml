@@ -185,3 +185,31 @@ hypervisor_etcd_drill_log_retention_days: 400
 # One run at a time. A second `virsh create` of the same transient name fails anyway, but failing
 # on the lock says why.
 hypervisor_etcd_drill_lock: /var/lock/etcd-restore-drill-vm.lock
+
+# ── The egress-fence leg of a drill run ──────────────────────────────────────────────────
+#
+# The orchestrator dials every range staging-nwfilter.xml.j2 drops, plus an internet control
+# target, from inside the guest — before the guest is handed the cluster token or the R2
+# credentials. It is the half of the fence a repo-side check cannot see: a filter that is
+# defined and unattached reads identical to a working one from this host. Its own header has
+# the four DECIDED trade-offs; ansible/tests/staging/test_staging_egress_fence.py enforces them.
+#
+# Per-target timeout: long enough that a slow-but-permitted answer is not read as a block,
+# short enough that every target timing out still fits the deadline below.
+hypervisor_etcd_drill_fence_probe_timeout: 6
+# Whole-leg ceiling, covering one ssh session that dials every target. Sized for all six timing
+# out at once (6 x 6 s) with ssh setup on top, because the leg runs outside the orchestrator's
+# RUN_TIMEOUT and a wedged dial would otherwise hang the monthly cron.
+hypervisor_etcd_drill_fence_deadline: 90
+# The Service-CIDR target: Longhorn's frontend Service, the thing actually found exposed from
+# the guest on 2026-08-28 — answering unauthenticated on this ClusterIP with a mutating
+# `diskUpdate` action in its payload.
+#
+# DECIDED: an allocated address written here rather than a pinned one from the inventory.
+# k8s_registry_cluster_ip and dns_k8s_cluster_ip are pinned and already answer nothing from the
+# guest, so either would read as a held fence forever and could never go red. The cost of an
+# allocated address is that it can go stale, and the orchestrator's host-side control leg is
+# what turns a stale one into a named `unproven=LONGHORNSVC` instead of a silent pass. Nothing
+# deploys from this value. Re-read it with `kubectl -n longhorn-system get svc longhorn-frontend`
+# on daniel-box when the leg reports it stale.
+hypervisor_etcd_drill_fence_longhorn_url: http://10.43.152.244/v1/nodes

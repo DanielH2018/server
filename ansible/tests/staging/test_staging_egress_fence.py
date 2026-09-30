@@ -17,11 +17,16 @@ ufw `route deny`: that was the first attempt, it deployed cleanly, `ufw status` 
 it was inert, because libvirt's own FORWARD accept is reached first. The whole history is at
 roles/setup/initial_setup/tasks/network.yml, where the rule used to live.
 
-These tests check the filter's SHAPE and its ATTACHMENT, which is all a repo-side check can
-see. Whether it fires is a property of the running host, and the probe that measured that ran
-inside the persistent daniel-stage guest; it was deleted with the guest (#2941) and re-pointing
-it at the drill's transient guest is filed, not done. So a correct filter that is unattached
-now reads green here — the inert ufw rule passed a whole file of shape tests.
+Two halves live here. The first checks the filter's SHAPE and its ATTACHMENT, which is all a
+check that never leaves the repo can see: a correct filter that is unattached reads green in
+every listing the host offers, and the inert ufw rule passed a whole file of shape tests.
+
+The second half is the reachability gate, and two tests of it live here: that the leg dials
+every range this filter drops, and that it runs before the guest is handed any credential.
+Neither can be seen from inside the guest. Its verdicts are
+test_staging_egress_fence_fires.py, driven through the _fence_probe harness. The leg replaces
+scripts/diagnostics/staging_egress_probe.py, which ran on demand inside the persistent
+daniel-stage guest and was deleted with it (#2941, restored as a drill leg in #2943).
 
 The pair that matters most is the two CIDR tests at the end. A fence keyed to a network that
 does not contain the guest is not a weaker fence, it is no fence at all, and it reads green
@@ -34,6 +39,12 @@ import xml.etree.ElementTree as ET
 
 from lib import yaml_fast
 
+from _fence_probe import (
+    CONTROL,
+    ORCHESTRATOR,
+    fence_targets_block,
+    dialled_addresses,
+)
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 
 HYPERVISOR = ROLES / "setup" / "hypervisor"
@@ -328,3 +339,53 @@ def test_the_staging_cidr_agrees_with_the_network_the_hypervisor_builds():
         f"with {netmask}. A wider CIDR here fences addresses libvirt never hands out; a "
         f"narrower one leaves part of the guest network unfenced."
     )
+
+
+def test_the_leg_dials_every_range_the_filter_fences():
+    """Non-vacuity, tied to the filter rather than to a count.
+
+    A leg that lost a target reads exactly like a fence that holds: every remaining dial still
+    comes back refused. So each network the nwfilter drops must have a dial aimed inside it. The
+    pod CIDR's is the one address that cannot be a literal — a pod IP is ephemeral, so the leg
+    discovers it from the host's neighbour table, and the runs below exercise that path.
+    """
+    block = fence_targets_block()
+    dialled = dialled_addresses(block)
+    assert dialled, f"no dialled addresses parsed out of fence_targets(): {block}"
+    assert "cni0" in block, (
+        "the leg no longer discovers a pod IP from the host's neighbour table, so nothing dials "
+        f"{POD_CIDR_VAR} at all"
+    )
+    pod_cidr = ipaddress.ip_network(_all_vars()[POD_CIDR_VAR])
+    for network in _expected_networks() - {pod_cidr}:
+        assert any(address in network for address in dialled), (
+            f"no dial in fence_targets() falls inside the fenced network {network}. "
+            f"{NWFILTER_TEMPLATE.name} drops that range and nothing measures it: every other "
+            f"dial still comes back refused, so the leg reads green."
+        )
+    control = ipaddress.ip_address(CONTROL.split("//")[1])
+    assert not any(control in network for network in _expected_networks()), (
+        f"the control target {control} sits inside a fenced range, so it cannot prove the guest "
+        f"kept its egress — a working fence would refuse it and the leg would call the fence "
+        f"broken on every run."
+    )
+
+
+def test_the_leg_runs_before_the_guest_is_handed_any_credential():
+    """Placement is the half of this that cannot be measured from inside the guest.
+
+    A leg that ran after the staging tar would report the leak correctly and a minute too late:
+    the cluster token and the R2 write credentials for the whole backup bucket would already be
+    on a guest that can reach production.
+    """
+    body = ORCHESTRATOR.read_text()
+    main = body.index("main() {")
+    leg = body.index("\n  fence_check\n", main)
+    for marker, what in (
+        ('. "$AGENT_ENV"', "the cluster token is read"),
+        ("etcd-s3.env", "the R2 credentials are staged"),
+        ("etcd-drill-guest-run --detached", "the drill is started"),
+    ):
+        assert leg < body.index(marker, main), (
+            f"the fence leg runs after {what} in {ORCHESTRATOR.name}"
+        )
