@@ -1,8 +1,10 @@
 # `setup/render_records` — the hourly k8s render-record producer on `daniel-box`
 
 Writes `/var/lib/homelab/k8s-renders.d/<service>.json` for every renderable k8s service once
-an hour, so `probe.py releases --stale-only` can clear a path-matched stale service by comparing
-digests instead of trusting the path (#2587). The record format and the reader's rules are in
+an hour, so `probe.py releases --stale-only` can answer staleness by comparing digests instead
+of trusting the path (#2587). Since #3046 that comparison is the reader's primary answer in both
+directions: a match clears a path hit, and a mismatch makes a service stale that no path hit
+reaches. The record format and the reader's rules are in
 `roles/k8s/manifests/CLAUDE.md`, *Release records*. Applied by `initial_setup.yml --tags
 render_records`, which the GitOps tick runs itself; it is not in `containers_list`.
 

@@ -73,10 +73,11 @@ def format_records(records, merged, service=None, stale=None, release_dir=None):
     lines.append("")
     lines.append(
         f"{len(records)} service(s); {unclean} carrying a flag. dirty = no commit reproduces "
-        "those bytes; unmerged = not an ancestor of origin/master; stale = origin/master has "
-        "moved past this record under the service's own or a shared role, or an inventory "
-        "key or shared macro its render reads (`probe.py releases --stale-only` for the "
-        "reasons)."
+        "those bytes; unmerged = not an ancestor of origin/master; stale = the render digest "
+        "disagrees with the applied bytes, or -- for a service no render record covers -- "
+        "origin/master has moved past this record under the service's own or a shared role, "
+        "or an inventory key or shared macro its render reads (`probe.py releases "
+        "--stale-only` for the reasons)."
     )
     return "\n".join(lines), (1 if unclean else 0)
 

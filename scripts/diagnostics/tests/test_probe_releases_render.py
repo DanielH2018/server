@@ -1,7 +1,9 @@
-"""A render record clears a `--stale-only` path hit only when it proves the bytes current (#2586).
+"""The render digest outranks the `--stale-only` path verdict, both ways (#2586, #3046).
 
 Every refusal is paired with the clearing case it differs from by one field, so a rule that
-stopped refusing fails here rather than reading green.
+stopped refusing fails here rather than reading green. The three-branch ladder -- a match
+clears, a mismatch flags, an untrustworthy record falls back to the path rule -- gets one test
+per branch on top of that.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_render.py
 """
@@ -94,7 +96,7 @@ def repo(tmp_path):
 
 def _stale_after_renders(repo, records, renders, tmp_path, pending=None):
     stale = pr.compute_stale(records, repo_root=repo, shared_roles=set())
-    cleared = rr.apply_renders(
+    cleared = rr.apply_digest_verdicts(
         stale,
         records,
         pending=pending,
@@ -146,7 +148,10 @@ def test_a_matching_secret_digest_clears_a_secret_manifest(repo, tmp_path):
 
 
 def test_a_moved_secret_digest_is_flagged(repo, tmp_path):
-    """A monitor added to static-monitors.yaml moves `secret_digest`, not `manifests_digest`."""
+    """A monitor added to static-monitors.yaml moves `secret_digest`, not `manifests_digest`.
+
+    The reason is the digest verdict rather than the path hit beside it (#3046).
+    """
     repo, base, tip = repo
     secrets = ["static-monitors.yaml"]
     stale, cleared = _stale_after_renders(
@@ -155,11 +160,12 @@ def test_a_moved_secret_digest_is_flagged(repo, tmp_path):
         [_render("uptime-kuma", tip, secrets=secrets, secret_digest="decade")],
         tmp_path,
     )
-    assert "static-monitors.yaml.j2" in stale["uptime-kuma"]
+    assert "applied secret manifests" in stale["uptime-kuma"]
     assert cleared == []
 
 
-def test_a_different_digest_is_flagged(repo, tmp_path):
+def test_a_different_digest_is_reported_as_the_digest_verdict(repo, tmp_path):
+    """The mismatch is the reason, not the path hit it happens to sit beside (#3046)."""
     repo, base, tip = repo
     stale, _ = _stale_after_renders(
         repo,
@@ -167,13 +173,107 @@ def test_a_different_digest_is_flagged(repo, tmp_path):
         [_render("littlelink", tip, digest="cafef00d")],
         tmp_path,
     )
-    assert "littlelink" in stale
+    assert stale["littlelink"].startswith(rr.DIGEST_REASON_PREFIX)
+    assert "applied manifests" in stale["littlelink"]
+
+
+def test_a_different_digest_flags_a_service_no_path_hit_reaches(repo, tmp_path):
+    """The inversion #3046 asks for: the digest can make a service stale on its own.
+
+    `uptime-kuma`'s own template moved at `tip`, `littlelink`'s did not -- so littlelink reads
+    clean by every path rule, and only the digest can see that its applied bytes are not what
+    origin/master renders.
+    """
+    repo, _, tip = repo
+    records = [_release("littlelink", tip)]
+    stale = pr.compute_stale(records, repo_root=repo, shared_roles=set())
+    assert stale == {}, (
+        "the path rules must read this service clean for the test to mean anything"
+    )
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(
+            tmp_path / "renders", _render("littlelink", tip, digest="cafef00d")
+        ),
+    )
+    assert stale["littlelink"].startswith(rr.DIGEST_REASON_PREFIX)
+
+
+def test_a_moved_secret_digest_flags_a_service_no_path_hit_reaches(repo, tmp_path):
+    """The 2026-09-25 uptime-kuma case, from the other side.
+
+    A monitor added to a secret manifest leaves `manifests_digest` identical, so only
+    `secret_digest` names the drift -- and before #3046 a differing one merely declined to
+    clear a path hit.
+    """
+    repo, _, tip = repo
+    secrets = ["static-monitors.yaml"]
+    records = [_release("littlelink", tip, secrets=secrets, secret_digest="c0ffee")]
+    stale = pr.compute_stale(records, repo_root=repo, shared_roles=set())
+    assert stale == {}
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(
+            tmp_path / "renders",
+            _render("littlelink", tip, secrets=secrets, secret_digest="decade"),
+        ),
+    )
+    assert "applied secret manifests" in stale["littlelink"]
+
+
+def test_an_untrustworthy_record_leaves_the_path_verdict_alone(repo, tmp_path):
+    """The third branch: a render from another commit answers nothing, either way."""
+    repo, base, _tip = repo
+    records = [_release("littlelink", base)]
+    stale = pr.compute_stale(records, repo_root=repo, shared_roles=set())
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        repo_root=repo,
+        render_dir=_write_renders(
+            tmp_path / "renders", _render("littlelink", base, digest="cafef00d")
+        ),
+    )
+    assert stale["littlelink"].startswith("changed since applied: ")
+
+
+def test_a_drifted_service_inside_the_grace_window_keeps_waiting(repo, tmp_path):
+    """A landing's own deploy is still in flight, which a digest cannot tell from drift."""
+    repo, base, tip = repo
+    stale, pending = {}, {"littlelink": 60}
+    rr.apply_digest_verdicts(
+        stale,
+        [_release("littlelink", base)],
+        pending=pending,
+        repo_root=repo,
+        render_dir=_write_renders(
+            tmp_path / "renders", _render("littlelink", tip, digest="cafef00d")
+        ),
+    )
+    assert stale == {}
+    assert pending == {"littlelink": 60}
+
+
+def test_a_drifted_digest_does_not_replace_the_unknown_commit_doubt(repo, tmp_path):
+    """Provenance outranks the bytes: nobody can say where the applied bytes came from."""
+    repo, _, tip = repo
+    stale, _ = _stale_after_renders(
+        repo,
+        [_release("littlelink", "f" * 40)],
+        [_render("littlelink", tip, digest="cafef00d")],
+        tmp_path,
+    )
+    assert stale == {"littlelink": "commit unknown to this checkout"}
 
 
 def test_a_matched_service_inside_the_grace_window_is_not_pending(repo, tmp_path):
     repo, base, tip = repo
     stale, pending = {}, {"littlelink": 60}
-    rr.apply_renders(
+    rr.apply_digest_verdicts(
         stale,
         [_release("littlelink", base)],
         pending=pending,
@@ -276,3 +376,40 @@ def test_an_unresolved_ref_is_flagged():
     assert not rr.render_proves_current(
         _release("x", "a" * 40), _render("x", TIP), None
     )
+
+
+@pytest.mark.parametrize(
+    ("release", "render", "expected"),
+    [
+        pytest.param(
+            _release("x", "a" * 40), _render("x", TIP), rr.CURRENT, id="current"
+        ),
+        pytest.param(
+            _release("x", "a" * 40),
+            _render("x", TIP, digest="other"),
+            rr.DRIFTED,
+            id="drifted",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET, secret_digest="d1"),
+            _render("x", TIP, secrets=SECRET, secret_digest="d2"),
+            rr.DRIFTED,
+            id="drifted-secret-digest",
+        ),
+        pytest.param(
+            _release("x", "a" * 40, secrets=SECRET),
+            _render("x", TIP, secrets=SECRET),
+            rr.UNKNOWN,
+            id="unknown-no-secret-digest",
+        ),
+        pytest.param(
+            _release("x", "a" * 40),
+            _render("x", "c" * 40, digest="other"),
+            rr.UNKNOWN,
+            id="unknown-other-commit-despite-a-mismatch",
+        ),
+    ],
+)
+def test_the_verdict_ladder_names_its_branch(release, render, expected):
+    """A mismatch an untrustworthy record reports is UNKNOWN, never DRIFTED."""
+    assert rr.digest_verdict(release, render, TIP)[0] == expected
