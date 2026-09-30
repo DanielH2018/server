@@ -817,7 +817,7 @@
  "scripts/lib/tests/test_kubectl.py": 0.03,
  "scripts/lib/tests/test_narrow_git.py": 0.02,
  "scripts/lib/tests/test_render_guard.py": 0.12,
- "scripts/lib/tests/test_script_classify_assembled_paths.py": 3.13,
+ "scripts/lib/tests/test_script_classify_assembled_paths.py": 0.0,
  "scripts/lib/tests/test_script_classify_in_process.py": 0.0,
  "scripts/lib/tests/test_script_classify_package_imports.py": 7.31,
  "scripts/lib/tests/test_script_classify_surface.py": 0.2,
