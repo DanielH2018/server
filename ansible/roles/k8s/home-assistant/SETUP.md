@@ -264,13 +264,15 @@ left, and it's a one-time UI step:
 >
 > If casting misbehaves, do NOT start with DNS, the certificate or the WAF, and do not reach for
 > `internal_url`. All three were measured and refuted for the `_connect_hass failed` burst
-> (issue #2800). `internal_url` is not a switch either: the cast integration calls `get_url(hass,
+> (issue #2800). The burst is a pychromecast bug: its socket thread blocks 30s waiting for a
+> reply only it can read (issue #2845). `internal_url` is not a switch either: the cast integration calls `get_url(hass,
 > require_ssl=True, prefer_external=True)`, which takes `external_url` whenever it is https, so
 > reaching `internal_url` means removing the URL the companion app and the Cloudflare route use.
 > Start from
 > [`docs/platform.md`](docs/platform.md) — "The cast connect-back failure is episodic" — which
-> carries the measurement, the `frontend.js` query that is the only usable signal, and why the
-> `_connect_hass failed` query returns nothing whether or not the fault is firing.
+> carries the measurement, the traceback that names the cause, the `frontend.js` query that is
+> the main usable signal, and why the `_connect_hass failed` query returns nothing whether or
+> not the fault is firing.
 
 ### 10e. Verify
 - `uv run python scripts/home_assistant/validate_ha_config.py` passes; deploy with `ha-edit-automation` step 5 (gates on health).
