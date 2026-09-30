@@ -15,6 +15,7 @@ from pathlib import Path
 import pytest
 
 import publish_pr
+from lib.git_testing import scrubbed_env
 
 SCRIPT = Path(publish_pr.__file__)
 NOW = datetime(2026, 9, 4, 1, 30, tzinfo=UTC)
@@ -410,7 +411,7 @@ def _run_cli(
     # Every GIT_* stripped. The stubs above answer instead of git, but an inherited GIT_DIR
     # from a hook or a parent worktree points at a REAL repository, and one of these arguments
     # is `reset --hard`. A git-driving fixture under prek has already written the real repo once.
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env = scrubbed_env()
     env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
     proc = subprocess.run(
         [sys.executable, str(SCRIPT), "--repo", str(tmp_path), *args],
@@ -477,7 +478,7 @@ def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
         stub = bin_dir / name
         stub.write_text(f"#!/usr/bin/env bash\n{body}exit 0\n")
         stub.chmod(stub.stat().st_mode | stat.S_IEXEC)
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+    env = scrubbed_env()
     env["PATH"] = f"{bin_dir}:{os.environ['PATH']}"
     proc = subprocess.run(
         [

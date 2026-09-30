@@ -18,7 +18,6 @@ Every existing test of this guard asserted its source text and passed throughout
 gap this module closes: it runs the role and lets Ansible judge the conditional.
 """
 
-import os
 import shutil
 import subprocess
 import sys
@@ -27,6 +26,7 @@ from pathlib import Path
 
 import pytest
 from _helpers import REPO as _REPO_ROOT
+from lib.git_testing import scrubbed_env
 
 
 _K3S_STUB = """#!/bin/sh
@@ -97,7 +97,7 @@ def _run_revert_guard(
             _PLAY.format(become_exe=fake_become, sha=sha, claims=claims)
         )
 
-        env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
+        env = scrubbed_env()
         env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"

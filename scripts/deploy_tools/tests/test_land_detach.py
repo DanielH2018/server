@@ -22,6 +22,7 @@ import pytest
 
 from deploy_tools.land_lib import detach
 from lib.exit_codes import LAND_GAVE_UP
+from lib.git_testing import scrubbed_env
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 
@@ -58,7 +59,7 @@ def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     env = {
         # `git commit` exports GIT_DIR and GIT_INDEX_FILE to its hooks, and a test inheriting
         # them has written the real repo.
-        **{k: v for k, v in os.environ.items() if not k.startswith("GIT_")},
+        **scrubbed_env(),
         "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
         "LAND_PRIMARY": str(tmp_path),
         detach.LOG_DIR_ENV: str(job_dir),
