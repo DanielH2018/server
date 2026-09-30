@@ -15,7 +15,7 @@ entry to `ansible/inventory/host_vars/daniel-box.yml`. Then it runs
 WHY A GENERATOR AND NOT A SIBLING (#2855). Step 1 of the `new-k8s-service` skill used to say
 "copy a close sibling". A sibling's files carry its narration, and that narration is dated: the
 littlelink role's Deployment cited a Compose template that had not existed since 2026-08-14.
-Six files carrying someone else's history is a worse starting point than six files carrying
+Five files carrying someone else's history is a worse starting point than five files carrying
 none.
 
 WHAT IT DOES NOT WRITE, deliberately:
@@ -267,9 +267,15 @@ def append_entry(box_vars: Path, entry: str) -> None:
     box_vars.write_text("".join(lines[:end]) + entry + "".join(lines[end:]))
 
 
-def write_role(args) -> list[Path]:
-    """Write every file the role needs. Returns the paths written, in write order."""
-    role = K8S_ROLES / args.name
+def write_role(args, roles_dir: Path | None = None) -> list[Path]:
+    """Write every file the role needs. Returns the paths written, in write order.
+
+    Args:
+        args: the parsed command line.
+        roles_dir: where `<name>/` is created. Defaults to `ansible/roles/k8s`; a test passes
+            a temporary directory rather than patching the module-level constant.
+    """
+    role = (roles_dir or K8S_ROLES) / args.name
     files = {
         role / "tasks" / "main.yml": tasks_main(args.name, args.route),
         role / "defaults" / "main.yml": defaults_main(

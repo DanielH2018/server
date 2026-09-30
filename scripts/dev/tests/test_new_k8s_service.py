@@ -199,11 +199,11 @@ def test_authelia_without_a_route_is_refused(capsys):
     assert "--no-route writes" in capsys.readouterr().err
 
 
-def test_the_generated_role_names_no_service_template(args, tmp_path, monkeypatch):
-    """The payoff of #2872: six files, not seven, and none of them a Service."""
-    monkeypatch.setattr(scaffold, "K8S_ROLES", tmp_path)
+def test_the_generated_role_names_no_service_template(args, tmp_path):
+    """The payoff of #2872: five files, not six, and none of them a Service."""
     written = {
-        p.relative_to(tmp_path / "widget").as_posix() for p in scaffold.write_role(args)
+        p.relative_to(tmp_path / "widget").as_posix()
+        for p in scaffold.write_role(args, tmp_path)
     }
     assert written == {
         "tasks/main.yml",
@@ -214,10 +214,7 @@ def test_the_generated_role_names_no_service_template(args, tmp_path, monkeypatc
     }
 
 
-def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(
-    args, tmp_path, monkeypatch
-):
+def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp_path):
     """Non-vacuity: the fallback resolver, run over the generated role, finds the Service."""
-    monkeypatch.setattr(scaffold, "K8S_ROLES", tmp_path)
-    scaffold.write_role(args)
+    scaffold.write_role(args, tmp_path)
     assert "service.yaml" in declared_manifest_files("widget", tmp_path)
