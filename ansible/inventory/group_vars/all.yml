@@ -415,6 +415,9 @@ k8s_psa_labels:
 # object (the same trap as kubectl-apply-leaves-orphaned-objects). To remove it live:
 #   kubectl delete limitrange default-container-limits -n homelab
 #   kubectl delete limitrange default-container-limits -n observability
+#
+# DECIDED: 40x CPU / 32x memory default-to-request, two namespaces only; do not tighten it, and
+# do not extend it to longhorn-system (instance-manager already peaks near a 2Gi limit).
 k8s_default_limitrange:
   defaultRequest:
     cpu: 50m

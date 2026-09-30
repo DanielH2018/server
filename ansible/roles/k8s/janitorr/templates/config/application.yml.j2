@@ -80,6 +80,8 @@ clients:
     apikey: "{{ radarr_api_key }}"
     only-delete-files: false
     determine-age-by: MOST_RECENT
+{# DECIDED: import-exclusions, not Radarr's autoUnmonitor flag; with only-delete-files: false
+   Janitorr removes the record, so the state that flag governs never occurs. #}
     # true here but false for sonarr above, and the asymmetry is the point. With
     # `only-delete-files: false` a cleanup removes the movie from Radarr entirely, so an import
     # list re-adds it on its next sync and the file is downloaded again through the VPN — the

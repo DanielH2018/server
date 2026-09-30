@@ -46,6 +46,8 @@
       land on top of Docker's chains. Run initial_setup.yml --tags docker_install to let
       the teardown purge it, then re-run this.
 
+# DECIDED: this agent-side mirror is tagged k3s_agent, not join-firewall, so --tags
+# join-firewall applies only the server half; change a port on both halves together.
 - name: Allow cluster traffic from the server node
   tags: [k3s_agent]
   community.general.ufw:

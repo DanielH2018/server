@@ -313,6 +313,8 @@
       a deploy of {{ volume_revert_service }} if the data is intact.
     quiet: true
 
+# DECIDED: no state wait after snapshotRevert; longhorn-manager v1.12.1 blocks on the engine
+# gRPC call and returns 200 only on success, unlike the detach below.
 - name: Revert the volume to the pre-deploy snapshot of {{ volume_revert_claim }}
   tags: [deploy]
   when: not (k8s_no_mutate | bool)

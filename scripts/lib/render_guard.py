@@ -108,6 +108,8 @@ BASE_CONTEXT = {
 }
 
 
+# DECIDED: secret values render as stubs, so a rendered-manifest guard must key on field names
+# and assert a non-empty denominator, never on credential-shaped values.
 class StubUndefined(ChainableUndefined):
     """A Jinja undefined value that renders as the literal ``STUB`` instead of raising.
 

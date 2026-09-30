@@ -21,6 +21,9 @@
 # scheduler currently never has to preempt — so in practice these are insurance against
 # memory pressure on daniel-box, which runs at ~60% with limits overcommitted to 160%.
 #
+# DECIDED: no PodDisruptionBudgets; every Deployment is single-replica, so a PDB blocks node
+# drains permanently.
+#
 # QoS RANKS ABOVE PRIORITY AT EVICTION. The kubelet sorts by QoS class first (BestEffort,
 # then Burstable, then Guaranteed) and only uses priority to break ties within a class.
 # Essentially every workload here is Burstable (requests below limits), so the tiers do

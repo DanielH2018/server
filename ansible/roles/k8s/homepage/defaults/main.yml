@@ -42,6 +42,9 @@ homepage_k8s_mem_request: 32Mi
 # (config/widgets.yaml.j2's kubernetes info widget, and this tile's own namespace/podSelector pod
 # stats), so repeating them here would add nothing visible.
 #
+# DECIDED: or vector(0) stays; every operand is KSM-sourced, so an outage zeros both counters
+# and reads visibly broken, and check_cluster_targets covers KSM.
+#
 # DECIDED: the second counter is named "Down" but matches Pending|Failed|Unknown, and a Pending
 # pod is starting rather than down. The mismatch is deliberate and chosen for the dashboard,
 # where one word fits the block and "Not Running" wrapped to two lines. Do not "correct" the name
