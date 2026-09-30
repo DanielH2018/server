@@ -39,8 +39,9 @@ longer exists. `k8s/terraria` is the sibling this role copies.
   chain, so the join password is the only access control.
 
 ## Notable
-- **The join password lives in SOPS as `valheim_server_pass`.** The compose value it
-  replaced is disclosed in a public git log; treat it as burned.
+- **The join password lives in SOPS as `valheim_server_pass`.** The value it replaced was
+  hardcoded in this public repo, and the plaintext is still in the git log, so treat it as
+  burned.
 - **The probes read `/proc/net/udp6`,** not `/proc/net/tcp` and not `/proc/net/udp` alone:
   Valheim is UDP and binds v6, so a copied terraria probe can never pass. It is a kernel-side
   bind check, so a Ready pod proves the port is bound and nothing more.

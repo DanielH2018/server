@@ -22,16 +22,6 @@ import re
 # token set against real configarr output in Task 9 if a clean run pages.
 _ERROR_LINE = re.compile(r"(?im)^[^\w]*(?:error|fatal)\b")
 
-# `docker compose run` appends its own resource status lines ("Container <name> Created", "Image
-# <ref> Pulled", "Network <name> Created", …) to stderr, which land last in the combined output.
-# Skip that whole status-line vocabulary when picking the summary so the message reflects configarr's
-# real final line (its Execution Summary, or its error), not docker noise.
-_COMPOSE_NOISE = re.compile(
-    r"^(?:Container|Image|Network|Volume)\s+\S+\s+(?:Creating|Created|Recreating|Recreated|"
-    r"Starting|Started|Stopping|Stopped|Removing|Removed|Running|Waiting|Healthy|"
-    r"Pulling|Pulled|Building|Built)$"
-)
-
 
 def has_error_line(output) -> bool:
     return bool(_ERROR_LINE.search(output or ""))
@@ -40,15 +30,14 @@ def has_error_line(output) -> bool:
 def summarize(output, maxlen: int = 200) -> str:
     """Returns the last meaningful line of configarr's output, collapsed and length-capped.
 
-    The useful tail for a Kuma/Discord one-liner. Skips docker-compose's own container
-    lifecycle lines so the summary is configarr's output, not "Container … Created". Empty
-    output returns a fixed placeholder.
+    The useful tail for a Kuma/Discord one-liner: on a clean run that is configarr's Execution
+    Summary, on a failure its error. The Job's log is configarr's output alone, so no line is
+    skipped. Empty output returns a fixed placeholder.
     """
     lines = [ln.strip() for ln in (output or "").splitlines() if ln.strip()]
     if not lines:
         return "(no output)"
-    meaningful = [ln for ln in lines if not _COMPOSE_NOISE.match(ln)]
-    tail = " ".join((meaningful or lines)[-1].split())
+    tail = " ".join(lines[-1].split())
     return tail[: maxlen - 3] + "..." if len(tail) > maxlen else tail
 
 
