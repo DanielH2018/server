@@ -36,8 +36,8 @@ qbittorrent_k8s_claim: qbittorrent-config
 qbittorrent_k8s_storage_class: longhorn
 qbittorrent_k8s_size: 1Gi
 
-# torrents/ ONLY, via subPath — NOT the whole media tree. Carried across from the Compose
-# comment and its reason (2026-07-02 review M2): qbittorrent handles the fleet's largest
+# torrents/ ONLY, via subPath — NOT the whole media tree (2026-07-02 review M2): qbittorrent
+# handles the fleet's largest
 # untrusted-input surface, and it has no business with write access to the book and film
 # library. The hardlink-import concern that unifies the \*arr mounts is theirs alone — link()
 # happens inside sonarr/radarr, whose single mount spans torrents/ AND media/.
@@ -53,9 +53,9 @@ qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
 
 # THE KILL-SWITCH ALLOW-LIST, and the one line in this file most likely to cause a silent
 # outage. The mod installs iptables rules that REJECT anything not leaving via wg0, except to
-# these ranges. The Compose value has three entries; the cluster needs the pod CIDR
-# (10.42.0.0/16 — where Traefik's requests and the kubelet's probes come from, so their replies
-# must be allowed back) and the Service CIDR (10.43.0.0/16 — cluster DNS).
+# these ranges. Beyond the LAN ranges, the cluster needs the pod CIDR (10.42.0.0/16 — where
+# Traefik's requests and the kubelet's probes come from, so their replies must be allowed
+# back) and the Service CIDR (10.43.0.0/16 — cluster DNS).
 #
 # WRITTEN AS ONE /15, AND THAT IS NOT A TIDY-UP. 10.42.0.0/15 spans exactly those two /16s.
 # Listing them separately fails, because the mod turns every entry into BOTH an iptables ACCEPT
@@ -66,12 +66,11 @@ qbittorrent_k8s_mullvad_mod: linuxserver/mods:wireguard-mullvad
 #
 # which wg-quick treats as fatal: it tears the interface back down and reports
 # "Tunnel /config/wg_confs/wg0.conf failed", with nothing in the message about routes. Measured
-# 2026-08-07 during B4c. The Compose value never hit this because Docker's bridge installs no
-# matching supernet route. The /15 duplicates nothing and yields the same ACCEPT coverage.
+# 2026-08-07 during B4c. The /15 duplicates nothing and yields the same ACCEPT coverage.
 qbittorrent_k8s_lan_networks: "192.168.0.0/24,{{ lan_subnet }},172.16.0.0/12,10.42.0.0/15"
 
-# NOT /run/secrets, which is the Compose convention and does not survive the port:
-# /var/run/secrets is where Kubernetes projects the ServiceAccount token, and a read-only
+# NOT /run/secrets: /var/run/secrets is where Kubernetes projects the ServiceAccount token,
+# and a read-only
 # Secret volume over it leaves runc unable to create the mountpoint. There is a guard test for
 # exactly this (ansible/tests/k8s/test_k8s_manifests.py).
 qbittorrent_k8s_secret_mount: /mullvad

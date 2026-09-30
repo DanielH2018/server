@@ -20,9 +20,8 @@ spec:
         app: littlelink
         netpol-baseline: enforced
     spec:
-      # No securityContext.runAsUser on purpose: the compose template sets no `user:` either,
-      # so the image's own default user is what has been serving this page. Pinning a UID here
-      # would be a behaviour change smuggled in under a platform move.
+      # No securityContext.runAsUser on purpose: the image's own default user is what serves
+      # this page, and pinning a UID here would be an unrelated behaviour change.
 {{ pod_shell('homelab-best-effort') }}
 {{ node_affinity_preference('daniel-server') }}
       containers:
@@ -80,8 +79,7 @@ spec:
             - name: LINKED_IN
               value: https://www.linkedin.com/in/danielrhunter/
           volumeMounts:
-            # The compose template's `tmpfs: - /tmp`, kept for the same reason it was added
-            # there: defensive cover for Node's os.tmpdir under a read-only rootfs.
+            # Defensive cover for Node's os.tmpdir under a read-only rootfs.
             - name: littlelink-tmp
               mountPath: /tmp
           readinessProbe:

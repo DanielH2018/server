@@ -52,11 +52,11 @@ prowlarr_k8s_rollout_timeout: 780s
 
 # ── flaresolverr ────────────────────────────────────────────────────────────────────────────
 # Solves Cloudflare challenges for the indexers, which means it RENDERS ATTACKER-SUPPLIED PAGES
-# in a headless browser. Under Compose it sits on its own `prowlarr-flaresolverr` network,
-# reachable by prowlarr and nothing else — a deliberate isolation, not an accident of layout.
+# in a headless browser. It is reachable by prowlarr and nothing else — a deliberate
+# isolation, not an accident of layout.
 #
-# One flat namespace would silently WIDEN that to every workload in {{ k8s_namespace }}. So the
-# move is made a narrowing instead, by networkpolicy-flaresolverr.yaml.j2: ingress on 8191 from pods labelled
+# One flat namespace would silently WIDEN that to every workload in {{ k8s_namespace }}, so
+# networkpolicy-flaresolverr.yaml.j2 holds it narrow: ingress on 8191 from pods labelled
 # app=prowlarr only. INGRESS is the enforced direction on this cluster — n8n-broker proves it,
 # and B3 proved egress policies here do nothing — so this is a control that actually holds, and
 # the probe beside it says so rather than assuming.
@@ -71,14 +71,14 @@ prowlarr_k8s_flaresolverr_claim: prowlarr-flaresolverr-config
 # busybox nc is all the isolation probe needs.
 prowlarr_k8s_probe_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
 
-# prowlarr's own four mirror the Compose-era resources('1.0', '1024M', '0.10', '128M').
+# Blast-radius caps for prowlarr itself; flaresolverr's own pair is below.
 prowlarr_k8s_cpu_limit: "1"
 prowlarr_k8s_mem_limit: 1024Mi
 prowlarr_k8s_cpu_request: "100m"
 prowlarr_k8s_mem_request: 128Mi
 
-# flaresolverr's memory pair is sized from measurement, not from the Compose defaults it started
-# at (1024Mi / 128Mi). It launches a fresh headless Chromium per solve, so its footprint tracks
+# flaresolverr's memory pair is sized from measurement, not from the 1024Mi / 128Mi it started
+# at. It launches a fresh headless Chromium per solve, so its footprint tracks
 # how many solves overlap, and a full deploy restarts most of the *arr stack at once: prowlarr
 # then re-syncs its indexers and a cold flaresolverr pod takes that whole burst.
 #

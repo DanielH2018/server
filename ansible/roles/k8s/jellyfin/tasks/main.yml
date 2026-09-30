@@ -108,7 +108,7 @@
     manifests_files:
       - deployment.yaml
       - service.yaml
-      # The direct-by-IP LAN address the Compose host binding used to provide (D7).
+      # The direct-by-IP LAN address, for clients that do not go through Traefik (D7).
       - service-lan.yaml
       - ingressroute.yaml
 

@@ -25,10 +25,9 @@ crowdsec_k8s_claim: crowdsec-db
 crowdsec_k8s_storage_class: longhorn
 crowdsec_k8s_size: 1Gi
 
-# Same set as the Docker engine (traefik role compose) — including the two transitive
-# deps `cscli hub upgrade` never auto-installs (http-cve, whitelist-good-actors) and the
-# two AppSec starter collections (deliberately NOT the full OWASP CRS). Kept identical so
-# the B1 "scenario parity" gate is a straight diff.
+# Including the two transitive deps `cscli hub upgrade` never auto-installs (http-cve,
+# whitelist-good-actors) and the two AppSec starter collections (deliberately NOT the full
+# OWASP CRS).
 crowdsec_k8s_collections: >-
   crowdsecurity/linux crowdsecurity/traefik LePresidente/authelia crowdsecurity/http-cve
   crowdsecurity/whitelist-good-actors crowdsecurity/appsec-virtual-patching

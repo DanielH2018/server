@@ -94,7 +94,7 @@ spec:
           imagePullPolicy: Always  # as on the init container above
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair — the s6 privilege-drop set.
+          # The s6 privilege-drop set.
           # s6/DOCKER_MODS init chmods files it doesn't own (e.g. /config/.ssh to
           # 0700) — without FOWNER that EPERMs and .ssh is left world-readable 0755.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}

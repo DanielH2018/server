@@ -5,8 +5,7 @@
 ---
 # Web UI + API. The Service is named `scrutiny` (not scrutiny-web) because the shared
 # ingressroute macro names the Service after the containers_list entry — and it keeps
-# COLLECTOR_API_ENDPOINT=http://scrutiny:8080 identical to the Docker compose for the
-# DaemonSet below.
+# COLLECTOR_API_ENDPOINT=http://scrutiny:8080 resolving for the DaemonSet below.
 apiVersion: apps/v1
 kind: Deployment
 metadata:

@@ -8,8 +8,8 @@
 # and would make the clone a SECOND source of truth for a file this play templates. A hostPath
 # would couple the build to whatever happens to be checked out on the node.
 #
-# Rendering here also means the context is templated exactly like the compose build's context
-# is: same variables, same secrets, one definition. The 1 MiB ConfigMap ceiling is not close.
+# Rendering here also means the context is templated like every other file this play writes:
+# same variables, same secrets, one definition. The 1 MiB ConfigMap ceiling is not close.
 apiVersion: v1
 kind: ConfigMap
 metadata:

@@ -53,7 +53,7 @@ spec:
           # place. The 2026-09-02 digest bump rebuilt the image, rolled the pod, and the node
           # reused its cached `:latest`; the drift gate in post_tasks/ caught it.
           imagePullPolicy: Always
-          # The image's console wants a TTY + open stdin (compose parity: stdin_open/tty).
+          # The image's console needs a TTY and an open stdin.
           stdin: true
           tty: true
           ports:

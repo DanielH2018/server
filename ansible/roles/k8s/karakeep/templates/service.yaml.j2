@@ -11,7 +11,7 @@ spec:
     - port: {{ container_item.port }}
       targetPort: {{ container_item.port }}
 ---
-# THE NAMES ARE LOAD-BEARING. karakeep reaches these by Compose service key today
+# THE NAMES ARE LOAD-BEARING. karakeep reaches these by name
 # (MEILI_ADDR=http://karakeep-meilisearch:7700, BROWSER_WEB_URL=http://karakeep-chrome:9222), so
 # the k8s Services have to answer to the same names or the app starts fine and then fails at the
 # first search or the first page snapshot — neither of which is a startup error. Same class of

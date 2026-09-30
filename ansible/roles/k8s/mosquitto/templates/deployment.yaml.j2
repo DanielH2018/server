@@ -68,12 +68,11 @@ spec:
             - name: mosquitto-data
               mountPath: /mosquitto/data
             # Image declares VOLUME /mosquitto/log; mount scratch over it so the read-only
-            # rootfs doesn't block the implicit volume. Stays empty (log_dest is stdout) —
-            # same reason the compose template bind-mounts ./log.
+            # rootfs doesn't block the implicit volume. Stays empty (log_dest is stdout).
             - name: mosquitto-log
               mountPath: /mosquitto/log
-          # TCP probes, not the compose healthcheck's authenticated $SYS subscribe: an exec
-          # probe would embed the SOPS MQTT password in the pod spec, which the read-only
+          # TCP probes rather than an authenticated $SYS subscribe: an exec probe would embed
+          # the SOPS MQTT password in the pod spec, which the read-only
           # kubeconfig can read. A listener that accepts TCP is what the clients need anyway.
           readinessProbe:
             tcpSocket:

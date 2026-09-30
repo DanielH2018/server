@@ -100,9 +100,9 @@
       {{ qbittorrent_k8s_host_ip.content | trim }}.
 
 # ── proof 2: the kill-switch has not eaten the cluster's return path ────────────────────────
-# From INSIDE the cluster, not from this host. The host's address sits in lan_subnet, which the
-# Compose allow-list already covered, so a request from here would pass even with the pod-CIDR
-# entry missing — and pod CIDR is exactly what Traefik and the kubelet's probes arrive from.
+# From INSIDE the cluster, not from this host. The host's address sits in lan_subnet, so a
+# request from here would pass even with the pod-CIDR entry missing — and pod CIDR is exactly
+# what Traefik and the kubelet's probes arrive from.
 # This is the D11 trap, tested at the only source address that can detect it.
 #
 # IT RETRIES FOR ~40s, AND THE RETRY IS THE WHOLE POINT OF THE LOOP — not defensive padding.

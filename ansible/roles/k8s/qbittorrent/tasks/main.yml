@@ -11,8 +11,8 @@
 
 - name: Create the qbittorrent config volume claim
   tags: [deploy]
-  # ONE volume for both containers, matching the Compose file — wireguard's wg0.conf and
-  # qbittorrent's settings live in the same tree.
+  # ONE volume for both containers — wireguard's wg0.conf and qbittorrent's settings live in
+  # the same tree.
   ansible.builtin.include_role:
     name: k8s/volume-claim
   vars:

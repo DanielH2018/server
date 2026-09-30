@@ -2,7 +2,7 @@
 # Makes /dev/dri/renderD128 schedulable as `devic.es/dri` (slice 4, B1).
 #
 # WHY THIS EXISTS AT ALL, since a hostPath looks simpler and was the original plan: Kubernetes has
-# no Compose-style `devices:` field, and a hostPath mount of /dev/dri is NOT enough. Measured
+# no `devices:` field of its own, and a hostPath mount of /dev/dri is NOT enough. Measured
 # 2026-08-07 — the device node appears in the container with the right group and mode, and every
 # open() still fails with EPERM, because cgroup v2 governs device access via an eBPF filter and
 # nothing had declared the device to the CRI. A device plugin is what declares it, which is what
