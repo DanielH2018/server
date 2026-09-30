@@ -41,9 +41,9 @@ validates libvirt XML.
 
 ## The egress fence is an nwfilter, and the first attempt was not
 
-`network.yml` defines a libvirt nwfilter, `staging-egress-fence`, that drops anything the guest
-sends to `lan_subnet`, and the domain's `<interface>` references it by name. Without it the guest
-reaches the whole production LAN masqueraded as daniel-server, measured 2026-08-27.
+`network.yml` defines a libvirt nwfilter, `staging-egress-fence`, dropping anything the guest
+sends to `lan_subnet`, `k3s_pod_cidr` or `k3s_service_cidr`; the domain's `<interface>`
+references it by name. Without it the guest reaches production masqueraded as daniel-server.
 
 **The first fix was a UFW `route deny` on this host, and it was inert** — libvirt's own FORWARD
 accept is reached first. Don't re-derive it: the rule is a delete-task in
@@ -60,8 +60,19 @@ Three mechanics decide whether a change lands:
 - **A referenced filter cannot be undefined** while a guest holds it. `virsh destroy` that
   domain first, then undefine, then re-run the role.
 
-ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which sees shape and attachment
-only. **Whether the fence FIRES has no gate** — the probe lived inside the retired guest.
+### Whether it fires is measured during a drill
+
+`fence_check` in the orchestrator dials every fenced range plus an internet control target from
+inside the guest, **before the guest is handed the cluster token or the R2 credentials**. A leak
+aborts the run with nothing staged. The run's Kuma message carries `fence=hold` or
+`fence=hold,unproven=<labels>`.
+
+- **The control target is load-bearing**, and the two allocated targets (Longhorn's ClusterIP,
+  a pod IP) carry a host-side control leg. Refused from BOTH sides means the target moved.
+- **An unproven target does not fail the drill**, per the `# DECIDED: a leak aborts` marker.
+
+ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's shape
+and runs the leg against stub dials — one test per verdict.
 
 ## Autonomous-role contract (the monthly drill creates and destroys a guest)
 
@@ -84,8 +95,10 @@ disk per run would otherwise force the orchestrator to accept any key.
   `/usr/local/bin/k3s`, and `K3S_TOKEN` from the k3s-agent unit's env file. A wrong token fails
   the restore stage loudly.
 - **Abort valves:** teardown on every exit path; the pinned guest host key; the deadline pinned
-  between one cron period and two.
-- **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/`, retained
+  between one cron period and two; the egress-fence leg, which aborts before any credential is
+  staged when a production target answers from the guest.
+- **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/` — including
+  `egress-fence.log`, the fence leg's per-target verdicts — retained
   `hypervisor_etcd_drill_log_retention_days`, and the `etcd Restore Drill (full)` Kuma tile,
   which is the alarm and sizes its deadline from `etcd_drill_full_kuma_interval_s`. Nothing in
   the cluster reads the local stamp — monitor-bridge takes daniel-box's list-only stamp and by

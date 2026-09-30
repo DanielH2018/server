@@ -31,10 +31,14 @@
 
   The shape of this filter and its attachment are ENFORCED by
   ansible/tests/staging/test_staging_egress_fence.py. A filter that is defined and unattached
-  reads identical to a working one from the host, so that check sees shape only. The
-  reachability half had an acceptance probe that ran INSIDE the persistent daniel-stage guest;
-  it went with the guest on 2026-09-29 (#2941), and re-pointing it at the drill's transient
-  guest is filed rather than done.
+  reads identical to a working one from the host, so those checks see shape only.
+
+  Whether it FIRES is measured once a month, by a leg of the drill orchestrator
+  (templates/etcd-restore-drill-vm.sh.j2, fence_check) that dials each range below plus an
+  internet control target from inside the guest, before the guest is handed the cluster token or
+  the R2 credentials. A leak aborts that run. The same file's tests run that leg against stub
+  dials. Until 2026-09-29 the measurement was an on-demand probe inside the persistent
+  daniel-stage guest; it went with the guest (#2941) and came back as a drill leg (#2943).
 -->
 <filter name='{{ hypervisor_staging_nwfilter_name }}' chain='root'>
   <!-- DECIDED: the UUID is pinned, derived from the filter's own name.

@@ -67,11 +67,22 @@ The reachability that forced the fence was measured on 2026-08-27 from inside th
 reached the whole production LAN masqueraded as daniel-server: MetalLB VIP 301, k3s API 401,
 and daniel-pi's unauthenticated wg-easy admin UI 200.
 
-**Whether the fence fires has no gate any more.** That half was
-`scripts/diagnostics/staging_egress_probe.py`, and it ran inside the persistent `daniel-stage`
-guest — the only place reachability can be measured from. It went with the guest (#2941).
-Re-pointing it at the drill's transient guest means running it during a drill, which is a
-different design; it is filed rather than done.
+**Whether the fence fires is measured during a drill.** That half used to be
+`scripts/diagnostics/staging_egress_probe.py`, an on-demand probe inside the persistent
+`daniel-stage` guest — the only place reachability can be measured from. It went with the guest
+(#2941) and came back as a leg of the drill orchestrator (#2943), because the drill's guest is
+transient: it exists only while a drill runs, so the measurement has to run during one.
+
+`fence_check` in `etcd-restore-drill-vm.sh.j2` dials the three fenced ranges plus an internet
+control target from the guest, after ssh comes up and before the guest is handed the cluster
+token or the R2 credentials — so a leak aborts the run with nothing staged. The evidence is
+`egress-fence.log` in the run's directory, and the verdict rides the run's Kuma message
+(`fence=hold`, or `fence=hold,unproven=<labels>` when a target answered from neither the guest
+nor daniel-server, which means the target moved rather than that the fence held).
+
+Two addresses are allocated rather than pinned in the inventory — Longhorn's frontend ClusterIP
+and a pod IP discovered from `ip neigh show dev cni0` — which is why each carries the host-side
+control leg. Without it a probe against an address production had moved off would pass forever.
 
 ## Two libvirt UUID collisions the templates pin around
 
