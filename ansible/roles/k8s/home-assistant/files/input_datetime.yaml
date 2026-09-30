@@ -3,8 +3,7 @@
 # every minute, so its last_changed is fresh ONLY while the automation scheduler is executing.
 # monitor-bridge polls it over the apps net (check_ha_heartbeat) and pushes a Kuma monitor down when
 # it goes stale — catching a wedged-but-running HA the container healthcheck (HTTP :8123) can't see.
-# Excluded from the recorder below (it changes every minute, zero history value). See the
-# 2026-06-19 spec in docs/superpowers/specs/.
+# Excluded from the recorder below (it changes every minute, zero history value).
 ha_heartbeat:
   name: HA heartbeat
   has_date: true

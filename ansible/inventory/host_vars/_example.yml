@@ -24,9 +24,10 @@ ssh_config_path: /etc/ssh/sshd_config
 # this is undefined. See the repo-root CLAUDE.md → "Adding a New Container Service".
 #
 # Each entry may carry `platform: docker|k8s` (default `docker`). It selects which deploy
-# stack owns the service during the k3s migration: deploy.yml skips anything marked `k8s`,
-# and the k8s manifests become that service's source of truth instead. Leave it unset for
-# Compose services. See docs/superpowers/plans/ for the current migration slice.
+# stack owns the service: deploy.yml skips anything marked `k8s`, and the k8s manifests
+# become that service's source of truth instead. Leave it unset for a Compose service, which
+# `daniel-pi` is the only host still running. The Docker to k3s migration finished on
+# 2026-08-14 and `docs/archive/k3s-migration/` is its record.
 containers_list: []
 
 # Bring-up: revert once the host is established

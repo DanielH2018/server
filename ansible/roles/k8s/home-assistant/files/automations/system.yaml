@@ -181,8 +181,7 @@
 # (check_ha_heartbeat) over the apps net and pushes the "Home Assistant Automations" Kuma monitor down
 # when it goes stale — detecting a wedged-but-running HA the container healthcheck (HTTP :8123) can't
 # see. No conditions (must tick unconditionally); homelab-wide (no bedroom_ prefix); does NOT route
-# through bedroom_notify. Excluded from the recorder (see configuration.yaml). Spec:
-# docs/superpowers/specs/2026-06-19-ha-automation-heartbeat-watchdog-design.md.
+# through bedroom_notify. Excluded from the recorder (see configuration.yaml).
 - id: ha_heartbeat
   alias: HA heartbeat
   description: Stamp input_datetime.ha_heartbeat every minute so monitor-bridge can detect a wedged automation engine.
@@ -208,7 +207,7 @@
 # own logger AND the notify script's. A failing notify path (e.g. a lapsed FCM token raising
 # service_not_found, logged under homeassistant.components.script.bedroom_notify) would otherwise
 # re-fire this alert -> call bedroom_notify -> error again: a self-sustaining loop exactly when
-# notifications are already broken. Spec: docs/superpowers/specs/2026-06-22-ha-runtime-error-alert-design.md.
+# notifications are already broken.
 - id: ha_runtime_error_alert
   alias: HA runtime error alert
   description: Notify when one of our automations/scripts/templates logs an ERROR/CRITICAL at runtime.

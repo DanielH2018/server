@@ -40,7 +40,6 @@
     # config case is invisible to `auto` — exactly what the conditional fills.
     #
     # Result: a no-op deploy recreates nothing; editing one config recreates only that
-    # service. See
-    # docs/superpowers/specs/2026-06-07-idempotent-deploys-conditional-recreate-design.md
+    # service. The long form is this role's CLAUDE.md, "Why `recreate` is conditional".
     recreate: "{{ 'always' if common_config_changed | default(false) | bool else 'auto' }}"
     remove_orphans: true

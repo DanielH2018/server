@@ -11,8 +11,8 @@ paths:
 
 The long form, with the measurements and the options not taken, is
 `docs/python-code-organization.md`. This file is the part you need while placing a file, plus
-the three rules every new check meets (the last three sections). They stay here because this
-file loads where a new check lands (#2811).
+the three rules every new check meets and the one that retires it (the last four sections).
+They stay here because this file loads where a new check lands (#2811).
 
 ## Cross-directory imports need a `sys.path` bootstrap
 
@@ -106,3 +106,29 @@ then timed out at the 10s `HTTP_TIMEOUT` on the next call, where the sibling end
 0.03-0.06s. PR #484 reshaped it so the cheap signal decides and the expensive one only explains.
 **A slow source is a design input:** make it conditional on the cheap signal having already
 fired, and make its failure downgrade the diagnosis rather than the verdict.
+
+## A check retires when its subject does
+
+The three rules above price a new check. Nothing priced deleting one, so checks only
+accumulated: in the 90 days to 2026-09-28 the repo added 889 test files and deleted 62, a ratio
+of 14 to 1, while the service count held near 50. Delete a check in the PR that obsoletes it,
+on either of two conditions.
+
+- **Its subject is gone.** The code path, rule or failure shape it watches no longer exists. A
+  check over a missing subject still passes — the census comes back empty and the `all(...)`
+  over nothing is true — so a green run is not evidence it is still worth keeping.
+- **A census or schema check already covers it.** `ansible/tests/_k8s_render.py`'s
+  role censuses and `scripts/validate/k8s_manifests.py`'s strict OpenAPI validation are the two
+  that usually swallow a single-shape guard. Name the covering check in the PR body and say
+  which inputs it accepts that the deleted one rejected.
+
+Drop the check's `ENFORCED` citation from the prose in the same PR.
+`ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on a
+node id that no longer resolves, so a deletion that leaves the citation behind arrives as a
+docs failure rather than as the deliberate retirement it was.
+
+A check whose prose the check itself pins is a third case, and it is blocked rather than
+retirable: `ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py` and
+`ansible/tests/deploy/test_land_skill_names_every_verdict.py` assert that a skill restates a
+tool's enum, so neither the test nor the prose can go while the tool does not print its own
+contract. Retire the pair once `deploy.sh` and `land.sh` do.

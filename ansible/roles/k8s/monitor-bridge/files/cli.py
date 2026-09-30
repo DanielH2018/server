@@ -6,7 +6,7 @@ seconds. Everything below the loop is a leaf: `registry.build_checks(env)` says 
 exist, `gates.Gates` says what each reachability gate suppresses, and `check.run_once` runs one
 cycle over both. Nothing here holds env-derived state after import.
 
-Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
+Design: docs/monitor-bridge-internals.md.
 """
 
 import argparse

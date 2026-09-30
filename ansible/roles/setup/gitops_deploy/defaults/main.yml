@@ -100,7 +100,7 @@ gitops_deploy_interaction_limit_expiry: six_months
 gitops_deploy_interaction_limit_cron_hour: "6"
 gitops_deploy_interaction_limit_cron_minute: "50"
 
-# k8s auto-deploy — design: docs/superpowers/specs/2026-08-14-renovate-k8s-autodeploy-design.md
+# k8s auto-deploy — design: docs/gitops-pipeline.md
 #
 # Ships OFF. Slice 1 enables it scoped to the pilot service; slice 3 clears the pilot list once
 # the induced-failure drill has proven rollback + hold clearing.

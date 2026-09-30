@@ -351,12 +351,18 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
     `findings.py close <n> --refuted --reason`), so the register holds it and `open` refuses to
     re-file it. A finding held from the public tracker for disclosure reasons stays in the
     ledger only.
-  - **Move the ledger two runs back to the memory `archive/`** once its durable rows are folded,
-    and say so in the standing list's fold history and in `archive/README.md`. Step 2 reads only
-    the newest two, so an older ledger is indexed and never read. Promote a trade-off or
-  refutation only on a **second** independent occurrence or against real evidence (a diff, a log,
-  a passing test, live `probe.py` state). One run's say-so is a candidate: written into memory, it
-  is injected every session and reinforces itself even when it is wrong.
+  - **Delete the ledger two runs back once its durable rows are folded**, and say so in the
+    standing list's fold history. Step 2 reads only the newest two, so an older ledger is
+    injected at session start, counted against the store, and never read — archiving it kept
+    the cost and dropped the use. Check three things before you delete it: every durable row is
+    folded into the standing list, every refuted lead is filed as an issue closed `--refuted`,
+    and every finding held off the public tracker for disclosure reasons has been carried
+    forward into a newer ledger. A ledger still holding the only copy of one of those is not
+    distilled yet — finish the fold, then delete on the next run.
+  - Promote a trade-off or refutation only on a **second** independent occurrence or against
+    real evidence (a diff, a log, a passing test, live `probe.py` state). One run's say-so is a
+    candidate: written into memory, it is injected every session and reinforces itself even when
+    it is wrong.
 - **Every row you write into `Deliberate trade-offs` opens with a provenance token** — `[operator]`
   if the operator ruled, `[enforced]` if a named test, hook or `# DECIDED:` marker makes the
   alternative fail. Step 2's table says what each licenses, and the two differ in cost: an
@@ -378,6 +384,24 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   (run-local note → memory → CLAUDE.md rule → executable check) with a trigger attached, since the
   ladder without one is what produced the counters. A class whose remedy stayed prose is the class
   that comes back.
+- **The ladder retires a check as well as adding one, and the retirement lands in the same PR as
+  the thing that obsoleted it.** Promotion has a trigger (run 3, above) and retirement had none,
+  so checks only ever accumulated: in the 90 days to 2026-09-28 the repo added 889 test files and
+  deleted 62, while the service count held near 50. Delete a check when either of two things is
+  true — **its subject is gone** (the code, rule or failure shape it watches no longer exists), or
+  **a census or schema check already covers it** (`_k8s_render`'s censuses, and
+  `validate-k8s-manifests`' strict OpenAPI validation, are the usual coverers here). Drop the
+  check's `ENFORCED` citation in the prose in the same PR, or
+  `ansible/tests/repo/test_documented_paths_exist.py::test_every_cited_test_exists` fails on the
+  dangling node id. Say in the PR body which of the two conditions applied and where the coverage
+  now sits; "it still passes" is not a reason to keep a check, because a check over a subject that
+  no longer exists passes by construction.
+- **One retirement is blocked, and it is blocked on a tool, not on this rule.**
+  `ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py` and
+  `ansible/tests/deploy/test_land_skill_names_every_verdict.py` assert that a skill restates a
+  tool's enum, so the prose cannot retire while the test stands. They retire once `deploy.sh` and
+  `land.sh` print their own contract — not before, because until then the skill's restatement is
+  the only place an operator reads the enum.
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`
