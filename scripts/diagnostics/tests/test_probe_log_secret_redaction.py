@@ -11,6 +11,12 @@ Every rule is a `..._is_redacted` / `..._is_printed` pair, so a rule that silent
 and one that started eating the whole record both fail their own test. What must survive is the
 `_handle_signal_show_view` marker: `docs/platform.md` tells the operator to query for it, and it is
 the only query that catches a cast timed out on a worker thread.
+
+The last test patches three names, which the monkeypatch ratchet caps at 0 for a new module. The
+seam it asks for would go in `probe_lib/ha.py`, and that module sits at exactly its 600-line cap on
+`origin/master`, so adding one there fails the length ratchet instead. This module therefore carries
+an entry in `ansible/tests/repo/monkeypatch_allowlist.txt`, which its header permits for a path
+`origin/master` does not track. Shrink `ha.py`, then take the seam and drop the entry.
 """
 
 from diagnostics.probe_lib import core
