@@ -42,6 +42,13 @@ usage() {
   exit 64
 }
 
+# `--help` is a question, not a usage error, so it prints the leading comment block on stdout
+# and exits 0 — the repo-wide convention `scripts/lib/cli_help.py` states (#2854).
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
+  exit 0
+fi
+
 [[ $# -eq 3 ]] || usage
 device=$1
 key=$2

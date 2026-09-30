@@ -21,6 +21,7 @@ MODULES = frozenset(
         "deploy",
         "health_verdict",
         "pipeline",
+        "detach",
     }
 )
 ALLOWED = {
@@ -38,6 +39,9 @@ ALLOWED = {
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
     # a run in flight (issue #1843). The kick's states live in tick.py, in one place.
     "health_verdict": {"landing", "outcome", "tick"},
+    # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
+    # callable and it never knows what a landing is (issue #2853).
+    "detach": set(),
     "pipeline": {
         "landing",
         "outcome",

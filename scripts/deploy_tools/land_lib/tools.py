@@ -58,7 +58,7 @@ from deploy_tools import (
 )
 from deploy_tools.deploy_detach_notify import GateResult
 from deploy_tools.deploy_detach_notify import gate as health_gate
-from deploy_tools.exit_codes import CI_DISARMED
+from lib.exit_codes import CI_DISARMED
 from deploy_tools.land_tags import Derivation
 from lib.gh import gh, gh_json
 from lib.git import git

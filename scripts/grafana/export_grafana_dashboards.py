@@ -33,7 +33,7 @@ from pathlib import Path
 # own directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
-from lib.kubectl import DEFAULT_CLUSTER, kubectl
+from lib.cli_help import answer_help
 
 OUTDIR = "ansible/roles/k8s/claude-otel/files/dashboards"
 
@@ -66,6 +66,11 @@ def gapi(path):
     (the grafana-admin Secret). Run on daniel-box; `privileged` because the plain
     kubeconfig is the readonly SA, which cannot exec.
     """
+    # Imported here, not at module scope: `lib.kubectl` resolves a kubeconfig on import and
+    # raises `MissingKubectl` where there is none, so a module-level import made `--help` die
+    # on every host but the cluster's (#2854).
+    from lib.kubectl import DEFAULT_CLUSTER, kubectl
+
     out = kubectl(
         DEFAULT_CLUSTER,
         "-n",
@@ -128,6 +133,7 @@ def dump(d):
 
 def main():
     """Export every non-skipped live dashboard to a normalized JSON file under OUTDIR."""
+    answer_help(__doc__)
     index = gapi("/api/search?type=dash-db")
     untracked = []
     for entry in sorted(index, key=lambda e: e["title"]):

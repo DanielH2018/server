@@ -633,10 +633,12 @@ denied about 1 run in 7 on identical text, which is classifier variance rather t
 `retry: true` reissues the call and the classifier judges it again. Two retries per session, and
 a compound command that merely contains the tick gets none — the classifier judged the whole line.
 
-On a **failure**, it decodes `deploy.sh` exits 75/4/3/2 into what each one means, because all four
-mean *nothing was deployed* and they reach Claude as a bare `Exit code N` that reads like a
-playbook failure. `test_auto_mode_bridge.py` pins its `_DEPLOY_EXITS` table to
-`scripts/deploy_tools/exit_codes.py`.
+On a **failure**, it names a `deploy.sh` exit a refusal rather than a playbook failure, and
+points at the wrapper's own last two lines for what it was. It decoded the whole exit-code
+table until 2026-09-30, as the fifth copy of it; `deploy_run.py:report` now prints the name,
+the meaning and the remedy from `scripts/lib/exit_codes.py` on every non-zero exit. What the
+hook still holds is the split -- `_REFUSALS` against `_PLAYBOOK_FAILED`, two integers with no
+prose, pinned to that module by `test_auto_mode_bridge.py`.
 
 It does **not** use `classifierContext`: that field is PostToolUse-only, so a failed deploy can't
 carry one, and the standing facts (public repo, read-only kubectl SA) already live in

@@ -37,7 +37,7 @@ from lib.repo_paths import HOST_VARS, REPO
 # Same directory, so a direct invocation already has it on sys.path. `tag_platforms` is the
 # reader of containers_list that says which probe can see a tag's workload.
 import deploy_tags
-from deploy_tools.exit_codes import DEPLOY_NO_HOSTS
+from lib.exit_codes import DEPLOY_NO_HOSTS
 
 # The inventory directory as a path relative to a checkout root. `check_one` reads the
 # inventory from whichever tree the probe renders the manifests from, which is not always this

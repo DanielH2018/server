@@ -76,6 +76,15 @@ class Options:
     stale_retries: int = 3
     primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path(STATE_DIR)
+    # `--detach` forks the landing into a logfile this script names; `--await-verdict` then
+    # blocks on that child's own VERDICT line. Both default off, so every invocation written
+    # before 2026-09-30 reaches the same code it always did (issue #2853).
+    detach: bool = False
+    await_verdict: bool = False
+    # Where `--detach` writes. Empty means `$CLAUDE_JOB_DIR/tmp`, or `detach.FALLBACK_LOG_DIR`
+    # outside a Claude session. The fan-out passes its worktree's `.fanout/`, which is where
+    # `fanout_lib/status.py` greps for the verdict.
+    log_dir: str = ""
 
 
 def parse_args(argv: list[str] | None, description: str) -> Options:
@@ -117,6 +126,21 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         action="store_true",
         help="arm a PR by any author, overriding LAND_REQUIRE_AUTHOR",
     )
+    parser.add_argument(
+        "--detach",
+        action="store_true",
+        help="fork the landing into a logfile this script names, and return",
+    )
+    parser.add_argument(
+        "--await-verdict",
+        action="store_true",
+        help="with --detach: block until the landing prints its VERDICT line",
+    )
+    parser.add_argument(
+        "--log-dir",
+        default="",
+        help="with --detach: where to write the log (default: $CLAUDE_JOB_DIR/tmp)",
+    )
     ns = parser.parse_args(argv)
     return Options(
         pr=ns.pr,
@@ -129,4 +153,7 @@ def parse_args(argv: list[str] | None, description: str) -> Options:
         require_author="" if ns.any_author else _require_author_from_env(),
         merge_poll=_merge_poll_from_env(),
         primary=_primary_from_env(),
+        detach=ns.detach,
+        await_verdict=ns.await_verdict,
+        log_dir=ns.log_dir,
     )

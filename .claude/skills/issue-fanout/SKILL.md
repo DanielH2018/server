@@ -291,25 +291,18 @@ Each agent starts with none of this conversation's context, so its brief must ca
 
 - That `land.sh` (the `land-after-merge` skill) is the landing path, and a hook denies
   hand-polling CI.
-- **How to wait for the landing, verbatim.** A backgrounded `land.sh` with its output
-  redirected to a file is not a harness-tracked child, so nothing wakes the agent when it
-  finishes. An agent that ends its turn there leaves the landing unwatched and costs the
-  orchestrator a `SendMessage` resume per stop. Give every agent this command and tell it to
-  run it in the foreground, once, instead of ending its turn:
+- **The landing is ONE command, and it waits for itself.** `land.sh --detach --await-verdict`
+  names its own logfile, forks into it, and returns with the landing's exit code once the
+  `VERDICT:` line is printed — so the agent stays in-turn without a `tail -f | grep` beside it,
+  and `--log-dir` puts the log where `status.py` greps. `brief.py` prints the exact command;
+  give the agent that and nothing else.
 
-  ```bash
-  timeout 1200 tail -f -n +1 <land.log> | grep -m1 '^VERDICT:'
-  ```
-
-  One call, no watcher, and it cannot poll CI. Four of four agents stopped short on the
-  2026-09-06 fan-out without it (issue #1291); supplying it ended the stopping in every case.
-
-  **Tell the agent the wait prints the verdict at once but does not return at once.** `tail
-  -f` only takes SIGPIPE on its next write, and `VERDICT:` is the last line `land.sh` writes,
-  so the call runs to the timeout and the harness moves it to the background — which is not a
-  failure and must not end the turn. What the wait buys is keeping the agent in-turn, so the
-  backgrounded `land.sh` has a live session to notify when it exits. Issue #1298 tracks a
-  command that returns on the match.
+  Before `--detach` existed (#2853) the agent had to background `land.sh`, redirect it and then
+  block on `timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'`. A backgrounded call whose
+  output is redirected to a file is not a harness-tracked child, so nothing wakes the agent when
+  it finishes: four of four agents stopped short on the 2026-09-06 fan-out (issue #1291), and
+  supplying the wait ended it in every case. `--await-verdict` removes the step rather than the
+  requirement — an agent must still not end its turn on a landing.
 - That `deploy.sh` exit 75 is a **resume point to retry**, not a failure to report.
 - **What to do with a verdict that leaves a host apply owed.** `needs-manual-apply` and
   `blocked` mean the PR merged and an apply is still owed on a host — a `manual_plane` role, a

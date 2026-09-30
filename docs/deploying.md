@@ -39,22 +39,19 @@ want none of the above.
 
 ## Exit codes are resume points
 
-Each of these means **nothing was deployed**. None is a playbook failure. The table is
-pinned to `DEPLOY_SH_NO_VERDICT` in `scripts/deploy_tools/exit_codes.py` by
-`ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py`; 20, the one code that
-means the playbook ran, is in the `deploy` skill's table.
+Each non-zero exit in `DEPLOY_SH_NO_VERDICT` means **nothing was deployed**. None is a
+playbook failure, and each is a resume point.
 
-| Code | Means | Do |
-|---|---|---|
-| 79 | `deploy_locks.py plan` did not print this run's service locks — it exited non-zero, timed out, or printed nothing — so the wrapper had nothing to take. It never falls back to a lock order of its own: that order lives in one module so a hand deploy and a tick cannot disagree on it | Run `uv run python ansible/roles/setup/gitops_deploy/files/deploy_locks.py plan <tag>` by hand, fix what it says, then retry. Nothing was held while it ran |
-| 78 | The playbook matched no host — ansible exits 0 for that, so the wrapper reads the `PLAY RECAP` itself | Read the `[WARNING]` lines: an inventory that failed to parse, or a host pattern that matched nothing. Fix it, then retry |
-| 77 | The snapshot worktree could not be created, or a full run could not list its deploy tags from it — the message says which; a list that took longer than `TAG_LIST_TIMEOUT` under the tree lock is the second | Check `/tmp/homelab-deploy-snapshots/` is writable and `git worktree add --detach` works. For the list, run `uv run python scripts/deploy_tools/deploy_tags.py list` once by hand, then retry |
-| 76 | `flock` failed on the lock file itself — a bad descriptor, or a lock file the deploy user cannot open — not contention | `ls -l /var/lock/server-git-tree.lock`; retrying alone changes nothing |
-| 75 | A lock stayed busy — the tree lock, or one of this run's services' | Retry |
-| 4 | The commit being deployed — `HEAD`, or `--at <sha>` — is behind `origin/master` on a path the deploy reaches | Pull, then retry. Never `--skip-staleness-check` — `.claude/hooks/block-footguns.py` denies it typed against `deploy.sh` |
-| 3 | The change is broad and maps to no single service | Run the playbook the change's plane needs |
-| 2 | The tag matched no service | `--list-services` prints the valid values |
-| 64 | The flags contradict each other, or `--at` named no commit this checkout has (or none at all) | Fix the command line |
+**The wrapper says which, on its own last two lines.** A failing run ends with
+`deploy.sh: <NAME> (<code>): <meaning> <what to do>` and then
+`DEPLOY-VERDICT: <verdict> (<the arguments>)`, both read from
+`scripts/lib/exit_codes.py`. The per-code table is rendered from that module into
+[Scripts](reference/scripts.md#scriptsdeploysh), so there is one copy and it is the one the
+script exits with. This page carried a hand-kept copy until 2026-09-30 and had lost 76 by the
+time a test was written for it (#2853).
+
+`DEPLOY_PLAYBOOK_FAILED` is the exception the set excludes: the playbook ran and a task
+failed, so whatever applied before it is live.
 
 Being *ahead* of master is normal branch work and is never refused.
 

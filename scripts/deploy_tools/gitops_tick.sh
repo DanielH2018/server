@@ -27,6 +27,8 @@
 #   0   the tick ran to completion (which includes a healthy noop / deferral)
 #   1   the tick failed — the unit exited non-zero, or it could not be started
 #   2   the unit is not installed on this host (has_gitops is false here)
+#   64  the command line is wrong (was 1 until 2026-09-30: 64 is a usage error everywhere
+#       under scripts/, and `scripts/lib/exit_codes.py` is where that scheme is named)
 #   4   `--no-wait` only: a tick was already in flight, so the request JOINED it and started
 #       nothing. That tick fetched before this request arrived, so a commit merged since is
 #       not in it, and nothing converges the checkout onto that commit until the next tick.
@@ -44,6 +46,11 @@
 #   75  the wait budget elapsed while the run was still in flight (nothing is wrong
 #       with the run; only this script gave up watching). Matches deploy.sh's use of
 #       75 for "we backed off, no verdict".
+#
+# The last line of every run is `TICK-VERDICT: <verdict> (<detail>)`, the shape land.sh's
+# `VERDICT:` line uses. `scripts/lib/exit_codes.py` maps each exit code above to its verdict
+# token and carries the DECIDED note on why the prefix is not the bare `VERDICT:` a landing
+# greps for.
 set -euo pipefail
 
 UNIT="gitops-deploy.service"
@@ -69,6 +76,17 @@ POLL_S="${GITOPS_TICK_POLL_S:-5}"
 # ansible/tests/deploy/test_gitops_manual_trigger.py asserts the two match.
 CONTENTION_MARKER="tick skipped (lock contention)"
 
+# Print the run's one-line verdict and exit with its code. Every exit below goes through this,
+# so a caller reading the last line always gets one: the tick printed free text plus the
+# state markers and left the reader to decide what had happened (#2853). The token/code pairs
+# are `scripts/lib/exit_codes.py`'s TICK_* rows, held against these by
+# ansible/tests/deploy/test_gitops_manual_trigger.py.
+tick_verdict() {
+  local code="$1" verdict="$2" detail="$3"
+  echo "TICK-VERDICT: $verdict ($detail)"
+  exit "$code"
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --wait)
@@ -85,7 +103,7 @@ while [[ $# -gt 0 ]]; do
       ;;
     *)
       echo "gitops_tick.sh: unknown argument '$1'" >&2
-      exit 1
+      tick_verdict 64 bad-args "unknown argument '$1'"
       ;;
   esac
 done
@@ -113,7 +131,7 @@ in_flight_seconds() {
 if ! systemctl cat "$UNIT" >/dev/null 2>&1; then
   echo "gitops_tick.sh: $UNIT is not installed on $(hostname) — the GitOps deployer" >&2
   echo "runs only on hosts with has_gitops: true (daniel-box)." >&2
-  exit 2
+  tick_verdict 2 not-installed "$UNIT not installed on $(hostname)"
 fi
 
 # Wall clock for the journal window, monotonic for detecting a NEW activation. The
@@ -146,7 +164,7 @@ else
     echo "gitops_tick.sh: could not start $UNIT. If that failed with 'Interactive" >&2
     echo "authentication required', the polkit rule is missing — apply it with:" >&2
     echo "  uv run ansible-playbook ansible/initial_setup.yml --tags gitops_deploy" >&2
-    exit 1
+    tick_verdict 1 failed "could not start $UNIT"
   fi
 fi
 
@@ -159,11 +177,11 @@ if [[ "$WAIT_S" -eq 0 ]]; then
     echo "request, so a commit merged since is not in it. Re-run once it ends, or wait for"
     echo "the timer. Follow it with:"
     echo "  journalctl -u $UNIT --since '$since' --no-pager"
-    exit 4
+    tick_verdict 4 joined "run in flight, already ${joined_after}s, nothing started"
   fi
   echo "Started. Read it with:"
   echo "  journalctl -u $UNIT --since '$since' --no-pager"
-  exit 0
+  tick_verdict 0 ticked "started, not awaited (--no-wait)"
 fi
 
 # Watch the unit until the run in flight ends or `deadline` (in $SECONDS terms) passes. A
@@ -233,7 +251,7 @@ if [[ "$joined" == 1 && "$WAIT_S" -gt 0 ]]; then
     started_before="$(show ExecMainStartTimestampMonotonic)"
     if ! systemctl start --no-block "$UNIT"; then
       echo "gitops_tick.sh: could not start $UNIT for the fresh run." >&2
-      exit 1
+      tick_verdict 1 failed "could not start $UNIT for the fresh run"
     fi
     fresh=1
     watch_run "$deadline"
@@ -284,7 +302,7 @@ if [[ "$state" == "activating" || "$state" == "deactivating" ]] ||
   echo
   echo "Still running after ${WAIT_S}s — the run is fine, this script stopped watching."
   echo "Follow it with: journalctl -u $UNIT --since '$since' --no-pager"
-  exit 75
+  tick_verdict 75 still-running "stopped watching after ${WAIT_S}s"
 fi
 
 result="$(show Result)"
@@ -305,16 +323,16 @@ if ended_in_contention; then
   echo "No alert fires for this — OnFailure cannot fire on a unit systemd considers"
   echo "successful, and GitOps-Alive only pages once last_run passes GITOPS_MAX_AGE_S"
   echo "(90 min). Re-run once the other deploy or secret-rotate cron finishes."
-  exit 3
+  tick_verdict 3 contention "the unit's full flock wait elapsed, nothing deployed"
 fi
 
 if [[ "$result" == "success" && "$status" == "0" ]]; then
   echo "Tick completed (Result=$result, exit=$status)."
   echo "A noop or a deferral (dirty tree, ci_pending, hold) also completes successfully —"
   echo "read the journal above for which one this was."
-  exit 0
+  tick_verdict 0 ticked "Result=$result, exit=$status"
 fi
 
 echo "Tick FAILED (Result=$result, exit=$status). gitops-deploy-alert.service has already" >&2
 echo "posted to Discord via OnFailure." >&2
-exit 1
+tick_verdict 1 failed "Result=$result, exit=$status"

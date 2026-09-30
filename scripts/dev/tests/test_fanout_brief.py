@@ -18,8 +18,8 @@ ISSUES = [
 def test_daniel_box_brief_lands_and_daniel_server_brief_stops_at_the_pr():
     box = render_brief(ISSUES, "daniel-box", "1345-1386", "worktree-orch", [])
     server = render_brief(ISSUES, "daniel-server", "1345-1386", "worktree-orch", [])
-    assert "land.sh" in box and "grep -m1 '^VERDICT:'" in box
-    assert ".fanout/land" in box and "$CLAUDE_JOB_DIR" not in box
+    assert "land.sh" in box and "--detach --await-verdict" in box
+    assert "--log-dir" in box and ".fanout" in box and "$CLAUDE_JOB_DIR" not in box
     assert "land.sh" not in server and "gh pr create" in server
     assert "do not merge" in server.lower()
 

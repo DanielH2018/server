@@ -57,6 +57,8 @@ from pathlib import Path as _Path
 # pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from lib.gh import gh as _gh
 
 UNTICKED = "- [ ] <!-- rebase-check -->"
@@ -125,6 +127,9 @@ def _edit_body(gh: Gh, number: str, body: str) -> str | None:
 
 def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
     argv = sys.argv[1:] if argv is None else argv
+    # `--help` is a question; the refusal below answered it with 64 and the docstring on
+    # stderr, which is a usage error (#2854).
+    answer_help(__doc__, argv)
     retick = "--retick" in argv
     positional = [a for a in argv if a != "--retick"]
     if (
@@ -133,7 +138,7 @@ def main(argv: list[str] | None = None, gh: Gh = _gh, out=sys.stdout) -> int:
         or argv.count("--retick") > 1
     ):
         print(__doc__, file=sys.stderr)
-        return 64
+        return USAGE_ERROR
     number = positional[0]
     try:
         # One read for both: the body carries the box, the rollup carries the soak status.

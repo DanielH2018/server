@@ -79,7 +79,7 @@ collide at collection.
 
 **A new module may not take the name of a namespace-package directory.** A regular module
 beats a namespace portion whatever the `sys.path` order, so a `deploy_tools.py` on the path
-shadows `scripts/deploy_tools/` and every `from deploy_tools.exit_codes import ...` raises
+shadows `scripts/deploy_tools/` and every `from deploy_tools.deploy_detach_notify import ...` raises
 `ModuleNotFoundError: 'deploy_tools' is not a package` — for the whole suite, not just for the
 role that added the file. That is why the deployer's boundaries object lives in
 `deploy_toolbox.py` while the class it holds is `DeployTools`.

@@ -12,7 +12,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_broad_fallback_verdict.p
 import pytest
 
 from _land_fakes import MERGE_SHA, Fakes
-from deploy_tools.exit_codes import DEPLOY_BROAD
+from lib.exit_codes import DEPLOY_BROAD
 from deploy_tools.land_lib import deploy
 from deploy_tools.land_lib.outcome import Outcome
 

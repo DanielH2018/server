@@ -20,6 +20,14 @@
 # this script, so the retry protects both and the semantics cannot drift between them.
 set -euo pipefail
 
+# `--help` answers from any environment, ahead of every step below — the repo-wide convention
+# `scripts/lib/tests/test_entry_points_answer_help.py` checks (#2854). The awk prints this
+# file's leading comment block, which is the usage, with the `#` markers stripped.
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"
+  exit 0
+fi
+
 attempts="${RENOVATE_INSTALL_ATTEMPTS:-6}"
 backoff="${RENOVATE_INSTALL_BACKOFF:-60}"
 prefix="${RUNNER_TEMP:-${TMPDIR:-/tmp}}/renovate-config-validator"

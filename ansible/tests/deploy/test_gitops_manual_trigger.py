@@ -211,3 +211,59 @@ def test_unit_timeout_covers_the_measured_k8s_worst_case():
         "re-size, re-derive it against the budget arithmetic in the unit's own comment and "
         "gitops_deploy/defaults/main.yml before changing this pin."
     )
+
+
+# -- the verdict line (issue #2853) --------------------------------------------------------
+
+_TICK_VERDICT_CALL = re.compile(r"^\s*tick_verdict (\d+) ([a-z-]+) ", re.MULTILINE)
+
+
+def _wrapper_verdicts() -> dict[int, str]:
+    """`{exit code: verdict token}` for every `tick_verdict` call in the wrapper."""
+    return {
+        int(code): verdict
+        for code, verdict in _TICK_VERDICT_CALL.findall(_WRAPPER.read_text())
+    }
+
+
+def test_the_wrappers_verdict_tokens_are_the_ones_the_exit_code_table_declares():
+    """The wrapper is bash and cannot import the table, so the two are held together here.
+
+    Before #2853 the tick printed free text plus the state markers and left the reader to
+    decide what had happened, which is the prose `gitops-tick/SKILL.md` carried.
+    """
+    from lib.exit_codes import contract
+
+    declared = {
+        code.value: code.verdict
+        for code in contract("scripts/deploy_tools/gitops_tick.sh")
+    }
+    assert _wrapper_verdicts() == declared
+
+
+def test_every_exit_in_the_wrapper_goes_through_the_verdict_emitter():
+    """A bare `exit` would end a run with no last line for a caller to read.
+
+    `--help`'s `exit 0` is the one exception: it answers a question rather than reporting a
+    run, and `test_entry_points_answer_help.py` requires its 0.
+    """
+    bare = [
+        line.strip()
+        for line in _WRAPPER.read_text().splitlines()
+        if re.match(r"^\s*exit \d", line)
+    ]
+    assert bare == ["exit 0"], bare
+
+
+def test_the_wrapper_declares_a_verdict_for_every_code_it_can_exit_with():
+    """Non-vacuity: the regex above finds nothing if `tick_verdict` is renamed."""
+    assert set(_wrapper_verdicts()) == {0, 1, 2, 3, 4, 64, 75}
+
+
+def test_a_bare_exit_is_flagged():
+    """The reject half, over the parser rather than the file: a wrapper that regains a bare
+    `exit 3` must fail `test_every_exit_in_the_wrapper_goes_through_the_verdict_emitter`."""
+    assert _TICK_VERDICT_CALL.findall("  exit 3\n") == []
+    assert _TICK_VERDICT_CALL.findall("  tick_verdict 3 contention 'x'\n") == [
+        ("3", "contention")
+    ]

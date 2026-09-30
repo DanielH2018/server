@@ -63,20 +63,22 @@ def test_an_unexpected_exception_annotates_as_aborted_and_propagates(monkeypatch
 def test_a_usage_error_does_not_annotate(argv):
     """Issue #1304's rejecting half: a bad flag and a missing `--pr` are usage errors, not
     landings, and must write nothing to the stream the Landings board counts. Both reach
-    argparse's SystemExit(2) before a Landing or a Ledger exists, so the only line they
-    could write is `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window.
+    argparse's SystemExit before a Landing or a Ledger exists, so the only line they could
+    write is `pr=unknown verdict=aborted` -- 592 of which reached Loki's 744h window. `main`
+    renumbers the code to `LAND_BAD_ARGS` on the way out and still annotates nothing.
 
     Real `parse_args`, not the `land_run` fixture's wrapper: the wrapper always calls the
     real parser first and only replaces `primary` afterwards, so an unrecognized flag still
-    raises SystemExit(2) through it same as here.
+    raises a usage-error SystemExit through it same as here.
     """
     import land
     from _land_fakes import build_tools
+    from lib.exit_codes import LAND_BAD_ARGS
 
     tools, calls = build_tools(Fakes())
     with pytest.raises(SystemExit) as exc:
         land.main(argv, tools=tools)
-    assert exc.value.code == 2
+    assert exc.value.code == LAND_BAD_ARGS
     assert not any(c[0] == "logger" for c in calls)
 
 

@@ -6,6 +6,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_options.py
 import pytest
 
 from deploy_tools.land_lib import options
+from lib import exit_codes
 
 
 def test_pr_is_required():
@@ -93,3 +94,25 @@ def test_an_abbreviated_flag_is_rejected_rather_than_silently_resolved():
 def test_the_full_flag_still_works():
     """The reject half above only proves something; this proves it isn't everything."""
     assert options.parse_args(["--pr", "7", "--subject", "text"], "d").subject == "text"
+
+
+def test_main_renumbers_argparses_two_onto_the_shared_usage_error():
+    """`land.sh` answers a bad command line with 64, the number every entry point here uses.
+
+    `parse_args` still raises argparse's own 2 -- the tests above assert that -- and `main` is
+    the one place it becomes `LAND_BAD_ARGS` (issue #2854).
+    """
+    import land
+
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--arm-merge"])
+    assert exc.value.code == exit_codes.LAND_BAD_ARGS == 64
+
+
+def test_main_leaves_helps_zero_alone():
+    """The reject half: renumbering must not turn a successful `--help` into a usage error."""
+    import land
+
+    with pytest.raises(SystemExit) as exc:
+        land.main(["--help"])
+    assert exc.value.code == 0

@@ -32,7 +32,7 @@ from _deploy_sh_fakes import (
     make_snapshot_repo,
     stub_bin,
 )
-from deploy_tools import exit_codes as ec
+from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
 _REPO = Path(__file__).resolve().parents[3]

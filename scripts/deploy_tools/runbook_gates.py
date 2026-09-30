@@ -31,10 +31,14 @@ from pathlib import Path as _Path
 # pyproject's `pythonpath` is a pytest setting.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
+from lib.cli_help import answer_help
+from lib.exit_codes import USAGE_ERROR
 from lib.kubectl import MissingKubectl, Tools, WrongCluster, kubectl_json
 
 EX_UNAVAILABLE = 69
-EX_USAGE = 64
+# The repo-wide 64, not a second definition of it: `lib.exit_codes` is the one scheme every
+# entry point here takes its usage code from.
+EX_USAGE = USAGE_ERROR
 
 # Allow-lists, not deny-lists: a Longhorn state this file has not heard of (a rename, a new
 # value after a Longhorn bump) must stop the procedure, not pass it. `healthy` is a volume with
@@ -157,8 +161,12 @@ def cli(
     script whose gates read only the host and the cluster, 1 for the etcd restore gates,
     where the snapshot name is the subject gate 3 grades. An argument starting with `-` is a
     flag, and no gate script has one, so it is usage rather than a positional.
+
+    `--help` is the exception, and it comes first: these scripts printed `doc` on stderr and
+    exited 64 for it, so asking one of the five what it gates read as a usage error (#2854).
     """
     argv = sys.argv[1:] if argv is None else argv
+    answer_help(doc, argv)
     if len(argv) != takes or any(arg.startswith("-") for arg in argv):
         print(doc, file=sys.stderr)
         return EX_USAGE

@@ -15,6 +15,13 @@ here needs an exception list. See the workflow for what replaced it.
 
 import re
 import sys
+from pathlib import Path
+
+# `lib` is a sibling directory under `scripts/`; a directly-invoked script gets only its own
+# directory on sys.path, and pyproject's `pythonpath` is a pytest setting.
+sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
+
+from lib.cli_help import answer_help
 
 # Added line (starts with a single '+', not '+++'), an `image:` key, capture the ref.
 _IMAGE_RE = re.compile(r'^\+(?!\+\+)\s*image:\s*["\']?(?P<ref>[^\s"\']+)["\']?\s*$')
@@ -44,6 +51,9 @@ def extract_changed_images(diff_text: str) -> list[str]:
 
 
 if __name__ == "__main__":
+    # Before the read: the diff arrives on stdin, so `--help` used to hang on a terminal
+    # rather than answer (#2854).
+    answer_help(__doc__)
     images = extract_changed_images(sys.stdin.read())
     for img in images:
         print(img)
