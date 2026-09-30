@@ -21,4 +21,4 @@
 # without a raw `curl` (#2301).
 initial_setup_uv_version: "0.12.18"
 initial_setup_uv_installer_url: "https://astral.sh/uv/{{ initial_setup_uv_version }}/install.sh"
-initial_setup_uv_installer_sha256: 37b82230b28617c6c24fa52364fa28aa37f2aa40c114809a623f6b064a9730e5
+initial_setup_uv_installer_sha256: e62a5ea089de9c6a9b1f767166c9f33194e18d350e9f375c6355fac3ba0fb42b
