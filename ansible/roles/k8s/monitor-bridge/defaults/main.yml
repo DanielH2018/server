@@ -92,3 +92,9 @@ monitor_bridge_healthchecks_expected:
   - {slug: etcd-snapshot-offbox, kind: cron, schedule: "45 2 * * *", tz: UTC, grace: 3600}
   - {slug: pi-peer-backup, kind: cron, schedule: "0 23 * * *", tz: "{{ tz }}", grace: 7200}
   - {slug: registry-gc, kind: cron, schedule: "20 4 * * 0", tz: UTC, grace: 3600}
+  # initial_setup's two pinging crons, moved off the self-hosted Healthchecks (#2806): the
+  # weekly reboot pings one slug per host, the Docker prune one per has_docker host.
+  - {slug: weekly-reboot-daniel-box, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
+  - {slug: weekly-reboot-daniel-server, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
+  - {slug: weekly-reboot-daniel-pi, kind: cron, schedule: "30 7 * * 0", tz: UTC, grace: 3600}
+  - {slug: daniel-pi-docker-prune, kind: cron, schedule: "30 6 * * *", tz: UTC, grace: 3600}

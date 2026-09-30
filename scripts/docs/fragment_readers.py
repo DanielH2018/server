@@ -41,6 +41,31 @@ def role_defaults(path: _Path) -> dict:
     return yaml_fast.safe_load(path.read_text())
 
 
+def host_has_docker(
+    hosts_ini: _Path, group_vars: dict, host_vars_dir: _Path
+) -> dict[str, bool]:
+    """`{host: has_docker}` for every host in hosts.ini's `[homeservers]`, in file order.
+
+    A host's own host_vars value wins over group_vars, the precedence Ansible applies. The
+    host list is what `initial_setup.yml` targets, so it is the set of hosts that install the
+    crons this role pings from.
+    """
+    hosts, in_group = [], False
+    for raw in hosts_ini.read_text().splitlines():
+        line = raw.split("#", 1)[0].strip()
+        if line.startswith("["):
+            in_group = line == "[homeservers]"
+        elif line and in_group:
+            hosts.append(line.split()[0])
+    default = bool(group_vars.get("has_docker", False))
+    out = {}
+    for host in hosts:
+        path = host_vars_dir / f"{host}.yml"
+        own = yaml_fast.safe_load(path.read_text()) if path.is_file() else {}
+        out[host] = bool((own or {}).get("has_docker", default))
+    return out
+
+
 def registry_counts(path: _Path) -> dict[str, int]:
     """How many registered secrets sit in each tier."""
     counts: dict[str, int] = {}

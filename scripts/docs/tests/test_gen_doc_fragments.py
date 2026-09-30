@@ -270,18 +270,83 @@ def test_deadman_cadences_assembles_each_cron_from_its_variables():
         "registry_k8s_gc_cron_hour": "4",
         "registry_k8s_gc_cron_minute": "20",
     }
+    group_vars = {
+        "weekly_reboot_minute": 30,
+        "weekly_reboot_hour": 7,
+        "weekly_reboot_weekday": 0,
+    }
+    initial_setup = {
+        "initial_setup_docker_prune_cron_minute": 30,
+        "initial_setup_docker_prune_cron_hour": 6,
+    }
     out = renderers.render_deadman_cadences(
-        k3s, {"pi_peer_backup_k8s_schedule": "30 23 * * *"}, registry
+        k3s,
+        {"pi_peer_backup_k8s_schedule": "30 23 * * *"},
+        registry,
+        group_vars,
+        initial_setup,
+        {"box": False, "pi": True},
     )
     assert "| `daniel-box-disk-health` | `*/5 * * * *` |" in out
     assert "| `etcd-snapshot-offbox` | `45 2 * * *` |" in out
     assert "| `registry-gc` | `20 4 * * 0` |" in out
     assert "| `uptime-kuma-alive` | `*/10 * * * *` |" in out
+    assert "| `weekly-reboot-box` | `30 7 * * 0` |" in out
+    assert "| `weekly-reboot-pi` | `30 7 * * 0` |" in out
+    assert "| `pi-docker-prune` | `30 6 * * *` |" in out
+
+
+def test_deadman_cadences_gives_a_prune_slug_only_to_a_docker_host():
+    out = renderers.render_deadman_cadences(
+        {
+            "k3s_longhorn_backup_health_cron_minute": "*/10",
+            "k3s_disk_health_cron_minute": "*/10",
+            "k3s_etcd_s3_cron_hour": "2",
+            "k3s_etcd_s3_cron_minute": "45",
+            "k3s_manifest_prune_cron_hour": "5",
+            "k3s_manifest_prune_cron_minute": "15",
+        },
+        {"pi_peer_backup_k8s_schedule": "0 23 * * *"},
+        {
+            "registry_k8s_gc_cron_weekday": "0",
+            "registry_k8s_gc_cron_hour": "4",
+            "registry_k8s_gc_cron_minute": "20",
+        },
+        {
+            "weekly_reboot_minute": 30,
+            "weekly_reboot_hour": 7,
+            "weekly_reboot_weekday": 0,
+        },
+        {
+            "initial_setup_docker_prune_cron_minute": 30,
+            "initial_setup_docker_prune_cron_hour": 6,
+        },
+        {"box": False},
+    )
+    assert "weekly-reboot-box" in out
+    assert "box-docker-prune" not in out
 
 
 def test_deadman_cadences_fails_on_a_missing_variable_rather_than_guessing():
     with pytest.raises(KeyError):
-        renderers.render_deadman_cadences({}, {"pi_peer_backup_k8s_schedule": "x"}, {})
+        renderers.render_deadman_cadences(
+            {}, {"pi_peer_backup_k8s_schedule": "x"}, {}, {}, {}, {}
+        )
+
+
+def test_host_has_docker_lets_host_vars_override_group_vars(tmp_path):
+    hosts = tmp_path / "hosts.ini"
+    hosts.write_text(
+        "[homeservers]\nbox  ansible_connection=local\npi ansible_host=10.0.0.9\n"
+        "# a comment\n[other]\nstray\n"
+    )
+    host_vars = tmp_path / "host_vars"
+    host_vars.mkdir()
+    (host_vars / "pi.yml").write_text("has_docker: true\n")
+    assert readers.host_has_docker(hosts, {"has_docker": False}, host_vars) == {
+        "box": False,
+        "pi": True,
+    }
 
 
 def test_lan_addresses_names_each_value_and_its_variable():

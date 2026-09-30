@@ -152,12 +152,47 @@
     - secret-rotate.sh
   become: true
 
+- name: Create the Healthchecks.io credential directory
+  tags: [crons, prune]
+  # The same path, mode and owner as the k3s role's task, so the two writers agree on
+  # daniel-box. This role writes it too because its two pinging crons run on every host, and
+  # the k3s role reaches neither daniel-pi nor, for this file, daniel-server.
+  ansible.builtin.file:
+    path: /etc/healthchecks
+    state: directory
+    mode: "0755"
+    owner: root
+    group: root
+  become: true
+
+- name: Deploy the Healthchecks.io ping key
+  tags: [crons, prune]
+  # Byte-identical to the k3s role's `Deploy the Healthchecks.io ping key`, which carries the
+  # reasoning: the project ping key can hold every check green, so it lives in a 0640 file the
+  # crons source at run time, never in a crontab line. cron logs each command it runs to the
+  # journal, and the journal ships to Loki. root owns it for the reboot cron, and the group is
+  # {{ sys_user }} for the prune cron.
+  ansible.builtin.copy:
+    content: "HC_PING_KEY='{{ healthchecks_ping_key | default('') }}'\n"
+    dest: /etc/healthchecks/ping.env
+    mode: "0640"
+    owner: root
+    group: "{{ sys_user }}"
+  become: true
+  no_log: true  # renders the Healthchecks.io ping key
+
 - name: Schedule sudo crontab for weekly restart
   tags: [crons]
   # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
   # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
   # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
   # the reboot must happen even if the ping fails. UUID = the check's dashed code.
+  #
+  # Two pings until the self-hosted Healthchecks retires (#2806): the old UUID, and
+  # healthchecks.io's per-host `weekly-reboot-<host>` slug. One slug per host because a shared
+  # check stays green while any host pings it, so one host missing its reboot was invisible.
+  # The key is sourced from ping.env at run time. `[ -r ] &&` guards the `.`, because a failed
+  # `.` exits /bin/sh and would skip the shutdown. The new ping discards its output (#2511).
   # The schedule and the `-r +N` delay come from group_vars/all.yml, not from literals here:
   # roles/k8s/uptime-kuma derives its Kuma maintenance window from the same four values, and a
   # reboot moved without that window pages Discord for every monitor it takes down.
@@ -168,7 +203,7 @@
     minute: "{{ weekly_reboot_minute }}"
     hour: "{{ weekly_reboot_hour }}"
     weekday: "{{ weekly_reboot_weekday }}"
-    job: "{ curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}; } 2>&1 | logger -t weekly-restart"
+    job: "{ curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/ea0ed733-f631-4bd5-b1c9-4ab394bd13eb ; [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env ; [ -n \"$HC_PING_KEY\" ] && curl -fs -m 10 --retry 3 \"https://hc-ping.com/$HC_PING_KEY/weekly-reboot-{{ inventory_hostname }}\" >/dev/null 2>&1 ; /sbin/shutdown -r +{{ weekly_reboot_shutdown_delay_minutes }}; } 2>&1 | logger -t weekly-restart"
     user: root
   become: true
 
@@ -236,12 +271,14 @@
   # instead of leaving a dead-man that never pings on those two hosts.
   # The chain is braced and sent to the journal (#2487): prune prints "Total reclaimed space"
   # and curl the ping's `OK` on every healthy run. A failure is the un-pinged dead-man above.
+  # Both pings sit inside one `&&` group until the self-hosted Healthchecks retires (#2806):
+  # the old UUID, and healthchecks.io's `<host>-docker-prune` slug, sourced as the reboot's is.
   when: has_docker
   ansible.builtin.cron:
     name: "Clean unused Docker images"
-    minute: "30"
-    hour: "6"
-    job: '{ /usr/bin/docker system prune -a -f --filter "until=168h" && curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35; } 2>&1 | logger -t docker-prune'
+    minute: "{{ initial_setup_docker_prune_cron_minute }}"
+    hour: "{{ initial_setup_docker_prune_cron_hour }}"
+    job: '{ /usr/bin/docker system prune -a -f --filter "until=168h" && { curl -fsS -m 10 --retry 3 https://healthchecks.{{ domain }}/ping/6c716f7f-219c-42e1-9f8b-d1d964b6cc35; [ -r /etc/healthchecks/ping.env ] && . /etc/healthchecks/ping.env; [ -n "$HC_PING_KEY" ] && curl -fs -m 10 --retry 3 "https://hc-ping.com/$HC_PING_KEY/{{ inventory_hostname }}-docker-prune" >/dev/null 2>&1; }; } 2>&1 | logger -t docker-prune'
     user: "{{ ansible_facts.user_id }}"
   become: true
   tags: [prune, crons]
