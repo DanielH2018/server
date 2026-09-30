@@ -195,6 +195,71 @@ def test_the_flat_legacy_parameters_are_flagged(rendered_config, validator):
     )
 
 
+# --- the notifier block, where values are asserted too -----------------------------
+#
+# The SMTP branch lost its only boot-level rehearsal when daniel-stage was retired (#2941):
+# that guest rendered this branch on a stand-in credential and proved the config parsed and the
+# pod came up. With the startup check off, nothing at boot touches SMTP, so the half that bites
+# is the parse. This value check covers that half without a cluster (#2945). It cannot prove the
+# pod boots; nothing in the repo does.
+
+NOTIFIER_PATH = ("notifier",)
+# The one value complaint the real render carries under `notifier`. The schema's `oneOf` for a
+# sender admits `Name <addr>` under BOTH its branches, which `oneOf` counts as a failure; the
+# parser accepts it. Excused by path, validator and message together, so any other complaint
+# about the sender still fails.
+_SENDER_ONEOF = ("notifier/smtp/sender", "oneOf", "is valid under each of")
+
+
+def rejected_notifier_values(document, validator):
+    """The schema's complaints about values under `notifier`, minus the sender `oneOf` quirk."""
+    found = []
+    for error in validator.iter_errors(document):
+        for sub in _walk(error):
+            path = tuple(str(p) for p in sub.absolute_path)
+            if path[: len(NOTIFIER_PATH)] != NOTIFIER_PATH:
+                continue
+            joined = "/".join(path)
+            if (joined, sub.validator) == _SENDER_ONEOF[:2] and _SENDER_ONEOF[
+                2
+            ] in sub.message:
+                continue
+            found.append((joined, sub.message))
+    return found
+
+
+def test_the_rendered_notifier_is_the_smtp_branch(rendered_config):
+    """Non-vacuity: the checks below read the branch production takes, not the file fallback."""
+    assert "smtp" in rendered_config["notifier"], rendered_config["notifier"]
+
+
+def test_the_rendered_notifier_values_are_clean(rendered_config, validator):
+    assert rejected_notifier_values(rendered_config, validator) == []
+
+
+def test_an_smtp_address_with_a_foreign_scheme_is_flagged(rendered_config, validator):
+    bad = copy.deepcopy(rendered_config)
+    bad["notifier"]["smtp"]["address"] = "http://smtp.gmail.com:465"
+    paths = [path for path, _msg in rejected_notifier_values(bad, validator)]
+    assert "notifier/smtp/address" in paths, paths
+
+
+def test_a_quoted_startup_check_is_flagged(rendered_config, validator):
+    """A string where the parser wants a boolean — the value half of #1464's key."""
+    bad = copy.deepcopy(rendered_config)
+    bad["notifier"]["disable_startup_check"] = "true"
+    paths = [path for path, _msg in rejected_notifier_values(bad, validator)]
+    assert "notifier/disable_startup_check" in paths, paths
+
+
+def test_a_sender_the_quirk_does_not_cover_is_still_flagged(rendered_config, validator):
+    """The excuse for the sender is narrow: a non-string sender is still reported."""
+    bad = copy.deepcopy(rendered_config)
+    bad["notifier"]["smtp"]["sender"] = 42
+    paths = [path for path, _msg in rejected_notifier_values(bad, validator)]
+    assert "notifier/smtp/sender" in paths, paths
+
+
 def test_the_schema_constrains_the_algorithm_to_an_enum(schema):
     """Non-vacuity: without the enum, the two checks above validate against nothing.
 
