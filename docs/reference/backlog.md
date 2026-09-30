@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-29 18:17 UTC
-generated_sha: 6155ea183
+generated_at: 2026-09-30 06:17 UTC
+generated_sha: eb9c27dd8
 ---
 
 !!! warning "Generated file — do not edit"
@@ -24,9 +24,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2853](https://github.com/DanielH2018/server/issues/2853) | medium | improvement | cicd | Make deploy.sh, land.sh and the GitOps tick print their own contract, and delete the prose copies | 2026-09-28 | 0 | - | ✓ |
 | [#2855](https://github.com/DanielH2018/server/issues/2855) | medium | improvement | container | Scaffold a new k8s service with a deterministic generator instead of copying a sibling role | 2026-09-28 | 0 | - | ✓ |
 | [#2857](https://github.com/DanielH2018/server/issues/2857) | medium | improvement | cicd | Replace 31 hand-rolled git fixtures and 27 bare Jinja environments in tests with the shared helpers | 2026-09-28 | 0 | - | ✓ |
-| [#2921](https://github.com/DanielH2018/server/issues/2921) | medium | improvement | docs | Trim the 29 role CLAUDE.md files over the inject hook's character budget | 2026-09-28 | 0 | worktree-fanout-2026-09-29 | ✓ |
 | [#2943](https://github.com/DanielH2018/server/issues/2943) | medium | gap | security | Restore a reachability gate for the staging egress fence | 2026-09-29 | 0 | - | ✓ |
-| [#2947](https://github.com/DanielH2018/server/issues/2947) | medium | gap | cicd | Nothing notices when one of the four classes #2876 deleted gains a member again | 2026-09-29 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
@@ -53,9 +51,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
 | [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
-| [#2979](https://github.com/DanielH2018/server/issues/2979) | low | improvement | cicd | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | 2026-09-29 | 0 | - | ✓ |
-| [#2981](https://github.com/DanielH2018/server/issues/2981) | low | improvement | cicd | has_ample_ram reads false on daniel-box, which has ample RAM | 2026-09-29 | 0 | - | ✓ |
-| [#2982](https://github.com/DanielH2018/server/issues/2982) | low | improvement | docs | initial_setup CLAUDE.md grew past its recorded ceiling instead of taking the named trim | 2026-09-29 | 0 | worktree-fanout-2026-09-29 | ✓ |
+| [#3008](https://github.com/DanielH2018/server/issues/3008) | low | gap | cicd | Vale scope: generated fragments are linted by hand runs but not by CI | 2026-09-30 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -101,6 +97,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2849](https://github.com/DanielH2018/server/issues/2849) | accepted | Master CI lints the whole tree on every push, adding about 20 s to each landing | Operator decision 2026-09-28: keep the full lint on every push to master. About 20 s per landing is not worth deploying before the whole tree is linted (#2809). |
 | [#2900](https://github.com/DanielH2018/server/issues/2900) | accepted | A dry run never judges pihole instance 2's Deployment manifest | Operator accepted 2026-09-28: both pihole Deployments render from one macro body differing only in name and claim name, so instance 1's server-side dry run validates what instance 2 renders; pihole is k8s_autodeploy: false, so every pihole deploy is human-run. |
 | [#2903](https://github.com/DanielH2018/server/issues/2903) | refuted | probe.py health holds no roll expectation for pihole-2 | Duplicate of #2902, filed seconds earlier for the same gap — findings.py dedup is blind past gh's 1000-issue list cap (the warning this run printed), so the same body filed twice. #2902 is the live one. |
+| [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
 
 ### container
 
