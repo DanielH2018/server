@@ -23,15 +23,17 @@ import yaml
 
 from lib import yaml_fast
 from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
-from lib.repo_paths import K8S_ROLES, REPO
+from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
 
 __all__ = [
     "CALLER_RENDERED_ROLES",
     "HOST_VARS",
     "K8S_ROLES",
     "NO_MANIFEST_ROLES",
+    "SHARED_MANIFEST_DEFAULTS",
     "SKIP_ROLES",
     "is_manifest_template",
+    "shared_default_templates",
     "k8s_entries",
     "misplaced_template_lookups",
     "non_manifest_documents",
@@ -216,3 +218,72 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
                 if callee != caller:
                     callers.setdefault(callee, set()).add(caller)
     return callers
+
+
+# Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
+# when the owning role ships none of its own, mapped to that template's file name. Mirrors
+# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml (#2872), which
+# `ansible/tests/k8s/test_shared_manifest_defaults.py` holds it equal to.
+#
+# Duplicated here rather than read out of that YAML because every consumer is an offline render
+# harness: reading the role default would make the harnesses depend on parsing a file whose
+# other keys they have no use for, and the guard catches the drift either way.
+SHARED_MANIFEST_DEFAULTS = {"service.yaml": "service-default.yaml.j2"}
+
+# The two keys a caller names its manifests under, and the basenames inside whichever value
+# shape it wrote. Read textually rather than by loading the tasks file: a role's tasks/main.yml
+# is Jinja-bearing YAML, and three roles (authelia, freshrss, traefik) build the list with a
+# folded `>-` expression that no plain YAML load resolves to a list at all.
+_MANIFEST_FILE_KEY = re.compile(
+    r"^(?P<indent>\s*)manifests(?:_secret)?_files:(?P<rest>.*)$"
+)
+_MANIFEST_BASENAME = re.compile(r"[A-Za-z0-9][A-Za-z0-9._-]*\.ya?ml\b")
+
+
+def declared_manifest_files(role, k8s_roles=None) -> set[str]:
+    """Every manifest basename a role's tasks name in manifests_files / manifests_secret_files.
+
+    The deploy renders exactly these into the role's staging directory, so this is also the
+    list an offline harness has to cover to render what a deploy renders.
+
+    Over-inclusive by construction: it reads every `*.yaml` basename in the key's value region,
+    which also catches one named in a conditional branch the deploy may not take. That is the
+    safe direction here -- the caller uses this to decide whether to ALSO render a shared
+    default, and a role that ships its own template for the basename never reaches that path.
+    """
+    tasks = Path(k8s_roles or K8S_ROLES) / role / "tasks" / "main.yml"
+    if not tasks.is_file():
+        return set()
+    lines = tasks.read_text().splitlines()
+    names: set[str] = set()
+    for i, line in enumerate(lines):
+        match = _MANIFEST_FILE_KEY.match(line)
+        if not match:
+            continue
+        region = [match.group("rest")]
+        indent = len(match.group("indent"))
+        # The value continues while lines stay indented past the key: a block list's `- `
+        # items, a folded scalar's body, or an inline list broken over several lines.
+        for following in lines[i + 1 :]:
+            if not following.strip():
+                continue
+            if len(following) - len(following.lstrip()) <= indent:
+                break
+            region.append(following)
+        names.update(_MANIFEST_BASENAME.findall("\n".join(region)))
+    return names
+
+
+def shared_default_templates(role, k8s_roles=None) -> list[Path]:
+    """The shared templates `k8s/manifests` renders for `role` because it ships none itself.
+
+    Sorted, so a harness iterating this renders in a stable order.
+    """
+    roles_dir = Path(k8s_roles or K8S_ROLES)
+    declared = declared_manifest_files(role, roles_dir)
+    return sorted(
+        SHARED_TPL / shared
+        for basename, shared in SHARED_MANIFEST_DEFAULTS.items()
+        if basename in declared
+        and not (roles_dir / role / "templates" / f"{basename}.j2").is_file()
+    )

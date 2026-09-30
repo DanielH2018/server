@@ -189,8 +189,26 @@
 
 - name: Render manifests for {{ manifests_service }}
   tags: [config]
+  # The caller's own template wins; `manifests_shared_defaults` supplies a SHARED one under
+  # ansible/templates/ for a basename the caller names but ships no template for (#2872). Only
+  # `service.yaml` has such a default today, and only the ~22 roles whose Service was a
+  # byte-identical wrapper around the `service()` macro reach it.
+  #
+  # Resolved per file rather than by a separate task, so `manifests_files` stays the one list
+  # the prune keep-set and `manifests_digest` both read. A default rendered outside that list
+  # would be pruned on the next deploy and would move no digest -- the #2899 failure, silent
+  # on both sides.
+  #
+  # A basename with no default and no own template falls through to the own path, so the
+  # failure is still the "Could not find or access .../templates/<name>.j2" every caller
+  # already recognises.
+  vars:
+    manifests_own_src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
   ansible.builtin.template:
-    src: "{{ playbook_dir }}/roles/k8s/{{ manifests_service }}/templates/{{ item }}.j2"
+    src: >-
+      {{ (playbook_dir ~ '/templates/' ~ manifests_shared_defaults[item])
+         if (item in manifests_shared_defaults and not (manifests_own_src is exists))
+         else manifests_own_src }}
     dest: "{{ manifests_dest_dir }}/{{ item }}"
     mode: "0644"
     owner: root

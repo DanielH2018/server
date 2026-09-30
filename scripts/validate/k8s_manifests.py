@@ -75,11 +75,13 @@ from lib.k8s_roles import (
     HOST_VARS,
     K8S_ROLES,
     NO_MANIFEST_ROLES,
+    SHARED_MANIFEST_DEFAULTS,
     SKIP_ROLES,
     is_manifest_template,
     k8s_entries,
     misplaced_template_lookups,
     non_manifest_documents,
+    shared_default_templates,
 )
 from validate.validate_lib.k8s_schema import (
     K8S_SCHEMA_VERSION,
@@ -119,6 +121,7 @@ __all__ = [
     "K8S_SCHEMA_VERSION",
     "NO_MANIFEST_ROLES",
     "NO_SCHEMA",
+    "SHARED_MANIFEST_DEFAULTS",
     "SHARED_TPL",
     "SKIP_ROLES",
     "check_template",
@@ -145,6 +148,7 @@ __all__ = [
     "resolve_vars",
     "role_defaults",
     "schema_error",
+    "shared_default_templates",
     "service_port_translations",
     "volume_claim_pvc_names",
     "workload_container_ports",
@@ -289,6 +293,12 @@ def main() -> int:
         # Contradict it with a case where the guard passes and the render is still wrong.
         ctx = {**base, **role_vars, "container_item": entries[role]}
         pvc_names.update(volume_claim_pvc_names(role, ctx, claim_env))
+        # A manifest `k8s/manifests` renders from ansible/templates/ because this role ships
+        # none of its own (#2872). Rendered here under the role's own context, exactly as the
+        # deploy renders it -- 25 roles' Service manifests left the tree with their template
+        # and would otherwise leave this validator's corpus with it, taking the schema check
+        # and the Service-to-container port cross-reference with them.
+        templates = templates + shared_default_templates(role)
         for tpl in templates:
             checked += 1
             rel = f"{role}/{tpl.name}"

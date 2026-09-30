@@ -35,8 +35,11 @@ move detail into topic files. Don't duplicate the role `CLAUDE.md` — record on
 ## Where things live (the mental model)
 
 - **`templates/` (role root) — k8s manifests ONLY.** `configmap.yaml.j2`, `deployment.yaml.j2`,
-  `service.yaml.j2`, `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
+  `ingressroute.yaml.j2`, `secret.yaml.j2`. `validate/k8s_manifests.py` renders
   and YAML-parses every `*.j2` it finds here, so HA config must never land in this directory.
+  The Service is not here: `k8s/manifests` renders the shared
+  `ansible/templates/service-default.yaml.j2` for it, and the named port HA needs comes from
+  `service_port_name` on its containers_list entry.
 - **`files/` — every HA config file, shipped VERBATIM.** `configuration.yaml`, `customize.yaml`,
   `ui-lovelace.yaml`, `scenes.yaml`, `templates.yaml`, `rest.yaml` at the root;
   `automations/<topic>.yaml`, `scripts/<topic>.yaml` and `custom_templates/*.jinja` below it. All
