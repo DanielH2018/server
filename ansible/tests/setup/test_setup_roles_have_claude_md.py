@@ -71,14 +71,13 @@ MIN_NON_BLANK_LINES = 8
 # took k3s out: the restore drill's three bounds, the cron-evidence checks, the read-only crons, the
 # control-plane gates and the four measured incidents moved to
 # docs/k3s-node-plane-crons-and-incidents.md, and the contract kept every `ENFORCED:` test node.
-OVER_CEILING: dict[str, str] = {
-    "gitops_deploy": (
-        "29971 chars on 2026-09-29: `## Safety` is the path-rule table root CLAUDE.md routes "
-        "to, and the contract governs a deployer that ships to production unattended; `## "
-        "Traps` and the error-string ledger moved to docs/gitops-pipeline.md (#2921), and "
-        "`## Safety`'s per-arm narration is the next thing to thin against that page"
-    ),
-}
+# #2999 took the last entry, gitops_deploy, out: the deployer's module layout, the two timeout
+# budgets and the waiters they move, the `manual_plane` and k8s-marker rules, the contention
+# reset, the dirty-tree skip and the two GitHub settings moved to docs/gitops-pipeline.md,
+# leaving the contract, `## Safety`'s one-line-per-arm rules and the hold-clearing rule. Both
+# role-doc ceilings now hold every doc in the tree, so an entry here is a new justification
+# rather than a survivor.
+OVER_CEILING: dict[str, str] = {}
 
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
