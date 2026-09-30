@@ -10,19 +10,46 @@ A new service belongs in `ansible/roles/k8s/<name>/` unless it must run on `dani
 (LAN-only utilities, WireGuard). `daniel-server` and `daniel-box` have no Docker at all, so
 a Compose role there deploys nothing — for the Pi, use the `new-container` skill instead.
 
-## 1. The role
+## 1. The role — scaffold it, do not copy a sibling
 
-Create `ansible/roles/k8s/<name>/tasks/main.yml` plus the manifest templates it needs:
-`deployment.yaml.j2`, `service.yaml.j2`, `ingressroute.yaml.j2`, `pvc.yaml.j2`.
+```bash
+uv run python scripts/dev/new_k8s_service.py <name> \
+    --image <repo:tag> --port <port> --uid <the image's own uid> \
+    [--authelia one_factor|two_factor] [--no-route] [--strategy Recreate]
+```
 
-Copy the shape from a close sibling rather than writing one from scratch:
+That writes `tasks/main.yml`, `defaults/main.yml`, `templates/deployment.yaml.j2`,
+`templates/ingressroute.yaml.j2` and a `CLAUDE.md`, appends the `containers_list` entry, and
+runs the role-glance generator over the new doc. Its output renders clean through
+`prek run --all-files` with no hand edits.
 
-| The service is… | Copy |
-|---|---|
-| a plain web app | `ansible/roles/k8s/freshrss` |
-| on the media volume | `ansible/roles/k8s/sonarr` |
+**Copying a sibling is what this replaced** (#2855). A sibling's files carry its narration, and
+that narration is dated — littlelink's Deployment cited a Compose template that had not existed
+since 2026-08-14. Read the generated files before you extend them; the TODOs in the CLAUDE.md
+are the parts only you can write.
 
-**The pod-spec shell comes from two shared macros, not from the sibling's copy.** A
+**No `service.yaml.j2` is written, and none is needed.** `k8s/manifests` renders
+`ansible/templates/service-default.yaml.j2` for a role that ships none (#2872), reading the
+name and port off the `containers_list` entry. A Service needing a named port or a sidecar's
+port says so on the entry, with `service_port_name` or `service_extra_ports`. Anything beyond
+that — a selector that differs from the name, a LoadBalancer, a pinned clusterIP — means
+writing the role its own `templates/service.yaml.j2`, which always wins over the default.
+`ansible/templates/service.yml.j2`'s header lists every disqualifier and the role behind it.
+
+**The scaffolder writes no PVC, Secret or NetworkPolicy.** Each is a decision about the
+service, so add the template by hand and name it in `manifests_files`.
+
+**Two censuses a new role always joins**, which `prek` does not run and CI does — the
+scaffolder names both when it finishes:
+
+- `BORN_FENCED_ROLES` in `ansible/tests/k8s/test_netpol_baseline_labels.py`, with the sentence
+  saying why Traefik is the pod's only caller. A service that dials out drops the
+  `netpol-baseline: enforced` pod label and gets its own NetworkPolicy instead.
+- `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`.
+
+Then `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes.
+
+**The pod-spec shell comes from two shared macros, which the scaffolder already calls.** A
 Deployment template calls `spec_shell(strategy)` under `spec:` and `pod_shell(priority_class,
 …)` under `spec.template.spec:`, both from `ansible/templates/workload-shell.yml.j2`; a
 DaemonSet calls `pod_shell` only. Both required arguments are decisions, and the file's
@@ -52,7 +79,8 @@ declares nothing, so a missing stance fails `initial_setup.yml --tags gitops_dep
 than defaulting to either answer. Declare `true` for an ordinary service whose image pin
 Renovate bumps. Declare `false` for a role that deploys no workload of its own, or one an
 unattended image bump could break, and say which in the reason — the reason is what makes the
-stance reviewable. Copy the shape from a sibling:
+stance reviewable. The scaffolder writes `true` unless you pass `--no-autodeploy`, and writes
+a TODO in place of the reason:
 
 ```yaml
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
@@ -62,19 +90,21 @@ k8s_autodeploy_reason: "deploys no workload of its own — …"  # noqa var-nami
 A `false` declaration also needs the extra command in step 4.
 
 **Every deployed role has a `CLAUDE.md` that opens with `## At a glance`, and the block under
-that heading is generated.** Write the heading and the prose; then run
+that heading is generated.** The scaffolder writes the heading, the markers and the prose
+skeleton, and runs the generator once. After any later change to the role's defaults,
+templates or `containers_list` entry, re-run
 `uv run python scripts/docs/gen_role_glance.py`, which writes the deploy tag, image
 repositories, route, claims and auto-deploy stance between two `generated_from` markers and
 leaves everything below them alone. `scripts/docs/tests/test_gen_role_glance.py` fails CI
-while the committed block differs from what the generator writes, so re-run it after any
-later change to the role's defaults, templates or `containers_list` entry. Put the reasoning
+while the committed block differs from what the generator writes. Put the reasoning
 — why a claim is unbacked, what a route bypasses — in the bullets below the block, not in
 the sources it reads.
 
 ## 2. The inventory entry — ordering is automatic, position is not
 
-Add the service to `containers_list` in `ansible/inventory/host_vars/daniel-box.yml` with
-`platform: k8s`. Where in the list doesn't matter: the k8s play toposorts on
+The scaffolder appends the entry to `containers_list` in
+`ansible/inventory/host_vars/daniel-box.yml` with `platform: k8s`, at the end of the list.
+Where in the list doesn't matter: the k8s play toposorts on
 `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and the
 two edges that used to require hand positioning are derived automatically —
 
