@@ -21,6 +21,14 @@ from pathlib import Path
 
 from _helpers import ANSIBLE
 
+# WHAT THIS SCAN DOES NOT SEE: a ship that names no basename. `with_fileglob`/`fileglob` over a
+# directory, a directory-shaped `src:` in a copy task, and `unarchive`/`synchronize` of a tree all
+# put files on a host without a literal name to match. None of them ships a `.md` today — the two
+# globs in the tree take `*.json` and `*.pub`, the three `unarchive` tasks take remote tarballs,
+# and no task carries a directory `src:` — so the hole is latent rather than live. A `.md` added
+# under one of those globs would pass this guard and be skipped by the deployer, which is the one
+# failure mode to check when a role starts globbing a directory that holds prose.
+#
 # The three shapes a role uses to put a named file on a host: a `src:`/`dest:` in a copy or
 # template task, the `lookup('file', ...)` a k8s ConfigMap inlines a file with, and a bare YAML
 # list entry, which is how `home-assistant`'s four `*_files` lists in `defaults/main.yml` name
@@ -100,7 +108,8 @@ def test_no_role_ships_a_markdown_file() -> None:
     assert not offenders, (
         "a role ships a .md to a host, so deploy_logic.is_doc would read a change to a "
         "deployed file as prose — the deployer fast-forwards it and never applies it. Either "
-        "rename the shipped file or give is_doc back a carve-out: "
+        "rename the shipped file or give is_doc back a carve-out (this scan matches a literal "
+        "basename; the header names the glob shapes it cannot see): "
         + "; ".join(offenders)
     )
 
