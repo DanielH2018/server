@@ -1718,3 +1718,106 @@ the git tree the first run is still using. **It does not alert.** `-E 75` plus
 trap above, which documents the same mechanism as a silent no-op. This paragraph said "fail
 cleanly (exit 1, alerting via `OnFailure`)" until 2026-08-24 (review L-4), contradicting the
 corrected text at the head of this file: PR #392 fixed the head and left the tail.
+
+## The deployer's Python layout
+
+Moved out of the role's `CLAUDE.md` by #2999. Three layers, and which one a function belongs in
+is decided by what it touches.
+
+| layer | modules | holds |
+|---|---|---|
+| decisions (pure) | `deploy_changes`, `deploy_git`, `deploy_health`, `deploy_inventory`, `deploy_k8s`, `deploy_remediation` | every branch the tick takes, as functions over plain values |
+| what a phase hands the next | `deploy_tick_types` | `TickTarget`, `TickPlan` and `RetryableFetchError`, no behaviour |
+| transport | `deploy_io`, `deploy_alerts` | subprocess, when an alert is sent, and the alert queue's own I/O |
+| the message bodies | `deploy_alert_text` | one pure function per alert — what each post SAYS (#2600) |
+| transport leaves | `gitops_markers`, `deploy_config`, `deploy_state`, `deploy_state_k8s`, `deploy_failtext` | the marker table, its parsers and line rewrites, the config file, the state directory, the two k8s marker families as a mixin, and the text a failed run's alert quotes |
+| the seam | `deploy_toolbox` | `DeployTools`, one frozen object holding every boundary the tick crosses |
+| the phases | `deploy_phases`, `deploy_handlers`, `deploy_defer`, `deploy_broad_k8s` | `assess` and `plan_tick`; one `handle_*` per terminal branch |
+| the tick | `gitops_deploy` | the config constants, `STATE`, `tick_config()`, `main()` and `entrypoint()` |
+
+- **`main()` sequences, it does not decide.** `assess()` returns a frozen `TickTarget`,
+  `plan_tick()` a frozen `TickPlan`, and one `handle_*` owns each terminal branch. No leaf imports
+  `gitops_deploy` (ENFORCED by `test_no_leaf_imports_the_entry_module`). The branch order — broad
+  before k8s — is load-bearing: the broad plane has to win.
+- **Every process boundary is injected, not patched.** `main(tools)` threads one frozen
+  `DeployTools` through every phase; a test builds one from `tests/_deploy_fakes.py`.
+  `deploy_io.deploy_k8s` and `deploy_broad` stay outside it because the suite asserts on the argv
+  they build, so `tests/conftest.py` keeps ONE patch, `deploy_io.run`.
+- **`deploy_io`, `deploy_alerts` and `deploy_alert_text` are reached QUALIFIED.** ENFORCED in
+  `ansible/tests/deploy/test_gitops_deploy_imports.py`, which also holds every module's sibling
+  imports to an explicit `ALLOWED` map and keeps `deploy_logic.py` defining nothing, so a
+  `deploy_logic.<name>` citation stays true.
+- **Configuration is parsed once, and parsing cannot fail.** `deploy_config.load_config` collects
+  a malformed value into `Config.errors`; `CONFIG.validate()` at the top of `main()` turns it into
+  one line naming the key plus a Discord post.
+- **One marker module, copied.** `files/gitops_markers.py` is the hand-edited source;
+  `scripts/dev/gen_gitops_markers.py` writes a verbatim copy into every other reader, and
+  `ansible/tests/deploy/test_gitops_markers_copies.py` fails on a stale copy. Edit the source,
+  run the generator, commit every copy in the same PR.
+- **State is one object.** `deploy_state.DeployerState` wraps the marker files and the hold
+  writes; a caller names a marker (`state.path("hold")`), never a path. `read()` returns None for
+  a missing AND an empty marker, and PROPAGATES any other `OSError` — an unreadable state
+  directory must not read as no hold.
+
+Tests: one `tests/test_deploy_<module>.py` per decision module, and the
+`tests/test_gitops_deploy_*.py` family for the entry module, of which `_main_branches` drives
+whole ticks against the scripted `tick` fixture. Run
+`uv run pytest ansible/roles/setup/gitops_deploy/tests`.
+
+## The two timeout budgets, and the waiters they move
+
+The rollback redeploy also reverts each claimed volume to its pre-deploy snapshot
+(`k8s/volume-revert`), so `K8S_ROLLBACK_TIMEOUT_S` is sized for the worst SINGLE promoted,
+claim-declaring service. `test_k8s_rollback_budget_covers_the_worst_single_promoted_service` in
+`tests/test_gitops_deploy_timeout_budgets.py` computes it from role sources and fails when it is
+under-sized.
+
+- Two claim-declaring services in one batch stack additively, which
+  `gitops_deploy_k8s_autodeploy_max_claim_services_per_tick` bounds. A failure aborts the play, so
+  failure-driven worst cases cannot stack; the residual is a slow but successful run cut short.
+- Forward and rollback run sequentially in one activation: `TimeoutStartSec` in
+  `gitops-deploy.service.j2` is `max(broad, k8s + rollback)` plus the flock wait.
+- **The FORWARD cap is derived from the worst promoted role** (#2397), and it cannot be raised
+  alone: it moves the four waiters below and `TimeoutStartSec` with it, in the same change.
+  Under-sized, a cap kill lands MID-DRAIN and routes to `_rollback_k8s`.
+- **All four tree-lock waiters are pinned as a census** (`_LOCK_WAITERS` in the same test file):
+  `deploy.sh`, secret-rotate, docs-refresh and eval-run each wait 3840 s.
+- **Waiting for a service lock spends the phase's own budget** (`deploy_locks.locked_budget`), and
+  the lock order is the `# DECIDED:` in `files/deploy_locks.py`. An overrun never produces a
+  second concurrent run — the timer coalesces the new start into the activation in flight — and
+  `-E 75` plus `SuccessExitStatus=75` keep it from alerting.
+
+## Other rules the role doc used to carry
+
+- **`roles/setup/<name>/` is not the same thing as `initial_setup.yml --tags <name>`**: the
+  playbook may not include the role (`k3s`, `common`) and the tag may not be the directory name
+  (`chezmoi_setup` → `chezmoi`). `setup_role_playbook` and `setup_role_tag` own the routing;
+  `ansible/tests/deploy/test_setup_role_playbooks_agree.py` derives the truth.
+- **A `manual_plane` row's remediation names the NARROWEST tag the change needs** (#2307), from
+  the `manual_plane_tags` sidecar `deploy_defer.record` writes. A row is logged on every later
+  tick, paged once per SHA, and cleared by the tick applying the role's real playbook or by
+  `gitops_state.py clear-manual-plane <role>`, with `--applied <tags>` after a narrowed apply.
+- **The `k8s_deferred` and `k8s_unapplied` markers** each hold one
+  `"<origin_sha> <service> <unix_ts>"` line per service: the first for a budget deferral, which
+  `gitops_status` pages on at six hours, the second for the hand-edited and denylisted classes,
+  which never pages and which the SessionStart banner reads. The hand clears are
+  `gitops_state.py clear-k8s-deferred <svc>` and `clear-k8s-unapplied <svc>`.
+- **A dirty working tree skips the deploy, not the tick** (`next_action(..., dirty=True)`):
+  `last_run` is still written, so GitOps-Alive stays green, and the page is throttled to twice per
+  America/Chicago day.
+- **A busy service lock is contention, not a failed deploy** (`ServiceLockBusy`, caught ahead of
+  each handler's failure arm): `deploy_defer.for_contention` resets to `local`, returns 0, writes
+  no hold, and `deploy_defer.unrecord` takes back every marker the tick wrote about the merge. The
+  streak is recorded in `contention_since` (#1847), monitor-bridge pages past
+  `GITOPS_CONTENTION_MAX_MIN` (30), and `gitops_state.py clear-contention` drops it.
+- **The two GitHub settings this role watches** are daily `kuma-check` timers on the deploy host.
+  `github-ruleset-drift.sh` compares the live master ruleset against
+  `gitops_deploy_expected_ruleset_contexts` and checks it excludes `refs/heads/renovate/**`
+  (#1759); it never writes, because a ruleset changes when a human changes it.
+  `github-interaction-limit.sh` re-applies `gitops_deploy_interaction_limit` daily, since GitHub
+  lets a limit lapse silently after six months (`none` clears it). A missing token, a failed PUT
+  and a differing stored value all push DOWN, never `armed`
+  (`ansible/tests/setup/test_github_interaction_limit.py`).
+- **The deployer runs the playbooks as `uv run --frozen ansible-playbook`**, the repo-pinned env,
+  so `uv` has to be on the unit's PATH; a config-only change still triggers a scoped,
+  health-gated redeploy.
