@@ -44,7 +44,7 @@ class _Recorder:
 
 def _config(tmp_path: pathlib.Path, *, push_url: str) -> str:
     cfg = tmp_path / "config.env"
-    lines = ["DISCORD_WEBHOOK=https://discord.example/hook"]
+    lines = ["DISCORD_WEBHOOK=https://discord.example/hook", f"STATE_DIR={tmp_path}"]
     if push_url:
         lines.append(f"KUMA_PUSH_URL={push_url}")
     cfg.write_text("\n".join(lines) + "\n")
@@ -65,6 +65,8 @@ def test_a_crash_pushes_a_down_carrying_the_exception_text(tmp_path):
     assert any(arg.startswith(PUSH_URL) and "status=down" in arg for arg in argv)
     assert any("git worktree add failed" in arg for arg in argv)
     assert rec.posts and "CRASHED" in rec.posts[0] and "already exists" in rec.posts[0]
+    (line,) = (tmp_path / renovate_agent.RUNS_FILE).read_text().splitlines()
+    assert '"result": "crashed"' in line and "already exists" in line
 
 
 def test_a_config_with_no_push_url_still_posts_to_discord(tmp_path):

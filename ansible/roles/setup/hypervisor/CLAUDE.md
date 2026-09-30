@@ -5,8 +5,8 @@ plus the network and egress fence that guest attaches to; it carried the staging
 #2941 retired that cluster on 2026-09-29.
 
 This file holds the rules. `docs/hypervisor-libvirt-internals.md` holds the working-out behind
-them — the staging reap, the subnet census, the inert UFW attempt, the two UUID collisions and
-what ships into the drill guest.
+them — the staging reap, the subnet census, the inert UFW attempt, the fence's tiles, the UUID
+collisions and what ships into the drill guest.
 
 - **Host:** `daniel-server` only (`has_hypervisor: true` in its host_vars). Default is
   `false` in `group_vars/all.yml` — opt-in per host.
@@ -64,12 +64,12 @@ Three mechanics decide whether a change lands:
 
 `fence_check` in the orchestrator dials every fenced range plus an internet control target from
 inside the guest, **before the guest is handed the cluster token or the R2 credentials**. A leak
-aborts the run with nothing staged. The run's Kuma message carries `fence=hold` or
-`fence=hold,unproven=<labels>`.
+aborts the run with nothing staged.
 
 - **The control target is load-bearing**, and the two allocated targets (Longhorn's ClusterIP,
   a pod IP) carry a host-side control leg. Refused from BOTH sides means the target moved.
-- **An unproven target does not fail the drill**, per the `# DECIDED: a leak aborts` marker.
+- **An unproven target does not fail the drill**, per the `# DECIDED: a leak aborts` marker. It
+  alarms on the fence's OWN Kuma tile: the drill's tile reads `up` through an unproven range.
 
 ENFORCED by `ansible/tests/staging/test_staging_egress_fence.py`, which holds the filter's shape
 and runs the leg against stub dials — one test per verdict.
@@ -99,8 +99,8 @@ disk per run would otherwise force the orchestrator to accept any key.
   staged when a production target answers from the guest.
 - **Required evidence:** `/var/log/etcd-restore-drill/<run-id>/` — including
   `egress-fence.log`, the fence leg's per-target verdicts — retained
-  `hypervisor_etcd_drill_log_retention_days`, and the `etcd Restore Drill (full)` Kuma tile,
-  which is the alarm and sizes its deadline from `etcd_drill_full_kuma_interval_s`. Nothing in
+  `hypervisor_etcd_drill_log_retention_days`, and the two Kuma tiles that alarm, sized
+  from `etcd_drill_full_kuma_interval_s`. Nothing in
   the cluster reads the local stamp — monitor-bridge takes daniel-box's list-only stamp and by
   design never a `full` one.
 - **Next-run review:** read the last run's directory before changing the cadence or what ships

@@ -59,12 +59,14 @@ Each arm is a rule and the function that holds it. The record page has the incid
 - **CI gate — the tip must be green before anything is merged or deployed** (`REQUIRE_CI`,
   `deploy_logic.ci_verdict`). A non-green tip sends the gate walking `<local>..<origin>` newest
   first for the first `pass`, bounded by `CI_ANCESTOR_WALK_MAX`; an **unauthenticated host does
-  not walk at all**. `cancelled` and `stale` are **no verdict, not failure**, `CI_CONTEXTS` must
-  match `ci.yml`'s `name:` exactly, and this is the ONLY gate — `master` has no branch protection.
+  not walk at all**. `deploy_git._CI_NO_VERDICT_CONCLUSIONS` are **no verdict, not failure**
+  (`docs/landing.md` owns that rule), `CI_CONTEXTS` must match `ci.yml`'s `name:` exactly, and
+  this is the ONLY gate — `master` has no branch protection.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`): a setup-plane change
   (`roles/setup/<name>/`, `requirements.yml`) applies as `initial_setup.yml --tags <name>`, a
   deploy-plane change (`ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) as
-  `deploy.yml` narrowed by `deploy_narrow.plan`, falling back to the FULL play on any refusal,
+  `deploy.yml` narrowed by `deploy_narrow.plan`, denylisted roles included, falling back to the
+  FULL play on any refusal,
   and a range carrying both applies both, setup first. **A role directory is not the same thing
   as its tag**: `setup_role_playbook` and `setup_role_tag` own that routing.
 - **The ff-merge runs BEFORE the apply**, since applying first renders the pre-merge tree, and

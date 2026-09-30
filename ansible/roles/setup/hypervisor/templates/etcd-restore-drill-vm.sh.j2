@@ -14,7 +14,8 @@
 #   2. destroy any guest a previous run left    — an aborted run must not block the next
 #   3. fresh disk from the base image, `virsh create` (transient: never a defined domain)
 #   4. wait for ssh against the PINNED host key — the staging guest shares this bridge
-#   5. probe the egress fence FROM the guest     — before it is handed any credential
+#   5. probe the egress fence FROM the guest     — before it is handed any credential, and push
+#                                                  that verdict to its OWN Kuma tile
 #   6. stage binary + token + env + scripts in one tar over ssh, then delete the staging dir
 #   7. run the guest-side script; pull restore.log / server.log out as evidence
 #   8. destroy the guest and delete its disk    — also from the EXIT trap, pass or fail
@@ -80,9 +81,13 @@ TAG=etcd-restore-drill-vm
 KUMA_HOST="uptime-kuma.local.{{ domain }}"
 KUMA_RESOLVE_IP="{{ k3s_metallb_ingress_vip }}"
 ETCD_DRILL_FULL_PUSH_TOKEN=""
+ETCD_DRILL_FENCE_PUSH_TOKEN=""
 # shellcheck source=/dev/null
 [[ -r "{{ hypervisor_etcd_drill_kuma_env }}" ]] && . "{{ hypervisor_etcd_drill_kuma_env }}"
 PUSH_TOKEN="$ETCD_DRILL_FULL_PUSH_TOKEN"
+# The fence leg reports to a tile of its own, so an unproven range alarms as an unproven range
+# rather than riding along in the message of a passing drill push. See report_fence.
+FENCE_PUSH_TOKEN="$ETCD_DRILL_FENCE_PUSH_TOKEN"
 
 VIRSH=(virsh --connect qemu:///system)
 RUN_ID="$(date -u +%Y%m%dT%H%M%SZ)"
@@ -93,9 +98,9 @@ KNOWN_HOSTS=""
 log() { echo "[$(date -u +%H:%M:%S)] $*"; }
 
 push_kuma() {
-  local status="$1" msg="$2"
-  [[ -z "$PUSH_TOKEN" ]] && return 0
-  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${PUSH_TOKEN}" \
+  local status="$1" msg="$2" token="${3:-$PUSH_TOKEN}"
+  [[ -z "$token" ]] && return 0
+  kuma_push "$status" "$msg" "https://${KUMA_HOST}/api/push/${token}" \
     "$KUMA_HOST" "$KUMA_RESOLVE_IP" "$TAG"
 }
 
@@ -106,6 +111,29 @@ report() {
   logger -t "$TAG" "status=${status} run=${RUN_ID} ${msg}"
   log "status=${status} ${msg}"
   push_kuma "$status" "$msg"
+}
+
+# The fence leg's own report, to its own tile. The drill's tile answers "did the restore pass",
+# and it cannot also answer "was the fence measured": a run that passes with a range unmeasured
+# is `up` on that tile by construction. This one is `up` only when every fenced range was dialled
+# and refused.
+#
+# Called from inside fence_check, BEFORE the two fatal paths call `fail` — a leak exits the run,
+# and a push made afterwards would never happen. A run that dies before the leg ever executes
+# pushes nothing here on purpose: the tile's deadline then expires and it goes DOWN by itself,
+# which is the honest reading of a fence nobody measured this month.
+report_fence() {
+  local status="$1" msg="$2"
+  logger -t "$TAG" "fence=${status} run=${RUN_ID} ${msg}"
+  log "fence=${status} ${msg}"
+  push_kuma "$status" "$msg" "$FENCE_PUSH_TOKEN"
+}
+
+# A fence verdict that also ends the run: report it to the fence tile first, then take the
+# orchestrator's normal failure path, which reports the same text to the drill's tile and exits.
+fence_fail() {
+  report_fence down "$1"
+  fail "$1"
 }
 
 guest_running() {
@@ -189,9 +217,16 @@ ssh_guest() {
 # NEITHER side is reported and not fatal. Staleness only degrades the meaning of a NEGATIVE — a
 # target answering from inside the guest is a leak whether or not it is stale, so leak detection
 # survives it — and losing a month of restore-drill coverage because a ClusterIP moved is the
-# worse trade. An unproven target rides along in this run's own Kuma message as
-# `fence=hold,unproven=<labels>` and is named per-target in egress-fence.log. There is no
-# separate Kuma tile for the fence verdict; the drill's own tile carries it.
+# worse trade. An unproven target is named per-target in egress-fence.log and rides along in this
+# run's own Kuma message as `fence=hold,unproven=<labels>`.
+#
+# DECIDED: the fence verdict pushes a Kuma tile of its own, `etcd Restore Drill (egress fence)`.
+# This reverses the "there is no separate Kuma tile; the drill's own tile carries it" decision
+# this marker used to carry (#2943), on the evidence of #3021: the drill tile cannot express the
+# non-fatal half. An unproven range leaves the drill PASSING, so the drill's tile is `up` and the
+# only record that a fenced range went unmeasured is the message text of a green push — which
+# alerts nobody. The leg exists so that an unmeasured fence does not read as a held one, and at
+# the monitor layer it did. report_fence below carries the wiring.
 
 fence_curl() { printf 'curl -sk --max-time %s -o /dev/null %s' "$FENCE_PROBE_TIMEOUT" "$1"; }
 
@@ -302,13 +337,13 @@ fence_check() {
   log "egress fence, dialled from inside the guest:"
   cat "$fence_log"
 
-  [[ "${dialled[INTERNET]-}" == 0 ]] || fail "egress fence UNPROVEN: the internet control target did \
+  [[ "${dialled[INTERNET]-}" == 0 ]] || fence_fail "egress fence UNPROVEN: the internet control target did \
 not answer from the guest, so every production target refused below did so only because nothing \
 can leave at all. That is a broken fence, not a working one; nothing was staged into the guest. \
 See $fence_log"
   # Emptiness tested with -z rather than the array-length form, here and below: a literal
   # dollar-brace-hash in a .j2 opens a Jinja comment, and the template then never renders.
-  [[ -z "${leaked[*]}" ]] || fail "egress fence BROKEN: ${leaked[*]} answered from inside guest \
+  [[ -z "${leaked[*]}" ]] || fence_fail "egress fence BROKEN: ${leaked[*]} answered from inside guest \
 $NAME, which is about to be handed the cluster token and the R2 write credentials. Nothing was \
 staged. Traffic arrives at production SNATed as daniel-server, so source-IP controls do not see \
 the guest as foreign. Check the LIVE tap device carries the filter — a defined-but-unreferenced \
@@ -320,8 +355,15 @@ See $fence_log"
     log "fence verdict: $FENCE_VERDICT — those targets were not tested, so the fence was not \
 proven against their range. The run continues: a leak is still detected whether or not a target \
 is stale, and a moved address is not worth a skipped restore drill."
+    report_fence down "egress fence UNMEASURED against ${unproven[*]}: those targets answered \
+from neither the guest nor daniel-server, so refusal from the guest proves nothing about their \
+range and the fence is unproven there. The restore drill itself continues and is unaffected. \
+Fix the probe, not the fence: re-read the target's live address (Longhorn's ClusterIP, or a pod \
+on this host's cni0 bridge) in $fence_log, then correct it in roles/setup/hypervisor."
   else
     FENCE_VERDICT=hold
+    report_fence up "egress fence holds: every fenced range refused from inside guest $NAME, \
+with the internet control target reachable. See $fence_log"
   fi
 }
 

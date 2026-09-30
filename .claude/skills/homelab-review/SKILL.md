@@ -62,6 +62,10 @@ order:
    before it flags; `ansible/tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py`
    keeps the inline copies from coming back.
 
+**A memory named in items 1 or 2 that is absent from the store stops the run.** Name the missing
+slug to the operator and wait. A missing file is not an error the harness reports, so a run
+that skips it proceeds unprimed and re-derives every settled decision (#3016).
+
 For each area, extract its don't-re-flag items **plus** the discipline: *verify a candidate finding
 against the role's CLAUDE.md, role crons, and monitor-bridge `check.py` BEFORE reporting it.* Pull
 this at runtime — never rely on a hardcoded list (it goes stale, the exact failure mode these

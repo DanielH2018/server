@@ -80,6 +80,28 @@ token or the R2 credentials — so a leak aborts the run with nothing staged. Th
 (`fence=hold`, or `fence=hold,unproven=<labels>` when a target answered from neither the guest
 nor daniel-server, which means the target moved rather than that the fence held).
 
+**The verdict also pushes a Kuma tile of its own**, `etcd Restore Drill (egress fence)`, added
+in #3021. Riding the drill's own tile gave the leg's two non-fatal outcomes no alarm at all. A
+leak did alarm, but named "etcd Restore Drill (full)" — an operator reading that tile sees a
+failed restore drill rather than a guest that reached production. An unproven target alarmed
+nowhere: it leaves the drill PASSING, so its label sat in the message text of an `up` push and
+one fenced range went unmeasured every month until someone read a green run. The leg exists so
+that an unmeasured fence does not read as a held one, and at the monitor layer it still did.
+
+- `report_fence` pushes it from inside `fence_check`, BEFORE the two paths that call `fail` —
+  a leak ends the run, so a push placed after the verdict would never happen.
+- `down` covers both a leak and an unproven range; `up` needs every fenced range dialled and
+  refused with the internet control reachable. The message says which, and names the targets.
+- A run that dies before the leg ever executes pushes nothing here, and the tile's deadline
+  then expires on its own. That is the honest reading of a fence nobody measured this month.
+- **Neither `tag-severity: critical` nor email**, unlike the drill's tile, and those are one
+  decision: critical is exactly the email tier here. The fatal half already escalates through
+  that tile, so what is unique to this one is a probe whose target moved — a maintenance
+  fault, not a page.
+- The token is `etcd_drill_fence_push_token`, registered in `scripts/secrets_mgmt/consumers.py`
+  beside the drill's. The cron is on daniel-server and both tiles are deployed from daniel-box,
+  so a rotation that moves only one half silences the tile.
+
 Two addresses are allocated rather than pinned in the inventory — Longhorn's frontend ClusterIP
 and a pod IP discovered from `ip neigh show dev cni0` — which is why each carries the host-side
 control leg. Without it a probe against an address production had moved off would pass forever.

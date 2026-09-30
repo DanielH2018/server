@@ -233,3 +233,43 @@ def test_the_orchestrator_is_registered_as_a_cross_host_token_consumer():
         ANSIBLE.parent / "scripts" / "secrets_mgmt" / "consumers.py"
     ).read_text()
     assert '"etcd_drill_full_push_token"' in consumers
+
+
+def test_the_fence_verdict_has_a_kuma_tile_and_a_token_of_its_own():
+    """#3021: the fence's non-fatal verdict has to reach the alert chain on its own tile.
+
+    An unmeasured range leaves the restore drill passing, so the drill's tile is `up` and the
+    label is only message text. This tile shares the drill's deadline because the same monthly
+    cron pushes both, and its token is a second cross-host consumer for the same reason as the
+    first: the cron is on daniel-server and the tile is deployed from daniel-box.
+    """
+    tile = KUMA_TEMPLATE.read_text()
+    assert '"name": "etcd Restore Drill (egress fence)"' in tile
+    fence = next(
+        line
+        for line in tile.splitlines()
+        if "etcd_drill_fence_push_token" in line and '"type": "push"' in line
+    )
+    assert '"interval": {{ etcd_drill_full_kuma_interval_s }}' in fence, (
+        "the fence tile is pushed by the same monthly cron, so it takes the same deadline"
+    )
+    assert '"max_retries": 0' in fence, (
+        "a down push on a tile with max_retries above 0 parks PENDING and never alarms"
+    )
+
+    consumers = (
+        ANSIBLE.parent / "scripts" / "secrets_mgmt" / "consumers.py"
+    ).read_text()
+    assert '"etcd_drill_fence_push_token"' in consumers
+
+    env_template = (
+        ANSIBLE
+        / "roles"
+        / "setup"
+        / "hypervisor"
+        / "templates"
+        / "etcd-drill-kuma-push.env.j2"
+    ).read_text()
+    assert "ETCD_DRILL_FENCE_PUSH_TOKEN" in env_template, (
+        "the orchestrator reads the token from this env file; without the line it pushes nothing"
+    )

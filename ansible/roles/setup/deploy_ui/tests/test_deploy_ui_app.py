@@ -446,6 +446,24 @@ def test_content_length_non_numeric_is_flagged():
     assert deploy_ui.content_length({"Content-Length": "-1"}) is None
 
 
+def test_request_line_names_a_page_load_and_its_user_is_clean():
+    assert (
+        deploy_ui.request_line("GET", "/?x=1", 200, "daniel")
+        == "request method=GET path=/ status=200 user=daniel"
+    )
+
+
+def test_request_line_drops_the_query_and_neuters_a_hostile_user_is_flagged():
+    """A log path in the query and a header carrying spaces must not reach journald raw:
+    either would split the logfmt line the usage count parses."""
+    line = deploy_ui.request_line(
+        "GET", "/api/log?path=/x/y z", 200, 'a b="c"\nrequest method=POST'
+    )
+    assert line.startswith("request method=GET path=/api/log status=200 user=a_b_")
+    assert line.count("=") == 4
+    assert deploy_ui.request_line("POST", "/api/land", 409, "").endswith("user=-")
+
+
 def test_lock_names_agree_with_deploy_locks_is_clean(monkeypatch):
     """The daemon runs outside the venv and cannot import the lock names, so this is
     the literal-agreement guard: the tree lock path and the service-lock shape the page

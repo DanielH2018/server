@@ -65,7 +65,8 @@ def test_the_operator_docs_name_the_constant():
         "run that can never go green"
     )
     assert (
-        "_CI_NO_VERDICT_CONCLUSIONS" in CLAUDE_MD and "land-after-merge" in CLAUDE_MD
+        "_CI_NO_VERDICT_CONCLUSIONS" in CLAUDE_MD
+        and "`docs/landing.md` owns the rule" in CLAUDE_MD
     ), (
-        "the root CLAUDE.md pointer must name the constant and the skill that owns the rule"
+        "the root CLAUDE.md pointer must name the constant and the page that owns the rule"
     )

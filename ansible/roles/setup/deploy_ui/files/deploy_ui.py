@@ -16,6 +16,7 @@ import json
 import os
 import re
 import subprocess
+import sys
 import threading
 import time
 import urllib.parse
@@ -392,6 +393,19 @@ def content_length(headers) -> int | None:
     return n if n >= 0 else None
 
 
+def request_line(method: str, path: str, status: int, user: str) -> str:
+    """One logfmt line for one request, as journald keeps it for the usage count (#2864).
+
+    Every request gets one, the 10-second panel polls included, so the line carries the
+    path: `path=/` is a page load and a POST is a write, and those two are what show a
+    person used the page. A poll only shows a tab was open. The query string is dropped,
+    and `user` is Authelia's `Remote-User`, `-` for a caller that came around it.
+    """
+    who = re.sub(r"[^\w.@-]", "_", user) or "-"
+    url = urllib.parse.urlsplit(path).path or "-"
+    return f"request method={method} path={url} status={int(status)} user={who}"
+
+
 def serve(config: Config) -> None:
     app = App(config)
 
@@ -436,11 +450,20 @@ def serve(config: Config) -> None:
                 "application/json" if status == 202 else "text/plain; charset=utf-8",
             )
 
-        def log_message(
-            self, format, *args
-        ) -> None:  # journald gets one line per write only
-            if self.command == "POST":
-                super().log_message(format, *args)
+        def log_request(self, code="-", size="-") -> None:
+            # A request line that failed to parse leaves `command`, `path` and `headers`
+            # unset, and send_error still logs it, so each is read with a default.
+            headers = getattr(self, "headers", None)
+            print(
+                request_line(
+                    getattr(self, "command", None) or "-",
+                    getattr(self, "path", ""),
+                    code if isinstance(code, int) else 0,
+                    headers.get("Remote-User", "") if headers else "",
+                ),
+                file=sys.stderr,
+                flush=True,
+            )
 
     ThreadingHTTPServer((config.bind, config.port), Handler).serve_forever()
 
