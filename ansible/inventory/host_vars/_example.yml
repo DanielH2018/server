@@ -26,7 +26,8 @@ ssh_config_path: /etc/ssh/sshd_config
 # Each entry may carry `platform: docker|k8s` (default `docker`). It selects which deploy
 # stack owns the service during the k3s migration: deploy.yml skips anything marked `k8s`,
 # and the k8s manifests become that service's source of truth instead. Leave it unset for
-# Compose services. See docs/superpowers/plans/ for the current migration slice.
+# Compose services. The migration finished on 2026-08-14; `docs/archive/k3s-migration/`
+# is its record.
 containers_list: []
 
 # Bring-up: revert once the host is established

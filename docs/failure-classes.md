@@ -7,6 +7,18 @@ memory store — every entry in `docs/reference/backlog.md`'s sibling ledgers is
 one of the eight. Read a class before filing a new finding as novel; if it belongs to one, the
 class's remedy is the thing to reach for, not another memory entry.
 
+**Deleting a detector is a remedy here, not a regression.** A class's remedy ladder runs
+run-local note → memory → CLAUDE.md rule → executable check, and until 2026-09-30 it only ever
+moved one way: in the 90 days to 2026-09-28 the repo added 889 test files and deleted 62, a
+ratio of 14 to 1, against a service count that held near 50. So a detector retires on either of
+two conditions — its subject is gone, or a census or schema check already covers it — and the
+deletion lands in the PR that obsoletes it, together with the row's `ENFORCED` citation.
+`.claude/rules/python-layout.md`'s *A check retires when its subject does* carries the
+conditions and the citation rule; `.claude/skills/homelab-review/SKILL.md` step 7 carries the
+trigger that fires during a review. Retiring the last detector a row cites is a different move:
+that row's coverage drops, so edit the table to say so rather than leaving the cell empty —
+`ansible/tests/repo/test_failure_class_detectors.py` fails a row that lost its citation.
+
 Each detector cell below cites a test node id, in the form `path/to/test_file.py` plus
 `::test_name`. `ansible/tests/repo/test_failure_class_detectors.py` parses this table and
 asserts every cited node id resolves to a real test in the tree — the same citation shape

@@ -13,7 +13,7 @@ Fake-remux detection moved OUT of this sidecar (2026-07-17) to the host-plane fa
 it needs ffprobe, which this zero-privilege container (cap_drop ALL, no docker) can't run. See the
 role CLAUDE.md.
 
-Design: docs/superpowers/specs/2026-07-06-autofix-bridge-disk-autoprune-design.md (Part A)
+Design: docs/autofix-bridge-actuators.md (the disk-autoprune actuator).
 """
 
 import json

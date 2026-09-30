@@ -18,7 +18,7 @@ time and never sees the patch. Nothing here is a module table any more: the chec
 them. Enforced by ansible/tests/services/test_bridge_patch_boundary.py; the census of what is
 patched where is ansible/tests/services/test_monitor_bridge_modules.py.
 
-Design: docs/superpowers/specs/2026-06-06-monitor-bridge-alerting-design.md
+Design: docs/monitor-bridge-internals.md.
 """
 
 import bridge.common
