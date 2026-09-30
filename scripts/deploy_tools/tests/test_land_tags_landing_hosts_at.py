@@ -9,12 +9,11 @@ health gate. Kept out of test_land_tags.py, which sits at its line cap.
 Run: uv run pytest scripts/deploy_tools/tests/test_land_tags_landing_hosts_at.py
 """
 
-import os
-import subprocess
 from pathlib import Path
 
 import land_platform
 import land_tags
+from lib.git_testing import git_out, init_repo
 from lib.render_guard import HOST_VARS_IN_TREE
 
 # `wg-easy` is the real two-platform shape: a `platform: k8s` entry on daniel-box and a
@@ -33,20 +32,11 @@ _PI = "containers_list:\n  - name: newpi\n  - name: wg-easy\n"
 
 def _repo(tmp_path: Path) -> list[str]:
     """Two commits: the box alone, then the Pi and the staging guest added beside it."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env |= {
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.invalid",
-        "GIT_COMMITTER_EMAIL": "t@example.invalid",
-    }
 
     def run(*args: str) -> str:
-        return subprocess.run(
-            args, cwd=tmp_path, env=env, check=True, capture_output=True, text=True
-        ).stdout.strip()
+        return git_out(tmp_path, *args[1:])
 
-    run("git", "init", "-q", "-b", "master")
+    init_repo(tmp_path)
     host_vars = tmp_path / HOST_VARS_IN_TREE
     host_vars.mkdir(parents=True)
     shas = []

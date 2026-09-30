@@ -12,11 +12,9 @@ how issue #929 (a landing that read `settled` while the Pi ran old code) comes b
 Run: uv run pytest scripts/deploy_tools/tests/test_land_platform.py
 """
 
-import os
-import subprocess
-
 import deploy_tags
 import land_platform
+from lib.git_testing import commit, git_out, init_repo
 import land_tags
 from deploy_tags import service_records
 from lib.render_guard import HOST_VARS
@@ -115,38 +113,19 @@ def test_diff_range_is_the_range_deploy_tags_changed_reads(tmp_path):
     two-dot range would prove the platform of a different file set with every case above still
     green, so this holds the two against each other on a history where they disagree -- the
     `other` branch carries a commit HEAD does not, and only three dots exclude it."""
-    env = dict(os.environ) | {
-        "GIT_AUTHOR_NAME": "t",
-        "GIT_COMMITTER_NAME": "t",
-        "GIT_AUTHOR_EMAIL": "t@example.invalid",
-        "GIT_COMMITTER_EMAIL": "t@example.invalid",
-    }
 
-    def commit(name: str, *args: str) -> None:
-        (tmp_path / name).write_text(name)
-        for argv in (
-            ("git", "add", "-A"),
-            ("git", "commit", "-qm", name, "--no-gpg-sign"),
-        ):
-            subprocess.run(argv, cwd=tmp_path, env=env, check=True, capture_output=True)
+    def at(name: str) -> None:
+        commit(tmp_path, name, **{name: name})
 
-    def git(*args: str) -> str:
-        r = subprocess.run(
-            ("git", *args),
-            cwd=tmp_path,
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
-        )
-        return r.stdout.strip()
-
-    git("init", "-q", "-b", "master")
-    commit("base")
-    git("checkout", "-q", "-b", "other")
-    commit("theirs")
-    git("checkout", "-q", "master")
-    commit("ours")
+    init_repo(tmp_path)
+    at("base")
+    git_out(tmp_path, "checkout", "-q", "-b", "other")
+    at("theirs")
+    git_out(tmp_path, "checkout", "-q", "master")
+    at("ours")
 
     assert deploy_tags._git_diff_paths("other", tmp_path) == ["ours"]
-    assert git("diff", "--name-only", land_platform.diff_range("other")) == "ours"
+    assert (
+        git_out(tmp_path, "diff", "--name-only", land_platform.diff_range("other"))
+        == "ours"
+    )

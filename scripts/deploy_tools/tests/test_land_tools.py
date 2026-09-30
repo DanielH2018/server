@@ -13,6 +13,7 @@ from types import SimpleNamespace
 
 import pytest
 from _deploy_sh_fakes import git_free_env
+from lib.git_testing import commit, init_repo
 from deploy_tools.land_lib import tools
 
 
@@ -267,22 +268,7 @@ def test_a_deploy_of_the_primary_checkout_passes_no_at(monkeypatch):
 
 def _commit(repo: Path, name: str) -> str:
     """Commit `name` into `repo` and return the new HEAD, with GIT_* scrubbed."""
-    env = git_free_env(
-        GIT_AUTHOR_NAME="t",
-        GIT_COMMITTER_NAME="t",
-        GIT_AUTHOR_EMAIL="t@example.invalid",
-        GIT_COMMITTER_EMAIL="t@example.invalid",
-    )
-
-    def run(*args: str) -> str:
-        return subprocess.run(
-            args, cwd=repo, env=env, check=True, capture_output=True, text=True
-        ).stdout.strip()
-
-    (repo / name).write_text(name)
-    run("git", "add", "-A")
-    run("git", "commit", "-q", "-m", name, "--no-gpg-sign")
-    return run("git", "rev-parse", "HEAD")
+    return commit(repo, name, **{name: name})
 
 
 def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
@@ -291,15 +277,7 @@ def _snapshot_repo(tmp_path: Path) -> tuple[Path, str, str, str]:
     The lock path is handed to the test that holds it while a snapshot is taken. It points
     inside tmp_path, never at the production file a live gitops tick holds.
     """
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(
-        ("git", "init", "-q", "-b", "master"),
-        cwd=repo,
-        env=git_free_env(),
-        check=True,
-        capture_output=True,
-    )
+    repo = init_repo(tmp_path / "repo")
     first = _commit(repo, "one")
     second = _commit(repo, "two")
     return repo, first, second, str(tmp_path / "tree.lock")

@@ -11,9 +11,9 @@ fixture writes the REAL repository's config. Same split as `_release_fixtures.py
 a test's own directory on `sys.path`.
 """
 
-import os
-import subprocess
 from pathlib import Path
+
+from lib.git_testing import commit, git_out, init_repo
 
 import narrow_broad
 
@@ -22,23 +22,12 @@ import narrow_broad
 DECLARED = {"sonarr", "radarr", "bazarr", "lidarr", "prowlarr", "jellyfin"}
 
 
-def _repo_git(repo, *args: str) -> str:
-    """One git command in `repo`, with every inherited GIT_* variable removed."""
-    env = {k: v for k, v in os.environ.items() if not k.startswith("GIT_")}
-    env["GIT_AUTHOR_NAME"] = env["GIT_COMMITTER_NAME"] = "t"
-    env["GIT_AUTHOR_EMAIL"] = env["GIT_COMMITTER_EMAIL"] = "t@example.invalid"
-    return subprocess.run(
-        ["git", *args], cwd=repo, env=env, check=True, capture_output=True, text=True
-    ).stdout.strip()
-
-
 class Tree:
     """A throwaway checkout the narrowing rules can be driven against."""
 
     def __init__(self, root: Path) -> None:
         self.root = root
-        root.mkdir(parents=True)
-        _repo_git(root, "init", "-q", "-b", "master")
+        init_repo(root)
 
     def write(self, rel: str, text: str) -> None:
         path = self.root / rel
@@ -49,9 +38,7 @@ class Tree:
         (self.root / rel).unlink()
 
     def commit(self, message: str) -> str:
-        _repo_git(self.root, "add", "-A")
-        _repo_git(self.root, "commit", "-q", "-m", message, "--no-gpg-sign")
-        return _repo_git(self.root, "rev-parse", "HEAD")
+        return commit(self.root, message)
 
     def narrow(self, old: str, new: str) -> set[str]:
         """`narrow_broad.narrow` against this tree, with the real repo's tree kept out."""
@@ -122,5 +109,5 @@ def build_tree(tmp_path) -> Tree:
 
 
 def _refs(tree: Tree, message: str = "change") -> tuple[str, str]:
-    old = _repo_git(tree.root, "rev-parse", "HEAD")
+    old = git_out(tree.root, "rev-parse", "HEAD")
     return old, tree.commit(message)
