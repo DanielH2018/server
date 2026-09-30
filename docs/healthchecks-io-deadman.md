@@ -19,6 +19,8 @@ it is a second destination for the handful of jobs whose silence actually matter
 | `pi-peer-backup` | `roles/k8s/pi-peer-backup/files/pull-pi-peers.sh` | rsync failed, or fewer than 2 peer files landed |
 | `registry-gc` | `roles/k8s/registry/templates/registry-gc.sh.j2` | GC job exceeded its deadline, the registry pod would not terminate, the job manifest failed to apply, or the registry did not come back afterwards |
 | `uptime-kuma-alive` | `roles/setup/k3s/templates/longhorn-backup-health.sh.j2` | that script's Kuma push returned non-zero — see *Watching the spine itself* below |
+| `weekly-reboot-<host>` | the `Weekly system restart` cron in `roles/setup/initial_setup/tasks/crons.yml`, one slug per host | never: it pings before the reboot, and silence means the cron did not run |
+| `<host>-docker-prune` | the `Clean unused Docker images` cron in the same file, on each `has_docker` host (`daniel-pi`) | never: it pings only after the prune succeeds, and silence is the failure |
 
 The cron behind each slug, read from the variables that set it:
 
@@ -58,6 +60,10 @@ below on 2026-09-25.
 | `etcd-snapshot-offbox` | Cron | 1 hour |
 | `pi-peer-backup` | Cron | 2 hours |
 | `registry-gc` | Cron | 1 hour |
+| `weekly-reboot-daniel-box` | Cron | 1 hour |
+| `weekly-reboot-daniel-server` | Cron | 1 hour |
+| `weekly-reboot-daniel-pi` | Cron | 1 hour |
+| `daniel-pi-docker-prune` | Cron | 1 hour |
 
 **The 20-minute grace on the 10-minute checks is derived, not chosen.** Their crons skip
 their first run after a boot — `boot_grace_active` in `kuma-push-lib.sh`, sized by
@@ -143,6 +149,7 @@ name internal infrastructure, and one sends no body at all:
 | `pi-peer-backup` | generic | An rsync failure echoes `PI_SRC`, which carries the Pi's LAN IP and ssh user. |
 | `registry-gc` | full message | A blob/link count, or a failure naming the cluster namespace and the `registry` Deployment. Low value to an outsider and it is what makes the failure actionable. |
 | `uptime-kuma-alive` | none | Status only, and status is the whole signal — it reports on Kuma, not on what Kuma found. |
+| `weekly-reboot-<host>`, `<host>-docker-prune` | none | Status only. The ping discards curl's output, and the cron sends no body. |
 
 The withheld detail is still in Kuma, on the LAN. The off-site copy only has to carry *that*
 something is wrong; the diagnosis is available as soon as you can reach the house.
@@ -167,6 +174,10 @@ others do. The env file is still the right home for the key: keeping it out of t
 what makes the mode of any one of them stop mattering.)
 
 For `pi-peer-backup` the URL is a key in the existing k8s Secret, not a file on a host.
+
+`initial_setup` writes the same file on every host, with the same content, mode and owner as the k3s role's task, because its two pinging crons run on hosts the k3s role does not write it on: the reboot on all three, the Docker prune on the Pi (#2806). The two writers agree, so a second apply on daniel-box reports no change. The reboot cron runs as root. The prune cron runs as `{{ sys_user }}`, which is the file's group. Each cron sources the file inside a `[ -r ] &&` guard, because a `.` of a missing file exits `/bin/sh` and would skip the reboot that follows.
+
+Until the self-hosted Healthchecks retires, both crons ping it too, on their old UUIDs. So neither the old checks nor the new ones go silent during the move. The retirement removes the old ping together with the `healthchecks` role.
 
 ## Activating it
 

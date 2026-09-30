@@ -58,6 +58,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from dev.k8s_autodeploy_counts import autodeploy_stances
 from fragment_readers import (
     container_udp_port,
+    host_has_docker,
     module_constant,
     parse_jails,
     registry_counts,
@@ -94,6 +95,8 @@ FAIL2BAN_CONF = (
 )
 GROUP_VARS = REPO / "ansible/inventory/group_vars/all.yml"
 HOST_VARS = REPO / "ansible/inventory/host_vars"
+HOSTS_INI = REPO / "ansible/inventory/hosts.ini"
+INITIAL_SETUP_DEFAULTS = REPO / "ansible/roles/setup/initial_setup/defaults/main.yml"
 TRAEFIK_DEFAULTS = REPO / "ansible/roles/k8s/traefik/defaults/main.yml"
 
 
@@ -155,15 +158,32 @@ def _traefik_ports() -> tuple[str, list[str]]:
     ), ["ansible/roles/k8s/traefik/defaults/main.yml"]
 
 
-def _deadman() -> tuple[str, list[str]]:
-    return render_deadman_cadences(
+def deadman_inputs() -> tuple[dict, dict, dict, dict, dict, dict[str, bool]]:
+    """The six arguments `deadman_crons` takes, read from the tree.
+
+    Shared with the monitor-bridge expectations test, so the fragment and the test cannot read
+    different sources.
+    """
+    group_vars = role_defaults(GROUP_VARS)
+    return (
         role_defaults(K3S_DEFAULTS),
         role_defaults(PI_PEER_DEFAULTS),
         role_defaults(REGISTRY_DEFAULTS),
-    ), [
+        group_vars,
+        role_defaults(INITIAL_SETUP_DEFAULTS),
+        host_has_docker(HOSTS_INI, group_vars, HOST_VARS),
+    )
+
+
+def _deadman() -> tuple[str, list[str]]:
+    return render_deadman_cadences(*deadman_inputs()), [
         "ansible/roles/setup/k3s/defaults/main.yml",
         "ansible/roles/k8s/pi-peer-backup/defaults/main.yml",
         "ansible/roles/k8s/registry/defaults/main.yml",
+        "ansible/roles/setup/initial_setup/defaults/main.yml",
+        "ansible/inventory/group_vars/all.yml",
+        "ansible/inventory/hosts.ini",
+        "ansible/inventory/host_vars/",
     ]
 
 

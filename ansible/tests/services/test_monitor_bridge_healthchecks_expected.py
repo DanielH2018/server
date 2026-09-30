@@ -15,7 +15,7 @@ import re
 from _helpers import REPO
 from fragment_readers import role_defaults
 from fragment_renderers import deadman_crons
-from gen_doc_fragments import K3S_DEFAULTS, PI_PEER_DEFAULTS, REGISTRY_DEFAULTS
+from gen_doc_fragments import deadman_inputs
 
 BRIDGE_DEFAULTS = REPO / "ansible/roles/k8s/monitor-bridge/defaults/main.yml"
 DOC = REPO / "docs/healthchecks-io-deadman.md"
@@ -30,6 +30,10 @@ WIRED_SLUGS = frozenset(
         "etcd-snapshot-offbox",
         "pi-peer-backup",
         "registry-gc",
+        "weekly-reboot-daniel-box",
+        "weekly-reboot-daniel-server",
+        "weekly-reboot-daniel-pi",
+        "daniel-pi-docker-prune",
     }
 )
 
@@ -43,11 +47,7 @@ def _expected() -> dict[str, dict]:
 
 
 def _crons() -> dict[str, str]:
-    rows = deadman_crons(
-        role_defaults(K3S_DEFAULTS),
-        role_defaults(PI_PEER_DEFAULTS),
-        role_defaults(REGISTRY_DEFAULTS),
-    )
+    rows = deadman_crons(*deadman_inputs())
     return {slug: cron for slug, cron, _ in rows}
 
 

@@ -150,12 +150,20 @@ def render_secret_tiers(tier_days: dict, lead_days: int, counts: dict[str, int])
 
 
 def deadman_crons(
-    k3s: dict, pi_peer: dict, registry: dict
+    k3s: dict,
+    pi_peer: dict,
+    registry: dict,
+    group_vars: dict,
+    initial_setup: dict,
+    has_docker: dict[str, bool],
 ) -> list[tuple[str, str, str]]:
     """(slug, cron, source) per Healthchecks.io slug, assembled from the variables that set it.
 
     Shared with ansible/tests/services/test_monitor_bridge_healthchecks_expected.py, which holds
     monitor-bridge's console expectations to these same crons.
+
+    `has_docker` is `{host: bool}` over every host initial_setup runs on. The weekly reboot
+    pings a slug per host, and the Docker prune pings one per host that installs it (#2806).
     """
     every_10 = f"{k3s['k3s_longhorn_backup_health_cron_minute']} * * * *"
     rows = [
@@ -196,13 +204,45 @@ def deadman_crons(
             "the `longhorn-backup-health` cron; the same script pings both",
         ),
     ]
+    reboot = (
+        f"{group_vars['weekly_reboot_minute']} {group_vars['weekly_reboot_hour']} "
+        f"* * {group_vars['weekly_reboot_weekday']}"
+    )
+    rows += [
+        (
+            f"weekly-reboot-{host}",
+            reboot,
+            f"`weekly_reboot_weekday` / `_hour` / `_minute`, on {host}",
+        )
+        for host in has_docker
+    ]
+    prune = (
+        f"{initial_setup['initial_setup_docker_prune_cron_minute']} "
+        f"{initial_setup['initial_setup_docker_prune_cron_hour']} * * *"
+    )
+    rows += [
+        (
+            f"{host}-docker-prune",
+            prune,
+            f"`initial_setup_docker_prune_cron_hour` / `_minute`, on {host}",
+        )
+        for host, docker in has_docker.items()
+        if docker
+    ]
     return rows
 
 
-def render_deadman_cadences(k3s: dict, pi_peer: dict, registry: dict) -> str:
+def render_deadman_cadences(
+    k3s: dict,
+    pi_peer: dict,
+    registry: dict,
+    group_vars: dict,
+    initial_setup: dict,
+    has_docker: dict[str, bool],
+) -> str:
     """One row per Healthchecks.io slug: the cron that pings it, assembled from its vars."""
-    rows = deadman_crons(k3s, pi_peer, registry)
-    lines = ["| Check slug | Cron (daniel-box, UTC) | Set by |", "|---|---|---|"]
+    rows = deadman_crons(k3s, pi_peer, registry, group_vars, initial_setup, has_docker)
+    lines = ["| Check slug | Cron (host clock, UTC) | Set by |", "|---|---|---|"]
     lines += [f"| `{slug}` | `{cron}` | {source} |" for slug, cron, source in rows]
     return "\n".join(lines) + "\n"
 
