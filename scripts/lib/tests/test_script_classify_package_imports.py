@@ -121,19 +121,46 @@ def test_no_python_module_without_a_main_guard_reads_as_something_a_person_runs(
     )
 
 
-def test_a_bare_import_of_a_module_in_another_directory_is_still_an_edge(tmp_path):
-    """The fallback: `cert_expiry.py` puts `scripts/docs` on `sys.path`, then imports by bare name.
+def _bare_import(tmp_path, insert: str):
+    """`scripts/diagnostics/user.py` imports `leafy` by bare name after the given `sys.path` insert.
 
-    No root under `scripts/` holds `route_facts.py` beside the importer, so the strict reading
-    finds nothing and the loose one has to answer.
+    `scripts/docs/leafy.py` exists, so a census matching on the bare name alone credits it
+    whether or not the insert puts `scripts/docs` on the path.
     """
     scripts = tmp_path / "scripts"
     (scripts / "docs").mkdir(parents=True)
     (scripts / "diagnostics").mkdir()
     (scripts / "docs" / "leafy.py").write_text('"""Summary."""\nVALUE = 1\n')
     (scripts / "diagnostics" / "user.py").write_text(
-        '"""Summary."""\nfrom leafy import VALUE\n'
+        f'"""Summary."""\nimport sys\nfrom pathlib import Path\n{insert}\nfrom leafy import VALUE\n'
     )
-    verdict, evidence = sc.classify(tmp_path, scripts)["leafy.py"]
+    return sc.classify(tmp_path, scripts)["leafy.py"]
+
+
+def test_a_bare_import_through_the_files_own_path_insert_is_credited(tmp_path):
+    """The `cert_expiry.py` shape: it inserts `scripts/docs`, then imports `route_facts`."""
+    verdict, evidence = _bare_import(
+        tmp_path,
+        'sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "docs"))',
+    )
     assert verdict == "library"
     assert "user.py" in evidence
+
+
+def test_a_bare_import_no_insert_explains_is_not_credited(tmp_path):
+    """The `gitops_state.py` shape: the insert is a name pointing outside `scripts/` (#3038).
+
+    Its `gitops_markers` import resolves to a role's `files/`, not to the same-named
+    `scripts/lib/gitops_markers.py`.
+    """
+    verdict, _ = _bare_import(tmp_path, "sys.path.insert(0, str(GITOPS_DEPLOY_FILES))")
+    assert verdict == "adhoc"
+
+
+def test_the_real_tree_credits_the_insert_edge_and_not_the_basename_one():
+    imported = sc.importers(SCRIPTS)
+    assert "cert_expiry.py" in imported["route_facts"]
+    assert "gitops_state.py" not in imported["gitops_markers"]
+    assert "secret_rotation.py" not in imported.get("secrets", set()), (
+        "`import secrets as pysecrets` is the stdlib, not scripts/docs/reference/secrets.py"
+    )

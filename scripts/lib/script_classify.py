@@ -25,6 +25,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 import ast
 import re
+import tomllib
 from pathlib import Path
 
 from lib.invocation_sites import (
@@ -308,22 +309,86 @@ def _resolve(parts: list[str], root: Path) -> str:
     return ""
 
 
-def _loose(parts: list[str], scripts: Path) -> str:
-    """The stem `parts` names when no root under `scripts/` holds the file itself.
+def _path_expr(node: ast.AST, path: Path) -> Path | None:
+    """The directory a `Path(__file__)`-rooted expression names, or None for any other shape.
 
-    A script may put a directory OUTSIDE `scripts/` on `sys.path` and import from there:
-    `cert_expiry.py` inserts `scripts/docs` and writes `from route_facts import PUBLIC`, and
-    `gitops_state.py` inserts an Ansible role's `files/`. Falling back to the bare segment
-    keeps those edges, at the cost of matching on basename alone — which is safe here because
-    `candidates` enforces one basename per script (`test_no_two_scripts_share_a_basename`).
+    Covers the spellings the tree puts on `sys.path`: `str(...)` around
+    `Path(__file__).resolve()`, then `.parent`, `.parents[N]` and `/ "segment"`.
     """
-    here = scripts
-    for part in parts:
-        if (here / part).is_dir():
-            here /= part
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Name):
+        if node.func.id == "str" and len(node.args) == 1:
+            return _path_expr(node.args[0], path)
+        if (
+            node.func.id in ("Path", "_Path")
+            and len(node.args) == 1
+            and isinstance(node.args[0], ast.Name)
+            and node.args[0].id == "__file__"
+        ):
+            return path
+        return None
+    if isinstance(node, ast.Call) and isinstance(node.func, ast.Attribute):
+        if node.func.attr == "resolve" and not node.args:
+            return _path_expr(node.func.value, path)
+        return None
+    if isinstance(node, ast.Attribute) and node.attr == "parent":
+        base = _path_expr(node.value, path)
+        return base.parent if base else None
+    if (
+        isinstance(node, ast.Subscript)
+        and isinstance(node.value, ast.Attribute)
+        and node.value.attr == "parents"
+        and isinstance(node.slice, ast.Constant)
+        and isinstance(node.slice.value, int)
+    ):
+        base = _path_expr(node.value.value, path)
+        return base.parents[node.slice.value] if base else None
+    if (
+        isinstance(node, ast.BinOp)
+        and isinstance(node.op, ast.Div)
+        and isinstance(node.right, ast.Constant)
+        and isinstance(node.right.value, str)
+    ):
+        base = _path_expr(node.left, path)
+        return base / node.right.value if base else None
+    return None
+
+
+def _path_inserts(tree: ast.AST, path: Path) -> list[Path]:
+    """The directories `path` puts on `sys.path` itself, in source order."""
+    # DECIDED: an insert whose argument is a name (`GITOPS_DEPLOY_FILES`, `HOST_LIB_FILES`,
+    # `FILTER_PLUGINS`) is skipped rather than evaluated. Every such insert in the tree points
+    # outside `scripts/`, or at `scripts/` itself, which `_roots` already covers. An import only
+    # such an insert explains resolves outside the tree, so it credits nothing here (#3038).
+    found: list[Path] = []
+    for node in ast.walk(tree):
+        if not (
+            isinstance(node, ast.Call)
+            and isinstance(node.func, ast.Attribute)
+            and node.func.attr in ("insert", "append")
+            and isinstance(node.func.value, ast.Attribute)
+            and node.func.value.attr == "path"
+            and node.args
+        ):
             continue
-        return part
-    return ""
+        target = _path_expr(node.args[-1], path.resolve())
+        if target is not None:
+            found.append(target)
+    return found
+
+
+def _pytest_pythonpath(scripts: Path) -> list[Path]:
+    """The directories pytest's `pythonpath` puts in front of every test, in order.
+
+    A test imports a module from another directory by bare name, `from deploy_run import ...`
+    in `scripts/lib/tests/test_exit_codes.py`, and only this list says where that resolves.
+    Empty when the repo root holds no `pyproject.toml`, as a synthetic test tree does not.
+    """
+    pyproject = scripts.parent / "pyproject.toml"
+    if not pyproject.is_file():
+        return []
+    ini = tomllib.loads(pyproject.read_text()).get("tool", {}).get("pytest", {})
+    ini = ini.get("ini_options", ini)
+    return [scripts.parent / entry for entry in ini.get("pythonpath", [])]
 
 
 def _roots(path: Path, scripts: Path) -> list[Path]:
@@ -345,12 +410,26 @@ def _roots(path: Path, scripts: Path) -> list[Path]:
 
 
 def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
-    """The module stem an absolute import names: the nearest root that holds it, else loosely."""
+    """The module stem an absolute import names, from the first root that holds it.
+
+    A root outside `scripts/` that holds the module means the import resolves there, so it
+    names no script: `gitops_state.py` imports `gitops_markers` from the gitops_deploy role's
+    `files/`, not `scripts/lib/gitops_markers.py` (#3038).
+    """
     for root in roots:
         stem = _resolve(dotted.split("."), root)
         if stem:
-            return stem
-    return _loose(dotted.split("."), scripts)
+            return stem if root == scripts or scripts in root.parents else ""
+    return ""
+
+
+def _package(dotted: str, roots: list[Path], scripts: Path) -> Path | None:
+    """The package directory under `scripts/` a dotted module part names, if any root holds it."""
+    for root in roots:
+        package = root.joinpath(*dotted.split("."))
+        if package.is_dir():
+            return package if package == scripts or scripts in package.parents else None
+    return None
 
 
 def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
@@ -361,6 +440,7 @@ def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
     reachable at all" do not take the same importers.
     """
     stems = {p.stem for p in _all_py(scripts)}
+    pythonpath = _pytest_pythonpath(scripts)
     found: dict[str, set[str]] = {}
     for path in _all_py(scripts):
         if not keep(path):
@@ -369,7 +449,13 @@ def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
             tree = ast.parse(path.read_text())
         except SyntaxError, ValueError, UnicodeDecodeError:
             continue
-        roots = _roots(path, scripts)
+        # `_roots` first, then what the file puts on `sys.path` itself, then, for a test,
+        # pytest's `pythonpath`. An import none of them explains resolves outside `scripts/`
+        # (the stdlib, a role's `files/`) and credits nothing: matching on the bare name
+        # credited `scripts/docs/reference/secrets.py` with `import secrets` (#3038).
+        roots = _roots(path, scripts) + _path_inserts(tree, path)
+        if _is_test_file(path):
+            roots += pythonpath
         for node in ast.walk(tree):
             if isinstance(node, ast.Import):
                 names = [_head(alias.name, roots, scripts) for alias in node.names]
@@ -396,8 +482,19 @@ def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
                 else:
                     head = _head(node.module, roots, scripts)
                     # `from diagnostics.probe_lib import core` names only directories in the
-                    # module part, so the modules imported are the aliases.
-                    names = [head] if head else [alias.name for alias in node.names]
+                    # module part, so the modules imported are the aliases, and only the ones
+                    # that directory holds: `from ansible.plugins.filter import core` names no
+                    # script, whatever else under `scripts/` is called `core.py`.
+                    package = None if head else _package(node.module, roots, scripts)
+                    names = (
+                        [head]
+                        if head
+                        else [
+                            alias.name
+                            for alias in node.names
+                            if package and (package / f"{alias.name}.py").is_file()
+                        ]
+                    )
             else:
                 continue
             for name in names:
