@@ -97,7 +97,7 @@ def test_adapt_writes_the_same_form_as_the_exporter():
 # published since, so an unrelated re-run could rewrite 13,746 lines of node-exporter-full.json.
 # The named members keep the census non-vacuous: a renamed key would otherwise leave the
 # `all(...)` below iterating an empty dict and passing.
-PINNED_BOARDS = frozenset({"node-exporter-full", "cadvisor"})
+PINNED_BOARDS = frozenset({"node-exporter-full"})
 
 
 def test_every_vendored_dashboard_pins_a_revision():
@@ -137,7 +137,12 @@ def test_the_download_url_names_the_pinned_revision_and_never_latest():
 
 # Seeding, not refreshing (#2912). The committed boards carry hand edits the script does not
 # reproduce, so a fresh fetch that differs from them must be refused rather than written. The
-# stub boards carry no query variables, so `adapt` never reaches Prometheus.
+# stub boards carry no query variables, so `adapt` never reaches Prometheus. Two boards rather
+# than the one the repo ships, because the all-or-nothing rule is about a refusal on one board
+# stopping the write of another.
+BOARDS = {"node-exporter-full": (1860, 45), "second": (14282, 1)}
+
+
 def _board(title):
     return {"uid": title, "templating": {"list": []}, "panels": [{"title": title}]}
 
@@ -148,13 +153,12 @@ def _fetched(gnet_id, revision):
 
 def _paths(outdir):
     return {
-        name: outdir / fg.SUBDIR.get(name, "") / ("%s.json" % name)
-        for name in fg.DASHBOARDS
+        name: outdir / fg.SUBDIR.get(name, "") / ("%s.json" % name) for name in BOARDS
     }
 
 
 def _fresh_text(name):
-    gnet_id, revision = fg.DASHBOARDS[name]
+    gnet_id, revision = BOARDS[name]
     s, _ = fg.adapt(name, _fetched(gnet_id, revision))
     return s + "\n"
 
@@ -167,21 +171,21 @@ def test_a_board_whose_committed_form_differs_is_refused_and_left_untouched(
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("hand-edited\n", encoding="utf-8")
 
-    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 1
+    assert fg.main([], fetch=_fetched, outdir=tmp_path, boards=BOARDS) == 1
 
     assert {p.read_text(encoding="utf-8") for p in paths.values()} == {"hand-edited\n"}
     err = capsys.readouterr().err
     assert "refusing to write" in err
-    assert "cadvisor.json" in err and "--overwrite" in err
+    assert "second.json" in err and "--overwrite" in err
 
 
 def test_a_refusal_writes_nothing_even_for_a_missing_board(tmp_path):
     paths = _paths(tmp_path)
-    differing = paths["cadvisor"]
+    differing = paths["second"]
     differing.parent.mkdir(parents=True, exist_ok=True)
     differing.write_text("hand-edited\n", encoding="utf-8")
 
-    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 1
+    assert fg.main([], fetch=_fetched, outdir=tmp_path, boards=BOARDS) == 1
 
     assert not paths["node-exporter-full"].exists()
 
@@ -192,7 +196,7 @@ def test_overwrite_takes_the_fetched_form_over_a_differing_board(tmp_path):
         path.parent.mkdir(parents=True, exist_ok=True)
         path.write_text("hand-edited\n", encoding="utf-8")
 
-    assert fg.main(["--overwrite"], fetch=_fetched, outdir=tmp_path) == 0
+    assert fg.main(["--overwrite"], fetch=_fetched, outdir=tmp_path, boards=BOARDS) == 0
 
     for name, path in paths.items():
         assert path.read_text(encoding="utf-8") == _fresh_text(name)
@@ -200,12 +204,12 @@ def test_overwrite_takes_the_fetched_form_over_a_differing_board(tmp_path):
 
 def test_a_missing_board_is_seeded_and_a_matching_one_is_not_rewritten(tmp_path):
     paths = _paths(tmp_path)
-    matching = paths["cadvisor"]
+    matching = paths["second"]
     matching.parent.mkdir(parents=True, exist_ok=True)
-    matching.write_text(_fresh_text("cadvisor"), encoding="utf-8")
+    matching.write_text(_fresh_text("second"), encoding="utf-8")
     matching.chmod(0o444)  # a write to the matching board would raise PermissionError
 
-    assert fg.main([], fetch=_fetched, outdir=tmp_path) == 0
+    assert fg.main([], fetch=_fetched, outdir=tmp_path, boards=BOARDS) == 0
 
     assert paths["node-exporter-full"].read_text(encoding="utf-8") == _fresh_text(
         "node-exporter-full"

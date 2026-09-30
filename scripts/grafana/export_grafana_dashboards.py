@@ -44,7 +44,6 @@ PROM_UID, LOKI_UID = "EGdsQqhVk", "bf4q19tuivta8e"
 # here so the two scripts own disjoint files and never clobber each other.
 SKIP_UIDS = {
     "rYdddlPWk",  # Node Exporter Full  -> node-exporter-full.json
-    "pMEd7m0Mz",  # Cadvisor exporter   -> cadvisor.json
     "n5bu_kv45",  # Traefik 17346 — RETIRED (merged into traefik-custom); skip so a
     # pre-deploy export can't resurrect the deleted board as a new custom file.
 }

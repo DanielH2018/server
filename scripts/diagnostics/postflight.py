@@ -199,11 +199,8 @@ def _cluster_prom_query(promql):
     this host's resolver bypasses the LAN DNS, so the name alone does not reach the
     cluster edge.
     """
-    base, pin = core.k8s_endpoint("prometheus")
-    from urllib.parse import urlencode
-
-    url = f"{base}/api/v1/query?" + urlencode({"query": promql})
-    return get(url, resolve=pin)
+    base, pin = core.prom_endpoint()
+    return get(core.prom_query_url(base, promql), resolve=pin)
 
 
 def check_kuma_monitors():

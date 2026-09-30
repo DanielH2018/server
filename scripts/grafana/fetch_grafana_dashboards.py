@@ -21,10 +21,9 @@ This script adapts each export so it renders on first load with no manual clicks
 Each board is pinned to a grafana.com REVISION (see ``DASHBOARDS``), so upstream cannot
 move under a re-run.
 
-This script SEEDS the boards; it does not refresh them. Both committed boards carry
-post-fetch hand edits it does not reproduce (cadvisor's ``graph`` panels migrated to
-``timeseries``; node-exporter-full's ``operstate="up"`` filter and the repo's own tags), and
-step 2 picks each single-select default from whatever the live Prometheus answers that day.
+This script SEEDS the boards; it does not refresh them. The committed board carries
+post-fetch hand edits it does not reproduce (node-exporter-full's ``operstate="up"`` filter
+and the repo's own tags), and step 2 picks each single-select default from whatever the live Prometheus answers that day.
 A fresh fetch therefore differs from the committed JSON, and writing it would revert that
 local work (#2912). So the script writes a board only when it is missing or when its
 committed form already matches, and otherwise refuses, names the boards that differ, and
@@ -65,18 +64,21 @@ UID_BY_PLUGIN = {
 # gnetId -> the PINNED grafana.com revision, never `latest`. A vendored board is a
 # dependency like any other: `revisions/latest` made a re-fetch return whatever upstream had
 # published since, so the 13,746-line node-exporter-full.json could change under an unrelated
-# re-run and the diff had no commit to explain it. Revision 45 of 1860 and revision 1 of 14282
-# are the ones the committed JSON was adapted from (verified 2026-09-28: revision 45 carries
+# re-run and the diff had no commit to explain it. Revision 45 of 1860 is the one the
+# committed JSON was adapted from (verified 2026-09-28: revision 45 carries
 # the same dashboard `version: 101` the committed file does), so re-running this script
 # reproduces the committed bytes. Bump a revision deliberately, in its own commit, and read
 # the diff.
-DASHBOARDS = {"node-exporter-full": (1860, 45), "cadvisor": (14282, 1)}
+#
+# The cAdvisor board (14282) went on 2026-09-30 (#2806): every panel filtered on the Docker
+# `name` label, which no series carries since the Docker retirement, so it drew nothing.
+DASHBOARDS = {"node-exporter-full": (1860, 45)}
 OUTDIR = Path("ansible/roles/k8s/claude-otel/files/dashboards")
 
 # Grafana folder (subdir) each community board is provisioned into; default is the General
 # root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't
 # recreate a duplicate at the root (foldersFromFilesStructure derives the folder from path).
-SUBDIR = {"node-exporter-full": "Infrastructure", "cadvisor": "Infrastructure"}
+SUBDIR = {"node-exporter-full": "Infrastructure"}
 
 # Panels removed because the underlying metric has no data on this host: no NIC
 # link-speed / battery / fan sensors, and the systemd collector isn't enabled
@@ -238,8 +240,8 @@ def adapt(name, d):
     return s, resolved
 
 
-def main(argv=None, fetch=fetch, outdir=OUTDIR):
-    """Seed every board in DASHBOARDS, refusing to overwrite one whose committed form differs.
+def main(argv=None, fetch=fetch, outdir=OUTDIR, boards=DASHBOARDS):
+    """Seed every board in `boards`, refusing to overwrite one whose committed form differs.
 
     Every board is fetched and adapted before any is written, so a refusal leaves the whole
     set untouched rather than half-rewritten.
@@ -249,6 +251,7 @@ def main(argv=None, fetch=fetch, outdir=OUTDIR):
             committed board.
         fetch: the grafana.com seam, taking (gnet_id, revision) and returning the JSON.
         outdir: the dashboards directory the boards are written under.
+        boards: name -> (gnet_id, revision) of the boards to seed.
 
     Returns:
         0 when every board was written or already matched, 1 when it refused.
@@ -263,7 +266,7 @@ def main(argv=None, fetch=fetch, outdir=OUTDIR):
     args = parser.parse_args(argv)
 
     planned = []  # (name, dest, text, resolved, state)
-    for name, (gnet_id, revision) in DASHBOARDS.items():
+    for name, (gnet_id, revision) in boards.items():
         s, resolved = adapt(name, fetch(gnet_id, revision))
         text = s + "\n"
         dest = Path(outdir) / SUBDIR.get(name, "") / ("%s.json" % name)
