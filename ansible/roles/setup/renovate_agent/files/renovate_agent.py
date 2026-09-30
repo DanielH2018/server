@@ -94,7 +94,7 @@ def run(argv: list[str], cwd: str | None = None, timeout: int = 120) -> tuple[in
 
 
 def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
-    """Every open PR in `repo`, with its author and head branch, from the repository listing.
+    """Every open PR in `repo`, with its author, head branch and `updatedAt`.
 
     Never `gh pr list --author`: with that flag gh runs a GraphQL `search(` query, and the
     search index is eventually consistent. The after-census runs seconds after the session
@@ -113,7 +113,8 @@ def _open_pr_listing(repo: str, tools: AgentTools) -> tuple[int, str]:
             "--limit",
             str(OPEN_PR_LIMIT),
             "--json",
-            "number,title,url,headRefName,author",
+            # `updatedAt` is the one field a comment-only triage moves (#3032).
+            "number,title,url,headRefName,updatedAt,author",
         ]
     )
 
@@ -125,6 +126,7 @@ def _authored_by(listing: str, login: str) -> list[OpenPR]:
             title=p.get("title", ""),
             url=p.get("url", ""),
             branch=p.get("headRefName", ""),
+            updated_at=p.get("updatedAt") or "",
         )
         for p in json.loads(listing)
         if (p.get("author") or {}).get("login") == login
@@ -523,8 +525,9 @@ def main(tools: AgentTools = TOOLS, config_path: str = CONFIG) -> int:
     handed = handed_off(own_before, own_prs(cfg["REPO"], tools), branch)
     moved = delta(before, after, pr_states(cfg["REPO"], gone, tools), handed)
     log(
-        f"resolved={moved.resolved} closed={moved.closed} unread={moved.unread} "
-        f"handed_off={moved.handed_off} remaining={moved.remaining} ok={outcome.ok}"
+        f"resolved={moved.resolved} closed={moved.closed} unread={moved.unread} touched="
+        f"{moved.touched} handed_off={moved.handed_off} remaining={moved.remaining} "
+        f"ok={outcome.ok}"
     )
     tools.discord_post(
         webhook, render_digest(outcome, moved, host, log_path), USER_AGENT, log=log

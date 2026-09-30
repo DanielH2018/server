@@ -129,6 +129,13 @@ class TestDelta:
         assert moved.remaining == (1,)
 
 
+def _own_pr() -> al.OpenPR:
+    """The one PR in `_LISTING` authored by the account the agent runs as."""
+    return al.OpenPR(
+        number=50, title="t", branch="b-1", updated_at="2026-09-30T06:10:00Z"
+    )
+
+
 def _own(number: int, branch: str) -> al.OpenPR:
     return al.OpenPR(number=number, title="Finish bump", branch=branch)
 
@@ -356,9 +363,16 @@ _LISTING = json.dumps(
             "number": 60,
             "title": "r",
             "headRefName": "renovate/x",
+            "updatedAt": "2026-09-30T06:00:00Z",
             "author": {"login": "app/renovate"},
         },
-        {"number": 50, "title": "t", "headRefName": "b-1", "author": {"login": "me"}},
+        {
+            "number": 50,
+            "title": "t",
+            "headRefName": "b-1",
+            "updatedAt": "2026-09-30T06:10:00Z",
+            "author": {"login": "me"},
+        },
         {
             "number": 40,
             "title": "o",
@@ -387,7 +401,14 @@ class TestOpenPrs:
 
     def test_the_census_keeps_only_renovates_prs(self) -> None:
         prs = renovate_agent.open_prs("o/r", _listing_tools())
-        assert prs == [al.OpenPR(number=60, title="r", branch="renovate/x")]
+        assert prs == [
+            al.OpenPR(
+                number=60,
+                title="r",
+                branch="renovate/x",
+                updated_at="2026-09-30T06:00:00Z",
+            )
+        ]
 
     def test_a_failed_census_raises(self) -> None:
         tools = renovate_agent.AgentTools(run=lambda argv, **kw: (1, "HTTP 502"))
@@ -400,7 +421,7 @@ class TestOwnPrs:
 
     def test_the_census_reads_this_accounts_branches(self) -> None:
         prs = renovate_agent.own_prs("o/r", _listing_tools())
-        assert prs == [al.OpenPR(number=50, title="t", branch="b-1")]
+        assert prs == [_own_pr()]
 
     def test_an_unreadable_login_is_flagged_as_none(self) -> None:
         tools = _listing_tools(login=(1, "HTTP 401"))
@@ -432,6 +453,7 @@ class TestRunRecord:
         rec = json.loads(al.run_record(100, "ran", "", moved, outcome))
         assert rec["merged"] == [1] and rec["closed"] == [2]
         assert rec["handed_off"] == [9] and rec["left_open"] == [3]
+        assert rec["touched"] == []
         assert rec["turns"] == outcome.turns
 
     def test_a_failed_handoff_census_records_null_not_none_opened_is_flagged(
