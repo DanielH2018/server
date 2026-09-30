@@ -79,6 +79,15 @@ IP_STUB = """\
 exit 0
 """
 
+# `logger`, recording instead of writing. The fence leg's own reporting calls it, and those tags
+# ship to Loki — a fixture verdict on the real syslog lands on a dashboard beside real ones.
+# ansible/tests/leakguard.py fails the test that lets one through, and logger_calls() below is the
+# assertion that keeps this stub from failing open.
+LOGGER_STUB = """\
+#!/bin/bash
+printf '%s\\n' "$*" >>"$LOGGER_CALLS"
+"""
+
 # Runs the leg and nothing else. `report` is the run's own Kuma reporting; `fail` records the
 # message the way the real one does before exiting non-zero.
 DRIVER = """\
@@ -87,12 +96,19 @@ source "$ORCH"
 export PATH="$STUBS:$PATH"
 LOG_DIR="$EVIDENCE"
 NAME=etcd-drill
+FENCE_PUSH_TOKEN="$STUB_FENCE_TOKEN"
 fail() { printf 'FAIL %s\\n' "$*" >"$VERDICT"; exit 1; }
 report() { :; }
 ssh_argv() { printf '%s\\n' "$STUBS/guest-ssh"; }
 fence_check
 printf 'VERDICT %s\\n' "$FENCE_VERDICT" >"$VERDICT"
 """
+
+# The token the driver gives the fence tile. The render context has no `etcd_drill_fence_push_token`
+# — that value is in SOPS — so the template's `default("")` would leave push_kuma suppressed and
+# every push assertion would pass against a leg that pushes nothing. 32 hex, the shape AutoKuma
+# accepts, so the fixture cannot drift from a real token's form.
+FENCE_TOKEN = "f" * 32
 
 CONTROL = "https://1.1.1.1"
 # The pod IP the `ip neigh` stub answers with, inside k3s_pod_cidr.
@@ -187,7 +203,13 @@ def run_fence(
         f"lines to source the script; without the strip it would run a real drill."
     )
     lib = tmp_path / "kuma-push-lib.sh"
-    lib.write_text("kuma_push() { :; }\n")
+    # Records `<status> <url> <message>` per push rather than discarding it, so a test can read
+    # which tile the leg reported to. The URL carries the token, which is what tells the fence
+    # tile's push apart from the drill's.
+    pushes = tmp_path / "kuma-pushes"
+    lib.write_text(
+        f'kuma_push() {{ printf "%s %s %s\\n" "$1" "$3" "$2" >>"{pushes}"; }}\n'
+    )
     orch = tmp_path / "etcd-restore-drill-vm"
     orch.write_text(body.replace(KUMA_LIB, str(lib)).rstrip().rsplit(ENTRYPOINT, 1)[0])
 
@@ -198,7 +220,11 @@ def run_fence(
         for directory in (stubs,) + ((guest_stubs,) if name in guest_tools else ()):
             (directory / name).write_text(DIAL_STUB)
             (directory / name).chmod(0o755)
-    for name, text in (("ip", IP_STUB), ("guest-ssh", GUEST_SSH_STUB)):
+    for name, text in (
+        ("ip", IP_STUB),
+        ("guest-ssh", GUEST_SSH_STUB),
+        ("logger", LOGGER_STUB),
+    ):
         (stubs / name).write_text(text)
         (stubs / name).chmod(0o755)
 
@@ -222,6 +248,8 @@ def run_fence(
             "EVIDENCE": str(evidence),
             "VERDICT": str(verdict),
             "STUB_POD_IP": pod_ip,
+            "STUB_FENCE_TOKEN": FENCE_TOKEN,
+            "LOGGER_CALLS": str(tmp_path / "logger-calls"),
         },
         capture_output=True,
         text=True,
@@ -234,6 +262,32 @@ def run_fence(
     fence_log = evidence / "egress-fence.log"
     lines = fence_log.read_text().splitlines() if fence_log.exists() else []
     return verdict.read_text().strip(), lines
+
+
+def logger_calls(tmp_path):
+    """Every `logger` invocation the leg made, as the argument string it passed.
+
+    Read by one test so the stub cannot fail open: a leg that started calling `/usr/bin/logger`
+    by absolute path would leave this empty while every other assertion still passed.
+    """
+    calls = tmp_path / "logger-calls"
+    return calls.read_text().splitlines() if calls.exists() else []
+
+
+def fence_pushes(tmp_path):
+    """Every Kuma push the leg made to the FENCE tile, as `(status, message)` pairs.
+
+    A push to any other tile is dropped: the drill's own reporting is stubbed out in DRIVER, so
+    anything left here that does not carry FENCE_TOKEN went to a tile this leg has no business
+    writing to.
+    """
+    log = tmp_path / "kuma-pushes"
+    made = []
+    for line in log.read_text().splitlines() if log.exists() else []:
+        status, url, message = line.split(" ", 2)
+        if url.endswith(f"/{FENCE_TOKEN}"):
+            made.append((status, message))
+    return made
 
 
 def state(lines, label):

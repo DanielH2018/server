@@ -67,6 +67,7 @@ STUBS = {
     "manifest_prune_push_token": "t" * 32,
     "etcd_snapshot_push_token": "t" * 32,
     "etcd_drill_full_push_token": "t" * 32,
+    "etcd_drill_fence_push_token": "u" * 32,
     "release_staleness_push_token": "t" * 32,
     # Armed 2026-09-10 (#1627), so unlike the four above this one is declared unguarded and the
     # stub is what the render needs rather than what keeps the tile from disappearing. Dropping
