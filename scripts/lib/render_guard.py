@@ -381,7 +381,8 @@ def hosts_for_tags(tags, records, k8s_only=()) -> dict[str, list[str]]:
 # what it names is "a host land.sh must not deploy to", the retired guest is still the worked
 # example of one, and it is what gives both reads (``deploy_tags.landing_hosts`` over the
 # working tree and ``land_tags.landing_hosts_at`` over a merge commit) a shared answer. #935
-# is about those two disagreeing.
+# is about those two disagreeing. The operator ruled on 2026-09-30 (#2944) that a staging
+# cluster may come back, so the entry stays rather than being re-derived later.
 HOSTS_LAND_SH_NEVER_DEPLOYS = frozenset({"daniel-stage"})
 
 

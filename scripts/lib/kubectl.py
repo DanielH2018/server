@@ -57,6 +57,8 @@ from typing import Any
 # to a one-entry lookup that can never disagree with itself. `daniel-stage` is therefore the
 # one name here that is deliberately not an inventory host — the exemption is named in
 # scripts/lib/tests/test_kubectl.py::test_every_named_node_is_a_host_in_the_inventory.
+# The operator ruled on 2026-09-30 (#2944) that a staging cluster may come back, so the entry
+# and its callers stay as they are rather than being re-derived later.
 CLUSTER_NODES = {
     "prod": frozenset({"daniel-box", "daniel-server"}),
     "stage": frozenset({"daniel-stage"}),
