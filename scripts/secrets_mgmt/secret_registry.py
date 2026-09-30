@@ -120,6 +120,8 @@ def audit(reg: dict, today: dt.date, tier_days: Mapping = DEFAULT_TIER_DAYS) -> 
     return {"overdue": overdue, "soon": soon, "by_tier": by_tier, "all": rows}
 
 
+# DECIDED: the registry tracks SOPS keys only; a hand-added non-SOPS name reads as stale, fails
+# cmd_audit and every secrets PR, and no tier value rescues it.
 def registry_drift(registered: set, present: set) -> tuple[list, list]:
     """Pure registry-vs-secrets.yml drift.
 

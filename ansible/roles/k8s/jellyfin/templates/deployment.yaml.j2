@@ -773,6 +773,8 @@ spec:
               value: "{{ tz }}"
             - name: JELLYFIN_PublishedServerUrl
               value: "{{ jellyfin_k8s_published_url }}"
+{# DECIDED: no nodeSelector; the bound media-data local PV's nodeAffinity pins this pod to
+   daniel-box, where the AMD VAAPI device is. #}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
@@ -843,6 +845,8 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
+{# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
+   not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
           # start-up on a slow or post-update boot runs a library scan and hardware-init before
           # /health answers.
           livenessProbe:

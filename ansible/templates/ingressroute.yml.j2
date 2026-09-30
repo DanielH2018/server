@@ -24,6 +24,8 @@
   Docker instance's. The Docker side repeats the same block on each hand-rolled file-provider
   router for the same reason.
 #}
+{# DECIDED: no retry middleware in the default chain; the macro has no per-route opt-out, and a
+   retry replays a POST body a terminating backend already consumed. #}
 {% macro ingressroute(name, hostname, port, authelia, extra_middlewares=[], namespace=none, public=true, bypass_prefixes=[]) -%}
 {#
   namespace defaults to k8s_namespace — every slice-2 service wants that. It is overridable

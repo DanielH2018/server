@@ -149,6 +149,8 @@ def io_config(
         # inventory edit, not a code one.
         B2_PROBE_KEY_ID=_env_file("B2_PROBE_KEY_ID"),
         B2_PROBE_APPLICATION_KEY=_env_file("B2_PROBE_APPLICATION_KEY"),
+        # DECIDED: both outcomes cache for B2_PROBE_INTERVAL_S, and only a genuinely successful
+        # auth clears a DOWN; it held DOWN through all four real cap incidents.
         # Probe at most this often, and cache BOTH outcomes until it expires. Every other gate
         # re-probes each cycle; this one must not, because the failure it detects is a
         # transaction cap and an uncached probe would add 288 calls/day (INTERVAL=300) to the

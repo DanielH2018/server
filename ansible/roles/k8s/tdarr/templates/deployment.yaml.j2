@@ -88,6 +88,8 @@ spec:
               port: {{ tdarr_k8s_webui_port }}
             initialDelaySeconds: 20
             periodSeconds: 10
+{# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
+   not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
           # 120s before the first liveness check: this pod has to attach a 400 G RWX volume
           # and let the internal node register itself before the API answers.
           livenessProbe:

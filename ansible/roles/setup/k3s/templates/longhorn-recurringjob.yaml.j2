@@ -1,6 +1,8 @@
 ---
 # Daily backup of every Longhorn volume to B2.
 #
+{# DECIDED: groups: [default], and no recurringJobSelector on the StorageClass; Longhorn already
+   assigns unlabelled volumes to default, and StorageClass parameters are immutable. #}
 # groups: [default] rather than a bespoke group label. Longhorn applies a `default`-group job
 # to any volume that has no job of its own, so a new PVC is backed up without anyone
 # remembering to label it — and the labels Longhorn reads live on its Volume CRs, not on the

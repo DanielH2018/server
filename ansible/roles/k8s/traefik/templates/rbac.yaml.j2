@@ -3,7 +3,7 @@
    but NO LONGER a verbatim copy. This file was `files/rbac.yaml`, applied as-is, with a header
    saying to re-sync it from that URL and "change nothing but the binding".
 
-   DECIDED 2026-08-24: split upstream's single ClusterRole into a cluster-scoped role holding
+   DECIDED: (2026-08-24) split upstream's single ClusterRole into a cluster-scoped role holding
    only what is genuinely cluster-scoped, plus one namespaced Role per watched namespace.
    Upstream ships one ClusterRole because it must work for any deployment, including one
    watching all namespaces. This deployment watches exactly three

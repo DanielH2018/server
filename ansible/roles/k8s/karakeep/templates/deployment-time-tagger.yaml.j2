@@ -71,6 +71,8 @@ spec:
           # manager, so they age visibly. The command carries no rotated-log prune: the
           # script's loguru sink rotates into the working directory, which here is an emptyDir
           # that dies with the pod, so a prune would have nothing to do.
+{# DECIDED: a plain (non-subPath) ConfigMap mount under a re-exec loop, so an edited script
+   takes effect after kubelet syncs, with no rollout. #}
           command:
             - bash
             - -c

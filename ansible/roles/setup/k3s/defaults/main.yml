@@ -701,6 +701,9 @@ k3s_longhorn_r2_volumes:
   - homelab/home-assistant-config
   - homelab/zigbee2mqtt-data
 
+# DECIDED: swap a replacement into a removed volume's index, never delete it; the weekday is
+# index mod 7, so a removal moves later volumes onto other shards and other retain jobs.
+#
 # ORDER MATTERS: a volume's backup weekday is its list index mod 7 (0=Sunday). The list is
 # laid out in columns of seven — positions 0-6 are the seven largest volumes, one per day,
 # then the next seven, then the smallest — so no weekday stacks two heavy volumes. Reordering
@@ -860,6 +863,10 @@ k3s_longhorn_snapshot_reap_delete_timeout: 120s
 # Caps & Alerts page stays the only ground truth for what was actually spent.
 #
 # Raise it only together with a decision about the cap itself, never to silence the warning.
+#
+# DECIDED: a modeled proxy (B2-destined backups per 24h), not a metered count; B2's per-class
+# counters are Partner-tier only, so never publish a log-derived Class-B figure as a cap
+# fraction.
 k3s_longhorn_daily_backup_budget: 16
 
 # Root-disk headroom heartbeat (templates/disk-health.sh.j2). 75, not the fleet's 90: Longhorn's

@@ -151,6 +151,9 @@
       - networkpolicy-wg-easy.yaml
 
 # ── prove the policy is enforced, rather than merely applied ────────────────────────────────
+# DECIDED: probe pods need no per-node placement; ingress NetworkPolicy is enforced on the
+# DESTINATION node, and the probe targets schedule onto daniel-server.
+#
 # DECIDED: the five probe blocks below stay hand-copied — do not fold them into an
 # `include_tasks` loop. Tried 2026-08-23: it works and it shrinks this file from 955 lines to
 # 470, with ansible-lint green at production profile. It also breaks
