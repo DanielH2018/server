@@ -193,6 +193,7 @@
  "ansible/tests/deploy/test_containers_list_roles_exist.py": 0.0,
  "ansible/tests/deploy/test_cronjob_gate_decision.py": 0.12,
  "ansible/tests/deploy/test_cronjob_only_roles_include_the_gate.py": 4.32,
+ "ansible/tests/deploy/test_deleted_widening_tripwires.py": 0.06,
  "ansible/tests/deploy/test_denylist_parsers_agree.py": 0.15,
  "ansible/tests/deploy/test_denylist_render_suppresses_the_kick.py": 0.0,
  "ansible/tests/deploy/test_deploy_annotations.py": 0.0,
