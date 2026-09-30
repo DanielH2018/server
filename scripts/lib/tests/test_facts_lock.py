@@ -1,9 +1,8 @@
 """facts.lock: written by the tool, checksummed against a hand edit, and checked against the tree."""
 
-import subprocess
-
 import pytest
 
+from lib.git_testing import git, init_repo
 from lib.facts.lock import (
     FINDING_KINDS,
     LOCK_REL,
@@ -32,14 +31,7 @@ Write commit messages that explain why.
 
 
 def _repo(tmp_path):
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
+    init_repo(tmp_path)
     (tmp_path / "t").mkdir()
     (tmp_path / "t" / "m.py").write_text("LIMIT = 85\n")
     (tmp_path / "t" / "test_m.py").write_text(
@@ -47,18 +39,13 @@ def _repo(tmp_path):
     )
     (tmp_path / "CLAUDE.md").write_text(DOC.format(repo="t/"))
     (tmp_path / "docs").mkdir()
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", "-A")
     return tmp_path
 
 
 def _git_add(repo, *paths):
     """Track ``paths`` in ``repo`` — a fixture step for a file added after ``_repo``'s commit."""
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(repo),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(["git", "add", *paths], cwd=repo, check=True, env=env)
+    git(repo, "add", *paths)
 
 
 def test_lock_round_trips_and_is_absent_as_empty(tmp_path):
@@ -371,13 +358,7 @@ def test_a_cited_file_leaving_the_index_is_refused(tmp_path):
     """
     repo = _repo(tmp_path)
     verify_units(repo, repo / LOCK_REL, ["CLAUDE.md#Gate"], "abc1234")
-    env = {"GIT_CONFIG_GLOBAL": "/dev/null", "HOME": str(repo), "PATH": "/usr/bin:/bin"}
-    subprocess.run(
-        ["git", "rm", "-q", "-f", "--cached", "t/test_m.py"],
-        cwd=repo,
-        check=True,
-        env=env,
-    )
+    git(repo, "rm", "-q", "-f", "--cached", "t/test_m.py")
     (repo / "CLAUDE.md").write_text(
         DOC.format(repo="t/").replace("bounds it", "still bounds it")
     )

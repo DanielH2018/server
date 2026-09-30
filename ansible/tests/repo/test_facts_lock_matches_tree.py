@@ -7,9 +7,8 @@ way the rule and its support change in the same PR. The design is
 in PR #2138.
 """
 
-import subprocess
-
 from _helpers import REPO
+from lib.git_testing import git, init_repo
 from lib.facts.lock import LOCK_REL, check_lock, read_lock, verify_units
 
 
@@ -29,14 +28,7 @@ def test_the_lock_records_at_least_the_first_converted_section():
 
 
 def test_a_moved_atom_is_flagged(tmp_path):
-    env = {
-        "GIT_CONFIG_GLOBAL": "/dev/null",
-        "HOME": str(tmp_path),
-        "PATH": "/usr/bin:/bin",
-    }
-    subprocess.run(
-        ["git", "init", "-q", "-b", "master", str(tmp_path)], check=True, env=env
-    )
+    init_repo(tmp_path)
     # Nested a directory deep: the citation grammar requires a slash in a path
     # citation (a bare filename is not a claim about the tree — see citations.py),
     # so a repo-root `m.py` would never parse as a citation at all.
@@ -44,7 +36,7 @@ def test_a_moved_atom_is_flagged(tmp_path):
     (tmp_path / "sub" / "m.py").write_text("LIMIT = 85\n")
     (tmp_path / "CLAUDE.md").write_text("## Gate\n`sub/m.py:LIMIT`\n")
     (tmp_path / "docs").mkdir()
-    subprocess.run(["git", "add", "-A"], cwd=tmp_path, check=True, env=env)
+    git(tmp_path, "add", "-A")
 
     verify_units(tmp_path, tmp_path / LOCK_REL, ["CLAUDE.md#Gate"], "abc")
     (tmp_path / "sub" / "m.py").write_text("LIMIT = 86\n")
