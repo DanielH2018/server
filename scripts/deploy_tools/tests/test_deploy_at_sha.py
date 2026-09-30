@@ -24,11 +24,11 @@ from _deploy_sh_fakes import (
     UV_WRAPPER_ARMS,
     deploy_sh_env,
     detached_pid,
-    git_free_env,
     make_snapshot_repo,
     run_front_half,
 )
 from _process_waits import wait_for_exit
+from lib.git_testing import git, git_out
 
 _REPO = Path(__file__).resolve().parents[3]
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
@@ -71,27 +71,17 @@ def _annotated_sha(calls: list[str]) -> str:
 
 
 def _second_commit(repo: Path) -> tuple[str, str]:
-    """Add one commit to `repo`; return (first sha, second sha), both full."""
-    env = git_free_env()
+    """Add one commit to `repo`; return (first sha, second sha), both full.
 
-    def sha() -> str:
-        return subprocess.run(
-            ("git", "rev-parse", "HEAD"),
-            cwd=repo,
-            env=env,
-            check=True,
-            capture_output=True,
-            text=True,
-        ).stdout.strip()
-
-    first = sha()
+    Through `lib.git_testing`, not `git_free_env`: the scratch repo carries no identity in its
+    own config, so a commit needs the one that module puts in the environment. A runner with
+    no host-derived identity fails the commit otherwise.
+    """
+    first = git_out(repo, "rev-parse", "HEAD")
     (repo / "ansible" / "later.yml").write_text("---\n[]\n")
-    for args in (
-        ("git", "add", "-A"),
-        ("git", "commit", "-q", "-m", "later", "--no-gpg-sign"),
-    ):
-        subprocess.run(args, cwd=repo, env=env, check=True, capture_output=True)
-    return first, sha()
+    git(repo, "add", "-A")
+    git(repo, "commit", "-q", "-m", "later", "--no-gpg-sign")
+    return first, git_out(repo, "rev-parse", "HEAD")
 
 
 def _run(
