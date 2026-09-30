@@ -137,12 +137,17 @@ boot.
 Codes still expire in ~5 min, the Authelia elevated-session default. Resend in the browser if
 one goes stale.
 
-**Nothing rehearses this branch any more.** daniel-stage did, on a credential that
-authenticated nothing: the startup check being off is what made that possible — Authelia opens
-no SMTP connection at boot, so a literal stand-in in its host_vars proved the half that bites,
-that the config parses and the pod comes up on it. That guest was retired on 2026-09-29
-(#2941), and its rehearsal went with it. The branch now has no boot check anywhere, which is
-the state #1464 created and the rehearsal covered for.
+**A schema check covers the parse; nothing covers the boot.** daniel-stage rehearsed this
+branch on a credential that authenticated nothing: the startup check being off is what made
+that possible — Authelia opens no SMTP connection at boot, so a literal stand-in in its
+host_vars proved that the config parses and the pod comes up on it. That guest was retired on
+2026-09-29 (#2941), and its rehearsal went with it.
+
+`ansible/tests/services/test_authelia_config_schema.py` holds the parse half without a cluster
+(#2945). It validates the rendered `notifier` block's values against the vendored schema for
+the pinned release, which rejects a wrong address scheme, a quoted `true` or a malformed
+timeout. The key half was already there. What no check covers is the pod starting on the
+config, so a notifier change still reaches production as its first boot.
 
 If mail is down and you need the break-glass path, the file notifier is one edit away in
 `templates/config-secret.yaml.j2`; reading it back needs `sudo k3s kubectl` on **daniel-box**

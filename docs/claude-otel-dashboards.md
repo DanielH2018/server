@@ -35,6 +35,26 @@ reproduce, and query-variable defaults resolve against the live Prometheus. So i
 overwrite a differing board and writes nothing (#2912); `--overwrite` takes the upstream form,
 after which re-apply the hand edits.
 
+## The container board reads kubelet's cAdvisor, not Docker's
+
+`Infrastructure/docker-and-system-monitoring.json` (titled *Containers and system monitoring*)
+came from the Docker era and keyed every per-container panel on cAdvisor's `name` label. Under
+k3s, kubelet's cAdvisor (`job="kubernetes-cadvisor"`) still sets `name`, but to the containerd ID
+hash, so the panels returned data with unreadable legends. They also counted the 102 pod sandbox
+series beside the 118 real containers (measured 2026-09-30).
+
+On 2026-09-30 (#2806) the panels were re-keyed rather than deleted, because every one of them
+returns data. CPU, memory and swap select `container!=""` and group by
+`namespace, pod, container`. Network selects `container="", pod!=""` and groups by
+`namespace, pod`, because the network namespace belongs to the pod sandbox and no
+`container!=""` series carries a network counter. The dead `containergroup` variable, which read
+a Docker label no series has, was dropped.
+
+The board stays a board of its own rather than merging into `node-exporter-full.json`. That one
+is a pinned community board the fetch script re-seeds, so panels merged into it would conflict
+with every re-seed. This board is the only compact view of host totals beside per-container
+usage.
+
 ## Two panels guard against an absent series
 
 Two panels on `Apps/exportarr-arr-stack.json` guard against an ABSENT series, and that is what a
