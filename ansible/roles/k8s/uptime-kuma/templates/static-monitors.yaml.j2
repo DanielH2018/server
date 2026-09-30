@@ -452,6 +452,19 @@ stringData:
   etcd-restore-drill-full.json: |
     {"type": "push", "name": "etcd Restore Drill (full)", "description": "A monthly cron on daniel-server (1st, 11:20) boots a throwaway libvirt guest, restores the newest off-box etcd snapshot there with a real k3s and reads the object graph back. DOWN means a preflight failed or the restore did not pass; the message says which. Read the run evidence under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_drill_full_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
+{# The egress-fence leg of that same run, pushed from the same cron and so on the same deadline
+   (issue #3021). It is a SECOND tile rather than a line in the message above because the drill
+   tile cannot express the leg's non-fatal outcome: an unmeasured fenced range leaves the restore
+   passing, so the drill tile is `up` and the only record is the message text of a green push,
+   which alerts nobody. NEITHER `tag-severity: critical` NOR email, unlike the drill tile above,
+   and those are one decision: critical IS the email tier here, per
+   test_severity_critical_is_exactly_the_email_tier. The fatal half — a guest that reached
+   production — aborts the drill and so already escalates through that tile, which leaves this
+   one's unique contribution a probe whose target moved: a maintenance fault, not a page. #}
+{% if etcd_drill_fence_push_token | default('') %}
+  etcd-restore-drill-fence.json: |
+    {"type": "push", "name": "etcd Restore Drill (egress fence)", "description": "The same monthly daniel-server cron dials every range the staging nwfilter drops, plus an internet control target, from inside the throwaway guest before that guest is handed the cluster token and the R2 write credentials. DOWN means the fence LEAKED, or that a range could not be measured at all and so is unproven — the message says which, and names the targets. Read egress-fence.log in the newest run directory under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_drill_fence_push_token }}", "tag_names": [{"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}"]}
+{% endif %}
   # ── Transcribed 2026-08-10: the LIVE push fleet whose labels sit inert on the
   # monitor-bridge / autofix-bridge composes (the transcription ledger, pre-ON_DELETE flip).
   # Ids must keep matching the kuma() first arguments at those call sites.

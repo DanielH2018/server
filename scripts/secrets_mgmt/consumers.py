@@ -68,6 +68,11 @@ CROSS_HOST_PUSH_TOKENS = frozenset(
         # on that host) + a k8s/uptime-kuma tile deployed from daniel-box: two hosts, no single
         # redeploy moves both halves. The tile is the only alarm on the full etcd restore drill.
         "etcd_drill_full_push_token",
+        # The same run's egress-fence verdict, on a tile of its own (#3021). Same two-host shape
+        # as the token above, and rendered into the same env file on daniel-server — so a
+        # rotation that moves only the tile silences the alarm that says a fenced range went
+        # unmeasured, which is the one thing this tile exists to say.
+        "etcd_drill_fence_push_token",
         "secret_rotation_push_token",  # self-referential
         # Pushed by a setup role with no deploy tag, so there is nothing for --deploy to run.
         # Named `monitor_bridge_*` only for Kuma monitor-history continuity after the check
