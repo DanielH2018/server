@@ -34,6 +34,10 @@ from lib.invocation_sites import (
     workflow_files as _workflow_files,
 )
 from lib.repo_paths import REPO, SCRIPTS
+from lib.script_imports import (
+    import_graph as _import_graph,
+    is_test_file as _is_test_file,
+)
 
 __all__ = [
     "ARGV_RE",
@@ -290,126 +294,6 @@ def _invocation_sites(repo: Path) -> list[tuple[Path, str, str]]:
     return sites
 
 
-def _resolve(parts: list[str], root: Path) -> str:
-    """The module stem `parts` names under `root`, or "" when it names no module there.
-
-    Walks past EVERY leading segment that is a real directory rather than assuming one:
-    `diagnostics.probe_lib.core` has two, and stopping at the second reported a module twelve
-    scripts import as something nobody runs. The segment has to be a real `.py` beside those
-    directories for this to answer — `from diagnostics.probe_lib import core` names only
-    directories in its module part, and the caller reads the aliases instead.
-    """
-    here = root
-    for part in parts:
-        if (here / part).is_dir():
-            here /= part
-            continue
-        return part if (here / f"{part}.py").is_file() else ""
-    return ""
-
-
-def _loose(parts: list[str], scripts: Path) -> str:
-    """The stem `parts` names when no root under `scripts/` holds the file itself.
-
-    A script may put a directory OUTSIDE `scripts/` on `sys.path` and import from there:
-    `cert_expiry.py` inserts `scripts/docs` and writes `from route_facts import PUBLIC`, and
-    `gitops_state.py` inserts an Ansible role's `files/`. Falling back to the bare segment
-    keeps those edges, at the cost of matching on basename alone — which is safe here because
-    `candidates` enforces one basename per script (`test_no_two_scripts_share_a_basename`).
-    """
-    here = scripts
-    for part in parts:
-        if (here / part).is_dir():
-            here /= part
-            continue
-        return part
-    return ""
-
-
-def _roots(path: Path, scripts: Path) -> list[Path]:
-    """The directories an import in `path` can resolve against, nearest first.
-
-    This is the runtime answer rather than a guess. A module reaching outside its own
-    directory inserts an ancestor of its own on `sys.path` (`.claude/rules/python-layout.md`),
-    and pytest's `pythonpath` lists `scripts/` and its subdirectories. So a sibling inside
-    `scripts/dev/fanout_lib` spells the import `from fanout_lib.manifest import Batch` — a head
-    naming its OWN package directory, which resolves against `scripts/dev` and against no other
-    root. Resolving against `scripts/` alone read those ten modules as imported by nobody
-    (#3020). The roots stop at `scripts/`: looking further up would let a directory outside the
-    tree manufacture an edge.
-    """
-    roots = [path.parent]
-    while roots[-1] != scripts and scripts in roots[-1].parents:
-        roots.append(roots[-1].parent)
-    return roots
-
-
-def _head(dotted: str, roots: list[Path], scripts: Path) -> str:
-    """The module stem an absolute import names: the nearest root that holds it, else loosely."""
-    for root in roots:
-        stem = _resolve(dotted.split("."), root)
-        if stem:
-            return stem
-    return _loose(dotted.split("."), scripts)
-
-
-def _import_graph(scripts: Path, keep) -> dict[str, set[str]]:
-    """Module stem -> the filenames satisfying `keep` that import it.
-
-    `keep` decides which files count as importers; the two callers below split test files
-    from the rest, because the answer to "is this a library" and the answer to "is this
-    reachable at all" do not take the same importers.
-    """
-    stems = {p.stem for p in _all_py(scripts)}
-    found: dict[str, set[str]] = {}
-    for path in _all_py(scripts):
-        if not keep(path):
-            continue
-        try:
-            tree = ast.parse(path.read_text())
-        except SyntaxError, ValueError, UnicodeDecodeError:
-            continue
-        roots = _roots(path, scripts)
-        for node in ast.walk(tree):
-            if isinstance(node, ast.Import):
-                names = [_head(alias.name, roots, scripts) for alias in node.names]
-            elif isinstance(node, ast.ImportFrom):
-                # A relative import resolves against the package directory `node.level` says,
-                # and against nothing else. `from .citations import Citation` in
-                # `scripts/lib/facts/atoms.py` is how a package's own members reach each other,
-                # and skipping those read `citations.py` as a script nobody runs (#3020).
-                if node.level:
-                    base = path.parent
-                    for _ in range(node.level - 1):
-                        base = base.parent
-                    head = _resolve(node.module.split("."), base) if node.module else ""
-                    if head:
-                        names = [head]
-                    else:
-                        names = [
-                            alias.name
-                            for alias in node.names
-                            if (base / f"{alias.name}.py").is_file()
-                        ]
-                elif not node.module:
-                    names = []
-                else:
-                    head = _head(node.module, roots, scripts)
-                    # `from diagnostics.probe_lib import core` names only directories in the
-                    # module part, so the modules imported are the aliases.
-                    names = [head] if head else [alias.name for alias in node.names]
-            else:
-                continue
-            for name in names:
-                if name in stems and name != path.stem:
-                    found.setdefault(name, set()).add(path.name)
-    return found
-
-
-def _is_test_file(path: Path) -> bool:
-    return path.name.startswith("test_") or path.name in _EXCLUDED_NAMES
-
-
 def importers(scripts: Path) -> dict[str, set[str]]:
     """Module stem -> the non-test scripts that import it.
 
@@ -536,11 +420,6 @@ def is_candidate(path: Path) -> bool:
 def _walk(scripts: Path) -> list[Path]:
     """Every file under scripts/, at any depth, skipping compiled caches."""
     return sorted(p for p in scripts.rglob("*") if "__pycache__" not in p.parts)
-
-
-def _all_py(scripts: Path) -> list[Path]:
-    """Every .py under scripts/, including the tests — the import scan needs their stems."""
-    return [p for p in _walk(scripts) if p.suffix == ".py"]
 
 
 def candidates(scripts: Path) -> list[Path]:

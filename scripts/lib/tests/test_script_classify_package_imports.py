@@ -119,21 +119,3 @@ def test_no_python_module_without_a_main_guard_reads_as_something_a_person_runs(
     assert not runnable, (
         f"these cannot be run and are not catalogued as libraries: {runnable}"
     )
-
-
-def test_a_bare_import_of_a_module_in_another_directory_is_still_an_edge(tmp_path):
-    """The fallback: `cert_expiry.py` puts `scripts/docs` on `sys.path`, then imports by bare name.
-
-    No root under `scripts/` holds `route_facts.py` beside the importer, so the strict reading
-    finds nothing and the loose one has to answer.
-    """
-    scripts = tmp_path / "scripts"
-    (scripts / "docs").mkdir(parents=True)
-    (scripts / "diagnostics").mkdir()
-    (scripts / "docs" / "leafy.py").write_text('"""Summary."""\nVALUE = 1\n')
-    (scripts / "diagnostics" / "user.py").write_text(
-        '"""Summary."""\nfrom leafy import VALUE\n'
-    )
-    verdict, evidence = sc.classify(tmp_path, scripts)["leafy.py"]
-    assert verdict == "library"
-    assert "user.py" in evidence
