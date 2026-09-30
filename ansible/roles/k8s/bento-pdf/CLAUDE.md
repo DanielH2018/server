@@ -28,5 +28,6 @@ conventions.
   difference between the two was never the image. #2385 deleted that role from the tree.
 
 ## Editing
-- Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
-  `templates/service.yaml.j2`.
+- Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`. The Service
+  comes from the shared `ansible/templates/service-default.yaml.j2`, which this role ships no
+  template for.

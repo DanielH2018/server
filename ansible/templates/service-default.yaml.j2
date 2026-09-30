@@ -1,0 +1,28 @@
+{# Not a macro — a whole manifest. `k8s/manifests` renders this file as `service.yaml` for
+   every role that names `service.yaml` in its `manifests_files` and ships no
+   `templates/service.yaml.j2` of its own (`manifests_shared_defaults` in that role's
+   defaults). 22 roles' Service templates were byte-identical three-line wrappers around the
+   `service()` macro below; this file is that wrapper, rendered once (#2872).
+
+   THE ENTRY IS THE INPUT. Name and port come from the role's `containers_list` entry, and the
+   two variants those 22 roles differed on are entry keys rather than template edits:
+
+     service_port_name    the Service's port NAME (home-assistant, homelab-mcp, zigbee2mqtt).
+                          Omit for the plain unnamed form every other role renders.
+     service_extra_ports  [{name, port}] for a sidecar's port — the exportarr metrics port on
+                          sonarr, radarr and prowlarr. Kubernetes REJECTS a Service mixing
+                          named and unnamed ports and rejects it at APPLY time, after every
+                          repo-side check has read green, so the macro names the primary port
+                          itself whenever this is non-empty.
+
+   A role whose Service does not fit keeps its own `templates/service.yaml.j2`, which wins
+   over this file. `ansible/templates/service.yml.j2`'s header lists the five disqualifiers
+   and names the role behind each. #}
+{% from 'service.yml.j2' import service with context %}
+---
+{{ service(
+     container_item.name,
+     container_item.port,
+     port_name=container_item.service_port_name | default(none),
+     extra_ports=container_item.service_extra_ports | default([])
+   ) -}}

@@ -3,7 +3,18 @@
   ships. Those roles' service.yaml.j2 were byte-identical but for the name; this macro is that
   body.
 
-  A Service that does NOT fit, and why each stays hand-written — check these before filing
+  NO PLAIN ROLE CALLS THIS MACRO ANY MORE. Since #2872 the 25 roles that did ship no Service
+  template at all: `k8s/manifests` renders `ansible/templates/service-default.yaml.j2` for them,
+  which is the one remaining caller of the plain form. That file reads the name, the port, and
+  the optional `service_port_name` / `service_extra_ports` off the role's containers_list entry.
+  To change what a plain role's Service looks like, change that file, not a role.
+
+  The macro's other callers are the roles whose Service needs something the entry cannot say:
+  freshrss, n8n, nut-exporter, pihole-exporter and tdarr each still write their own
+  service.yaml.j2 around it.
+
+  A Service that does NOT fit the macro at all, and why each stays hand-written — check these
+  before filing
   "role X still inlines a Service", because each one was converted and reverted or measured
   and refused:
 
@@ -27,10 +38,13 @@
                the IngressRoute this Service backs.
     port       Service and target port — this fleet has no services publishing on a different
                container port than their Service port, so there is only the one number.
-    port_name  Set when a caller's Service needs a NAMED port (home-assistant, homelab-mcp,
-               zigbee2mqtt) rather than the bare port list every other role uses. Omit to get
-               the plain form.
-    extra_ports  Additional ports as [{name, port}] — a sidecar's, typically. Kubernetes REJECTS
+    port_name  Set when a caller's Service needs a NAMED port rather than the bare port list
+               every other role uses. Omit to get the plain form. home-assistant, homelab-mcp
+               and zigbee2mqtt need one and reach it through `service_port_name` on their
+               containers_list entry; nut-exporter and pihole-exporter pass it directly.
+    extra_ports  Additional ports as [{name, port}] — a sidecar's, typically. sonarr, radarr
+               and prowlarr carry the exportarr port this way, through `service_extra_ports`
+               on their containers_list entry. Kubernetes REJECTS
                a Service that mixes named and unnamed ports, and it rejects it at apply time,
                after every repo-side check has read green. So passing extra_ports forces the
                primary port to be named too (`http` unless port_name says otherwise) rather than

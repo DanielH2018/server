@@ -34,7 +34,7 @@ review — routes through the skill listing rather than this table.
 
 | If you're… | Start here |
 |---|---|
-| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill · a sibling role in `ansible/roles/k8s/` · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
+| Adding / changing a service (k3s — the default) | `/new-k8s-service` skill (it scaffolds with `scripts/dev/new_k8s_service.py`; no sibling copying) · `ansible/roles/k8s/manifests/CLAUDE.md` for the shared render → apply → queue contract every k8s role includes (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/` lists them) |
 | A PR just merged — what now | `## After a PR Merges — Pull, Deploy, Verify` below (the directive and *When to wait*) · `/land-after-merge` skill (the commands) |
 | Picking up an open issue, or working through the backlog | `findings.py next` names what is free to take · `/issue-fanout` skill for several at once · `findings.py claims` shows who holds what, `findings.py reap` releases the claims whose worktree is gone. Claim before you start: `findings.py claim <n> --worktree <branch>`. A claim `next` marks stale is reaped by `claim` itself, so a refusal there means the claim is LIVE — find the other session before you take the issue. |
 | A Bash or `kubectl` command keeps prompting, or you need the full permission tables | `## Shell Commands — Shape Them to Auto-Approve` below (summary) · `docs/claude-shell-permissions.md` (full detail) |
@@ -61,9 +61,11 @@ Docker at all, so a Compose role there deploys nothing.
 The step-by-step for each platform is a skill, because it is a procedure you follow once per
 service rather than a fact you need in every session:
 
-- **k3s** → the `new-k8s-service` skill. Role skeleton, which sibling to copy, the
-  `containers_list` entry, secrets, and what a `--dry-run` does *not* prove about a
-  brand-new service.
+- **k3s** → the `new-k8s-service` skill. It opens with
+  `scripts/dev/new_k8s_service.py`, which writes the role skeleton and the `containers_list`
+  entry rather than leaving you to copy a sibling (#2855); the skill then covers secrets, the
+  two censuses a new role joins, and what a `--dry-run` does *not* prove about a brand-new
+  service.
 - **Docker on `daniel-pi`** → the `new-container` skill. It carries the canonical compose
   skeleton, the shared macros in `ansible/templates/`, and the `common_config_changed`
   wiring a bind-mounted config file needs.

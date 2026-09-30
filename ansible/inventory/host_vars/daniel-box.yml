@@ -150,6 +150,12 @@ containers_list:
     port: 8989
     use_authelia: true
     auth_tier: one_factor
+    service_extra_ports:
+      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
+      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
+      # ports, and rejects it at APPLY time, after every repo-side check has read green.
+      - name: metrics
+        port: 9707
   # Runs a WireGuard/Mullvad sidecar sharing the pod's netns, gating qbittorrent's start so
   # it cannot talk to a tracker before the kill-switch exists.
   - name: qbittorrent
@@ -166,6 +172,12 @@ containers_list:
     port: 7878
     use_authelia: true
     auth_tier: one_factor
+    service_extra_ports:
+      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
+      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
+      # ports, and rejects it at APPLY time, after every repo-side check has read green.
+      - name: metrics
+        port: 9707
   # Brings a second workload with it — flaresolverr, which renders attacker-supplied
   # Cloudflare pages. An INGRESS NetworkPolicy keeps it reachable from prowlarr alone;
   # ingress is the direction actually enforced on this cluster.
@@ -175,6 +187,12 @@ containers_list:
     port: 9696
     use_authelia: true
     auth_tier: one_factor
+    service_extra_ports:
+      # The exportarr sidecar's scrape port. Named, and so is the primary port the shared
+      # default renders beside it: Kubernetes rejects a Service mixing named and unnamed
+      # ports, and rejects it at APPLY time, after every repo-side check has read green.
+      - name: metrics
+        port: 9707
   - name: bazarr
     platform: k8s
     depends_on: [media-volume]
@@ -332,6 +350,8 @@ containers_list:
     platform: k8s
     port: 8000
     use_authelia: false
+    # Named Service port, which the shared default Service renders on request.
+    service_port_name: http
   # Brings three unrouted workloads with it — headless Chrome, Meilisearch and the
   # time-tagger — reached in-cluster by Service name. Those names are load-bearing:
   # karakeep addresses them exactly as it addressed the Compose service keys.
@@ -389,6 +409,8 @@ containers_list:
     port: 8080
     use_authelia: true
     auth_tier: one_factor
+    # Named Service port, which the shared default Service renders on request.
+    service_port_name: http
 
   # use_authelia false: forward-auth breaks the companion app, so HA's own login + TOTP is
   # the gate. Reaches mosquitto by Service name.
@@ -397,6 +419,8 @@ containers_list:
     hostname: "home-assistant"
     port: 8123
     use_authelia: false
+    # Named Service port, which the shared default Service renders on request.
+    service_port_name: http
 
   # LAN DNS on its own pinned VIP (dns_k8s_vip). Not seeded: blocklist state is declared in
   # the role defaults (pihole_k8s_adlists) and everything else in /etc/pihole regenerates.

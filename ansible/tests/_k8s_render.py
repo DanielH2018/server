@@ -27,6 +27,7 @@ from validate.k8s_manifests import (
     render_or_error,
     resolve_vars,
     role_defaults,
+    shared_default_templates,
 )
 
 
@@ -57,7 +58,12 @@ def _render_all():
         env.globals["lookup"] = make_lookup(ctx)
         register_ansible_filters(env)
 
-        for tpl in sorted(role_dir.glob("templates/*.j2")):
+        # The shared defaults come with the role's own templates: `k8s/manifests` renders a
+        # manifest from `ansible/templates/` for a basename the role names and ships no
+        # template for (#2872, `service.yaml` for 25 roles). Leaving them out would drop 25
+        # Services out of every guard built on this, silently.
+        own = sorted(role_dir.glob("templates/*.j2"))
+        for tpl in own + shared_default_templates(role):
             if tpl.name.endswith(".sh.j2") or tpl.name.startswith("Dockerfile"):
                 continue
             rendered, err = render_or_error(env, tpl.name, ctx)

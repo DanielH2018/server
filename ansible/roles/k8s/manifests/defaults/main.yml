@@ -87,3 +87,23 @@ manifests_rollout_timeout_default: 600s
 # hashed into its own pod template (`ansible/templates/checksum-annotation.yml.j2`), where the
 # apply itself does the rolling and `manifests_rolled_by_apply` reports it. Issue #2858.
 manifests_restart_triggers_default: [config, secret, image]
+
+# Manifest basenames this role renders from a SHARED template under `ansible/templates/` when
+# the caller's own role ships no `templates/<basename>.j2` (#2872). A role's own template
+# always wins; this is the fallback, not an override.
+#
+# `service.yaml` is the one entry. 22 roles' Service templates were byte-identical three-line
+# wrappers around the `service()` macro, differing only in the name and port the macro reads
+# off `container_item` anyway. The two variants they did carry — a named port, an exportarr
+# sidecar's second port — became `service_port_name` and `service_extra_ports` on the
+# containers_list entry, so the fallback covers all 22.
+#
+# The render task below resolves the source per file, so the fallback costs nothing for the
+# ~40 roles that ship their own Service, and the prune keep-set is unchanged: the caller still
+# names `service.yaml` in `manifests_files`, which is what the prune and the digest both read.
+#
+# `scripts/lib/k8s_roles.py:SHARED_MANIFEST_DEFAULTS` mirrors this map so the offline render
+# harnesses render what a deploy renders; `ansible/tests/k8s/test_shared_manifest_defaults.py`
+# holds the two in step.
+manifests_shared_defaults:
+  service.yaml: service-default.yaml.j2

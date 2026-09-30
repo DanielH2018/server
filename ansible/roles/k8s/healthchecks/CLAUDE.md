@@ -84,7 +84,8 @@ noticed instead of silently going quiet.
 
 ## Editing
 - Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
-  `templates/secret.yaml.j2`, `templates/service.yaml.j2`.
+  `templates/secret.yaml.j2`. The Service comes from the shared
+  `ansible/templates/service-default.yaml.j2`, which this role ships no template for.
 - Settings the PVC used to own: `files/strip_local_settings_owned.py`, tested by
   `tests/test_strip_local_settings_owned.py`.
 - Notification channel: `files/seed_discord_channel.py`, tested by
