@@ -29,9 +29,16 @@ from pathlib import Path
 
 from lib.repo_paths import ANSIBLE, REPO, SCRIPTS
 
-# Every directory holding tests that can import `lib.git_testing`: `pyproject.toml` puts
-# `scripts/` on `pythonpath` for the whole session, so depth does not matter.
-_TEST_ROOTS = (SCRIPTS, ANSIBLE / "tests", ANSIBLE / "roles")
+# Every `testpaths` entry, so the rule covers the same files pytest collects. All of them can
+# import `lib.git_testing`: `pyproject.toml` puts `scripts/` on `pythonpath` for the whole
+# session, so depth does not matter.
+_TEST_ROOTS = (
+    SCRIPTS,
+    ANSIBLE / "tests",
+    ANSIBLE / "roles",
+    REPO / ".claude" / "hooks",
+    REPO / ".claude" / "tests",
+)
 
 # Modules whose SUBJECT is the environment handling itself, or a subject's own environment
 # rather than a git call. Each keeps its raw form, and says why here.
