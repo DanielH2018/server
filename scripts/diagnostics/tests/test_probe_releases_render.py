@@ -11,10 +11,12 @@ Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_render.py
 import json
 import re
 from pathlib import Path
+from types import SimpleNamespace
 
 import pytest
 
 from diagnostics.probe_lib import releases as pr
+from diagnostics.probe_lib import releases_format as rf
 from diagnostics.probe_lib import releases_render as rr
 
 from _release_fixtures import _commit, _init_repo, _record, _set_origin_master
@@ -413,3 +415,25 @@ def test_an_unresolved_ref_is_flagged():
 def test_the_verdict_ladder_names_its_branch(release, render, expected):
     """A mismatch an untrustworthy record reports is UNKNOWN, never DRIFTED."""
     assert rr.digest_verdict(release, render, TIP)[0] == expected
+
+
+@pytest.mark.parametrize(
+    ("ns", "expected"),
+    [
+        pytest.param(SimpleNamespace(service=None, previous=False), True, id="table"),
+        pytest.param(
+            SimpleNamespace(service=None, previous=True), False, id="previous"
+        ),
+        pytest.param(
+            SimpleNamespace(service="littlelink", previous=False), False, id="service"
+        ),
+    ],
+)
+def test_only_the_flags_table_view_is_judged_at_all(ns, expected):
+    """`--previous` reads the release BEFORE the current one.
+
+    Its digest differs from what the ref renders by definition, so a digest verdict there
+    would mark the whole fleet drifted for having been superseded. `run_releases` reads this
+    once and gates BOTH verdicts on it.
+    """
+    assert rf.renders_flags_table(ns) is expected

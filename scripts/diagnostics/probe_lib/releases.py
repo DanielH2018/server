@@ -60,6 +60,7 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
     format_records,
     format_stale_kuma,
     format_stale_only,
+    renders_flags_table,
     write_counted_names,
 )
 
@@ -585,14 +586,12 @@ def run_releases(ns):
         return code
     merged = merged_commits(r.get("commit") for r in records)
     service = getattr(ns, "service", None)
-    # Skip the git subprocess work for a single-service lookup or a previous-record read --
-    # neither renders the flags table `stale` feeds.
-    stale = (
-        compute_stale(records)
-        if not service and not getattr(ns, "previous", False)
-        else {}
-    )
-    apply_digest_verdicts(stale, records)
+    # Both verdicts are skipped for the views that print no FLAGS column, and skipped
+    # TOGETHER -- `renders_flags_table` says why the digest half cannot run over an empty dict.
+    flags_table = renders_flags_table(ns)
+    stale = compute_stale(records) if flags_table else {}
+    if flags_table:
+        apply_digest_verdicts(stale, records)
     text, code = format_records(
         records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
     )
