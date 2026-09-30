@@ -20,9 +20,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import ui_login
 
-REPO_ROOT = os.path.dirname(
-    os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-)
+from lib.repo_paths import REPO as REPO_ROOT
+
 AUTHELIA_DEFAULTS = os.path.join(
     REPO_ROOT, "ansible", "roles", "k8s", "authelia", "defaults", "main.yml"
 )

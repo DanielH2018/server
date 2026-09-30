@@ -8,7 +8,6 @@ Run: uv run pytest scripts/dev/tests/test_fanout_launch.py
 import json
 import subprocess
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 
@@ -31,7 +30,7 @@ from fanout_lib.launch import (
 from fanout_lib.manifest import Batch, Manifest, load, new_run_id, save
 from _fanout_fakes import fake_tools, ok
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as REPO_ROOT
 
 ISSUES = [
     Issue(1345, "Traefik startupProbe has no red-proof", "body one\nline two"),

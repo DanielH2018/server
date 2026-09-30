@@ -27,8 +27,8 @@ spec:
     spec:
 {{ pod_shell('homelab-best-effort') }}
       initContainers:
-        # The compose template's `depends_on: n8n: condition: service_healthy`, which k8s has no
-        # equivalent for. Connecting to the SERVICE rather than the pod is what makes this a gate
+        # A start gate on n8n's READINESS, which k8s has no `depends_on` equivalent for.
+        # Connecting to the SERVICE rather than the pod is what makes this a gate
         # on readiness: a Service has no endpoints until its probe passes, so this cannot succeed
         # until n8n's /healthz does.
         #
@@ -58,8 +58,6 @@ spec:
           # binds no port, so it needs none.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
-            # Byte-identical to the compose template. `n8n` is a Service name here rather than a
-            # Compose service key, and resolves the same way.
             - name: N8N_RUNNERS_TASK_BROKER_URI
               value: "http://n8n:{{ n8n_k8s_broker_port }}"
             - name: N8N_RUNNERS_AUTH_TOKEN
@@ -67,9 +65,8 @@ spec:
                 secretKeyRef:
                   name: n8n
                   key: N8N_RUNNERS_AUTH_TOKEN
-          # The compose healthcheck is `pgrep -f task-runner-launcher` — a liveness test with no
-          # network component, which translates directly to exec. There is no HTTP endpoint to
-          # probe: this workload listens on nothing.
+          # `pgrep -f task-runner-launcher` — a liveness test with no network component, so an
+          # exec probe. There is no HTTP endpoint to probe: this workload listens on nothing.
           livenessProbe:
             exec:
               command:

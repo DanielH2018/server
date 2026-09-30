@@ -19,11 +19,11 @@ Run: uv run pytest scripts/tests/test_fqdn_links_js.py
 import json
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
+
 SCRIPT = REPO / "docs" / "assets" / "fqdn-links.js"
 
 pytestmark = pytest.mark.skipif(

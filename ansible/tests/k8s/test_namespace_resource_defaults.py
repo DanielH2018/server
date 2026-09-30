@@ -28,10 +28,8 @@ import subprocess
 
 from lib import yaml_fast
 from _k8s_render import rendered_docs
-from ansible.plugins.filter.core import combine
-from jinja2.nativetypes import NativeEnvironment
 from _helpers import REPO as _REPO
-from _helpers import load_yaml
+from _helpers import jinja_env, load_yaml
 
 
 _DEPLOY = _REPO / "ansible/deploy.yml"
@@ -92,10 +90,9 @@ def _homelab_ns_items() -> list[dict]:
         for t in _k8s_play().get("pre_tasks", [])
         if "Build the workload namespace manifest" in str(t.get("name", ""))
     )
-    env = NativeEnvironment()
-    # The real filter, not a shim: `combine` decides whether `type: Container` reaches the
-    # LimitRange at all, and that is the field this test is about.
-    env.filters["combine"] = combine
+    # `jinja_env` carries the real `combine`, not a shim: it decides whether
+    # `type: Container` reaches the LimitRange at all, and that is the field this test is about.
+    env = jinja_env()
 
     ctx = dict(_all_vars())
     ctx.update(_eval(task.get("vars", {}), ctx, env))

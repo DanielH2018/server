@@ -28,9 +28,9 @@ import subprocess
 import sys
 
 from lib import yaml_fast
+from lib.repo_paths import REPO
 
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
-REPO = pathlib.Path(__file__).resolve().parents[5]
 ROLE = pathlib.Path(__file__).resolve().parents[1]
 COMMON_FILES = REPO / "ansible" / "roles" / "setup" / "common" / "files"
 COPY_TASK_NAME = "Install the Longhorn reap-orphan classifier scripts"

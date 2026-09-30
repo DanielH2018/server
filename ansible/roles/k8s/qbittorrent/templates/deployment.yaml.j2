@@ -30,9 +30,8 @@ spec:
           - name: net.ipv4.conf.all.src_valid_mark
             value: "1"
       initContainers:
-        # A NATIVE SIDECAR — an initContainer with restartPolicy: Always. This is the k8s
-        # translation of Compose's `depends_on: {wireguard: {condition: service_healthy}}`, and
-        # it is not cosmetic: ordinary pod containers all start in parallel, so qbittorrent
+        # A NATIVE SIDECAR — an initContainer with restartPolicy: Always, and it is not
+        # cosmetic: ordinary pod containers all start in parallel, so qbittorrent
         # could begin talking to trackers in the seconds before the tunnel and its kill-switch
         # exist — traffic that would leave over eth0 in the clear. A sidecar's startupProbe
         # gates the main containers, so qbittorrent cannot start until wg0 is up.
@@ -103,8 +102,8 @@ spec:
             # and a cold pull of the mod makes that slower still.
             failureThreshold: 60
           livenessProbe:
-            # Both signals, as the Compose healthcheck does, and for its reason: if the mod
-            # fails at boot then wg0 AND the kill-switch are never installed, so a bare reach
+            # Both signals: if the mod fails at boot then wg0 AND the kill-switch are never
+            # installed, so a bare reach
             # for 1.1.1.1 LEAKS out eth0 and false-passes while the tunnel is dead. Asserting
             # wg0 first makes that state fail instead. Tolerant — only a sustained outage
             # restarts the tunnel.
@@ -122,8 +121,7 @@ spec:
         - name: qbittorrent
           image: {{ qbittorrent_k8s_image }}
           # No network configuration of its own: containers in a pod share one network
-          # namespace, which IS `network_mode: service:wireguard`. The one place this port is
-          # genuinely simpler than Compose.
+          # namespace, so it inherits the wireguard sidecar's.
           ports:
             - containerPort: {{ qbittorrent_k8s_webui_port }}
               name: webui
@@ -148,8 +146,7 @@ spec:
           volumeMounts:
             - name: qbittorrent-config
               mountPath: /config
-            # subPath, so this container sees ONLY torrents/ out of the shared media volume —
-            # the Compose mount's scoping, reproduced.
+            # subPath, so this container sees ONLY torrents/ out of the shared media volume.
             - name: media
               mountPath: /data/torrents
               subPath: {{ qbittorrent_k8s_torrents_subpath }}

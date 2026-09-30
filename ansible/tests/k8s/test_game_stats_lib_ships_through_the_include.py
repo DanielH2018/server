@@ -24,8 +24,9 @@ Run: uv run pytest ansible/tests/k8s/test_game_stats_lib_ships_through_the_inclu
 import ast
 from pathlib import Path
 
-from jinja2 import Environment
+from jinja2 import Undefined
 
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import K8S_ROLES, imported_module_ids, leaf_tasks, load_tasks, walk_tasks
 
 MODULE = "stats_lib"
@@ -180,7 +181,7 @@ def stage_contract(dest_dir: str = "/etc/rancher/k3s/synthetic") -> tuple[str, s
     assert copy_dest and fact_value, (
         "stage.yml no longer carries both the copy and the fact"
     )
-    env = Environment()
+    env = make_ansible_env(undefined_cls=Undefined)
     ctx = {DEST_VAR: dest_dir}
     return env.from_string(copy_dest).render(ctx), env.from_string(fact_value).render(
         ctx
@@ -291,7 +292,7 @@ def test_every_consumer_ships_stats_lib_by_interpolating_the_fact():
         dest_dir = declared[DEST_VAR]
         _, fact_value = stage_contract(dest_dir)
         rendered = (
-            Environment()
+            make_ansible_env(undefined_cls=Undefined)
             .from_string(cmds[0])
             .render({FACT: fact_value, "k8s_namespace": "ns"})
         )

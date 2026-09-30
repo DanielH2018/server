@@ -32,13 +32,12 @@ import json
 import re
 import subprocess
 import time
-from pathlib import Path
 
 import pytest
+from lib.repo_paths import REPO as REPO_ROOT
 
 pytestmark = pytest.mark.ui
 
-REPO_ROOT = Path(__file__).resolve().parents[3]
 WRAPPER = REPO_ROOT / "scripts" / "diagnostics" / "ui_mcp.sh"
 
 # Hardcoded, NOT derived from containers_list: deriving it would silently enlist every new

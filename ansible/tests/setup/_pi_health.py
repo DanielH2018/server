@@ -12,6 +12,7 @@ health log it appends to. Every decision the script makes runs unmodified.
 
 import subprocess
 import jinja2
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
 
 
@@ -126,7 +127,7 @@ def render(name, tmp_path, jinja_vars=None):
     }
     context.update(jinja_vars or {})
     body = (
-        jinja2.Environment(undefined=jinja2.StrictUndefined)
+        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
         .from_string(template.read_text())
         .render(**context)
     )

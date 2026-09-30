@@ -51,8 +51,8 @@ sonarr_k8s_size: 2Gi
 # wrong does not fail at startup; it fails as a library that looks intact until an import.
 sonarr_k8s_media_claim: media-data
 
-# TheCaptain989's striptracks mod, as the compose template runs it (there is no separate
-# `sonarr-striptracks` — the radarr-named image auto-detects which app it is in).
+# TheCaptain989's striptracks mod (there is no separate `sonarr-striptracks` — the
+# radarr-named image auto-detects which app it is in).
 sonarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
 sonarr_k8s_cpu_limit: "1"

@@ -13,7 +13,7 @@ server:
     # the "Maximum number of concurrent DNS queries reached" warning). so-reuseport
     # defaults to yes, so each thread gets its own listening socket. NB: outgoing-range
     # (8192, from the base config) is PER THREAD — 2 threads need ~16k outgoing sockets,
-    # so the compose service raises nofile to match (default ~8k only covers one thread).
+    # so nofile must cover both threads (containerd's 1048576 default does).
     num-threads: 2
 
     # ── Caching ──────────────────────────────────────────────────────────────

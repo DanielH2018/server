@@ -7,14 +7,14 @@ Run: uv run pytest scripts/deploy_tools/tests/test_pinned_rotation_gates.py
 import io
 import subprocess
 from datetime import UTC, datetime
-from pathlib import Path
 
 import pytest
 from _gates_fakes import fake_tools
 from deploy_tools import pinned_rotation_gates as gates
 from lib import kubectl, yaml_fast
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _RUNBOOK = _REPO / "docs" / "secret-rotation.md"
 
 NOW = 1_800_000_000.0

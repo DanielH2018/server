@@ -21,7 +21,8 @@ from _deploy_sh_fakes import stub_path as _stub_path
 from lib import exit_codes as ec
 from deploy_tools.land_lib import tools
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _TICK_SH = _REPO / "scripts" / "deploy_tools" / "gitops_tick.sh"
 
 # A fixed boot clock, handed to gitops_tick.sh through GITOPS_TICK_UPTIME_SOURCE, so the

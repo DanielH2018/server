@@ -20,16 +20,14 @@ spec:
         app: peanut
         netpol-baseline: enforced
     spec:
-      # No runAsUser pinned, mirroring littlelink: the compose template sets no `user:` either
-      # (the image's own non-root `node` user is what has been serving this page), so pinning a
-      # UID here would be a behaviour change smuggled in under a platform move. fsGroup is set
-      # instead — it's added as a supplementary group to the container process regardless of
-      # which UID the image actually runs as, which is what makes the /app/config emptyDir
-      # group-writable without knowing that UID. Mirrors the compose template's
-      # `tmpfs: /app/config:mode=1777`, which sidesteps the same unknown-UID problem the other way.
+      # No runAsUser pinned, mirroring littlelink: the image's own non-root `node` user is
+      # what serves this page, and pinning a UID here would be an unrelated behaviour change.
+      # fsGroup is set instead — it's added as a supplementary group to the container process
+      # regardless of which UID the image actually runs as, which is what makes the
+      # /app/config emptyDir group-writable without knowing that UID.
 {{ pod_shell('homelab-best-effort', fs_group=1000) }}
-      # PeaNUT WRITES /config (it persists UI settings beside settings.yml — the compose
-      # template's writable ./peanut-config bind). A read-only subPath mount there EROFS'd
+      # PeaNUT WRITES /config (it persists UI settings beside settings.yml). A read-only
+      # subPath mount there EROFS'd
       # the app at first deploy (2026-08-12), so the Secret seeds a writable emptyDir
       # instead, same copy-not-mount shape as the app-config scratch below.
       initContainers:
@@ -71,9 +69,9 @@ spec:
             # Writable /config seeded with settings.yml by the init container above.
             - name: peanut-config
               mountPath: /config
-            # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent from
-            # the image, not part of the settings mount above) — the compose template's
-            # `tmpfs: /app/config:mode=1777` equivalent.
+            # auth.yaml is regenerated from WEB_USERNAME/WEB_PASSWORD at every boot (absent
+            # from the image, not part of the settings mount above), so /app/config has to be
+            # writable scratch.
             - name: peanut-app-config
               mountPath: /app/config
           readinessProbe:

@@ -23,10 +23,11 @@ trying to tar a directory that is gone.
 import ast
 
 import pytest
-from jinja2 import Environment, StrictUndefined
+from jinja2 import StrictUndefined
 
 
 from _helpers import load_tasks
+from lib.ansible_jinja_env import make_ansible_env
 from lib import yaml_fast
 
 from validate.k8s_manifests import (
@@ -35,7 +36,6 @@ from validate.k8s_manifests import (
     BASE_CONTEXT,
     K8S_ROLES,
     load_yaml,
-    register_ansible_filters,
     resolve_vars,
     role_defaults,
 )
@@ -68,8 +68,7 @@ def _include(task: dict) -> dict:
 def seed_runs(host: str, overrides: dict | None = None) -> bool:
     """Whether the k8s/volume-claim include's `when:` holds for this host."""
     ctx = _context(host, overrides)
-    env = Environment(undefined=StrictUndefined)
-    register_ansible_filters(env)
+    env = make_ansible_env(undefined_cls=StrictUndefined)
     for task in load_tasks(_TASKS):
         if _include(task).get("name") != "k8s/volume-claim":
             continue
@@ -83,8 +82,7 @@ def seed_runs(host: str, overrides: dict | None = None) -> bool:
 def manifest_files(host: str, overrides: dict | None = None) -> list[str]:
     """The manifest list k8s/manifests is handed, with this host's variables applied."""
     ctx = _context(host, overrides)
-    env = Environment(undefined=StrictUndefined)
-    register_ansible_filters(env)
+    env = make_ansible_env(undefined_cls=StrictUndefined)
     for task in load_tasks(_TASKS):
         if _include(task).get("name") != "k8s/manifests":
             continue
@@ -150,8 +148,7 @@ def test_the_two_creators_agree_on_the_claim(overrides: dict | None) -> None:
         .replace("{{ volume_claim_size }}", ctx["freshrss_k8s_size"])
         .replace("{{ k8s_namespace }}", ctx["k8s_namespace"])
     )
-    env = Environment(undefined=StrictUndefined)
-    register_ansible_filters(env)
+    env = make_ansible_env(undefined_cls=StrictUndefined)
     role_pvc = yaml_fast.safe_load(
         env.from_string(
             (K8S_ROLES / _ROLE / "templates" / "pvc.yaml.j2").read_text()
@@ -166,8 +163,7 @@ def test_the_deployment_references_the_claim_the_flag_creates() -> None:
     A rename on one side alone passes every check above.
     """
     ctx = _context(_HOST, _UNSEEDED)
-    env = Environment(undefined=StrictUndefined)
-    register_ansible_filters(env)
+    env = make_ansible_env(undefined_cls=StrictUndefined)
     pvc = yaml_fast.safe_load(
         env.from_string(
             (K8S_ROLES / _ROLE / "templates" / "pvc.yaml.j2").read_text()

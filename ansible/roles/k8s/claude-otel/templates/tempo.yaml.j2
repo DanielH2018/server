@@ -90,9 +90,8 @@ spec:
     spec:
       # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
       # in this role's CLAUDE.md.
-      # The compose bundle needs a `tempo-init` sidecar that runs `chown -R 10001:10001
-      # /var/tempo` before Tempo starts. k8s does that natively: the kubelet applies fsGroup
-      # ownership to the volume at mount time, so the init container has no equivalent here.
+      # No init container chowns /var/tempo: the kubelet applies fsGroup ownership to the
+      # volume at mount time, which is what Tempo's non-root uid 10001 needs.
       #
       # fsGroup ORs group bits onto everything on the volume, which bit Traefik's acme.json
       # (it requires 0600 and refuses group-readable). Tempo wants group ownership, so this

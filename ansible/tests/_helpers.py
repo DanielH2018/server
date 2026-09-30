@@ -19,13 +19,13 @@ from pathlib import Path
 from typing import Iterator
 
 from lib import yaml_fast
+from lib.repo_paths import REPO
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
 from ansible.plugins.test.core import TestModule as _AnsibleTests
 from jinja2 import FileSystemLoader
 from jinja2.nativetypes import NativeEnvironment
 
-REPO = Path(__file__).resolve().parents[2]
 ANSIBLE = REPO / "ansible"
 ROLES = ANSIBLE / "roles"
 K8S_ROLES = ROLES / "k8s"

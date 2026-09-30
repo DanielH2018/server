@@ -28,6 +28,9 @@ Design contract (mirrors the other hooks here):
 Stdout is injected as session context by Claude Code (same mechanism the remember plugin uses).
 """
 
+# DECIDED: return [] on any error, so a broken health read never blocks a session start;
+# SESSION_HEALTH_VERBOSE=1 forces output.
+
 import json
 import os
 import subprocess

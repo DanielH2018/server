@@ -16,6 +16,7 @@ import subprocess
 
 import jinja2
 
+from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
 
 # `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
@@ -41,7 +42,7 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
     recorded.
     """
     body = (
-        jinja2.Environment(undefined=jinja2.StrictUndefined)
+        make_ansible_env(undefined_cls=jinja2.StrictUndefined)
         .from_string(TEMPLATE.read_text())
         .render(
             domain="example.test",

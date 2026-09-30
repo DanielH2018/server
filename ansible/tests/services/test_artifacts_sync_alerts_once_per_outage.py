@@ -22,8 +22,9 @@ import os
 import subprocess
 from pathlib import Path
 
-from jinja2 import Environment
+from jinja2 import Undefined
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ROLES, load_defaults
 
@@ -44,7 +45,11 @@ def _runner(tmp_path: Path):
     defaults = dict(DEFAULTS)
     defaults["artifacts_peer_dir"] = str(tmp_path / "peer")
     script = tmp_path / "sync-artifacts.sh"
-    script.write_text(Environment().from_string(SCRIPT.read_text()).render(**defaults))
+    script.write_text(
+        make_ansible_env(undefined_cls=Undefined)
+        .from_string(SCRIPT.read_text())
+        .render(**defaults)
+    )
     (tmp_path / "peer" / PEER).mkdir(parents=True)
     stub = tmp_path / "outcome"
     journal = tmp_path / "journal"
@@ -157,7 +162,11 @@ def test_the_ssh_transport_drops_inherited_local_forwards():
     entry applies here too — and a bind collision on that port fails the connection, taking the
     sync with it. The flag has no other effect on an rsync transport.
     """
-    rendered = Environment().from_string(SCRIPT.read_text()).render(**DEFAULTS)
+    rendered = (
+        make_ansible_env(undefined_cls=Undefined)
+        .from_string(SCRIPT.read_text())
+        .render(**DEFAULTS)
+    )
     transports = [line for line in rendered.splitlines() if "-e 'ssh" in line]
     assert transports, rendered
     assert all("ClearAllForwardings=yes" in line for line in transports), transports

@@ -1,10 +1,5 @@
 ---
-# Reactivated 2026-08-13 straight onto k3s, NOT back onto Docker: the Docker edge retired at
-# E7 and Phase F is draining daniel-server, so the archived compose role and the
-# archive/CLAUDE.md reactivation recipe both described a topology that no longer exists.
-# #2385 deleted both; they are `git show
-# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/valheim/` and
-# `…:ansible/roles/containers/archive/CLAUDE.md`. terraria is the sibling this role copies.
+# Reactivated 2026-08-13 straight onto k3s. terraria is the sibling this role copies.
 
 # The upstream repo moved: lloesche/valheim-server-docker is now community-valheim-tools,
 # and only the new package publishes semver tags (the old ghcr.io/lloesche/valheim-server
@@ -239,8 +234,8 @@ valheim_k8s_server_storage_class: longhorn-nobackup
 valheim_k8s_server_update_transient_bytes: 3221225472
 
 # ── server identity ─────────────────────────────────────────────────────────────────────
-# Name and world carried over from the Docker compose so returning players' saved entries
-# and the existing world keep matching. The password did NOT carry over: the old value was
+# Name and world are unchanged from the pre-migration server, so returning players' saved
+# entries and the existing world keep matching. The password did NOT carry over: the old value was
 # hardcoded in this PUBLIC repo's history (c3330c5a replaced it with a variable but the
 # plaintext is still in the log), so it is treated as disclosed and a fresh one lives in
 # SOPS as valheim_server_pass.

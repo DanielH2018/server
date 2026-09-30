@@ -8,14 +8,16 @@ records its calls to a log the assertions read.
 Run: uv run pytest scripts/validate/tests/test_renovate_config_retry.py
 """
 
+from pathlib import Path
+
 import os
 import shutil
 import subprocess
-from pathlib import Path
 
 import pytest
 
-REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO
+
 SCRIPT = REPO / "scripts" / "validate" / "renovate_config.sh"
 
 # Fails until the call count reaches NPM_FAILURES, then "installs" a validator stub whose

@@ -82,9 +82,11 @@ containers_list:
   - name: wg-easy
     port: 51821
     udp_port: 51822
-    # Accepted risk: LAN-only host, so no Authelia AND no PASSWORD_HASH — the admin UI is
-    # open to anyone on the Pi's LAN (it's bound to the LAN IP, never internet-exposed or on
-    # the tunnel). To gate it, add a PASSWORD_HASH env from SOPS. See the wg-easy CLAUDE.md.
+    # DECIDED: no Authelia and no PASSWORD_HASH on the Pi's wg-easy UI (accepted risk
+    # 2026-06-23); the UI binds the LAN IP. See ansible/roles/containers/wg-easy/CLAUDE.md.
+    # LAN-only host, so the admin UI is open to anyone on the Pi's LAN (it's bound to the LAN
+    # IP, never internet-exposed or on the tunnel). To gate it, add a PASSWORD_HASH env from
+    # SOPS.
     use_authelia: false
     networks:
       - proxy

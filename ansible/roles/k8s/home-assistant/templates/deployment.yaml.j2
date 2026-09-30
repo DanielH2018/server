@@ -95,7 +95,7 @@ spec:
           image: {{ home_assistant_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap posture: drop ALL, add the s6 privilege-drop set. No
+          # Drop ALL, add the s6 privilege-drop set. No
           # NET_BIND_SERVICE — HA binds 8123. allowPrivilegeEscalation false mirrors
           # no-new-privileges:true (s6 goes root -> PUID, never up).
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'FOWNER', 'DAC_OVERRIDE']) }}
@@ -114,8 +114,8 @@ spec:
             # HA's .cache is re-derived; kopia excluded it (.cache/), and on block-level backups its churn is what costs.
             - name: home-assistant-cache
               mountPath: /config/.cache
-          # HA is a slow first-booter (the LSIO permissions pass, then core start before :8123
-          # binds) — the compose healthcheck carries start_period 120s for the same reason.
+          # HA is a slow first-booter: the LSIO permissions pass, then core start before
+          # :8123 binds.
           # DECIDED: exec-curl to 127.0.0.1, not httpGet — HA's ip_ban middleware runs on EVERY
           # request, and it keys on the peer address. A kubelet httpGet arrives from the node's
           # pod-network gateway (10.42.0.1), so once anything gets that IP banned HA answers 403
@@ -124,8 +124,8 @@ spec:
           # 127.0.0.1, which no ban can reach. Readiness moves too: fixing liveness alone just
           # relocates the outage to a yanked Service endpoint.
           # curl over tcpSocket: tcpSocket also escapes the ban but stops proving HTTP works, so a
-          # wedged HA still holding the listener would pass. curl is proven present in this image —
-          # it was the Compose healthcheck (`curl --fail -s http://localhost:8123/`) pre-migration.
+          # wedged HA still holding the listener would pass. curl is proven present in this
+          # image — it was the pre-migration healthcheck's binary.
           # timeoutSeconds: exec probes default to 1s; curl -m 4 keeps curl's deadline inside it.
           readinessProbe:
             exec:

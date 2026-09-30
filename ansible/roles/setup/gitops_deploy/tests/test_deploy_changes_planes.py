@@ -10,10 +10,10 @@ imported task file that classifies as EMPTY is the same silent ff-merge from the
 
 # ansible/roles/setup/gitops_deploy/tests/test_deploy_changes_planes.py
 
-import pathlib
-
 import pytest
 import yaml
+
+from lib.repo_paths import REPO as _REPO_ROOT
 
 from deploy_changes import (
     ChangeSet,
@@ -250,8 +250,6 @@ def test_broad_stays_true_for_every_split_arm():
 
 
 # ── deploy.yml's imported task files must reach the classifier ────────────────────────────────
-
-_REPO_ROOT = pathlib.Path(__file__).resolve().parents[5]
 
 
 def _task_imports(playbook) -> set[str]:

@@ -760,10 +760,9 @@ spec:
           image: {{ jellyfin_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair MINUS FOWNER and DAC_OVERRIDE.
-          # Those two existed only so the opencl-intel DOCKER_MODS installer's root dpkg
-          # unpack could chmod files it did not own. That mod is gone (D8), so the caps go
-          # with it rather than being carried over out of habit.
+          # The s6 privilege-drop set MINUS FOWNER and DAC_OVERRIDE. Those two existed only
+          # so the opencl-intel DOCKER_MODS installer's root dpkg unpack could chmod files it
+          # did not own. That mod is gone (D8), so the caps went with it.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID']) }}
           env:
             - name: PUID
@@ -774,19 +773,20 @@ spec:
               value: "{{ tz }}"
             - name: JELLYFIN_PublishedServerUrl
               value: "{{ jellyfin_k8s_published_url }}"
+{# DECIDED: no nodeSelector; the bound media-data local PV's nodeAffinity pins this pod to
+   daniel-box, where the AMD VAAPI device is. #}
           volumeMounts:
             - name: jellyfin-config
               mountPath: /config
-            # BOTH media mounts are read-only, carried over from the Compose template (2026-07-03):
-            # jellyfin only READS the library. SaveLocalMetadata is off in every library, artwork
+            # BOTH media mounts are read-only (2026-07-03): jellyfin only READS the library. SaveLocalMetadata is off in every library, artwork
             # and trickplay live in /config, and every writer has its own mount. This caps the
             # blast radius of the one internet-facing, Authelia-less media parser.
             #
             # subPath `media`, NOT the volume root — and this is where B5 first got it wrong.
             # The *arrs mount the WHOLE tree at /data because their databases store
-            # /data/media/tv/... and they hardlink from /data/torrents. jellyfin's Compose mount
-            # was `containers/data/media:/data`, one level DEEPER, so its library paths are
-            # /data/tv and /data/movies with no `media` component. Mounting the root here put
+            # /data/media/tv/... and they hardlink from /data/torrents. jellyfin's own mount is
+            # one level DEEPER, so its library paths are /data/tv and /data/movies with no
+            # `media` component. Mounting the root here put
             # /data/media and /data/torrents in front of it, the libraries pointed at paths that
             # no longer existed, and every playback failed with an IO error on
             # /data/tv/... while the pod stayed Ready and the UI listed the whole library from
@@ -795,14 +795,13 @@ spec:
               mountPath: /data
               subPath: media
               readOnly: true
-            # THE SAME TREE AGAIN, DELIBERATELY (D4 / compose review M4). janitorr mounts the
+            # THE SAME TREE AGAIN, DELIBERATELY (D4). janitorr mounts the
             # data root at /data and hands Jellyfin a leaving-soon dir of /data/media/leaving-soon,
             # whose symlink TARGETS are /data/media/tv/... — those resolve only if /data/media/*
             # exists in THIS namespace too. Reproduce it; do not tidy it. Moving the libraries
             # instead would mean editing paths in Jellyfin's own database.
-            # Same subPath again, at the deeper path — reproducing Compose's second
-            # `containers/data/media:/data/media` mount exactly, which lands the media directory
-            # on top of the real `media` subdirectory that already exists inside it.
+            # Same subPath again, at the deeper path, which lands the media directory on top
+            # of the real `media` subdirectory that already exists inside it.
             - name: media
               mountPath: /data/media
               subPath: media
@@ -846,8 +845,10 @@ spec:
             initialDelaySeconds: 15
             periodSeconds: 10
             timeoutSeconds: 5
+{# DECIDED: no startupProbe; its case is a first-boot DOCKER_MODS install, which this image does
+   not run, and the liveness initialDelaySeconds covers a measured 60s boot. #}
           # start-up on a slow or post-update boot runs a library scan and hardware-init before
-          # /health answers; the compose healthcheck allows 60s for the same reason.
+          # /health answers.
           livenessProbe:
             httpGet:
               path: /health

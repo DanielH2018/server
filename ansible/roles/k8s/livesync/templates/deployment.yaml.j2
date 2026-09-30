@@ -53,11 +53,11 @@ spec:
           image: {{ livesync_k8s_image }}
           ports:
             - containerPort: {{ container_item.port }}
-          # The compose template's cap_drop/cap_add pair: CouchDB's entrypoint chowns
-          # /opt/couchdb/data and then drops to the couchdb user via setpriv.
+          # CouchDB's entrypoint chowns /opt/couchdb/data and then drops to the couchdb user
+          # via setpriv.
           #
-          # FOWNER is the one addition, and it is required HERE and not in Docker because
-          # the volume is an ext4 Longhorn PVC rather than a bind mount, so it carries a
+          # FOWNER is the one addition, and it is required because the volume is an ext4
+          # Longhorn PVC rather than a bind mount, so it carries a
           # lost+found at mode 0700. The entrypoint's second pass is
           #   find /opt/couchdb/data -type d ! -perm 0755 -exec chmod -f 0755 {} +
           # which on daniel-server matches nothing (that tree is already all 0755). Here it
@@ -68,8 +68,7 @@ spec:
           #
           # The failure mode is worth recording because it is invisible: the container exits
           # 1 having logged absolutely nothing, which reads like a crashed image rather than
-          # a permission error. Found with `bash -x` on the entrypoint. The compose template
-          # predicted it — "Add FOWNER if it complains".
+          # a permission error. Found with `bash -x` on the entrypoint.
 {{ hardened_security_context(add=['CHOWN', 'SETUID', 'SETGID', 'DAC_OVERRIDE', 'FOWNER']) }}
           env:
             - name: COUCHDB_USER
@@ -86,9 +85,9 @@ spec:
               mountPath: /opt/couchdb/etc/local.d
           # An exec probe, not httpGet, because local.ini sets require_valid_user = true: BOTH
           # `/` and `/_up` answer 401 to an unauthenticated request. Measured against the running
-          # Docker container, which is why this is not the compose healthcheck's shape — that one
-          # is `curl -s` with no -f, so it passes on the 401 and proves only that a socket
-          # answered. A k8s httpGet treats 401 as failure, so the pod would never go ready.
+          # Docker container. A `curl -s` with no -f passes on the 401 and proves only that a
+          # socket answered, and a k8s httpGet treats 401 as failure, so the pod would never
+          # go ready.
           #
           # The credential comes from the container's own env, so it appears in no manifest.
           # `/_up` is CouchDB's health endpoint and returns {"status":"ok"} once the node is

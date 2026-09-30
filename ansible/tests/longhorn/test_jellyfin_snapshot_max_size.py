@@ -16,10 +16,9 @@ rewritten-and-wrong one does not.
 Run: uv run pytest ansible/tests/longhorn/test_jellyfin_snapshot_max_size.py
 """
 
-import jinja2
 import pytest
 
-from _helpers import ANSIBLE, load_defaults
+from _helpers import ANSIBLE, load_defaults, render_expr
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 TASKS = ANSIBLE / "roles" / "k8s" / "jellyfin" / "tasks" / "main.yml"
@@ -28,9 +27,7 @@ GIB = 1024**3
 
 
 def _resolve(expression: str, size: str) -> int:
-    return int(
-        jinja2.Environment().from_string(expression).render(jellyfin_k8s_size=size)
-    )
+    return int(render_expr(expression, jellyfin_k8s_size=size))
 
 
 def _assert_cap_is_legal(expression: str, size: str) -> None:

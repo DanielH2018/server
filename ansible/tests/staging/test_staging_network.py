@@ -27,7 +27,8 @@ import xml.etree.ElementTree as ET
 
 import pytest
 from lib import yaml_fast
-from jinja2 import Environment, FileSystemLoader
+from jinja2 import Undefined
+from lib.ansible_jinja_env import template_env
 from _helpers import ANSIBLE
 
 
@@ -54,10 +55,7 @@ def _vars():
 
 
 def _rendered():
-    env = Environment(
-        loader=FileSystemLoader(str(ROLE / "templates")),
-        keep_trailing_newline=True,
-    )
+    env = template_env(ROLE / "templates", undefined_cls=Undefined)
     return env.get_template(TEMPLATE).render(**_vars())
 
 

@@ -20,7 +20,8 @@ import subprocess
 import tomllib
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
+
 PREK_TOML = REPO / "prek.toml"
 
 

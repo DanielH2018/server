@@ -25,12 +25,11 @@
   is quantiles, which on a homelab's apiserver nobody acts on. Error rates and request rates are
   the signals that get read, and both come from `_count`.
 
-  etcd_request_duration_seconds_bucket is the one exception, kept deliberately: etcd write
-  latency is the early-warning signal the control-plane scrape was justified by, and a quantile
-  is the whole point of watching it. It is also, usefully, available from the apiserver's side
-  WITHOUT `--etcd-expose-metrics` — so this one family delivers a good part of what the gated
-  etcd job would add.
 #}
+{# DECIDED: etcd_request_duration_seconds_bucket is kept, although it is the largest family in
+   the TSDB; etcd write latency is the signal the control-plane scrape exists for. It is also,
+   usefully, available from the apiserver's side WITHOUT `--etcd-expose-metrics`, so this one
+   family delivers a good part of what the gated etcd job would add. #}
 {#
   An EXPLICIT list, not `_bucket` minus an exception. Prometheus matches with RE2, which has no
   lookaround at all — a `(?!etcd_...)` negative-lookahead spelling does not error, it simply

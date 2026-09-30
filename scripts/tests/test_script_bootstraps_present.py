@@ -51,7 +51,8 @@ import tomllib
 from functools import lru_cache
 from pathlib import Path
 
-REPO = Path(__file__).resolve().parents[2]
+from lib.repo_paths import REPO
+
 SCRIPTS = REPO / "scripts"
 
 _PYPROJECT = tomllib.loads((REPO / "pyproject.toml").read_text())

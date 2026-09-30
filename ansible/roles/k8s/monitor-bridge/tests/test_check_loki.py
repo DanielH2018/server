@@ -10,7 +10,6 @@ zero — the freshness analogue of the SMART and restore-drill checks.
 """
 
 import re
-from pathlib import Path
 
 from dataclasses import fields, replace
 
@@ -20,7 +19,7 @@ import bridge.config
 import bridge.net
 import checks.logs
 
-_REPO = Path(__file__).resolve().parents[5]
+from lib.repo_paths import REPO as _REPO
 
 # ── HA ip_ban arm (2026-08-23: a banned infra IP 403'd the probes into a crash loop) ────────
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's

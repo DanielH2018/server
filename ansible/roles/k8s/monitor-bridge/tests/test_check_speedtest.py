@@ -8,7 +8,6 @@ serialization, which is the detail the age arm turns on.
 from dataclasses import replace
 
 from datetime import datetime, timezone
-from pathlib import Path
 
 
 import bridge.config
@@ -16,7 +15,6 @@ import bridge.net
 import checks.host_edge
 import verdicts.host
 
-_REPO = Path(__file__).resolve().parents[5]
 
 # ── speedtest-tracker's newest result row ────────────────────────────────────────────────
 # speedtest_verdict judges one row of /api/v1/results. The rows below are trimmed copies of

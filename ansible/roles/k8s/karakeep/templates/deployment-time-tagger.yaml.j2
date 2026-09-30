@@ -22,8 +22,8 @@ spec:
     spec:
 {{ pod_shell('homelab-standard') }}
       initContainers:
-        # The compose template gates this container on `depends_on: karakeep: condition:
-        # service_healthy`, which has NO k8s equivalent — pods start in parallel. Without this
+        # A start gate on karakeep being READY, which has NO k8s `depends_on` equivalent —
+        # pods start in parallel. Without this
         # the tagger raced the app, failed its initial connection check against
         # /api/v1/users/me with ECONNREFUSED, and crashed; observed on the first deploy.
         #
@@ -68,10 +68,11 @@ spec:
           # Runtime deps are version-pinned rather than floating so a container start does not
           # silently re-resolve them to whatever is newest on PyPI — the same silent drift the
           # base-image digest pin closes, one layer down. Renovate tracks each pin via a custom
-          # manager, so they age visibly. Kept identical to the compose command, minus the
-          # rotated-log prune: the script's loguru sink rotates into the working directory, which
-          # on Docker was the container's writable layer that nothing cleaned. Here the working
-          # directory is an emptyDir that dies with the pod, so the prune has nothing to do.
+          # manager, so they age visibly. The command carries no rotated-log prune: the
+          # script's loguru sink rotates into the working directory, which here is an emptyDir
+          # that dies with the pod, so a prune would have nothing to do.
+{# DECIDED: a plain (non-subPath) ConfigMap mount under a re-exec loop, so an edited script
+   takes effect after kubelet syncs, with no rollout. #}
           command:
             - bash
             - -c
@@ -152,8 +153,8 @@ spec:
               mountPath: /uv-cache
             - name: time-tagger-work
               mountPath: /work
-          # The compose healthcheck, unchanged: /tmp/healthy is touched only after a SUCCESSFUL
-          # run, so a hung or persistently failing tagger goes stale even though the process is
+          # /tmp/healthy is touched only after a SUCCESSFUL run, so a hung or persistently
+          # failing tagger goes stale even though the process is
           # alive. The loop sleeps 900s, so <2100 allows one missed cycle. No readiness probe —
           # nothing routes to this and nothing waits on it, so readiness would only add a state
           # that means nothing.

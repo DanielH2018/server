@@ -39,7 +39,8 @@ from _deploy_sh_fakes import (
 )
 from _process_waits import wait_for_exit
 
-_REPO = Path(__file__).resolve().parents[3]
+from lib.repo_paths import REPO as _REPO
+
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
 # The playbook stub's sleep, and the bound the `--detach` case checks its parent returned

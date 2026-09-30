@@ -70,9 +70,9 @@ spec:
           # The uid is explicit because `runAsNonRoot` alone pins nothing, and the kubelet
           # refuses a container whose image names its user rather than numbering it — `node`
           # is a name. PID 1 (`tini`) measured at uid 1000 on 2026-08-31, so this is a no-op.
-          # The compose template's cap_drop: ALL with no cap_add. The image runs as `node`
-          # (uid 1000) and the seeded tree is uid 1000 too — tar restored it with
-          # --numeric-owner — so nothing here needs CHOWN or DAC_OVERRIDE.
+          # Drop ALL with no cap_add. The image runs as `node` (uid 1000) and the seeded tree
+          # is uid 1000 too — tar restored it with --numeric-owner — so nothing here needs
+          # CHOWN or DAC_OVERRIDE.
 {{ hardened_security_context(non_root=true, run_as_user=1000) }}
           env:
             - name: TZ
@@ -181,10 +181,10 @@ spec:
               value: "true"
             - name: N8N_RUNNERS_MODE
               value: external
-            # Binds the broker on all interfaces (n8n has no per-interface bind option). Under
-            # Compose that exposed it to `apps` siblings; here it would be every pod in
-            # {{ k8s_namespace }}. networkpolicy.yaml.j2 is what actually narrows that to the
-            # runners pod — the auth token below is the second layer, not the only one.
+            # Binds the broker on all interfaces (n8n has no per-interface bind option), so
+            # every pod in {{ k8s_namespace }} could reach it. networkpolicy.yaml.j2 is what
+            # actually narrows that to the runners pod — the auth token below is the second
+            # layer, not the only one.
             - name: N8N_RUNNERS_BROKER_LISTEN_ADDRESS
               value: 0.0.0.0
             - name: N8N_NATIVE_PYTHON_RUNNER
@@ -192,8 +192,11 @@ spec:
             - name: N8N_RUNNERS_TASK_REQUEST_TIMEOUT
               value: "300"
             # Keeps database.sqlite small (it once hit 840M of execution history, and its daily
-            # page churn was the biggest single driver of B2 billable growth). Carried across
-            # verbatim from the compose template, where the full reasoning lives.
+            # page churn was the biggest single driver of B2 billable growth, 2026-07-03). The
+            # Kopia backup only needs workflows and credentials, so successful-run data is not
+            # saved at all (the operator never reads it; errors still are), the rest is pruned
+            # after 3 days, and the DB is compacted on startup so the space returns to the
+            # filesystem. At 168h with save-all the post-vacuum DB was still 214M.
             - name: EXECUTIONS_DATA_SAVE_ON_SUCCESS
               value: none
             - name: EXECUTIONS_DATA_PRUNE
@@ -215,9 +218,8 @@ spec:
             # n8n's .cache is re-derived (kopia's .cache/ rule).
             - name: n8n-cache
               mountPath: /home/node/.n8n/.cache
-          # The compose healthcheck's endpoint, as an httpGet. /healthz answers 200 without
-          # credentials — it is n8n's own liveness endpoint, not a routed one, so Authelia is
-          # not in the path here.
+          # /healthz answers 200 without credentials — it is n8n's own liveness endpoint, not
+          # a routed one, so Authelia is not in the path here.
           readinessProbe:
             httpGet:
               path: /healthz

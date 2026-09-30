@@ -85,9 +85,9 @@ spec:
             # the read-only kubeconfig can read; it only sees the Secret's name.
             - secretRef:
                 name: pihole-env
-          # Same cap set as the Docker compose (documented there line-by-line): FTL binds
-          # <1024 ports, applies file caps to its own binary at startup (SETFCAP — without it
-          # "unable to set CAP_SETFCAP ... Cannot run as non-root"), and the s6 init chowns
+          # FTL binds <1024 ports, applies file caps to its own binary at startup (SETFCAP —
+          # without it "unable to set CAP_SETFCAP ... Cannot run as non-root"), and the s6
+          # init chowns
           # /etc/pihole then drops privileges. Runs as root by image design — the DAC_OVERRIDE
           # memory's "use the pod uid" fix does not fit an image whose entrypoint demands the
           # drop-privileges dance. No NET_RAW: that was for DHCP raw sockets, and this copy is
@@ -125,9 +125,8 @@ spec:
           image: {{ pihole_k8s_unbound_image }}
           # Starts as root to read its config, then drops to the unbound user — SETUID/SETGID
           # only. No NET_BIND_SERVICE: it listens on {{ pihole_k8s_unbound_port }} (>1024)
-          # here, unlike the Docker copy's :53. The compose's nofile ulimit (32768, for
-          # num-threads: 2 × outgoing-range 8192) has no k8s equivalent — containerd's
-          # default (1048576) already clears it.
+          # here. A nofile ulimit (32768, for num-threads: 2 × outgoing-range 8192) needs no
+          # k8s equivalent — containerd's default (1048576) already clears it.
 {{ hardened_security_context(add=['SETUID', 'SETGID']) }}
           volumeMounts:
             - name: dns-config

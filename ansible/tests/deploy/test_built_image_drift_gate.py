@@ -29,7 +29,7 @@ failure. Hence a test rather than a comment.
 import re
 
 from lib import yaml_fast
-from _helpers import ANSIBLE, load_tasks
+from _helpers import ANSIBLE, jinja_env, load_tasks
 
 _ANSIBLE = ANSIBLE
 _GATE = _ANSIBLE / "post_tasks" / "k8s_image_drift_gate.yml"
@@ -214,25 +214,23 @@ def _evaluate_gate(pods, built_image):
     """
     import json
 
-    from ansible.plugins.filter.core import FilterModule
-    from ansible.plugins.test.core import TestModule
-    from jinja2 import Environment
-
     task = next(
         t for t in _tasks(_GATE) if "ansible.builtin.assert" in t and "loop" in t
     )
     expression = task["ansible.builtin.assert"]["that"][0]
 
-    env = Environment()
-    env.filters.update(FilterModule().filters())
-    # `search` is an ansible TEST, not a filter — selectattr('imageID', 'search', ...) needs it.
-    env.tests.update(TestModule().tests())
-    rendered = env.from_string("{{ " + expression + " }}").render(
-        item=built_image,
-        k8s_image_drift_pods={"stdout": json.dumps(pods)},
-        k8s_registry_pull_host="localhost:5000",
+    # `jinja_env` carries Ansible's tests as well as its filters: `search` is a TEST, and
+    # selectattr('imageID', 'search', ...) needs it.
+    rendered = (
+        jinja_env()
+        .from_string("{{ " + expression + " }}")
+        .render(
+            item=built_image,
+            k8s_image_drift_pods={"stdout": json.dumps(pods)},
+            k8s_registry_pull_host="localhost:5000",
+        )
     )
-    return rendered == "True"
+    return rendered is True
 
 
 _NUT = {"name": "nut", "digest": "sha256:aaa"}

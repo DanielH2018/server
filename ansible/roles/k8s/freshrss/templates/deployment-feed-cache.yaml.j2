@@ -58,8 +58,8 @@ spec:
         - name: feed-cache-nginx-conf
           configMap:
             name: freshrss-feed-cache
-        # The compose side uses a named volume so the cache survives a recreate. Here it is an
-        # emptyDir on purpose: this is an HTTP cache in front of one upstream, it refills
+        # An emptyDir rather than a PVC, on purpose: this is an HTTP cache in front of one
+        # upstream, it refills
         # itself, and a PVC for it would spend Longhorn capacity on regenerable bytes.
         - name: feed-cache-nginx-cache
           emptyDir: {}

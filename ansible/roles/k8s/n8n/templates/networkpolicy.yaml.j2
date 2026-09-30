@@ -7,13 +7,11 @@
 #
 # WHAT IT IS FOR. n8n's task-runner broker binds 0.0.0.0:5679 because n8n has no per-interface
 # bind option, and a client that can reach it AND holds N8N_RUNNERS_AUTH_TOKEN can register a
-# runner — which is arbitrary code execution. Under Compose the exposure was `apps` siblings.
-# Moving to one flat namespace would have WIDENED it to every workload in {{ k8s_namespace }},
-# including karakeep's headless Chrome, which renders attacker-supplied pages. This policy makes
-# the move a narrowing instead: the runners pod, and nothing else.
+# runner — which is arbitrary code execution. Without this policy the broker is reachable by
+# every workload in {{ k8s_namespace }}, including karakeep's headless Chrome, which renders
+# attacker-supplied pages. This policy narrows that to the runners pod, and nothing else.
 #
-# The token is still a gate, not a replacement for one. This is the layer Compose could not
-# express.
+# The token is still a gate, not a replacement for one.
 #
 # Since 2026-09-17 the file fences 5678 as well (#1926): the same policy, two ports, two peer
 # sets. netpol-probe-job.yaml.j2 proves both fences on every deploy.

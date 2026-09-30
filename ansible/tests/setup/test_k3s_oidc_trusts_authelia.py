@@ -20,6 +20,7 @@ import re
 
 import jinja2
 from lib import yaml_fast
+from lib.ansible_jinja_env import make_ansible_env
 
 from _helpers import ANSIBLE, load_defaults
 
@@ -62,11 +63,7 @@ def _all_vars() -> dict:
 
 
 def _env() -> jinja2.Environment:
-    return jinja2.Environment(
-        undefined=jinja2.StrictUndefined,
-        trim_blocks=True,
-        keep_trailing_newline=True,
-    )
+    return make_ansible_env(undefined_cls=jinja2.StrictUndefined)
 
 
 def _context() -> dict:
