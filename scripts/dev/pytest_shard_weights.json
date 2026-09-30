@@ -450,7 +450,6 @@
  "ansible/tests/services/test_exportarr_sidecars.py": 0.01,
  "ansible/tests/services/test_freshrss_seed_optional.py": 0.06,
  "ansible/tests/services/test_grafana_authelia_oidc.py": 0.0,
- "ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py": 0.02,
  "ansible/tests/services/test_ha_trusted_proxies_cover_cloudflare.py": 0.01,
  "ansible/tests/services/test_headlamp_widget_mapping_order.py": 0.0,
  "ansible/tests/services/test_health_reader_code_is_stamped.py": 0.0,
