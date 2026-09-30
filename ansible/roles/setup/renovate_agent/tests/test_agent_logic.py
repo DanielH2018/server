@@ -259,7 +259,9 @@ class TestConfigGuard:
 
     def test_a_complete_config_is_clean(self, tmp_path) -> None:
         cfg = tmp_path / "config.env"
-        cfg.write_text("REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\n")
+        cfg.write_text(
+            f"REPO=o/r\nREPO_DIR=/repo\nPROMPT_FILE=/p.txt\nSTATE_DIR={tmp_path}\n"
+        )
         assert renovate_agent.main(_tools(_FakeHost(prs=[])), str(cfg)) == 0
 
     def test_a_missing_key_is_flagged_by_name(self, tmp_path) -> None:
@@ -410,6 +412,37 @@ class TestOwnPrs:
         assert renovate_agent.own_prs("o/r", tools) is None
 
 
+def _records(tmp_path) -> list[dict]:
+    """The run records main() appended under the config's STATE_DIR."""
+    path = tmp_path / "state" / renovate_agent.RUNS_FILE
+    return [json.loads(line) for line in path.read_text().splitlines()]
+
+
+class TestRunRecord:
+    """The per-tick line the 30-day usage count reads (#2864): measured PRs, not the summary."""
+
+    def test_a_run_records_what_moved_is_clean(self) -> None:
+        moved = al.delta(
+            [_pr(1), _pr(2), _pr(3)],
+            [_pr(3)],
+            {1: "MERGED", 2: "CLOSED"},
+            handed=(9,),
+        )
+        outcome = al.parse_run(_result(), 0, False)
+        rec = json.loads(al.run_record(100, "ran", "", moved, outcome))
+        assert rec["merged"] == [1] and rec["closed"] == [2]
+        assert rec["handed_off"] == [9] and rec["left_open"] == [3]
+        assert rec["turns"] == outcome.turns
+
+    def test_a_failed_handoff_census_records_null_not_none_opened_is_flagged(
+        self,
+    ) -> None:
+        moved = al.delta([_pr(1)], [_pr(1)], {}, handed=None)
+        rec = json.loads(al.run_record(100, "ran", "", moved))
+        assert rec["handed_off"] is None
+        assert "cost_usd" not in rec
+
+
 class TestSkipExitCodes:
     """The Alive beat is the unit's ExecStartPost, so it fires on any exit 0 — including a
     skip that means the tree is stuck. That laundered five daily skips behind a green tile
@@ -420,7 +453,10 @@ class TestSkipExitCodes:
     def _cfg(self, tmp_path) -> str:
         (tmp_path / ".claude" / "worktrees" / "renovate-auto").mkdir(parents=True)
         cfg = tmp_path / "config.env"
-        cfg.write_text(f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE=/p.txt\n")
+        cfg.write_text(
+            f"REPO=o/r\nREPO_DIR={tmp_path}\nPROMPT_FILE=/p.txt\n"
+            f"STATE_DIR={tmp_path}/state\n"
+        )
         return str(cfg)
 
     def test_a_worktree_blocked_skip_is_flagged(self, tmp_path) -> None:
@@ -430,9 +466,12 @@ class TestSkipExitCodes:
 
         assert rc == renovate_agent.EXIT_WORKTREE_BLOCKED != 0
         assert any("holds 1 commit(s) not on origin/master" in p for p in host.posts)
+        assert _records(tmp_path)[-1]["result"] == "blocked"
 
     def test_an_empty_backlog_skip_is_clean(self, tmp_path) -> None:
         host = _FakeHost(prs=[])
 
         assert renovate_agent.main(_tools(host), self._cfg(tmp_path)) == 0
         assert host.posts == []
+        (rec,) = _records(tmp_path)
+        assert rec["result"] == "skipped" and rec["reason"]
