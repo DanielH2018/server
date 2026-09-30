@@ -14,8 +14,9 @@ uv run ansible-playbook ansible/initial_setup.yml --tags renovate_agent
 ```
 
 The four bounds on a run and the worktree rules, what the Discord digest measures, the alive
-tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, and the
-denylist marker's own history are in `docs/renovate-agent-bounds-and-digest.md`.
+tile's exit-code and token plumbing, how to exercise the wrapper without arming anything, the
+four modules `files/` ships, and the denylist marker's own history are in
+`docs/renovate-agent-bounds-and-digest.md`.
 
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
@@ -26,7 +27,7 @@ denylist marker's own history are in `docs/renovate-agent-bounds-and-digest.md`.
 
 ## Arming it
 
-The role installs the script, config, prompt and units on every run.
+The role installs the scripts, config, prompt and units on every run.
 `renovate_agent_enabled` alone decides whether the timer is enabled and started, and setting
 it back to `false` stops **and** disables the timer. That is the rollback, and
 `ansible/tests/setup/test_renovate_agent_unit.py` pins that both directions stay wired.

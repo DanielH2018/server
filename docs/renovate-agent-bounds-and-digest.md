@@ -2,9 +2,31 @@
 
 Working-out moved off `ansible/roles/setup/renovate_agent/CLAUDE.md` (#2995), which a session
 reads on every touch of the unattended agent. The role doc keeps the arming procedure and the
-autonomous-role contract; this page keeps the four bounds and why each is the var it is, the
-worktree rules, what the Discord digest measures, and the alive tile's exit-code and token
-plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
+autonomous-role contract; this page keeps the modules `files/` ships, the four bounds and why
+each is the var it is, the worktree rules, what the Discord digest measures, and the alive
+tile's exit-code and token plumbing. `docs/renovate-notify-internals.md` is the sibling page for the reporting half.
+
+## The four modules `files/` ships
+
+- `agent_logic.py` — the pure half: the run gate, the before/after delta, the digest text.
+- `agent_toolbox.py` — `AgentTools`, the four process boundaries a test replaces. It names
+  the other two modules nowhere, which is what makes it the leaf they both import.
+- `run_worktree.py` — the run worktree's lifecycle, and the only code here that talks to git.
+- `renovate_agent.py` — the entry module: config, the `gh` census, the session, the digest,
+  the crash report.
+
+`run_worktree.py` and `agent_toolbox.py` came out of `renovate_agent.py` on 2026-09-30, which
+had reached the 600-line cap `ansible/tests/repo/test_module_length_ratchet.py` enforces
+(#3036). The seam was already there: the worktree half talks only to git and to the forge, it
+had its own test module, and it shared nothing with the census and digest halves except the
+toolbox. `agent_toolbox.py` is a third module rather than a name the other two pass between
+them, because either of the two-module shapes makes the import a cycle.
+
+The role names each module twice — once in the "Install agent Python files" copy loop, once in
+`stamp_deployed_pairs` for manifest-prune-check.sh's stale-script arm. Neither list is derived
+from the directory, so a module in `files/` and in neither list is one the host never receives.
+ENFORCED:
+`ansible/tests/setup/test_renovate_agent_modules_are_shipped.py::test_every_shipped_module_is_installed_and_stamped`.
 
 ## Exercising the wrapper without arming anything
 
@@ -44,6 +66,8 @@ parks the GitOps deployer silently, and a session that edits, renders and tests 
 leave some. Each tick recreates `.claude/worktrees/renovate-auto` at `origin/master` and runs
 there. `land.sh` changes to the primary checkout itself, so the landing steps still deploy the
 right tree.
+
+Every rule in the rest of this section lives in `files/run_worktree.py`.
 
 **A worktree holding work is not thrown away.** If the previous tick left uncommitted changes or
 commits whose content is not on `origin/master`, the tick skips, posts the path and exits

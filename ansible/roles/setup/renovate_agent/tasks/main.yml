@@ -21,6 +21,8 @@
     mode: "0755"
   loop:
     - renovate_agent.py
+    - agent_toolbox.py
+    - run_worktree.py
     - agent_logic.py
     - gitops_markers.py
   become: true
@@ -110,6 +112,10 @@
     stamp_deployed_pairs:
       - live: /opt/renovate-agent/renovate_agent.py
         src: ansible/roles/setup/renovate_agent/files/renovate_agent.py
+      - live: /opt/renovate-agent/agent_toolbox.py
+        src: ansible/roles/setup/renovate_agent/files/agent_toolbox.py
+      - live: /opt/renovate-agent/run_worktree.py
+        src: ansible/roles/setup/renovate_agent/files/run_worktree.py
       - live: /opt/renovate-agent/agent_logic.py
         src: ansible/roles/setup/renovate_agent/files/agent_logic.py
       - live: /opt/renovate-agent/gitops_markers.py
