@@ -476,6 +476,25 @@ def test_a_dial_whose_tool_is_missing_reads_as_unproven_not_refused(tmp_path):
     assert "UNPROVEN" in state(lines, "PODNET"), lines
 
 
+def test_a_pod_cidr_with_no_neighbour_to_dial_is_unproven_rather_than_absent(tmp_path):
+    """REJECT: the failure a skipped target hides.
+
+    The pod target is the one address the leg discovers at runtime, so on a bridge whose
+    neighbour table holds nothing usable there is no address to dial. Dropping the row would
+    leave no evidence line and no label, and the run would report a clean `hold` with the pod
+    CIDR never measured — this issue's own failure, one level down.
+    """
+    verdict, lines = run_fence(
+        tmp_path,
+        guest_reachable=[CONTROL],
+        host_reachable=host_reaches(),
+        pod_ip="",
+    )
+
+    assert verdict == "VERDICT hold,unproven=PODNET", verdict
+    assert "no usable neighbour" in state(lines, "PODNET"), lines
+
+
 def test_the_leg_runs_before_the_guest_is_handed_any_credential():
     """Placement is the half of this that cannot be measured from inside the guest.
 

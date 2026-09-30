@@ -211,14 +211,28 @@ fence_targets() {
   # 2026-08-28, answering unauthenticated with a mutating `diskUpdate` action in its payload.
   printf '%s|%s|%s\n' LONGHORNSVC "$(fence_curl "$FENCE_LONGHORN_URL")" "$(fence_curl "$FENCE_LONGHORN_URL")"
   # k3s_pod_cidr. Discovered rather than pinned, because a pod IP is ephemeral: whichever pod on
-  # this host's CNI bridge is currently reachable. Read from `ip neigh` and not kubectl, because
-  # daniel-server is an agent node with no kubeconfig — kubectl here dials localhost:8080 and is
-  # refused. ICMP rather than HTTP: the neighbour is whichever pod happens to be up and its
-  # listening port is unknown, while the nwfilter rule carries no protocol, so a ping proves the
-  # same rule an HTTP dial would.
+  # this host's CNI bridge the neighbour table currently holds. Read from `ip neigh` and not
+  # kubectl, because daniel-server is an agent node with no kubeconfig — kubectl here dials
+  # localhost:8080 and is refused. ICMP rather than HTTP: the neighbour is whichever pod happens
+  # to be up and its listening port is unknown, while the nwfilter rule carries no protocol, so a
+  # ping proves the same rule an HTTP dial would.
+  #
+  # STALE, DELAY and PROBE count alongside REACHABLE: an idle entry ages out of REACHABLE while
+  # its address stays good, and the ping re-resolves it. Taking REACHABLE alone would fall to the
+  # no-neighbour row below on a quiet bridge, leaving the pod CIDR unmeasured most months.
   local pod_ip
-  pod_ip="$(ip -4 neigh show dev cni0 2>/dev/null | awk '/REACHABLE/ {print $1; exit}')"
-  [[ -n "$pod_ip" ]] && printf '%s|%s|%s\n' PODNET "ping -c1 -W3 $pod_ip" "ping -c1 -W3 $pod_ip"
+  # Matched as a FIELD, not with a `$` anchor: `ip neigh` pads every line with a trailing space,
+  # so an anchored state matches nothing and every run falls to the no-neighbour row.
+  pod_ip="$(ip -4 neigh show dev cni0 2>/dev/null |
+    awk '{for (i = 2; i <= NF; i++) if ($i ~ /^(REACHABLE|STALE|DELAY|PROBE)$/) {print $1; exit}}')"
+  if [[ -n "$pod_ip" ]]; then
+    printf '%s|%s|%s\n' PODNET "ping -c1 -W3 $pod_ip" "ping -c1 -W3 $pod_ip"
+  else
+    # Emitted rather than skipped. A row that is simply absent leaves no evidence line and no
+    # label, so the run reports a clean `hold` with the pod CIDR never dialled — this issue's own
+    # failure, one level down. The sentinel makes it an `unproven` target instead.
+    printf '%s|%s|\n' PODNET "SKIP: no usable neighbour on cni0 to dial"
+  fi
   return 0
 }
 
@@ -239,7 +253,8 @@ fence_dial_guest() {
   )
   local label probe _control
   while IFS='|' read -r label probe _control; do
-    [[ -n "$label" ]] && script+=("dial $label $probe")
+    [[ -z "$label" || "$probe" == SKIP:* ]] && continue
+    script+=("dial $label $probe")
   done
   printf '%s\n' "${script[@]}" | timeout "$FENCE_DEADLINE" "${argv[@]}" bash -s
 }
@@ -262,16 +277,20 @@ fence_check() {
   while IFS='|' read -r label probe control; do
     [[ -n "$label" ]] || continue
     code="${dialled[$label]-}"
-    case "$code" in
-      0)  state=REACHABLE ;;
-      "") state="UNPROVEN (the guest reported no result for this target)" ;;
-      na) state="UNPROVEN (the dial needs a tool the guest does not have)" ;;
-      127) state="UNPROVEN (the dial exited 127: it could not be run in the guest)" ;;
-      *)  state="refused (exit $code)" ;;
-    esac
-    if [[ -n "$control" && "$code" != 0 ]] \
-      && ! timeout $((FENCE_PROBE_TIMEOUT + 4)) bash -c "$control" >/dev/null 2>&1; then
-      state="UNPROVEN (stale: answered from neither the guest nor this host)"
+    if [[ "$probe" == SKIP:* ]]; then
+      state="UNPROVEN (${probe#SKIP: })"
+    else
+      case "$code" in
+        0)  state=REACHABLE ;;
+        "") state="UNPROVEN (the guest reported no result for this target)" ;;
+        na) state="UNPROVEN (the dial needs a tool the guest does not have)" ;;
+        127) state="UNPROVEN (the dial exited 127: it could not be run in the guest)" ;;
+        *)  state="refused (exit $code)" ;;
+      esac
+      if [[ -n "$control" && "$code" != 0 ]] \
+        && ! timeout $((FENCE_PROBE_TIMEOUT + 4)) bash -c "$control" >/dev/null 2>&1; then
+        state="UNPROVEN (stale: answered from neither the guest nor this host)"
+      fi
     fi
     printf '%-12s %-58s %s\n' "$label" "$state" "$probe" >>"$fence_log"
     case "$state" in
