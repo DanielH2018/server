@@ -396,12 +396,10 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   dangling node id. Say in the PR body which of the two conditions applied and where the coverage
   now sits; "it still passes" is not a reason to keep a check, because a check over a subject that
   no longer exists passes by construction.
-- **One retirement is blocked, and it is blocked on a tool, not on this rule.**
-  `ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py` and
-  `ansible/tests/deploy/test_land_skill_names_every_verdict.py` assert that a skill restates a
-  tool's enum, so the prose cannot retire while the test stands. They retire once `deploy.sh` and
-  `land.sh` print their own contract — not before, because until then the skill's restatement is
-  the only place an operator reads the enum.
+- **A test that pins a skill's restatement of a tool's enum retires with the tool's own
+  contract.** Until the tool prints the enum, the skill's copy is the only place an operator
+  reads it, so the pin stays. Once the tool prints it, retire the pin and the copy in that PR.
+  #3023 did this for the deploy and land skills.
 
 ## Notes
 - All six reviewer agents are read-only investigators. `security-review` is the one without `Bash`

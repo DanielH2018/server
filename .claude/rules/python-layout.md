@@ -127,8 +127,7 @@ Drop the check's `ENFORCED` citation from the prose in the same PR.
 node id that no longer resolves, so a deletion that leaves the citation behind arrives as a
 docs failure rather than as the deliberate retirement it was.
 
-A check whose prose the check itself pins is a third case, and it is blocked rather than
-retirable: `ansible/tests/deploy/test_deploy_skill_names_every_exit_code.py` and
-`ansible/tests/deploy/test_land_skill_names_every_verdict.py` assert that a skill restates a
-tool's enum, so neither the test nor the prose can go while the tool does not print its own
-contract. Retire the pair once `deploy.sh` and `land.sh` do.
+A check that pins a skill's restatement of a tool's enum is a third case. It retires in the
+same PR that makes the tool print its own contract, together with the prose it pinned. #3023
+retired the two tests that pinned the deploy and land skills' copies this way, once `deploy.sh`
+and `land.sh` printed their exit codes and verdicts themselves.
