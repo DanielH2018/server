@@ -19,6 +19,18 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from lib.repo_paths import REPO as REPO_ROOT
 
 
+def renders_flags_table(ns):
+    """Whether this `releases` invocation prints the flags table both verdicts feed.
+
+    A single-service lookup returns one record as JSON and a `--previous` read reports the
+    release before the current one, so neither renders the FLAGS column. Both verdicts are
+    skipped together for them: the digest verdict especially, because a superseded record's
+    digest differs from what the ref renders by definition, and judging one would mark the
+    whole fleet drifted for having been replaced.
+    """
+    return not getattr(ns, "service", None) and not getattr(ns, "previous", False)
+
+
 def format_records(records, merged, service=None, stale=None, release_dir=None):
     """Render the release table. Pure: returns (text, exit_code).
 
@@ -73,10 +85,11 @@ def format_records(records, merged, service=None, stale=None, release_dir=None):
     lines.append("")
     lines.append(
         f"{len(records)} service(s); {unclean} carrying a flag. dirty = no commit reproduces "
-        "those bytes; unmerged = not an ancestor of origin/master; stale = origin/master has "
-        "moved past this record under the service's own or a shared role, or an inventory "
-        "key or shared macro its render reads (`probe.py releases --stale-only` for the "
-        "reasons)."
+        "those bytes; unmerged = not an ancestor of origin/master; stale = the render digest "
+        "disagrees with the applied bytes, or -- for a service no render record covers -- "
+        "origin/master has moved past this record under the service's own or a shared role, "
+        "or an inventory key or shared macro its render reads (`probe.py releases "
+        "--stale-only` for the reasons)."
     )
     return "\n".join(lines), (1 if unclean else 0)
 

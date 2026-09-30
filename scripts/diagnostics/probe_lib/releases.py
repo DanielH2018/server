@@ -21,8 +21,9 @@ deployer's tick asks -- #1993). `stale` is what makes a deferred k8s change visi
 gitops deployer ff-merges a non-auto-deployable k8s role change and pages Discord once, and
 every other monitored marker then reads clean while the cluster still runs the old manifests
 (issue #947). All three flags are normal mid-slice and alarming a week later, which is why they
-are reported rather than judged. A path hit is cleared when a render record proves the applied
-bytes are what origin/master renders (`releases_render`, #2586).
+are reported rather than judged. The path rules here are the FALLBACK (#3046):
+`releases_render` compares the render digest against the release record's, and that verdict
+outranks every one of them, in both directions.
 
 Exit codes: 0 when every record is clean, 1 when any service is dirty, unmerged or stale, 2 when
 no records exist at all (nothing has been deployed since the stamp shipped). `--stale-only`
@@ -59,6 +60,7 @@ from diagnostics.probe_lib.releases_format import (  # noqa: E402
     format_records,
     format_stale_kuma,
     format_stale_only,
+    renders_flags_table,
     write_counted_names,
 )
 
@@ -73,8 +75,8 @@ from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
     role_paths_for,
 )
 
-# A render record that proves the applied bytes current clears a path hit (#2586).
-from diagnostics.probe_lib.releases_render import apply_renders  # noqa: E402
+# The digest verdict, which outranks the path verdict computed here (#2586, inverted by #3046).
+from diagnostics.probe_lib.releases_render import apply_digest_verdicts  # noqa: E402
 from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
 from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
 
@@ -573,7 +575,7 @@ def run_releases(ns):
         grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
         pending = {}
         stale = compute_stale(records, grace_seconds=grace_seconds, pending=pending)
-        apply_renders(stale, records, pending=pending)
+        apply_digest_verdicts(stale, records, pending=pending)
         missing = missing_services(records)
         write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
@@ -584,14 +586,12 @@ def run_releases(ns):
         return code
     merged = merged_commits(r.get("commit") for r in records)
     service = getattr(ns, "service", None)
-    # Skip the git subprocess work for a single-service lookup or a previous-record read --
-    # neither renders the flags table `stale` feeds.
-    stale = (
-        compute_stale(records)
-        if not service and not getattr(ns, "previous", False)
-        else {}
-    )
-    apply_renders(stale, records)
+    # Both verdicts are skipped for the views that print no FLAGS column, and skipped
+    # TOGETHER -- `renders_flags_table` says why the digest half cannot run over an empty dict.
+    flags_table = renders_flags_table(ns)
+    stale = compute_stale(records) if flags_table else {}
+    if flags_table:
+        apply_digest_verdicts(stale, records)
     text, code = format_records(
         records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
     )

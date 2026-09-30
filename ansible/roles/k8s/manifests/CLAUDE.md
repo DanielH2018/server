@@ -307,15 +307,25 @@ path. On 2026-09-25 a fleet render on daniel-box reproduced the recorded digest 
 services a dry run can reach, in 5m38s. A rendered one-line change to one template moved the
 digest, so the comparison can go red.
 
-`probe.py releases --stale-only` reads those records
-(`scripts/diagnostics/probe_lib/releases_render.py:render_proves_current`). A matching digest
-clears a service's path hits only when the render record's `commit` is origin/master, its tree
-was clean, and its `host` is the release record's. A digest match says nothing about secret
-manifests: a rendered line added to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest,
-left its digest unchanged. So a match also needs `secret_manifests` empty on both records,
-which held for 25 of 58 on that date (#2586), or the same names on both and a matching
-`secret_digest` (#2574). A record without `secret_digest` keeps the path verdict, so services
-with secret manifests stop reading stale one redeploy at a time.
+**The digest is `probe.py releases --stale-only`'s primary answer, and the path rules are its
+fallback** (`scripts/diagnostics/probe_lib/releases_render.py:digest_verdict`, #3046). Three
+branches: the digests agree and every path hit is dropped, they disagree and the service is
+stale for that reason whether or not a path moved, or the record proves nothing and the path
+verdict stands. Until #3046 only the first branch existed, so a service the path narrowing read
+clean could drift unseen.
+
+A record proves nothing unless its `commit` is origin/master, its tree was clean, and its `host`
+is the release record's. A digest also says nothing about secret manifests: a rendered line
+added to uptime-kuma's `static-monitors.yaml.j2`, a secret manifest, left its digest unchanged.
+So a verdict needs `secret_manifests` empty on both records, which held for 25 of 58 on that
+date (#2586), or the same names on both and `secret_digest` present on both (#2574) — a
+`secret_digest` that is present and DIFFERENT is drift, and one that is absent keeps the path
+verdict, so services with secret manifests stop reading stale one redeploy at a time.
+
+Two verdicts a mismatch does not override. A service inside the reader's grace window keeps
+waiting, because the window exists for a landing's own deploy still being in flight and a digest
+cannot tell that from drift. And `commit unknown to this checkout` is a doubt about provenance,
+which no digest speaks to.
 
 **`ansible/roles/setup/render_records/` is the hourly producer** (#2587). It renders every
 service `scripts/deploy_tools/render_targets.py` lists, at the newest origin/master commit
