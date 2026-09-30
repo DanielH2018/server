@@ -173,7 +173,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "count(container_last_seen{name=~\".+\"})",
+          "expr": "count(container_last_seen{container!=\"\"})",
           "intervalFactor": 2,
           "refId": "A",
           "step": 1800
@@ -787,7 +787,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[$__rate_interval]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total{container!=\"\"}[$__rate_interval]))",
           "hide": true,
           "interval": "",
           "intervalFactor": 2,
@@ -828,7 +828,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(rate(container_cpu_system_seconds_total{name=~\".+\"}[$__rate_interval])) + sum(rate(container_cpu_system_seconds_total{id=\"/\"}[$__rate_interval])) + sum(rate(process_cpu_seconds_total[$__rate_interval]))",
+          "expr": "sum(rate(container_cpu_system_seconds_total{container!=\"\"}[$__rate_interval])) + sum(rate(container_cpu_system_seconds_total{id=\"/\"}[$__rate_interval])) + sum(rate(process_cpu_seconds_total[$__rate_interval]))",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "",
@@ -1260,7 +1260,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_rss{name=~\".+\"}",
+          "expr": "container_memory_rss{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "{{__name__}}",
@@ -1272,7 +1272,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_memory_rss{name=~\".+\"})",
+          "expr": "sum(container_memory_rss{container!=\"\"})",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "{{__name__}}",
@@ -1284,10 +1284,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 20
         },
@@ -1428,7 +1428,7 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_rss{name=~\".+\"}",
+          "expr": "container_memory_rss{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
           "legendFormat": "{{__name__}}",
@@ -1698,9 +1698,9 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(rate(container_network_receive_bytes_total{name=~\".+\"}[$__rate_interval])) by (name)",
+          "expr": "sum(rate(container_network_receive_bytes_total{container=\"\", pod!=\"\"}[$__rate_interval])) by (namespace, pod)",
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}",
           "refId": "A",
           "step": 240
         },
@@ -1709,10 +1709,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "- rate(container_network_transmit_bytes_total{name=~\".+\"}[$__rate_interval])",
+          "expr": "- rate(container_network_transmit_bytes_total{container=\"\", pod!=\"\"}[$__rate_interval])",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}",
           "refId": "B",
           "step": 10
         }
@@ -1811,9 +1811,9 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(rate(container_network_transmit_bytes_total{name=~\".+\"}[$__rate_interval])) by (name)",
+          "expr": "sum(rate(container_network_transmit_bytes_total{container=\"\", pod!=\"\"}[$__rate_interval])) by (namespace, pod)",
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}",
           "refId": "A",
           "step": 240
         },
@@ -1924,11 +1924,11 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(rate(container_cpu_usage_seconds_total{name=~\".+\"}[$__rate_interval])) by (name) * 100",
+          "expr": "sum(rate(container_cpu_usage_seconds_total{container!=\"\"}[$__rate_interval])) by (namespace, pod, container) * 100",
           "hide": false,
           "interval": "",
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "metric": "",
           "refId": "F",
           "step": 240
@@ -2028,10 +2028,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_memory_swap{name=~\".+\"}) by (name)",
+          "expr": "sum(container_memory_swap{container!=\"\"}) by (namespace, pod, container)",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "A",
           "step": 240
         },
@@ -2040,10 +2040,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 240
         }
@@ -2142,10 +2142,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_memory_rss{name=~\".+\"}) by (name)",
+          "expr": "sum(container_memory_rss{container!=\"\"}) by (namespace, pod, container)",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "A",
           "step": 240
         },
@@ -2154,10 +2154,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 240
         }
@@ -2222,10 +2222,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_spec_memory_limit_bytes{name=~\".+\"} - container_memory_usage_bytes{name=~\".+\"}) by (name) ",
+          "expr": "sum(container_spec_memory_limit_bytes{container!=\"\"} - container_memory_usage_bytes{container!=\"\"}) by (namespace, pod, container) ",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "metric": "",
           "refId": "A",
           "step": 240
@@ -2235,10 +2235,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_spec_memory_limit_bytes{name=~\".+\"}) by (name) ",
+          "expr": "sum(container_spec_memory_limit_bytes{container!=\"\"}) by (namespace, pod, container) ",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 240
         },
@@ -2247,10 +2247,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "C",
           "step": 240
         }
@@ -2326,10 +2326,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_spec_memory_limit_bytes{name=~\".+\"} - container_memory_usage_bytes{name=~\".+\"}) by (name) ",
+          "expr": "sum(container_spec_memory_limit_bytes{container!=\"\"} - container_memory_usage_bytes{container!=\"\"}) by (namespace, pod, container) ",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "metric": "",
           "refId": "A",
           "step": 240
@@ -2339,10 +2339,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_spec_memory_limit_bytes{name=~\".+\"}) by (name) ",
+          "expr": "sum(container_spec_memory_limit_bytes{container!=\"\"}) by (namespace, pod, container) ",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 240
         },
@@ -2351,10 +2351,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": false,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "C",
           "step": 240
         }
@@ -2430,9 +2430,9 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(100 - ((container_spec_memory_limit_bytes{name=~\".+\"} - container_memory_usage_bytes{name=~\".+\"})  * 100 / container_spec_memory_limit_bytes{name=~\".+\"}) ) by (name) ",
+          "expr": "sum(100 - ((container_spec_memory_limit_bytes{container!=\"\"} - container_memory_usage_bytes{container!=\"\"})  * 100 / container_spec_memory_limit_bytes{container!=\"\"}) ) by (namespace, pod, container) ",
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "metric": "",
           "refId": "A",
           "step": 240
@@ -2442,10 +2442,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "sum(container_spec_memory_limit_bytes{name=~\".+\"}) by (name) ",
+          "expr": "sum(container_spec_memory_limit_bytes{container!=\"\"}) by (namespace, pod, container) ",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "B",
           "step": 240
         },
@@ -2454,10 +2454,10 @@
             "type": "prometheus",
             "uid": "EGdsQqhVk"
           },
-          "expr": "container_memory_usage_bytes{name=~\".+\"}",
+          "expr": "container_memory_usage_bytes{container!=\"\"}",
           "hide": true,
           "intervalFactor": 2,
-          "legendFormat": "{{name}}",
+          "legendFormat": "{{namespace}}/{{pod}}/{{container}}",
           "refId": "C",
           "step": 240
         }
@@ -2487,20 +2487,6 @@
   ],
   "templating": {
     "list": [
-      {
-        "allValue": ".+",
-        "current": {},
-        "datasource": "EGdsQqhVk",
-        "includeAll": true,
-        "label": "Container Group",
-        "multi": true,
-        "name": "containergroup",
-        "options": [],
-        "query": "label_values(container_group)",
-        "refresh": 1,
-        "regex": "",
-        "type": "query"
-      },
       {
         "auto": true,
         "auto_count": 50,
@@ -2623,7 +2609,7 @@
   },
   "timepicker": {},
   "timezone": "browser",
-  "title": "Docker and system monitoring",
+  "title": "Containers and system monitoring",
   "uid": "262f714c-24c8-43da-8955-9626d6b4d0a3",
   "version": 1,
   "weekStart": ""
