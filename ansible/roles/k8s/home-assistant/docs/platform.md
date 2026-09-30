@@ -51,42 +51,81 @@ automations do.
   composite `k8s_workloads` tile red 11 times in 14 days and masked real workload failures while
   red. The connect-back itself is unfixed.
 
-### The cast connect-back failure is episodic, and the receiver does reach HA (issue #2800)
+### The cast connect-back failure is episodic: pychromecast blocks its own reader thread (issues #2800, #2845)
 
-Measured 2026-09-28 from Loki over the 7 days to 2026-09-27. Every date below is the
-container's `America/Chicago` clock, which is what the log line prints; HA's API and `git %ci`
-are UTC, so do not compare the two without converting.
+Measured 2026-09-28 from Loki over the 7 days to 2026-09-27, and on 2026-09-30 from Loki over
+10 days plus one live test cast at debug level. Every time below is the container's
+`America/Chicago` clock, which is what the log line prints; HA's API and `git %ci` are UTC, so
+do not compare the two without converting.
 
-- **Episodic, not per-callback.** The 197 `_connect_hass failed` warnings fall in 11
-  hour-buckets across 4 of the 7 days — 09-21, 09-22, 09-23, 09-26 — and 3 days have none. The
-  longest clean gap inside the window is about 56h, so a quiet day or two is not evidence the
-  fault has cleared.
-- **One warning costs exactly one exception.** 197 `Exception thrown when calling cast status
-  listener` records land in exactly those 11 buckets, one per warning.
-- **The receiver reaches HA.** Those same 11 buckets, and no others, carry 1570
-  `frontend.js.modern.<build>` `Uncaught error from Chrome 150.0.0.0 on unknown OS` records.
-  That is the Hub Max's cast receiver posting its own JS exceptions back to HA over its
-  connection to `external_url` — `unknown OS` is what the receiver reports where a desktop
-  browser names its platform.
-- **Three candidate causes are refuted by that.** The LAN hairpin through Cloudflare, the
-  receiver rejecting the served certificate, and CrowdSec or the CF-only-origin allowlist
-  refusing the device would each fail on *every* cast rather than in bursts, and none of them
-  would deliver receiver-side JS errors into HA's log. The mechanism is receiver-state- or
-  session-scoped, in the receiver's JS or in pychromecast's ack wait, and it is not a
-  network, TLS or WAF refusal. The root cause is still unidentified.
-- **The mechanism on HA's side.** `_connect_hass` sends `connect`, then waits
-  `DEFAULT_HASS_CONNECT_TIMEOUT = 30` seconds for `_hass_connecting_event`.
-  `receive_message` sets that event only on a `receiver_status` where the controller was NOT
-  already connected; every other path returns early and leaves it clear, so the wait runs to
-  the full timeout. Consecutive warnings sit 30.05s apart, which is the timeout rather than a
-  poll interval.
-- **`external_url` is not the thing to change.** HA's cast integration resolves the URL itself:
-  `hass_url = get_url(hass, require_ssl=True, prefer_external=True)` in
-  `homeassistant/components/cast/home_assistant_cast.py`, read from core `dev` on 2026-09-28.
-  `prefer_external=True` takes `external_url` whenever it is https, and ours is, so the only
-  way to hand the receiver `internal_url` is to remove or downgrade `external_url` — which the
-  working cast path, the companion app and the Cloudflare route all depend on. There is no
-  per-integration override.
+**The cause is a self-deadlock in pychromecast 14.0.10, not the network and not the
+receiver.** pychromecast's `SocketClient` is the one thread that reads every message from the
+Hub (`Thread-5` in HA's log). When it sees the HA Lovelace app on a new channel, it calls
+`HomeAssistantController.channel_connected()` on that same thread. That calls `get_status()`,
+and while the controller is not yet connected, `get_status()` calls `_connect_hass()`.
+`_connect_hass()` sends `connect`, then blocks for `DEFAULT_HASS_CONNECT_TIMEOUT = 30` seconds
+until `_hass_connecting_event` is set. Only the receiver's `receiver_status` reply sets that
+event, and only `Thread-5` can read the reply, so the wait always runs out. `Thread-5` then
+logs `_connect_hass failed` and raises `PyChromecastError` into
+`Exception thrown when calling cast status listener`.
+
+- **All 197 failures in the window take that path.** Every traceback reads
+  `socket_client.py` `new_cast_status` → `receiver.py` `_process_get_status` →
+  `homeassistant.py` `channel_connected` → `get_status` → `_send_connected_message` →
+  `_connect_hass`, with the line numbers of pychromecast 14.0.10. Every warning is logged on
+  `Thread-5`.
+- **The live test cast shows why most casts escape it.** On 2026-09-30 at 07:50:56 the
+  operator-approved test turned the Hub off, and `bedroom_display_show` re-cast at once.
+  `SyncWorker_7` entered `_connect_hass` first and cleared the event. At 07:50:59 `Thread-5`
+  ran `channel_connected` → `_connect_hass` and hit the early return
+  `_hass_connecting_event not set`, so it went back to reading. At 07:51:00 it read
+  `receiver_status connected: True`, and the Hub showed the dashboard. The deadlock fires only
+  when `Thread-5` reaches `_connect_hass` with no HA-initiated cast already waiting. That
+  happens when HA re-joins an HA app already running on the Hub without casting, for example
+  after a socket drop.
+- **A blocked `Thread-5` also fails a concurrent cast.** On 2026-09-29 at 14:23:36 a
+  `Connection reset by peer` on the Hub's socket was followed within 20 ms by
+  `bedroom_display_show` casting. At 14:24:06, 30.03 s later, the cast failed with
+  `Exception in _handle_signal_show_view` on `homeassistant.util.logging`. That record is not
+  silenced, and its message carries the cast user's `refresh_token` in plaintext.
+- **The fault is episodic.** The 197 warnings fall in 11 hour-buckets across 4 of the 7 days
+  (09-21, 09-22, 09-23, 09-26), and 3 days have none. The longest clean gap inside the window
+  is about 56 h, so a quiet day or two is not evidence the fault has cleared. Inside a burst,
+  consecutive warnings sit 30.05 s apart: each timeout is followed at once by another. Why the
+  loop re-enters was not established.
+
+**The receiver JS exception is a symptom of the loop.** The 1570
+`frontend.js.modern.<build>` `Uncaught error from Chrome 150.0.0.0 on unknown OS` records in
+the same 11 buckets are all one exception, `TypeError: Cannot read properties of null
+(reading 'themes')`. Every one carries the same stack: `hui-view-container`
+`_setUpMediaQuery` → `media_query` `listener` → `_applyTheme` → `applyThemesOnElement`, at
+`src/common/dom/apply_themes_on_element.ts:117`. That line reads `themes.themes[themeToApply]`.
+`themeToApply` is `nest_dark`, because `files/ui-lovelace.yaml` pins that theme to the view.
+`themes` is `hass.themes`, which is null on the fresh `hass` the receiver builds for each
+`connect`. The receiver's `_handleConnectMessage` sends `receiver_status` before that render
+runs, so the throw does not block the reply. Each loop iteration resends `connect`, and the
+per-cycle JS error count grows by about one. The frontend bug is real, but it is upstream in
+`home-assistant/frontend` and only cosmetic here.
+
+**Three candidate causes from #2800 are refuted.** The LAN hairpin through Cloudflare, the
+receiver rejecting the served certificate, and CrowdSec or the CF-only-origin allowlist
+refusing the device would each fail on every cast rather than in bursts. None of them would
+deliver receiver-side JS errors into HA's log, and the receiver's reply does arrive: `Thread-5`
+simply cannot read it while it waits.
+
+**Nothing in this repo's config fixes it.** The fix belongs in
+`home-assistant-libs/pychromecast`: `channel_connected` must not block the socket thread. It
+could send `get_status` without waiting for the connect ack, or `_connect_hass` could refuse to
+wait when called on the socket thread. Issue #3014 tracks filing that report upstream and
+carries the draft.
+
+**`external_url` is not the thing to change either.** HA's cast integration resolves the URL
+itself: `hass_url = get_url(hass, require_ssl=True, prefer_external=True)` in
+`homeassistant/components/cast/home_assistant_cast.py`, read from core `dev` on 2026-09-28.
+`prefer_external=True` takes `external_url` whenever it is https, and ours is, so the only way
+to hand the receiver `internal_url` is to remove or downgrade `external_url`. The working cast
+path, the companion app and the Cloudflare route all depend on it. There is no
+per-integration override.
 
 **Verify with the `frontend.js` channel, never with `_connect_hass failed`.** #2781 silenced
 both records the fault emits, because `Exception thrown when calling cast status listener` is
@@ -97,6 +136,11 @@ unfalsifiable. The query that still works:
 ```logql
 {job="k8s", container="home-assistant"} |= "Uncaught error from Chrome"
 ```
+
+It fires only while the loop keeps resending `connect` to a receiver showing the `nest_dark`
+view, so it misses a single blocked cycle. The 2026-09-29 failure left no `frontend.js` record.
+Query `|= "_handle_signal_show_view"` as well to catch a cast that collided with a blocked
+`Thread-5`, and redact its output: the record prints the cast `refresh_token`.
 
 Nothing in `files/configuration.yaml` silences `frontend.js`, and
 `ansible/tests/services/test_ha_cast_verify_signal_is_not_silenced.py` fails if a future
