@@ -8,15 +8,19 @@ target's own NetworkPolicy naming `app: homepage`. Fenced out, homepage stays 1/
 health homepage` exits 0, and the tile shows a widget-proxy error only a human looking at the
 dashboard would see.
 
-The census walks services.yaml.j2 for in-namespace widget URLs, resolves each Service to the pod
-label it selects (they diverge: the `scrutiny` Service selects `app: scrutiny-web`), and checks the
-rendered NetworkPolicies for a rule admitting homepage on that port.
+The census walks the RENDERED tile list for in-namespace widget URLs, resolves each Service to the
+pod label it selects (they diverge: the `scrutiny` Service selects `app: scrutiny-web`), and checks
+the rendered NetworkPolicies for a rule admitting homepage on that port. Both halves now come from
+the same render: the previous form regex-scanned `services.yaml.j2` for the literal
+`{{ k8s_namespace }}`, so a tile written with the namespace spelled any other way — a different
+variable, or the value itself — dropped out of the census silently while the file still read right.
 
 TWO EXCLUSIONS, both deliberate, neither previously written down (#1401). This guard covers a
 subset of the widgets whose reachability depends on a NetworkPolicy, not all of them:
 
-1. `WIDGET_URL` matches `http://<svc>.{{ k8s_namespace }}.svc.cluster.local:<port>` only, so a
-   widget URL naming any OTHER namespace is invisible to the census.
+1. `CLUSTER_URL` matches `http://<svc>.<ns>.svc.cluster.local:<port>` and the census keeps only
+   the hits whose `<ns>` is this deploy's own namespace, so a widget URL naming any OTHER
+   namespace is excluded — deliberately, per exclusion 2 below.
 2. `_live_services_and_policies` reads `podSelector` peers — `matchLabels`, and an `app` `matchExpressions` `In`
    list. A `namespaceSelector` + `podSelector` sibling pair is not read, so a cross-namespace
    allow rule does not register as admitting homepage.
@@ -34,34 +38,28 @@ Run: uv run pytest ansible/tests/services/test_homepage_widget_netpol_edges.py
 
 import re
 
-from _helpers import ANSIBLE as _ANSIBLE
-
-
+from _homepage_config import config_urls, namespace
 from _k8s_render import rendered_docs
 
-SERVICES_TEMPLATE = (
-    _ANSIBLE
-    / "roles"
-    / "k8s"
-    / "homepage"
-    / "templates"
-    / "config"
-    / "services.yaml.j2"
-)
-
-# Widget targets this suite knows are in place. Named rather than counted: the census below is a
-# regex over one file, and it returns an empty set the moment those URLs are reshaped — after
-# which every `all()` in this module passes while checking nothing.
+# Widget targets this suite knows are in place. Named rather than counted: the census below
+# returns an empty set the moment those URLs are reshaped — after which every `all()` in this
+# module passes while checking nothing.
 KNOWN_TARGETS = frozenset({("scrutiny", 8080), ("sonarr", 8989), ("radarr", 7878)})
 
-WIDGET_URL = re.compile(
-    r"http://([a-z0-9-]+)\.\{\{\s*k8s_namespace\s*\}\}\.svc\.cluster\.local:(\d+)"
+CLUSTER_URL = re.compile(
+    r"http://([a-z0-9-]+)\.([a-z0-9-]+)\.svc\.cluster\.local:(\d+)"
 )
 
 
-def widget_targets(template_text: str) -> set[tuple[str, int]]:
-    """(Service name, port) for every widget URL addressing this namespace's ClusterIPs."""
-    return {(m.group(1), int(m.group(2))) for m in WIDGET_URL.finditer(template_text)}
+def widget_targets(ns: str, urls: set[str]) -> set[tuple[str, int]]:
+    """(Service name, port) for every widget URL addressing namespace `ns`'s ClusterIPs."""
+    matched = (CLUSTER_URL.search(url) for url in urls)
+    return {(m.group(1), int(m.group(3))) for m in matched if m and m.group(2) == ns}
+
+
+def live_widget_targets() -> set[tuple[str, int]]:
+    """The census, against the rendered tile list."""
+    return widget_targets(namespace(), config_urls())
 
 
 def unfenced_targets(targets, services, policies) -> set[tuple[str, int]]:
@@ -128,13 +126,21 @@ def _live_services_and_policies():
 def test_every_in_namespace_widget_target_admits_homepage():
     """The accepting half, against the real tree."""
     services, policies = _live_services_and_policies()
-    targets = widget_targets(SERVICES_TEMPLATE.read_text())
-    assert unfenced_targets(targets, services, policies) == set()
+    assert unfenced_targets(live_widget_targets(), services, policies) == set()
 
 
 def test_the_census_still_finds_the_targets_it_is_meant_to_cover():
     """Non-vacuity. The test above passes on an empty census."""
-    assert KNOWN_TARGETS <= widget_targets(SERVICES_TEMPLATE.read_text())
+    assert KNOWN_TARGETS <= live_widget_targets()
+
+
+def test_the_census_excludes_a_url_naming_another_namespace():
+    """Exclusion 1: the Headlamp tile dials Prometheus across namespaces and is out of scope."""
+    urls = {
+        "http://scrutiny.homelab.svc.cluster.local:8080",
+        "http://prometheus.observability.svc.cluster.local:9090/api/v1/query?query=up",
+    }
+    assert widget_targets("homelab", urls) == {("scrutiny", 8080)}
 
 
 def test_a_target_whose_policy_omits_homepage_is_flagged():
