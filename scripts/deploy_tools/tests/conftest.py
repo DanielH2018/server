@@ -7,7 +7,6 @@ for the whole pipeline through land.main. The fakes they build on live in _land_
 Run: uv run pytest scripts/deploy_tools/tests -k land
 """
 
-import os
 import sys
 from dataclasses import replace
 from pathlib import Path
@@ -16,6 +15,7 @@ import pytest
 
 from _land_fakes import PRIMARY, Fakes, build_classifier, build_tools, make_landing
 from deploy_tools.land_lib import options, tools
+from lib.proc_testing import fake_bin, path_with
 
 # The stub records one line per call so a test can assert it intercepted something. Without
 # that record the fixture would be indistinguishable from one that silently stopped being on
@@ -71,15 +71,12 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     prepended, so mutating PATH here is inherited by all of them: their `gh` stub still wins
     for `gh`, and this wins for `logger` over `/usr/bin/logger`.
     """
-    stub_dir = tmp_path_factory.mktemp("logger-stub")
-    logger = stub_dir / "logger"
-    logger.write_text(_LOGGER_STUB)
-    logger.chmod(0o755)
+    stub_dir = fake_bin(tmp_path_factory.mktemp("logger-stub"), logger=_LOGGER_STUB)
 
     calls = stub_dir / "logger-calls"
     calls.touch()
     monkeypatch.setenv("LAND_TEST_LOGGER_CALLS", str(calls))
-    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", path_with(stub_dir))
     return calls
 
 

@@ -24,6 +24,7 @@ import subprocess
 
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
+from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE
 from lib import yaml_fast
 
@@ -166,17 +167,13 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
     )
     env_file = tmp_path / "push.env"
     env_file.write_text("LOKI_ROUTE_WITNESS_PUSH_TOKEN=stubtoken\n")
-    uv = tmp_path / "uv"
-    uv.write_text(
+    uv = write_exec(
+        tmp_path / "uv",
         "#!/usr/bin/env bash\n"
         'case "$*" in *loki_route_health.py*) echo verdict; exit "$STUB_ROUTE_RC" ;;'
-        " *) echo body ;; esac\n"
+        " *) echo body ;; esac\n",
     )
-    uv.chmod(0o755)
-    binstub = tmp_path / "bin"
-    binstub.mkdir()
-    (binstub / "logger").write_text("#!/bin/sh\nexit 0\n")
-    (binstub / "logger").chmod(0o755)
+    binstub = fake_bin(tmp_path / "bin", logger="#!/bin/sh\nexit 0\n")
 
     body = (
         body.replace(REAL_LIB, str(lib))
@@ -184,14 +181,12 @@ def _run_witness(tmp_path, route_rc: int) -> tuple[int, str]:
         .replace("/home/ubuntu/.local/bin/uv", str(uv))
         .replace("/usr/local/bin/uv", str(uv))
     )
-    script = tmp_path / "loki-read-route-health.sh"
-    script.write_text(body)
-    script.chmod(0o755)
+    script = write_exec(tmp_path / "loki-read-route-health.sh", body)
     result = subprocess.run(
         [str(script)],
         env={
             **os.environ,
-            "PATH": f"{binstub}:{os.environ['PATH']}",
+            "PATH": path_with(binstub),
             "KUMA_PUSH_OUT": str(pushed),
             "STUB_ROUTE_RC": str(route_rc),
         },

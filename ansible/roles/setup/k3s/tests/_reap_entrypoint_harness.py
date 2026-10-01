@@ -29,6 +29,7 @@ import sys
 
 from lib import yaml_fast
 from lib.repo_paths import REPO
+from lib.proc_testing import fake_bin, path_with
 
 FILES = pathlib.Path(__file__).resolve().parents[1] / "files"
 ROLE = pathlib.Path(__file__).resolve().parents[1]
@@ -169,17 +170,13 @@ def _run(
     now=None,
 ):
     deployed = _deployed_entry(entry, tmp_path / "opt")
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir(exist_ok=True)
-    stub = stub_dir / "k3s"
-    stub.write_text(_STUB_KUBECTL)
-    stub.chmod(0o755)
+    stub_dir = fake_bin(tmp_path / "bin", k3s=_STUB_KUBECTL)
 
     calls_log = tmp_path / "calls.jsonl"
     calls_log.write_text("")
 
     env = dict(os.environ)
-    env["PATH"] = "%s:%s" % (stub_dir, env.get("PATH", ""))
+    env["PATH"] = path_with(stub_dir, env=env)
     env["STUB_CALLS_LOG"] = str(calls_log)
     env["STUB_FIXTURES"] = json.dumps(fixtures)
     env["STUB_FAIL_DELETE_NAMES"] = json.dumps(list(fail_delete_names))

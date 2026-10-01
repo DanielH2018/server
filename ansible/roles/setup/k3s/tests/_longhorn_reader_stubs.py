@@ -15,6 +15,8 @@ import subprocess
 import sys
 from pathlib import Path
 
+from lib.proc_testing import write_exec
+
 READER = Path(__file__).resolve().parents[1] / "files" / "longhorn_backup_health.py"
 HOST_LIB_DIR = Path(__file__).resolve().parents[2] / "common" / "files"
 
@@ -179,9 +181,7 @@ if branch == os.environ.get("STUB_NULL_BRANCH"):
 
 sys.stdout.write(body)
 """.replace("__SNAPSHOT_TS__", snapshot_ts)
-    stub.write_text(script)
-    stub.chmod(0o755)
-    return stub
+    return write_exec(stub, script)
 
 
 def _run_reader_against(stub, tmp_path, **env_overrides):
@@ -258,6 +258,4 @@ else:
     sys.stderr.write("UNEXPECTED ARGS: %r\\n" % (args,))
     sys.exit(1)
 """
-    stub.write_text(script)
-    stub.chmod(0o755)
-    return stub
+    return write_exec(stub, script)

@@ -22,6 +22,7 @@ from _deploy_sh_fakes import (
     UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
+    stub_bin,
 )
 
 from lib.repo_paths import REPO as _REPO
@@ -40,12 +41,13 @@ esac
 
 def _run(tmp_path: Path, snapshot_root_mode: int) -> subprocess.CompletedProcess:
     """A scoped run of deploy.sh whose snapshot root already exists with `snapshot_root_mode`."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(_UV_STUB)
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "flock": FLOCK_STUB,
+            "uv": _UV_STUB,
+        },
+    )
     repo = make_snapshot_repo(tmp_path / "repo")
     env = deploy_sh_env(tmp_path, bin_dir)
     root = Path(env["HOMELAB_DEPLOY_SNAPSHOT_ROOT"])

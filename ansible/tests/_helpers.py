@@ -12,13 +12,13 @@ way.
 """
 
 import ast
-import os
 import re
 import subprocess
 from pathlib import Path
 from typing import Iterator
 
 from lib import yaml_fast
+from lib.proc_testing import fake_bin, path_with
 from lib.repo_paths import REPO
 from ansible.plugins.filter.core import FilterModule
 from ansible.plugins.filter.mathstuff import FilterModule as _MathFilters
@@ -486,13 +486,10 @@ def stub_logger_on_path(tmp_path_factory, monkeypatch) -> Path:
     measured 84% of the Landings board as fixtures before its copy of this existed, and issue
     #1052 found the backup-health reader's fixture verdicts in the Alert History board.
     """
-    stub_dir = tmp_path_factory.mktemp("logger-stub")
-    logger = stub_dir / "logger"
-    logger.write_text(_LOGGER_STUB)
-    logger.chmod(0o755)
+    stub_dir = fake_bin(tmp_path_factory.mktemp("logger-stub"), logger=_LOGGER_STUB)
 
     calls = stub_dir / "logger-calls"
     calls.touch()
     monkeypatch.setenv("TEST_LOGGER_CALLS", str(calls))
-    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", path_with(stub_dir))
     return calls

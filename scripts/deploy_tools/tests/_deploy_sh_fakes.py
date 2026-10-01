@@ -23,6 +23,7 @@ import shutil
 import sys
 from pathlib import Path
 
+from lib.proc_testing import fake_bin, path_with
 from lib.git_testing import git, init_repo, scrub_process_git_env
 
 from lib.repo_paths import REPO as _REPO
@@ -127,7 +128,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
     locks = tmp_path / "locks"
     locks.mkdir(exist_ok=True)
     return git_free_env(
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        PATH=path_with(bin_dir),
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
         HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),
@@ -171,19 +172,17 @@ def make_snapshot_repo(path: Path) -> Path:
 
 
 def stub_bin(tmp_path: Path, stubs: dict[str, str]) -> Path:
-    """Write each stub as an executable under `tmp_path/bin` and return that directory."""
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    for name, body in stubs.items():
-        (bin_dir / name).write_text(body)
-        (bin_dir / name).chmod(0o755)
-    return bin_dir
+    """Write each stub as an executable under `tmp_path/bin` and return that directory.
+
+    This suite's spelling of `lib.proc_testing.fake_bin`: the directory is always
+    `tmp_path/bin`, because `deploy_sh_env` and every module here agree on that name.
+    """
+    return fake_bin(tmp_path / "bin", **stubs)
 
 
 def stub_path(tmp_path: Path, stubs: dict[str, str]) -> dict[str, str]:
     """`os.environ` with the stubs from `stub_bin` ahead of everything on PATH."""
-    bin_dir = stub_bin(tmp_path, stubs)
-    return dict(os.environ, PATH=f"{bin_dir}:{os.environ['PATH']}")
+    return dict(os.environ, PATH=path_with(stub_bin(tmp_path, stubs)))
 
 
 # What `deploy.sh --detach` prints once it has backgrounded the playbook subshell.

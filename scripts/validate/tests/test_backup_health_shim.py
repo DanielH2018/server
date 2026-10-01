@@ -9,14 +9,13 @@ token files, `curl`) replaced by a fixture. `conftest.py` in this directory puts
 Run: uv run pytest scripts/validate/tests/test_backup_health_shim.py
 """
 
-import os
 import re
 import shutil
-import subprocess
 
 import pytest
 from validate import shell_templates as v
 from validate.validate_lib import shell_lint as sl
+from lib.proc_testing import fake_bin, run, write_exec
 from lib.render_guard import ALL_VARS, BASE_CONTEXT, load_yaml
 
 BACKUP_HEALTH = v.ROLES / "setup" / "k3s" / "templates" / "longhorn-backup-health.sh.j2"
@@ -168,9 +167,9 @@ def _run_rendered_shim(
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **v.SHELL_STUB_OVERRIDES}
     rendered = sl.render_template(BACKUP_HEALTH, ctx)
 
-    fake_reader = tmp_path / "fake-reader.sh"
-    fake_reader.write_text("#!/usr/bin/env bash\n" + fake_reader_body)
-    fake_reader.chmod(0o755)
+    fake_reader = write_exec(
+        tmp_path / "fake-reader.sh", "#!/usr/bin/env bash\n" + fake_reader_body
+    )
 
     push_token_env = tmp_path / "kuma-push.env"
     push_token_env.write_text("LONGHORN_BACKUP_PUSH_TOKEN='test-token'\n")
@@ -178,17 +177,13 @@ def _run_rendered_shim(
     hc_ping_env.write_text(f"HC_PING_KEY='{FAKE_HC_PING_KEY}'\n")
     kuma_push_call = tmp_path / "kuma-push-call.txt"
 
-    stub_bin = tmp_path / "bin"
-    stub_bin.mkdir()
-    curl_calls = stub_bin / "curl-calls"
+    curl_calls = tmp_path / "bin" / "curl-calls"
+    stub_bin = fake_bin(
+        tmp_path / "bin",
+        curl=f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {curl_calls}\n",
+        **(extra_stub_files or {}),
+    )
     curl_calls.touch()
-    curl = stub_bin / "curl"
-    curl.write_text(f"#!/bin/sh\nprintf '%s\\n' \"$*\" >> {curl_calls}\n")
-    curl.chmod(0o755)
-    for name, body in (extra_stub_files or {}).items():
-        stub = stub_bin / name
-        stub.write_text(body)
-        stub.chmod(0o755)
 
     script = rendered
     script = script.replace(
@@ -218,19 +213,9 @@ def _run_rendered_shim(
         1,
     )
 
-    script_path = tmp_path / "longhorn-backup-health.sh"
-    script_path.write_text(script)
-    script_path.chmod(0o755)
+    script_path = write_exec(tmp_path / "longhorn-backup-health.sh", script)
 
-    env = dict(os.environ)
-    env["PATH"] = f"{stub_bin}{os.pathsep}{env['PATH']}"
-    proc = subprocess.run(
-        ["bash", str(script_path)],
-        capture_output=True,
-        text=True,
-        timeout=30,
-        env=env,
-    )
+    proc = run(["bash", str(script_path)], stub_bin=stub_bin, timeout=30)
     kuma_status = kuma_push_call.read_text() if kuma_push_call.exists() else None
     return proc, kuma_status, curl_calls.read_text().splitlines()
 

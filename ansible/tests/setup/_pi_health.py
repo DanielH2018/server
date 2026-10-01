@@ -13,6 +13,7 @@ health log it appends to. Every decision the script makes runs unmodified.
 import subprocess
 import jinja2
 from lib.ansible_jinja_env import make_ansible_env
+from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE, HOST_VARS, load_yaml
 
 
@@ -144,10 +145,7 @@ def render(name, tmp_path, jinja_vars=None):
 
     body = body.replace(REAL_LIB, str(lib)).replace(REAL_LOG, str(log))
 
-    script = tmp_path / f"{name}.sh"
-    script.write_text(body)
-    script.chmod(0o755)
-    return script, log
+    return write_exec(tmp_path / f"{name}.sh", body), log
 
 
 def run(
@@ -187,14 +185,7 @@ def run(
         counter_file.write_text(counter)
         script.write_text(script.read_text().replace(SD_COUNTER, str(counter_file)))
 
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    docker = bin_dir / "docker"
-    docker.write_text(DOCKER_STUB)
-    docker.chmod(0o755)
-    journalctl = bin_dir / "journalctl"
-    journalctl.write_text(JOURNALCTL_STUB)
-    journalctl.chmod(0o755)
+    bin_dir = fake_bin(tmp_path / "bin", docker=DOCKER_STUB, journalctl=JOURNALCTL_STUB)
 
     state = tmp_path / "running"
     state.write_text("".join(f"{c}\n" for c in running))
@@ -205,7 +196,7 @@ def run(
         check=True,
         capture_output=True,
         env={
-            "PATH": f"{bin_dir}:/usr/bin:/bin",
+            "PATH": path_with(bin_dir, env={"PATH": "/usr/bin:/bin"}),
             "STATE_FILE": str(state),
             "UNSTARTABLE": unstartable,
             "STUB_PUSH_OK": push_ok,

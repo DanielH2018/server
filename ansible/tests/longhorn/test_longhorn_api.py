@@ -28,6 +28,8 @@ import tempfile
 from pathlib import Path
 
 import pytest
+
+from lib.proc_testing import fake_bin, path_with
 from _helpers import K8S_ROLES
 from _helpers import REPO as _REPO_ROOT
 from _helpers import load_tasks as _tasks
@@ -223,27 +225,23 @@ def _run_longhorn_api_scratch_play(
 ) -> subprocess.CompletedProcess[str]:
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
-
-        k3s_stub = bin_dir / "k3s"
-        k3s_stub.write_text("#!/bin/sh\nexit 0\n")
-        k3s_stub.chmod(0o755)
-
-        # A `sudo`/`become_exe` passthrough: finds the trailing `-c '<command>'` the sudo become
-        # plugin always builds and execs it directly, as the current (unprivileged) user. Nothing
-        # the resolved task runs needs real root — it only needs `become: true` to not block on a
-        # password prompt this sandbox cannot answer.
-        fake_become = bin_dir / "fake_become"
-        fake_become.write_text(
-            "#!/bin/sh\n"
-            'last=""\n'
-            'prev=""\n'
-            'for a in "$@"; do prev="$last"; last="$a"; done\n'
-            'if [ "$prev" = "-c" ]; then exec /bin/sh -c "$last"; fi\n'
-            'exec "$@"\n'
+        # `fake_become` is a `sudo`/`become_exe` passthrough: it finds the trailing
+        # `-c '<command>'` the sudo become plugin always builds and execs it directly, as the
+        # current (unprivileged) user. Nothing the resolved task runs needs real root — it only
+        # needs `become: true` to not block on a password prompt this sandbox cannot answer.
+        bin_dir = fake_bin(
+            tmp_path / "bin",
+            k3s="#!/bin/sh\nexit 0\n",
+            fake_become=(
+                "#!/bin/sh\n"
+                'last=""\n'
+                'prev=""\n'
+                'for a in "$@"; do prev="$last"; last="$a"; done\n'
+                'if [ "$prev" = "-c" ]; then exec /bin/sh -c "$last"; fi\n'
+                'exec "$@"\n'
+            ),
         )
-        fake_become.chmod(0o755)
+        fake_become = bin_dir / "fake_become"
 
         required_var = "" if required else "\n          longhorn_api_required: false"
         playbook = tmp_path / "play.yml"
@@ -266,7 +264,7 @@ def _run_longhorn_api_scratch_play(
         )
 
         env = dict(os.environ)
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+        env["PATH"] = path_with(bin_dir, env=env)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"
         # The fact cache is shared across worktrees and with deploy.sh, so a test must never

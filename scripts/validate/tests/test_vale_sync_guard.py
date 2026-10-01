@@ -28,6 +28,7 @@ import tomllib
 import pytest
 
 from pathlib import Path
+from lib.proc_testing import fake_bin, path_with, write_exec
 from lib.repo_paths import REPO
 
 GUARD = REPO / "scripts" / "validate" / "vale.sh"
@@ -81,17 +82,13 @@ def fake_repo(tmp_path):
     for name in ("a.md", "b.md"):
         (tmp_path / "docs" / name).write_text("# heading\n")
 
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    vale = bin_dir / "vale"
-    vale.write_text(FAKE_VALE)
-    vale.chmod(0o755)
+    fake_bin(tmp_path / "bin", vale=FAKE_VALE)
     return tmp_path
 
 
 def env_for(repo: Path) -> dict[str, str]:
     env = dict(os.environ)
-    env["PATH"] = f"{repo / 'bin'}{os.pathsep}{env['PATH']}"
+    env["PATH"] = path_with(repo / "bin", env=env)
     env["VALE_LOG"] = str(repo / "vale.log")
     return env
 
@@ -174,9 +171,7 @@ def test_an_unlocked_guard_syncs_concurrently(fake_repo):
     Without this the assertions above are unfalsifiable — a harness that serialises the
     processes by accident would score a clean single sync for any script at all.
     """
-    unlocked = fake_repo / "scripts" / "validate" / "unlocked.sh"
-    unlocked.write_text(UNLOCKED_GUARD)
-    unlocked.chmod(0o755)
+    write_exec(fake_repo / "scripts" / "validate" / "unlocked.sh", UNLOCKED_GUARD)
 
     results = run_concurrently(fake_repo, 10, script="scripts/validate/unlocked.sh")
 

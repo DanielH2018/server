@@ -10,17 +10,17 @@ monkeypatches instead of going through `_run_main` let `stale_worktree_lines` ru
 and made 5 `gh` calls. Measured 2026-09-04. None of that is what either test is checking.
 
 Same mechanism as `ansible/tests/_helpers.py`'s `stub_logger_on_path` and
-`scripts/deploy_tools/tests/conftest.py`'s `_no_syslog`: not shared with them here, because
-`_helpers.py` is importable from this directory only through `pyproject.toml`'s global
-`pythonpath` setting, and generalizing it into a shared multi-binary stub is a separate
-change from fencing this suite's leak.
+`scripts/deploy_tools/tests/conftest.py`'s `_no_syslog`. All three now write their stubs and
+their `PATH` through `lib.proc_testing` (#3056); what stays per-suite is WHICH binaries each
+fences and what their bodies record.
 """
 
-import os
 import sys
 from pathlib import Path
 
 import pytest
+
+from lib.proc_testing import fake_bin, path_with
 
 # One line per invocation, so a test can assert the stub intercepted a call rather than the
 # real binary running underneath it. A stub that silently drops off PATH fails OPEN -- the
@@ -40,15 +40,14 @@ def _fence_external_binaries(tmp_path_factory, monkeypatch):
     Returns the file every stub appends its argv to, one line per call as
     `<binary> <args...>`.
     """
-    stub_dir = tmp_path_factory.mktemp("bin-stub")
+    stub_dir = fake_bin(
+        tmp_path_factory.mktemp("bin-stub"),
+        **{name: _STUB_TEMPLATE.format(name=name) for name in _FENCED_BINARIES},
+    )
     calls = stub_dir / "calls"
     calls.touch()
-    for name in _FENCED_BINARIES:
-        stub = stub_dir / name
-        stub.write_text(_STUB_TEMPLATE.format(name=name))
-        stub.chmod(0o755)
     monkeypatch.setenv("FENCE_CALLS", str(calls))
-    monkeypatch.setenv("PATH", f"{stub_dir}{os.pathsep}{os.environ['PATH']}")
+    monkeypatch.setenv("PATH", path_with(stub_dir))
     return calls
 
 

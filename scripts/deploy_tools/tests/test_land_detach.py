@@ -23,6 +23,7 @@ import pytest
 from deploy_tools.land_lib import detach
 from lib.exit_codes import LAND_GAVE_UP
 from lib.git_testing import scrubbed_env
+from lib.proc_testing import fake_bin, path_with
 
 _LAND_SH = Path(__file__).resolve().parents[1] / "land.sh"
 
@@ -44,15 +45,11 @@ esac
 
 
 def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    for name, text in (
-        ("gh", _GH_STUB),
-        ("git", _GIT_STUB.replace("{calls}", str(tmp_path))),
-    ):
-        stub = bin_dir / name
-        stub.write_text(text)
-        stub.chmod(0o755)
+    bin_dir = fake_bin(
+        tmp_path / "bin",
+        gh=_GH_STUB,
+        git=_GIT_STUB.replace("{calls}", str(tmp_path)),
+    )
     (tmp_path / "git-calls").touch()
     job_dir = tmp_path / "job"
     (job_dir / "tmp").mkdir(parents=True)
@@ -60,7 +57,7 @@ def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
         # `git commit` exports GIT_DIR and GIT_INDEX_FILE to its hooks, and a test inheriting
         # them has written the real repo.
         **scrubbed_env(),
-        "PATH": f"{bin_dir}{os.pathsep}{os.environ['PATH']}",
+        "PATH": path_with(bin_dir),
         "LAND_PRIMARY": str(tmp_path),
         detach.LOG_DIR_ENV: str(job_dir),
     }
