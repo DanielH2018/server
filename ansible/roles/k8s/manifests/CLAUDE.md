@@ -129,8 +129,18 @@ same resources.
   deploying more than one Deployment names the rest in `manifests_extra_rollouts` as
   `{name, image}` pairs (`freshrss`, `prowlarr`, `karakeep`, `n8n` today), where `image` is the
   `k8s/image-builder` name whose rebuild should roll it.
+- **The `config` trigger is the render AND the apply's own verdict (#3115).** `manifests_render
+  is changed` compares rendered file bytes, so a YAML comment or whitespace edit moved it while
+  `kubectl apply` printed every object `unchanged`, and the pods rolled for nothing. The two
+  restart tasks and the record's `restart` field now read `manifests_render is changed and
+  manifests_apply is changed`. `manifests_apply` is changed when its stdout holds `created` or
+  `configured`, so a ConfigMap whose data moved still restarts. Under `--dry-run` it is pinned
+  unchanged, as is every restart. The `secret` trigger deliberately stays on
+  `manifests_secret_render`: `verify_secret_keys.yml` patches a stale key out of a Secret after
+  an apply that printed `unchanged`, and that change needs the restart. The private restarts in
+  pihole and the queued `changed` flag for the stabilisation gate still read the render bytes.
 - **The restart is skipped for a workload the apply itself rolled.** The two `rollout
-  restart` tasks fire on `manifests_render is changed`, which an image-pin bump satisfies —
+  restart` tasks fire on the render and the apply both changing, which an image-pin bump satisfies —
   and the apply already rolls that Deployment, because its pod template changed. The second
   roll costs a spare pod on a `RollingUpdate` Deployment; on a `Recreate` one it deletes the
   pod the apply just created while the kubelet is mid-pull, and the drain waits out the whole

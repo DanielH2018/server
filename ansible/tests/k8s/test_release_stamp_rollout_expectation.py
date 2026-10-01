@@ -133,6 +133,11 @@ def test_the_expectation_reads_the_same_facts_as_the_restart_task():
         assert ingredient in FACT_EXPR, ingredient
     assert "manifests_image_changed" in when
     assert "k8s_rebuilt_images" in FACT_EXPR
+    # #3115: the config trigger is the render AND the apply's own verdict, on all three sides.
+    assert "manifests_render is changed and manifests_apply is changed" in when
+    assert "manifests_render is changed and manifests_apply is changed" in FACT_EXPR
+    extras = " ".join(task_named(MAIN, "Roll the extra deployments")["when"])
+    assert "manifests_render is changed and manifests_apply is changed" in extras
     extras = task_named(MAIN, "Roll the extra deployments")
     assert "manifests_rolled_by_apply.get(item.name" in " ".join(extras["when"])
 
@@ -152,6 +157,63 @@ def test_an_unchanged_render_queues_nothing():
         "prowlarr": False,
         "flaresolverr": False,
     }
+
+
+def test_a_render_change_the_apply_did_not_act_on_queues_nothing():
+    """#3115, the reject half: a YAML comment or whitespace edit moves the rendered bytes, and
+    `kubectl apply` prints every object `unchanged`, so the apply's `changed` is false and no
+    pod is expected to restart. The accept half is the default `_rollouts()` above, where the
+    apply printed `configured` for the same changed render."""
+    rollouts = _rollouts(
+        manifests_apply={
+            "changed": False,
+            "stdout": "deployment.apps/prowlarr unchanged\nconfigmap/prowlarr unchanged",
+        }
+    )
+    assert {n: r["restart"] for n, r in rollouts.items()} == {
+        "prowlarr": False,
+        "flaresolverr": False,
+    }
+
+
+def test_the_restart_tasks_fire_on_the_apply_verdict_not_the_render_bytes_alone():
+    """The same pair rendered through the two restart tasks' own `when`, so the record and
+    the tasks cannot drift apart: only the clause naming the render is exercised."""
+    for name in (
+        "Roll the deployment after a config change",
+        "Roll the extra deployments",
+    ):
+        (clause,) = [
+            c
+            for c in task_named(MAIN, name)["when"]
+            if "manifests_render is changed" in c
+        ]
+        ctx = dict(
+            item={"name": "flaresolverr"},
+            manifests_secret_render={"changed": False},
+            manifests_image_changed=False,
+            k8s_rebuilt_images=[],
+        )
+        expr = "{{ " + " ".join(clause.split()) + " }}"
+        assert render_expr(
+            expr,
+            manifests_render={"changed": True},
+            manifests_apply={"changed": True},
+            **ctx,
+        ), name
+        assert not render_expr(
+            expr,
+            manifests_render={"changed": True},
+            manifests_apply={"changed": False},
+            **ctx,
+        ), name
+        # The secret trigger is deliberately not gated on the apply (verify_secret_keys.yml).
+        assert render_expr(
+            expr,
+            manifests_render={"changed": True},
+            manifests_apply={"changed": False},
+            **{**ctx, "manifests_secret_render": {"changed": True}},
+        ), name
 
 
 def test_a_secret_change_alone_queues_a_restart():
@@ -244,7 +306,9 @@ def test_the_rolled_fact_is_reset_per_service():
 
 
 def test_a_workload_this_apply_created_is_not_expected_to_restart():
-    rollouts = _rollouts(manifests_apply={"stdout": "deployment.apps/prowlarr created"})
+    rollouts = _rollouts(
+        manifests_apply={"changed": True, "stdout": "deployment.apps/prowlarr created"}
+    )
     assert rollouts["prowlarr"]["restart"] is False
     assert rollouts["flaresolverr"]["restart"] is True
 

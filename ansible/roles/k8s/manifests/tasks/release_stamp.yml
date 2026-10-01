@@ -114,7 +114,8 @@
            'name': manifests_release_target.name,
            'kind': manifests_release_target.kind | default(manifests_rollout_kind | default('deploy')),
            'restart': (
-             ('config' in manifests_target_triggers and manifests_render is changed)
+             ('config' in manifests_target_triggers
+              and manifests_render is changed and manifests_apply is changed)
              or ('secret' in manifests_target_triggers and manifests_secret_render is changed)
              or ('image' in manifests_target_triggers
                  and (manifests_release_target.image | default(manifests_release_target.name))
