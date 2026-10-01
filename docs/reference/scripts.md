@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-01 16:09 UTC
-generated_sha: 3f0bb6ac0
+generated_at: 2026-10-01 16:41 UTC
+generated_sha: 4683148f1
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 3f0bb6ac0
 
 # Scripts
 
-218 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+219 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 48 scripts that run unattended have no test; 4 of all 218 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 49 scripts that run unattended have no test; 4 of all 219 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -54,7 +54,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-29 script(s) — every commit, CI run, deploy or Claude session runs it.
+30 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -65,6 +65,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/deploy_run.py` | deploy_tools | Run an interactive Ansible deploy under the locks the automated deployers take. | every deploy (deploy.sh) | `test_deploy_exit_codes.py` *(indirect)* | — |
 | `scripts/deploy_tools/deploy_staleness.py` | deploy_tools | Refuse a deploy from a git tree that is behind origin/master. | deploy_run.py (every commit, CI run, deploy or Claude session runs it) | `test_deploy_staleness.py` | — |
 | `scripts/deploy_tools/deploy_tags.py` | deploy_tools | Validate the --tags a deploy was given, before Ansible silently accepts them. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_deploy_tags.py` | — |
+| `scripts/deploy_tools/digest_provable.py` | deploy_tools | Which k8s roles act ONLY through the bytes their render digest covers (#3110). | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_digest_provable.py` | — |
 | `scripts/backup/etcd_restore_drill.sh` | backup | prove an off-box etcd snapshot actually restores, without an outage. | deploy: ansible/roles/setup/hypervisor/tasks/etcd_drill.yml | `test_etcd_restore_drill_cron.py` *(indirect)* | — |
 | `scripts/deploy_tools/fact_cache_guard.py` | deploy_tools | Clear the shared Ansible fact cache when it pins another worktree's interpreter. | deploy_run.py (every commit, CI run, deploy or Claude session runs it) | `test_fact_cache_guard.py` | — |
 | `scripts/dev/fact_status.py` | dev | Status, verification and lint for the fact stores — the one entry point. | prek hook (every commit) | `test_facts_cli.py` *(indirect)* | — |
@@ -236,7 +237,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/dev/fanout_lib/transport.py` | dev | The transport seam: every process boundary the dispatcher crosses, as one injectable object. | imported by _fanout_fakes.py, clean.py, fanout_place.py, launch.py | `test_fanout_clean.py` *(indirect)* | — |
 | `scripts/dev/findings_lib/verify.py` | dev | Verify-by: the prose an issue stores about how to check it, and how `verify` reports it. | imported by findings.py | `test_findings_verify.py` *(indirect)* | — |
 | `scripts/diagnostics/probe_lib/vip_placement.py` | diagnostics | `probe.py vip-placement` — does every ETP=Local VIP have a Ready endpoint on an announcing node? | imported by probe.py, subcommands.py | `test_probe_vip_placement.py` *(indirect)* | — |
-| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by asset_pins.py, atoms.py, catalog_backup.py, compose_templates.py, config_templates.py, cron_targets.py, crons.py, fragment_readers.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_pvc.py, k8s_roles.py, land_reach.py, longhorn_upgrade_gates.py, monitors.py, narrow_git.py, narrow_setup_index.py, narrow_setup_playbook.py, pinned_rotation_gates.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, setup_role_chains.py, setup_templates.py, state.py, validate_ha_config.py | `test_yaml_fast.py` | — |
+| `scripts/lib/yaml_fast.py` | lib | `yaml.safe_load` backed by libyaml, which parses the same schema an order faster. | imported by asset_pins.py, atoms.py, catalog_backup.py, compose_templates.py, config_templates.py, cron_targets.py, crons.py, digest_provable.py, fragment_readers.py, git_dates.py, glance_facts.py, ha_state_checks.py, ha_state_model.py, inventory.py, invocation_sites.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_pvc.py, k8s_roles.py, land_reach.py, longhorn_upgrade_gates.py, monitors.py, narrow_git.py, narrow_setup_index.py, narrow_setup_playbook.py, pinned_rotation_gates.py, release_bin_groups.py, render_guard.py, rotation_tools.py, route_facts.py, secret_bearing_host_paths.py, setup_role_chains.py, setup_templates.py, state.py, validate_ha_config.py | `test_yaml_fast.py` | — |
 
 ## Run by hand
 
