@@ -20,7 +20,7 @@ def _repo(tmp_path, *names: str):
 
 
 def test_a_reincluded_or_local_only_root_entry_is_clean(tmp_path):
-    repo = _repo(tmp_path, ".venv/", "ansible.log")
+    repo = _repo(tmp_path, ".venv/", "ansible.log", ".fanout/")
     assert root_ignored_files.problems(repo) == []
 
 
