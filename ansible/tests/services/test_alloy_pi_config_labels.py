@@ -4,16 +4,20 @@
 the estate: monitor-bridge's `LOKI_PI_STREAM` selects `{job="pi"}`, `probe.py alerts` reads
 `{job="syslog"} |= "status=down"` and relies on `machine="daniel-pi"` to tell the Pi's health
 crons from the cluster hosts' syslog. The config is River, which `validate/config_templates.py`
-cannot parse, so this reads the template text.
+cannot parse, so this reads the RENDERED config as text — what the container receives, with
+`{{ domain }}` already expanded (#3175).
 """
 
 import re
 
 import pytest
 
-from _helpers import REPO
+from _compose_render import host_context, rendered_text
 
-_CONFIG = REPO / "ansible/roles/containers/alloy/templates/config.alloy.j2"
+# The render's own domain, not a hardcoded one: the push URL is the only fragment below that
+# carries a variable, and pinning a literal domain here would check a value the inventory may
+# not hold.
+_DOMAIN = host_context()["domain"]
 
 REQUIRED_FRAGMENTS = (
     # Discovery through the read-only proxy, never the raw socket.
@@ -27,13 +31,13 @@ REQUIRED_FRAGMENTS = (
     '"job" = "syslog"',
     '"machine" = "daniel-pi"',
     # The push-only door on the LAN route.
-    'url = "https://loki-homelab.local.{{ domain }}/loki/api/v1/push"',
+    f'url = "https://loki-homelab.local.{_DOMAIN}/loki/api/v1/push"',
 )
 
 
 @pytest.fixture(scope="module")
 def alloy_config() -> str:
-    return _CONFIG.read_text()
+    return rendered_text("alloy", "config.alloy.j2")
 
 
 @pytest.mark.parametrize("fragment", REQUIRED_FRAGMENTS)
@@ -59,16 +63,13 @@ def test_the_journal_is_not_shipped(alloy_config: str) -> None:
     assert "loki.source.journal" not in re.sub(r"//[^\n]*", "", alloy_config)
 
 
-_COMPOSE = REPO / "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
-
-
 def test_storage_path_is_not_under_the_images_own_var_lib_alloy() -> None:
     """The image's /var/lib/alloy is 0770 uid 473; uid 1000 cannot traverse it.
 
     A bind mount inside it is unreachable and Alloy dies at startup with
     `mkdir /var/lib/alloy/data: permission denied`.
     """
-    compose = _COMPOSE.read_text()
+    compose = rendered_text("alloy", "docker-compose.yml.j2")
     assert "--storage.path=/data" in compose
     assert "./data:/data" in compose
     assert "/var/lib/alloy/data" not in re.sub(r"#[^\n]*", "", compose)
@@ -77,6 +78,8 @@ def test_storage_path_is_not_under_the_images_own_var_lib_alloy() -> None:
 def test_the_guard_can_go_red() -> None:
     assert len(REQUIRED_FRAGMENTS) >= 8
     assert '"machine" = "daniel-pi"' in REQUIRED_FRAGMENTS
+    # A fragment that still carried a Jinja expression would match nothing in a render.
+    assert not [f for f in REQUIRED_FRAGMENTS if "{{" in f]
 
 
 _DNS_OPT_BLOCK = re.compile(r"^\s+dns_opt:\n((?:\s+- \S+\n)+)", re.MULTILINE)
@@ -101,7 +104,7 @@ def test_resolver_retries_the_embedded_dns_hop() -> None:
     A single 2s try fails every lookup in that window at level=error; see the comment above
     `dns_opt` in the compose template.
     """
-    assert _resolver_attempts(_COMPOSE.read_text()) >= 3
+    assert _resolver_attempts(rendered_text("alloy", "docker-compose.yml.j2")) >= 3
 
 
 def test_resolver_attempts_reads_the_real_value_and_defaults_without_it() -> None:

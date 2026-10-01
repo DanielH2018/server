@@ -3,7 +3,9 @@
 An unpinned `npm install -g` in `roles/k8s/n8n/templates/Dockerfile.j2` takes whatever npm
 serves on each rebuild, and nothing records which version a pod carries. Two halves here: the
 Dockerfile carries an exact version, and the renovate.json regex manager over that file extracts
-it, so a bump arrives as a PR rather than as a silent change on the next rebuild.
+it, so a bump arrives as a PR rather than as a silent change on the next rebuild. The first half
+reads the RENDERED build text; the second stays on the source, because that is the file Renovate
+itself reads.
 
 Run: uv run pytest ansible/tests/services/test_n8n_build_is_pinned.py
 """
@@ -12,7 +14,11 @@ import json
 import re
 
 from _helpers import K8S_ROLES, REPO
+from _k8s_render import rendered_build_text
 
+# The source template, for the Renovate half alone: Renovate reads the file on disk, braces
+# intact, so asserting its matchString against a render would claim something false about the
+# real system. The pin halves read the rendered build text (#3175).
 DOCKERFILE = K8S_ROLES / "n8n" / "templates" / "Dockerfile.j2"
 RENOVATE = REPO / "renovate.json"
 
@@ -47,13 +53,13 @@ def _fuzzball_manager() -> dict:
 
 def test_the_dockerfile_installs_fuzzball() -> None:
     """Non-vacuity: the guard below passes over nothing if the install line is renamed away."""
-    assert re.search(r"npm install -g fuzzball@", DOCKERFILE.read_text()), (
+    assert re.search(r"npm install -g fuzzball@", rendered_build_text("n8n")), (
         "the n8n Dockerfile no longer installs fuzzball — update this guard with the package"
     )
 
 
 def test_every_npm_package_is_pinned_exactly() -> None:
-    assert not unpinned_npm_installs(DOCKERFILE.read_text())
+    assert not unpinned_npm_installs(rendered_build_text("n8n"))
 
 
 def test_renovate_reads_the_pin_from_the_dockerfile() -> None:
