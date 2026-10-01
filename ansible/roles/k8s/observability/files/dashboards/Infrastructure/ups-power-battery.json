@@ -142,7 +142,7 @@
         "type": "prometheus",
         "uid": "EGdsQqhVk"
       },
-      "description": "NUT's RB (Replace Battery) verdict via HA binary_sensor.apc_ups_replace_battery. monitor-bridge check_ups pages on this — the earliest UPS signal, it can trip while charge/runtime still read fine.",
+      "description": "NUT's RB (Replace Battery) verdict — the earliest UPS signal, it can trip while charge/runtime still read fine. monitor-bridge check_ups pages on the nut-exporter series alone since #3105; the HA binary_sensor is kept in this panel's query as a second view during an exporter outage.",
       "fieldConfig": {
         "defaults": {
           "mappings": [

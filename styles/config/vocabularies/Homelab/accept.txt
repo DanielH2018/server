@@ -43,6 +43,7 @@ Scrutiny
 Tempo
 TLSStore
 [Tt]raefik
+upsd
 Vale
 WireGuard
 [Zz]igbee
