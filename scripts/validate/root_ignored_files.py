@@ -42,11 +42,9 @@ LOCAL_ONLY = frozenset(
         "ansible.log",
         ".remember",
         ".mkdocs-strict-check",
-        # Per-batch run state a fan-out agent's own worktree holds: the brief it was handed,
-        # its report and its stderr (scripts/dev/fanout_place.py). Every fan-out worktree has
-        # one, so without this entry the hook fails for every batch before it can commit.
-        ".fanout",
         "site",
+        # The issue-fanout harness's per-batch brief and landing logs (`fanout_place.py`).
+        ".fanout",
     }
 )
 
