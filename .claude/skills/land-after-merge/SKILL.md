@@ -22,7 +22,9 @@ run `gh pr merge` yourself.
 It arms `gh pr merge --squash --auto`, waits for the merge, waits for master CI on the merge
 commit, deploys that commit, kicks the tick, gates the health, and prints the landing's
 `VERDICT:` line. `--detach` names its own logfile and forks into it; `--await-verdict` blocks
-until the landing prints its verdict and exits with the landing's own code. `--since` is
+until the landing prints its verdict and exits with the landing's own code. The landing runs
+outside the caller's process tree, so a Bash call killed at its time limit does not kill it:
+read the log for the `VERDICT:` line instead. `--since` is
 resolved from `origin/master` before the merge is armed, so you do not pass it.
 
 `land.sh --help` prints the flags, the exit codes and the verdicts.

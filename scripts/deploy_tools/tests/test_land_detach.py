@@ -13,9 +13,13 @@ with neither flag never forks and never resolves `--since` for itself. That is t
 that makes the new mode safe to ship before it has been exercised on a real landing.
 """
 
+import contextlib
 import io
 import os
+import re
+import signal
 import subprocess
+import time
 from pathlib import Path
 
 import pytest
@@ -44,16 +48,16 @@ esac
 """
 
 
-def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
+def _env(tmp_path: Path, gh: str = _GH_STUB) -> dict[str, str]:
     bin_dir = fake_bin(
         tmp_path / "bin",
-        gh=_GH_STUB,
+        gh=gh,
         git=_GIT_STUB.replace("{calls}", str(tmp_path)),
     )
     (tmp_path / "git-calls").touch()
     job_dir = tmp_path / "job"
     (job_dir / "tmp").mkdir(parents=True)
-    env = {
+    return {
         # `git commit` exports GIT_DIR and GIT_INDEX_FILE to its hooks, and a test inheriting
         # them has written the real repo.
         **scrubbed_env(),
@@ -61,9 +65,12 @@ def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
         "LAND_PRIMARY": str(tmp_path),
         detach.LOG_DIR_ENV: str(job_dir),
     }
+
+
+def _run(tmp_path: Path, *flags: str) -> subprocess.CompletedProcess[str]:
     return subprocess.run(
         ["bash", str(_LAND_SH), "--pr", "939", *flags],
-        env=env,
+        env=_env(tmp_path),
         capture_output=True,
         text=True,
         timeout=180,
@@ -122,6 +129,72 @@ def test_no_flags_reaches_the_same_landing_as_before(tmp_path):
     assert "land --detach" not in result.stdout
     assert _logs(tmp_path) == []
     assert "rev-parse origin/master" not in _git_argv(tmp_path)
+
+
+def _descendants(root: int) -> set[int]:
+    """Every live pid below `root`, found by parent pid -- the walk a harness timeout does."""
+    children: dict[int, list[int]] = {}
+    for stat in Path("/proc").glob("[0-9]*/stat"):
+        try:
+            fields = stat.read_text().rpartition(")")[2].split()
+        except OSError:
+            continue
+        children.setdefault(int(fields[1]), []).append(int(stat.parent.name))
+    found, todo = set(), [root]
+    while todo:
+        for child in children.get(todo.pop(), []):
+            found.add(child)
+            todo.append(child)
+    return found
+
+
+def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdict(
+    tmp_path,
+):
+    """Issue #3158: a harness timeout killed the waiting call and the landing died with it.
+
+    The kill here is both halves of what a harness does: the caller's process group and every
+    descendant found by parent pid. `setsid` alone survives the first and not the second, so
+    this goes red on a landing that is merely a child in its own session.
+    """
+    # A slow first `gh` call holds the landing open long enough to kill the caller under it.
+    slow_gh = _GH_STUB.replace('case "$*" in', 'sleep 3\ncase "$*" in', 1)
+    caller = subprocess.Popen(
+        ["bash", str(_LAND_SH), "--pr", "939", "--detach", "--await-verdict"],
+        env=_env(tmp_path, gh=slow_gh),
+        stdout=subprocess.PIPE,
+        text=True,
+        start_new_session=True,
+    )
+    landing_pid = None
+    try:
+        assert caller.stdout is not None
+        announced = caller.stdout.readline()
+        landing_pid = int(re.search(r"\(pid (\d+)\)", announced).group(1))
+        tree = _descendants(caller.pid)
+        os.killpg(caller.pid, signal.SIGKILL)
+        for pid in tree:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(pid, signal.SIGKILL)
+        caller.wait(timeout=10)
+
+        [log] = _logs(tmp_path)
+        deadline = time.monotonic() + 60
+        while detach.verdict_in(log) is None and time.monotonic() < deadline:
+            time.sleep(0.2)
+        verdict = detach.verdict_in(log) or ""
+        assert verdict.startswith("VERDICT: nothing-to-deploy (PR #939"), (
+            log.read_text()
+        )
+        assert detach.recorded_code(log) == 0
+    finally:
+        if landing_pid:
+            with contextlib.suppress(ProcessLookupError):
+                os.kill(landing_pid, signal.SIGKILL)
+        caller.kill()
+        caller.wait()
+        if caller.stdout:
+            caller.stdout.close()
 
 
 # -- land_lib/detach.py's own rules ---------------------------------------------------------
