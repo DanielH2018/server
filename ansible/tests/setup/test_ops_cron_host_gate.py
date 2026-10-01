@@ -30,7 +30,6 @@ KNOWN_GATED_TASKS = frozenset(
     {
         "Schedule the weekly worktree sweep and git object-store repair (box only)",
         "Schedule the infrastructure-map refresh (box only)",
-        "Schedule the TLS cert-expiry watch (box only)",
         "Schedule the generated-docs refresh (box only)",
         "Schedule the weekly homelab eval sweep (box only)",
     }

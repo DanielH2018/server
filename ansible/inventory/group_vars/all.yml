@@ -648,8 +648,8 @@ renovate_agent_host: daniel-box
 # renovate_notify_host is.
 fake_remux_host: daniel-box
 # The one host that runs the repo-level ops crons `initial_setup/tasks/crons.yml` gates to a
-# single host: the worktree sweep, the infrastructure-map refresh, the TLS cert-expiry watch,
-# the generated-docs refresh and the weekly eval sweep. They need the primary checkout, uv, gh
+# single host: the worktree sweep, the infrastructure-map refresh, the generated-docs refresh
+# and the weekly eval sweep. They need the primary checkout, uv, gh
 # and a local kubectl, which daniel-box is the only host to carry together.
 #
 # Here rather than in the role's defaults for the reason fake_remux_host gives above, plus one
