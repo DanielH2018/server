@@ -26,7 +26,7 @@ from _jellyfin_plugins import (
     INSTALLERS,
     PLUGIN_ROOT,
     compares_against,
-    constants,
+    plugin_constants,
     init_containers,
     script,
     without_assignment,
@@ -104,7 +104,7 @@ def _assert_install_step(installer: str, defaults: dict) -> None:
         installer: the Python the `install-webhook` init container runs.
         defaults: the jellyfin role's defaults, holding the pins the script must agree with.
     """
-    consts = constants(installer)
+    consts = plugin_constants(installer)
     version = defaults["jellyfin_k8s_webhook_version"]
 
     assert consts.get("WANT_MD5") == defaults["jellyfin_k8s_webhook_md5"], (
@@ -156,7 +156,9 @@ def test_the_install_marker_follows_the_pin_rather_than_a_literal():
     A single render cannot see the difference — a literal and `{{ ... }}` produce the same text —
     so the role is rendered again with the pin flipped.
     """
-    bumped = constants(script(INSTALLER, {"jellyfin_k8s_webhook_version": "9.9.9.9"}))
+    bumped = plugin_constants(
+        script(INSTALLER, {"jellyfin_k8s_webhook_version": "9.9.9.9"})
+    )
     assert bumped.get("VERSION") == "9.9.9.9", (
         f"the installer still installs {bumped.get('VERSION')!r} after "
         f"jellyfin_k8s_webhook_version was flipped to 9.9.9.9, so the version is written into "

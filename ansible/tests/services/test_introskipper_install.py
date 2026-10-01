@@ -29,7 +29,7 @@ from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
-    constants,
+    plugin_constants,
     init_containers,
     script,
     without_assignment,
@@ -165,7 +165,7 @@ def _assert_install_step(installer: str, defaults: dict) -> None:
         installer: the Python the `install-intro-skipper` init container runs.
         defaults: the jellyfin role's defaults, holding the pins the script must agree with.
     """
-    consts = constants(installer)
+    consts = plugin_constants(installer)
     version = defaults["jellyfin_k8s_introskipper_version"]
 
     assert consts.get("WANT_SHA256") == defaults["jellyfin_k8s_introskipper_sha256"], (
@@ -218,7 +218,7 @@ def test_the_install_marker_follows_the_pin_rather_than_a_literal():
     so the role is rendered again with the pin flipped. The marker path, the download and the log
     lines all have to name one version, and this is what keeps that true.
     """
-    bumped = constants(
+    bumped = plugin_constants(
         script(INSTALLER, {"jellyfin_k8s_introskipper_version": "9.9.9.9"})
     )
     assert bumped.get("VERSION") == "9.9.9.9", (

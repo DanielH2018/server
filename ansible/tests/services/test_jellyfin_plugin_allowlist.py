@@ -25,7 +25,7 @@ from _jellyfin_plugins import (
     INSTALLERS,
     PLUGIN_ROOT,
     SWEEP,
-    constants,
+    plugin_constants,
     init_containers,
     script,
     without_assignment,
@@ -41,7 +41,7 @@ def _installed_names() -> set[str]:
     """
     names = set()
     for installer in INSTALLERS:
-        consts = constants(script(installer))
+        consts = plugin_constants(script(installer))
         plugin_dir = consts.get("PLUGIN_DIR")
         assert isinstance(plugin_dir, str) and plugin_dir.startswith(
             f"{PLUGIN_ROOT}/"
@@ -53,7 +53,7 @@ def _installed_names() -> set[str]:
 
 
 def _keep(sweep: str) -> tuple[str, ...]:
-    keep = constants(sweep).get("KEEP")
+    keep = plugin_constants(sweep).get("KEEP")
     assert isinstance(keep, tuple), "the sweep no longer assigns a KEEP tuple"
     return keep
 
@@ -178,7 +178,7 @@ def test_the_sweep_removes_only_unlisted_plugin_directories(plugins):
 
 def test_the_report_check_fails_when_configurations_is_not_skipped(plugins):
     """Red proof: a sweep that treats `configurations` as a plugin must fail the report check."""
-    settings = constants(script(SWEEP))["SETTINGS"]
+    settings = plugin_constants(script(SWEEP))["SETTINGS"]
     swept = script(SWEEP).replace(
         f'SETTINGS = "{settings}"', 'SETTINGS = "something-else"'
     )

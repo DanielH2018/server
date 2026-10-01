@@ -30,7 +30,7 @@ from _helpers import ANSIBLE, REPO, load_defaults
 from _jellyfin_plugins import (
     PLUGIN_ROOT,
     compares_against,
-    constants,
+    plugin_constants,
     init_containers,
     script,
     without_assignment,
@@ -187,7 +187,7 @@ def _assert_install_step(installer: str, defaults: dict) -> None:
         installer: the Python the `install-media-cleaner` init container runs.
         defaults: the jellyfin role's defaults, holding the pins the script must agree with.
     """
-    consts = constants(installer)
+    consts = plugin_constants(installer)
     version = defaults["jellyfin_k8s_mediacleaner_version"]
 
     assert consts.get("WANT_SHA256") == defaults["jellyfin_k8s_mediacleaner_sha256"], (
@@ -248,7 +248,7 @@ def test_the_install_marker_follows_the_pin_rather_than_a_literal():
     A single render cannot see the difference — a literal and `{{ ... }}` produce the same text —
     so the role is rendered again with the pin flipped.
     """
-    bumped = constants(
+    bumped = plugin_constants(
         script(INSTALLER, {"jellyfin_k8s_mediacleaner_version": "9.9.9.9"})
     )
     assert bumped.get("VERSION") == "9.9.9.9", (

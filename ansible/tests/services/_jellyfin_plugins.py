@@ -45,7 +45,7 @@ PLUGIN_ROOT = "/config/data/plugins"
 
 
 class Unevaluable(Exception):
-    """The expression is not one `constants` knows how to fold to a value."""
+    """The expression is not one `plugin_constants` knows how to fold to a value."""
 
 
 def init_containers(overrides: dict | None = None) -> dict[str, dict]:
@@ -117,8 +117,14 @@ def _value(node: ast.expr, known: dict[str, object]) -> object:
     raise Unevaluable(ast.dump(node))
 
 
-def constants(installer: str) -> dict[str, object]:
+def plugin_constants(installer: str) -> dict[str, object]:
     """The module-level constants of an installer script, by name.
+
+    # DECIDED: named `plugin_constants`, not `constants`. `scripts/lib/script_coverage.py`
+    # credits a script with an `import` when any test writes `from <x> import <stem>`, matching
+    # on the bare stem — so `from _jellyfin_plugins import constants` credited
+    # `scripts/infra_map/constants.py` with coverage it does not have, and failed
+    # scripts/docs/tests/test_gen_reference_scripts.py::test_a_facade_only_member_gets_no_by_name_import_credit.
 
     An assignment this cannot fold — a call, a comprehension — is left out rather than raising:
     the scripts hold plenty of those, and a guard asks only about the handful of constants that

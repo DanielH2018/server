@@ -26,7 +26,7 @@ Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 import re
 
 from _helpers import ANSIBLE, load_defaults
-from _jellyfin_plugins import PLUGIN_ROOT, constants, script
+from _jellyfin_plugins import PLUGIN_ROOT, plugin_constants, script
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 
@@ -98,12 +98,14 @@ def test_the_init_container_reads_the_version_from_the_variable():
     """
     version = load_defaults(JELLYFIN)["jellyfin_k8s_anisync_version"]
 
-    assert constants(script(INSTALLER)).get("VERSION") == version, (
+    assert plugin_constants(script(INSTALLER)).get("VERSION") == version, (
         f"the install-ani-sync init container installs "
-        f"{constants(script(INSTALLER)).get('VERSION')!r} while the role pins {version!r} — the "
+        f"{plugin_constants(script(INSTALLER)).get('VERSION')!r} while the role pins {version!r} — the "
         f"marker file would stop tracking the pin"
     )
-    bumped = constants(script(INSTALLER, {"jellyfin_k8s_anisync_version": "9.9.9.9"}))
+    bumped = plugin_constants(
+        script(INSTALLER, {"jellyfin_k8s_anisync_version": "9.9.9.9"})
+    )
     assert bumped.get("VERSION") == "9.9.9.9", (
         "the version is written literally into deployment.yaml.j2: flipping "
         "jellyfin_k8s_anisync_version left the installer installing the old build. Take it from "
@@ -124,7 +126,7 @@ def test_the_plugin_lands_where_jellyfin_actually_scans():
     rather than left to a comment. The directory layout is the second half: Jellyfin's own
     installer writes `<Name>_<Version>`, and `Ani-Sync` is meta.json's name, not ours.
     """
-    consts = constants(script(INSTALLER))
+    consts = plugin_constants(script(INSTALLER))
     version = load_defaults(JELLYFIN)["jellyfin_k8s_anisync_version"]
 
     assert consts.get("PLUGINS") == PLUGIN_ROOT, (

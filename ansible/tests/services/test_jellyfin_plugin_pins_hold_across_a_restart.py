@@ -35,7 +35,7 @@ import pytest
 from _jellyfin_plugins import (
     INSTALLERS,
     PLUGIN_ROOT,
-    constants,
+    plugin_constants,
     init_containers,
     script,
 )
@@ -44,13 +44,13 @@ from lib.proc_testing import run
 
 def _plugin_name(installer: str) -> str:
     """The plugin NAME an installer writes, from its rendered `PLUGIN_DIR`."""
-    plugin_dir = constants(installer)["PLUGIN_DIR"]
+    plugin_dir = plugin_constants(installer)["PLUGIN_DIR"]
     return plugin_dir.rsplit("/", 1)[-1].rsplit("_", 1)[0]
 
 
 def _seed(installer: str, plugins) -> str:
     """The pinned plugin, complete, plus the newer directory `Update Plugins` leaves behind."""
-    consts = constants(installer)
+    consts = plugin_constants(installer)
     name = _plugin_name(installer)
     version = consts["VERSION"]
     pinned = plugins / f"{name}_{version}"
@@ -79,7 +79,7 @@ def _run(installer: str, plugins) -> str:
 
 def _assert_pin_holds(installer: str, plugins) -> None:
     name = _seed(installer, plugins)
-    version = constants(installer)["VERSION"]
+    version = plugin_constants(installer)["VERSION"]
     out = _run(installer, plugins)
 
     assert "already installed" in out, (
@@ -93,7 +93,7 @@ def _assert_pin_holds(installer: str, plugins) -> None:
 
 def _assert_auto_update_off(installer: str, plugins) -> None:
     name = _seed(installer, plugins)
-    version = constants(installer)["VERSION"]
+    version = plugin_constants(installer)["VERSION"]
     _run(installer, plugins)
 
     meta = json.loads((plugins / f"{name}_{version}" / "meta.json").read_text())
