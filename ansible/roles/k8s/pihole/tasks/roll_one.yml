@@ -88,11 +88,25 @@
       # Read by the record amend below: `is changed` is false both when the gate skipped this
       # task and when it never ran at all, which is exactly "no restartedAt was stamped".
       register: pihole_k8s_restarted
-      # Two facts, one per apply, both keyed by instance name so neither can suppress the
-      # other instance's restart whatever order the loop runs in.
-      when: >-
-        not (manifests_rolled_by_apply.get(pihole_instance, false)
-             or pihole_k8s_rolled_by_own_apply.get(pihole_instance, false))
+      when:
+        # The trigger, per instance (#3127, mirroring #3115). The include in main.yml also fires
+        # on rendered bytes alone for pihole-2, because it has to run apply_instance_2.yml to
+        # learn whether that apply changed anything, so the restart re-checks the verdicts here.
+        # Each config trigger is the render AND the matching apply's own `changed`: the shared
+        # apply for the shared files (both instances read the ConfigMap), pihole-2's own apply
+        # for deployment-2.yaml. A YAML comment edit moves the bytes and leaves both applies
+        # `unchanged`. The secret trigger stays on the secret render, as in the shared role.
+        # `pihole_instance == 'pihole-2'` first, so the `pihole` iteration never reads a register
+        # that only the pihole-2 iteration creates.
+        - (manifests_render is changed and manifests_apply is changed)
+          or manifests_secret_render is changed or manifests_image_changed
+          or (pihole_instance == 'pihole-2'
+              and (pihole_k8s_instance_2_apply | default({})) is changed
+              and (manifests_deferred_render | default({})) is changed)
+        # Two facts, one per apply, both keyed by instance name so neither can suppress the
+        # other instance's restart whatever order the loop runs in.
+        - not (manifests_rolled_by_apply.get(pihole_instance, false)
+               or pihole_k8s_rolled_by_own_apply.get(pihole_instance, false))
 
     - name: Wait for serving Pi-hole instance {{ pihole_instance }}
       ansible.builtin.command:

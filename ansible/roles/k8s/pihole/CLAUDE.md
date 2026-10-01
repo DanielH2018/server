@@ -64,6 +64,20 @@ continuity. Coexisted with a Docker-era copy through the DNS cutover; that copy 
   Deploy time is covered either way and more strictly: `roll_one.yml` blocks on pihole-2's
   `rollout status`, and `Verify both Pi-hole instances have a ready DNS endpoint` refuses fewer
   than two ready endpoints.
+- **Each private restart needs the render AND the matching apply's own `changed` (#3127,
+  mirroring #3115).** `manifests_render is changed` compares rendered bytes, so a YAML-comment
+  edit to a template used to roll the LAN resolvers while `kubectl apply` printed every object
+  `unchanged`. The restart task in `roll_one.yml` now fires on `manifests_render is changed and
+  manifests_apply is changed` for the shared files (both instances mount the ConfigMap), and for
+  `pihole-2` also on `manifests_deferred_render is changed` and its own
+  `pihole_k8s_instance_2_apply` being changed. `tasks/apply_instance_2.yml` pins that apply's
+  `changed_when` false under `k8s_dry_run`, as the shared apply does. The secret and image
+  triggers are unchanged: `verify_secret_keys.yml` can patch a Secret after an apply that printed
+  `unchanged`. The include in `main.yml` still fires `pihole-2` on the deferred bytes alone,
+  because it must run the apply to learn the verdict; only the restart waits for it. The #2884
+  ordering holds: the apply is still reached only after instance 1 is proven serving, so the two
+  pod templates never change in one request. The `pihole-2` record raise (#2902) is unchanged and
+  stays consistent, since it reads whether the restart task ran.
 - **`roll_one.yml` refuses a sibling that is terminating.** A pod keeps phase `Running` and
   condition `Ready` for its whole grace period, so `kubectl wait` alone reported a
   half-gone sibling as a serving one. The check reads `deletionTimestamp` and fails the play.

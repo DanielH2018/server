@@ -353,6 +353,7 @@ def test_a_deferred_only_change_rolls_instance_two_alone():
     context = {
         "k8s_no_mutate": False,
         "manifests_render": unchanged,
+        "manifests_apply": unchanged,
         "manifests_secret_render": unchanged,
         "manifests_image_changed": False,
         "manifests_deferred_render": {"changed": True},
@@ -368,8 +369,19 @@ def test_a_deferred_only_change_rolls_instance_two_alone():
     assert fires("pihole-2"), "a deferred-only change must still roll instance 2"
     assert not fires("pihole"), "a deferred-only change must not restart instance 1"
     # Control: a change the shared apply carries still rolls both.
-    assert fires("pihole", manifests_render={"changed": True})
-    assert fires("pihole-2", manifests_render={"changed": True})
+    changed = {
+        "manifests_render": {"changed": True},
+        "manifests_apply": {"changed": True},
+    }
+    assert fires("pihole", **changed)
+    assert fires("pihole-2", **changed)
+    # Reject (#3127): moved bytes with an unchanged shared apply is a comment-only edit.
+    assert not fires("pihole", manifests_render={"changed": True})
+    assert not fires(
+        "pihole-2",
+        manifests_render={"changed": True},
+        manifests_deferred_render={"changed": False},
+    )
 
 
 def test_instance_twos_bytes_reach_the_release_digest():
