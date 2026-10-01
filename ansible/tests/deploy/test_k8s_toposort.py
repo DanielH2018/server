@@ -9,10 +9,16 @@ build_k8s_dep_map + toposort_containers (ansible/filter_plugins/toposort.py), th
 toposort_containers the Docker play already used, so the two rules that used to be
 enforced by hand position are now graph edges instead:
 
-  traefik <- every role rendering a Traefik CRD.
-      Derived from the role's own templates (_role_renders_traefik_crd), not hand-listed.
+  traefik <- every ROUTED role.
+      Derived from the containers_list entry's `hostname` (_entry_is_routed), with the
+      role's own templates (_role_renders_traefik_crd) as a second test for a role that
+      renders a Traefik CRD without declaring a host of its own. Neither is hand-listed.
       Fails LOUDLY without the edge, on a fresh cluster: the CRD does not exist, `kubectl
       apply` exits non-zero, the task fails.
+
+      The entry is the primary test because #3043 moved 16 roles' IngressRoute to
+      `ansible/templates/ingressroute-default.yaml.j2`. A route rendered from there leaves
+      no string in the role, so a templates-only derivation would drop the edge for all 16.
 
   authelia <- every entry with use_authelia: true.
       Derived from the containers_list entry itself. Fails SILENTLY without the edge: the
@@ -46,7 +52,6 @@ from _helpers import ANSIBLE, HOST_VARS
 from _k8s_render import rendered_docs
 from toposort import (
     K8S_CRD_EDGE_EXEMPT,
-    _role_renders_traefik_crd,
     build_k8s_dep_map,
     toposort_containers,
 )
@@ -73,9 +78,10 @@ def _roles_rendering_traefik_crds() -> set[str]:
 
     Derived from the rendered output, not a filename or text scan: an IngressRoute that
     only appears under a Jinja conditional still counts, and a role that stops rendering
-    one drops out without anyone editing this file. Compared below against the textual
-    scan build_k8s_dep_map actually runs at deploy time, which has to agree with this on
-    every role or the derived edges are wrong.
+    one drops out without anyone editing this file. It covers the shared default too, so a
+    role whose IngressRoute is `ansible/templates/ingressroute-default.yaml.j2` is in here
+    under its own name. Compared below against the edge set build_k8s_dep_map derives at
+    deploy time, which has to agree with this on every role or the derived edges are wrong.
     """
     return {
         role
@@ -110,65 +116,95 @@ def test_the_render_found_traefik_crd_roles_at_all():
     assert {"traefik", "authelia", "crowdsec", "freshrss"} <= TRAEFIK_CRD_ROLES
 
 
-# Roles whose route is behind a Jinja conditional the committed variables can switch off.
-# For these the textual scan is allowed to say yes while the render says no, and only in
-# that direction: an extra edge onto traefik costs an ordering constraint that is already
-# true, while a missing one applies a Traefik CRD before traefik owns it. The reason goes
-# beside the name.
-CONDITIONALLY_ROUTED_ROLES = {
+def _derived_traefik_edge(entries: list[dict]) -> set[str]:
+    """The roles build_k8s_dep_map actually gives a traefik edge, for this host's entries.
+
+    Read off the map the deploy builds rather than by re-asking its predicates: a test that
+    reimplemented `_entry_is_routed or _role_renders_traefik_crd` would keep agreeing with
+    itself after the derivation changed.
+    """
+    dep_map = build_k8s_dep_map(entries, str(ANSIBLE))
+    return {name for name, deps in dep_map.items() if "traefik" in deps}
+
+
+# Roles the derivation claims an edge for while the render shows no Traefik CRD in the role.
+# Over-derivation is the safe direction and under-derivation is not: an extra edge costs an
+# ordering constraint that is already true, while a missing one applies a Traefik CRD before
+# traefik owns the CRDs. Each name carries the reason it is one-directional.
+OVER_DERIVED_TRAEFIK_EDGE = {
     "navidrome": (
         "ingressroute.yaml.j2 renders only when navidrome_k8s_replicas > 0 — the workload "
         "is parked at 0, and a route to an empty EndpointSlice makes traefik log "
         "'no servers found' every ~20s (issue #1323)"
     ),
+    "livesync": (
+        "its route is a file-provider router in the traefik role "
+        "(templates/livesync-gate-secret.yaml.j2), not an IngressRoute of its own, so the "
+        "entry's hostname derives an edge no manifest of livesync's renders. The role's own "
+        "CLAUDE.md already states the traefik dependency"
+    ),
 }
 
 
-def test_textual_scan_agrees_with_the_render(host):
-    """build_k8s_dep_map's deploy-time detector must match the render, for every role.
+def test_the_derived_traefik_edge_agrees_with_the_render(host):
+    """build_k8s_dep_map's deploy-time derivation must match the render, for every role.
 
-    The detector textually scans a role's own templates for the traefik.io apiVersion or
-    the shared ingressroute.yml.j2 macro import, standing in for a real Jinja render so the
-    deploy doesn't pay for one. That's only sound if it agrees with the render exactly --
-    except for CONDITIONALLY_ROUTED_ROLES, where over-detection is the safe direction and
-    under-detection is still a failure.
+    The derivation reads the containers_list entry and textually scans the role's own
+    templates, standing in for a real Jinja render so the deploy doesn't pay for one. That's
+    only sound if it agrees with the render -- except for OVER_DERIVED_TRAEFIK_EDGE, where an
+    extra edge is the safe direction and a missing one is still a failure.
     """
     _path, entries, _idx = host
+    derived = _derived_traefik_edge(entries)
     for c in entries:
         name = c["name"]
-        templates_dir = ANSIBLE / "roles" / "k8s" / name / "templates"
-        detected = _role_renders_traefik_crd(str(templates_dir))
+        if name == "traefik" or name in K8S_CRD_EDGE_EXEMPT:
+            continue
         rendered = name in TRAEFIK_CRD_ROLES
-        if name in CONDITIONALLY_ROUTED_ROLES:
-            assert detected >= rendered, (
-                f"{name}: textual scan says renders-Traefik-CRD=False while the render says "
-                "True. build_k8s_dep_map would drop the traefik edge and apply a Traefik CRD "
-                "before traefik owns it."
+        if name in OVER_DERIVED_TRAEFIK_EDGE:
+            assert (name in derived) >= rendered, (
+                f"{name}: build_k8s_dep_map derives no traefik edge while the render says it "
+                "renders a Traefik CRD. The deploy would apply that CRD before traefik owns "
+                "the CRDs."
             )
             continue
-        assert detected == rendered, (
-            f"{name}: textual scan says renders-Traefik-CRD={detected}, render says "
-            f"{rendered}. build_k8s_dep_map would derive the wrong edge."
+        assert (name in derived) == rendered, (
+            f"{name}: build_k8s_dep_map derives traefik edge={name in derived}, render says "
+            f"{rendered}. Either the entry lost its hostname or the role gained a Traefik CRD "
+            "nothing derives an edge from."
         )
 
 
-def test_every_conditionally_routed_role_is_a_real_role_the_scan_still_detects(host):
+def test_every_over_derived_role_is_a_real_role_that_still_gets_the_edge(host):
     """The exemption list must not outlive what it exempts.
 
-    A name that no longer exists, or one whose templates the textual scan no longer flags,
-    silently widens the test above into an exemption for nothing.
+    A name that no longer exists, or one the derivation no longer gives an edge, silently
+    widens the test above into an exemption for nothing.
     """
     _path, entries, _idx = host
     names = {c["name"] for c in entries}
-    for name, reason in CONDITIONALLY_ROUTED_ROLES.items():
+    derived = _derived_traefik_edge(entries)
+    for name, reason in OVER_DERIVED_TRAEFIK_EDGE.items():
         if name not in names:
             continue
         assert reason.strip(), f"{name} is exempted with no reason"
-        templates_dir = ANSIBLE / "roles" / "k8s" / name / "templates"
-        assert _role_renders_traefik_crd(str(templates_dir)), (
-            f"{name} is listed in CONDITIONALLY_ROUTED_ROLES but its templates no longer "
-            "look like they render a Traefik CRD at all — drop the exemption."
+        assert name in derived, (
+            f"{name} is listed in OVER_DERIVED_TRAEFIK_EDGE but build_k8s_dep_map derives no "
+            "traefik edge for it at all — drop the exemption."
         )
+
+
+def test_a_routed_entry_that_ships_no_route_template_still_gets_the_edge():
+    """The red-proof for #3043: the 16 roles whose IngressRoute is the shared default.
+
+    `_role_renders_traefik_crd` returns False for a role with no templates directory at all,
+    so an entry-blind derivation would return an empty dep list here.
+    """
+    entry = {"name": "widget", "hostname": "widget", "port": 80}
+    assert build_k8s_dep_map([entry], str(ANSIBLE))["widget"] == ["traefik"]
+
+    unrouted = {"name": "widget", "port": 80}
+    assert build_k8s_dep_map([unrouted], str(ANSIBLE))["widget"] == []
 
 
 def test_traefik_is_deployed(host):

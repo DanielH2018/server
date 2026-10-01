@@ -111,23 +111,16 @@ def test_the_generated_deployment_renders_and_pins_a_uid(args, tmp_path):
     assert container["ports"][0]["containerPort"] == 8080
 
 
-def test_the_generated_ingressroute_renders(tmp_path):
-    kinds = {
-        d["kind"]
-        for d in _render(tmp_path, scaffold.ingressroute_template(), "widget", 8080)
-    }
-    assert "IngressRoute" in kinds, f"the generated route rendered {kinds} instead"
-
-
-def test_the_tasks_name_service_yaml_without_shipping_a_template(args):
+def test_the_tasks_name_the_shared_defaults_without_shipping_a_template(args):
     """The shared default is only rendered for a basename `manifests_files` names."""
     tasks = yaml_fast.safe_load(scaffold.tasks_main(args.name, args.route))
     files = tasks[0]["vars"]["manifests_files"]
-    assert "service.yaml" in files, (
-        "service.yaml has to stay in manifests_files even though the role ships no template "
-        "for it — that name is the prune keep-set and the digest"
-    )
-    assert "service.yaml" in SHARED_MANIFEST_DEFAULTS
+    for basename in ("service.yaml", "ingressroute.yaml"):
+        assert basename in files, (
+            f"{basename} has to stay in manifests_files even though the role ships no "
+            "template for it — that name is the prune keep-set and the digest"
+        )
+        assert basename in SHARED_MANIFEST_DEFAULTS
 
 
 def test_an_unrouted_service_gets_no_ingressroute_and_no_hostname():
@@ -199,8 +192,8 @@ def test_authelia_without_a_route_is_refused(capsys):
     assert "--no-route writes" in capsys.readouterr().err
 
 
-def test_the_generated_role_names_no_service_template(args, tmp_path):
-    """The payoff of #2872: five files, not six, and none of them a Service."""
+def test_the_generated_role_ships_no_service_or_route_template(args, tmp_path):
+    """The payoff of #2872 and #3043: four files, and neither a Service nor an IngressRoute."""
     written = {
         p.relative_to(tmp_path / "widget").as_posix()
         for p in scaffold.write_role(args, tmp_path)
@@ -209,7 +202,6 @@ def test_the_generated_role_names_no_service_template(args, tmp_path):
         "tasks/main.yml",
         "defaults/main.yml",
         "templates/deployment.yaml.j2",
-        "templates/ingressroute.yaml.j2",
         "CLAUDE.md",
     }
 
@@ -217,4 +209,6 @@ def test_the_generated_role_names_no_service_template(args, tmp_path):
 def test_the_real_tree_agrees_that_a_scaffolded_role_takes_the_default(args, tmp_path):
     """Non-vacuity: the fallback resolver, run over the generated role, finds the Service."""
     scaffold.write_role(args, tmp_path)
-    assert "service.yaml" in declared_manifest_files("widget", tmp_path)
+    declared = declared_manifest_files("widget", tmp_path)
+    assert "service.yaml" in declared
+    assert "ingressroute.yaml" in declared

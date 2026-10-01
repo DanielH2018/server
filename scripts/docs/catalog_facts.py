@@ -16,6 +16,7 @@ from pathlib import Path
 from typing import Any
 
 from catalog_model import K8S_ROLES, UNKNOWN
+from lib.k8s_roles import manifest_template
 from lib.render_guard import ALL_VARS
 from route_facts import reachability, route_cell
 
@@ -47,7 +48,10 @@ def k8s_route(
     """
     name = entry["name"]
     role_dir = k8s_roles / name
-    if not (role_dir / "templates" / "ingressroute.yaml.j2").is_file():
+    # Own template or the shared default: 16 roles' IngressRoute moved to
+    # `ansible/templates/ingressroute-default.yaml.j2` (#3043), and asking the role directory
+    # alone printed "no route" for every one of them.
+    if manifest_template(name, "ingressroute.yaml", k8s_roles) is None:
         return "no route (infra role)"
     # ingressroute.yml.j2's own macro call is uniformly
     # `container_item.hostname | default(container_item.name)` — see the shared macro

@@ -12,6 +12,7 @@ from lib.ansible_jinja_env import make_ansible_env, template_env
 from lib.render_guard import BUILT_IMAGE_TAG_STUBS
 from jinja2 import Undefined
 
+from lib.k8s_roles import manifest_template
 from validate.k8s_manifests import make_lookup
 from _helpers import ANSIBLE
 
@@ -48,6 +49,28 @@ def _render(path: Path, **ctx) -> str:
 
 def _k8s_entries() -> list[dict]:
     return [c for c in BOX_VARS["containers_list"] if c.get("platform") == "k8s"]
+
+
+def _route_template(role: str) -> Path | None:
+    """The template a role's main IngressRoute renders from, or None if it has no route.
+
+    Its own `templates/ingressroute.yaml.j2`, else the shared default. A guard that asked for
+    the role's own path alone stopped covering the 16 roles whose route moved to
+    `ansible/templates/ingressroute-default.yaml.j2` (#3043), and these guards skip a role
+    they find no template for -- so the coverage would have gone quietly.
+    `manifest_template` is the one resolver the deploy, the docs generators and these guards
+    share.
+    """
+    return manifest_template(role, "ingressroute.yaml", K8S)
+
+
+def _route_templates(role: str) -> list[Path]:
+    """Every template a role's IngressRoutes render from, main route and extra ones alike."""
+    own = sorted((K8S / role / "templates").glob("ingressroute*.j2"))
+    shared = _route_template(role)
+    if shared is not None and shared not in own:
+        own.append(shared)
+    return own
 
 
 def _role_defaults(role: str) -> dict:

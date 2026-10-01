@@ -7,9 +7,9 @@ Usage::
         --image ghcr.io/miniflux/miniflux:2.2.16 --port 8080 --authelia one_factor
 
 Writes `ansible/roles/k8s/<name>/` — `tasks/main.yml`, `defaults/main.yml`,
-`templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2` and a `CLAUDE.md` with the
-`## At a glance` markers the role-glance generator fills — and appends the `containers_list`
-entry to `ansible/inventory/host_vars/daniel-box.yml`. Then it runs
+`templates/deployment.yaml.j2` and a `CLAUDE.md` with the `## At a glance` markers the
+role-glance generator fills — and appends the `containers_list` entry to
+`ansible/inventory/host_vars/daniel-box.yml`. Then it runs
 `scripts/docs/gen_role_glance.py` so the new CLAUDE.md's block is already correct.
 
 WHY A GENERATOR AND NOT A SIBLING (#2855). Step 1 of the `new-k8s-service` skill used to say
@@ -73,8 +73,9 @@ def var_prefix(name: str) -> str:
 def tasks_main(name: str, route: bool) -> str:
     """`tasks/main.yml`: one include of the shared render/apply/queue role.
 
-    `service.yaml` is named even though this role ships no template for it — that name is what
-    keeps the rendered default inside the prune keep-set and `manifests_digest`.
+    `service.yaml` and `ingressroute.yaml` are named even though this role ships no template
+    for either — the name is what resolves the shared default in `manifests_shared_defaults`,
+    and what keeps the rendered file inside the prune keep-set and `manifests_digest`.
     """
     files = ["deployment.yaml", "service.yaml"]
     if route:
@@ -169,19 +170,6 @@ spec:
 """
 
 
-def ingressroute_template() -> str:
-    return """{% from 'ingressroute.yml.j2' import ingressroute with context %}
----
-{{ ingressroute(
-    container_item.name,
-    container_item.hostname | default(container_item.name),
-    container_item.port,
-    container_item.use_authelia,
-  )
-}}
-"""
-
-
 def role_doc(name: str, port: int, route: bool) -> str:
     """A CLAUDE.md whose `## At a glance` block the generator fills in immediately after.
 
@@ -189,9 +177,16 @@ def role_doc(name: str, port: int, route: bool) -> str:
     leaves everything else alone, so a doc without them is never filled.
     """
     routing = (
-        "Reached through Traefik; the route is in `templates/ingressroute.yaml.j2`."
+        "Reached through Traefik; the route comes from the shared "
+        "`ansible/templates/ingressroute-default.yaml.j2`, which reads the hostname, port "
+        "and Authelia gate off the containers_list entry."
         if route
         else "No IngressRoute — reached in-cluster by Service name only."
+    )
+    shared_route = (
+        " and the IngressRoute from `ansible/templates/ingressroute-default.yaml.j2`"
+        if route
+        else ""
     )
     return f"""# {name} — TODO: one line on what this service is for
 
@@ -202,8 +197,9 @@ See repo-root `CLAUDE.md` for shared conventions.
 <!-- /generated_from -->
 
 - **Port:** {port}. {routing}
-- **Service:** rendered from the containers_list entry by
-  `ansible/templates/service-default.yaml.j2`; this role ships no `service.yaml.j2`.
+- **Manifests from the containers_list entry:** the Service comes from
+  `ansible/templates/service-default.yaml.j2`{shared_route}; this role ships no template for
+  either.
 
 ## Notable
 - TODO: what a reader would get wrong about this role. Delete this heading if nothing does.
@@ -286,9 +282,6 @@ def write_role(args, roles_dir: Path | None = None) -> list[Path]:
         ),
         role / "CLAUDE.md": role_doc(args.name, args.port, args.route),
     }
-    if args.route:
-        files[role / "templates" / "ingressroute.yaml.j2"] = ingressroute_template()
-
     written = []
     for path, content in files.items():
         path.parent.mkdir(parents=True, exist_ok=True)
@@ -397,6 +390,11 @@ def main(argv=None) -> int:
             check=True,
         )
 
+    route_census = (
+        ", and ROLES_WITH_A_DEFAULT_INGRESSROUTE beside it for its route"
+        if args.route
+        else ""
+    )
     print(
         f"\nNext: fill the TODOs in {(role / 'CLAUDE.md').relative_to(REPO)}, then\n"
         f"  prek run --all-files\n"
@@ -412,7 +410,7 @@ def main(argv=None) -> int:
         f"`netpol-baseline: enforced` pod label and write the role its own NetworkPolicy.\n"
         f"  ROLES_WITH_A_DEFAULT_SERVICE in "
         f"ansible/tests/k8s/test_shared_manifest_defaults.py — add {args.name}, since it "
-        f"takes the shared default Service.\n"
+        f"takes the shared default Service{route_census}.\n"
         f"  uv run python scripts/docs/gen_doc_fragments.py, then commit what it writes."
     )
     return 0

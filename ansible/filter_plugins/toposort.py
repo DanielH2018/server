@@ -150,9 +150,13 @@ def expand_with_deps(containers_list, deps_map, requested_tags, running_names):
 # A role's own IngressRoute/Middleware templates either write `apiVersion: traefik.io/...`
 # directly or pull it in through the one shared `ingressroute.yml.j2` macro (`{% from
 # 'ingressroute.yml.j2' import ingressroute %}`) -- there is no third way in this repo to
-# emit one. A textual scan for either string matched a full Jinja render of every k8s role
-# exactly (35/35 roles, see ansible/tests/deploy/test_k8s_toposort.py), so it stands in for
-# the render at deploy time without paying for one.
+# emit one from a file inside the role.
+#
+# This scan is the SECOND of the two routed tests below, not the only one. It stopped being
+# sufficient when #3043 moved 16 roles' IngressRoute to `ansible/templates/`: a route rendered
+# from there leaves no string in the role, so a scan-only derivation would drop the traefik
+# edge for all 16 and apply their routes before the CRDs exist. The entry's `hostname` is the
+# first test and the one that covers them.
 _TRAEFIK_CRD_MARKERS = ("traefik.io", "ingressroute.yml.j2")
 
 # Roles exempted from the derived "renders a Traefik CRD -> depends on traefik" edge.
@@ -168,6 +172,22 @@ K8S_CRD_EDGE_EXEMPT = {
         "harmless on a running cluster and a documented first-run-only failure on a rebuild."
     ),
 }
+
+
+def _entry_is_routed(container):
+    """Whether a containers_list entry declares a Traefik route.
+
+    The `hostname` key is the declaration: `ingressroute()` takes it as the host label, and an
+    entry carrying one is a service someone reaches through the edge. It is the only routed
+    test that survives a route rendered from `ansible/templates/ingressroute-default.yaml.j2`,
+    which leaves nothing in the role for `_role_renders_traefik_crd` to find (#3043).
+
+    It also claims an edge the templates never did, for a role whose route lives in traefik's
+    own file provider rather than in an IngressRoute of its own -- livesync is the one, and its
+    CLAUDE.md already states the dependency. An edge too many costs an ordering constraint that
+    was already true; one too few applies a Traefik CRD before traefik owns the CRDs.
+    """
+    return bool(container.get("hostname"))
 
 
 def _role_renders_traefik_crd(role_templates_dir):
@@ -196,7 +216,8 @@ def build_k8s_dep_map(containers_list, playbook_dir):
     constraints are mechanically derivable, and re-deriving them here (instead of reading a
     hand-authored file) is what lets a new role's edges arrive for free:
 
-      * every role rendering a Traefik CRD depends on traefik, except K8S_CRD_EDGE_EXEMPT
+      * every routed role depends on traefik, except K8S_CRD_EDGE_EXEMPT -- routed meaning the
+        entry declares a `hostname`, or the role's own templates render a Traefik CRD
       * every entry with `use_authelia: true` depends on authelia
 
     The third -- crowdsec before traefik -- is not derivable from a template, so it is
@@ -220,7 +241,7 @@ def build_k8s_dep_map(containers_list, playbook_dir):
             role_templates = os.path.join(
                 playbook_dir, "roles", "k8s", name, "templates"
             )
-            if _role_renders_traefik_crd(role_templates):
+            if _entry_is_routed(c) or _role_renders_traefik_crd(role_templates):
                 deps.add("traefik")
         dep_map[name] = sorted(deps)
     return dep_map

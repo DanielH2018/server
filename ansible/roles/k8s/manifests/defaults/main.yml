@@ -92,11 +92,19 @@ manifests_restart_triggers_default: [config, secret, image]
 # the caller's own role ships no `templates/<basename>.j2` (#2872). A role's own template
 # always wins; this is the fallback, not an override.
 #
-# `service.yaml` is the one entry. 22 roles' Service templates were byte-identical three-line
+# `service.yaml` was the first entry. 22 roles' Service templates were byte-identical three-line
 # wrappers around the `service()` macro, differing only in the name and port the macro reads
 # off `container_item` anyway. The two variants they did carry — a named port, an exportarr
 # sidecar's second port — became `service_port_name` and `service_extra_ports` on the
 # containers_list entry, so the fallback covers all 22.
+#
+# `ingressroute.yaml` is the second (#3043). 16 roles' IngressRoute templates were the same
+# shape: one call to the `ingressroute()` macro with the name, hostname, port and
+# `use_authelia` the entry already carries. A role whose route needs a parameter the entry
+# does not carry — extra middlewares, `public=false`, a bypass prefix, a render condition —
+# keeps its own template. Deleting those 16 also took the string the deploy's traefik ordering
+# edge was derived from, so `ansible/filter_plugins/toposort.py` derives that edge from the
+# entry's `hostname` instead.
 #
 # The render task below resolves the source per file, so the fallback costs nothing for the
 # ~40 roles that ship their own Service, and the prune keep-set is unchanged: the caller still
@@ -107,3 +115,4 @@ manifests_restart_triggers_default: [config, secret, image]
 # holds the two in step.
 manifests_shared_defaults:
   service.yaml: service-default.yaml.j2
+  ingressroute.yaml: ingressroute-default.yaml.j2

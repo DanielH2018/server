@@ -27,7 +27,14 @@ from jinja2.exceptions import UndefinedError
 from lib import yaml_fast
 from lib.ansible_jinja_env import make_ansible_env
 from _helpers import ANSIBLE
-from _manifest_guards import ALL_VARS, K8S, _k8s_entries, _render, _role_defaults
+from _manifest_guards import (
+    ALL_VARS,
+    K8S,
+    _k8s_entries,
+    _render,
+    _role_defaults,
+    _route_template,
+)
 
 # `scripts` is on pythonpath and `scripts/diagnostics` deliberately is not, so postflight is
 # reached as a module of the `diagnostics` namespace package rather than by a sys.path insert.
@@ -173,8 +180,10 @@ def test_the_app_route_itself_is_not_widened(app):
     API has behind no credential but the shared X-Api-Key.
     """
     entry = next(c for c in _k8s_entries() if c["name"] == app)
+    route_tpl = _route_template(app)
+    assert route_tpl is not None, f"{app} renders no main IngressRoute at all"
     rendered = _render(
-        K8S / app / "templates" / "ingressroute.yaml.j2",
+        route_tpl,
         container_item=entry,
         domain="example.com",
         **_role_defaults(app),

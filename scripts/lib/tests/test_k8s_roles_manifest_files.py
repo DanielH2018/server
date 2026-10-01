@@ -11,7 +11,11 @@ freshrss and traefik build the list with a folded `>-` Jinja expression.
 Run: uv run pytest scripts/lib/tests/test_k8s_roles_manifest_files.py
 """
 
-from lib.k8s_roles import declared_manifest_files, shared_default_templates
+from lib.k8s_roles import (
+    declared_manifest_files,
+    manifest_template,
+    shared_default_templates,
+)
 
 # A role that takes the shared default Service and one that does not, so a fallback that
 # stopped resolving (or started resolving for everyone) fails by name.
@@ -122,8 +126,38 @@ def test_a_role_that_names_no_service_gets_no_default(tmp_path):
 def test_the_real_tree_answers_both_ways():
     """Non-vacuity against the repo itself, not just synthetic roles."""
     assert "service.yaml" in declared_manifest_files(TAKES_THE_DEFAULT)
+    # bazarr takes both shared defaults: its Service since #2872, its route since #3043.
     assert [p.name for p in shared_default_templates(TAKES_THE_DEFAULT)] == [
-        "service-default.yaml.j2"
+        "ingressroute-default.yaml.j2",
+        "service-default.yaml.j2",
     ]
     assert "service.yaml" in declared_manifest_files(SHIPS_ITS_OWN)
     assert shared_default_templates(SHIPS_ITS_OWN) == []
+
+
+def test_manifest_template_prefers_the_roles_own_over_the_shared_default(tmp_path):
+    role = _role(
+        tmp_path,
+        "widget",
+        "---\n- name: Deploy widget\n  vars:\n"
+        "    manifests_files: [deployment.yaml, ingressroute.yaml]\n",
+    )
+    shared = manifest_template("widget", "ingressroute.yaml", tmp_path)
+    assert shared is not None and shared.name == "ingressroute-default.yaml.j2"
+
+    own = role / "templates" / "ingressroute.yaml.j2"
+    own.write_text("---\nkind: IngressRoute\n")
+    assert manifest_template("widget", "ingressroute.yaml", tmp_path) == own
+
+
+def test_manifest_template_resolves_nothing_for_a_basename_the_role_never_names(
+    tmp_path,
+):
+    """The reject half: a role with no route gets no route, shared default or not."""
+    _role(
+        tmp_path,
+        "widget",
+        "---\n- name: Deploy widget\n  vars:\n    manifests_files: [deployment.yaml]\n",
+    )
+    assert manifest_template("widget", "ingressroute.yaml", tmp_path) is None
+    assert manifest_template("widget", "configmap.yaml", tmp_path) is None

@@ -33,6 +33,7 @@ __all__ = [
     "SHARED_MANIFEST_DEFAULTS",
     "SKIP_ROLES",
     "is_manifest_template",
+    "manifest_template",
     "shared_default_templates",
     "k8s_entries",
     "misplaced_template_lookups",
@@ -222,13 +223,17 @@ def role_callers(repo: Path | str | None = None) -> dict[str, set[str]]:
 
 # Manifest basenames `k8s/manifests` renders from a shared template under `ansible/templates/`
 # when the owning role ships none of its own, mapped to that template's file name. Mirrors
-# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml (#2872), which
+# `manifests_shared_defaults` in ansible/roles/k8s/manifests/defaults/main.yml (#2872 for the
+# Service, #3043 for the IngressRoute), which
 # `ansible/tests/k8s/test_shared_manifest_defaults.py` holds it equal to.
 #
 # Duplicated here rather than read out of that YAML because every consumer is an offline render
 # harness: reading the role default would make the harnesses depend on parsing a file whose
 # other keys they have no use for, and the guard catches the drift either way.
-SHARED_MANIFEST_DEFAULTS = {"service.yaml": "service-default.yaml.j2"}
+SHARED_MANIFEST_DEFAULTS = {
+    "service.yaml": "service-default.yaml.j2",
+    "ingressroute.yaml": "ingressroute-default.yaml.j2",
+}
 
 # The two keys a caller names its manifests under, and the basenames inside whichever value
 # shape it wrote. Read textually rather than by loading the tasks file: a role's tasks/main.yml
@@ -272,6 +277,29 @@ def declared_manifest_files(role, k8s_roles=None) -> set[str]:
             region.append(following)
         names.update(_MANIFEST_BASENAME.findall("\n".join(region)))
     return names
+
+
+def manifest_template(role, basename, k8s_roles=None) -> Path | None:
+    """The template `k8s/manifests` renders `basename` from for `role`, or None if it renders none.
+
+    The role's own `templates/<basename>.j2` first, then the shared default under
+    `ansible/templates/` for a basename the role names in `manifests_files` and ships no
+    template for.
+
+    The one place a reader asks "does this role get a `<basename>`, and from where". Every
+    caller that answered it with `(role/'templates'/f'{basename}.j2').is_file()` silently
+    returned False for the 25 roles whose Service and the 16 whose IngressRoute moved to a
+    shared default (#2872, #3043) -- a docs generator printing "no route" for a routed service,
+    or a guard skipping the role it was written to cover.
+    """
+    roles_dir = Path(k8s_roles or K8S_ROLES)
+    own = roles_dir / role / "templates" / f"{basename}.j2"
+    if own.is_file():
+        return own
+    shared = SHARED_MANIFEST_DEFAULTS.get(basename)
+    if shared and basename in declared_manifest_files(role, roles_dir):
+        return SHARED_TPL / shared
+    return None
 
 
 def shared_default_templates(role, k8s_roles=None) -> list[Path]:

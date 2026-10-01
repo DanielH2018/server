@@ -45,14 +45,22 @@ The directory name is reserved the way `<service>-netpol` is, by
 **A basename with no template in the caller's role falls back to a SHARED one.**
 `manifests_shared_defaults` (this role's `defaults/main.yml`) maps a manifest basename to a
 template under `ansible/templates/`, and the render task uses it when the caller names the
-basename in `manifests_files` and ships no `templates/<basename>.j2` of its own. `service.yaml`
-is the one entry: 25 roles' Service templates were byte-identical wrappers around the
+basename in `manifests_files` and ships no `templates/<basename>.j2` of its own. There are
+two entries. `service.yaml`: 25 roles' Service templates were byte-identical wrappers around the
 `service()` macro, so they were deleted and `ansible/templates/service-default.yaml.j2` renders
 for all of them (#2872). It reads the name and port off the role's `containers_list` entry,
-plus the optional `service_port_name` and `service_extra_ports` keys there. The caller still
-names `service.yaml` in `manifests_files`, which is what keeps the prune keep-set and
-`manifests_digest` unchanged. A role whose Service needs anything else writes its own template,
-which always wins.
+plus the optional `service_port_name` and `service_extra_ports` keys there. `ingressroute.yaml`:
+16 roles' IngressRoute templates were the same shape around the `ingressroute()` macro, so
+`ansible/templates/ingressroute-default.yaml.j2` renders those (#3043), reading the name,
+`hostname`, `port` and `use_authelia` off the entry. The caller still
+names the basename in `manifests_files`, which is what keeps the prune keep-set and
+`manifests_digest` unchanged. A role whose Service or route needs anything else writes its own
+template, which always wins.
+
+**A route rendered from `ansible/templates/` leaves no string in the role**, which is what the
+deploy's traefik ordering edge used to be derived from. `ansible/filter_plugins/toposort.py`
+derives it from the entry's `hostname` instead — so dropping `hostname` from a routed entry now
+costs the role its traefik edge as well as its route's host label.
 
 **Templates stay in the caller's role**, at `roles/k8s/<service>/templates/<name>.j2`. The
 `src` is derived from `manifests_service` and anchored to `playbook_dir` on purpose. A relative
