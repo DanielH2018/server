@@ -19,11 +19,21 @@ health verdict through `deploy_detach_notify.py`. The genuinely shared part is f
 Factoring those out would mean editing the deploy hot path for nothing, so the fork is written
 here.
 
-THE CHILD'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. `await_verdict` reaps the child first and
-reads the log afterwards. A landing can exit with no `VERDICT:` line at all
-(`tests/test_land_broad_fallback_verdict.py` covers a truncated file list), and a parent that
-exited on the grep alone would either race the child's last flush or wait out its whole budget on
-a run that had already finished.
+THE LANDING IS A GRANDCHILD, SO A KILL OF THE CALLER CANNOT REACH IT (issue #3158). A harness that
+times out a Bash call kills the call's whole descendant tree, found by walking parent pids, not
+just its process group. A child in its own session (`setsid`) is still a descendant, and on
+2026-10-01 the landing of PR #3137 died that way 7m34s into a fleet deploy with no verdict line.
+So `fork` forks twice: the intermediate child calls `setsid`, forks the landing and exits at once.
+The landing reparents to init or the nearest subreaper, outside the caller's tree, and it holds
+no inherited descriptor beyond its log and /dev/null.
+
+THE LANDING'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. A grandchild cannot be reaped by the
+waiter, so the landing records its own exit code in `<log stem>.rc` after flushing its last line.
+`await_verdict` reads that file first and the log second. A landing can exit with no `VERDICT:`
+line at all (`tests/test_land_broad_fallback_verdict.py` covers a truncated file list), and a
+parent that exited on the grep alone would either race the last flush or wait out its whole budget
+on a run that had already finished. A landing that dies without writing the file -- SIGKILL, OOM
+-- is reported as exactly that.
 """
 
 import contextlib
@@ -79,45 +89,105 @@ def verdict_in(log: Path) -> str | None:
     return match.group(0) if match else None
 
 
-def fork(log: Path, landing: Callable[[], int]) -> int:
-    """Run `landing` in a forked, logged child; the child's pid, in the parent.
+def rc_path(log: Path) -> Path:
+    """Where the landing records its exit code: the log's own name with `.rc` for `.log`."""
+    return log.with_suffix(".rc")
 
-    The child gets its own session, stdin on /dev/null and stdout/stderr on `log`, then runs
-    `landing` and leaves through `os._exit` so none of the parent's frames unwind twice.
+
+def fork(log: Path, landing: Callable[[], int]) -> int:
+    """Run `landing` in a detached, logged grandchild; its pid, in the parent.
+
+    The intermediate child calls `setsid`, forks the landing and exits, so the landing is in its
+    own session and outside the caller's process tree. The landing gets stdin on /dev/null,
+    stdout/stderr on `log` and no other inherited descriptor. It runs `landing`, writes the exit
+    code to `rc_path(log)`, and leaves through `os._exit` so none of the parent's frames unwind
+    twice.
 
     Args:
-      log: the file the child's stdout and stderr are rebound to. Opened here, by this
+      log: the file the landing's stdout and stderr are rebound to. Opened here, by this
         process, which is what guarantees the blocking handle Ansible needs.
-      landing: what the child runs; its return value is the child's exit status.
+      landing: what the grandchild runs; its return value is the recorded exit code.
 
     Returns:
-      The child's pid. Only the parent ever returns from this function.
+      The landing's pid. Only the parent ever returns from this function.
     """
     sys.stdout.flush()
     sys.stderr.flush()
+    read_end, write_end = os.pipe()
     pid = os.fork()
     if pid:
-        return pid
+        os.close(write_end)
+        with os.fdopen(read_end, "rb") as pipe:
+            reported = pipe.read()
+        os.waitpid(pid, 0)
+        if not reported:
+            raise RuntimeError("land --detach: the landing never started (fork failed)")
+        return int(reported)
+    try:
+        os.close(read_end)
+        os.setsid()
+        grandchild = os.fork()
+        if grandchild:
+            os.write(write_end, str(grandchild).encode())
+            os._exit(0)
+        os.close(write_end)
+        _run_landing(log, landing)
+    finally:
+        os._exit(1)
+
+
+def _run_landing(log: Path, landing: Callable[[], int]) -> None:
+    """The grandchild's body: rebind stdio, drop inherited fds, run, record the code, exit."""
     code = 1
     try:
-        os.setsid()
         null = os.open(os.devnull, os.O_RDONLY)
         out = os.open(log, os.O_WRONLY | os.O_CREAT | os.O_APPEND, 0o644)
         os.dup2(null, 0)
         os.dup2(out, 1)
         os.dup2(out, 2)
-        os.close(null)
-        os.close(out)
+        # An inherited pipe of the caller's -- the harness's own output capture -- would keep
+        # the caller's call open for as long as the landing runs.
+        os.closerange(3, os.sysconf("SC_OPEN_MAX"))
         code = landing()
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1
     except Exception:
         traceback.print_exc()
     finally:
+        code = code if isinstance(code, int) else 1
         with contextlib.suppress(Exception):
             sys.stdout.flush()
             sys.stderr.flush()
-        os._exit(code if isinstance(code, int) else 1)
+        # After the flush, so a reader that sees the code also sees the last log line.
+        with contextlib.suppress(Exception):
+            rc = rc_path(log)
+            tmp = rc.with_suffix(".rc.tmp")
+            tmp.write_text(f"{code}\n")
+            tmp.replace(rc)
+        os._exit(code)
+
+
+def recorded_code(log: Path) -> int | None:
+    """The exit code the landing recorded next to `log`, or None when it has not written one."""
+    try:
+        return int(rc_path(log).read_text().strip())
+    except OSError, ValueError:
+        return None
+
+
+def _alive(pid: int) -> bool:
+    """Whether `pid` still runs. A zombie is dead: its new parent may never reap it."""
+    with contextlib.suppress(ChildProcessError):
+        # Our own child (only in tests): reap it, or it stays a zombie of this process.
+        reaped, _ = os.waitpid(pid, os.WNOHANG)
+        if reaped:
+            return False
+    try:
+        stat = Path(f"/proc/{pid}/stat").read_text()
+    except OSError:
+        return False
+    # The state is the first field after the parenthesised command name.
+    return stat.rpartition(")")[2].split()[0] not in ("Z", "X")
 
 
 def announce(pid: int, log: Path, awaiting: bool, out=None) -> None:
@@ -143,25 +213,37 @@ def await_verdict(
     sleep: Callable[[float], None] = time.sleep,
     out=None,
 ) -> int:
-    """Wait for the child, print its `VERDICT:` line, and return the code to exit with.
+    """Wait for the landing, print its `VERDICT:` line, and return the code to exit with.
 
-    Reaps `pid` first and reads `log` second: the exit code is the authority, and a landing
-    can finish without writing a verdict at all. On timeout the child is left running -- it
+    Reads the recorded exit code first and `log` second: the code is the authority, and a
+    landing can finish without writing a verdict at all. A landing that is gone without a
+    recorded code was killed, and this says so. On timeout the landing is left running -- it
     holds the deploy locks and killing it mid-apply is worse than losing sight of it -- and
     this returns `LAND_GAVE_UP` with a line saying where to look.
 
     Returns:
-      The child's exit status, or `LAND_GAVE_UP` when the budget elapsed first.
+      The landing's exit code, 1 when it died without recording one, or `LAND_GAVE_UP` when
+      the budget elapsed first.
     """
     out = out if out is not None else sys.stdout
     deadline = clock() + timeout_s
     while True:
-        reaped, status = os.waitpid(pid, os.WNOHANG)
-        if reaped:
+        code = recorded_code(log)
+        # Checked again after the liveness probe: the landing writes its code, then exits.
+        if code is None and not _alive(pid):
+            code = recorded_code(log)
+            if code is None:
+                print(
+                    f"land --detach: the landing (pid {pid}) died without recording an exit "
+                    f"code; it was killed mid-run. Read {log}",
+                    file=out,
+                )
+                code = 1
+        if code is not None:
             verdict = verdict_in(log)
             print(verdict or f"VERDICT: (none printed — read {log})", file=out)
             out.flush()
-            return os.waitstatus_to_exitcode(status)
+            return code
         if clock() >= deadline:
             print(
                 f"land --detach: no verdict within {timeout_s}s; the landing (pid {pid}) is "

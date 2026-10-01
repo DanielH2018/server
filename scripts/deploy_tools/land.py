@@ -17,8 +17,9 @@ It names its own logfile, forks the landing into it, then blocks until that land
 ``VERDICT:`` line and exits with the landing's code. It covers three steps a caller would
 otherwise write by hand: the ``git rev-parse origin/master`` for ``--since`` (resolved here when
 the flag is absent, before the merge is armed, so it is still the PRE-merge tip), the redirect,
-and ``timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'``. The mechanics are
-``land_lib/detach.py``.
+and ``timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'``. The landing runs as a detached
+grandchild outside the caller's process tree, so a harness that kills the waiting call leaves it
+running to its verdict (issue #3158). The mechanics are ``land_lib/detach.py``.
 
 WITHOUT ``--detach``, REDIRECT STDOUT AND STDERR TO A FILE YOURSELF. A backgrounded Bash call
 hands this script a non-blocking pipe, and Ansible refuses to start on one ("Ansible requires
