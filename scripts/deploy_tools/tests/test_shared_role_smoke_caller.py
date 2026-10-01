@@ -18,6 +18,7 @@ Run: uv run pytest scripts/deploy_tools/tests/test_shared_role_smoke_caller.py
 import land_shared
 import land_tags
 import shared_role_callers
+import shared_role_reach
 from shared_role_callers import SMOKE_TESTABLE_SHARED_ROLES, smoke_caller
 
 # PR #3117's real five-path file list, read from `gh pr view 3117 --json files` on 2026-10-01.
@@ -95,6 +96,18 @@ def test_a_per_caller_helper_keeps_every_caller():
     reached = land_tags.shared_caller_tags(files)["arr-notification"]
     assert reached == _every_caller("arr-notification")
     assert len(reached) > 1
+
+
+def test_the_smoke_path_rule_is_the_reach_rule_minus_meta():
+    """Two modules classify the same subdirectories, so neither can widen alone (#3150).
+
+    `shared_role_reach.deploy_time_only` is the finer, diff-reading rule and carries `meta/`;
+    `land_shared.deploy_run_only` is the range-free path rule and deliberately leaves it out.
+    Both docstrings name the split, and this holds them to it.
+    """
+    reach = shared_role_reach._DEPLOY_TIME_SUBDIRS
+    assert "meta" in reach
+    assert land_shared._DEPLOY_RUN_SUBDIRS == reach - {"meta"}
 
 
 def test_the_smoke_set_cannot_widen_past_the_digest_provable_roles():

@@ -187,6 +187,16 @@ def _tasks_read_only_these_keys(
 def deploy_time_only(role: str, files, pr_range: str, repo) -> bool:
     """Whether every changed path under shared role `role` moves no rendered manifest.
 
+    THE SPLIT WITH `land_shared.deploy_run_only` (#3150). That function asks a neighbouring
+    question: whether the landing's caller deploy can shrink to one smoke caller. This one is
+    the finer rule. It reads the diff per changed key and needs `pr_range`, where that one is a
+    path rule over the file list alone. Its subdirectories are this module's
+    `_DEPLOY_TIME_SUBDIRS` minus `meta/`. Here a `meta/` edit can still be quiet, under the
+    same diff test as `tasks/`. There any `meta/` path keeps every caller, because a
+    dependency change alters which roles run for every caller and one caller cannot
+    smoke-test that. A rule about WHICH BYTES a change moves goes here; a rule about how many
+    callers prove a change runs goes there.
+
     Args:
         role: the shared role's directory name, as `land_tags.shared_roles` returns it.
         files: the PR's changed paths, the whole list.

@@ -157,6 +157,18 @@ def deploy_run_only(role: str, files) -> bool:
     `_DEPLOY_RUN_SUBDIRS`. A `templates/` or `files/` path is bytes a deploy applies, and a
     `defaults/` key can render into a manifest, so either keeps the full fan-out.
 
+    THE SPLIT WITH `shared_role_reach.deploy_time_only` (#3150). Both ask whether a shared-role
+    change moves a rendered manifest, for different callers. That one decides whether a hand
+    owes a full `ansible/deploy.yml` at all. This one decides whether the landing's caller
+    deploy can shrink to one smoke caller. That one is the finer rule: it reads the diff over a
+    range, per changed key. This one is a path rule over the file list alone, so it answers
+    with no range and cannot fail on a git read. `meta/` is the one disagreement, and it is
+    deliberate. That rule can find a comment-only `meta/` edit quiet, but here any `meta/`
+    path keeps the full fan-out: a dependency change alters which other roles run for every
+    caller, and one caller cannot smoke-test that. A rule about WHICH BYTES
+    a change moves goes there; a rule about how many callers prove a change runs goes here.
+    `tests/test_shared_role_smoke_caller.py` holds this set inside that one's.
+
     Args:
         role: the shared role's directory name.
         files: the PR's changed paths, the whole list.

@@ -109,6 +109,18 @@ SMOKE_TESTABLE_SHARED_ROLES = frozenset({"manifests"})
 # manifests` — still deploys every caller, because there the operator asked for the fleet
 # (#2717), and `deploy_defer.discharge_k8s_unapplied` still reads every caller, because its
 # question is whether the change is applied everywhere rather than whether it runs.
+#
+# WHY THE COST KEY IS A PROXY AND STAYS ONE (#3149). Hosts, then rendered templates, counts
+# objects, and rollout wait usually dominates a k8s deploy. It does not dominate this one. The
+# narrowing fires only for a `tasks/`/`handlers/`-only change (`land_shared.deploy_run_only`),
+# which renders no new bytes, so the central rollout-restart has nothing to fire on — #3117's
+# smoke-shaped change restarted 0 of 60 workloads. What is left is the shared play overhead,
+# identical for every tag, plus one apply and one wait per rendered object, each already
+# converged. That is the part the key counts. No per-tag wall-clock exists to check it against:
+# the deployer's journal holds no single-tag apply of any of the five callers tied at one
+# template (bento-pdf, dri-device-plugin, littlelink, node-exporter, texbrain), and among those
+# the name decides anyway. Replace the template count with a measured number only if one is
+# taken and it disagrees by more than run-to-run noise, and derive it rather than listing it.
 def smoke_caller(
     tags: set[str], host_vars: Path = HOST_VARS, roles: Path = K8S_ROLES
 ) -> str | None:
@@ -119,7 +131,8 @@ def smoke_caller(
     `render_targets` derives it — so the deploy actually exercises the render-and-apply path
     the change is in. Among those, the cost key is the number of hosts declaring it, then the
     number of manifests it renders, then its name: a one-template service on one host is one
-    short rollout, and the name breaks the tie so two runs over one tree pick the same caller.
+    apply of an object that is already converged, and the name breaks the tie so two runs over
+    one tree pick the same caller. The `# DECIDED:` above says why that count is not a timing.
 
     None for an empty candidate set, which is the answer that keeps the full fan-out. An empty
     caller set would read to `land_tags.plane_note` as a role nothing deploys.
