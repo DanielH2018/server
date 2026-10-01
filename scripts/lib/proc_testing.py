@@ -31,9 +31,9 @@ Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `p
 
 `scripts/tests/test_tests_share_the_subprocess_helpers.py` holds all three decisions as rules.
 Rule 3 is the deadline: a test-module `subprocess.run` with no `timeout=` is refused, so a
-caller either comes through `run` or states its own budget at the line. `subprocess.Popen` is
-outside that rule, because it takes no `timeout=` — bound its `wait`/`communicate` yourself
-(#3073).
+caller either comes through `run` or states its own budget at the line — `timeout=None`
+included, which is why rule 3 exempts no module. `subprocess.Popen` is outside that rule,
+because it takes no `timeout=` at all; bound its `wait`/`communicate` yourself (#3073).
 
 A test whose SUBJECT is one of the three decisions does not use this. `scripts/lib/tests/
 test_proc_testing.py` covers this module's own behaviour, and a test that pins the minimal

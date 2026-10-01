@@ -21,14 +21,14 @@ THREE RULES, each with a clean/flagged pair below.
    something in front of an existing `PATH` value, whether it lands in an `env=` dict or in
    `monkeypatch.setenv`. `lib.proc_testing.path_with` is that string, and
    `run(..., stub_bin=...)` is the call that never spells it.
-
 3. A test module does not launch a subprocess with no deadline. The shape is a call to
    `subprocess.run`/`check_output`/`check_call`/`call` that passes no `timeout=`, or a
    `from subprocess import run` that would let the sanctioned bare `run(` name the unbounded
-   one. `lib.proc_testing.run` supplies `DEFAULT_TIMEOUT`, so a call through it is clean.
-   `subprocess.Popen` is NOT covered: it takes no `timeout=` at all, and its deadline lives on
-   the `wait`/`communicate` that follows, which is a different AST shape and a different set of
-   exemptions (#3073).
+   one. `lib.proc_testing.run` supplies `DEFAULT_TIMEOUT`, so a call through it is clean,
+   and so is an explicit `timeout=None` where outliving every deadline is the point — which is
+   why rule 3 exempts no module, unlike the two above it. `subprocess.Popen` is NOT covered: it
+   takes no `timeout=` at all, and its deadline lives on the `wait`/`communicate` that follows,
+   which is a different AST shape with its own exemptions (#3073).
 
 Every rule reads the AST, so a docstring naming the old form is prose rather than a hit.
 
@@ -64,21 +64,13 @@ EXEMPT = {
     "scripts/dev/tests/test_gen_hook_settings.py",
 }
 
-# Rule 3 keeps its own set. `EXEMPT` above names the modules whose subject is the exec bit or
-# the `PATH` prefix, and none of those is a reason to launch unbounded —
-# `test_gen_hook_settings.py` is in both sets for unrelated reasons, and sharing one set would
-# have let its launch out of rule 3 silently.
-EXEMPT_UNBOUNDED = {
-    # This module: rule 3's own red-proof pair spells the raw form as fixture text.
-    "scripts/tests/test_tests_share_the_subprocess_helpers.py",
-    # The helper itself, whose `timeout=` default is the thing under test.
-    "scripts/lib/tests/test_proc_testing.py",
-}
-# No third entry. #3066 predicted a module whose subject IS the timeout
-# (`ansible/tests/deploy/test_gitops_deploy_subprocess.py`); no such file exists, and every
-# other site in the 2026-10-01 census took a deadline without changing what it asserts. A
-# module that genuinely needs an unbounded launch belongs here with the reason, not behind a
-# `timeout=None` the rule cannot see.
+# RULE 3 HAS NO EXEMPTION SET, and that is deliberate. Rules 1 and 2 need one because their
+# subject — the exec bit, the `PATH` prefix — cannot be written any other way. Rule 3's can: a
+# launch that must outlive every deadline passes `timeout=None`, which satisfies the rule and
+# puts the decision at the line that made it. A module-wide exemption would blanket that
+# module's OTHER launches too, which is the cost rules 1 and 2 accept and rule 3 need not.
+# #3066 predicted one entry here, `ansible/tests/deploy/test_gitops_deploy_subprocess.py`; no
+# such file exists, and no site in the 2026-10-01 census needed an unbounded launch.
 
 # The rules' own census must reach these. Each held one of the two forms before #3056, so an
 # empty or partial scan means the walk stopped matching rather than that the tree is clean.
@@ -93,8 +85,9 @@ KNOWN_MEMBERS = frozenset(
     }
 )
 
-# Rule 3's census. Each of these launched without a deadline before this guard landed, across
-# all four test roots that hold one, so a scan that stops reaching them reads as a clean tree.
+# Rule 3's census. Each of these launched without a deadline before this guard landed, and
+# they span the three roots that held one — the hooks tree, `ansible/tests` and `scripts` — so
+# a scan that stops reaching them reads as a clean tree.
 KNOWN_UNBOUNDED_MEMBERS = frozenset(
     {
         ".claude/hooks/tests/test_hook_scripts_executable.py",
@@ -372,23 +365,17 @@ def test_the_unbounded_census_reaches_every_migrated_module():
     assert not missing, f"the scan no longer reaches: {sorted(missing)}"
 
 
-def test_every_unbounded_exemption_still_names_a_file_that_exists():
-    gone = sorted(name for name in EXEMPT_UNBOUNDED if not (REPO / name).exists())
-    assert gone == [], f"exempted modules that no longer exist: {gone}"
-
-
 def test_no_test_module_launches_a_subprocess_without_a_deadline():
     offenders = {
         _rel(p): names
         for p in _test_modules()
-        if _rel(p) not in EXEMPT_UNBOUNDED
-        and (names := unbounded_launches(p.read_text()))
+        if (names := unbounded_launches(p.read_text()))
     }
     assert offenders == {}, (
         "these tests launch a child with no deadline, so a wedged one parks the whole CI run "
         "instead of failing its own test. Call `lib.proc_testing.run(...)`, which supplies "
-        f"`DEFAULT_TIMEOUT`, or pass your own `timeout=` with the reason at the line: "
-        f"{offenders}"
+        "`DEFAULT_TIMEOUT`, or pass your own `timeout=` with the reason at the line — "
+        f"`timeout=None` included, where outliving every deadline is the point: {offenders}"
     )
 
 
