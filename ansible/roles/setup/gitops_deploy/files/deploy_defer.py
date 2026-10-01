@@ -474,8 +474,14 @@ def discharge_k8s_unapplied(
 
 # DECIDED: only `manifests` discharges on a render digest (#3057). A digest match proves the
 # bytes `manifests_digest` and `secret_digest` cover, and nothing a role does outside them.
-# `manifests` is the renderer of those bytes, and its own tasks render, apply and stamp them,
-# so a change of its that moves no caller's digest has nothing left to apply. Every other
+# `manifests` renders those bytes, so most of its changes either move a caller's digest or
+# take effect on the next deploy of any caller without being "behind". The gap taken is a
+# change to HOW it applies — the prune, the Secret-key reconcile, an apply flag — which can
+# leave live state different from what that change would produce while no digest moves: the
+# line discharges and the difference waits for the next deploy. `probe.py releases` has taken
+# the same gap since #3046, where a CURRENT digest clears a `manifests/tasks/` path hit. A
+# line that never discharged until a full deploy was the defect (#2643), so the gap is
+# accepted. Every other
 # shared role acts outside the digest: `volume-claim` stages its PVC in a sibling directory
 # the digest never stats, `image-builder`'s `build-job.yaml.j2` is outside it (only the build
 # CONTEXT reaches a caller's bytes, through the content tag), `arr-notification` writes an
