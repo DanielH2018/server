@@ -316,3 +316,16 @@
     cron_file: claude-otel-health
   become: true
   when: not k8s_dry_run | bool
+
+# The 2026-10-01 rename from claude-otel (#2911) left the old service's release records beside
+# observability.json; nothing declares claude-otel any more, so they are dead copies (#3088).
+- name: Remove the release records the claude-otel name left behind
+  tags: [config]
+  ansible.builtin.file:
+    path: "/var/lib/homelab/k8s-releases.d/{{ item }}"
+    state: absent
+  loop:
+    - claude-otel.json
+    - claude-otel.previous.json
+  become: true
+  when: not k8s_dry_run | bool
