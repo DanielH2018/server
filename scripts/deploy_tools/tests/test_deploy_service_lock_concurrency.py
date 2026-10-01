@@ -70,6 +70,21 @@ case "$*" in
 esac
 """.replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
 
+# The same again, parked on a gate fifo instead of a sleep. A test that reads state which only
+# holds WHILE the playbook runs -- the service lock, the snapshot, the child's descriptors --
+# bets with a sleep that it is scheduled inside those seconds, and issue #3171 is the full
+# suite losing that bet once under four xdist workers and winning the immediate retry. The
+# stub's `read` blocks until the test writes to the gate, so the window is as long as the
+# assertions take and the sleep's wall clock leaves the test entirely.
+_UV_GATED_STUB = """#!/bin/bash
+case "$*" in
+  *ansible-playbook*) pwd >"$DEPLOY_TEST_PWD_FILE"; read -r _ <"$DEPLOY_TEST_GATE_FILE"; {recap}; exit 0 ;;
+  *deploy_tags.py*) printf 'alpha\\nbeta\\n'; exit 0 ;;
+{locks}
+  *) exit 0 ;;
+esac
+""".replace("{recap}", FAKE_RECAP).replace("{locks}", UV_WRAPPER_ARMS)
+
 
 def _harness(
     tmp_path: Path, uv_stub: str = _UV_STUB, sleep_s: float = _SLEEP_S
@@ -220,20 +235,37 @@ def _service_lock_free(path: Path) -> bool:
         os.close(fd)
 
 
-def _pwd_fifo(tmp_path: Path) -> tuple[Path, int]:
-    """A fifo for the playbook stub's `pwd`, and a descriptor on it this test holds.
+def _fifo(path: Path) -> tuple[Path, int]:
+    """`path` as a fifo, and a descriptor on it this test holds.
 
-    Opened O_RDWR, so the descriptor is itself a writer: the pipe never reads as closed
-    before the stub has opened it, and `select` in `_playbook_cwd` fires on the stub's line
-    and on nothing else. That line is the signal the backgrounded playbook has started.
+    Opened O_RDWR, so the descriptor is both a reader and a writer. Neither end ever reads as
+    closed while the test holds it: the stub's `>` and `<` on the same path both open without
+    blocking, whichever runs first, and a `select` on this descriptor fires on what the stub
+    wrote and on nothing else.
+    """
+    os.mkfifo(path)
+    return path, os.open(path, os.O_RDWR)
+
+
+def _pwd_fifo(tmp_path: Path) -> tuple[Path, int]:
+    """The fifo the playbook stub writes its `pwd` to. That line says the playbook started.
 
     Keep the descriptor open until every run that inherits the fifo's path has finished. A
     stub's `pwd >` blocks in open() while the fifo has no reader, and this descriptor is the
     reader; a later run whose line nobody reads writes into the pipe buffer and moves on.
     """
-    path = tmp_path / "playbook-pwd"
-    os.mkfifo(path)
-    return path, os.open(path, os.O_RDWR)
+    return _fifo(tmp_path / "playbook-pwd")
+
+
+def _gate_fifo(tmp_path: Path) -> tuple[Path, int]:
+    """The fifo `_UV_GATED_STUB` parks on, and the descriptor `_open_gate` releases it with."""
+    return _fifo(tmp_path / "playbook-gate")
+
+
+def _open_gate(fd: int) -> None:
+    """Let the parked playbook stub finish. The test's own descriptor is a reader too, so this
+    write never blocks, even when nothing is parked on the gate at all."""
+    os.write(fd, b"go\n")
 
 
 def _playbook_cwd(fd: int, timeout: float = 60) -> Path:
@@ -241,6 +273,42 @@ def _playbook_cwd(fd: int, timeout: float = 60) -> Path:
     readable, _, _ = select.select([fd], [], [], timeout)
     assert readable, "the backgrounded playbook never ran"
     return Path(os.read(fd, 4096).decode().strip())
+
+
+def _held_fds(pid: int) -> dict[int, str]:
+    """Every descriptor `pid` holds, by number. A descriptor closed mid-listing is skipped."""
+    held = {}
+    for link in Path(f"/proc/{pid}/fd").iterdir():
+        try:
+            held[int(link.name)] = os.readlink(link)
+        except OSError:
+            continue
+    return held
+
+
+def _settled_fds(pid: int, timeout: float = 10) -> dict[int, str]:
+    """`pid`'s descriptors once only stdio and locks are left, else the last sample taken.
+
+    `run_playbook` hands the playbook's stdout to a `tee` child through a pipe it closes in a
+    `finally` that runs AFTER the playbook is spawned, so for the microseconds either side of
+    the signal a test waits on -- the stub's first line -- the child legitimately holds two
+    pipes. Measured under 0.1ms on daniel-server and never caught by a sample, but it is a
+    race, and polling for the settled set costs nothing.
+
+    This weakens no assertion: a descriptor the child never closes, which is the leak of issue
+    #3162, never settles, and the deadline then hands the last sample to the assertion that
+    names it. The caller asserts on the returned sample rather than on this returning.
+    """
+    deadline = time.monotonic() + timeout
+    while True:
+        held = _held_fds(pid)
+        beyond_stdio = set(held) - {0, 1, 2}
+        locks = {fd for fd, target in held.items() if target.endswith(".lock")}
+        if locks and beyond_stdio == locks:
+            return held
+        if time.monotonic() >= deadline:
+            return held
+        time.sleep(0.01)
 
 
 def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_ends(
@@ -253,10 +321,16 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
     close cannot release), the snapshot directory (the parent's EXIT trap fires the instant it
     backgrounds the job, so the cleanup has to belong to the subshell), and the cleanup itself.
     Deleting the snapshot too early and leaking it are both invisible to the run that did it.
+
+    The playbook parks on the gate rather than sleeping, so the parent returning at all is the
+    proof it backgrounded the job, and every assertion below runs with the playbook still
+    inside its run however loaded the host is.
     """
-    repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
+    repo, env = _harness(tmp_path, uv_stub=_UV_GATED_STUB)
     pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    gate_fifo, gate_fd = _gate_fifo(tmp_path)
     env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
+    env["DEPLOY_TEST_GATE_FILE"] = str(gate_fifo)
     snapshots = tmp_path / "snapshots"
     alpha_lock = tmp_path / "locks" / "server-deploy-alpha.lock"
 
@@ -264,7 +338,6 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
     # stdout, so a pipe stays open until the playbook ends and `capture_output` would wait for
     # exactly the thing this test is checking the parent does not wait for.
     output = tmp_path / "detach-output"
-    started = time.monotonic()
     with output.open("w") as sink:
         returncode = subprocess.run(
             [
@@ -282,9 +355,9 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
             timeout=120,
             check=False,
         ).returncode
-    assert returncode == 0, output.read_text()
-    assert time.monotonic() - started < _SLEEP_S, (
-        "--detach waited for the playbook instead of backgrounding it"
+    assert returncode == 0, (
+        "--detach waited for the parked playbook instead of backgrounding it, or refused:\n"
+        + output.read_text()
     )
 
     playbook_cwd = _playbook_cwd(pwd_fd)
@@ -301,6 +374,7 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
 
     # The subshell releases the lock and removes the snapshot on its way out, so its exit is
     # the point after which both must hold.
+    _open_gate(gate_fd)
     assert wait_for_exit(detached_pid(output.read_text())), (
         "the detached subshell never finished"
     )
@@ -311,6 +385,7 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
         f"the detached run left its snapshot behind in {snapshots}"
     )
     os.close(pwd_fd)
+    os.close(gate_fd)
 
 
 def test_a_detached_deploy_keeps_only_stdio_its_log_and_its_locks(tmp_path):
@@ -318,12 +393,20 @@ def test_a_detached_deploy_keeps_only_stdio_its_log_and_its_locks(tmp_path):
 
     An inherited pipe of the caller's -- a harness's output capture -- keeps the caller's call
     open for as long as the playbook runs. This passes `deploy.sh` a stray descriptor on a
-    marker file and reads the child's own /proc/<pid>/fd while the playbook still sleeps: the
-    marker must be gone, and the service lock and the snapshot's owner lock must still be held.
+    marker file and reads the child's own /proc/<pid>/fd while the playbook is still inside its
+    run: the marker must be gone, and the service lock and the snapshot's owner lock must still
+    be held.
+
+    The playbook parks on the gate rather than sleeping (issue #3171). Read against a sleep,
+    this listing is a bet that the test is scheduled before the sleep ends -- and the service
+    lock the assertions want is closed the instant the playbook returns, so losing that bet
+    reads as the invariant being broken rather than as a sample taken too late.
     """
-    repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
+    repo, env = _harness(tmp_path, uv_stub=_UV_GATED_STUB)
     pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    gate_fifo, gate_fd = _gate_fifo(tmp_path)
     env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
+    env["DEPLOY_TEST_GATE_FILE"] = str(gate_fifo)
     stray_path = tmp_path / "callers-stray-descriptor"
     stray = os.open(stray_path, os.O_WRONLY | os.O_CREAT, 0o644)
     output = tmp_path / "detach-output"
@@ -352,8 +435,7 @@ def test_a_detached_deploy_keeps_only_stdio_its_log_and_its_locks(tmp_path):
     snapshot = _playbook_cwd(pwd_fd)
     pid = detached_pid(output.read_text())
 
-    fds = Path(f"/proc/{pid}/fd")
-    held = {int(link.name): os.readlink(link) for link in fds.iterdir()}
+    held = _settled_fds(pid)
     assert str(stray_path) not in held.values(), (
         f"the detached child still holds its caller's descriptor on {stray_path}: {held}"
     )
@@ -364,5 +446,7 @@ def test_a_detached_deploy_keeps_only_stdio_its_log_and_its_locks(tmp_path):
         fd for fd, target in held.items() if target.endswith(".lock")
     }, f"the detached child holds descriptors beyond stdio and its locks: {held}"
 
+    _open_gate(gate_fd)
     assert wait_for_exit(pid), "the detached child never finished"
     os.close(pwd_fd)
+    os.close(gate_fd)
