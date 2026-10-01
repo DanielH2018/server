@@ -46,7 +46,7 @@
   become: true
 
 - name: Deploy the daily secret-rotation audit wrapper (gitops host only)
-  tags: [crons]
+  tags: [crons, secret-rotation]
   # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key
   # list of ansible/vars/secrets.yml straight off the working tree (no SOPS decrypt, no live
   # source), so it's only trustworthy on a host whose tree self-refreshes — gitops-deploy.service
@@ -65,7 +65,7 @@
   no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
 - name: Schedule the daily secret-rotation audit (gitops host only)
-  tags: [crons]
+  tags: [crons, secret-rotation]
   # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
   # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
   #
@@ -84,7 +84,7 @@
     kuma_check_cron_name: "Daily secret rotation audit"
 
 - name: Deploy the weekly secret-rotation wrapper (gitops host only)
-  tags: [crons]
+  tags: [crons, secret-rotation]
   # Unattended rotation of coming-due auto-tier push tokens (rotate --commit --deploy +
   # git push; anything due within ROTATE_LEAD_DAYS rotates BEFORE it goes overdue).
   # Reverts on failure; cross-host tokens stay manual. See scripts/secrets_mgmt/secret_rotation.py +
@@ -101,7 +101,7 @@
   no_log: true  # renders secret_rotation_push_token (gitops_deploy wrapper parity)
 
 - name: Schedule the weekly secret rotation (gitops host only)
-  tags: [crons]
+  tags: [crons, secret-rotation]
   # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
   # have all settled; quiet window minimises any clash with a concurrent operator session.
   #
@@ -130,7 +130,7 @@
 # the staleness this move fixes. These run everywhere the gate is false, so the crons follow
 # has_gitops in both directions.
 - name: Remove the secret-rotation crons from any non-gitops host
-  tags: [crons]
+  tags: [crons, secret-rotation]
   when: not has_gitops
   ansible.builtin.cron:
     name: "{{ item }}"
@@ -142,7 +142,7 @@
   become: true
 
 - name: Remove the secret-rotation wrappers from any non-gitops host
-  tags: [crons]
+  tags: [crons, secret-rotation]
   when: not has_gitops
   ansible.builtin.file:
     path: "/usr/local/bin/{{ item }}"
@@ -153,7 +153,7 @@
   become: true
 
 - name: Create the Healthchecks.io credential directory
-  tags: [crons, prune]
+  tags: [crons, prune, weekly-restart]
   # The same path, mode and owner as the k3s role's task, so the two writers agree on
   # daniel-box. This role writes it too because its two pinging crons run on every host, and
   # the k3s role reaches neither daniel-pi nor, for this file, daniel-server.
@@ -166,7 +166,7 @@
   become: true
 
 - name: Deploy the Healthchecks.io ping key
-  tags: [crons, prune]
+  tags: [crons, prune, weekly-restart]
   # Byte-identical to the k3s role's `Deploy the Healthchecks.io ping key`, which carries the
   # reasoning: the project ping key can hold every check green, so it lives in a 0640 file the
   # crons source at run time, never in a crontab line. cron logs each command it runs to the
@@ -182,7 +182,7 @@
   no_log: true  # renders the Healthchecks.io ping key
 
 - name: Schedule sudo crontab for weekly restart
-  tags: [crons]
+  tags: [crons, weekly-restart]
   # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
   # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
   # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
@@ -309,7 +309,7 @@
     weekday: "0" # 0 is Sunday
     job: "truncate -s 0 /home/{{ sys_user }}/server/ansible.log"
   become: true
-  tags: [crons]
+  tags: [crons, ansible-log]
   # The gate matters MORE here than on a task that fails. `ansible.builtin.cron` only writes a
   # crontab line, so on a host with no checkout this task SUCCEEDS and the deploy reads green —
   # the failure is deferred to 06:00 every Sunday, on stderr nothing reads. A task that installs
@@ -317,7 +317,7 @@
   when: has_repo_checkout
 
 - name: Schedule the weekly worktree sweep and git object-store repair (box only)
-  tags: [crons]
+  tags: [crons, worktree-sweep]
   # Several Claude sessions branch, commit and retire worktrees in this checkout every day, and
   # each removal leaves that branch's objects unreachable. `prune_worktrees.py --prune --brief`
   # removes the merged worktrees, deletes the orphan `worktree-*` branches whose content is on
@@ -392,7 +392,7 @@
   become: true
 
 - name: Retire the TLS cert-expiry watch
-  tags: [crons]
+  tags: [crons, cert-expiry]
   # The watcher is gone (#3095). It dialled every public hostname at the MetalLB VIP with that
   # name as the TLS SNI and warned on Discord at 14 days. Traefik serves ONE certificate -- a
   # wildcard whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- so each of those
@@ -423,10 +423,10 @@
 # weekly STATE-CHANGING cron that commits and pushes, so a stale render runs old rotation logic
 # against live secrets with every repo-side check reading green.
 #
-# Same has_gitops gate and same [crons] tag as the two wrappers above — a stamp that ran where
+# Same has_gitops gate and same [crons, secret-rotation] tags as the two wrappers above — a stamp that ran where
 # the wrappers do not would claim coverage this host never renders.
 - name: Stamp the rendered secret-rotation wrappers (gitops host only)
-  tags: [crons]
+  tags: [crons, secret-rotation]
   when: has_gitops
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -733,7 +733,7 @@
 # so a stale render would keep committing generated pages from old generator wiring while
 # every repo-side check reads green.
 - name: Stamp the rendered docs-refresh wrapper (box only)
-  tags: [crons]
+  tags: [crons, docs]
   when: inventory_hostname == ops_cron_host
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -801,7 +801,7 @@
 # render would keep committing eval history from old wiring while every repo-side check
 # reads green.
 - name: Stamp the rendered eval-run wrapper (box only)
-  tags: [crons]
+  tags: [crons, evals]
   when: inventory_hostname == ops_cron_host
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:

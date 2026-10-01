@@ -68,7 +68,7 @@
   become: true
 
 - name: Schedule weekly package autoremove
-  tags: [crons]
+  tags: [crons, apt-hygiene]
   ansible.builtin.cron:
     name: "Weekly apt autoremove"
     minute: "0"
@@ -79,7 +79,7 @@
   become: true
 
 - name: Schedule weekly purge of removed-package config remnants
-  tags: [crons]
+  tags: [crons, apt-hygiene]
   ansible.builtin.cron:
     name: "Weekly dpkg purge orphaned configs"
     minute: "15"
