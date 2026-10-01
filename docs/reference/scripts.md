@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/scripts.py
-generated_at: 2026-10-01 16:41 UTC
-generated_sha: 4683148f1
+generated_at: 2026-10-01 18:17 UTC
+generated_sha: 3d5b8e000
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 4683148f1
 
 # Scripts
 
-219 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
+220 first-party script(s) in `scripts/`. Each summary is the script's own module docstring — change the docstring to change this page.
 
 The sections below split them by **how each one is run**, which is derived from the tree rather than declared: a cron `job:`, a `prek.toml` entry, a workflow step, a Claude hook, an Ansible task, or an import edge. The *Reached by* column is the evidence, so a wrong answer is a wrong answer about a real file. The filter bar above the first table narrows all four at once: by section, by directory, or by any text in a row. A header click sorts by that column.
 
@@ -20,7 +20,7 @@ The sections below split them by **how each one is run**, which is derived from 
     Whether a script is safe to run. The summary is whatever its author wrote, and nothing here judges blast radius. For the ones that run unattended, and which of those change state, see [Scheduled jobs](crons.md).
 
 
-**0 of the 49 scripts that run unattended have no test; 4 of all 219 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
+**0 of the 50 scripts that run unattended have no test; 4 of all 220 do not.** The first number is the one that matters. An untested script a person runs fails in front of that person; an untested one a cron or a commit gate runs fails unattended, or blocks everybody.
 
 !!! note "Where the Tests column looks"
     First for a `scripts/test_<name>.py`. Failing that, for any test in `scripts/` or `ansible/tests/` that names the script — `gitops_tick.sh` has five, in `test_gitops_manual_trigger.py`, and the naming convention alone called it untested. Those show as *(indirect)*, which means a test exercises it, not that the test is about it.
@@ -54,7 +54,7 @@ The sections below split them by **how each one is run**, which is derived from 
 
 ## Run automatically, on a commit, CI run, deploy or session
 
-30 script(s) — every commit, CI run, deploy or Claude session runs it.
+31 script(s) — every commit, CI run, deploy or Claude session runs it.
 
 | Script | Directory | What it does | Reached by | Tests | Exit codes |
 |---|---|---|---|---|---|
@@ -80,6 +80,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/deploy_tools/narrow_setup.py` | deploy_tools | Which narrow `--tags` value a setup-role change needs, or a refusal to guess. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_narrow_setup.py` | — |
 | `scripts/deploy_tools/prune_releases.py` | deploy_tools | Remove old host-script release directories, never the one in use. | deploy: ansible/roles/setup/common/tasks/release_bin.yml | `test_prune_releases.py` | — |
 | `scripts/deploy_tools/render_targets.py` | deploy_tools | The k8s services a render-record run renders on one host, derived from the tree. | deploy: ansible/roles/setup/render_records/files/render_records.py | `test_render_targets.py` | — |
+| `scripts/validate/root_ignored_files.py` | validate | Flag a root-level file that `.gitignore`'s `/*` rule hides from git. | prek hook (every commit) | `test_validate_root_ignored_files.py` *(indirect)* | — |
 | `scripts/validate/setup_templates.py` | validate | Render every setup-plane Jinja template and fail on a variable nothing defines. | prek hook (every commit) | `test_validate_setup_templates.py` *(indirect)* | — |
 | `scripts/deploy_tools/shared_role_callers.py` | deploy_tools | Which deploy tags run a shared k8s role, record or no record. | deploy: ansible/roles/setup/gitops_deploy/files/deploy_narrow.py | `test_shared_role_callers.py` | — |
 | `scripts/validate/shell_templates.py` | validate | Render every Jinja-templated shell script under ansible/roles/ and lint the output. | prek hook (every commit) | `test_validate_shell_templates.py` *(indirect)* | — |
@@ -215,7 +216,7 @@ The sections below split them by **how each one is run**, which is derived from 
 | `scripts/diagnostics/probe_lib/releases_retired.py` | diagnostics | Release records for services the inventory no longer declares. | imported by releases.py | `test_probe_releases.py` *(indirect)* | — |
 | `scripts/infra_map/render.py` | infra_map | Rendering: turn the reconciled model into one self-contained HTML page. | imported by gen_infra_map.py | `test_infra_map_render.py` *(indirect)* | — |
 | `scripts/lib/render_guard.py` | lib | Shared helpers for the render-guard scripts and other Ansible-inventory readers. | imported by ansible_jinja_env.py, catalog_backup.py, catalog_facts.py, compose_templates.py, config_templates.py, deploy_tags.py, gen_role_glance.py, glance_facts.py, hosts.py, k8s_context.py, k8s_manifests.py, k8s_roles.py, k8s_yaml.py, land_tags.py, monitors.py, narrow_broad.py, narrow_containers.py, networking.py, render_targets.py, service_catalog.py, setup_templates.py, shell_templates.py, unit_templates.py | `test_render_guard.py` | — |
-| `scripts/lib/repo_paths.py` | lib | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by _deploy_sh_fakes.py, _renovate.py, asset_pins.py, await_ci.py, build_docs.py, catalog_backup.py, catalog_model.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, docs_provenance.py, fact_cache_guard.py, fact_status.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_gitops_markers.py, gen_hook_settings.py, gen_role_glance.py, gitops_state.py, glance_facts.py, grafana_dashboards.py, ha.py, health.py, health_docker.py, hosts.py, invocation_sites.py, jinja_bash_collisions.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_manifests.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_changes.py, land_reach.py, land_tags.py, longhorn_upgrade_gates.py, monitors.py, narrow_broad.py, narrow_paths.py, networking.py, new_k8s_service.py, pi_plane.py, pinned_rotation_gates.py, prune_worktrees.py, releases.py, releases_format.py, releases_render.py, render_guard.py, render_targets.py, renovate_branch_sweep.py, review_metrics.py, rotation_tools.py, route_facts.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, setup_templates.py, shared_role_reach.py, shell_templates.py, state.py, tools.py, validate_ha_config.py | `test_ansible_jinja_env.py` *(indirect)* | — |
+| `scripts/lib/repo_paths.py` | lib | The repo path anchors a script under ``scripts/`` reads the Ansible tree through. | imported by _deploy_sh_fakes.py, _renovate.py, asset_pins.py, await_ci.py, build_docs.py, catalog_backup.py, catalog_model.py, constants.py, core.py, cron_checks.py, cron_targets.py, crons.py, decisions.py, deploy_detach_notify.py, deploy_run.py, deploy_staleness.py, deploy_tags.py, deploy_under_locks.py, docs_provenance.py, fact_cache_guard.py, fact_status.py, fragment_readers.py, freshness.py, gen_doc_fragments.py, gen_gitops_markers.py, gen_hook_settings.py, gen_role_glance.py, gitops_state.py, glance_facts.py, grafana_dashboards.py, ha.py, health.py, health_docker.py, hosts.py, invocation_sites.py, jinja_bash_collisions.py, jinja_defaults.py, k8s_autodeploy_counts.py, k8s_context.py, k8s_manifests.py, k8s_pvc.py, k8s_roles.py, k8s_schema.py, land_changes.py, land_reach.py, land_tags.py, longhorn_upgrade_gates.py, monitors.py, narrow_broad.py, narrow_paths.py, networking.py, new_k8s_service.py, pi_plane.py, pinned_rotation_gates.py, prune_worktrees.py, releases.py, releases_format.py, releases_render.py, render_guard.py, render_targets.py, renovate_branch_sweep.py, review_metrics.py, root_ignored_files.py, rotation_tools.py, route_facts.py, script_classify.py, scripts.py, secret_bearing_host_paths.py, secrets.py, setup_templates.py, shared_role_reach.py, shell_templates.py, state.py, tools.py, validate_ha_config.py | `test_ansible_jinja_env.py` *(indirect)* | — |
 | `scripts/secrets_mgmt/rotation_tools.py` | secrets_mgmt | Every process boundary `secret_rotation.py` crosses, as one injectable object. | imported by _rotation_fakes.py, consumers.py, git_dates.py, secret_registry.py, secret_rotation.py, secrets.py | `test_rotation_tools.py` | — |
 | `scripts/docs/route_facts.py` | docs | Shared route facts for the reference generators. | imported by catalog_facts.py, catalog_render.py, networking.py | `test_route_facts.py` | — |
 | `scripts/deploy_tools/runbook_gates.py` | deploy_tools | The runner and the shared verdicts behind every `scripts/deploy_tools/*_gates.py`. | imported by k3s_etcd_restore_gates.py, k3s_upgrade_gates.py, longhorn_dr_gates.py, longhorn_upgrade_gates.py, pinned_rotation_gates.py | `test_k3s_etcd_restore_gates.py` *(indirect)* | — |
@@ -393,10 +394,11 @@ uv run python scripts/dev/findings.py open --title "..." --body-file f.md \
 --severity high --kind gap [--domain network] [--file path/to/file.py:12] \
 [--source review-2026-09-02] [--no-vetted-remediation] \
 [--verify-by 'Run probe.py health <svc>; it should exit 0.'] \
-[--not-before 2026-09-12] [--repo DanielH2018/dotfiles] [--dry-run]
+[--not-before 2026-09-12] [--manual] [--repo DanielH2018/dotfiles] [--dry-run]
 uv run python scripts/dev/findings.py touch 688 [--source review-2026-09-02]
 uv run python scripts/dev/findings.py defer 688 --until 2026-09-12
 uv run python scripts/dev/findings.py defer 688 --clear
+uv run python scripts/dev/findings.py manual 688 [--clear]
 uv run python scripts/dev/findings.py claim 688 701 --worktree worktree-foo \
 [--session id] [--force]
 uv run python scripts/dev/findings.py release 688 --worktree worktree-foo [--reason "..."]

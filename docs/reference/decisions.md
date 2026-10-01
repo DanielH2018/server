@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/decisions.py
-generated_at: 2026-10-01 16:41 UTC
-generated_sha: 4683148f1
+generated_at: 2026-10-01 18:17 UTC
+generated_sha: 3d5b8e000
 ---
 
 !!! warning "Generated file — do not edit"
@@ -20,9 +20,9 @@ generated_sha: 4683148f1
     * `.claude/hooks/_claude_guard.py:19` and `scripts/dev/_claude_worktree.py:10`
     * `.claude/rules/facts.md:30` and `scripts/lib/tests/test_facts_citations.py:78`
     * `.claude/skills/worktree-cleanup/SKILL.md:50` and `ansible/roles/k8s/wg-easy/CLAUDE.md:73`
-    * `.claude/skills/worktree-cleanup/SKILL.md:50` and `docs/gitops-pipeline.md:1676`
+    * `.claude/skills/worktree-cleanup/SKILL.md:50` and `docs/gitops-pipeline.md:1683`
     * `.claude/skills/worktree-cleanup/SKILL.md:50` and `docs/monitor-bridge-checks.md:485`
-    * `.claude/skills/worktree-cleanup/SKILL.md:50` and `prek.toml:381`
+    * `.claude/skills/worktree-cleanup/SKILL.md:50` and `prek.toml:393`
     * `ansible/roles/containers/autoheal/CLAUDE.md:47` and `ansible/roles/k8s/artifacts/CLAUDE.md:63`
     * `ansible/roles/containers/autoheal/CLAUDE.md:47` and `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:346`
     * `ansible/roles/containers/autoheal/CLAUDE.md:47` and `ansible/tests/repo/test_adr_links.py:13`
@@ -66,9 +66,9 @@ generated_sha: 4683148f1
     * `ansible/roles/k8s/terraria/templates/deployment.yaml.j2:27` and `ansible/roles/k8s/traefik/templates/deployment.yaml.j2:27`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:346` and `ansible/tests/repo/test_adr_links.py:13`
     * `ansible/roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2:346` and `docs/archive/docs-ui-and-adrs/design.md:27`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/gitops-pipeline.md:1676`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/gitops-pipeline.md:1683`
     * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `docs/monitor-bridge-checks.md:485`
-    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `prek.toml:381`
+    * `ansible/roles/k8s/wg-easy/CLAUDE.md:73` and `prek.toml:393`
     * `ansible/roles/setup/deploy_ui/files/gitops_markers.py:554` and `ansible/roles/setup/gitops_deploy/files/gitops_markers.py:551`
     * `ansible/roles/setup/deploy_ui/files/gitops_markers.py:554` and `ansible/roles/setup/renovate_agent/files/gitops_markers.py:554`
     * `ansible/roles/setup/deploy_ui/files/gitops_markers.py:554` and `scripts/lib/gitops_markers.py:554`
@@ -88,7 +88,7 @@ generated_sha: 4683148f1
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:162` and `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:344`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:7`
     * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/archive/docs-ui-and-adrs/design.md:137`
-    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:490`
+    * `docs/archive/docs-ui-and-adrs/2-adrs-and-style.md:329` and `docs/gitops-pipeline.md:497`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/docs-ui-and-adrs/design.md:137`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `docs/archive/post-merge-automation.md:268`
     * `docs/archive/docs-ui-and-adrs/design.md:7` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
@@ -96,14 +96,14 @@ generated_sha: 4683148f1
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `docs/archive/post-merge-automation.md:268`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/docs-ui-and-adrs/design.md:137` and `scripts/diagnostics/tests/test_probe_health.py:324`
-    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:490`
+    * `docs/archive/post-merge-automation.md:268` and `docs/gitops-pipeline.md:497`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
     * `docs/archive/post-merge-automation.md:268` and `scripts/diagnostics/tests/test_probe_health.py:324`
-    * `docs/gitops-pipeline.md:490` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
-    * `docs/gitops-pipeline.md:490` and `scripts/diagnostics/tests/test_probe_health.py:324`
-    * `docs/gitops-pipeline.md:1676` and `docs/monitor-bridge-checks.md:485`
-    * `docs/gitops-pipeline.md:1676` and `prek.toml:381`
-    * `docs/monitor-bridge-checks.md:485` and `prek.toml:381`
+    * `docs/gitops-pipeline.md:497` and `scripts/diagnostics/probe_lib/health_kubectl.py:12`
+    * `docs/gitops-pipeline.md:497` and `scripts/diagnostics/tests/test_probe_health.py:324`
+    * `docs/gitops-pipeline.md:1683` and `docs/monitor-bridge-checks.md:485`
+    * `docs/gitops-pipeline.md:1683` and `prek.toml:393`
+    * `docs/monitor-bridge-checks.md:485` and `prek.toml:393`
     * `scripts/deploy_tools/tests/test_shared_role_reach.py:111` and `scripts/deploy_tools/tests/test_shared_role_reach.py:125`
     * `scripts/diagnostics/probe_lib/health_kubectl.py:12` and `scripts/diagnostics/tests/test_probe_health.py:324`
     * `scripts/lib/tests/test_facts_atoms.py:208` and `scripts/lib/tests/test_facts_atoms.py:215`
@@ -156,8 +156,8 @@ generated_sha: 4683148f1
 | a plain (non-subPath) ConfigMap mount under a re-exec loop, so an edited script | `ansible/roles/k8s/karakeep/templates/deployment-time-tagger.yaml.j2:74` | 2026-09-30 |
 | no readOnlyRootFilesystem here, unlike the wait-for-karakeep init container above. The `uv pip install ... --system` in the command block installs five packages into the interpreter's site-packages, on the image's own root filesystem, on EVERY container start — `--system` is what targets it there rather than a venv. A read-only root makes that first command fail, so the container never reaches the script. The chown changes who may write that path, never whether the path is writable, so the in-cluster build does not reopen this. Redirecting the install into a mounted emptyDir instead (a venv on /work, or PYTHONUSERBASE) would make read-only reachable, but it re-resolves the same install against a cache that no longer persists and changes how the container boots — a bigger change than the hardening it buys, and out of scope for #1129. | `ansible/roles/k8s/karakeep/templates/deployment-time-tagger.yaml.j2:96` | 2026-09-05 |
 | no readOnlyRootFilesystem here, unlike the chrome sidecar and the wait-for-deps init container above. Three facts, and the third is why this is recorded rather than tried: 1. PID 1 is s6-overlay's `/init` (upstream `docker/Dockerfile`'s ENTRYPOINT, and the process was measured as s6-svscan at uid 0 — see the ("karakeep", "karakeep") entry in _ENTRYPOINT_DROPS, ansible/tests/k8s/test_container_security_context.py). s6 rebuilds its whole service tree under /run on every start, so a read-only root needs an emptyDir at /run plus S6_READ_ONLY_ROOT=1, which changes how the init itself boots. 2. The image hardcodes HOME=/root, so anything cache-writing lands on the root filesystem rather than a mounted path. That is its own open issue; it is not fixed here. 3. Guessing wrong is a manual recovery, not a rollback: k8s_autodeploy is false, strategy is Recreate, and the PVC is ReadWriteOnce, so the old pod is gone before the replacement's mounts are known-good. Measuring the writable-path set would settle 1 and 2, and it needs a deploy — the read-only ServiceAccount is Forbidden on pods/exec, so no live census is possible from a review session. | `ansible/roles/k8s/karakeep/templates/deployment.yaml.j2:72` | 2026-09-05 |
-| HMAC-SHA256 under a host-local key` | `ansible/roles/k8s/manifests/CLAUDE.md:294` | 2026-09-26 |
-| this digest names the bytes` | `ansible/roles/k8s/manifests/CLAUDE.md:362` | 2026-09-25 |
+| HMAC-SHA256 under a host-local key` | `ansible/roles/k8s/manifests/CLAUDE.md:295` | 2026-09-26 |
+| this digest names the bytes` | `ansible/roles/k8s/manifests/CLAUDE.md:363` | 2026-09-25 |
 | default false, armed per-role rather than globally. (1) there is no shared metadata-labels macro yet, so every one of the other ~63 roles would need its templates hand-edited to carry `homelab/role: <service>` before --prune could ever see their objects — doing that without a proven mechanism first is the wrong order. (2) a label added to a role's manifests only protects objects APPLIED AFTER the label lands: an orphan whose staged file was already deleted before this feature shipped (the claude-otel-ingest IngressRoute this issue names) never receives the label and stays invisible to `-l homelab/role=...` — it still needs one manual kubectl delete, same as today. roles/k8s/registry is the one role armed so far, proving the mechanism end-to-end on a role with a normal Deployment+Service+NetworkPolicy shape. Arming another role means: label its object metadata the same way, list every kind it renders in manifests_prune_kinds (the default --prune-allowlist misses NetworkPolicy and every Traefik CRD), and never include Secret or PersistentVolumeClaim — see the guard test on that. | `ansible/roles/k8s/manifests/defaults/main.yml:31` | 2026-09-04 |
 | HMAC-SHA256 under a host-local key, never a plain hash. manifest rendered from a known template lets anyone who reads a 0644 record test guesses at a low-entropy secret; a keyed digest leaks nothing without the root-only key. One task per file, `no_log`, registering only the digest the helper prints. The key never reaches an argv: `openssl dgst -hmac` would put it in /proc and in this register. Full reasoning in this role's CLAUDE.md, under `## Release records`. | `ansible/roles/k8s/manifests/tasks/release_digest.yml:171` | 2026-09-26 |
 | one step of history, not an append-only log. an incident is "what was live before this deploy", and one step answers it. An unbounded JSONL grows by one line per service per deploy — up to 54 lines every 30-minute tick — and would need rotation, a rotation cron, and a monitor for the rotation cron. Depth beyond one step is what git history is for: every record names a commit, so the trail continues there. | `ansible/roles/k8s/manifests/tasks/release_stamp.yml:158` | 2026-08-29 |
@@ -427,10 +427,10 @@ generated_sha: 4683148f1
 | under `tempfile.mkdtemp`, NOT under HOMELAB_DEPLOY_SNAPSHOT_ROOT. | `scripts/deploy_tools/land_lib/tools.py:275` | 2026-09-24 |
 | the parent directory is PINNED to GATE_TMP_ROOT rather than left to `mkdtemp`'s | `scripts/deploy_tools/land_lib/tools.py:285` | 2026-09-16 |
 | the tag is dropped, not only the shared-role note. current manifests on its next image bump anyway, and a pytest guard reaches no cluster. | `scripts/deploy_tools/land_tags.py:168` | 2026-09-11 |
-| `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_tags.py:272` | 2026-09-24 |
-| fan a shared role out to its callers, reversing the "report, do not fan out" this held until #2704. The operator asked for every piece of the deploy to be selectable, and a report left PR #2701 for the next full deploy. A change to `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy, unmeasured as a tag list. A change reaching no rendered manifest never gets here: `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the report, because an unattended tick parking a range is a different cost. | `scripts/deploy_tools/land_tags.py:325` | 2026-09-27 |
-| fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_tags.py:377` | 2026-09-01 |
-| fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_tags.py:384` | 2026-09-01 |
+| `except Exception`, because any failure here must print the role tag. derivation shells out to git and decodes the output. An escape would kill a landing that has already merged, over a note the whole-role tag answers correctly. | `scripts/deploy_tools/land_tags.py:279` | 2026-09-24 |
+| fan a shared role out to its callers, reversing the "report, do not fan out" this held until #2704. The operator asked for every piece of the deploy to be selectable, and a report left PR #2701 for the next full deploy. A change to `manifests` or `volume-snapshot` therefore deploys ~58 services — about a full deploy, unmeasured as a tag list. A change reaching no rendered manifest never gets here: `shared_role_reach` drops its paths first. The deployer's `k8s_remediation` keeps the report, because an unattended tick parking a range is a different cost. | `scripts/deploy_tools/land_tags.py:329` | 2026-09-27 |
+| fire on ANY change to secrets.yml, and never try to name which keys moved. Naming them means decrypting both revisions, and no plaintext may reach a terminal, a transcript or a log. `.gitattributes` sets `diff=sops`, so even `git diff ansible/vars/secrets.yml` renders the values, which is why a hook denies that form. Over-firing on a key that needed no redeploy costs one exit code; under-firing leaves a rotated credential stale in a consumer this file list cannot show. | `scripts/deploy_tools/land_tags.py:381` | 2026-09-01 |
+| fire on the tag-carrying path too, which is the opposite of what deploy_logic.alert_secrets_deferred does for the deployer. Not a contradiction, a different reader: that alert is unattended, so a false fire on the /add-secret happy path is noise nobody can act on. Here an operator is reading land.sh's output, and a PR shipping secrets.yml WITH one consuming template still cannot show the OTHER consumers -- PR #695's token had two, in two planes, and the landing got neither. | `scripts/deploy_tools/land_tags.py:388` | 2026-09-01 |
 | ` on `is_doc` says why that | `scripts/deploy_tools/narrow_paths.py:38` | 2026-09-30 |
 | transitive. walk that stopped at the first hop would name no tag for them and their `k8s_unapplied` lines would need a hand to clear. #2704 replaced the land side's first-hop `covered_roles` with this for the same reason. | `scripts/deploy_tools/shared_role_callers.py:32` | 2026-10-01 |
 | every caller counts, including one whose deploy writes no release record (#3057). Until #3057 the deployer's caller set kept only tags whose deploy also ran `manifests`, because a caller with no record could never discharge a line and would keep it forever. No declared entry has that shape — `cronjob-gate`, `volume-snapshot` and `volume-revert`, the three roles that never include `k8s/manifests`, are all shared — so the filter dropped nothing and cost a second walk. Should one appear, its shared roles' lines stay until a hand clears them, which names the gap rather than discharging past a caller nothing proved. `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries re-derives whether one has. | `scripts/deploy_tools/shared_role_callers.py:95` | 2026-10-01 |
@@ -450,7 +450,7 @@ generated_sha: 4683148f1
 | no exit or timeout from this call can happen after the unit is live. `systemd-run` (without --wait/--pty/--scope) starts the transient unit and returns immediately, so this call is still running only while an earlier step (fetch, worktree add/lock, or the brief write) is — never after `systemd-run` has handed off. That's what makes an unconditional cleanup safe on a timeout, and what makes `--scope` forbidden here: it would tie the agent to this ssh connection, and a cleanup after that would remove a worktree a live unit still needs. `test_the_launch_command_folds_every_step_into_one_call_ending_in_systemd_run` asserts `"--scope" not in cmd` as the guard. | `scripts/dev/fanout_lib/launch.py:285` | 2026-09-10 |
 | no LOCAL_HOST exemption, unlike `over_ssh_budget` above. there because its launches go over `bash -c` and spend no ssh connection at all; that reason does not transfer to memory, which a local agent consumes exactly as a remote one does. The two caps share the number 3 and nothing else. | `scripts/dev/fanout_lib/launch_gates.py:75` | 2026-09-29 |
 | 2.5 GiB per agent. (claude_code defaults/main.yml derivation) with three to four `claude` processes live, so ~2 GiB each at peak; 2.5 GiB adds a pytest fan-out's worth (4 workers x ~150 MB). Confirm against claude_cgroup_memory_current_bytes / claude_cgroup_pids_current before raising. | `scripts/dev/fanout_lib/placement.py:10` | 2026-09-10 |
-| the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings. `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only `scripts/` on sys.path, so a bare `from issue_model import ...` would raise ModuleNotFoundError under the docs-refresh cron while pytest stayed green. | `scripts/dev/findings.py:127` | 2026-09-06 |
+| the leaves are imported as `dev.findings_lib.<leaf>`, never as bare siblings. `scripts/docs/reference/backlog.py` reaches this code as `dev.findings` with only `scripts/` on sys.path, so a bare `from issue_model import ...` would raise ModuleNotFoundError under the docs-refresh cron while pytest stayed green. | `scripts/dev/findings.py:135` | 2026-09-06 |
 | \`Claim:\` wins over \`Released:\`` in findings_lib/issue_model.py for the reasoning; `test_a_body_carrying_both_trailers_ages_the_claim_from_the_comment_ that_opened_it` is what fails if the two diverge. | `scripts/dev/findings_lib/claim.py:212` | 2026-09-06 |
 | imported as `dev.findings_lib.<leaf>`, never as bare siblings — see the marker in findings.py. | `scripts/dev/findings_lib/claim_cli.py:29` | 2026-09-06 |
 | `open` asks gh's search index for the one fingerprint instead of fetching the register and scanning it. Measured 2026-09-28 on daniel-server: the whole-register read this replaced was 995 issues, 4.3 MB and 58.4s, and it grew with every finding filed — #2800 had already watched it blow through `lib.gh.gh`'s 60s default and take EVERY findings.py subcommand down with it. The search is 0.6s and does not grow. The cost is gh's search INDEX LAG: an issue filed seconds ago may not be findable yet, so two sessions filing one fingerprint inside that window both create. That trade is right — a duplicate issue is one `close --refuted` away, while a filer that cannot run drops the finding into a reply and loses it, which is the harm the register exists to prevent. Long form: #2846. | `scripts/dev/findings_lib/gh_calls.py:162` | 2026-09-28 |
@@ -574,16 +574,16 @@ generated_sha: 4683148f1
 | ` marker sits | `docs/claude-shell-permissions.md:98` | 2026-09-18 |
 | no | `docs/crowdsec-waf-record.md:45` | 2026-09-29 |
 | ` marker above `_BROAD_MANUAL_PREFIXES` in `deploy_changes.py` carries the evidence. | `docs/gitops-pipeline.md:126` | 2026-09-28 |
-| ` marker. | `docs/gitops-pipeline.md:490` | 2026-09-21 |
-| ` at the fallback in | `docs/gitops-pipeline.md:669` | 2026-09-21 |
-| ` on | `docs/gitops-pipeline.md:675` | 2026-09-21 |
-| ` marker and the measurement. | `docs/gitops-pipeline.md:730` | 2026-09-21 |
-| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:781` | 2026-09-21 |
-| ` at the `cs.k8s` branch of | `docs/gitops-pipeline.md:988` | 2026-09-21 |
-| ` that says how each one does. | `docs/gitops-pipeline.md:1182` | 2026-10-01 |
-| ` at that task says why the state | `docs/gitops-pipeline.md:1215` | 2026-09-21 |
-| ` marker in | `docs/gitops-pipeline.md:1676` | 2026-09-21 |
-| ` in `files/deploy_locks.py`. | `docs/gitops-pipeline.md:1828` | 2026-09-30 |
+| ` marker. | `docs/gitops-pipeline.md:497` | 2026-09-21 |
+| ` at the fallback in | `docs/gitops-pipeline.md:676` | 2026-09-21 |
+| ` on | `docs/gitops-pipeline.md:682` | 2026-09-21 |
+| ` marker and the measurement. | `docs/gitops-pipeline.md:737` | 2026-09-21 |
+| ` marker above `_BROAD_MANUAL_PREFIXES` in | `docs/gitops-pipeline.md:788` | 2026-09-21 |
+| ` at the `cs.k8s` branch of | `docs/gitops-pipeline.md:995` | 2026-09-21 |
+| ` that says how each one does. | `docs/gitops-pipeline.md:1189` | 2026-10-01 |
+| ` at that task says why the state | `docs/gitops-pipeline.md:1222` | 2026-09-21 |
+| ` marker in | `docs/gitops-pipeline.md:1683` | 2026-09-21 |
+| ` in `files/deploy_locks.py`. | `docs/gitops-pipeline.md:1835` | 2026-09-30 |
 | ` marker in `roles/k8s/traefik/templates/dashboard-ingressroute.yaml.j2` mean | `docs/homepage-widgets-and-layout.md:154` | 2026-09-29 |
 | ` in `healthchecks_verdict`). | `docs/monitor-bridge-checks.md:413` | 2026-09-25 |
 | ` marker in | `docs/monitor-bridge-checks.md:485` | 2026-09-21 |
@@ -679,7 +679,7 @@ generated_sha: 4683148f1
 | strict, and deliberately constraining. | `ansible/tests/setup/test_k3s_stage_gates.py:62` | 2026-08-27 |
 | `domain` is exempt. (ansible/secret_rotation.yml:108-110) because it is a hostname, not a credential — leaking it costs nothing, and every script that builds a URL names it. Left in, it flags 6 of the 9 candidate scripts plus one already converted, so the guard would refuse every group and be turned off rather than obeyed. Exempting the name is right; loosening the whole-word regex that finds it would not be. | `ansible/tests/setup/test_release_bin_groups_have_no_secrets.py:41` | 2026-08-29 |
 | docs/archive stays; size was never the concern, and a PR number is not greppable offline the way the linked record is. Deleting the archive in favour of PR numbers was re-examined on 2026-09-28 (#2808) and kept. | `mkdocs.yml:113` | 2026-09-30 |
-| ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml:381` | 2026-09-28 |
-| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:592` | 2026-09-30 |
-| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:614` | 2026-09-30 |
+| ` marker in ansible/tests/_ratchet.py), which made every such PR edit a line by hand: 70 commits touched one of the two lists in the 30 days to 2026-09-28, 49 of them only lowering or deleting. It only ever tightens -- a grown file's entry is left verbatim, so the ratchet still fails on it -- and it writes unconditionally, never running the suite first, which is what keeps it out of the #1799 repair deadlock. | `prek.toml:393` | 2026-09-28 |
+| never widen this hook to docs/reference/; the docs-refresh cron commits those paths with hooks running, so a strict failure stops every refresh. A style error there aborts the commit and alerts on every run until someone fixes the generator. ENFORCED by the same test. | `prek.toml:604` | 2026-09-30 |
+| the generated fragments under docs/assets/generated/fragments/ are linted here, although the docs-refresh cron commits them with hooks running. The operator chose this on 2026-09-30 (#3008) so that a generator's prose is gated in CI and not only by a hand `vale docs` run, where #3006 was found. The cost is accepted: a Vale error in a fragment aborts the cron's commit, and its commit-failure stamp reports DOWN on every run until the generator in scripts/docs/gen_doc_fragments.py is fixed. docs/reference/ stays out. | `prek.toml:626` | 2026-09-30 |
 | Markdown stays out of ruff's scope. blocks inside .md, which pulled every prose file in the repo into a gate whose stated job is first-party Python — and its output mangles the plan docs, exploding readable two-element dict keys across four lines. Excluding *.md holds the gate to the same Python files ruff 0.15 covered; `uv run ruff format --check` prints the count, so don't restate one here. `ansible/collections` is the vendored third-party tree, never linted or formatted. | `pyproject.toml:167` | 2026-08-23 |
