@@ -17,11 +17,11 @@ Run: uv run pytest ansible/tests/setup/test_claude_memory_sync.py
 import re
 
 import jinja2
-import yaml
-from _helpers import ANSIBLE
+from _helpers import ANSIBLE, load_yaml
+from lib.ansible_jinja_env import make_ansible_env
 
 ROLE = ANSIBLE / "roles" / "setup" / "claude_code"
-DEFAULTS = yaml.safe_load((ROLE / "defaults" / "main.yml").read_text())
+DEFAULTS = load_yaml(ROLE / "defaults" / "main.yml")
 SERVICE = ROLE / "templates" / "claude-memory-sync.service.j2"
 
 
@@ -32,7 +32,7 @@ def _render(text: str, **overrides: object) -> str:
         "claude_code_rc_workdir": "/home/ubuntu/server",
     }
     context.update(overrides)
-    env = jinja2.Environment(undefined=jinja2.StrictUndefined)
+    env = make_ansible_env(undefined_cls=jinja2.StrictUndefined)
     # Defaults are themselves Jinja; render them in order so the store path resolves.
     for key in (
         "claude_code_memory_sync_target",
@@ -93,18 +93,14 @@ def test_an_empty_source_never_reaches_delete():
 
 def test_armed_only_on_daniel_box_and_disarming_removes_the_units():
     assert DEFAULTS["claude_code_memory_sync_enabled"] is False
-    box = yaml.safe_load(
-        (ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml").read_text()
-    )
-    server = yaml.safe_load(
-        (ANSIBLE / "inventory" / "host_vars" / "daniel-server.yml").read_text()
-    )
+    box = load_yaml(ANSIBLE / "inventory" / "host_vars" / "daniel-box.yml")
+    server = load_yaml(ANSIBLE / "inventory" / "host_vars" / "daniel-server.yml")
     assert box.get("claude_code_memory_sync_enabled") is True
     assert not server.get("claude_code_memory_sync_enabled", False), (
         "daniel-server must never push: it would overwrite the store sessions write"
     )
 
-    tasks = yaml.safe_load((ROLE / "tasks" / "main.yml").read_text())
+    tasks = load_yaml(ROLE / "tasks" / "main.yml")
     removal = [
         t
         for t in tasks
