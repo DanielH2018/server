@@ -96,26 +96,34 @@
   ansible.builtin.include_tasks: roll_one.yml
   # Only when this role actually changed something — otherwise a full-fleet deploy
   # Recreate-cycles both Pi-holes (and their Longhorn volumes) every run for nothing, up to
-  # 2x180s, and never reports idempotent. Same three facts the shared role itself gates its
-  # own restart on (roles/k8s/manifests/tasks/main.yml:155); registered inside the include_role
-  # above, they stay in scope here because `register` sets a play-scoped fact, not one local
-  # to the included role. The fourth fact the shared role gates on, `manifests_rolled_by_apply`,
-  # is read inside roll_one.yml on the restart task alone: the include still runs so the
-  # sibling check and the rollout wait follow a roll the apply started.
+  # 2x180s, and never reports idempotent. Same facts the shared role itself gates its own
+  # restart on (roles/k8s/manifests/tasks/main.yml, the `config`/`secret`/`image` triggers);
+  # registered inside the include_role above, they stay in scope here because `register` sets
+  # a play-scoped fact, not one local to the included role. The fact the shared role also gates
+  # on, `manifests_rolled_by_apply`, is read inside roll_one.yml on the restart task alone: the
+  # include still runs so the sibling check and the rollout wait follow a roll the apply started.
+  #
+  # The `config` trigger is the render AND the shared apply's own verdict (#3127, mirroring
+  # #3115): `manifests_render is changed` compares rendered bytes, so a YAML comment edit moved
+  # it while `kubectl apply` printed every object `unchanged`, and the LAN resolvers rolled for
+  # nothing. The secret trigger stays on the secret render, as in the shared role.
   #
   # Never on a dry run or --check: a dry-run render is always `changed` and the apply rolled
   # nothing, so this would restart both live Pi-holes on every dry run (#2588).
   #
-  # `manifests_deferred_render` is the fourth trigger: instance 2's Deployment is rendered into
+  # `manifests_deferred_render` is the other trigger: instance 2's Deployment is rendered into
   # its own directory and is not part of `manifests_render`, so a change to deployment-2.yaml.j2
-  # alone moves none of the three facts above and without this the apply that carries it would
+  # alone moves none of the facts above and without this the apply that carries it would
   # never run. It fires the `pihole-2` iteration only: `when` on a looped include is evaluated
   # per item, and instance 1's manifests did not move, so rolling it bought one needless
   # Recreate cycle of a live resolver plus a Longhorn detach/attach (#2957). Skipping the
   # `pihole` iteration skips nothing else — apply_instance_2.yml is included from `pihole-2`'s.
+  # This clause is bytes only, because the apply it must let run has not happened yet; the
+  # restart that follows it is gated on that apply's own verdict inside roll_one.yml (#3127).
   when:
     - not k8s_no_mutate
-    - manifests_render is changed or manifests_secret_render is changed or manifests_image_changed
+    - (manifests_render is changed and manifests_apply is changed)
+      or manifests_secret_render is changed or manifests_image_changed
       or ((manifests_deferred_render | default({})) is changed and pihole_instance == 'pihole-2')
   loop:
     - pihole

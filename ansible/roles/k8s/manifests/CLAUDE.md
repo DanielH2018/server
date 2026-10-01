@@ -137,8 +137,9 @@ same resources.
   `configured`, so a ConfigMap whose data moved still restarts. Under `--dry-run` it is pinned
   unchanged, as is every restart. The `secret` trigger deliberately stays on
   `manifests_secret_render`: `verify_secret_keys.yml` patches a stale key out of a Secret after
-  an apply that printed `unchanged`, and that change needs the restart. The private restarts in
-  pihole and the queued `changed` flag for the stabilisation gate still read the render bytes.
+  an apply that printed `unchanged`, and that change needs the restart. Pihole's private restarts
+  read the same conjunction per instance (#3127, see its `CLAUDE.md`); the queued `changed` flag
+  for the stabilisation gate still reads the render bytes.
 - **The restart is skipped for a workload the apply itself rolled.** The two `rollout
   restart` tasks fire on the render and the apply both changing, which an image-pin bump satisfies —
   and the apply already rolls that Deployment, because its pod template changed. The second
