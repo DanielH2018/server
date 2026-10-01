@@ -2,7 +2,7 @@
 retired on 2026-08-10 and took `kopia_b2_billable_bytes` with it.
 
 The live API call is not exercised here (it spends the transaction cap it guards); these cover the
-pure summing and verdict logic, and `docs/b2-transaction-cap-monitoring-gaps.md` carries the
+pure summing and verdict logic, and `docs/archive/b2-transaction-cap-monitoring-gaps.md` carries the
 operator smoke-test that proves B2 accepts the query.
 """
 

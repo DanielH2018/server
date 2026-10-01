@@ -145,7 +145,7 @@ LOKI_DEPENDENT = frozenset(
 )
 
 # B2-reachability gate — the third peer of the Prometheus and Loki gates (see check_b2_reachable /
-# b2_reachable in run_once), and the fix for G2/G4 of docs/b2-transaction-cap-monitoring-gaps.md.
+# b2_reachable in run_once), and the fix for G2/G4 of docs/archive/b2-transaction-cap-monitoring-gaps.md.
 # It used to gate five kopia-era checks that read B2 health from state files written by periodic
 # crons, so they reported the LAST SUCCESSFUL RUN rather than current health: on 2026-08-02 they
 # read green through a nine-and-a-half-hour outage in which B2 refused every request. Those checks

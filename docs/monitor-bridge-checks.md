@@ -328,7 +328,7 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
 - **B2 Reachable** (authenticates against B2's native API (`b2_authorize_account`, Basic auth
   with `B2_PROBE_KEY_ID` + the file-mounted `B2_PROBE_APPLICATION_KEY_FILE`) — Longhorn's own
   B2-backed backups need this probe. Added after the 2026-08-02 transaction-cap incident
-  (`docs/b2-transaction-cap-monitoring-gaps.md`): B2 caps **transactions** separately from
+  (`docs/archive/b2-transaction-cap-monitoring-gaps.md`): B2 caps **transactions** separately from
   storage bytes, and it used to gate five kopia-era state-file checks (Backup Verify, Backup
   Content Verify, Backup Maintenance, B2 Storage Usage, B2 Usage Trend) that read green for nine
   and a half hours during that incident because they reported their cron's LAST SUCCESSFUL RUN

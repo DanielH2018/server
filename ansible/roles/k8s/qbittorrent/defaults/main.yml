@@ -32,7 +32,7 @@ qbittorrent_k8s_claim: qbittorrent-config
 # Backed up. Excluding it was tried and reverted the same day: the exclusion left this volume
 # with a single frozen restore point, and whether steady-state incrementals actually drive
 # B2's transaction cap cannot be read off anything Longhorn or B2 expose. So it is being
-# tested rather than assumed — docs/b2-transaction-cap-monitoring-gaps.md.
+# tested rather than assumed — docs/archive/b2-transaction-cap-monitoring-gaps.md.
 qbittorrent_k8s_storage_class: longhorn
 qbittorrent_k8s_size: 1Gi
 

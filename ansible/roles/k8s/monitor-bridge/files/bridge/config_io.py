@@ -116,7 +116,7 @@ def io_config(
 
     return IoConfig(
         # B2 REACHABILITY — the gap the 2026-08-02 transaction-cap incident exposed
-        # (docs/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from
+        # (docs/archive/b2-transaction-cap-monitoring-gaps.md). B2 caps TRANSACTIONS separately from
         # storage bytes; the kopia-era state-file checks this used to gate reported their last
         # successful cron run rather than current B2 health, so all of them read green — "B2
         # 6.05/10GB billable (60% of plan)" among them — for nine and a half hours while B2

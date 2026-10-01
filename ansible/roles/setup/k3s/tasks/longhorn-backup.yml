@@ -48,7 +48,7 @@
 # Declarative in BOTH directions: k3s_longhorn_backup_armed=false enforces a BLANK target.
 # It used to arm unconditionally, which silently resurrected a deliberately blanked target
 # on every role run — that re-arm restarted the B2 transaction-cap death spiral twice
-# (2026-08-10 and 2026-08-12; docs/b2-transaction-cap-monitoring-gaps.md). Blanking is the
+# (2026-08-10 and 2026-08-12; docs/archive/b2-transaction-cap-monitoring-gaps.md). Blanking is the
 # incident lever that stops all backupstore S3 traffic, so a blank must survive deploys
 # until an operator flips the var back.
 #

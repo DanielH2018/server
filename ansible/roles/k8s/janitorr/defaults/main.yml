@@ -41,7 +41,7 @@ janitorr_k8s_media_claim: media-data
 
 # No PVC. janitorr keeps no state of its own — config comes from a Secret, everything else it
 # needs is in /data. That also keeps it out of the Longhorn backup set, which matters more than
-# usual right now (docs/b2-transaction-cap-monitoring-gaps.md).
+# usual right now (docs/archive/b2-transaction-cap-monitoring-gaps.md).
 
 # Mirrors resources('1.0', '1024M', '0.10', '128M') from the Docker template.
 janitorr_k8s_cpu_limit: "1"
