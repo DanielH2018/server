@@ -11,7 +11,7 @@ karakeep_k8s_image: ghcr.io/karakeep-app/karakeep:release@sha256:b069e4307dec06e
 # `release` is a moving tag behind a digest, the same shape as karakeep_k8s_image above, so the
 # k8s-defaults manager's `matchUpdateTypes: [digest]` rule bumps it after its soak.
 karakeep_k8s_chrome_image: ghcr.io/karakeep-app/karakeep-chrome:release@sha256:5b19bbb160e9ff60681a3abd97e1c4ec9f64212301410de658c3900ab7ef31e7
-karakeep_k8s_meili_image: getmeili/meilisearch:v1.53.2
+karakeep_k8s_meili_image: getmeili/meilisearch:v1.54.0
 # Built in-cluster. The base-image pin (uv `python3.14-bookworm-slim` digest) lives in
 # `templates/Dockerfile.j2`'s `FROM` line, where Renovate's dockerfile manager reads it. All five
 # pinned pip deps below must resolve wheel-only under the base's interpreter, because
