@@ -17,10 +17,15 @@ the name:
 - `apt-upgrade` — the Docker-engine hold, then the full dist-upgrade. The `docker_install`
   role's `CLAUDE.md` has why the hold sits here.
 - `tooling` — uv and the CLI tools; `packages` is the apt baseline.
-- `crons` — restart, prune, log-truncate, autoremove, dpkg-purge and infra-map. The prune cron
-  also answers to `prune`, the daniel-box-only infrastructure-map refresh to `infra-map`, the
-  fwupd-gated weekly firmware update to `firmware`, and the Loki read-route witness to
-  `loki_route_witness`.
+- `crons` — every cron and kuma-check timer in `crons.yml` and `accounting.yml`. The
+  rkhunter and AIDE crons answer to `rkhunter` and `aide` instead. Each `crons` task also
+  answers to a subject tag, so `--tags crons` is never the only way to reach it:
+  `secret-rotation` (the audit, the weekly rotation and their stamp), `weekly-restart`, `prune`, `ansible-log`,
+  `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`, `firmware`,
+  `setup_drift`, `loki_route_witness`, `docs`, `evals` and `apt-hygiene` (autoremove and
+  dpkg-purge). The Healthchecks ping key answers to both `prune` and `weekly-restart`, because
+  both crons source it. `ansible/tests/setup/test_initial_setup_tasks_have_a_subject_tag.py`
+  refuses a task whose only tag is `crons`.
 - `tuning` — the server's CPU governor and swappiness.
 - `debloat` — the server's LXD-snap removal and the networkd-dispatcher mask on both hosts.
 - `firewall` — UFW. `kernel-modules` is the blacklist plus WireGuard.
