@@ -29,7 +29,7 @@
 #                           skip its private restart of a workload the apply already rolled
 #                           (#1994) -- never the shared restart or the drain, which such a
 #                           role opted out of. `namespace` defaults to k8s_namespace; a role
-#                           whose workloads live elsewhere (claude-otel) names it, or the
+#                           whose workloads live elsewhere (observability) names it, or the
 #                           fingerprints read nothing and it restarts twice. Issue #1902.
 #                           `rolled_by_role: true` (present only when true) says THIS role
 #                           cannot decide the entry's `restart`: the owning role applies the
@@ -86,7 +86,7 @@
   tags: [deploy]
   # Same alias trap as the assert above, reached through the loop instead of the role var: an
   # extra rollout can set its own `kind` (mixing deploy and daemonset in one role is legitimate
-  # — claude-otel does exactly that, though via its own private loop, declared to the release
+  # — observability does exactly that, though via its own private loop, declared to the release
   # record as manifests_self_rollouts), so it needs the same constraint the primary rollout
   # gets. A self rollout's kind picks the `created` prefix the record checks, so it is held to
   # the same two literals.
@@ -391,7 +391,7 @@
 # manifests_self_rollouts entry (the owning role's private restart, which this role never
 # issues but which reads manifests_rolled_by_apply for the same skip, #1994). Listed once so
 # the two fingerprints and the fact they feed read one list. Self rollouts were left out
-# until #1994, so an image-pin bump on pihole or claude-otel rolled each workload twice.
+# until #1994, so an image-pin bump on pihole or observability rolled each workload twice.
 - name: List the workloads whose pod template is fingerprinted for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.set_fact:
@@ -527,7 +527,7 @@
 - name: Note which workloads the apply itself rolled for {{ manifests_service }}
   tags: [deploy]
   # name -> bool, read by the two restart tasks, by the private restarts in pihole and
-  # claude-otel (#1994) and by release_stamp.yml, which must decide `rollouts[].restart` from
+  # observability (#1994) and by release_stamp.yml, which must decide `rollouts[].restart` from
   # the same answer or `probe.py health` fails the skipped restart as NOT ROLLED. Both reads must have succeeded for a difference to count: a read that
   # failed on one side only (a transient kubectl error) reads as "not rolled" and restarts.
   ansible.builtin.set_fact:
@@ -622,7 +622,7 @@
     # keeps the two in step — a mismatch here never matches, so a freshly created workload
     # would be restarted mid-creation, which is the race this condition exists to prevent.
     # `| default('')` — an unreadable register falls through to "not created" and restarts,
-    # which is the recoverable direction. See the same guard in k8s/claude-otel.
+    # which is the recoverable direction. See the same guard in k8s/observability.
     - not (manifests_apply.stdout | default('')) is search(
         (manifests_rollout_kind | default('deploy') == 'daemonset') | ternary('daemonset.apps/', 'deployment.apps/')
         ~ (manifests_rollout | default(manifests_service)) ~ ' created')
@@ -663,7 +663,7 @@
 # whose rebuild should roll it. Optional and empty by default, so every single-Deployment role
 # behaves exactly as before. Every current extra is kind: Deployment; an entry can set its own
 # `kind` and falls back to manifests_rollout_kind, same as the primary rollout, when it omits
-# one. claude-otel is the precedent for one role legitimately rolling both kinds together, though
+# one. observability is the precedent for one role legitimately rolling both kinds together, though
 # it does so via its own private loop rather than manifests_extra_rollouts.
 - name: Roll the extra deployments after a config or image change for {{ manifests_service }}
   tags: [deploy]

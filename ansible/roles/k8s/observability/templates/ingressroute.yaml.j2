@@ -1,7 +1,7 @@
 {% from 'ingressroute.yml.j2' import ingressroute with context %}
 ---
 {#
-  The Service is `grafana`, not the containers_list entry name (`claude-otel`) — the macro's
+  The Service is `grafana`, not the containers_list entry name (`observability`) — the macro's
   first argument names both the IngressRoute and the Service it targets, and this role runs
   several workloads under one entry.
 

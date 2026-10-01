@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-09-30 06:17 UTC
-generated_sha: eb9c27dd8
+generated_at: 2026-10-01 00:28 UTC
+generated_sha: 7f5047711
 ---
 
 !!! warning "Generated file — do not edit"
@@ -16,42 +16,36 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 
 | # | Severity | Kind | Domain | Finding | First seen | Re-observed | Claim | Verify-by |
 |---|---|---|---|---|---|---|---|---|
-| [#2851](https://github.com/DanielH2018/server/issues/2851) | high | improvement | cicd | Give the enforcement ladder a way to retire a check, not only to add one | 2026-09-28 | 0 | - | ✓ |
+| [#3027](https://github.com/DanielH2018/server/issues/3027) | high | gap | security | Rotate the Google Cast refresh token HA leaked, and age out the Loki records that still carry it | 2026-09-30 | 0 | - | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
 | [#2808](https://github.com/DanielH2018/server/issues/2808) | medium | improvement | docs | Sixteen stores hold what the next session needs; consolidate to seven and retire facts.lock | 2026-09-28 | 0 | - | ✓ |
-| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 0 | - | ✓ |
-| [#2810](https://github.com/DanielH2018/server/issues/2810) | medium | improvement | cicd | Path narrowing stands in for rendered bytes; narrow broad deploys by render digest instead | 2026-09-28 | 0 | - | ✓ |
-| [#2853](https://github.com/DanielH2018/server/issues/2853) | medium | improvement | cicd | Make deploy.sh, land.sh and the GitOps tick print their own contract, and delete the prose copies | 2026-09-28 | 0 | - | ✓ |
-| [#2855](https://github.com/DanielH2018/server/issues/2855) | medium | improvement | container | Scaffold a new k8s service with a deterministic generator instead of copying a sibling role | 2026-09-28 | 0 | - | ✓ |
-| [#2857](https://github.com/DanielH2018/server/issues/2857) | medium | improvement | cicd | Replace 31 hand-rolled git fixtures and 27 bare Jinja environments in tests with the shared helpers | 2026-09-28 | 0 | - | ✓ |
-| [#2943](https://github.com/DanielH2018/server/issues/2943) | medium | gap | security | Restore a reachability gate for the staging egress fence | 2026-09-29 | 0 | - | ✓ |
+| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 1 | worktree-ha-unpin-cast-theme | ✓ |
+| [#3016](https://github.com/DanielH2018/server/issues/3016) | medium | gap | docs | homelab-review step 2 primes from three memory files this host does not have | 2026-09-30 | 0 | - | ✓ |
+| [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
 | [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
-| [#2759](https://github.com/DanielH2018/server/issues/2759) | low | gap | network | Confirm the Traefik bouncer's stream-pull stalls stopped after disabling its metrics ticker | 2026-09-27 | 0 | - | ✓ |
 | [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | - | ✓ |
-| [#2800](https://github.com/DanielH2018/server/issues/2800) | low | gap | home-assistant | Home Assistant's cast receiver cannot reach external_url — pychromecast _connect_hass fails on every callback | 2026-09-27 | 0 | - | ✓ |
 | [#2818](https://github.com/DanielH2018/server/issues/2818) | low | improvement | cicd | Move shared harness code from server to dotfiles: escaping-write arm, memory survey, scaffolding skill, grammar fixture | 2026-09-28 | 0 | - | ✓ |
-| [#2819](https://github.com/DanielH2018/server/issues/2819) | low | improvement | container | 147 comment lines across 88 k8s templates narrate the retired Compose twin | 2026-09-28 | 0 | - | ✓ |
 | [#2821](https://github.com/DanielH2018/server/issues/2821) | low | improvement | docs | Archive the B2 cap incident record once its shipped citations change anyway | 2026-09-28 | 0 | - | ✓ |
-| [#2845](https://github.com/DanielH2018/server/issues/2845) | low | gap | home-assistant | Identify the cast connect-back fault from a live cast — receiver JS error text, on daniel-box | 2026-09-28 | 0 | - | ✓ |
-| [#2854](https://github.com/DanielH2018/server/issues/2854) | low | improvement | cicd | Share one exit-code and --help convention across every scripts/ entry point | 2026-09-28 | 0 | - | ✓ |
 | [#2860](https://github.com/DanielH2018/server/issues/2860) | low | improvement | backup-observability | Six Prometheus/Loki HTTP clients: route homelab-mcp and postflight through probe_lib | 2026-09-28 | 0 | - | ✓ |
-| [#2864](https://github.com/DanielH2018/server/issues/2864) | low | improvement | cicd | Measure whether deploy-ui and renovate_agent are used before keeping them | 2026-09-28 | 0 | - | ✓ |
-| [#2872](https://github.com/DanielH2018/server/issues/2872) | low | improvement | container | Render a default Service from the containers_list entry when a k8s role ships none | 2026-09-28 | 0 | - | ✓ |
 | [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2897](https://github.com/DanielH2018/server/issues/2897) | low | gap | backup-observability | Patch the stale monitor-bridge and scrutiny Secret keys out of the live cluster after #2825/#2832 deploy | 2026-09-28 | 0 | - | ✓ |
-| [#2911](https://github.com/DanielH2018/server/issues/2911) | low | improvement | backup-observability | claude-otel holds the cluster monitoring plane its name does not mention | 2026-09-28 | 0 | - | ✓ |
-| [#2933](https://github.com/DanielH2018/server/issues/2933) | low | improvement | cicd | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | 2026-09-28 | 0 | - | ✓ |
-| [#2944](https://github.com/DanielH2018/server/issues/2944) | low | improvement | cicd | Decide whether the retired staging cluster's two shared-machinery constants stay | 2026-09-29 | 0 | - | ✓ |
-| [#2945](https://github.com/DanielH2018/server/issues/2945) | low | gap | cicd | Authelia's SMTP notifier branch lost its only rehearsal with daniel-stage | 2026-09-29 | 0 | - | ✓ |
+| [#2911](https://github.com/DanielH2018/server/issues/2911) | low | improvement | backup-observability | claude-otel holds the cluster monitoring plane its name does not mention | 2026-09-28 | 0 | worktree-ha-unpin-cast-theme | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
 | [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
-| [#3008](https://github.com/DanielH2018/server/issues/3008) | low | gap | cicd | Vale scope: generated fragments are linted by hand runs but not by CI | 2026-09-30 | 0 | - | ✓ |
+| [#3043](https://github.com/DanielH2018/server/issues/3043) | low | improvement | - | Render a default IngressRoute from the containers_list entry once the traefik edge stops reading the template | 2026-09-30 | 0 | - | ✓ |
+| [#3047](https://github.com/DanielH2018/server/issues/3047) | low | improvement | cicd | Collapse the nine once-per-SHA alert markers into one keyed file | 2026-09-30 | 0 | - | ✓ |
+| [#3048](https://github.com/DanielH2018/server/issues/3048) | low | improvement | cicd | Derive role_of and PLAY_PREFIXES from one path classifier | 2026-09-30 | 0 | - | ✓ |
+| [#3055](https://github.com/DanielH2018/server/issues/3055) | low | improvement | cicd | Fold 18 single-role render test files into the pod hygiene and security-context tables | 2026-09-30 | 1 | worktree-ha-unpin-cast-theme | ✓ |
+| [#3056](https://github.com/DanielH2018/server/issues/3056) | low | improvement | cicd | Replace 64 local subprocess wrappers and 11 fake-bin writers in tests with shared helpers | 2026-09-30 | 0 | worktree-ha-unpin-cast-theme | ✓ |
+| [#3057](https://github.com/DanielH2018/server/issues/3057) | low | improvement | cicd | Derive the deployer's k8s_unapplied discharge from the render digest | 2026-09-30 | 0 | - | ✓ |
+| [#3063](https://github.com/DanielH2018/server/issues/3063) | low | gap | docs | test_root_needs_dac_capability's docstring names two root+drop-ALL sites; the render shows six | 2026-10-01 | 0 | - | ✓ |
+| [#3064](https://github.com/DanielH2018/server/issues/3064) | low | gap | docs | The shared securityContext macro's header cites loki-homelab's retired promtail-daemonset.yaml.j2 | 2026-10-01 | 0 | - | ✓ |
+| [#3066](https://github.com/DanielH2018/server/issues/3066) | low | improvement | cicd | Route the remaining 109 timeout-less test subprocess launches through lib.proc_testing.run | 2026-10-01 | 0 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -97,6 +91,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2849](https://github.com/DanielH2018/server/issues/2849) | accepted | Master CI lints the whole tree on every push, adding about 20 s to each landing | Operator decision 2026-09-28: keep the full lint on every push to master. About 20 s per landing is not worth deploying before the whole tree is linted (#2809). |
 | [#2900](https://github.com/DanielH2018/server/issues/2900) | accepted | A dry run never judges pihole instance 2's Deployment manifest | Operator accepted 2026-09-28: both pihole Deployments render from one macro body differing only in name and claim name, so instance 1's server-side dry run validates what instance 2 renders; pihole is k8s_autodeploy: false, so every pihole deploy is human-run. |
 | [#2903](https://github.com/DanielH2018/server/issues/2903) | refuted | probe.py health holds no roll expectation for pihole-2 | Duplicate of #2902, filed seconds earlier for the same gap — findings.py dedup is blind past gh's 1000-issue list cap (the warning this run printed), so the same body filed twice. #2902 is the live one. |
+| [#2933](https://github.com/DanielH2018/server/issues/2933) | accepted | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | Operator ruling 2026-09-30: keep the 4-shard matrix because it cuts wall-clock time. The #2245 spike measured an 80s pole shard against 267s for a single job, about 3.3x, and ADR-0018 leaves no Actions bill for collapsing it to save. |
 | [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
 
 ### container
@@ -118,6 +113,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
+| [#1132](https://github.com/DanielH2018/server/issues/1132) | accepted | A single etcd voter on daniel-box is the whole cluster's control-plane SPOF | - |
 | [#1610](https://github.com/DanielH2018/server/issues/1610) | refuted | Deploying authelia without netpol-baseline crashloops the SSO gate | Duplicate of #1609, filed a minute earlier by the session that owns the authelia-redis change; both are cross-referenced and #1609 is the primary. |
 | [#1928](https://github.com/DanielH2018/server/issues/1928) | refuted | Validate: crowdsec-lapi .local route is reachable by SNI from any client that reaches the WAN 443 forward | Operator confirmed 2026-09-17: the router's WAN 80/443 forward to daniel-box admits Cloudflare's IP ranges only, so no internet client reaches the edge by SNI for a .local route. |
 | [#1930](https://github.com/DanielH2018/server/issues/1930) | accepted | Validate: Authelia network-scoped bypasses and the loki push ClientIP grant may admit masqueraded WireGuard clients | Verified live (wg-easy MASQUERADEs 10.8.0.0/24 out eth0, so WireGuard clients arrive as the Pi's LAN IP). Operator policy 2026-09-17: WireGuard clients are keyed devices and are trusted as LAN devices; the network-scoped bypasses apply to them by design. |
@@ -136,6 +132,8 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | # | Ruling | Finding | Reason |
 |---|---|---|---|
 | [#1454](https://github.com/DanielH2018/server/issues/1454) | refuted | Nothing can drive the cast Nest Hub dashboard from an automation | Browser Mod 2.0 is config-flow only (no browser_mod: YAML key); home-assistant/core#159553 breaks cast rendering with custom resources on this HA version; view switching already exists via cast.show_lovelace_view in display.yaml. Evidence in PR #1579 and the role's docs/platform.md. |
+| [#2800](https://github.com/DanielH2018/server/issues/2800) | accepted | Home Assistant's cast receiver cannot reach external_url — pychromecast _connect_hass fails on every callback | Operator ruling 2026-09-30: live with it. Casting works, #2781 already silences the log noise, and the remaining cost is an occasional 30s stall on a cast. The cause is upstream in pychromecast (#2845) and will not be reported (#3014). |
+| [#3014](https://github.com/DanielH2018/server/issues/3014) | accepted | Report the cast connect-back deadlock upstream to pychromecast (and the receiver themes TypeError to frontend) | Operator ruling 2026-09-30: no upstream reports will be filed. The drafts stay in this issue body for reference; the fault is a pychromecast socket-thread deadlock that no config in this repo reaches. |
 
 ### unlabelled
 

@@ -74,7 +74,7 @@ SERVICES = [
     # It earns an entry because it is the dead-man's switch the fleet's crons ping, so its
     # silent breakage is least likely to be caught by anything else (#1575).
     ("healthchecks", "Log In - Home Server healthchecks", "/accounts/login/"),
-    # Routed by the `claude-otel` role, whose containers_list entry names Grafana alone.
+    # Routed by the `observability` role, whose containers_list entry names Grafana alone.
     # `Grafana` at `/login` is Grafana's OWN login page: it sits behind the one_factor
     # Authelia rule, so reaching it proves ingress → Authelia → backend. It does NOT prove a
     # dashboard renders — the 19 dead panels in this module's docstring would score green

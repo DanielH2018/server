@@ -73,7 +73,7 @@ UID_BY_PLUGIN = {
 # The cAdvisor board (14282) went on 2026-09-30 (#2806): every panel filtered on the Docker
 # `name` label, which no series carries since the Docker retirement, so it drew nothing.
 DASHBOARDS = {"node-exporter-full": (1860, 45)}
-OUTDIR = Path("ansible/roles/k8s/claude-otel/files/dashboards")
+OUTDIR = Path("ansible/roles/k8s/observability/files/dashboards")
 
 # Grafana folder (subdir) each community board is provisioned into; default is the General
 # root. Keeps a re-fetch writing to the same folder the boards live in, so it doesn't

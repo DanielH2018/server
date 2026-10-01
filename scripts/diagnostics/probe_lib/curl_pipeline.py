@@ -33,7 +33,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 from diagnostics.probe_lib.cli_parser import cert_stages, _build_parser
 from diagnostics.probe_lib.core import (
     curl_argv,
-    claude_otel_loki_ip,
+    observability_loki_ip,
     k8s_endpoint,
     loki_endpoint,
     loki_labels_url,
@@ -47,12 +47,15 @@ from diagnostics.probe_lib.core import (
 
 
 def plan(
-    args, resolve_ip, k8s_endpoint=k8s_endpoint, claude_otel_loki_ip=claude_otel_loki_ip
+    args,
+    resolve_ip,
+    k8s_endpoint=k8s_endpoint,
+    observability_loki_ip=observability_loki_ip,
 ):
     """Return the command pipeline (list of argv stages) for the parsed args.
 
     `resolve_ip(container) -> ip`, `k8s_endpoint(hostname) -> (base, pin)` and
-    `claude_otel_loki_ip() -> ip` are injected so all routing/URL logic is testable without
+    `observability_loki_ip() -> ip` are injected so all routing/URL logic is testable without
     Docker, SOPS, or the network. Most commands are a single stage; `cert` is a two-stage
     openssl pipeline.
     """
@@ -65,13 +68,13 @@ def plan(
         base, pin = k8s_endpoint("prometheus")
         return [curl_argv(prom_targets_url(base), resolve=pin)]
     if cmd == "loki-labels":
-        base, pin = loki_endpoint(ns.loki, k8s_endpoint, claude_otel_loki_ip)
+        base, pin = loki_endpoint(ns.loki, k8s_endpoint, observability_loki_ip)
         return [curl_argv(loki_labels_url(base), resolve=pin)]
     if cmd == "loki-query":
         store, note = pick_loki_store(ns.logql, ns.loki)
         if note:
             print(note, file=_sys.stderr)
-        base, pin = loki_endpoint(store, k8s_endpoint, claude_otel_loki_ip)
+        base, pin = loki_endpoint(store, k8s_endpoint, observability_loki_ip)
         start, end = since_window_ns(getattr(ns, "since", None))
         return [
             curl_argv(

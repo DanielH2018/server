@@ -171,13 +171,13 @@ def test_no_expectation_keeps_the_old_verdict_for_a_stale_workload():
 
 
 def test_the_expectation_is_matched_by_workload_name_not_role():
-    """claude-otel's tag names no workload; the record names grafana, and only grafana is held."""
+    """observability's tag names no workload; the record names grafana, and only grafana is held."""
     stale = (APPLIED - timedelta(days=1)).strftime("%Y-%m-%dT%H:%M:%SZ")
     checked = _checked(_deploy(restarted_at=stale), "grafana") + _checked(
         _deploy(restarted_at=stale), "loki"
     )
     text, code = health.format_role_health(
-        "claude-otel", checked, NOW, {"grafana": APPLIED}
+        "observability", checked, NOW, {"grafana": APPLIED}
     )
     assert code == 1
     assert text.splitlines()[0].endswith("— homelab/grafana")

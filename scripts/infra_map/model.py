@@ -26,7 +26,7 @@ def match_k8s_workloads(
     """Find the workloads backing a declared k8s service.
 
     A workload is a Deployment, DaemonSet or StatefulSet. A namespace owner
-    (``claude-otel``) claims every workload in its namespace; everything else
+    (``observability``) claims every workload in its namespace; everything else
     matches its own name plus ``<name>-*`` helpers in the app namespace, and in
     any namespace its own manifests name literally (*extra_namespaces*):
     dri-device-plugin's DaemonSet lives in kube-system because an extended

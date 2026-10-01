@@ -70,7 +70,7 @@ def timeout_problem(job: dict, *, on_pi: bool) -> str | None:
 def _scrape_jobs() -> list[dict]:
     """Every scrape job out of the rendered prometheus ConfigMap's embedded prometheus.yml."""
     for role, template, doc in rendered_docs():
-        if role != "claude-otel" or "prometheus" not in str(template):
+        if role != "observability" or "prometheus" not in str(template):
             continue
         if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
             continue

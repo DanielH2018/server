@@ -60,7 +60,7 @@ _MUST_CONTAIN = frozenset(
         # `kind:` out of the template text rather than a render — so the file to scan is the
         # macro, not either caller (#2884).
         "pihole/pihole-deployment.yaml.j2",
-        "claude-otel/prometheus.yaml.j2",
+        "observability/prometheus.yaml.j2",
         "node-exporter/daemonset.yaml.j2",
         "dri-device-plugin/daemonset.yaml.j2",
         # radarr's and sonarr's whole Deployment body, shared out of ansible/templates/ — the

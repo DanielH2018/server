@@ -77,9 +77,9 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. #2991 took three
 # more: crowdsec's incident record to docs/crowdsec-waf-record.md, qbittorrent's two outages
 # and prefs plane to docs/qbittorrent-vpn-and-prefs.md, and jellyfin's per-plugin record to
-# docs/jellyfin-plugins.md. #2993 took claude-otel and monitor-bridge out: the OIDC
+# docs/jellyfin-plugins.md. #2993 took observability and monitor-bridge out: the OIDC
 # measurements, the idle-vs-broken diagnosis and the verification commands moved to
-# docs/claude-otel-oidc-and-idle-diagnosis.md, and the module table, gate-set membership,
+# docs/observability-oidc-and-idle-diagnosis.md, and the module table, gate-set membership,
 # operator prerequisites and test seams to docs/monitor-bridge-internals.md. #2995 took homepage
 # and volume-revert out: the grid and stat-block derivations, the browser measurements and the
 # per-widget record moved to docs/homepage-widgets-and-layout.md, and volume-revert's drill

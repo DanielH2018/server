@@ -90,7 +90,7 @@ same resources.
   `kubectl apply -f <dir>/` sweeps it either. Those names are a reservation, and
   `ansible/tests/k8s/test_no_role_stages_files_in_a_pruned_manifest_dir.py` enforces it (#1670)
   — one invariant refuses a file staged in a pruned directory, the other refuses a
-  `manifests_service` that claims a reserved sibling name. `claude-otel`
+  `manifests_service` that claims a reserved sibling name. `observability`
   moved its dashboard ConfigMaps out for the same reason and carries an explicit `state:
   absent` for the copies it left behind.
 - **`manifests_prune` (#1076) removes the live object too, opt-in per role.** Set
@@ -131,10 +131,10 @@ same resources.
   `.spec.template` of every workload a restart could follow this apply for — the primary, every
   `manifests_extra_rollouts` entry and every `manifests_self_rollouts` entry — before and after
   the apply; a target whose hash moved is `manifests_rolled_by_apply[name] == true`, and the
-  two shared restart tasks, the private restarts in pihole and claude-otel (#1994) and the
+  two shared restart tasks, the private restarts in pihole and observability (#1994) and the
   release record's `rollouts[].restart` all skip it. A self rollout outside `k8s_namespace`
   names its `namespace` on the entry, or the hash reads fail on both sides and it restarts
-  twice — claude-otel's six live in `observability`, so its declaration carries it.
+  twice — observability's six live in `observability`, so its declaration carries it.
   The template, not `.metadata.generation`: generation
   bumps on any spec change (navidrome and terraria template `replicas:`), and a replicas change
   beside a ConfigMap change would otherwise skip the restart the ConfigMap needs. A read that
@@ -159,7 +159,7 @@ same resources.
   macro only standardises how the line renders, not what feeds it.
   `ansible/tests/k8s/test_checksum_annotation_census.py` is the guard: every role that stages
   a ConfigMap this way either carries the annotation or is named in that test's `DEBT` dict
-  with the reason it does not need one (claude-otel's dashboards poll on their own, per
+  with the reason it does not need one (observability's dashboards poll on their own, per
   Grafana's `updateIntervalSeconds`).
 - **Stale Secret keys are patched out explicitly, because `apply` cannot.** `kubectl apply` only
   prunes map keys on objects it has a last-applied baseline for, so one historical
@@ -226,7 +226,7 @@ A role that sets `manifests_rollout: ''` and restarts its workloads through a pr
 after this role returns declares them in `manifests_self_rollouts` (`[{name, kind, image?,
 namespace?, rolled_by_role?}]`), and the record carries them with the same `restart` decision
 (#1902).
-claude-otel passes `claude_otel_stabilise_workloads` with `namespace:
+observability passes `observability_stabilise_workloads` with `namespace:
 k8s_observability_namespace` on each entry; pihole names both instances with `image: pihole`,
 since `roll_one.yml` also fires on `manifests_image_changed`, which keys on the service name.
 The entry reaches `rollouts[]` and the pod-template fingerprints (#1994, so the private restart
@@ -383,5 +383,5 @@ therefore exempts this one file from the release-staleness census
 `test_k8s_dry_run.py`, `test_k8s_rollout_gate.py`, `test_inline_rollout_gates.py`,
 `test_manifests_prune.py` (the `manifests_prune` opt-in — flag rendering, the
 Secret/PersistentVolumeClaim ban, the registry pilot's label/kind pairing), and the
-`test_k8s_autodeploy_*` set. A role rolling a workload outside this role (`claude-otel`,
+`test_k8s_autodeploy_*` set. A role rolling a workload outside this role (`observability`,
 `pihole`, `prowlarr` do, deliberately) is covered by the inline-gate test rather than exempted.

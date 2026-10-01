@@ -92,7 +92,7 @@ def test_workflow_run_steps_skips_a_step_with_no_run_field(tmp_path):
 
 
 def test_cron_jobs_is_tree_wide_not_just_initial_setup(tmp_path):
-    """traefik, claude-otel and eight other roles carry their own cron tasks -- a reader
+    """traefik, observability and eight other roles carry their own cron tasks -- a reader
     scoped to `initial_setup/tasks/crons.yml` alone misses all of them."""
     _write(
         tmp_path / "ansible" / "roles" / "traefik" / "tasks" / "main.yml",

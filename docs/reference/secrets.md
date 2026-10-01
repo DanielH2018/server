@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/secrets.py
-generated_at: 2026-09-30 06:17 UTC
-generated_sha: eb9c27dd8
+generated_at: 2026-10-01 00:11 UTC
+generated_sha: 7f5047711
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: eb9c27dd8
 
 # Secrets
 
-179 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
+180 secret(s) in the rotation registry (`ansible/secret_rotation.yml`).
 
 !!! note "Names and dates only"
     This page is generated from the plaintext rotation registry. No secret VALUE is read here, and the generator never opens the encrypted store or invokes the decryption tool — a test enforces that.
@@ -140,6 +140,7 @@ rotated unattended by the weekly secret-rotate cron.
 | `crowdsec_remote_allowlist_push_token` | 2026-06-05 | 2026-11-18 | 49 |
 | `daniel_box_disk_push_token` | 2026-08-28 | 2027-02-16 | 139 |
 | `docs_refresh_push_token` | 2026-08-06 | 2027-01-19 | 111 |
+| `etcd_drill_fence_push_token` | 2026-07-26 | 2027-01-19 | 111 |
 | `etcd_drill_full_push_token` | 2026-07-21 | 2027-01-13 | 105 |
 | `etcd_snapshot_push_token` | 2026-08-28 | 2027-02-22 | 145 |
 | `interaction_limit_push_token` | 2026-05-15 | 2026-10-30 | 30 |

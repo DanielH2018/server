@@ -46,7 +46,7 @@ client holds no certificate.
 - Every router on ONE public host must name the SAME option, or Traefik falls back to the
   default options, which require nothing — the bypass documents and healthchecks' ping twin
   share hosts with the main objects.
-- The option and its Secret resolve in the ROUTE's namespace, so claude-otel carries the
+- The option and its Secret resolve in the ROUTE's namespace, so observability carries the
   observability copies for `grafana`.
 
 A request whose Host header maps to a different option than its SNI (no SNI, or a `.local.`

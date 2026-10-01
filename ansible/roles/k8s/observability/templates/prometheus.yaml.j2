@@ -15,7 +15,7 @@
   storage_operation_duration.
 
   That matters because the cap here is BYTES, not series: retention.size is
-  `claude_otel_prometheus_retention_size` (7GB as of 2026-08-31) against a 12Gi PVC
+  `observability_prometheus_retention_size` (7GB as of 2026-08-31) against a 12Gi PVC
   (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
   series roughly doubles the block growth rate, so the visible effect of keeping every bucket
   would be retention quietly falling from 30 days to under three weeks. Nothing would report
@@ -55,7 +55,7 @@ metadata:
 data:
   prometheus.yml: |
 {# Captured so the Deployment below can hash it into checksum/config. #}
-{% set claude_otel_prometheus_config %}
+{% set observability_prometheus_config %}
     global:
       scrape_interval: 15s
     scrape_configs:
@@ -117,7 +117,7 @@ data:
       # appending 5,086 of 5,734 samples/s. Relaxing them to 1m cuts total ingest 66.5%.
       #
       # That matters because retention here is bound by BYTES, not time: `retention.size` is
-      # `claude_otel_prometheus_retention_size` (defaults/main.yml) against a configured 30d, so
+      # `observability_prometheus_retention_size` (defaults/main.yml) against a configured 30d, so
       # the window is whatever that many bytes buys. It was 3.56 DAYS at 2.48GB when this was
       # measured against a 3GB cap; at the 7GB cap set since, the TSDB held 5.5 days at 2.94GB
       # (measured 2026-08-31) and was still filling. Re-measure rather than trusting either figure.
@@ -630,7 +630,7 @@ data:
               (longhorn_rest_client_rate_limiter_latency_seconds|longhorn_rest_client_request_latency_seconds|longhorn_workqueue_queue_duration_seconds|longhorn_workqueue_work_duration_seconds)_bucket
       # This stack's OWN Loki/Tempo internals, distinct from the loki-homelab job above
       # (that one is the general-purpose homelab log store). instance_role separates the
-      # two so a dashboard/alert query doesn't accidentally blend claude-otel's internal
+      # two so a dashboard/alert query doesn't accidentally blend observability's internal
       # health series with the homelab's.
       - job_name: loki-internal
         scrape_interval: 1m
@@ -782,7 +782,7 @@ data:
       # ONE switch drives both halves — `k3s_etcd_expose_metrics` in group_vars/all.yml gates
       # this job and the k3s flag alike, so they cannot drift into "port open, nobody scraping"
       # or "job armed, port closed". They still land in two runs: flip the var, run
-      # k3s-bringup.yml to rewrite the unit and restart k3s, THEN deploy claude-otel. Deploying
+      # k3s-bringup.yml to rewrite the unit and restart k3s, THEN deploy observability. Deploying
       # this first only means the target reads down until the bringup run catches up.
       - job_name: etcd
         scrape_interval: 30s
@@ -792,7 +792,7 @@ data:
               instance_role: control-plane
 {% endif %}
 {% endset %}
-{{ claude_otel_prometheus_config -}}
+{{ observability_prometheus_config -}}
 ---
 # Prometheus authenticates to the API server as itself for the kubernetes_sd_configs discovery
 # above (enumerating nodes for scrape targets), and its bearer token is presented to each
@@ -833,7 +833,7 @@ subjects:
     name: prometheus
     namespace: {{ k8s_observability_namespace }}
 ---
-{{ pvc('prometheus-data', claude_otel_storage_class, claude_otel_prometheus_storage, namespace=k8s_observability_namespace) }}
+{{ pvc('prometheus-data', observability_storage_class, observability_prometheus_storage, namespace=k8s_observability_namespace) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -854,7 +854,7 @@ spec:
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
         # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
         # under `## One config change, one restart`.
-        {{ checksum_annotation('config', value=claude_otel_prometheus_config | hash('sha1')) }}
+        {{ checksum_annotation('config', value=observability_prometheus_config | hash('sha1')) }}
       labels:
         app: prometheus
         netpol-baseline: enforced
@@ -863,17 +863,17 @@ spec:
       # kubernetes_sd_configs then discovers zero targets and the cadvisor job silently reports
       # no series rather than erroring.
       # Tier 1: monitor-bridge (itself homelab-critical) reads this Prometheus every cycle for
-      # its disk, memory, OOM, restart and PVC verdicts — see `DECIDED: claude-otel tiers` in
+      # its disk, memory, OOM, restart and PVC verdicts — see `DECIDED: observability tiers` in
       # this role's CLAUDE.md.
 {{ pod_shell('homelab-critical', service_account='prometheus', run_as_user=65534, run_as_group=65534, fs_group=65534) }}
       containers:
         - name: prometheus
-          image: {{ claude_otel_prometheus_image }}
+          image: {{ observability_prometheus_image }}
 {{ hardened_security_context(non_root=true) }}
           args:
             - --config.file=/etc/prometheus/prometheus.yml
             - --storage.tsdb.path=/prometheus
-            - --storage.tsdb.retention.time={{ claude_otel_prometheus_retention }}
+            - --storage.tsdb.retention.time={{ observability_prometheus_retention }}
             # A SECOND cap, on bytes. The time cap alone does not bound the PVC: retention.time
             # says how old a block may get, not how much a block holds, so an ingest-rate rise
             # grows the footprint without aging anything out. A full Prometheus PVC does not
@@ -881,7 +881,7 @@ spec:
             # cap binds first wins, which is the intended behaviour. (The rise this was sized for
             # was daniel-server remote-writing its TSDB here; that stopped at Phase E2/F, and the
             # receiver came out on 2026-08-16 — the cap is still wanted, the rationale moved on.)
-            - --storage.tsdb.retention.size={{ claude_otel_prometheus_retention_size }}
+            - --storage.tsdb.retention.size={{ observability_prometheus_retention_size }}
             # NO --web.enable-remote-write-receiver. It accepted the remote-write protocol on
             # /api/v1/write for daniel-server's Docker Prometheus (slice 3, B3); that sender was
             # retired in Phase E2 and daniel-server has had no Docker at all since 2026-08-14.
@@ -893,9 +893,9 @@ spec:
             - name: http
               containerPort: 9090
               # On the node's loopback so otelq can reach it; see
-              # claude_otel_query_host_ip in defaults/main.yml.
+              # observability_query_host_ip in defaults/main.yml.
               hostPort: 9090
-              hostIP: {{ claude_otel_query_host_ip }}
+              hostIP: {{ observability_query_host_ip }}
           volumeMounts:
             - name: prometheus-config
               mountPath: /etc/prometheus
@@ -956,8 +956,8 @@ metadata:
     headlamp-prometheus: "true"
 spec:
   # Pinned: host-side query tools carry this address as a constant. See
-  # claude_otel_prometheus_cluster_ip in defaults/main.yml for why.
-  clusterIP: {{ claude_otel_prometheus_cluster_ip }}
+  # observability_prometheus_cluster_ip in defaults/main.yml for why.
+  clusterIP: {{ observability_prometheus_cluster_ip }}
   selector:
     app: prometheus
   ports:

@@ -15,7 +15,7 @@ a substring match would demand list membership for every one of them.
 
 Namespace comes off the rendered PVC document or the resolved `k8s_namespace` Jinja
 context, never a hardcoded literal — `test_longhorn_storageclass.py:178` hardcodes
-`homelab`, which would silently miss the `observability` namespace's PVCs (claude-otel's
+`homelab`, which would silently miss the `observability` namespace's PVCs (observability's
 prometheus/loki/tempo/grafana volumes) were any of them ever moved onto `longhorn`.
 
 Run: uv run pytest ansible/tests/longhorn/test_every_longhorn_pvc_has_a_tier.py

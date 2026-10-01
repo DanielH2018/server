@@ -1,15 +1,15 @@
-# claude-otel: the dashboard record
+# observability: the dashboard record
 
 Where the provisioned Grafana boards came from, how the two community boards are seeded, and the
 panel-query traps a 2026-09-10 audit measured. The editing rules — where the JSON lives, which
 folders are provisioned, which datasource `uid` values resolve, what to run after a change — are in
-`ansible/roles/k8s/claude-otel/CLAUDE.md`, the file a session loads on every touch of the role.
+`ansible/roles/k8s/observability/CLAUDE.md`, the file a session loads on every touch of the role.
 This page is where the evidence and the history live, kept out of that file so the rules stay
 short (#2925, the same split `docs/monitor-bridge-checks.md` makes for monitor-bridge and
 `docs/volume-snapshot-drills.md` for volume-snapshot).
 
-Nothing tests this page. `ansible/roles/k8s/claude-otel/tasks/dashboards.yml` and the JSON under
-`ansible/roles/k8s/claude-otel/files/` are the authority on what is provisioned; where a
+Nothing tests this page. `ansible/roles/k8s/observability/tasks/dashboards.yml` and the JSON under
+`ansible/roles/k8s/observability/files/` are the authority on what is provisioned; where a
 paragraph here disagrees with them, the tree is right.
 
 ## Where the boards came from
@@ -95,7 +95,7 @@ and all three were repaired in that pass.
   `cs_bucket_pour_seconds_bucket` come only from the engine — a per-node board cannot filter them
   by node.
 - **`[1m]` against a 1-minute scrape returns nothing.** Every application job here sets
-  `scrape_interval: 1m` (`ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2`), so a
+  `scrape_interval: 1m` (`ansible/roles/k8s/observability/templates/prometheus.yaml.j2`), so a
   `rate()`/`increase()` over a literal `[1m]` — or over `$__interval`, which is SHORTER than 1m
   on a typical range — sees one sample and yields no result. Use `$__rate_interval`, which
   Grafana derives from the datasource's `timeInterval`. This killed panels on `traefik-custom`

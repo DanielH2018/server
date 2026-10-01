@@ -11,7 +11,7 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 data:
 {# Captured so the Deployment below can hash it into checksum/config. #}
-{% set claude_otel_grafana_config %}
+{% set observability_grafana_config %}
   datasources.yaml: |
     apiVersion: 1
     # Provisioning keys on NAME, so renaming the alias (loki -> loki-homelab, E1) needs
@@ -54,7 +54,7 @@ data:
           nodeGraph:
             enabled: true
       # --- Aliases carrying daniel-server's Grafana uids (slice 3, B4) ------------------
-      # Every dashboard in roles/k8s/claude-otel/files/dashboards references its datasource
+      # Every dashboard in roles/k8s/observability/files/dashboards references its datasource
       # by UID — `EGdsQqhVk` and `bf4q19tuivta8e`, baked into each panel; none references one by
       # NAME, so these aliases are free to be named whatever reads clearly. D6's lever is that a
       # matching uid makes all of them work here with no edit at all.
@@ -93,7 +93,7 @@ data:
   dashboards.yaml: |
     apiVersion: 1
     providers:
-      # Every board, from roles/k8s/claude-otel/files/dashboards — one provider, because
+      # Every board, from roles/k8s/observability/files/dashboards — one provider, because
       # foldersFromFilesStructure derives the Grafana folder from the directory name and so
       # reproduces the AI/Apps/Infrastructure/Logs/Networking/Security layout without naming any
       # of them here. The Claude Code board had its own provider until the two copies were
@@ -109,9 +109,9 @@ data:
           path: /var/lib/grafana/dashboards/homelab
           foldersFromFilesStructure: true
 {% endset %}
-{{ claude_otel_grafana_config -}}
+{{ observability_grafana_config -}}
 ---
-{{ pvc('grafana-data', claude_otel_storage_class, claude_otel_grafana_storage, namespace=k8s_observability_namespace) }}
+{{ pvc('grafana-data', observability_storage_class, observability_grafana_storage, namespace=k8s_observability_namespace) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -132,17 +132,17 @@ spec:
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
         # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
         # under `## One config change, one restart`.
-        {{ checksum_annotation('config', value=claude_otel_grafana_config | hash('sha1')) }}
+        {{ checksum_annotation('config', value=observability_grafana_config | hash('sha1')) }}
       labels:
         app: grafana
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
       # in this role's CLAUDE.md.
 {{ pod_shell('homelab-best-effort', run_as_user=472, run_as_group=472, fs_group=472) }}
       containers:
         - name: grafana
-          image: {{ claude_otel_grafana_image }}
+          image: {{ observability_grafana_image }}
 {{ hardened_security_context(non_root=true) }}
           env:
             - name: GF_SECURITY_ADMIN_PASSWORD
@@ -217,7 +217,7 @@ spec:
               mountPath: /etc/grafana/provisioning/datasources
             - name: grafana-provisioning-dashboards
               mountPath: /etc/grafana/provisioning/dashboards
-{% for folder in claude_otel_dashboard_folders %}
+{% for folder in observability_dashboard_folders %}
             - name: dashboards-{{ folder | lower }}
               mountPath: /var/lib/grafana/dashboards/homelab/{{ folder }}
 {% endfor %}
@@ -263,7 +263,7 @@ spec:
         # added. These are built from the JSON files by the role's tasks (see
         # dashboards.yml), not templated, because the JSON carries no Jinja and inlining
         # 730 KB into a template would be unreadable.
-{% for folder in claude_otel_dashboard_folders %}
+{% for folder in observability_dashboard_folders %}
         - name: dashboards-{{ folder | lower }}
           configMap:
             name: grafana-dashboards-{{ folder | lower }}

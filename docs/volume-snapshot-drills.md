@@ -217,7 +217,7 @@ something else, at which point the fix is adding them to the `vars:` block of th
 **Scope for this slice: 13 of 31.** Measured 2026-08-21, 31 roles in this repo carry the
 `Recreate` + rendered-RWO-claim shape this role exists for; task 3 declared
 `k8s_autodeploy_snapshot_pvcs` for 13 of them — the ones drawn from the auto-deploy promotion
-criteria, not from a data-migration survey. The other 18 (`authelia`, `claude-otel`, `crowdsec`,
+criteria, not from a data-migration survey. The other 18 (`authelia`, `observability`, `crowdsec`,
 `healthchecks`, `karakeep`, `loki-homelab`, `mosquitto`, `n8n`, `pihole`, `registry`, `scrutiny`,
 `terraria`, `terraria-stats`, `traefik`, `uptime-kuma`, `valheim`, `valheim-stats`, `wg-easy`)
 carried the same

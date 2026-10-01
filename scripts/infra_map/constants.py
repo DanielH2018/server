@@ -53,10 +53,10 @@ _CONTAINER_NAME = re.compile(
 
 _MANIFEST_KIND = re.compile(r"^kind:\s*([A-Za-z]+)\s*$", re.MULTILINE)
 
-# `claude-otel` is one declared entry that expands to the whole observability
+# `observability` is one declared entry that expands to the whole observability
 # namespace (collector + loki + prometheus + tempo + grafana). Nothing else in
 # the inventory owns a namespace, so an explicit entry beats deriving it by
 # rendering the role's Jinja namespace manifest.
-NAMESPACE_OWNERS = {"claude-otel": "k8s_observability_namespace"}
+NAMESPACE_OWNERS = {"observability": "k8s_observability_namespace"}
 
 _JINJA_VAR = re.compile(r"\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}")

@@ -31,7 +31,7 @@
   ansible.builtin.template:
     src: sync-artifacts.sh.j2
     dest: /usr/local/bin/sync-artifacts.sh
-    # 0700 owned by sys_user, the same DECIDED as roles/k8s/claude-otel/tasks/main.yml: the
+    # 0700 owned by sys_user, the same DECIDED as roles/k8s/observability/tasks/main.yml: the
     # script embeds a live Kuma push token (#2516), and the cron below runs as sys_user, so
     # root:root 0700 would lock out its own caller.
     owner: "{{ sys_user }}"

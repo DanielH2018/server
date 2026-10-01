@@ -36,7 +36,7 @@ def check_kubelet_plugin_readonly(cfg: Config) -> tuple[bool, str]:
     read-only remount does not self-heal like a Longhorn replica rebuild or a kubelet restart
     does, so holding it through a streak only delays a real page. The schedule is fast enough
     that a streak would buy nothing anyway — node-exporter's `node` job scrapes at 1m
-    (claude-otel/templates/prometheus.yaml.j2) and this check runs on the bridge's own
+    (observability/templates/prometheus.yaml.j2) and this check runs on the bridge's own
     INTERVAL-second cadence (300s deployed), so a fault is visible on the very first cycle
     that follows it, not several scrapes later.
 

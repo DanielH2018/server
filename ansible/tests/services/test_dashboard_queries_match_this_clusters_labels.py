@@ -7,7 +7,7 @@ nothing.
 
   Security/  The four CrowdSec boards came from an upstream that labels each agent `machine`.
              This cluster's Prometheus labels the node-agent DaemonSet `node`
-             (`job_name: crowdsec-node-agents` in claude-otel/templates/prometheus.yaml.j2) and
+             (`job_name: crowdsec-node-agents` in observability/templates/prometheus.yaml.j2) and
              labels the central LAPI pod with neither. It also acquires from FILES and appsec
              only (crowdsec/templates/node-agent-acquis.yaml.j2, config-secret.yaml.j2), so the
              journald, syslog and CloudWatch acquisition counters can never exist.
@@ -15,7 +15,7 @@ nothing.
              selector naming `node` alone answers with alloy's series alongside CrowdSec's --
              a WRONG answer rather than an empty one, which no dead-panel audit can see.
   AI/        The OTEL collector ships Claude Code logs to the stack-native Loki
-             (`endpoint: http://loki:3100/otlp`, claude-otel/templates/collector.yaml.j2), which
+             (`endpoint: http://loki:3100/otlp`, observability/templates/collector.yaml.j2), which
              Grafana provisions as uid `loki`. The `loki-homelab` uid holds the fleet's syslog —
              the Deploys ANNOTATION belongs there, and every log PANEL does not.
 
@@ -32,7 +32,7 @@ from pathlib import Path
 
 from _helpers import ANSIBLE
 
-DASHBOARDS = ANSIBLE / "roles" / "k8s" / "claude-otel" / "files" / "dashboards"
+DASHBOARDS = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "dashboards"
 SECURITY = DASHBOARDS / "Security"
 
 # The homelab-syslog Loki. Correct for the Deploys annotation, wrong for a Claude Code log panel.
@@ -78,7 +78,7 @@ NODE_AGENT_JOB = 'job="crowdsec-node-agents"'
 NODE_SELECTOR = re.compile(r"\{[^{}]*node=\"\$node\"[^{}]*\}")
 
 # Metrics only the central LAPI pod emits. Prometheus scrapes it as `job: crowdsec` with no
-# `node` label at all (claude-otel/templates/prometheus.yaml.j2), so a per-node selector on any
+# `node` label at all (observability/templates/prometheus.yaml.j2), so a per-node selector on any
 # of these matches nothing however the rename went.
 LAPI_ONLY_METRICS = frozenset(
     {"cs_alerts", "cs_active_decisions", "cs_lapi_request_duration_seconds_bucket"}

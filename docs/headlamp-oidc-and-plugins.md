@@ -19,7 +19,7 @@ every touch of the role (#2985).
   tracks the versions while the list is empty; the defaults header names the Renovate
   manager to restore with the first entry, and the commands that finish its sha256.
 - **Prometheus charts.** The plugin finds Prometheus by the `headlamp-prometheus: "true"`
-  label on the Service in `roles/k8s/claude-otel`, and queries it through the API server's
+  label on the Service in `roles/k8s/observability`, and queries it through the API server's
   service proxy, so `templates/rbac.yaml.j2` carries a Role in `observability` granting `get`
   on `services/proxy` pinned to `prometheus:9090`. The network hop is the API server's,
   admitted by `netpol_baseline_obs_node_cidrs`, not by anything on the headlamp pod. Label,
@@ -30,7 +30,7 @@ every touch of the role (#2985).
   page toggles them, stored in that browser's localStorage; nothing in IaC can pre-enable it.
 - **CPU, network and filesystem charts read `No Data`; memory works.** The plugin hardcodes
   `rate(...[1m])` for the pod-level counters, and `kubernetes-cAdvisor` scrapes at 1m (the
-  retention note at the kube-state-metrics job in `claude-otel/templates/prometheus.yaml.j2`),
+  retention note at the kube-state-metrics job in `observability/templates/prometheus.yaml.j2`),
   so the window holds one sample. Measured 2026-09-06 through the proxy: `[1m]` returned 0
   series for the headlamp pod, `[2m]` and `[5m]` returned 1, `container_memory_working_set_bytes`
   returned 1. A 30s cAdvisor interval would fix it at +357 samples/s (cAdvisor was 357 of

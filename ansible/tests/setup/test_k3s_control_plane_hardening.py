@@ -372,7 +372,12 @@ def test_psa_does_not_enforce():
 def test_both_namespaces_carry_the_psa_labels():
     """Labels on one namespace and not the other is the asymmetry slice 5 already produced."""
     obs = (
-        ANSIBLE / "roles" / "k8s" / "claude-otel" / "templates" / "00-namespace.yaml.j2"
+        ANSIBLE
+        / "roles"
+        / "k8s"
+        / "observability"
+        / "templates"
+        / "00-namespace.yaml.j2"
     ).read_text()
     assert "k8s_psa_labels" in obs, (
         "The observability Namespace template must render k8s_psa_labels, or the two "

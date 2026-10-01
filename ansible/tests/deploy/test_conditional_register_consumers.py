@@ -11,7 +11,7 @@ The `when:` half of the rule has bitten twice:
   * 2026-08-21, k8s/volume-snapshot: a retake wait registered over the first wait's genuine
     result and failed the deploy over a healthy snapshot. `test_volume_snapshot_register.py`
     is the behavioural anchor from that one, and it covers that role only.
-  * 2026-08-22, k8s/claude-otel: the restart-count snapshot is gated on the manifests
+  * 2026-08-22, k8s/observability: the restart-count snapshot is gated on the manifests
     changing, but its assert and its stabilise-gate hand-off were not. A dashboards-only
     deploy — manifests unchanged — failed the play after the dashboards had already applied.
 
@@ -164,7 +164,7 @@ def test_the_live_coredns_read_is_clean() -> None:
     assert _offenders(_COREDNS) == []
 
 
-def test_the_check_finds_the_claude_otel_shape(tmp_path: Path) -> None:
+def test_the_check_finds_the_observability_shape(tmp_path: Path) -> None:
     """Anchor the detector against the 2026-08-22 bug as it was actually written."""
     tasks = tmp_path / "tasks"
     tasks.mkdir()

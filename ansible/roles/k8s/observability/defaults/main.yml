@@ -1,5 +1,7 @@
 ---
-# Claude Code telemetry stack, slice 1: collector + Loki + Prometheus.
+# The observability plane: the Claude Code telemetry stack (collector, Tempo, Loki) and the
+# cluster's metrics plane (Prometheus, kube-state-metrics, Grafana). Built as slice 1 —
+# collector + Loki + Prometheus — which is what the slice notes below date from.
 #
 # Claude Code runs on the daniel-box HOST and exports to localhost:4317 — that endpoint is
 # fixed by the chezmoi settings template, which enables telemetry on every host except
@@ -10,9 +12,9 @@
 # without them; adding either changes nothing about whether collection works.
 
 # Pinned, Renovate-tracked. Same collector build the Docker side runs so config stays portable.
-claude_otel_collector_image: otel/opentelemetry-collector-contrib:0.161.0
-claude_otel_loki_image: grafana/loki:3.7.8
-claude_otel_prometheus_image: prom/prometheus:v3.14.0
+observability_collector_image: otel/opentelemetry-collector-contrib:0.161.0
+observability_loki_image: grafana/loki:3.7.8
+observability_prometheus_image: prom/prometheus:v3.14.0
 # 11.6.16 -> 13.2.0 (2026-08-22), crossing the Grafana 12 removal of Angular. Safe only
 # because the 19 `graph` panels this repo shipped were converted to `timeseries` first and
 # deployed against 11.6.16 — do that before any future major, not alongside it.
@@ -21,11 +23,11 @@ claude_otel_prometheus_image: prom/prometheus:v3.14.0
 # dashboards and datasources are provisioned from git.
 # Grafana's schema migrations are one-way, which is tolerable because of that: the DB holds
 # only preferences, version history and annotations. Recovery is deleting the PVC.
-claude_otel_grafana_image: grafana/grafana:13.2.2
+observability_grafana_image: grafana/grafana:13.2.2
 # Slice 3 (D8). Distinct from the metrics-server k3s already bundles: that serves the
 # resource-metrics API for `kubectl top`/HPA, while this exports kube_pod_status_ready and
 # kube_deployment_status_* — the only readiness signal the seven routeless workloads have.
-claude_otel_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
+observability_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-state-metrics:v2.20.0
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
 # Observability: the Claude Code telemetry stack (collector/Loki/Prometheus/Grafana/Tempo/
@@ -34,35 +36,35 @@ claude_otel_kube_state_metrics_image: registry.k8s.io/kube-state-metrics/kube-st
 # prometheus-data, tempo-data) — several independently migrating-state-shaped Deployments behind
 # one role, which compounds the risk across more than one component at once.
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
-k8s_autodeploy_reason: "observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
+k8s_autodeploy_reason: "observability — the cluster metrics plane and Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits"  # noqa var-naming[no-role-prefix]
 
 # longhorn-nobackup, NOT longhorn. Two reasons, either sufficient on its own:
 #   - Volume: Loki with content logging on grows fast, and Prometheus TSDB is high-churn.
 #     Both are the "bulky, regenerable state" the Docker side already keeps out of Kopia.
 #   - Sensitivity: content logging is ON, so Loki holds prompts, responses and tool output
 #     verbatim. The default class would copy transcript-grade data into B2 automatically.
-claude_otel_storage_class: longhorn-nobackup
-claude_otel_loki_storage: 10Gi
-claude_otel_prometheus_storage: 12Gi
+observability_storage_class: longhorn-nobackup
+observability_loki_storage: 10Gi
+observability_prometheus_storage: 12Gi
 # Grafana keeps only its own SQLite (users, prefs, starred dashboards). Datasources and
 # dashboards are provisioned from ConfigMaps, so this volume is small and losing it costs
 # nothing but UI state — it is on the no-backup class for that reason, not just size.
 # allowUiUpdates is true, so a UI-edited board DOES live only here until
 # scripts/grafana/export_grafana_dashboards.py round-trips it into the git tree — git is the
 # backup, the export is the save step. Reaffirmed nobackup 2026-08-13 (operator decision).
-claude_otel_grafana_storage: 1Gi
+observability_grafana_storage: 1Gi
 
 # OTLP gRPC, bound to loopback ON THE NODE via hostPort. Deliberately not a MetalLB VIP:
 # with content logging on, this must not be reachable from the LAN. Loopback is the whole
 # access control, exactly as the chezmoi bundle intends.
-claude_otel_otlp_port: 4317
-claude_otel_otlp_host_ip: 127.0.0.1
-# Query-side twin of claude_otel_otlp_host_ip, for Loki/Prometheus/Tempo. `otelq` is a
+observability_otlp_port: 4317
+observability_otlp_host_ip: 127.0.0.1
+# Query-side twin of observability_otlp_host_ip, for Loki/Prometheus/Tempo. `otelq` is a
 # host process and hardcodes 127.0.0.1 on 3100/9090/3200, so a ClusterIP-only Service is
 # unreachable to it. Loopback is load-bearing for the same reason as the collector's:
 # these backends hold prompts, responses and tool output verbatim, so the node-side
 # listener must never bind 0.0.0.0.
-claude_otel_query_host_ip: 127.0.0.1
+observability_query_host_ip: 127.0.0.1
 
 # Pinned ClusterIPs for the three query backends. These are the addresses they already
 # hold; declaring them makes an existing allocation explicit rather than requesting a
@@ -70,7 +72,7 @@ claude_otel_query_host_ip: 127.0.0.1
 #
 # They are pinned because they are quoted as constants outside this repo. Loki, Prometheus
 # and Tempo are single-replica Deployments with no nodeSelector, publishing their query
-# ports on a hostPort bound to claude_otel_query_host_ip — so only the node they happen to
+# ports on a hostPort bound to observability_query_host_ip — so only the node they happen to
 # run on answers on loopback. A reboot on 2026-08-23 moved all three from daniel-box to
 # daniel-server, and every host-side query tool broke while the telemetry itself stayed
 # healthy. `otelq` and `otel-sweep` (chezmoi: home/dot_local/bin/) now try loopback first
@@ -79,16 +81,16 @@ claude_otel_query_host_ip: 127.0.0.1
 #
 # spec.clusterIP is immutable: changing a value here is rejected on apply, and actually
 # moving one means deleting the Service and updating the constants in both repos together.
-claude_otel_loki_cluster_ip: 10.43.99.158
-claude_otel_prometheus_cluster_ip: 10.43.39.218
-claude_otel_tempo_cluster_ip: 10.43.4.147
+observability_loki_cluster_ip: 10.43.99.158
+observability_prometheus_cluster_ip: 10.43.39.218
+observability_tempo_cluster_ip: 10.43.4.147
 
 # 744h (31d), carried over from the bundle's loki-config.yaml along with the compactor that
 # enforces it. Retention matters more here than in a normal log store: every prompt and
 # response is retained verbatim for this window.
-claude_otel_loki_retention: 744h
+observability_loki_retention: 744h
 # Dashboard folders ported from daniel-server's Grafana (slice 3, B4). These are the
-# subdirectories of roles/k8s/claude-otel/files/dashboards, which stays the single source of
+# subdirectories of roles/k8s/observability/files/dashboards, which stays the single source of
 # truth for the JSON — the cluster mounts the same files rather than keeping a second copy.
 #
 # `AI` was excluded during B4 (uid collision with a vendored copy), reconciled 2026-08-07 into
@@ -98,14 +100,14 @@ claude_otel_loki_retention: 744h
 # folder now stages from this role's files/dashboards/AI, the rest still from the shared tree.
 # DECIDED: this list has no folder-level prune, and that is deliberate (operator 2026-08-28).
 # Dropping a name here removes the folder's volume and volumeMount from grafana.yaml.j2 (both
-# rendered by `{% for folder in claude_otel_dashboard_folders %}`, at the volumeMounts and volumes
+# rendered by `{% for folder in observability_dashboard_folders %}`, at the volumeMounts and volumes
 # blocks) but leaves the staged dir, the annotated dir and the live grafana-dashboards-<folder>
 # ConfigMap behind. That orphan is INERT: the mount is by explicit per-folder volume name, so an
 # unlisted ConfigMap is never mounted and never reaches Grafana. Adding a prune would trade an
 # inert orphan for deletion behaviour that can remove a live ConfigMap — a worse failure than the
 # one it closes, and the reason the 2026-08-28 review's fix-skeptic pass rejected it. Reopen only
 # with a case where the orphan is reachable, not merely present.
-claude_otel_dashboard_folders:
+observability_dashboard_folders:
   - AI
   - Apps
   - Infrastructure
@@ -122,16 +124,16 @@ claude_otel_dashboard_folders:
 # The uid MUST equal the `loki-homelab` datasource uid in templates/grafana.yaml.j2. A wrong one
 # does not error: Grafana renders the annotation query against nothing and the board shows no
 # deploy markers, silently. ansible/tests/deploy/test_deploy_annotations.py holds the two in lockstep.
-claude_otel_loki_homelab_uid: bf4q19tuivta8e
+observability_loki_homelab_uid: bf4q19tuivta8e
 # `|= "event=deploy"` before `| logfmt`, in that order: the line filter runs first and is far
 # cheaper than parsing every syslog line in the window.
-claude_otel_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
+observability_deploy_annotation_expr: '{job="syslog"} |= "event=deploy" | logfmt'
 
-claude_otel_prometheus_retention: 30d
+observability_prometheus_retention: 30d
 # DECIDED: the size cap binds before the 30d time cap; read
 # (time() - prometheus_tsdb_lowest_timestamp_seconds)/86400 before any retention claim.
 #
-# Deliberately well under claude_otel_prometheus_storage (12Gi), not close to it. What the cap
+# Deliberately well under observability_prometheus_storage (12Gi), not close to it. What the cap
 # counts is persisted blocks PLUS the WAL and the m-mapped head chunks; what it does NOT cover is
 # compaction, which needs room for the output block alongside its inputs. (This comment said
 # "BLOCKS only" until 2026-08-29 — measured that day, the accounting was 2.70GB against 2.55GB of
@@ -147,7 +149,7 @@ claude_otel_prometheus_retention: 30d
 #
 # Expect the window to widen over WEEKS, not on the next deploy. The existing blocks hold
 # old-rate data, so they age out at the old cost before the new rate shows in the retained span.
-claude_otel_prometheus_retention_size: 7GB
+observability_prometheus_retention_size: 7GB
 
 # Traces (slice 3). Claude Code emits spans only with both CLAUDE_CODE_ENHANCED_TELEMETRY_BETA
 # and OTEL_TRACES_EXPORTER set — the chezmoi settings template already sets both, so this is
@@ -156,12 +158,12 @@ claude_otel_prometheus_retention_size: 7GB
 # backend_scheduler/backend_worker; tempo.yaml.j2 carries both changes and says why. The hard
 # prerequisite was the block format — 3.0 refuses vParquet3 and earlier, and this instance was
 # already writing vParquet4 (read off /status/config before upgrading).
-claude_otel_tempo_image: grafana/tempo:3.0.3
-claude_otel_tempo_storage: 5Gi
+observability_tempo_image: grafana/tempo:3.0.3
+observability_tempo_storage: 5Gi
 # 720h (30d) — the same window as the Prometheus retention, a day under Loki's 744h. Its own
 # variable rather than a shared one because spans are per-turn and far bulkier than counters,
 # so this is the value most likely to need cutting first if the PVC fills.
-claude_otel_tempo_retention: 720h
+observability_tempo_retention: 720h
 
 # Self-monitoring (templates/telemetry-health.sh.j2). Pushes to a static Kuma monitor rather
 # than being polled, because monitor-bridge runs on daniel-server and cannot see this cluster.
@@ -170,13 +172,13 @@ claude_otel_tempo_retention: 720h
 # than reading a local file, and the fastest thing it watches (a 15m export-failure window)
 # does not move faster than that. The Kuma monitor's heartbeat interval must stay above this
 # (see the uptime-kuma role) so a dead cron trips the watchdog.
-claude_otel_health_cron_minute: "*/10"
+observability_health_cron_minute: "*/10"
 
 # The six telemetry workloads, as the {kind, name} pairs post_tasks/k8s_stabilise_gate.yml reads.
 # A variable rather than a second inline copy of the list: tasks/main.yml still spells it out
 # once (the wait loop; the restart loop reads this variable), and the stabilisation tasks that
 # consume it must iterate the SAME set or the gate silently watches fewer workloads than rolled.
-# ansible/tests/services/test_claude_otel_stabilise_coverage.py holds the three in step.
+# ansible/tests/services/test_observability_stabilise_coverage.py holds the three in step.
 #
 # `restart_on` names which of roles/k8s/manifests's three change signals queues a
 # `rollout restart` for that workload, and so which makes the release record expect a fresh
@@ -193,7 +195,7 @@ claude_otel_health_cron_minute: "*/10"
 # through `env.valueFrom`, and hashing a Secret's bytes into a world-readable annotation would
 # open a read path over it. Those two restart on a secret render, which is one register over all
 # three secret manifests — so rotating grafana's password also restarts prometheus. Issue #2858.
-claude_otel_stabilise_workloads:
+observability_stabilise_workloads:
   - { kind: deploy, name: loki, restart_on: [] }
   - { kind: deploy, name: prometheus, restart_on: [secret] }
   - { kind: deploy, name: kube-state-metrics, restart_on: [] }

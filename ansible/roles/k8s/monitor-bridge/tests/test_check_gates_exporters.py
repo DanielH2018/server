@@ -90,7 +90,7 @@ def test_exporter_dependent_values_are_real_checks():
 # would leave a literal here naming a job nothing emits, so the NEW name goes unmapped while the
 # dead one passes: the guard reporting the opposite of the truth.
 _PROM_SCRAPE_CONFIG = (
-    _REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
+    _REPO / "ansible/roles/k8s/observability/templates/prometheus.yaml.j2"
 )
 NODE_EXPORTER_PORT = "9100"
 

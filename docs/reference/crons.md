@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-09-29 03:18 UTC
-generated_sha: fb9e4017f
+generated_at: 2026-10-01 00:11 UTC
+generated_sha: 7f5047711
 ---
 
 !!! warning "Generated file — do not edit"
@@ -21,7 +21,7 @@ generated_sha: fb9e4017f
 |---|---|---|---|---|---|
 | B2 backup budget listing | `20 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | yes (backup) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | B2 deletion accounting | `10 7 * * *` | conditional (has_repo_checkout) | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
-| Claude Code telemetry health | `*/10 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/claude-otel/tasks/main.yml` |
+| Claude Code telemetry health | `*/10 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/observability/tasks/main.yml` |
 | Clean unused Docker images | `30 6 * * *` | conditional (has_docker) | `{{ ansible_facts.user_id }}` | yes (prune) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Clear ansible log file | `0 6 * * 0` | conditional (has_repo_checkout) | `root` | yes (truncate) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | CrowdSec AppSec verify | `*/15 * * * *` | conditional (not k8s_dry_run \| bool) | `root` | read the script | `ansible/roles/k8s/crowdsec/tasks/main.yml` |

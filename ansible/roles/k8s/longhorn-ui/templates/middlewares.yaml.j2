@@ -4,7 +4,7 @@
 # beside the Service it targets, and Traefik's `allowCrossNamespace` stays off — so the
 # objects a route names have to exist here rather than in {{ k8s_namespace }}.
 #
-# Same trade-off the telemetry stack made (roles/k8s/claude-otel/templates/middlewares.yaml.j2):
+# Same trade-off the telemetry stack made (roles/k8s/observability/templates/middlewares.yaml.j2):
 # these can drift from the originals in roles/k8s/traefik/templates/dynamic.yaml.j2 and
 # roles/k8s/authelia/templates/forwardauth-middleware.yaml.j2. Three namespaces carrying a copy
 # is the point at which a shared template starts to earn itself; the next one should build it.
@@ -67,7 +67,7 @@ spec:
 ---
 # A TLSOption resolves in the ROUTE's namespace, so the `modern` the ingressroute() macro
 # names must exist here too. Without it the router never builds and the TLS handshake is
-# reset — a failure that names neither the route nor the certificate. See claude-otel's copy.
+# reset — a failure that names neither the route nor the certificate. See observability's copy.
 apiVersion: traefik.io/v1alpha1
 kind: TLSOption
 metadata:

@@ -29,7 +29,7 @@
 #   - grafana has use_authelia: true, so Authelia's forwardauth would answer with a 302 before
 #     Traefik ever proxied to the app — a probe would print success without ever contacting the
 #     target. That is exactly the slice-1 littlelink trap this role's own header documents.
-#   - prometheus's route (claude-otel/templates/prometheus-ingressroute.yaml.j2) carries no
+#   - prometheus's route (observability/templates/prometheus-ingressroute.yaml.j2) carries no
 #     Authelia middleware at all; it is gated by ClientIP({{ lan_subnet }}) plus the two node
 #     bridge /31s, and that file's own comments record pod-source IPs (10.42/16, always .2+) as
 #     deliberately excluded from the match. A pod-sourced probe request would fail the ClientIP
@@ -89,7 +89,7 @@ spec:
               #    policies admit different caller sets, see the header above), so if either
               #    connects, that policy admits more than its documented callers.
               #
-              #    Ports (9090, 3100) hardcoded from claude-otel/templates/prometheus.yaml.j2 and
+              #    Ports (9090, 3100) hardcoded from observability/templates/prometheus.yaml.j2 and
               #    loki.yaml.j2's Service definitions. A WRONG PORT HERE FAILS SILENTLY GREEN,
               #    not loudly: these assertions are inverted, so a port nothing listens on makes
               #    `nc` fail, which is the PASS branch. Re-check both hardcoded ports against

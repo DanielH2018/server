@@ -68,7 +68,7 @@
       {{ ns.hashes | sort | join(',') | hash('sha1') }}
 
 # check.py is Jinja-hostile (PromQL selectors carry {…} braces), so it becomes a
-# ConfigMap via kubectl --from-file — the terraria-stats/claude-otel pattern.
+# ConfigMap via kubectl --from-file — the terraria-stats/observability pattern.
 #
 # One --from-file per module rather than --from-file=<dir>: the staging directory also holds
 # the rendered configmap.yaml below, and the directory form would fold that into the ConfigMap

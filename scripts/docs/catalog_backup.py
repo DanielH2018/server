@@ -53,7 +53,7 @@ __all__ = [
 #   1. an inline `kind: PersistentVolumeClaim` block carrying its own `storageClassName:` line
 #      (media-volume, valheim, zigbee2mqtt, freshrss, code-server's workspace);
 #   2. a call to the shared `pvc()` macro in ansible/templates/pvc.yml.j2, whose second
-#      positional argument is the class (authelia, registry, karakeep-meili, claude-otel's four);
+#      positional argument is the class (authelia, registry, karakeep-meili, observability's four);
 #   3. an `include_role: k8s/volume-claim` task, whose `vars:` carry `volume_claim_name` and,
 #      optionally, `volume_claim_storage_class` — the volume-claim role's own default applies
 #      when the caller leaves it out (uptime-kuma, karakeep's main claim, the *arrs, ~20 roles).
@@ -423,7 +423,7 @@ def claim_tiers(
     `namespace/claim` as `_classify` describes. A claim whose name the role's own defaults
     cannot resolve is returned as the expression written, with an "unknown" tier saying so.
     Every claim is classified under `k8s_namespace`: the one role whose claims live elsewhere
-    (claude-otel, in the observability namespace) is on `longhorn-nobackup` by class, so the
+    (observability, in the observability namespace) is on `longhorn-nobackup` by class, so the
     namespace never reaches a list lookup for it.
 
     This is the one derivation both readers print — `backup_tier` joins it into the

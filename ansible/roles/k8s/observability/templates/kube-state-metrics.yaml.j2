@@ -83,12 +83,12 @@ spec:
         app: kube-state-metrics
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
       # in this role's CLAUDE.md.
 {{ pod_shell('homelab-best-effort', service_account='kube-state-metrics', run_as_user=65534, run_as_group=65534, non_root=true) }}
       containers:
         - name: kube-state-metrics
-          image: {{ claude_otel_kube_state_metrics_image }}
+          image: {{ observability_kube_state_metrics_image }}
           args:
             # Must match the ClusterRole above. Restricting the set also drops the metric
             # cardinality this stack has no use for.

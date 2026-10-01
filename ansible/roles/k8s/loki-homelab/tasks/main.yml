@@ -1,5 +1,5 @@
 ---
-# Slice-7 Phase D.2 (2026-08-10): the homelab log store, SEPARATE from the claude-otel Loki
+# Slice-7 Phase D.2 (2026-08-10): the homelab log store, SEPARATE from the observability Loki
 # by decision KL1 (slice-7-phase-d-loki.md) — merging would give the verbatim-prompts store
 # the LAN route it deliberately lacks. Ships with the KL3 pod-log DaemonSet (Grafana Alloy),
 # which is what un-darkens terraria-stats and restores log-based checks for cluster services.

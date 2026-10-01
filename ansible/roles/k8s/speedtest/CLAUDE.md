@@ -20,7 +20,7 @@ repo-root `CLAUDE.md` for shared conventions.
   revert (`k8s_autodeploy_snapshot_pvcs: [speedtest-config]`).
 - **REQUIRED one-time post-deploy step (#996):** log in at `speedtest.<domain>`, open
   **Settings -> Data Integration**, and turn on **Prometheus**. Without this the
-  `speedtest` scrape job in claude-otel's `prometheus.yaml.j2` returns 404 forever — see
+  `speedtest` scrape job in observability's `prometheus.yaml.j2` returns 404 forever — see
   below for why this cannot be set any other way.
 
 ## Notable
@@ -36,7 +36,7 @@ repo-root `CLAUDE.md` for shared conventions.
   series — a degradation (the 2026-09-03 78.8 Mbps DOWN, itself below the worst-ever
   119 Mbps this pinned server had returned) had no history. The image natively exposes
   `/prometheus` (`speedtest_tracker_download_bits`, `_upload_bits`, `_ping_ms`, etc.,
-  labeled by server/ISP), scraped by claude-otel's `prometheus.yaml.j2`
+  labeled by server/ISP), scraped by observability's `prometheus.yaml.j2`
   (`job_name: speedtest`).
 
   The pin (`defaults/main.yml`) resolves to upstream `alexjustesen/speedtest-tracker`

@@ -14,7 +14,7 @@ k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — n
 
 # The UPS name upsd knows is NOT a variable of this role. The exporter scrapes one UPS per
 # request and takes the name as a `ups=` query param, so the name is set where the request is
-# built — the `nut` scrape job in claude-otel/templates/prometheus.yaml.j2, from the same
+# built — the `nut` scrape job in observability/templates/prometheus.yaml.j2, from the same
 # `nut_ups_name` expression nut/templates/config-secret.yaml.j2 uses for the ups.conf section.
 # A copy here would be a second place to drift.
 

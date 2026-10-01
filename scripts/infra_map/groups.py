@@ -36,7 +36,7 @@ SERVICE_GROUPS: tuple[tuple[str, tuple[str, ...]], ...] = (
         (
             "uptime-kuma",
             "loki-homelab",
-            "claude-otel",
+            "observability",
             "node-exporter",
             "scrutiny",
             "monitor-bridge",

@@ -12,7 +12,7 @@ metadata:
 data:
   config.yaml: |
 {# Captured so the Deployment below can hash it into checksum/config. #}
-{% set claude_otel_tempo_config %}
+{% set observability_tempo_config %}
     server:
       http_listen_port: 3200
     distributor:
@@ -38,7 +38,7 @@ data:
       provider:
         compaction:
           compaction:
-            block_retention: {{ claude_otel_tempo_retention }}
+            block_retention: {{ observability_tempo_retention }}
     # Set on the worker too. 3.0 splits compaction across a scheduler that decides which blocks
     # to act on and a worker that executes the jobs, and each carries its own copy of the
     # compaction settings — setting only the scheduler left the worker reading the 336h default,
@@ -47,7 +47,7 @@ data:
     # silent halving of the window: pin both to the same value and the question cannot arise.
     backend_worker:
       compaction:
-        block_retention: {{ claude_otel_tempo_retention }}
+        block_retention: {{ observability_tempo_retention }}
     storage:
       trace:
         backend: local
@@ -60,9 +60,9 @@ data:
     usage_report:
       reporting_enabled: false
 {% endset %}
-{{ claude_otel_tempo_config -}}
+{{ observability_tempo_config -}}
 ---
-{{ pvc('tempo-data', claude_otel_storage_class, claude_otel_tempo_storage, namespace=k8s_observability_namespace) }}
+{{ pvc('tempo-data', observability_storage_class, observability_tempo_storage, namespace=k8s_observability_namespace) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -83,12 +83,12 @@ spec:
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
         # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
         # under `## One config change, one restart`.
-        {{ checksum_annotation('config', value=claude_otel_tempo_config | hash('sha1')) }}
+        {{ checksum_annotation('config', value=observability_tempo_config | hash('sha1')) }}
       labels:
         app: tempo
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
       # in this role's CLAUDE.md.
       # No init container chowns /var/tempo: the kubelet applies fsGroup ownership to the
       # volume at mount time, which is what Tempo's non-root uid 10001 needs.
@@ -99,16 +99,16 @@ spec:
 {{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: tempo
-          image: {{ claude_otel_tempo_image }}
+          image: {{ observability_tempo_image }}
           args: ["-config.file=/etc/tempo/config.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:
             - name: http
               containerPort: 3200
               # On the node's loopback so otelq can reach it; see
-              # claude_otel_query_host_ip in defaults/main.yml.
+              # observability_query_host_ip in defaults/main.yml.
               hostPort: 3200
-              hostIP: {{ claude_otel_query_host_ip }}
+              hostIP: {{ observability_query_host_ip }}
             - name: otlp-grpc
               containerPort: 4317
           volumeMounts:
@@ -138,8 +138,8 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 spec:
   # Pinned: host-side query tools carry this address as a constant. See
-  # claude_otel_tempo_cluster_ip in defaults/main.yml for why.
-  clusterIP: {{ claude_otel_tempo_cluster_ip }}
+  # observability_tempo_cluster_ip in defaults/main.yml for why.
+  clusterIP: {{ observability_tempo_cluster_ip }}
   selector:
     app: tempo
   ports:

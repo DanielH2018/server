@@ -1,5 +1,5 @@
 #!/usr/bin/env bash
-# Claude Code telemetry-stack heartbeat — managed by Ansible (k8s/claude-otel role); edits overwritten.
+# Claude Code telemetry-stack heartbeat — managed by Ansible (k8s/observability role); edits overwritten.
 #
 # The stack watches Claude Code. Nothing watched the stack: if the collector crashed, the
 # hostPort DNAT broke, or Loki started rejecting writes, export would stop and the first
@@ -65,8 +65,8 @@ fi
 #    iptables DNAT installed by the CNI portmap plugin, not a socket, so it is invisible to
 #    `ss` and a broken rule leaves every pod Running and Ready while Claude Code — a HOST
 #    process, not a container — silently fails to export.
-if ! timeout 5 bash -c "exec 3<>/dev/tcp/{{ claude_otel_otlp_host_ip }}/{{ claude_otel_otlp_port }}" 2>/dev/null; then
-  add "OTLP receiver unreachable on {{ claude_otel_otlp_host_ip }}:{{ claude_otel_otlp_port }}"
+if ! timeout 5 bash -c "exec 3<>/dev/tcp/{{ observability_otlp_host_ip }}/{{ observability_otlp_port }}" 2>/dev/null; then
+  add "OTLP receiver unreachable on {{ observability_otlp_host_ip }}:{{ observability_otlp_port }}"
 fi
 
 # 3. Is anything being dropped between the collector and its backends? send_failed_* is the

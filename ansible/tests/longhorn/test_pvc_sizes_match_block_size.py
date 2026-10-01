@@ -49,7 +49,7 @@ JINJA_RE = re.compile(r"^\{\{\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*\}\}$")
 # on almost nothing; `test_the_var_map_resolves_most_templated_sizes` is the floor that caught
 # exactly that when the first five roles adopted the macro.
 #
-# The trailing `(?:,\s*namespace=[^,()]+)?` is for claude-otel's four claims (#1230): the macro
+# The trailing `(?:,\s*namespace=[^,()]+)?` is for observability's four claims (#1230): the macro
 # grew an optional `namespace=` kwarg so they could pass `k8s_observability_namespace` instead
 # of the module default, and a plain 3-arg regex stops matching the moment a 4th argument
 # follows the size — which is exactly how a converted role drops out silently. See the accept
@@ -156,7 +156,7 @@ def test_pvc_size_is_a_multiple_of_the_backup_block_size(
         "{{ pvc(registry_k8s_claim, registry_k8s_storage_class, registry_k8s_size) }}",
         "{% call pvc(mosquitto_k8s_claim, mosquitto_k8s_storage_class, mosquitto_k8s_size) %}",
         "{% call pvc('authelia-config', 'longhorn', authelia_k8s_storage) %}",
-        "{{ pvc('tempo-data', claude_otel_storage_class, claude_otel_tempo_storage,"
+        "{{ pvc('tempo-data', observability_storage_class, observability_tempo_storage,"
         " namespace=k8s_observability_namespace) }}",
     ],
 )

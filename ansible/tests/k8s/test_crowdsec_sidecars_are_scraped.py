@@ -176,7 +176,7 @@ def _rendered():
         if not isinstance(doc, dict):
             continue
         if (
-            role == "claude-otel"
+            role == "observability"
             and "prometheus" in str(template)
             and doc.get("kind") == "ConfigMap"
         ):

@@ -104,7 +104,7 @@ def cluster_config(
         # targets_verdict.
         # CORRECTED 2026-08-24: this said "exactly two origin="daniel-server" jobs: node,
         # cadvisor". It is ONE — `node`. Only the node job is relabelled with `origin`
-        # (claude-otel/templates/prometheus.yaml.j2:202, the `node` job); the cadvisor job never
+        # (observability/templates/prometheus.yaml.j2:202, the `node` job); the cadvisor job never
         # was, which is the whole mechanism behind the blind restarts/oom/cpu checks fixed the
         # same day. A reviewer checking that finding against this comment would have cleared it,
         # so the stale half is corrected here rather than left to be re-derived.

@@ -14,7 +14,7 @@
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
-    manifests_service: claude-otel
+    manifests_service: observability
     manifests_files:
       - 00-namespace.yaml
       - collector.yaml
@@ -52,7 +52,7 @@
     # k8s_observability_namespace -- without it both reads fail, every entry reads "not
     # rolled", and an image bump rolls each workload twice, exactly as before the fix.
     manifests_self_rollouts: >-
-      {{ claude_otel_stabilise_workloads
+      {{ observability_stabilise_workloads
          | map('combine', {'namespace': k8s_observability_namespace}) | list }}
 
 - name: Restart the telemetry workloads whose secret changed
@@ -82,7 +82,7 @@
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }}
       rollout restart {{ item.kind }}/{{ item.name }}
-  loop: "{{ claude_otel_stabilise_workloads }}"
+  loop: "{{ observability_stabilise_workloads }}"
   loop_control:
     label: "{{ item.name }}"
   become: true
@@ -152,10 +152,10 @@
       k3s kubectl -n {{ k8s_observability_namespace }} get pods
       -l app={{ item.name }}
       -o jsonpath={.items[*].status.containerStatuses[*].restartCount}
-  loop: "{{ claude_otel_stabilise_workloads }}"
+  loop: "{{ observability_stabilise_workloads }}"
   loop_control:
     label: "{{ item.name }}"
-  register: claude_otel_restarts_before
+  register: observability_restarts_before
   become: true
   changed_when: false
   when:
@@ -182,7 +182,7 @@
   # result and `item.stdout` raises "object of type 'dict' has no attribute 'stdout'". Filter
   # to what the producer actually ran rather than mirroring its `when:`, so a partial skip
   # still asserts over the entries that did produce output.
-  loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop: "{{ observability_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
   when: not k8s_no_mutate
@@ -207,7 +207,7 @@
   # Same skipped-register filter as the assert above, and for the same reason: `item.stdout`
   # does not exist on a skip result. Without it this task fails identically once the assert
   # stops failing first.
-  loop: "{{ claude_otel_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
+  loop: "{{ observability_restarts_before.results | default([]) | rejectattr('skipped', 'defined') | list }}"
   loop_control:
     label: "{{ item.item.name }}"
   when: not k8s_no_mutate
@@ -245,11 +245,11 @@
   # undefined, the `until` below can never match, and the run would die after 5 retries. That
   # only stays hidden while the secret happens not to differ, which is the condition guarding it.
   when: manifests_secret_render is changed and not k8s_no_mutate
-  register: claude_otel_admin_password_sync
-  until: (claude_otel_admin_password_sync.rc | default(1)) == 0
+  register: observability_admin_password_sync
+  until: (observability_admin_password_sync.rc | default(1)) == 0
   retries: 5
   delay: 10
-  changed_when: (claude_otel_admin_password_sync.rc | default(1)) == 0
+  changed_when: (observability_admin_password_sync.rc | default(1)) == 0
   no_log: true
 
 - name: Read back the OTLP listener's bind address
@@ -262,7 +262,7 @@
     cmd: >-
       k3s kubectl -n {{ k8s_observability_namespace }} get daemonset otel-collector
       -o jsonpath={.spec.template.spec.containers[0].ports[0].hostIP}
-  register: claude_otel_bind
+  register: observability_bind
   become: true
   changed_when: false
   # Runs under --check too: this only reads. Skipped, it leaves stdout empty and the assert
@@ -273,10 +273,10 @@
 - name: Fail if the OTLP receiver is not pinned to loopback
   tags: [deploy]
   ansible.builtin.assert:
-    that: claude_otel_bind.stdout == claude_otel_otlp_host_ip
+    that: observability_bind.stdout == observability_otlp_host_ip
     fail_msg: >-
-      OTLP receiver is bound to '{{ claude_otel_bind.stdout | default('(unset)') }}',
-      expected '{{ claude_otel_otlp_host_ip }}'. With content logging enabled this
+      OTLP receiver is bound to '{{ observability_bind.stdout | default('(unset)') }}',
+      expected '{{ observability_otlp_host_ip }}'. With content logging enabled this
       receiver must not be reachable off the node.
     quiet: true
 
@@ -284,6 +284,17 @@
   tags: [cron]
   # Runs as {{ sys_user }}, not root: it reads the cluster through that user's read-only
   # kubeconfig, which is the whole point — the cron cannot mutate anything.
+  #
+  # DECIDED: the heartbeat keeps the name `claude-otel-health` though the role was renamed to
+  # `observability` on 2026-10-01 (#2911). That string is a join key in four places outside
+  # this role: the AutoKuma monitor id `claude-otel-health` in
+  # roles/k8s/uptime-kuma/templates/static-monitors.yaml.j2, the group rule
+  # `^claude-otel-health$` in that role's defaults, the syslog tag query B of the Alert History
+  # board reads, and `probe.py alerts`' parser. Renaming it costs the Kuma monitor's history —
+  # AutoKuma runs ON_DELETE=delete, so a changed id is a delete plus a create — and orphans
+  # every `claude-otel-health` line already in Loki's 31-day window. A changed cron `name:` or
+  # `cron_file:` would also leave the old crontab entry behind on daniel-box. The role name is
+  # what the issue was about; this tag is not it.
   ansible.builtin.template:
     src: telemetry-health.sh.j2
     dest: /usr/local/bin/claude-otel-health.sh
@@ -301,7 +312,7 @@
   tags: [cron]
   ansible.builtin.cron:
     name: "Claude Code telemetry health"
-    minute: "{{ claude_otel_health_cron_minute }}"
+    minute: "{{ observability_health_cron_minute }}"
     user: "{{ sys_user }}"
     job: "/usr/local/bin/claude-otel-health.sh"
     cron_file: claude-otel-health

@@ -90,7 +90,7 @@ def _include_vars(role_tasks: Path) -> list[dict]:
 def _restarts_privately(role_dir: Path) -> bool:
     """Does the role run its own `rollout restart`, anywhere in its task files?
 
-    Two roles legitimately do: claude-otel rolls a Deployment and a DaemonSet together in a
+    Two roles legitimately do: observability rolls a Deployment and a DaemonSet together in a
     private loop, and pihole rolls its two instances one at a time from an included
     `roll_one.yml`. Searching the whole `tasks/` tree rather than `main.yml` is the point —
     pihole's restart lives in the include, so a main.yml-only check would call it broken.
@@ -303,7 +303,7 @@ def test_a_second_workload_mounting_the_secret_as_a_volume_is_clean(tmp_path):
 
 
 def test_a_role_restarting_its_workloads_privately_is_clean(tmp_path):
-    """claude-otel and pihole roll their own workloads; the exemption must keep working."""
+    """observability and pihole roll their own workloads; the exemption must keep working."""
     role = _write_role(
         tmp_path,
         "widget",

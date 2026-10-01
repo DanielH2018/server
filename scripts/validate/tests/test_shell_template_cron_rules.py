@@ -36,10 +36,10 @@ def cron_map():
 
 
 def test_cron_job_scripts_resolves_a_dest_rename(cron_map):
-    # claude-otel deploys templates/telemetry-health.sh.j2 to
+    # observability deploys templates/telemetry-health.sh.j2 to
     # /usr/local/bin/claude-otel-health.sh — the cron `job:` only ever names the dest, so this
     # must resolve through the template task's `src:`, not assume dest basename == template name.
-    telemetry = v.ROLES / "k8s/claude-otel/templates/telemetry-health.sh.j2"
+    telemetry = v.ROLES / "k8s/observability/templates/telemetry-health.sh.j2"
     assert telemetry in cron_map
     assert cron_map[telemetry].name == "main.yml"
 

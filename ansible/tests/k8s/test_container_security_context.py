@@ -9,8 +9,8 @@ SETUID, SETGID, NET_RAW, ...) however locked-down the pod block looks.
 That distinction is why this went unnoticed. A grep for `securityContext` across the fleet
 matched the pod block and reported the templates clean, and a 2026-08-15 review recorded
 securityContext as verified across all 48 deployment templates on that basis. Five templates
-had no container block at all — loki-homelab plus four of claude-otel's — and one role
-(claude-otel) was internally inconsistent, since its kube-state-metrics manifest did carry one.
+had no container block at all — loki-homelab plus four of observability's — and one role
+(observability) was internally inconsistent, since its kube-state-metrics manifest did carry one.
 
 Nothing else enforces this: the cluster has no PodSecurity admission labels on any namespace,
 so an absent container securityContext is simply honoured.

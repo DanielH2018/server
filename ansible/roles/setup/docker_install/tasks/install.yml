@@ -334,7 +334,7 @@
     #
     # metrics-addr: dockerd's own Prometheus endpoint (engine counters and the Go runtime's
     # `go_memstats_*`), on the LAN IP so the cluster's Prometheus scrapes it as `dockerd-pi`
-    # (roles/k8s/claude-otel). It exists to size a GOMEMLIMIT: dockerd took 97 major
+    # (roles/k8s/observability). It exists to size a GOMEMLIMIT: dockerd took 97 major
     # faults/s on daniel-pi, 30% of the host's, each GC cycle faulting a swapped-out heap
     # back from zram (#2003), and the pairing that cuts that (`GOGC=off` under a limit, as
     # the Pi Alloy runs) needs the live heap measured first — a limit under the live set is

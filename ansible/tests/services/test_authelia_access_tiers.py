@@ -36,7 +36,7 @@ KNOWN_SSO = frozenset(
         "code-server",
         "n8n",
         "sonarr",
-        "claude-otel",
+        "observability",
         "scrutiny",
     }
 )

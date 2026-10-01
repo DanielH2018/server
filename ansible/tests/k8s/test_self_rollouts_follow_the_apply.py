@@ -1,6 +1,6 @@
 """The two roles that roll their own workloads follow the record and the apply.
 
-claude-otel (its restart loop) and pihole (roll_one.yml) set `manifests_rollout: ''`, opt out
+observability (its restart loop) and pihole (roll_one.yml) set `manifests_rollout: ''`, opt out
 of the shared restart and the batch drain, and restart their workloads through a private task
 after `k8s/manifests` returns. Two issues are pinned here, over the harness in
 `_release_expectation.py`:
@@ -14,14 +14,14 @@ after the include_role that writes the record.
 
 Issue #1994: the skip #1988 added to the shared restart reaches those two private restarts.
 The pod-template fingerprints cover every `manifests_self_rollouts` entry, each private
-restart reads `manifests_rolled_by_apply` for its own workload, and claude-otel's entries
+restart reads `manifests_rolled_by_apply` for its own workload, and observability's entries
 carry the namespace the fingerprints must read in -- the fingerprints default to
 `k8s_namespace`, its six workloads live in `observability`, and a read in the wrong namespace
 fails on both sides and reads as "not rolled", which is the double roll the issue names.
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
-Issue #2858 narrowed claude-otel's declaration a second way, per SIGNAL rather than per
+Issue #2858 narrowed observability's declaration a second way, per SIGNAL rather than per
 workload. Each entry carries `restart_on`, so the record decides `restart` from the same key
 the private restart selects its targets with. Five of the six no longer restart for a changed
 render at all — their ConfigMaps are hashed into their own pod templates — and a record that
@@ -47,13 +47,13 @@ Run: uv run pytest ansible/tests/k8s/test_self_rollouts_follow_the_apply.py
 
 from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, walk_tasks
 from _release_expectation import (
-    CLAUDE_OTEL,
+    OBSERVABILITY,
     FACT_EXPR,
     LOOP_EXPR,
     MAIN,
     OBSERVABILITY_NAMESPACE,
     PIHOLE,
-    claude_otel_self_rollouts,
+    observability_self_rollouts,
     include_role_vars,
     rollouts as _rollouts,
 )
@@ -63,9 +63,9 @@ def _pairs(entries):
     return {(e["kind"], e["name"]) for e in entries}
 
 
-def _claude_otel_private_restart():
+def _observability_private_restart():
     return task_named(
-        load_tasks(CLAUDE_OTEL / "tasks/main.yml"),
+        load_tasks(OBSERVABILITY / "tasks/main.yml"),
         "Restart the telemetry workloads whose secret changed",
     )
 
@@ -119,34 +119,34 @@ def test_a_self_rolling_role_records_only_what_it_declares():
     )
 
 
-def _claude_otel_rollouts(**over):
+def _observability_rollouts(**over):
     return _rollouts(
-        manifests_service="claude-otel",
+        manifests_service="observability",
         manifests_rollout="",
         manifests_extra_rollouts=[],
-        manifests_self_rollouts=claude_otel_self_rollouts(),
+        manifests_self_rollouts=observability_self_rollouts(),
         **over,
     )
 
 
-def test_claude_otel_a_changed_render_expects_nothing_to_roll():
+def test_observability_a_changed_render_expects_nothing_to_roll():
     """#2858's red half. Every workload here declares `restart_on` without `config`, because
     each ConfigMap is hashed into its own pod template — the apply rolls the one that changed
     and `manifests_rolled_by_apply` reports it, so no restart TASK runs and the record must
     expect no `restartedAt`. Expecting one is not a quiet failure: `probe.py health` reads it
     as NOT ROLLED and fails the deploy."""
-    rollouts = _claude_otel_rollouts(
+    rollouts = _observability_rollouts(
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
     )
     assert rollouts["otel-collector"]["kind"] == "daemonset"
     assert not any(r["restart"] for r in rollouts.values()), rollouts
 
 
-def test_claude_otel_a_changed_secret_expects_only_its_two_readers_to_roll():
+def test_observability_a_changed_secret_expects_only_its_two_readers_to_roll():
     """The green half. A Secret's bytes are not hashed into a pod template, so the private
     restart survives for the two workloads that read one, and the record expects exactly
     those two to carry a fresh `restartedAt`."""
-    rollouts = _claude_otel_rollouts(
+    rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
@@ -154,20 +154,20 @@ def test_claude_otel_a_changed_secret_expects_only_its_two_readers_to_roll():
     assert {n for n, r in rollouts.items() if r["restart"]} == {"prometheus", "grafana"}
 
 
-def test_claude_otel_an_unchanged_render_expects_nothing_to_roll():
+def test_observability_an_unchanged_render_expects_nothing_to_roll():
     """An idempotent re-run names the six with `restart: false`."""
-    rollouts = _claude_otel_rollouts(manifests_render={"changed": False})
+    rollouts = _observability_rollouts(manifests_render={"changed": False})
     assert rollouts["grafana"]["restart"] is False
     assert not any(r["restart"] for r in rollouts.values()), rollouts
 
 
-def test_claude_otel_a_created_workload_is_not_expected_to_roll():
+def test_observability_a_created_workload_is_not_expected_to_roll():
     """The private loop's guard is `.apps/<name> created`, kind-agnostic; the record's is per
     kind, so the prefix has to resolve or the record would expect a restart of a workload the
     loop skipped. Driven by a secret change, because that is the only signal that still reaches
     this role's restart task — `restart_on: []` decides the other five before the `created`
     clause is consulted, which is why the DaemonSet no longer exercises this branch."""
-    rollouts = _claude_otel_rollouts(
+    rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
         manifests_apply={"stdout": "deployment.apps/grafana created"},
@@ -176,24 +176,26 @@ def test_claude_otel_a_created_workload_is_not_expected_to_roll():
     assert rollouts["prometheus"]["restart"] is True
 
 
-def test_claude_otel_declares_the_same_workloads_its_private_restart_rolls():
+def test_observability_declares_the_same_workloads_its_private_restart_rolls():
     """A seventh workload added to the restart loop alone would re-open the gap with the pair
     above still green. Since #2858 the loop and the declaration read ONE variable, so they
     cannot drift — assert that rather than comparing two literals, which would pass vacuously
     once one of them stopped being a literal."""
     assert (
-        _claude_otel_private_restart()["loop"]
-        == "{{ claude_otel_stabilise_workloads }}"
+        _observability_private_restart()["loop"]
+        == "{{ observability_stabilise_workloads }}"
     )
-    declared = _pairs(claude_otel_self_rollouts())
+    declared = _pairs(observability_self_rollouts())
     assert declared == _pairs(
-        load_yaml(CLAUDE_OTEL / "defaults/main.yml")["claude_otel_stabilise_workloads"]
+        load_yaml(OBSERVABILITY / "defaults/main.yml")[
+            "observability_stabilise_workloads"
+        ]
     )
     assert ("deploy", "grafana") in declared
 
 
-def test_claude_otel_private_restart_reads_the_same_facts_as_the_record():
-    when = " ".join(_claude_otel_private_restart()["when"])
+def test_observability_private_restart_reads_the_same_facts_as_the_record():
+    when = " ".join(_observability_private_restart()["when"])
     for ingredient in (
         "manifests_secret_render is changed",
         "manifests_rolled_by_apply.get(",
@@ -213,22 +215,22 @@ def test_claude_otel_private_restart_reads_the_same_facts_as_the_record():
     )
 
 
-def test_claude_otel_declares_the_namespace_the_fingerprints_must_read():
+def test_observability_declares_the_namespace_the_fingerprints_must_read():
     """Its six workloads live outside k8s_namespace, which the fingerprints default to. A
     declaration without the namespace passes every other test here and double-rolls in the
     play: both reads fail, every entry reads "not rolled", the private restart fires."""
-    declared = claude_otel_self_rollouts()
+    declared = observability_self_rollouts()
     assert declared, "the declaration rendered empty"
     assert {e["namespace"] for e in declared} == {OBSERVABILITY_NAMESPACE}, declared
     assert (
         OBSERVABILITY_NAMESPACE
         != load_yaml(ANSIBLE / "inventory/group_vars/all.yml")["k8s_namespace"]
     ), "the trap this test guards no longer exists"
-    private = _claude_otel_private_restart()["ansible.builtin.command"]["cmd"]
+    private = _observability_private_restart()["ansible.builtin.command"]["cmd"]
     assert "-n {{ k8s_observability_namespace }}" in private, private
 
 
-def test_claude_otel_skips_its_private_restart_of_a_workload_the_apply_rolled():
+def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled():
     """The accept/reject pair for #1994, rendered through the private restart's own `when`:
     the template moved (an image bump) skips the restart; a ConfigMap-only change, where the
     template held, still fires it."""
@@ -236,7 +238,7 @@ def test_claude_otel_skips_its_private_restart_of_a_workload_the_apply_rolled():
     # escape that Ansible's templar accepts and plain Jinja rejects, and the ingredient test
     # above already holds the clause list.
     (clause,) = [
-        c for c in _claude_otel_private_restart()["when"] if "rolled_by_apply" in c
+        c for c in _observability_private_restart()["when"] if "rolled_by_apply" in c
     ]
     item = {"kind": "deploy", "name": "grafana"}
     rolled = dict(item=item, manifests_rolled_by_apply={"grafana": True})
@@ -246,7 +248,7 @@ def test_claude_otel_skips_its_private_restart_of_a_workload_the_apply_rolled():
     assert render_expr("{{ " + clause + " }}", **held)
     assert render_expr("{{ " + clause + " }}", **unseen)
     # And the record agrees, so `probe.py health` expects no `restartedAt` of the skip.
-    rollouts = _claude_otel_rollouts(
+    rollouts = _observability_rollouts(
         manifests_render={"changed": False},
         manifests_secret_render={"changed": True},
         manifests_apply={"stdout": "deployment.apps/grafana configured"},
@@ -400,7 +402,7 @@ def test_the_private_restarts_run_after_the_record_is_written():
     """The gate compares `applied_at` against `restartedAt`, so the include_role that writes
     the record must precede the private restart in each role."""
     for role_dir, restart_name in (
-        (CLAUDE_OTEL, "Restart the telemetry workloads whose secret changed"),
+        (OBSERVABILITY, "Restart the telemetry workloads whose secret changed"),
         (PIHOLE, "Roll the Pi-hole instances one at a time"),
     ):
         names = [

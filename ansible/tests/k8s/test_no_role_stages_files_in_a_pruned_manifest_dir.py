@@ -21,7 +21,7 @@ invariants, each with the input it must accept, the input it must reject, and a 
 so a rename cannot empty it and leave an assertion passing on nothing:
 
 1. **No task stages a file into a directory some role's `manifests_service` names**, unless
-   that role lists the filename. `state: absent` tasks are exempt: claude-otel deliberately
+   that role lists the filename. `state: absent` tasks are exempt: observability deliberately
    removes copies it left behind in its own directory.
 2. **No `manifests_service` claims a reserved sibling name** — a literal one already staged in
    the tree, or one matching the parametric shapes (`<x>-claims`, `<x>-netpol`, `<x>-probe`,
@@ -246,7 +246,7 @@ def test_a_listed_manifest_in_its_own_directory_is_clean(tmp_path):
 
 
 def test_a_removal_task_in_the_pruned_directory_is_clean(tmp_path):
-    """claude-otel's shape: an explicit cleanup of copies it left behind is not a staging."""
+    """observability's shape: an explicit cleanup of copies it left behind is not a staging."""
     text = """---
 - name: Deploy widget to the cluster
   ansible.builtin.include_role:

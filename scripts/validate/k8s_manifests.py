@@ -238,7 +238,7 @@ def main() -> int:
     claim_env = make_ansible_env([SHARED_TPL])
     for role in roles:
         # Not every .j2 in a k8s role's templates/ is a manifest — a role may also ship a
-        # helper script (claude-otel's telemetry-health.sh.j2) or a Dockerfile for
+        # helper script (observability's telemetry-health.sh.j2) or a Dockerfile for
         # image-builder (homelab-mcp). Shell is rendered and linted by
         # validate/shell_templates.py; a Dockerfile is consumed by buildctl. Parsing
         # either here reports a comment line as malformed YAML.

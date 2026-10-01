@@ -15,7 +15,7 @@ workload this apply CREATED is not expected to restart, matching the restart tas
 guard.
 
 The two roles that opt out of the shared restart and roll their own workloads through
-private tasks (claude-otel's loop and pihole's roll_one.yml) are pinned in
+private tasks (observability's loop and pihole's roll_one.yml) are pinned in
 `test_self_rollouts_follow_the_apply.py`, over the same harness (`_release_expectation.py`).
 
 WHAT THE HARNESS CANNOT REACH. ansible-core 2.21's `default` filter recognises only its own
@@ -103,7 +103,7 @@ def test_the_template_fingerprints_read_the_template_not_the_generation():
         assert "sha256sum" in cmd, "the register must carry a hash, never the template"
         assert task["loop"] == "{{ manifests_fingerprint_targets }}"
         assert "-n {{ item.namespace | default(k8s_namespace) }}" in cmd, (
-            "a self rollout outside k8s_namespace (claude-otel) reads nothing otherwise"
+            "a self rollout outside k8s_namespace (observability) reads nothing otherwise"
         )
         assert task["failed_when"] is False, (
             "a workload the apply creates has no before side"
@@ -270,7 +270,7 @@ def test_roles_that_roll_nothing_still_exist_in_the_tree():
     """Non-vacuity for the case above: the shape it protects is live, by name.
 
     cloudflare-ddns's `manifests_rollout: ''` is protected by the record's silence (no
-    entry, no expectation). claude-otel and pihole ALSO restart their own workloads through
+    entry, no expectation). observability and pihole ALSO restart their own workloads through
     private `rollout restart` tasks, and declare them as `manifests_self_rollouts` so the
     record holds the expectation for them -- the tests below this one."""
     opted_out = {
@@ -278,4 +278,4 @@ def test_roles_that_roll_nothing_still_exist_in_the_tree():
         for p in (ANSIBLE / "roles/k8s").glob("*/tasks/main.yml")
         if re.search(r"manifests_rollout:\s*(''|\"\")", p.read_text())
     }
-    assert {"cloudflare-ddns", "pihole", "claude-otel"} <= opted_out, opted_out
+    assert {"cloudflare-ddns", "pihole", "observability"} <= opted_out, opted_out

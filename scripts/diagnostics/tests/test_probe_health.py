@@ -350,7 +350,7 @@ def test_the_import_census_sees_a_module_that_reaches_for_a_sibling():
 # 2026-09-01: for eleven roles the tag is not the name of the thing to health-check, and for
 # four of them it names no workload at all — so `probe.py health <tag>` reported "no Deployment
 # or DaemonSet" and `deploy_detach_notify.py` skipped it. PR #685 landed VERDICT: settled with
-# claude-otel's gate never having run.
+# observability's gate never having run.
 #
 
 
@@ -365,7 +365,7 @@ def _target(namespace, kind, name, workload, pods_doc=None):
 
 def test_role_health_all_present_is_clean():
     text, code = health.format_role_health(
-        "claude-otel",
+        "observability",
         [
             _target("observability", "Deployment", "grafana", _deploy(), pods()),
             _target("observability", "Deployment", "loki", _deploy(), pods()),
@@ -384,7 +384,7 @@ def test_role_health_absent_workload_is_flagged():
     it must NOT read as a skip.
     """
     text, code = health.format_role_health(
-        "claude-otel",
+        "observability",
         [
             _target("observability", "Deployment", "grafana", None),
             _target("observability", "Deployment", "loki", _deploy(), pods()),
@@ -394,7 +394,7 @@ def test_role_health_absent_workload_is_flagged():
     assert code == 1
     assert "MISSING" in text
     assert text.splitlines()[0].startswith(
-        "claude-otel: 1 of 2 workloads FAILED the gate"
+        "observability: 1 of 2 workloads FAILED the gate"
     )
 
 

@@ -49,7 +49,7 @@ def cadvisor_sel(*matchers: str) -> str:
     """A `{...}` block for cAdvisor series, which carry NO origin label — so no origin pin.
 
     DECIDED: cAdvisor metrics must NOT go through origin_sel(). `origin` is applied by exactly
-    one relabel rule, on the `node` job (claude-otel/templates/prometheus.yaml.j2:202); the
+    one relabel rule, on the `node` job (observability/templates/prometheus.yaml.j2:202); the
     kubernetes-cadvisor job has none. PromQL does not match an absent label, so an origin-pinned
     cAdvisor query selects the empty vector and every check built on it reports green forever.
 

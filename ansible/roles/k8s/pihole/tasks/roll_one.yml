@@ -9,7 +9,7 @@
 # instead — it has to, because it is the task that would do the creating.
 - name: Roll instance if this run did not just create it {{ pihole_instance }}
   tags: [deploy]
-  # `| default('')` — see the same guard in k8s/claude-otel for why an unreadable register
+  # `| default('')` — see the same guard in k8s/observability for why an unreadable register
   # must mean "restart" rather than raise.
   when: not ((manifests_apply.stdout | default('')) is search('deployment.apps/' ~ pihole_instance ~ ' created'))
   block:

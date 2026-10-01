@@ -496,7 +496,7 @@ def host_config(
         ),
         # PSI `full` stall rate window. The writer's timer samples cgroupfs every 30s, but the
         # BINDING sample interval is Prometheus's `job: node` scrape_interval of 1m
-        # (claude-otel/templates/prometheus.yaml.j2) — the extra timer tick only guarantees the
+        # (observability/templates/prometheus.yaml.j2) — the extra timer tick only guarantees the
         # textfile is fresh at every scrape. 5m is therefore 5 samples: enough that one missed
         # scrape cannot empty the window, and short enough that the arm sees a stall inside the
         # ten minutes the 2026-09-05 incident took to reach anything downstream.

@@ -95,7 +95,7 @@ def _build_parser():
         "--pi",
         action="store_true",
         help="scope to daniel-pi's own scrape jobs (derived from the k8s_pi_client_ip static "
-        "targets in claude-otel's prometheus.yaml.j2), formatted rather than raw JSON, and "
+        "targets in observability's prometheus.yaml.j2), formatted rather than raw JSON, and "
         "exits 1 if a declared job has gone missing, not just down",
     )
     sub.add_parser("monitors", help="Kuma down-monitors rollup (exit 0 = all up)")

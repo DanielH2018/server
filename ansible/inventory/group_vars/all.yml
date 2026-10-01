@@ -222,7 +222,7 @@ jellyfin_k8s_lan_ip: 10.0.0.241
 # collide, and the guard is the one that is right.
 #
 # Three renders follow this value, and all three must move together — the server Deployment,
-# the terraria-stats Deployment, and claude-otel's `terraria-stats` Prometheus scrape job,
+# the terraria-stats Deployment, and observability's `terraria-stats` Prometheus scrape job,
 # which is gated on it because a job whose target has no pod pages the scrape-target check.
 #
 # To bring it back, see the restore checklist on issue #822. Setting this to 1 is the first of
@@ -441,7 +441,7 @@ k3s_audit_log_dir: /var/lib/rancher/k3s/server/logs
 k3s_audit_log_path: "{{ k3s_audit_log_dir }}/audit.log"
 # Embedded etcd's metrics endpoint. Here, not in roles/setup/k3s/defaults, for the same reason
 # as the audit log above: TWO roles read it. setup/k3s puts --etcd-expose-metrics in the server
-# args, and claude-otel's prometheus.yaml.j2 gates its `etcd` scrape job on the same value, so
+# args, and observability's prometheus.yaml.j2 gates its `etcd` scrape job on the same value, so
 # the port and its only consumer cannot drift apart.
 #
 # k3s serves etcd metrics on 2381 either way. The flag moves the bind from 127.0.0.1 to
@@ -504,7 +504,7 @@ k8s_dry_run: false
 # and would still have built and PUSHED an image under a dry run.
 k8s_no_mutate: "{{ ansible_check_mode or (k8s_dry_run | bool) }}"
 # Telemetry lives apart from the service workloads. Global rather than a role default
-# because TWO roles need it: claude-otel puts its workloads here, and the traefik role must
+# because TWO roles need it: observability puts its workloads here, and the traefik role must
 # list it under the CRD provider's watched namespaces — Traefik ignores IngressRoutes in
 # namespaces it is not told to watch, silently, with the route reporting no error at all.
 k8s_observability_namespace: observability
@@ -584,7 +584,7 @@ k8s_node_dns_metrics_port: 9253
 # Here rather than in the registry role's defaults because roles/setup/k3s also needs them,
 # to write the containerd trust config — a role cannot read another role's defaults.
 k8s_registry_port: 5000
-# Loopback for the same reason claude-otel's OTLP receiver is: this registry has no auth and
+# Loopback for the same reason observability's OTLP receiver is: this registry has no auth and
 # no TLS, so it must not be reachable from the LAN.
 k8s_registry_host_ip: 127.0.0.1
 # Image references in manifests are `{{ k8s_registry_pull_host }}/<name>:<tag>`. The mirror

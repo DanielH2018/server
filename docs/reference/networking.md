@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/networking.py
-generated_at: 2026-09-29 01:30 UTC
-generated_sha: fea456d31
+generated_at: 2026-10-01 00:11 UTC
+generated_sha: 7f5047711
 ---
 
 !!! warning "Generated file — do not edit"
@@ -29,7 +29,6 @@ generated_sha: fea456d31
 | authelia | daniel-box | <span class="fqdn" data-host="auth">auth.&lt;domain&gt;</span> · <span class="fqdn" data-host="auth.local">auth.local.&lt;domain&gt;</span> | LAN + public | `rate-limit` |
 | bazarr | daniel-box | <span class="fqdn" data-host="bazarr">bazarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | bento-pdf | daniel-box | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
-| claude-otel | daniel-box | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | code-server | daniel-box | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | crowdsec | daniel-box | <span class="fqdn" data-host="crowdsec-lapi.local">crowdsec-lapi.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit` |
 | deploy-ui | daniel-box | <span class="fqdn" data-host="deploy.local">deploy.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
@@ -47,6 +46,7 @@ generated_sha: fea456d31
 | longhorn-ui | daniel-box | <span class="fqdn" data-host="longhorn.local">longhorn.local.&lt;domain&gt;</span> (LAN only) | LAN only | `rate-limit`, `authelia` |
 | n8n | daniel-box | <span class="fqdn" data-host="n8n">n8n.&lt;domain&gt;</span> · <span class="fqdn" data-host="n8n.local">n8n.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | navidrome | daniel-box | <span class="fqdn" data-host="navidrome">navidrome.&lt;domain&gt;</span> · <span class="fqdn" data-host="navidrome.local">navidrome.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
+| observability | daniel-box | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | peanut | daniel-box | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | pihole | daniel-box | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |
 | prowlarr | daniel-box | <span class="fqdn" data-host="prowlarr">prowlarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="prowlarr.local">prowlarr.local.&lt;domain&gt;</span> | LAN + public | `rate-limit`, `authelia` |

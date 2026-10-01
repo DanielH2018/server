@@ -30,7 +30,7 @@ marker is positional, not a property of any one message:
 
 Every message across the four modules is written to that rule, and the `test_probe_health*.py`
 suites assert each one lands on the intended side of it. PR #685 is the reason: `land.sh`
-printed `VERDICT: settled` for a claude-otel deploy whose health gate never ran.
+printed `VERDICT: settled` for a observability deploy whose health gate never ran.
 """
 
 import json
@@ -176,7 +176,7 @@ def role_workload_targets(role, default_namespace):
     probing the tag name itself, which is what lets `--docker` pick up a Pi service.
 
     A deploy tag is a role name, NOT a workload name, and for four roles today it names no
-    workload at all: claude-otel deploys grafana/loki/prometheus/tempo/otel-collector/
+    workload at all: observability deploys grafana/loki/prometheus/tempo/otel-collector/
     kube-state-metrics, scrutiny deploys scrutiny-{web,influxdb,collector}, cloudflare-ddns
     deploys cloudflare-ddns-{direct,proxied}, and dri-device-plugin's DaemonSet lives in
     kube-system rather than the default namespace. All four made `probe.py health <tag>` report

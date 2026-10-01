@@ -18,7 +18,7 @@ import json
 import export_grafana_dashboards as eg
 from _helpers import ANSIBLE
 
-DASHBOARDS_DIR = ANSIBLE / "roles" / "k8s" / "claude-otel" / "files" / "dashboards"
+DASHBOARDS_DIR = ANSIBLE / "roles" / "k8s" / "observability" / "files" / "dashboards"
 
 # Named so a moved directory fails by name, not by an empty glob passing.
 KNOWN_BOARDS = frozenset({"Infrastructure/node-exporter-full.json", "Logs/logs.json"})

@@ -292,7 +292,7 @@ def test_the_limitrange_values_live_in_group_vars_only() -> None:
     all_vars = _all_vars()
     assert set(all_vars["k8s_default_limitrange"]) == {"default", "defaultRequest"}
 
-    # Two roles read it — deploy.yml for homelab, claude-otel for observability — so a role
+    # Two roles read it — deploy.yml for homelab, observability for observability — so a role
     # default would be invisible to one of them and silently win for the other.
     duplicated = [
         str(path.relative_to(_REPO))

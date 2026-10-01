@@ -240,10 +240,10 @@ def test_prometheus_scrapes_the_sidecars_by_port_not_by_app_label():
     not error, it just yields a target that returns HTML and a job that is permanently down.
     """
     prom = (
-        REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
+        REPO / "ansible/roles/k8s/observability/templates/prometheus.yaml.j2"
     ).read_text()
     job = prom.split("- job_name: exportarr", 1)
-    assert len(job) == 2, "claude-otel declares no `exportarr` scrape job"
+    assert len(job) == 2, "observability declares no `exportarr` scrape job"
     block = job[1].split("- job_name:", 1)[0]
 
     assert str(METRICS_PORT) in block, (

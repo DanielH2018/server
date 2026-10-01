@@ -10,7 +10,7 @@ command result — it raises, mid-loop:
 
     Error while evaluating conditional: object of type 'dict' has no attribute 'stdout'
 
-Observed on a real `deploy.yml --tags claude-otel` run on 2026-08-22, four times in one play.
+Observed on a real `deploy.yml --tags observability` run on 2026-08-22, four times in one play.
 Ansible leaves a register set on a task that was skipped, and a skipped task's register is a
 plain dict carrying `skipped: true` and no `stdout` — so any path that reaches a consumer
 without the apply having produced output turns a deploy red at a task that is not the problem.

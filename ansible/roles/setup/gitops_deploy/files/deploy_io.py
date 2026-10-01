@@ -299,7 +299,7 @@ def deploy_k8s(
 
     The wait and the soak moved out of roles/k8s/manifests in 5eea64e6, when rollouts were
     batched and the stabilisation window deferred to end-of-play; the sequence above is
-    unchanged. assert_stable.yml is gone entirely as of 2026-08-22: claude-otel was its last
+    unchanged. assert_stable.yml is gone entirely as of 2026-08-22: observability was its last
     caller, and it now hands its six telemetry workloads to the same end-of-play gate as
     everything else rather than running a second 60s window of its own.
 

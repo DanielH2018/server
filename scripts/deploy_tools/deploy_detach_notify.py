@@ -55,7 +55,7 @@ PROBE_TIMEOUT_S = 30
 # THESE MUST STAY UNAMBIGUOUS. "not found (not created" used to be on this list, and probe.py
 # emitted it for BOTH "this tag names no container" and "the container that should exist is
 # absent" -- so a failed deploy reported `skipped` and the verdict stayed `settled`. That is
-# how PR #685's claude-otel health gate never ran while land.sh printed VERDICT: settled.
+# how PR #685's observability health gate never ran while land.sh printed VERDICT: settled.
 # probe.py now says which of the two happened, and its docstring records the rule: a name
 # GUESSED from the tag may skip when absent, a name RESOLVED from the role's own manifests may
 # not. `test_deploy_detach_notify.py` asserts every message probe.py emits for an absent

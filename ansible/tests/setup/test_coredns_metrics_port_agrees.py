@@ -56,7 +56,7 @@ def test_mismatched_ports_are_flagged() -> None:
 
 def test_the_scrape_job_reads_the_group_var_rather_than_a_literal() -> None:
     """A literal port in the template would pass the comparison above while ignoring it."""
-    template = (_ROLES / "k8s/claude-otel/templates/prometheus.yaml.j2").read_text()
+    template = (_ROLES / "k8s/observability/templates/prometheus.yaml.j2").read_text()
     assert "{{ k8s_node_client_ip }}:{{ k8s_node_dns_metrics_port }}" in template, (
         "the coredns-host job no longer interpolates both group vars; this guard would "
         "compare two values the rendered config does not use"

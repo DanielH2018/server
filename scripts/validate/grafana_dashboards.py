@@ -22,7 +22,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 
 from lib.repo_paths import K8S_ROLES, REPO
 
-GRAFANA_ROLE = K8S_ROLES / "claude-otel"
+GRAFANA_ROLE = K8S_ROLES / "observability"
 DASHBOARDS_DIR = GRAFANA_ROLE / "files/dashboards"
 DATASOURCES_TEMPLATE = GRAFANA_ROLE / "templates/grafana.yaml.j2"
 
@@ -36,7 +36,7 @@ def provisioned_datasource_ids(
     """uids AND names of every provisioned datasource.
 
     Since the Docker grafana role's deploy machinery retired (2026-08-14) the live declaration is
-    the cluster grafana's provisioning ConfigMap (claude-otel grafana.yaml.j2). That file carries
+    the cluster grafana's provisioning ConfigMap (observability grafana.yaml.j2). That file carries
     Jinja, so the datasource entries are extracted by line rather than yaml-parsed whole; including
     names as well as uids means a legacy name-form ref ("datasource": "Prometheus") also resolves —
     a valid Grafana reference, not a bug.
@@ -115,7 +115,7 @@ def dashboard_uids(dashboards_dir: Path = DASHBOARDS_DIR) -> dict[str, list[str]
     found the boards it is supposed to check. Every rule here finds its subject by glob, so a
     renamed or moved dashboards directory yields an empty census, no errors, and a guard that
     passes over zero boards. The dashboards have moved before: five folders came into
-    claude-otel from the retired Docker grafana role on 2026-08-14.
+    observability from the retired Docker grafana role on 2026-08-14.
 
     An unparseable file is skipped here — `validate` reports the parse failure itself.
     """

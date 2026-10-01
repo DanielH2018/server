@@ -2,7 +2,7 @@
 # gpu-exporter: DRM sysfs turned into `homelab_gpu_*` series, one pod per node (#1446). Until
 # this role existed the render node the dri-device-plugin advertises was unmeasured, so a slow
 # jellyfin or tdarr transcode could not be told from a contended one. The scrape job lives in
-# claude-otel's prometheus.yaml.j2 (job_name: gpu).
+# observability's prometheus.yaml.j2 (job_name: gpu).
 
 - name: Deploy gpu-exporter to the cluster
   ansible.builtin.include_role:

@@ -28,7 +28,7 @@ The derived half recognises three shapes of "inspects a pod", all of them via `k
   2. `get pod -l <anylabel>=<value>` — pihole, which selects an instance by the pod-only
                                        `instance` label because both its Deployments share
                                        `app: pihole` in an immutable selector
-  3. `exec`/`logs <target>`          — crowdsec (`exec deploy/crowdsec`) and claude-otel
+  3. `exec`/`logs <target>`          — crowdsec (`exec deploy/crowdsec`) and observability
                                        (`exec deploy/grafana`), plus every `exec {{ reg.stdout }}`
                                        whose register is traced back to the lookup that filled it
 
@@ -37,7 +37,7 @@ The register trace follows the bare `{{ reg.stdout }}` form only. A filter or an
 
 WORKLOAD IDENTITY IS NOT THE DIRECTORY NAME. The first version of this guard matched
 `app={role}` and then looked for the role's directory name inside a `rollout status` command.
-That is true of exactly the four roles it was written for. `claude-otel` renders the workload
+That is true of exactly the four roles it was written for. `observability` renders the workload
 called `grafana`; `pihole` renders two, `pihole` and `pihole-2`, from one template and picks
 between them at runtime. So both the inspection and the gate resolve to a workload NAME taken
 from the role's RENDERED manifests (`_k8s_render.rendered_docs()`), and a gate satisfies an
@@ -179,7 +179,7 @@ def test_the_gate_is_tagged_with_what_it_protects() -> None:
 # derivation and the hand-written set agree on, so the two halves are checked against each
 # other on every run.
 _KNOWN_SELF_POD_ROLES = {
-    "claude-otel",
+    "observability",
     "crowdsec",
     "janitorr",
     "jellyfin",
@@ -352,7 +352,7 @@ def test_no_role_gates_with_a_readiness_wait_on_its_own_pods() -> None:
 # below it. A reader meeting either outlier could not tell a considered budget from a typo
 # without going and looking, and for dri-device-plugin looking does not answer it.
 _GATE_BUDGETS = {
-    "claude-otel": (
+    "observability": (
         300,
         "default; one looped gate covering all six telemetry workloads",
     ),

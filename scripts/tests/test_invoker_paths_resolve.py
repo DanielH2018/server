@@ -89,7 +89,7 @@ def workflow_run_steps() -> list[tuple[str, str]]:
 def cron_jobs() -> list[tuple[str, str]]:
     """Every `scripts/...` token in an `ansible.builtin.cron` task's `job:`, tree-wide.
 
-    Not scoped to `initial_setup` -- traefik, claude-otel, qbittorrent and eight other
+    Not scoped to `initial_setup` -- traefik, observability, qbittorrent and eight other
     roles each carry their own cron tasks (`lib/invocation_sites.py` finds all of them).
     """
     return [

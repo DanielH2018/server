@@ -94,9 +94,9 @@ def _traefik_credential_findings(doc: dict) -> list[str]:
 _REQUIRED_TRAEFIK_MIDDLEWARES = frozenset(
     {
         "authelia/authelia",
-        "claude-otel/authelia",
-        "claude-otel/rate-limit",
-        "claude-otel/rate-limit-proxied",
+        "observability/authelia",
+        "observability/rate-limit",
+        "observability/rate-limit-proxied",
         "karakeep/csp-karakeep",
         "longhorn-ui/authelia",
         "longhorn-ui/rate-limit",

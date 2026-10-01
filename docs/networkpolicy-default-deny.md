@@ -287,10 +287,10 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   own `metadata.namespace`, so `observability` needed its own ingress baseline
   (`netpol-baseline-observability`, plus two per-workload policies) rather than more labels on the
   existing `homelab` one. It is one role's worth of templates (`netpol-baseline`) but fences six
-  workloads once it enforces — `claude-otel` renders `prometheus`, `loki`, `tempo`, the otel-collector,
+  workloads once it enforces — `observability` renders `prometheus`, `loki`, `tempo`, the otel-collector,
   `grafana` and kube-state-metrics as six separate pod-producing documents from one role. Counting
   roles, the fenced total becomes 17 once this slice enforces (6 slice-1 + 10 slice-2 +
-  `claude-otel`); counting workloads it is considerably higher — the two numbers answer different
+  `observability`); counting workloads it is considerably higher — the two numbers answer different
   questions and this slice is the first place they diverge by more than one.
 - **There are two Loki instances, and a name grep cannot tell them apart.** `homelab-mcp` (in `homelab`) is
   the only in-cluster caller of *this* Loki, reaching it via `CLAUDE_LOKI_URL`. `terraria-stats`,
@@ -300,7 +300,7 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   template happens to use.
 - **Neither web route is unauthenticated, so the probe has no HTTP liveness leg.** `grafana` is
   `use_authelia: true`. The `prometheus` route is **ClientIP LAN-gated plus rate-limit, not
-  Authelia** (`claude-otel/templates/prometheus-ingressroute.yaml.j2`) — worth stating precisely
+  Authelia** (`observability/templates/prometheus-ingressroute.yaml.j2`) — worth stating precisely
   because an earlier draft of this section called it Authelia-gated, and the two middlewares fail
   identically to an unauthenticated-route probe (a 401 or a 302, see "The liveness target must be
   an unauthenticated route" above) for different reasons. With no unauthenticated target available,
@@ -314,7 +314,7 @@ it first means debugging slices 2–4 with the monitoring possibly impaired.
   that list today, and editing it for observability's benefit would put all 16 at risk of a
   regression nobody would trace back to this namespace.
 - **The intra-namespace mesh is a bare `podSelector: {}` peer.** The real justification is not "one
-  role, six workloads" but that `observability` is **sole-tenant today** — `claude-otel` is the only
+  role, six workloads" but that `observability` is **sole-tenant today** — `observability` is the only
   role that renders into it. That is the invariant the design leans on, and it is exactly what a
   second role landing in the namespace later would silently invalidate: it would get free ingress to
   every already-fenced pod there with no policy change of its own.

@@ -29,7 +29,7 @@ TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
 HA_TOKEN = os.environ.get("HOMELAB_HA_TOKEN", "")
 PROMETHEUS = os.environ.get("PROMETHEUS_URL", "http://prometheus:9090")
 LOKI = os.environ.get("LOKI_URL", "http://loki:3100")
-# The claude-otel Loki (verbatim prompt/response content — KL1). Only the metadata
+# The observability Loki (verbatim prompt/response content — KL1). Only the metadata
 # whitelist in k8s_reads.claude_event_rows ever leaves through this server.
 CLAUDE_LOKI = os.environ.get("CLAUDE_LOKI_URL", "")
 # In-cluster API access with the pod's own read-only ServiceAccount (rbac.yaml).
@@ -364,7 +364,7 @@ def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
     The full set is tool decisions, api_request / api_error / api_refusal,
     mcp_server_connection, and permission-mode changes.
 
-    Metadata ONLY — the source (the claude-otel Loki) stores prompts, responses and tool output
+    Metadata ONLY — the source (the observability Loki) stores prompts, responses and tool output
     verbatim, and that content must never gain a LAN-reachable path (KL1), so rows are projected
     through k8s_reads.CLAUDE_EVENT_FIELDS and the log body is dropped entirely. query_logs cannot
     reach this store; it reads the homelab Loki.

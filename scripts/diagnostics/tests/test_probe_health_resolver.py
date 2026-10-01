@@ -37,7 +37,7 @@ _ROLES_WITH_NO_WORKLOAD = {
 # resolver must still return at least these names. Extra workloads are fine and need no edit
 # here; a name disappearing is a workload that stopped being gated.
 _MULTI_WORKLOAD_ROLES = {
-    "claude-otel": {
+    "observability": {
         "grafana",
         "kube-state-metrics",
         "loki",
@@ -65,7 +65,7 @@ _MULTI_WORKLOAD_ROLES = {
 # namespace for every name until 2026-09-01, so dri-device-plugin's DaemonSet — the only thing
 # its role deploys — was unreachable and the gate skipped it.
 _NON_DEFAULT_NAMESPACES = {
-    "claude-otel": "observability",
+    "observability": "observability",
     "dri-device-plugin": "kube-system",
 }
 
@@ -95,7 +95,7 @@ def test_resolver_covers_the_whole_k8s_tree():
     while leaving the gate on the guess-the-name path it is replacing."""
     resolved = _resolved()
     assert len(resolved) > 40, resolved.keys()
-    assert "claude-otel" in resolved and "jellyfin" in resolved
+    assert "observability" in resolved and "jellyfin" in resolved
 
 
 def test_roles_with_no_workload_have_not_grown():

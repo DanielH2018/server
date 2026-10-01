@@ -2,7 +2,7 @@
 """The Pi's Alloy HTTP listener is LAN-published, so its surface must stay narrowed.
 
 daniel-pi's Alloy publishes 12345 on the LAN IP because two consumers reach it from off-box:
-claude-otel's `alloy-pi` Prometheus job (a STATIC target, so it cannot use a loopback or a
+observability's `alloy-pi` Prometheus job (a STATIC target, so it cannot use a loopback or a
 bridge address) and monitor-bridge's detached-container arm, which expects `alloy` to report a
 published mapping. Closing the port is therefore not available — issue #1130 was closed by
 narrowing what answers on it instead.

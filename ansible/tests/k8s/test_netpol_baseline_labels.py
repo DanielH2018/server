@@ -83,14 +83,14 @@ BORN_FENCED_ROLES = {
 LABEL = ("netpol-baseline", "enforced")
 
 # Slice 3: the observability namespace. Named per WORKLOAD, not per role — all six render
-# from the single claude-otel role, which is why Task 1 made the guard workload-granular.
+# from the single observability role, which is why Task 1 made the guard workload-granular.
 SLICE_3_WORKLOADS = {
-    ("claude-otel", "grafana"),
-    ("claude-otel", "prometheus"),
-    ("claude-otel", "loki"),
-    ("claude-otel", "tempo"),
-    ("claude-otel", "kube-state-metrics"),
-    ("claude-otel", "otel-collector"),
+    ("observability", "grafana"),
+    ("observability", "prometheus"),
+    ("observability", "loki"),
+    ("observability", "tempo"),
+    ("observability", "kube-state-metrics"),
+    ("observability", "otel-collector"),
 }
 
 SLICE_3_ROLES = {role for role, _name in SLICE_3_WORKLOADS}
@@ -267,7 +267,7 @@ def _labelled_workloads() -> set[tuple[str, str]]:
 def test_every_pod_producing_doc_in_a_fenced_role_is_labelled() -> None:
     """A role is not a unit of fencing.
 
-    claude-otel renders six workloads; five could go unlabelled while the role still looked fenced.
+    observability renders six workloads; five could go unlabelled while the role still looked fenced.
     """
     fenced_roles = (
         SLICE_1_ROLES
@@ -340,13 +340,13 @@ def test_exactly_the_slice_45c_workloads_carry_the_baseline_label() -> None:
 
 
 def test_exactly_the_slice_3_workloads_carry_the_baseline_label() -> None:
-    labelled_claude_otel = {
-        name for (role, name) in _labelled_workloads() if role == "claude-otel"
+    labelled_observability = {
+        name for (role, name) in _labelled_workloads() if role == "observability"
     }
     expected = {name for _, name in SLICE_3_WORKLOADS}
-    assert labelled_claude_otel == expected, (
-        "claude-otel's labelled workloads no longer match SLICE_3_WORKLOADS.\n"
-        f"  labelled: {sorted(labelled_claude_otel)}\n"
+    assert labelled_observability == expected, (
+        "observability's labelled workloads no longer match SLICE_3_WORKLOADS.\n"
+        f"  labelled: {sorted(labelled_observability)}\n"
         f"  expected: {sorted(expected)}"
     )
 

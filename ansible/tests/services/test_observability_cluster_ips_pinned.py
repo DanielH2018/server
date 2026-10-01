@@ -1,4 +1,4 @@
-"""The claude-otel query Services must keep an explicitly pinned ClusterIP.
+"""The observability query Services must keep an explicitly pinned ClusterIP.
 
 Host-side tools quote these addresses as compile-time constants. `otelq` and
 `otel-sweep` (chezmoi, `home/dot_local/bin/`) try the node-local hostPort first
@@ -21,14 +21,14 @@ import pytest
 from lib import yaml_fast
 from _helpers import ALL_VARS, K8S_ROLES
 
-ROLE = K8S_ROLES / "claude-otel"
+ROLE = K8S_ROLES / "observability"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 
 # Service name -> the defaults variable its manifest must interpolate.
 PINNED = {
-    "loki": "claude_otel_loki_cluster_ip",
-    "prometheus": "claude_otel_prometheus_cluster_ip",
-    "tempo": "claude_otel_tempo_cluster_ip",
+    "loki": "observability_loki_cluster_ip",
+    "prometheus": "observability_prometheus_cluster_ip",
+    "tempo": "observability_tempo_cluster_ip",
 }
 
 ALL_VARS_FILE = ALL_VARS
@@ -43,9 +43,9 @@ ALL_VARS_FILE = ALL_VARS
 # this fix false-positives on day one. Adding a sixth pin means adding a line here, which is the
 # point: a new pin that collides with an existing one is exactly what this catches.
 CROSS_ROLE_PINS = {
-    "claude_otel_loki_cluster_ip": DEFAULTS,
-    "claude_otel_prometheus_cluster_ip": DEFAULTS,
-    "claude_otel_tempo_cluster_ip": DEFAULTS,
+    "observability_loki_cluster_ip": DEFAULTS,
+    "observability_prometheus_cluster_ip": DEFAULTS,
+    "observability_tempo_cluster_ip": DEFAULTS,
     "dns_k8s_cluster_ip": ALL_VARS_FILE,
     "k8s_registry_cluster_ip": ALL_VARS_FILE,
 }

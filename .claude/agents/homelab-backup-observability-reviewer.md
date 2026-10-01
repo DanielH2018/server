@@ -25,7 +25,7 @@ operator's time).
   incidents in `docs/b2-transaction-cap-monitoring-gaps.md` were driven by Kopia and Longhorn
   contending for one cap; that contention is gone. `check_b2_reachable` remains.
 - **Monitoring: Uptime-Kuma** (k8s, AutoKuma file-provisioned monitors), the **cluster
-  Grafana/Loki/Prometheus** (`k8s/claude-otel` + `k8s/loki-homelab` roles — the Docker
+  Grafana/Loki/Prometheus** (`k8s/observability` + `k8s/loki-homelab` roles — the Docker
   `grafana` role is now only the dashboards source tree, mounted into the cluster Grafana), and
   a custom **monitor-bridge** (a k8s workload, `roles/k8s/monitor-bridge`) whose
   `files/check.py` runs push-style checks into Kuma (B2 reachability, disk/cert/memory, restarts
@@ -38,7 +38,7 @@ operator's time).
   in the cluster on daniel-box.
 
 ## Tools (read-only)
-- `Read`/`Grep` `roles/k8s/{monitor-bridge,claude-otel,loki-homelab,uptime-kuma,pi-peer-backup}` +
+- `Read`/`Grep` `roles/k8s/{monitor-bridge,observability,loki-homelab,uptime-kuma,pi-peer-backup}` +
   their CLAUDE.md, the Longhorn config in `roles/setup/k3s`, and the role crons/CronJobs
   (`grep -rn cron ansible/roles/k8s/*/tasks ansible/roles/containers/*/tasks`).
 - `uv run python scripts/diagnostics/probe.py targets` / `metric '<promql>'` / `loki-query '<logql>'` /

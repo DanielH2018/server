@@ -104,7 +104,7 @@ def cron_jobs(repo: Path = REPO) -> list[CronJob]:
     """Every present `ansible.builtin.cron` task in the tree, wherever it lives.
 
     Tree-wide by design: cron tasks are not confined to `initial_setup` (traefik,
-    claude-otel, qbittorrent and eight other roles each carry their own), so a reader
+    observability, qbittorrent and eight other roles each carry their own), so a reader
     scoped to one file misses the rest.
     """
     jobs = []

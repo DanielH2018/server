@@ -341,6 +341,10 @@ stringData:
   loki-read-route-daniel-server.json: |
     {"type": "push", "name": "Loki Read Route (daniel-server)", "description": "The hourly kuma-check-loki-read-route timer on daniel-server runs probe.py loki-labels through the loki-homelab IngressRoute and judges the body, not the exit code; it reruns every 15 min while red. DOWN means the route answered 404 or an error from this host, usually the ClientIP guard rejecting its source address. Run systemctl status kuma-check-loki-read-route on daniel-server; check traefik pod placement.", "interval": 7200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ loki_route_witness_daniel_server_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
+  # DECIDED: this id stays `claude-otel-health` after the k8s/claude-otel role was renamed
+  # `observability` on 2026-10-01 (#2911) — under ON_DELETE=delete a changed id deletes the
+  # monitor and its history and creates a new one. The full reasoning is at the `DECIDED:`
+  # marker on the heartbeat task in roles/k8s/observability/tasks/main.yml.
   claude-otel-health.json: |
     {"type": "push", "name": "k3s Telemetry Stack", "description": "A daniel-box cron runs every 10 min: loki, prometheus, tempo and grafana Deployments ready, the otel-collector DaemonSet ready, the OTLP hostPort reachable, and no collector send failures in 15 min. DOWN lists which failed. Check the named workload with kubectl -n homelab, then the collector export metrics.", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ claude_otel_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   # 600s against a */5 cron (#2516): the deadline must exceed the period plus the work, and a run

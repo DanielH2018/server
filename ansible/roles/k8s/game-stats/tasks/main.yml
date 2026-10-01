@@ -2,7 +2,7 @@
 # game-stats: the playtime exporters for the two hand-run game servers, terraria-stats and
 # valheim-stats. Each reads its game pod's console lines from loki-homelab, folds them into
 # all-time per-player stats (SQLite on a Longhorn PVC) and serves Prometheus metrics on :9420.
-# The scrape jobs live in claude-otel's prometheus.yaml.j2 (job_name: terraria-stats and
+# The scrape jobs live in observability's prometheus.yaml.j2 (job_name: terraria-stats and
 # valheim-stats).
 #
 # One role since #2813, where it had been three: one per game plus game-stats-lib for the
