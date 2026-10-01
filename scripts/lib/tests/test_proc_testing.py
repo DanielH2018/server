@@ -18,7 +18,6 @@ from lib.proc_testing import (
     fake_bin,
     path_with,
     run,
-    run_out,
     write_exec,
 )
 
@@ -26,19 +25,19 @@ from lib.proc_testing import (
 def test_a_written_script_is_executable_and_runs(tmp_path):
     script = write_exec(tmp_path / "greet", "#!/bin/sh\necho hi\n")
     assert os.access(script, os.X_OK)
-    assert run_out([str(script)]) == "hi"
+    assert run([str(script)]).stdout.strip() == "hi"
 
 
 def test_a_body_without_a_shebang_still_execs(tmp_path):
     """The bug this prevents: a stub written without `#!` fails as `Exec format error`."""
     script = write_exec(tmp_path / "bare", "echo hi\n")
     assert script.read_text().startswith("#!")
-    assert run_out([str(script)]) == "hi"
+    assert run([str(script)]).stdout.strip() == "hi"
 
 
 def test_a_parent_directory_is_created(tmp_path):
     script = write_exec(tmp_path / "deep" / "nest" / "s", "echo ok\n")
-    assert run_out([str(script)]) == "ok"
+    assert run([str(script)]).stdout.strip() == "ok"
 
 
 def test_fake_bin_writes_one_stub_per_keyword(tmp_path):
@@ -57,13 +56,13 @@ def test_fake_bin_reuses_a_directory_so_two_calls_build_one_up(tmp_path):
 def test_stub_bin_shadows_the_real_binary(tmp_path):
     """The property the whole module exists for: the stub is found before `/usr/bin`."""
     stubs = fake_bin(tmp_path / "bin", env="echo shadowed\n")
-    assert run_out(["env"], stub_bin=stubs) == "shadowed"
+    assert run(["env"], stub_bin=stubs).stdout.strip() == "shadowed"
 
 
 def test_the_real_path_survives_behind_the_stub_directory(tmp_path):
     """A prefix, not a replacement — the child still finds `sh` and everything else."""
     stubs = fake_bin(tmp_path / "bin", nothing_real="exit 0\n")
-    found = run_out(["sh", "-c", "command -v true"], stub_bin=stubs)
+    found = run(["sh", "-c", "command -v true"], stub_bin=stubs).stdout.strip()
     assert found != ""
 
 
@@ -93,7 +92,7 @@ def test_check_raises_when_asked():
 
 
 def test_input_reaches_the_child():
-    assert run_out(["cat"], input="fed\n") == "fed"
+    assert run(["cat"], input="fed\n").stdout.strip() == "fed"
 
 
 def test_a_wedged_child_times_out_rather_than_parking_the_run():
@@ -114,8 +113,8 @@ def test_a_replacement_environment_is_used_rather_than_merged():
 
 
 def test_cwd_decides_where_the_child_runs(tmp_path):
-    assert run_out(["pwd"], cwd=tmp_path) == str(tmp_path.resolve())
+    assert run(["pwd"], cwd=tmp_path).stdout.strip() == str(tmp_path.resolve())
 
 
 def test_shell_runs_a_string(tmp_path):
-    assert run_out("echo shelled", shell=True) == "shelled"
+    assert run("echo shelled", shell=True).stdout.strip() == "shelled"

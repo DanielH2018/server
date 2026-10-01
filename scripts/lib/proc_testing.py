@@ -47,14 +47,16 @@ __all__ = [
     "fake_bin",
     "path_with",
     "run",
-    "run_out",
     "write_exec",
 ]
 
-# Every launch this module makes is bounded. 60s is above the slowest test launch measured on
-# daniel-server on 2026-09-30 (the `deploy.sh` wrapper tests, ~12s) with room for a loaded CI
-# runner, and far below pytest's own patience — a child that wedges fails its test rather than
-# parking the run.
+# Every launch this module makes is bounded. 60s is two orders of magnitude above what a test
+# launch here actually takes (`pytest scripts/deploy_tools/tests/test_deploy_at_sha.py
+# --durations=5` on daniel-server, 2026-10-01: slowest case 0.39s), so it leaves room for a
+# loaded CI runner without any caller needing to raise it. It is also far below pytest's own
+# patience, which is the point — a child that wedges fails its own test rather than parking the
+# run. A caller whose subject is genuinely slow passes its own `timeout=`; the `ansible-lint`
+# hook test passes 120.
 DEFAULT_TIMEOUT = 60
 
 # The interpreter line `write_exec` supplies when the text does not carry one. `sh` rather than
@@ -73,7 +75,8 @@ def write_exec(path: Path, text: str) -> Path:
 
     The exec bit is set for everyone (`0o755`) rather than for the owner alone: a test that
     runs its stub through `sudo` or as another user under `become` needs the group and other
-    bits, and two suites already did.
+    bits. Two callers do — `ansible/tests/longhorn/test_volume_revert_input_guard.py` and
+    `test_volume_snapshot_register.py` both hand a `fake_become` stub to a real playbook run.
     """
     path.parent.mkdir(parents=True, exist_ok=True)
     path.write_text(text if text.startswith("#!") else SHEBANG + text)
@@ -172,8 +175,3 @@ def run(
         capture_output=True,
         text=True,
     )
-
-
-def run_out(argv: list[str] | str, **kwargs) -> str:
-    """`run(...).stdout` with surrounding whitespace removed."""
-    return run(argv, **kwargs).stdout.strip()
