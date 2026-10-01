@@ -43,6 +43,8 @@ NARROW_SETUP_SCRIPT = "scripts/deploy_tools/narrow_setup.py"
 # the k8s role tree's tasks, so thirty seconds is the wedged case, as for the setup narrowing.
 SHARED_CALLERS_TIMEOUT_S = 30.0
 SHARED_CALLERS_SCRIPT = "scripts/deploy_tools/shared_role_callers.py"
+# Which own roles a render digest can prove (#3110); one YAML walk per role, same budget.
+DIGEST_PROVABLE_SCRIPT = "scripts/deploy_tools/digest_provable.py"
 
 
 class BroadPlan(NamedTuple):
@@ -183,8 +185,29 @@ def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
         subprocess.TimeoutExpired: the child outlived `SHARED_CALLERS_TIMEOUT_S`.
         ValueError: its stdout was not the JSON object it prints.
     """
+    out = _role_json(repo, shared_callers_argv(roles))
+    return {role: set(tags) for role, tags in out.items()}
+
+
+def digest_provable(repo: str, roles) -> set[str]:
+    """Ask `digest_provable.py` which of `roles` act only through their render digest (#3110).
+
+    A subprocess for the reason `shared_role_callers` is one, raising what it raises. The one
+    reader, `deploy_defer.discharge_k8s_unapplied`, treats any exception as "none are".
+    """
+    out = _role_json(repo, digest_provable_argv(roles))
+    return {role for role, ok in out.items() if ok is True}
+
+
+def digest_provable_argv(roles) -> list[str]:
+    """The command `digest_provable` runs, split out for the reason `narrow_setup_argv` is."""
+    return ["uv", "run", "--frozen", "python", DIGEST_PROVABLE_SCRIPT, *sorted(roles)]
+
+
+def _role_json(repo: str, argv: list[str]) -> dict:
+    """Run one of the YAML-reading role scripts in `repo` and decode the object it prints."""
     r = subprocess.run(
-        shared_callers_argv(roles),
+        argv,
         cwd=repo,
         capture_output=True,
         text=True,
@@ -195,7 +218,10 @@ def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
         if line.strip():
             log(line.strip())
     r.check_returncode()
-    return {role: set(tags) for role, tags in json.loads(r.stdout).items()}
+    out = json.loads(r.stdout)
+    if not isinstance(out, dict):
+        raise ValueError(f"{argv[4]} printed {type(out).__name__}, not an object")
+    return out
 
 
 def plan(

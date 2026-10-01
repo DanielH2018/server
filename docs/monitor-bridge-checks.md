@@ -603,33 +603,39 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   its pod was on), 2026-09-10. Same shape as the five instant queries the temperature arm
   already makes.)
 - **UPS Battery Health** (mains loss + the APC UPS's charge % + estimated runtime + the
-  replace-battery self-test verdict, read from **nut-exporter** over `monitoring` with HA's
-  re-export of the same UPS as the FALLBACK — issue #1548 moved the direction, because HA is the
-  workload the UPS most obviously protects and with HA primary the alert path went down with it).
-  Each arm's fallback is `max(A) or max(B)` inside the query string, not a branch in the check:
-  both sides reduce to one unlabelled series, so `or` drops the right whenever the left has a
-  sample. `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT
+  replace-battery self-test verdict, all four read from **nut-exporter** and nothing else).
+  Issue #1548 made nut-exporter the primary and kept HA's re-export of the same UPS as a
+  `max(A) or max(B)` fallback inside each query string; **#3105 dropped the fallback half**. HA's
+  NUT integration reads the SAME upsd over the `nut` ClusterIP, so the fallback never covered a
+  upsd outage — only nut-exporter dying while upsd lived, which Prometheus reports as
+  `up{job="nut"} == 0` and Scrape Targets already pages for. Measured 2026-10-01 against live
+  Prometheus: nut answers all four arms (charge 100, runtime 1959, RB 0, OB 0), so the second
+  source could only disagree with the first. HA's `hass_*` UPS series stay in the
+  `Infrastructure/ups-power-battery` Grafana board, where a second view during an exporter
+  outage is worth having and a disagreement costs nothing.
+  `down` on sustained **mains loss** (`UPS_ON_BATTERY_QUERY`, the NUT
   `ups.status{flag="OB"}` — one-hot over `flag`, so the exporter forces a 0 when the UPS is not
   asserting it and the series is a real 0/1 alert input; judged FIRST and returning alone,
   because charge and runtime read the RUNWAY and hold green through most of an outage; its own
   streak key) or on a low battery RUNWAY: charge <
   `UPS_CHARGE_MIN_PCT` (50, a deep discharge while on battery) OR estimated runtime <
   `UPS_RUNTIME_MIN_S` (300 s — an aged battery whose full-charge runway has decayed, OR a discharge
-  nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, an HA
-  template `binary_sensor.apc_ups_replace_battery` over the NUT `RB` flag — the earliest signal, it
-  can trip while charge/runtime still read fine; before this the RB verdict reached NEITHER channel,
-  2026-07-14 review). Two defer paths avoid double-paging a source outage another monitor owns:
-  ALL arms absent → BOTH source scrapes are down (Scrape Targets' page); **both NUT numeric arms
-  (charge, runtime) absent while the replace arm is still present** → the NUT server/integration
-  dropped (HA drops the unavailable numeric sensors, but the replace-battery template FLOORS to 0 so
-  it stays present — it CANNOT reach the all-absent branch), which the `nut` container healthcheck
-  owns. A **partial** absence that is neither (a single numeric arm gone, or replace gone while the
-  numerics report) is a specific entity rename → pages through the streak rather than silently
+  nearing shutdown) OR the UPS's own **replace-battery** verdict (`UPS_REPLACE_QUERY`, the NUT
+  `RB` flag — the earliest signal, it can trip while charge/runtime still read fine; before this
+  the RB verdict reached NEITHER channel, 2026-07-14 review). One defer path avoids double-paging
+  a source outage another monitor owns: ALL arms absent while the nut scrape is down → Scrape
+  Targets' page. That one shape now covers a dead upsd as well as a dead exporter, because
+  nut-exporter fails the WHOLE `/ups_metrics` scrape when upsd is unreachable — which is why its
+  probes are `tcpSocket` (`roles/k8s/nut-exporter/CLAUDE.md`). A second defer for **both numeric
+  arms absent while the replace arm reports** existed until #3105 and only ever fired because the
+  HA fallback dropped its numeric sensors while its replace-battery template floored to 0; one
+  source has one absence shape. A **partial** absence (one arm gone while the others report) is a
+  specific series rename → pages through the streak rather than silently
   monitoring the survivor. The only
   pre-existing UPS alert is an HA automation → **mobile** push (a separate channel from this
   Kuma→Discord brain) and nothing trended the battery, so a slowly degrading battery was invisible
   until an outage collapsed it — this is the health/runway signal + the Discord escalation path.
-  **Prom-dependent** (queries the `nut` and `home-assistant` scrapes). `UPS_CONSECUTIVE` (2, like
+  **Prom-dependent** (queries the `nut` scrape). `UPS_CONSECUTIVE` (2, like
   `HA_CONSECUTIVE`) rides out a one-cycle dip from a transient load spike, a restart blip that
   briefly drops one arm, or a brownout shorter than the grace window. Queries are env-driven
   (`UPS_CHARGE_QUERY`/`UPS_RUNTIME_QUERY`/`UPS_REPLACE_QUERY`/`UPS_ON_BATTERY_QUERY`, all empty =
@@ -784,7 +790,19 @@ gates (`prometheus`, `loki_reachable`, `b2_reachable`, `cluster_prometheus`) and
   because an app restart under a deploy is a real transient; `speedtest` is also in
   `STARTUP_GRACE`. Same split as `check_ha_heartbeat`.
   Reaching the app needs `netpol-baseline/templates/networkpolicy-speedtest.yaml.j2` — the
-  baseline admits `traefik`, `prometheus` and two cni0 /32s, none of which is this pod.)
+  baseline admits `traefik`, `prometheus` and two cni0 /32s, none of which is this pod.
+  **The verdict stays on the REST API although Prometheus scrapes the same app** — #3105 asked
+  for the switch and this is the recorded answer, marked `# DECIDED:` at the fetch in
+  `checks/host_edge.py`. Three facts decide it. The scrape carries no timestamp: `count by
+  (__name__) ({job="speedtest"})` returned 28 names on 2026-10-01 and not one is a created-at,
+  age or timestamp series, so the age arm — the only arm whose failure mode nothing else sees —
+  could only be inferred from when `speedtest_tracker_result_id` last changed over an 8h window.
+  `SPEEDTEST_FLOOR_CONSECUTIVE` counts RESULTS, which one REST fetch hands back, where
+  Prometheus samples a 6-hourly result every 5 min and the arm would have to group samples by
+  result id before counting. And the scrape depends on a manual UI toggle that
+  `roles/k8s/speedtest/CLAUDE.md` records as impossible to set from config at the pinned build,
+  on a `longhorn-nobackup` PVC — a human step this alert path should not acquire. The scrape stays
+  what #996 added it for: history in Grafana, which a Kuma tile cannot keep.)
 - **Renovate Notifier — Alive** — RETIRED from this container at the host flips (2026-08-14).
   The notifier pushes its own Kuma monitor from an `ExecStartPost` now, so there is no
   `/renovate-state/last_run` bind mount and no `renovate_alive()` check here. The monitor and

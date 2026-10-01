@@ -1180,6 +1180,17 @@ what it recorded.
   not be of origin/master's tip, only of a commit holding the change, so the hourly producer
   answers within about an hour of a merge. Every other shared role acts outside the digest,
   and `deploy_defer.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:` that says how each one does.
+- A service's OWN line takes the same render proof when its role acts only through the bytes
+  the digest covers (#3110). `scripts/deploy_tools/digest_provable.py` derives that per role,
+  fail-closed: every task is a `k8s/manifests` include, a pure fact or check module, or an
+  include of a task file that meets the same rule, and the role has no handlers or meta
+  dependencies. A comment-only template edit to such a role then discharges within about an
+  hour with no deploy. A role that includes `volume-claim` or `image-builder`, writes a host
+  file or calls an API still needs its record to descend.
+- Each line is written at the newest commit in the tick's range whose own diff reaches its
+  service (`deploy_phases.k8s_change_commits`, #3111), not at the tick's tip. A landing
+  deploys its PR's commit, so a line at a later, unrelated tip could never discharge by
+  ancestry. On 2026-10-01 that left eight media-role lines for a hand to clear.
 - Any tick that deploys the service clears its `k8s_deferred` line
   (`deploy_defer.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
   plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears

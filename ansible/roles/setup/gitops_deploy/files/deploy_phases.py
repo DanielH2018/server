@@ -240,7 +240,61 @@ def plan_tick(
     hostvars = deploy_io.host_vars_text(config.repo, config.hostname)
     k8s_services = declared_k8s_services(hostvars) if hostvars is not None else set()
     cs = _promote_k8s_auto_deploys(tools, state, config, cs, paths, target)
+    cs.k8s_origins = k8s_change_commits(tools, config, target, set(quiet))
     return TickPlan(cs=cs, paths=paths, k8s_services=k8s_services)
+
+
+# The line `git log` prints ahead of each commit's paths. No tracked path starts with it.
+_COMMIT_LINE = "@@"
+
+
+def k8s_change_commits(
+    tools: DeployTools, config: Config, target: TickTarget, dropped: set[str]
+) -> dict[str, str]:
+    """The newest commit in `local..origin` whose own diff reaches each k8s service (#3111).
+
+    `deploy_defer.alert_and_record_deferred` writes a service's `k8s_unapplied` line at this
+    commit rather than at the tick's tip. A landing deploys its PR's merge commit, so the
+    release record names THAT commit; a line written at a later, unrelated tip in the same range
+    is a commit the record can never descend from, and the line never discharged (2026-10-01:
+    #3080's eight media roles recorded at #3081's tests-only tip, cleared by hand).
+
+    `--first-parent -m` lists a merge commit's diff against master's side, so a service is
+    attributed to the commit that sits on master and that a landing deploys. `dropped` is the
+    comment-only set `plan_tick` already filtered, applied per commit for the same reason.
+
+    Returns an empty map when the log cannot be read, and the caller then records at the tip,
+    which is the behaviour before #3111.
+    """
+    try:
+        out = tools.run(
+            [
+                "git",
+                "log",
+                "--first-parent",
+                "-m",
+                "--name-only",
+                f"--format={_COMMIT_LINE}%H",
+                f"{target.local}..{target.origin}",
+            ],
+            cwd=config.repo,
+        )
+    except Exception as exc:
+        log(
+            f"k8s_unapplied: could not read per-commit paths ({exc}) — recording at tip"
+        )
+        return {}
+    commits: list[tuple[str, list[str]]] = []
+    for line in out.splitlines():
+        if line.startswith(_COMMIT_LINE):
+            commits.append((line[len(_COMMIT_LINE) :], []))
+        elif line.strip() and commits and line not in dropped:
+            commits[-1][1].append(line)
+    newest: dict[str, str] = {}
+    for commit, paths in commits:  # git log is newest first, so the first hit wins
+        for service in services_from_changed_paths(paths).k8s:
+            newest.setdefault(service, commit)
+    return newest
 
 
 # The one command that re-derives K8S_AUTODEPLOY_DENYLIST — the filter plugin reads every role

@@ -149,6 +149,9 @@ class DeployTools:
     shared_role_callers: Callable[..., dict[str, set[str]]] = (
         deploy_narrow.shared_role_callers
     )
+    # The roles whose own render digest may discharge their line (#3110). A YAML-parsing
+    # subprocess too, and a field for the same reason.
+    digest_provable: Callable[..., set[str]] = deploy_narrow.digest_provable
     fetch_ci_verdict: Callable[[str], str] = _ci_unconfigured
     # Production default, unlike `fetch_ci_verdict` above: this one needs no `Config`.
     github_authenticated: Callable[[], bool] = github_authenticated
