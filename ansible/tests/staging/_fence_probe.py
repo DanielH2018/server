@@ -15,6 +15,7 @@ import re
 import subprocess
 
 from lib import yaml_fast
+from lib.proc_testing import fake_bin
 
 from _helpers import ALL_VARS, HOST_VARS, ROLES, jinja_env
 
@@ -213,20 +214,20 @@ def run_fence(
     orch = tmp_path / "etcd-restore-drill-vm"
     orch.write_text(body.replace(KUMA_LIB, str(lib)).rstrip().rsplit(ENTRYPOINT, 1)[0])
 
-    stubs, guest_stubs = tmp_path / "bin", tmp_path / "guest-bin"
-    for directory in (stubs, guest_stubs):
-        directory.mkdir()
-    for name in ("curl", "ping"):
-        for directory in (stubs,) + ((guest_stubs,) if name in guest_tools else ()):
-            (directory / name).write_text(DIAL_STUB)
-            (directory / name).chmod(0o755)
-    for name, text in (
-        ("ip", IP_STUB),
-        ("guest-ssh", GUEST_SSH_STUB),
-        ("logger", LOGGER_STUB),
-    ):
-        (stubs / name).write_text(text)
-        (stubs / name).chmod(0o755)
+    stubs = fake_bin(
+        tmp_path / "bin",
+        curl=DIAL_STUB,
+        ping=DIAL_STUB,
+        ip=IP_STUB,
+        logger=LOGGER_STUB,
+        **{"guest-ssh": GUEST_SSH_STUB},
+    )
+    # Only the tools named in `guest_tools` exist on the guest side, so a leg that dials from
+    # the guest with a tool the guest lacks fails the way the VM would.
+    guest_stubs = fake_bin(
+        tmp_path / "guest-bin",
+        **{name: DIAL_STUB for name in ("curl", "ping") if name in guest_tools},
+    )
 
     guest_list, host_list = tmp_path / "guest-reachable", tmp_path / "host-reachable"
     guest_list.write_text("".join(f"{t}\n" for t in guest_reachable))

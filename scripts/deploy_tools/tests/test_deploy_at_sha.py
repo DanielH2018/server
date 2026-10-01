@@ -26,6 +26,7 @@ from _deploy_sh_fakes import (
     detached_pid,
     make_snapshot_repo,
     run_front_half,
+    stub_bin,
 )
 from _process_waits import wait_for_exit
 from lib.git_testing import git, git_out
@@ -94,13 +95,14 @@ def _run(
     `git worktree add` that makes the snapshot are all the real script, run against a real
     two-commit repository.
     """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(_UV_STUB)
-    (bin_dir / "logger").write_text(_LOGGER_STUB)
-    for stub in ("flock", "uv", "logger"):
-        (bin_dir / stub).chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "flock": FLOCK_STUB,
+            "uv": _UV_STUB,
+            "logger": _LOGGER_STUB,
+        },
+    )
 
     calls = tmp_path / "calls.log"
     calls.write_text("")

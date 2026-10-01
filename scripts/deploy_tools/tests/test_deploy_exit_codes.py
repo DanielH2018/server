@@ -29,6 +29,7 @@ from _deploy_sh_fakes import (
     UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
+    stub_bin,
 )
 
 from lib.repo_paths import REPO as _REPO
@@ -69,12 +70,13 @@ def _run_with_stubs(
     succeeding for the wrapper's helper calls. Everything between -- the argument parsing, the
     annotation, the exit mapping -- is the real script.
     """
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(_UV_STUB.format(ansible_exit=ansible_exit, recap=recap))
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "flock": FLOCK_STUB,
+            "uv": _UV_STUB.format(ansible_exit=ansible_exit, recap=recap),
+        },
+    )
 
     repo = make_snapshot_repo(tmp_path / "repo")
     env = deploy_sh_env(tmp_path, bin_dir)

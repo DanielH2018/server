@@ -36,6 +36,7 @@ from _deploy_sh_fakes import (
     deploy_sh_env,
     detached_pid,
     make_snapshot_repo,
+    stub_bin,
 )
 from _process_waits import wait_for_exit
 
@@ -74,10 +75,12 @@ esac
 def _harness(
     tmp_path: Path, uv_stub: str = _UV_STUB, sleep_s: float = _SLEEP_S
 ) -> tuple[Path, dict[str, str]]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "uv").write_text(uv_stub)
-    (bin_dir / "uv").chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "uv": uv_stub,
+        },
+    )
     repo = make_snapshot_repo(tmp_path / "repo")
     return repo, deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_SLEEP=str(sleep_s))
 

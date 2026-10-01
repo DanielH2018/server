@@ -16,10 +16,10 @@ is that nothing should be invoked at all.
 """
 
 import os
-import subprocess
 import tomllib
 from pathlib import Path
 
+from lib.proc_testing import fake_bin, run
 from lib.repo_paths import REPO
 
 PREK_TOML = REPO / "prek.toml"
@@ -45,30 +45,24 @@ def _stub_bin(tmp_path: Path) -> Path:
     Running the real pair would install collections over the network and lint the tree,
     which makes the test slow enough to be skipped and dependent on the host's state.
     """
-    stub_dir = tmp_path / "bin"
-    stub_dir.mkdir()
-    for name in ("ansible-galaxy", "ansible-lint"):
-        script = stub_dir / name
-        script.write_text(f'#!/bin/sh\necho "{name} $*" >> "$STUB_LOG"\nexit 0\n')
-        script.chmod(0o755)
-    return stub_dir
+    return fake_bin(
+        tmp_path / "bin",
+        **{
+            name: f'#!/bin/sh\necho "{name} $*" >> "$STUB_LOG"\nexit 0\n'
+            for name in ("ansible-galaxy", "ansible-lint")
+        },
+    )
 
 
 def _run(entry: str, args: list[str], tmp_path: Path) -> tuple[int, str]:
     log = tmp_path / "calls.log"
     log.touch()
-    env = {
-        **os.environ,
-        "PATH": f"{_stub_bin(tmp_path)}{os.pathsep}{os.environ['PATH']}",
-        "STUB_LOG": str(log),
-    }
-    completed = subprocess.run(
+    completed = run(
         f"{entry} {' '.join(args)}",
         shell=True,
         cwd=REPO,
-        env=env,
-        capture_output=True,
-        text=True,
+        env={**os.environ, "STUB_LOG": str(log)},
+        stub_bin=_stub_bin(tmp_path),
         timeout=120,
     )
     return completed.returncode, log.read_text()

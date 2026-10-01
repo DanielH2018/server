@@ -21,6 +21,7 @@ from _deploy_sh_fakes import (
     UV_WRAPPER_ARMS,
     deploy_sh_env,
     make_snapshot_repo,
+    stub_bin,
 )
 
 from lib.repo_paths import REPO as _REPO
@@ -41,12 +42,13 @@ esac
 
 def test_multi_tag_snapshot_dir_has_no_comma(tmp_path: Path) -> None:
     repo = make_snapshot_repo(tmp_path / "repo")
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(_UV_STUB)
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "flock": FLOCK_STUB,
+            "uv": _UV_STUB,
+        },
+    )
 
     cwd_file = tmp_path / "snapshot-cwd"
     env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_CWD_FILE=str(cwd_file))
@@ -73,12 +75,13 @@ def test_multi_tag_snapshot_dir_has_no_comma(tmp_path: Path) -> None:
 def test_single_tag_snapshot_dir_is_unaffected(tmp_path: Path) -> None:
     """A one-tag deploy never had a comma to begin with; this pins the label, not just its fix."""
     repo = make_snapshot_repo(tmp_path / "repo")
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir()
-    (bin_dir / "flock").write_text(FLOCK_STUB)
-    (bin_dir / "uv").write_text(_UV_STUB)
-    for stub in ("flock", "uv"):
-        (bin_dir / stub).chmod(0o755)
+    bin_dir = stub_bin(
+        tmp_path,
+        {
+            "flock": FLOCK_STUB,
+            "uv": _UV_STUB,
+        },
+    )
 
     cwd_file = tmp_path / "snapshot-cwd"
     env = deploy_sh_env(tmp_path, bin_dir, DEPLOY_TEST_CWD_FILE=str(cwd_file))

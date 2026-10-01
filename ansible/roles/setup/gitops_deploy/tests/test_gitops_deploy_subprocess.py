@@ -14,6 +14,8 @@ import time
 
 import pytest
 
+from lib.proc_testing import write_exec
+
 import deploy_io
 from _process_waits import wait_for_exit
 
@@ -102,9 +104,9 @@ def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
     pidfifo = tmp_path / "grandchild.pid"
     os.mkfifo(pidfifo)
     pidfd = os.open(pidfifo, os.O_RDWR)
-    script = tmp_path / "parent.sh"
-    script.write_text(_GRANDCHILD_SHAPE.format(pidfifo=pidfifo))
-    script.chmod(0o755)
+    script = write_exec(
+        tmp_path / "parent.sh", _GRANDCHILD_SHAPE.format(pidfifo=pidfifo)
+    )
 
     start = time.monotonic()
     with pytest.raises(subprocess.TimeoutExpired):
@@ -154,9 +156,7 @@ _TASK_HEADER = "TASK [manifests : apply rendered manifests]"
 
 
 def test_run_timeout_error_names_the_task_that_was_still_running(tmp_path) -> None:
-    script = tmp_path / "wedged.sh"
-    script.write_text(_WEDGED_TASK_SHAPE)
-    script.chmod(0o755)
+    script = write_exec(tmp_path / "wedged.sh", _WEDGED_TASK_SHAPE)
 
     with pytest.raises(subprocess.TimeoutExpired) as caught:
         deploy_io.run(["sh", str(script)], cwd=str(tmp_path), timeout=1.0)

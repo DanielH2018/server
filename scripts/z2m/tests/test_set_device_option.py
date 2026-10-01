@@ -16,6 +16,7 @@ import subprocess
 import pytest
 
 from pathlib import Path
+from lib.proc_testing import fake_bin, path_with
 from lib.repo_paths import REPO as _REPO
 
 _SCRIPT = _REPO / "scripts" / "z2m" / "set_device_option.sh"
@@ -45,19 +46,16 @@ exit 0
 def _run(
     tmp_path: Path, args: list[str], state: str
 ) -> tuple[subprocess.CompletedProcess[str], list[str]]:
-    bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    for name, body in {
-        "sops": _SOPS,
-        "mosquitto_pub": _MOSQUITTO_PUB,
-        "mosquitto_sub": _MOSQUITTO_SUB,
-    }.items():
-        (bin_dir / name).write_text(body)
-        (bin_dir / name).chmod(0o755)
+    bin_dir = fake_bin(
+        tmp_path / "bin",
+        sops=_SOPS,
+        mosquitto_pub=_MOSQUITTO_PUB,
+        mosquitto_sub=_MOSQUITTO_SUB,
+    )
     pub_args = tmp_path / "pub-args"
     env = dict(
         os.environ,
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        PATH=path_with(bin_dir),
         Z2M_MQTT_HOST="broker.test",
         Z2M_SECRETS_FILE=str(tmp_path / "unused.yml"),
         Z2M_READBACK_TIMEOUT="3",
