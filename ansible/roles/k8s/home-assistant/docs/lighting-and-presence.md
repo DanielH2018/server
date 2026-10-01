@@ -85,7 +85,7 @@ and the bedtime/wake routines that drive them.
 - **Too-bright arrival blip (since 2026-06-19).** `automation.bedroom_presence_blip_too_bright` is a
   sibling of `bedroom_presence_on`: same arrival edge (`binary_sensor.aqara_fp300_presence` -> on),
   but the lux gate is **inverted** (`binary_sensor.bedroom_auto_light_allowed` == off) plus
-  `manual_off` off, `person home`, and lights currently off. When you walk in but it's too bright to
+  `manual_off` off, `person home`, and lights off. When you walk in but it's too bright to
   auto-light, it calls `script.bedroom_blip` (off -> 15% warm 2700K ~1s -> off) so you get an
   acknowledgement instead of silence. `bedroom_blip` is the inverse of `bedroom_alert_pulse` — it
   needs NO `scene.create` snapshot because it only runs with the lights already off, so a plain
@@ -133,11 +133,15 @@ and the bedtime/wake routines that drive them.
   over-corrected — the high-sensitivity mmwave radar read the **running tower fan's** moving air as a
   permanent occupant, so `presence` stuck `true` in an empty room (15+ min observed) and
   `bedroom_absence_off` never fired → lights stayed on. Confirmed by experiment: fan OFF → `presence`
-  cleared to `false` 72s later (= the 60s `absence_delay_timer`). Fixed via another Z2M **device
-  setting** (same `mosquitto_pub .../Aqara FP300/set`, NOT templated, re-apply after a re-pair):
-  `ai_interference_source_selfidentification: ON` — Aqara's purpose-built interference rejection;
-  keeps `motion_sensitivity: high` so the desk-sitting fix survives. The dog is NOT a factor (an
-  mmwave radar does see a pet as presence, but the room was confirmed pet-free during the incident).
+  cleared to `false` 72s later (= the 60s `absence_delay_timer`). **No FP300 setting fixes this,
+  and the operator accepted it.** Aqara's interference filter
+  (`ai_interference_source_selfidentification: ON`) had no effect, and no sensitivity setting
+  separates the running fan from a person. The dog also holds `presence`, because the mmwave radar
+  reads a pet as an occupant. The consequence is that the bedroom lights stay on while someone is
+  home but out of the room with the fan running or the dog inside. Do not retune the FP300 to
+  chase it. The wake ramp is gated on `person.daniel`, not the FP300, so it is unaffected.
+  **Changing `motion_sensitivity` causes a ~26 s false `presence: false` blip.** The blip can
+  switch the lights off once while you tune.
 - **Adaptive Lighting is a HACS dependency (since 2026-06-18).** `configuration.yaml` declares
   `adaptive_lighting:` for the bedroom group; the integration code installs via HACS into
   `custom_components/adaptive_lighting/` (on the config PVC, not templated — like `dreo`). Install it
