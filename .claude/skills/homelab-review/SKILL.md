@@ -43,17 +43,29 @@ report-only by nature — its findings are stale-doc edits for the operator, nev
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Read, in this
 order:
 
-1. **`homelab-review-standing-donot-reflag`** — the distilled deliberate trade-offs, durable
+1. **`review-standing-decisions`** — the distilled deliberate trade-offs, durable
    refutations, verified-clean list, and the recurring-open register. This is the bulk of the
    priming and it is one file by design: the dated ledgers grow by one per run, and reading all of
    them at the most expensive moment (immediately before a 4–6 way fan-out that each get a slice)
    is what this file replaces. It holds what has no code site; a trade-off governed by one line
    lives in a `# DECIDED:` marker there (step 7). Collapsing the file into markers and issues
    was re-examined on 2026-09-28 (#2808) and rejected, because operator rulings and
-   cross-cutting stances would have nowhere to go.
-2. **The newest two dated `review-*-state` memories** — for recency only: what shipped since the
-   standing list was last distilled, and this week's refutations with their evidence. Same-day runs
-   carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the later is not a superset.
+   cross-cutting stances would have nowhere to go. This step and `.claude/agents/skeptic.md`
+   both name that slug (ENFORCED:
+   `ansible/tests/repo/test_review_skills_name_one_standing_list_slug.py::test_each_primed_surface_names_the_live_slug`),
+   and no skill, agent or eval case carries a retired spelling of it (ENFORCED:
+   `ansible/tests/repo/test_review_skills_name_one_standing_list_slug.py::test_no_searched_file_carries_a_retired_slug`).
+   A slug the store does not hold primes nothing, and the harness reports no error for it.
+2. **The newest two dated `review-*-state` ledgers the store actually holds** — for recency only:
+   what shipped since the standing list was last distilled, and this week's refutations with their
+   evidence. Same-day runs carry a letter suffix (`review-2026-08-16-state` *and* `…16b-state`); the
+   later is not a superset. List them rather than recalling a slug — the names change every run:
+   ```bash
+   ls -1 ~/.claude/projects/-home-ubuntu-server/memory/review-*-state.md 2>/dev/null | sort | tail -2
+   ```
+   **Zero ledgers is a valid state, not a missing file.** Step 7 deletes a ledger once its durable
+   rows are folded into the standing list, so an empty match means nothing has shipped since the
+   last fold. Say so in the report and prime from item 1 alone.
 3. Any other accepted-decision memory the auto-memory index surfaces for an in-scope area.
 4. **`accepted-designs.md` beside this skill and the *Settled findings* table in
    `docs/reference/backlog.md`** — the design facts the reviewer agents used to carry inline,
@@ -62,9 +74,11 @@ order:
    before it flags; `ansible/tests/repo/test_reviewer_agents_carry_no_hand_reflag_list.py`
    keeps the inline copies from coming back.
 
-**A memory named in items 1 or 2 that is absent from the store stops the run.** Name the missing
-slug to the operator and wait. A missing file is not an error the harness reports, so a run
-that skips it proceeds unprimed and re-derives every settled decision (#3016).
+**Item 1's file missing from the store stops the run.** Name the missing slug to the operator and
+wait. A missing file is not an error the harness reports, so a run that skips it proceeds unprimed
+and re-derives every settled decision (#3016). Item 2 names a glob rather than a slug, so an empty
+match is a state and not a stop — the stop there is a ledger `MEMORY.md` indexes that the store
+no longer holds, which means the index and the store have drifted.
 
 For each area, extract its don't-re-flag items **plus** the discipline: *verify a candidate finding
 against the role's CLAUDE.md, role crons, and monitor-bridge `check.py` BEFORE reporting it.* Pull
@@ -344,7 +358,7 @@ control is the "fires on nothing" case the repo warns about, and it reads exactl
   printf '%s\n' '{"date": "2026-09-02", "high": 0, "medium": 3, "low": 1, "refuted": 1, "downgraded": null, "fixes_proposed": 4, "fixes_confirmed_safe": 3, "fixes_refuted": 1, "prs": [812, 813], "ledger": "review-2026-09-02-state"}' >> evals/review_outcomes.jsonl
   ```
   Use `null` for any count the ledger prose does not state as a number — never a guess.
-- **Then fold the durable half into `homelab-review-standing-donot-reflag`** — a new deliberate
+- **Then fold the durable half into `review-standing-decisions`** — a new deliberate
   trade-off, a refutation of a finding that was never filed, or an entry this run proved stale.
   Open and recurring items belong in `findings.py`'s register, not there.
   - **A trade-off governed by one code line goes in a `# DECIDED:` marker at that line**, not in
