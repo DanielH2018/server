@@ -82,9 +82,9 @@ def test_both_branches_parse_as_yaml(
 def test_every_mount_resolves_to_a_declared_volume(
     role: str, flag: str, manage: bool
 ) -> None:
-    spec = _docs(role, flag, "deployment.yaml.j2", manage)[0]["spec"]["template"][
-        "spec"
-    ]
+    # `safe_load`, not `_docs`: a stray second document in the Deployment must fail here.
+    text = render_role_template(role, "deployment.yaml.j2", {flag: manage})
+    spec = yaml_fast.safe_load(text)["spec"]["template"]["spec"]
     dangling = dangling_mounts(spec)
     assert not dangling, (
         f"{role} mounts {dangling}, which no volume declares ({flag}={manage})"
