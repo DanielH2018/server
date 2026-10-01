@@ -44,6 +44,13 @@ _TEMPLATE_EDGE = re.compile(r"{%-?\s*(?:import|include|from)\s")
 # asked for — so neither describes "the work this change needs". `docker_install`'s
 # `tasks/install.yml` carries both `never` and `docker-engine-upgrade`, and printing that pair
 # would tell an operator to run the engine upgrade a config edit never asked for (#2350).
+#
+# The two refuse differently. `never` beside a subject tag refuses the whole file. `always` is
+# DROPPED from the answer instead (#3134), because an `always` task runs under every `--tags`
+# value: the file's subject tags select its other tasks, and the `always` ones come along.
+# `initial_setup/tasks/crons.yml` opens with two `always` tasks (its `DECIDED:` comment says
+# why), and refusing on them made the role's most-edited task file narrow nothing. A file
+# whose ONLY tag is `always` still refuses, since no tag is left to name its work.
 _SPECIAL_TAGS = frozenset({"never", "always"})
 
 
@@ -405,11 +412,15 @@ class RoleIndex:
                 f"{rel} carries no tags of its own, so its tasks inherit them from wherever "
                 "it is imported"
             )
-        special = tags & _SPECIAL_TAGS
-        if special:
+        if "never" in tags:
             raise CannotNarrow(
-                f"{rel} carries the special tag {', '.join(sorted(special))}, which selects "
-                "opt-in or unconditional tasks rather than this change's work"
+                f"{rel} carries the special tag never, which selects opt-in tasks rather "
+                "than this change's work"
+            )
+        tags = tags - _SPECIAL_TAGS
+        if not tags:
+            raise CannotNarrow(
+                f"{rel} carries only the special tag always, so no tag names its work"
             )
         for fact in sorted(self.facts.get(rel, frozenset())):
             tags |= self.key_readers(fact, seen)

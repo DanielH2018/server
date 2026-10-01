@@ -306,6 +306,29 @@ def test_a_task_file_carrying_never_is_flagged(tree):
         narrow(tree, *_refs(tree))
 
 
+ALWAYS_PREAMBLE = (
+    "---\n- name: A helper every tag needs\n"
+    "  ansible.builtin.debug:\n    msg: helper\n"
+    "  tags: [always]\n"
+)
+
+
+def test_an_always_task_beside_a_subject_tagged_one_narrows_to_the_subject_tag(tree):
+    """`initial_setup/tasks/crons.yml`'s shape (#3134): `always` is dropped, not refused.
+
+    The `always` task runs under `--tags alpha` anyway, so `alpha` covers the whole file.
+    """
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALWAYS_PREAMBLE + ALPHA.removeprefix("---\n"))
+    assert narrow(tree, *_refs(tree)) == frozenset({"alpha"})
+
+
+def test_a_task_file_carrying_only_always_is_flagged(tree):
+    """No subject tag is left once `always` is dropped, so nothing names the work."""
+    tree.write(f"{ROLE}/tasks/alpha.yml", ALPHA.replace("[alpha]", "[always]"))
+    with pytest.raises(narrow_setup.CannotNarrow, match="only the special tag always"):
+        narrow(tree, *_refs(tree))
+
+
 TWO_ROLE_PLAYBOOK = "ansible/two.yml"
 TWO_ROLE_PLAYBOOK_TEXT = """\
 ---
