@@ -28,7 +28,8 @@ conventions.
   debug logs in a rolling window ships that churn forever.
 - The exportarr sidecar's image tag is pinned in this role's own `defaults/main.yml`
   (not `group_vars`, so Renovate's k8s-images manager can see it) and kept in lockstep
-  with radarr and prowlarr's copies by `test_exportarr_pins_in_lockstep.py`.
+  with radarr and prowlarr's copies by
+  `ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`.
 - Sonarr is the only *arr whose sidecar gets `--enable-additional-metrics`
   (`additional_metrics=true` on the shared `exportarr` macro). The flag turns on the episode
   collector that publishes `sonarr_episode_monitored_total`, `_unmonitored_total` and

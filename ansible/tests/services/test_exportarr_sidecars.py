@@ -10,6 +10,12 @@ The image pin is deliberately duplicated three times rather than shared from gro
 Renovate's k8s-images manager matches `roles/k8s/*/defaults` and `_image:` keys only, so a
 shared var one directory up is invisible to it — the escape `crowdsec_k8s_image` made, recorded
 in renovate.json. Duplication that a test keeps in lockstep beats a single copy nothing tracks.
+
+WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry no readinessProbe, and that
+rule lives in `ansible/tests/k8s/test_readiness_coverage.py` alone: all three are rows in its
+`_NO_READINESS` record, and its `test_the_record_has_no_stale_entries` goes red the moment one
+gains a probe. Asserting it here as well split one rule's rationale across two files (#3055).
+Do not re-add it; add a row there.
 """
 
 import re
@@ -25,6 +31,33 @@ METRICS_PORT = 9707
 
 def _docs():
     return list(rendered_docs())
+
+
+def _sidecars() -> dict[str, dict]:
+    """{role: the rendered exportarr sidecar container} for the three *arr Deployments.
+
+    Every guard below that reads one field off the sidecar goes through here, so the
+    non-vacuity check is written once: a renamed container or a render that dropped a role
+    leaves the dict short, and each caller asserts `set(...) == set(ARRS)` against it. Nine
+    guards in this repo broke by looping `continue` past everything and asserting over nothing.
+    """
+    found: dict[str, dict] = {}
+    for role, name, doc in _docs():
+        if doc.get("kind") != "Deployment" or role not in ARRS:
+            continue
+        if name != "deployment.yaml.j2":
+            continue
+        for container in doc["spec"]["template"]["spec"]["containers"]:
+            if container.get("name") == "exportarr":
+                found[role] = container
+    return found
+
+
+def _census(found: dict[str, dict], what: str) -> None:
+    assert set(found) == set(ARRS), (
+        f"rendered no exportarr {what} for {sorted(set(ARRS) - set(found))} — this guard "
+        "would pass vacuously"
+    )
 
 
 def test_every_arr_runs_an_exportarr_sidecar():
@@ -75,26 +108,29 @@ def test_the_api_key_is_a_secret_reference_never_a_literal():
             assert apikey["valueFrom"]["secretKeyRef"]["name"] == f"{role}-exportarr"
 
 
-def test_the_sidecar_has_no_readiness_probe():
-    """A not-ready sidecar removes the whole POD from its Service.
+def test_the_sidecar_is_restarted_when_it_wedges():
+    """The sidecar keeps a livenessProbe and no readinessProbe, and only one half lives here.
 
-    The *arr and the exporter share one pod, so a readinessProbe here turns an exporter outage
-    into an application outage — monitoring taking down the thing it monitors. Liveness is
-    correct and present; readiness is the one that must not be added.
+    The readiness half moved to `ansible/tests/k8s/test_readiness_coverage.py`, which records
+    all three exportarr containers in `_NO_READINESS` with this reason — a readinessProbe on a
+    sidecar takes the whole pod out of its *arr's Service whenever the exporter hiccups, so
+    monitoring takes down the thing it monitors. That file's
+    `test_the_record_has_no_stale_entries` goes red the moment one of the three gains a probe,
+    so asserting it again here only duplicated the rule and split its rationale across two
+    files (#3055). `ARRS` is exactly the three roles recorded there.
+
+    Liveness is the half no table covers: nothing else in the suite asks whether an exempt
+    container is restartable at all, and a wedged exporter with no probe is simply silent.
+
+    Census first: the loop `continue`s past every container not named `exportarr`, so a rename
+    or an empty render would otherwise pass with zero assertions.
     """
-    for role, _, doc in _docs():
-        if doc.get("kind") != "Deployment":
-            continue
-        for container in doc["spec"]["template"]["spec"].get("containers", []):
-            if container.get("name") != "exportarr":
-                continue
-            assert "readinessProbe" not in container, (
-                f"{role}'s exportarr must not have a readinessProbe — it would take the "
-                f"{role} pod out of its Service whenever the exporter hiccuped"
-            )
-            assert "livenessProbe" in container, (
-                f"{role}'s exportarr should still be restarted when it wedges"
-            )
+    probed = _sidecars()
+    _census(probed, "sidecar")
+    for role, container in sorted(probed.items()):
+        assert "livenessProbe" in container, (
+            f"{role}'s exportarr should still be restarted when it wedges"
+        )
 
 
 def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
@@ -177,29 +213,42 @@ def test_the_image_pins_stay_in_lockstep():
 
     Drift here is quiet: the three exporters keep working at different versions until one
     upstream release changes a metric name, and then one dashboard panel goes blank.
+
+    Read off the RENDERED container rather than regexed out of each role's defaults (#2809).
+    The pin reaches the pod as a macro ARGUMENT — `exportarr(app, image, ...)` in
+    `ansible/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
+    role renders in its OWN defaults context. So an invocation naming another role's variable
+    ships `image: STUB` while all three text pins still read identical and agree. Measured on
+    this tree: crossing radarr's argument to `sonarr_exportarr_image` renders
+    `{'radarr': 'STUB', ...}` here and leaves the defaults regex clean.
     """
-    pins = {}
+    # fact: ansible/roles/k8s/radarr/CLAUDE.md#At a glance
+    # fact: ansible/roles/k8s/sonarr/CLAUDE.md#Notable
+    images = {role: c["image"] for role, c in _sidecars().items()}
+    _census(images, "image")
+    assert len(set(images.values())) == 1, f"exportarr pins have drifted: {images}"
+
+
+def test_each_pin_is_a_variable_renovate_can_see():
+    """Where the pin LIVES is the requirement here, so this half stays a source check.
+
+    Renovate's k8s-images manager matches `roles/k8s/*/defaults` and an `_image:` key, and
+    nothing else. A pin hoisted into group_vars, or inlined into the macro invocation, renders
+    an identical manifest and silently stops being offered updates — the escape
+    `crowdsec_k8s_image` made. No render assertion can see that, because the manifest is the
+    same either way.
+    """
     for arr in ARRS:
         text = (REPO / f"ansible/roles/k8s/{arr}/defaults/main.yml").read_text()
-        match = re.search(rf"^{arr}_exportarr_image:\s*(\S+)", text, re.M)
-        assert match, f"{arr} has no {arr}_exportarr_image pin in its own defaults"
-        pins[arr] = match.group(1)
+        assert re.search(rf"^{arr}_exportarr_image:\s*\S+", text, re.M), (
+            f"{arr} has no {arr}_exportarr_image pin in its own defaults, so Renovate will "
+            "never offer it an update"
+        )
 
-    assert len(set(pins.values())) == 1, f"exportarr pins have drifted: {pins}"
 
-
-def _sidecar_args():
+def _sidecar_args() -> dict[str, list[str]]:
     """{role: the exportarr sidecar's rendered args} for the three *arr Deployments."""
-    args = {}
-    for role, name, doc in _docs():
-        if doc.get("kind") != "Deployment" or role not in ARRS:
-            continue
-        if name != "deployment.yaml.j2":
-            continue
-        for container in doc["spec"]["template"]["spec"]["containers"]:
-            if container.get("name") == "exportarr":
-                args[role] = container["args"]
-    return args
+    return {role: c["args"] for role, c in _sidecars().items()}
 
 
 def test_only_sonarr_enables_the_additional_metrics_collector():
@@ -232,6 +281,47 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
         )
 
 
+def _scrape_jobs() -> list[dict]:
+    """claude-otel's scrape_configs, read from the RENDERED prometheus ConfigMap.
+
+    Through the render rather than the template text (#2809). The text form split
+    `prometheus.yaml.j2` on the job's name and then asked whether two strings appeared
+    anywhere in the slice that followed, which three different mistakes satisfy: `9707` in one
+    of the four prose comments that sit above the job, the `__meta_...port_number` label used
+    as a `target_label` instead of in a `keep` rule, or the two appearing in separate relabel
+    entries that have nothing to do with each other. The parsed job is what Prometheus loads,
+    so a keep rule there is a keep rule.
+    """
+    for role, template, doc in rendered_docs():
+        if role != "claude-otel" or "prometheus" not in str(template):
+            continue
+        if doc.get("kind") != "ConfigMap":
+            continue
+        return yaml_fast.safe_load(doc["data"]["prometheus.yml"])["scrape_configs"]
+    raise AssertionError(
+        "no prometheus ConfigMap rendered — this guard watches nothing"
+    )
+
+
+def port_keep_rule(jobs: list[dict]) -> dict | None:
+    """The `exportarr` job's relabel entry that keeps targets by container port number.
+
+    None when the job is absent, or keeps on anything other than that label — which is the
+    `app`-label mistake this guard exists to refuse.
+    """
+    for job in jobs:
+        if job.get("job_name") != "exportarr":
+            continue
+        for rule in job.get("relabel_configs") or []:
+            if rule.get("action") != "keep":
+                continue
+            if rule.get("source_labels") == [
+                "__meta_kubernetes_pod_container_port_number"
+            ]:
+                return rule
+    return None
+
+
 def test_prometheus_scrapes_the_sidecars_by_port_not_by_app_label():
     """Selecting on `app` would also match the *arr's own container port.
 
@@ -239,20 +329,52 @@ def test_prometheus_scrapes_the_sidecars_by_port_not_by_app_label():
     keep rule therefore scrapes sonarr's web UI as if it were a metrics endpoint — which does
     not error, it just yields a target that returns HTML and a job that is permanently down.
     """
-    prom = (
-        REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
-    ).read_text()
-    job = prom.split("- job_name: exportarr", 1)
-    assert len(job) == 2, "claude-otel declares no `exportarr` scrape job"
-    block = job[1].split("- job_name:", 1)[0]
+    rule = port_keep_rule(_scrape_jobs())
+    assert rule is not None, (
+        "the exportarr job must keep targets on "
+        "__meta_kubernetes_pod_container_port_number — an `app` label alone matches the "
+        "*arr's own web port too"
+    )
+    assert rule["regex"] == str(METRICS_PORT), (
+        f"the keep rule matches port {rule['regex']!r}, not the sidecar's {METRICS_PORT}"
+    )
 
-    assert str(METRICS_PORT) in block, (
-        "the job must keep targets by container port number"
+
+def test_a_job_that_keeps_on_the_app_label_is_flagged():
+    """The reject half: the shape whose targets return HTML, run against a synthetic job list.
+
+    The tree is supposed to be clean, so the accept case above passes identically whether the
+    rule works or matches nothing at all.
+    """
+    assert (
+        port_keep_rule(
+            [
+                {
+                    "job_name": "exportarr",
+                    "relabel_configs": [
+                        {
+                            "source_labels": ["__meta_kubernetes_pod_label_app"],
+                            "action": "keep",
+                            "regex": "sonarr|radarr|prowlarr",
+                        },
+                        # Present, but as a rename rather than a filter — the slice the text
+                        # form read could not tell this from a keep rule.
+                        {
+                            "source_labels": [
+                                "__meta_kubernetes_pod_container_port_number"
+                            ],
+                            "target_label": "port",
+                        },
+                    ],
+                }
+            ]
+        )
+        is None
     )
-    assert "__meta_kubernetes_pod_container_port_number" in block, (
-        "the keep rule must be on the port number — an `app` label alone matches the *arr's "
-        "own web port too"
-    )
+
+
+def test_a_job_list_without_the_exportarr_entry_is_flagged():
+    assert port_keep_rule([{"job_name": "speedtest"}]) is None
 
 
 def test_the_rendered_sidecar_is_a_sibling_container_not_a_nested_key():
