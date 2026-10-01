@@ -7,6 +7,8 @@ argparse surface in `cli_parser`, and the formatters each `run_*` prints through
 builds for each streaming subcommand.
 """
 
+import subprocess
+
 import pytest
 
 from diagnostics.probe_lib import arr
@@ -368,3 +370,82 @@ def test_arr_subcommand_rejects_unknown_app():
 
     with pytest.raises(SystemExit):
         cli_parser._build_parser().parse_args(["arr", "lidarr", "health"])
+
+
+# ── core.get_status: the (status, body) curl GET postflight judges its checks by ─────────
+
+
+def stub_curl(monkeypatch, run):
+    """Replace the subprocess `get_status()` shells out to."""
+    monkeypatch.setattr(subprocess, "run", run)
+
+
+def test_get_parses_status_and_body(monkeypatch):
+    class Result:
+        returncode = 0
+        stdout = '{"a": 1}\n200'
+        stderr = ""
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    assert core.get_status("http://x") == (200, '{"a": 1}')
+
+
+def test_get_reports_curl_failure_as_status_zero(monkeypatch):
+    class Result:
+        returncode = 7
+        stdout = ""
+        stderr = "connection refused"
+
+    stub_curl(monkeypatch, lambda *a, **kw: Result())
+    assert core.get_status("http://x") == (0, "connection refused")
+
+
+def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):
+    """The subprocess timeout is what turns a hung curl into a status-0 reply (issue #2156)."""
+
+    def hang(argv, **kw):
+        raise subprocess.TimeoutExpired(argv, kw["timeout"])
+
+    stub_curl(monkeypatch, hang)
+    status, body = core.get_status("http://x", timeout=3)
+    assert status == 0
+    assert "8s" in body
+
+
+def test_get_bounds_the_subprocess_beyond_curls_own_max_time(monkeypatch):
+    seen = {}
+
+    class Result:
+        returncode = 0
+        stdout = "\n200"
+        stderr = ""
+
+    def fake_run(argv, **kw):
+        seen["timeout"] = kw.get("timeout")
+        seen["max_time"] = argv[argv.index("--max-time") + 1]
+        return Result()
+
+    stub_curl(monkeypatch, fake_run)
+    core.get_status("http://x", timeout=3)
+    assert seen["max_time"] == "3"
+    assert seen["timeout"] is not None and seen["timeout"] > 3
+
+
+def test_credentials_never_reach_argv(monkeypatch):
+    """The auth header goes in on stdin — a secret in argv would land in `ps`."""
+    seen = {}
+
+    class Result:
+        returncode = 0
+        stdout = "\n200"
+        stderr = ""
+
+    def fake_run(argv, input=None, **kw):
+        seen["argv"] = argv
+        seen["input"] = input
+        return Result()
+
+    stub_curl(monkeypatch, fake_run)
+    core.get_status("http://x", 'header = "X-Api-Key: hunter2"\n')
+    assert "hunter2" not in " ".join(seen["argv"])
+    assert "hunter2" in seen["input"]

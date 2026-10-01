@@ -5,7 +5,7 @@ status: Accepted
 date: 2026-09-02
 governs:
   - scripts/diagnostics/probe_lib/ha.py:283
-  - ansible/roles/k8s/homelab-mcp/files/safe_reads.py:266
+  - ansible/roles/k8s/homelab-mcp/files/safe_reads.py:248
 ---
 
 # ADR-0016: Code scanning stays on default setup, and false positives are removed in code
@@ -36,7 +36,7 @@ recurrences are on the record:
 | #24 | #44 | `probe_ha.py` became `probe_lib/ha.py` (PR #858) |
 
 Across the repo's whole history that is 44 alerts: 31 dismissed by hand, 12 fixed in code,
-1 open at the time of writing.
+1 open on 2026-09-02.
 
 Four options existed.
 
@@ -148,7 +148,7 @@ those two queries matter most.
 ## Governs
 
 - `scripts/diagnostics/probe_lib/ha.py:283` — the `tls_context()` marker in the probe library.
-- `ansible/roles/k8s/homelab-mcp/files/safe_reads.py:266` — the same marker in the MCP
+- `ansible/roles/k8s/homelab-mcp/files/safe_reads.py:248` — the same marker in the MCP
   server's ship list.
 
 Both markers explain why the TLS floor is stated rather than inherited. Neither enforces the

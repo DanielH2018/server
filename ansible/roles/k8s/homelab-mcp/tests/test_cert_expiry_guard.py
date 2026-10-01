@@ -5,6 +5,10 @@ app.py calls it first. app.py imports mcp, httpx and starlette, none of which th
 carries, so those are stubbed in sys.modules for the import: the tool decorator returns the
 function unchanged, which is all `cert_expiry` needs to be called directly.
 
+The image carries `obs_api` flat beside app.py. Here a copy of the repo module under
+`scripts/diagnostics/probe_lib` takes the image's bare name, with `get_json` replaced by a
+recorder, so the last test can prove a Loki read always sends an explicit window.
+
 Run: uv run pytest ansible/roles/k8s/homelab-mcp/tests/test_cert_expiry_guard.py
 """
 
@@ -15,6 +19,8 @@ import sys
 import types
 
 import pytest
+
+from diagnostics.probe_lib import obs_api
 
 FILES = os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "files")
 sys.path.insert(0, FILES)
@@ -52,6 +58,10 @@ def app(monkeypatch):
         "httpx",
         _stub("httpx", Client=lambda *a, **k: object(), Timeout=lambda *a, **k: None),
     )
+    recorder = _stub("obs_api", **vars(obs_api))
+    recorder.seen = []
+    recorder.get_json = lambda url: recorder.seen.append(url) or {}
+    monkeypatch.setitem(sys.modules, "obs_api", recorder)
     monkeypatch.setitem(sys.modules, "starlette", _stub("starlette"))
     monkeypatch.setitem(
         sys.modules, "starlette.middleware", _stub("starlette.middleware")
@@ -118,3 +128,11 @@ def test_an_in_zone_target_reaches_the_socket(app, monkeypatch):
     with pytest.raises(ConnectionRefusedError):
         app.cert_expiry("n8n.example.com", 443)
     assert calls == [("n8n.example.com", 443)]
+
+
+def test_a_loki_read_sends_an_explicit_backward_window(app):
+    """Loki answers an unbounded query_range from its last hour only, so older rows vanish."""
+    app.query_logs('{job="x"}', limit=5, hours=2.0)
+    (url,) = app.obs_api.seen
+    assert url.startswith(f"{app.LOKI}/loki/api/v1/query_range?")
+    assert "start=" in url and "end=" in url and "direction=backward" in url

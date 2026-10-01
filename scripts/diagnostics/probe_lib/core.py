@@ -12,7 +12,6 @@ import os
 import re
 import subprocess
 from datetime import datetime
-from urllib.parse import urlencode
 from zoneinfo import ZoneInfo
 
 # `lib.repo_paths` is a sibling package under `scripts/`: a directly-invoked script gets only
@@ -24,6 +23,16 @@ from pathlib import Path as _Path
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import REPO
+
+# The URL builders live in obs_api, which homelab-mcp's image also carries (#2860). Re-exported
+# here so every `core.prom_query_url(...)` call site and test keeps its spelling.
+from diagnostics.probe_lib.obs_api import (  # noqa: F401
+    loki_labels_url,
+    loki_query_url,
+    prom_query_url,
+    prom_targets_url,
+    trailing_window_ns,
+)
 
 DEFAULT_TIMEOUT = 10
 
@@ -184,15 +193,6 @@ HOSTS_INI_PATH = os.path.join(
     "inventory",
     "hosts.ini",
 )
-# URL builders (pure)
-
-
-def prom_query_url(base, promql):
-    return f"{base}/api/v1/query?" + urlencode({"query": promql})
-
-
-def prom_targets_url(base):
-    return f"{base}/api/v1/targets"
 
 
 def prom_endpoint():
@@ -202,31 +202,6 @@ def prom_endpoint():
     2026-08-14 with the drain.
     """
     return k8s_endpoint("prometheus")
-
-
-def loki_labels_url(base):
-    return f"{base}/loki/api/v1/labels"
-
-
-def loki_query_url(base, logql, limit, start=None, end=None, direction=None):
-    """Build a Loki `query_range` URL, omitting each optional param when it is unset.
-
-    Args:
-        base: The Loki base URL.
-        logql: The LogQL query string.
-        limit: Max lines to return.
-        start: Range start, in nanoseconds since epoch.
-        end: Range end, in nanoseconds since epoch.
-        direction: `forward` or `backward`.
-    """
-    params = {"query": logql, "limit": limit}
-    if start is not None:
-        params["start"] = start
-    if end is not None:
-        params["end"] = end
-    if direction is not None:
-        params["direction"] = direction
-    return f"{base}/loki/api/v1/query_range?" + urlencode(params)
 
 
 _DURATION_UNITS = {"m": 60, "h": 3600, "d": 86400, "w": 604800}
@@ -257,9 +232,9 @@ def since_window_ns(since):
     """
     if not since:
         return None, None
-    end_s = datetime.now(_CHICAGO).timestamp()
-    start_ns = int((end_s - parse_duration_seconds(since)) * 1e9)
-    return start_ns, int(end_s * 1e9)
+    return trailing_window_ns(
+        parse_duration_seconds(since), datetime.now(_CHICAGO).timestamp()
+    )
 
 
 def scrutiny_url(base):
@@ -295,6 +270,38 @@ def fetch(url, resolve=None):
     if out.returncode != 0:
         raise SystemExit(f"curl {url} failed: {out.stderr.strip()}")
     return out.stdout
+
+
+def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
+    """GET `url`, returning (http_status, body) instead of raising.
+
+    For a caller that judges the status itself, such as postflight, which reports a 401 as a
+    stale credential rather than a crash. `config_body` is a full `curl --config` body (e.g.
+    `header = "X-Api-Key: ..."`) fed via stdin, so credentials stay out of argv. `resolve` is
+    a curl --resolve pin (k8s_endpoint's second element). Status 0 means curl itself failed:
+    connection refused, DNS, or a timeout.
+    """
+    argv = curl_argv(url, timeout=timeout, resolve=resolve)
+    argv[-1:-1] = ["-o", "-", "-w", "\n%{http_code}"]
+    if config_body:
+        argv[-1:-1] = ["--config", "-"]
+    # `--max-time` bounds curl's own transfer; the subprocess timeout is the backstop for a
+    # curl that never gets that far (a wedged DNS resolver, a stalled TLS handshake). Either
+    # way the caller reads a transport failure rather than hanging (#2156).
+    try:
+        out = subprocess.run(
+            argv,
+            input=config_body or "",
+            capture_output=True,
+            text=True,
+            timeout=timeout + 5,
+        )
+    except subprocess.TimeoutExpired:
+        return 0, f"curl did not return within {timeout + 5}s"
+    if out.returncode != 0:
+        return 0, out.stderr.strip()
+    body, _, code = out.stdout.rpartition("\n")
+    return int(code or 0), body
 
 
 class NonJsonResponse(SystemExit):

@@ -35,13 +35,20 @@ routed tenant of the retired Docker edge. See repo-root `CLAUDE.md` for shared c
 - **Secrets** (SOPS keys, not values): `homelab_mcp_token`, `claude_ha_token`.
 
 ## Notable
-- `image_builder_context_files` (not `image_builder_context`) carries `app.py` and
-  `safe_reads.py` verbatim into the build — they embed PromQL whose `{{...}}` braces a Jinja
-  render would otherwise eat.
+- `image_builder_context_files` (not `image_builder_context`) carries `app.py`,
+  `safe_reads.py`, `k8s_reads.py` and `obs_api.py` verbatim into the build — they embed PromQL
+  whose `{{...}}` braces a Jinja render would otherwise eat.
+- **Every Prometheus and Loki read goes through `obs_api`**, the client probe.py and
+  postflight share (`scripts/diagnostics/probe_lib/obs_api.py`, #2860). The image carries it
+  flat at `/app/obs_api.py`, so it stays stdlib-only with no first-party import;
+  `scripts/diagnostics/tests/test_obs_api.py` imports it with `scripts/` off the path. An edit
+  to that file alone maps to no deploy tag, so the image keeps the old copy until
+  `./scripts/deploy.sh --tags "homelab-mcp"` runs.
 - The Dockerfile path is built from `playbook_dir`, not `role_path`: that render happens
   **inside** `k8s/image-builder`, where `role_path` resolves to the wrong role (bit the first
   deploy, 2026-08-13).
 
 ## Editing
-- App: `files/app.py`, `files/safe_reads.py` (tests in `tests/`) · Image:
+- App: `files/app.py`, `files/safe_reads.py` (tests in `tests/`), the shared
+  `scripts/diagnostics/probe_lib/obs_api.py` · Image:
   `templates/Dockerfile.j2` · RBAC: `templates/rbac.yaml.j2`.

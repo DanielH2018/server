@@ -57,14 +57,14 @@ real_resolve_service_ip = postflight.health_docker.resolve_service_ip
 
 
 def respond(monkeypatch, status, body=""):
-    """Stub `get()`. `status` may instead be a `get`-shaped callable for a per-URL reply.
+    """Stub `core.get_status()`. `status` may instead be a callable for a per-URL reply.
 
-    One patch point for both shapes on purpose: a second `monkeypatch.setattr(postflight,
-    "get", ...)` elsewhere in this file is the same seam patched twice, and the repo ratchets
-    on that count.
+    One patch point for both shapes on purpose: a second `monkeypatch.setattr(postflight.core,
+    "get_status", ...)` elsewhere in this file is the same seam patched twice, and the repo
+    ratchets on that count.
     """
     reply = status if callable(status) else lambda *a, **kw: (status, body)
-    monkeypatch.setattr(postflight, "get", reply)
+    monkeypatch.setattr(postflight.core, "get_status", reply)
 
 
 def only_checks(monkeypatch, checks):
@@ -420,7 +420,7 @@ def test_an_unanswered_clusterip_falls_back_to_the_traefik_route(monkeypatch):
     """
     seen = []
 
-    def answer(url, header=None, timeout=postflight.TIMEOUT, resolve=None):
+    def answer(url, header=None, timeout=postflight.core.DEFAULT_TIMEOUT, resolve=None):
         seen.append((url, resolve))
         if url.startswith("http://10."):  # the ClusterIP attempt
             return 0, "curl: (7) Failed to connect"

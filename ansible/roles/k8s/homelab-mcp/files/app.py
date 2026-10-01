@@ -23,6 +23,7 @@ from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import JSONResponse, PlainTextResponse
 
 import k8s_reads
+import obs_api
 import safe_reads
 
 TOKEN = os.environ.get("HOMELAB_MCP_TOKEN", "")
@@ -110,24 +111,32 @@ def _kube_get(path: str, params: dict | None = None, raw: bool = False):
     return r.text if raw else r.json()
 
 
+def _prom_rows(promql: str) -> list[dict]:
+    """A Prometheus instant query as {metric labels, value} rows.
+
+    Every Prometheus and Loki read here goes through obs_api, the client probe.py shares
+    (`scripts/diagnostics/probe_lib/obs_api.py`, shipped into this image by tasks/main.yml).
+    """
+    return safe_reads.parse_metric(
+        obs_api.get_json(obs_api.prom_query_url(PROMETHEUS, promql))
+    )
+
+
+def _loki_range(base: str, logql: str, limit: int, hours: float) -> list[dict]:
+    """Loki range query over an explicit trailing window, newest first."""
+    start, end = obs_api.trailing_window_ns(
+        hours * 3600, datetime.now(timezone.utc).timestamp()
+    )
+    url = obs_api.loki_query_url(
+        base, logql, limit, start=start, end=end, direction="backward"
+    )
+    return safe_reads.parse_loki(obs_api.get_json(url))
+
+
 @mcp.tool()
 def query_metric(promql: str) -> list[dict]:
     """Prometheus instant query. Returns {metric labels, value} rows."""
-    return safe_reads.parse_metric(
-        _get_json(f"{PROMETHEUS}/api/v1/query", {"query": promql})
-    )
-
-
-def _loki_range(logql: str, limit: int, hours: float) -> list[dict]:
-    """Loki range query over an explicit trailing window, newest first.
-
-    Window construction lives in safe_reads.loki_range_params (unit-tested); this
-    is the wiring.
-    """
-    params = safe_reads.loki_range_params(
-        logql, limit, hours, datetime.now(timezone.utc).timestamp()
-    )
-    return safe_reads.parse_loki(_get_json(f"{LOKI}/loki/api/v1/query_range", params))
+    return _prom_rows(promql)
 
 
 @mcp.tool()
@@ -136,13 +145,15 @@ def query_logs(logql: str, limit: int = 100, hours: float = 24.0) -> list[dict]:
 
     Returns {labels, ts, line} rows. Widen `hours` to reach older activity.
     """
-    return _loki_range(logql, limit, hours)
+    return _loki_range(LOKI, logql, limit, hours)
 
 
 @mcp.tool()
 def scrape_targets() -> list[dict]:
     """Prometheus scrape-target health (up/down + last error)."""
-    return safe_reads.parse_targets(_get_json(f"{PROMETHEUS}/api/v1/targets"))
+    return safe_reads.parse_targets(
+        obs_api.get_json(obs_api.prom_targets_url(PROMETHEUS))
+    )
 
 
 @mcp.tool()
@@ -311,12 +322,7 @@ def host_overview() -> dict:
         "disk_root_used_pct": '100 * (1 - node_filesystem_avail_bytes{mountpoint="/"} / node_filesystem_size_bytes{mountpoint="/"})',
         "temp_celsius": "node_hwmon_temp_celsius",
     }
-    return {
-        k: safe_reads.parse_metric(
-            _get_json(f"{PROMETHEUS}/api/v1/query", {"query": q})
-        )
-        for k, q in queries.items()
-    }
+    return {k: _prom_rows(q) for k, q in queries.items()}
 
 
 @mcp.tool()
@@ -326,9 +332,7 @@ def top_containers(by: str = "cpu", n: int = 5) -> list[dict]:
         q = f'topk({n}, container_memory_working_set_bytes{{name!=""}})'
     else:
         q = f'topk({n}, rate(container_cpu_usage_seconds_total{{name!=""}}[5m]))'
-    return safe_reads.parse_metric(
-        _get_json(f"{PROMETHEUS}/api/v1/query", {"query": q})
-    )
+    return _prom_rows(q)
 
 
 @mcp.tool()
@@ -349,12 +353,7 @@ def claude_code_usage() -> dict:
         "tokens_by_model": 'sum by (model) ({__name__=~"claude_code_token_usage.*"})',
         "cost_by_model_usd": 'sum by (model) ({__name__=~"claude_code_cost_usage.*"})',
     }
-    return {
-        k: safe_reads.parse_metric(
-            _get_json(f"{PROMETHEUS}/api/v1/query", {"query": q})
-        )
-        for k, q in queries.items()
-    }
+    return {k: _prom_rows(q) for k, q in queries.items()}
 
 
 @mcp.tool()
@@ -370,13 +369,7 @@ def claude_code_events(limit: int = 100, hours: float = 24.0) -> list[dict]:
     reach this store; it reads the homelab Loki.
     """
     base = k8s_reads.claude_loki_base_or_raise(CLAUDE_LOKI)
-    params = safe_reads.loki_range_params(
-        '{service_name="claude-code"}',
-        limit,
-        hours,
-        datetime.now(timezone.utc).timestamp(),
-    )
-    parsed = safe_reads.parse_loki(_get_json(f"{base}/loki/api/v1/query_range", params))
+    parsed = _loki_range(base, '{service_name="claude-code"}', limit, hours)
     return k8s_reads.claude_event_rows(parsed)
 
 
