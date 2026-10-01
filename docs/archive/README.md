@@ -67,8 +67,8 @@ documentation and not as history.
 shipped code cites it by path. Comments in monitor-bridge's `files/gates.py` and
 `files/bridge/config_io.py` cite it, and so do the defaults of eight k8s media roles and the
 `setup/k3s` role. The monitor-bridge files feed the pod's `check-script` checksum, so
-repointing them restarted monitor-bridge on the next deploy, and the eight media roles joined
-the deployer's changed set for a comment. That is the same trade the `slice-` decision above
+repointing them restarts monitor-bridge on its next deploy, and the eight media roles join the
+deployer's changed set for a comment. That is the same trade the `slice-` decision above
 records; the operator accepted it in #2821 rather than waiting for another change to those
 files.
 
