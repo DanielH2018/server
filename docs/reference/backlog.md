@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-01 00:28 UTC
-generated_sha: 7f5047711
+generated_at: 2026-10-01 06:17 UTC
+generated_sha: 89bf63ff9
 ---
 
 !!! warning "Generated file — do not edit"
@@ -19,7 +19,7 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#3027](https://github.com/DanielH2018/server/issues/3027) | high | gap | security | Rotate the Google Cast refresh token HA leaked, and age out the Loki records that still carry it | 2026-09-30 | 0 | - | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
 | [#2808](https://github.com/DanielH2018/server/issues/2808) | medium | improvement | docs | Sixteen stores hold what the next session needs; consolidate to seven and retire facts.lock | 2026-09-28 | 0 | - | ✓ |
-| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 1 | worktree-ha-unpin-cast-theme | ✓ |
+| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 1 | - | ✓ |
 | [#3016](https://github.com/DanielH2018/server/issues/3016) | medium | gap | docs | homelab-review step 2 primes from three memory files this host does not have | 2026-09-30 | 0 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
@@ -28,24 +28,15 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 | [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
 | [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | - | ✓ |
 | [#2818](https://github.com/DanielH2018/server/issues/2818) | low | improvement | cicd | Move shared harness code from server to dotfiles: escaping-write arm, memory survey, scaffolding skill, grammar fixture | 2026-09-28 | 0 | - | ✓ |
-| [#2821](https://github.com/DanielH2018/server/issues/2821) | low | improvement | docs | Archive the B2 cap incident record once its shipped citations change anyway | 2026-09-28 | 0 | - | ✓ |
 | [#2860](https://github.com/DanielH2018/server/issues/2860) | low | improvement | backup-observability | Six Prometheus/Loki HTTP clients: route homelab-mcp and postflight through probe_lib | 2026-09-28 | 0 | - | ✓ |
 | [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
-| [#2911](https://github.com/DanielH2018/server/issues/2911) | low | improvement | backup-observability | claude-otel holds the cluster monitoring plane its name does not mention | 2026-09-28 | 0 | worktree-ha-unpin-cast-theme | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
 | [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
 | [#3043](https://github.com/DanielH2018/server/issues/3043) | low | improvement | - | Render a default IngressRoute from the containers_list entry once the traefik edge stops reading the template | 2026-09-30 | 0 | - | ✓ |
-| [#3047](https://github.com/DanielH2018/server/issues/3047) | low | improvement | cicd | Collapse the nine once-per-SHA alert markers into one keyed file | 2026-09-30 | 0 | - | ✓ |
-| [#3048](https://github.com/DanielH2018/server/issues/3048) | low | improvement | cicd | Derive role_of and PLAY_PREFIXES from one path classifier | 2026-09-30 | 0 | - | ✓ |
-| [#3055](https://github.com/DanielH2018/server/issues/3055) | low | improvement | cicd | Fold 18 single-role render test files into the pod hygiene and security-context tables | 2026-09-30 | 1 | worktree-ha-unpin-cast-theme | ✓ |
-| [#3056](https://github.com/DanielH2018/server/issues/3056) | low | improvement | cicd | Replace 64 local subprocess wrappers and 11 fake-bin writers in tests with shared helpers | 2026-09-30 | 0 | worktree-ha-unpin-cast-theme | ✓ |
-| [#3057](https://github.com/DanielH2018/server/issues/3057) | low | improvement | cicd | Derive the deployer's k8s_unapplied discharge from the render digest | 2026-09-30 | 0 | - | ✓ |
-| [#3063](https://github.com/DanielH2018/server/issues/3063) | low | gap | docs | test_root_needs_dac_capability's docstring names two root+drop-ALL sites; the render shows six | 2026-10-01 | 0 | - | ✓ |
-| [#3064](https://github.com/DanielH2018/server/issues/3064) | low | gap | docs | The shared securityContext macro's header cites loki-homelab's retired promtail-daemonset.yaml.j2 | 2026-10-01 | 0 | - | ✓ |
-| [#3066](https://github.com/DanielH2018/server/issues/3066) | low | improvement | cicd | Route the remaining 109 timeout-less test subprocess launches through lib.proc_testing.run | 2026-10-01 | 0 | - | ✓ |
+| [#3057](https://github.com/DanielH2018/server/issues/3057) | low | improvement | cicd | Derive the deployer's k8s_unapplied discharge from the render digest | 2026-09-30 | 1 | - | ✓ |
 
 ## Settled findings — do not re-flag
 
@@ -93,6 +84,7 @@ Findings closed with `findings.py close --accepted` (true, and the operator chos
 | [#2903](https://github.com/DanielH2018/server/issues/2903) | refuted | probe.py health holds no roll expectation for pihole-2 | Duplicate of #2902, filed seconds earlier for the same gap — findings.py dedup is blind past gh's 1000-issue list cap (the warning this run printed), so the same body filed twice. #2902 is the live one. |
 | [#2933](https://github.com/DanielH2018/server/issues/2933) | accepted | Decide whether the 4-shard pytest matrix is worth keeping now that no Actions minutes are billed | Operator ruling 2026-09-30: keep the 4-shard matrix because it cuts wall-clock time. The #2245 spike measured an 80s pole shard against 267s for a single job, about 3.3x, and ADR-0018 leaves no Actions bill for collapsing it to save. |
 | [#2979](https://github.com/DanielH2018/server/issues/2979) | accepted | Finish #2865: single-importer test helpers blocked by the length ratchet, release_bin_groups pinned by a k3s path | Operator decision 2026-09-29: keep the three test helpers split out; #762 and #768 split them to bring their test modules under the 500-line cap, and inlining would recreate three ~700-line modules. The release_bin_groups move is folded into #2978, which needs the same attended k3s apply. The step-2 claim was stale: both modules have production importers. |
+| [#3055](https://github.com/DanielH2018/server/issues/3055) | refuted | Fold 18 single-role render test files into the pod hygiene and security-context tables | A sweep of ansible/tests/ for every table column found 26 files: 11 are the fleet-wide censuses, 4 are rollout gates, and each remaining single-role file asserts what neither table can express (mount paths, probe timeouts, a positive automount, specific capabilities, an upstream-manifest patch). The one real overlap, exportarr's readiness assertion, was folded in PR #3065. Per-file list is in this thread. |
 
 ### container
 
