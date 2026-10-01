@@ -20,6 +20,7 @@ from pathlib import Path
 import yaml
 
 from lib import yaml_fast
+from lib.jinja_comments import strip_jinja_comments
 from lib.render_guard import HOST_VARS as HOST_VARS_DIR, load_yaml
 from lib.repo_paths import K8S_ROLES, REPO, SHARED_TPL
 
@@ -103,7 +104,6 @@ def is_manifest_template(path: Path) -> bool:
 
 _TEMPLATE_LOOKUP = re.compile(r"""lookup\(\s*['"]template['"]\s*,\s*([^)]*)\)""")
 _TEMPLATES_PATH = re.compile(r"""['"][^'"]*/templates/([^'"]*)['"]""")
-_JINJA_COMMENT = re.compile(r"\{#.*?#\}", re.S)
 _YAML_COMMENT_LINE = re.compile(r"^\s*#.*$", re.M)
 
 
@@ -121,7 +121,7 @@ def misplaced_template_lookups(source: str) -> list[str]:
     `{# #}` block and a `#` line — so a comment that names a lookup by example (pihole's
     configmap.yaml.j2 does) is not judged as a call.
     """
-    source = _YAML_COMMENT_LINE.sub("", _JINJA_COMMENT.sub("", source))
+    source = _YAML_COMMENT_LINE.sub("", strip_jinja_comments(source))
     misplaced = []
     for call in _TEMPLATE_LOOKUP.finditer(source):
         path = _TEMPLATES_PATH.search(call.group(1))

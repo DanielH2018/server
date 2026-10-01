@@ -115,3 +115,29 @@ def test_linkify_leaves_ordinary_prose_alone(tmp_path):
 def test_linkify_does_not_match_a_bare_domain_placeholder(tmp_path):
     """`<domain>` with no host in front of it is prose, not an FQDN."""
     assert rf.linkify_fqdns("`domain` is SOPS-sourced") == "`domain` is SOPS-sourced"
+
+
+def test_a_comment_quoting_the_opt_out_is_not_the_opt_out(tmp_path):
+    """`roles/k8s/docs/` passed no `public` argument while explaining the one it dropped,
+    so its route read as LAN-only for five weeks (#3148)."""
+    role = _role(
+        tmp_path,
+        "docs",
+        "{#\n  Public as well as LAN. This used to pass public=false, which was true\n"
+        "  until 2026-08-24.\n#}\n{{ ingressroute(a, b, c, d) }}\n",
+    )
+    gv = _group_vars(tmp_path, "k8s_public_route: true\n")
+    assert rf.reachability(role, gv) == rf.PUBLIC
+
+
+def test_an_opt_out_explained_in_the_comment_above_it_still_counts(tmp_path):
+    """crowdsec, deploy-ui and longhorn-ui all write the argument AND explain it, so
+    blanking comments must not blank the call."""
+    role = _role(
+        tmp_path,
+        "longhorn-ui",
+        "{# `public=false`: the storage control plane never gets a public Host rule. #}\n"
+        "{{ ingressroute(a, b, c, d, public=false) }}\n",
+    )
+    gv = _group_vars(tmp_path, "k8s_public_route: true\n")
+    assert rf.reachability(role, gv) == rf.LAN

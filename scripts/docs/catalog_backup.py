@@ -21,6 +21,7 @@ import yaml
 
 from catalog_model import K3S_DEFAULTS, K8S_ROLES, UNKNOWN
 from lib import yaml_fast
+from lib.jinja_comments import strip_jinja_comments
 from lib.render_guard import load_yaml as _load_yaml
 from lib.repo_paths import FILTER_PLUGINS, SHARED_TPL
 
@@ -174,7 +175,7 @@ def _template_declarations(role_dir: Path) -> list[ClaimDecl]:
         return []
     decls = []
     for tmpl in sorted(templates.glob("*.j2")):
-        text = tmpl.read_text()
+        text = strip_jinja_comments(tmpl.read_text())
         for block in _PVC_BLOCK_RE.finditer(text):
             sc = _STORAGE_CLASS_RE.search(block.group("body"))
             decls.append(
@@ -276,7 +277,7 @@ def _shared_macro_claim_exprs(text: str, shared_tpl: Path) -> list[str]:
         macro_file = shared_tpl / imp.group("file")
         if not macro_file.is_file():
             continue
-        body = macro_file.read_text()
+        body = strip_jinja_comments(macro_file.read_text())
         for name in (n.strip() for n in imp.group("names").split(",")):
             if not name or name + "(" not in text:
                 continue
@@ -297,7 +298,7 @@ def _referenced_claim_exprs(role_dir: Path, shared_tpl: Path = SHARED_TPL) -> li
         return []
     exprs = []
     for tmpl in sorted(templates.glob("*.j2")):
-        text = tmpl.read_text()
+        text = strip_jinja_comments(tmpl.read_text())
         exprs.extend(_CLAIM_NAME_RE.findall(text))
         exprs.extend(_shared_macro_claim_exprs(text, shared_tpl))
     return exprs

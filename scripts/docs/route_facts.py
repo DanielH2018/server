@@ -15,7 +15,9 @@ and rewrites the span into a link. That also picks the right TIER -- a reader on
 gets LAN links, a reader on the public name gets public ones -- which a baked FQDN could not
 do. Without JavaScript the span still reads as the placeholder text it always did.
 
-STATIC PARSING ONLY: yaml.safe_load over the inventory, plain regex over template text.
+STATIC PARSING ONLY: yaml.safe_load over the inventory, plain regex over template text with
+its Jinja comments blanked first (`lib.jinja_comments`) -- a comment quoting `public=false`
+is prose about the route, not an argument to it.
 """
 
 import html
@@ -34,11 +36,14 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 
+from lib.jinja_comments import strip_jinja_comments
 from lib.k8s_roles import manifest_template
 from lib.repo_paths import ALL_VARS as GROUP_VARS
 
 # `public=false` in a role's own macro call opts the service out of the public Host rule
-# whatever k8s_public_route says. See ansible/templates/ingressroute.yml.j2.
+# whatever k8s_public_route says. See ansible/templates/ingressroute.yml.j2. Matched against
+# comment-stripped text: three roles explain the argument in a `{# #}` above the call that
+# passes it, and `roles/k8s/docs/` explained one it does NOT pass (#3148).
 _PUBLIC_FALSE_RE = re.compile(r"public\s*=\s*false")
 # Only the `ingressroute()` macro renders the public Host rule. A role whose templates call
 # `monitoring_route()` alone (ical-proxy, loki-homelab) is LAN-only by construction, and a
@@ -86,7 +91,9 @@ def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:
 
 def reachability(role_dir: Path, group_vars: Path = GROUP_VARS) -> str:
     """PUBLIC or LAN for a role that has a route. Callers check for a route first."""
-    text = "\n".join(p.read_text() for p in ingressroute_templates(role_dir))
+    text = "\n".join(
+        strip_jinja_comments(p.read_text()) for p in ingressroute_templates(role_dir)
+    )
     if not _INGRESSROUTE_CALL_RE.search(text) or _PUBLIC_FALSE_RE.search(text):
         return LAN
     return PUBLIC if public_route_enabled(group_vars) else LAN
