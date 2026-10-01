@@ -96,21 +96,16 @@ def index_links(index_path: Path) -> list[str]:
     """Return every `.md` target the index links to, in document order, deduplicated.
 
     A relative target names a sibling memory file and is returned as its bare filename, so
-    `./foo.md` and `foo.md` compare equal. An absolute target is returned as the full path,
-    unless it points into the index's own directory. The index's header prescribes absolute
-    links for a memory retired to the repo doc that owns its claim, and reducing those to a
-    basename made every one read as a missing memory file (#3106).
+    `./foo.md` and `foo.md` compare equal. An absolute target is a repo doc that owns a
+    retired memory's claim, and is returned whole: reducing it to a basename made every such
+    link read as a missing memory file (#3106).
     """
     if not index_path.exists():
         return []
-    store = index_path.parent.resolve()
     seen: dict[str, None] = {}
     for target in _LINK.findall(_read(index_path)):
         path = Path(target)
-        if path.is_absolute() and path.parent.resolve() != store:
-            seen.setdefault(str(path), None)
-        else:
-            seen.setdefault(path.name, None)
+        seen.setdefault(target if path.is_absolute() else path.name, None)
     return list(seen)
 
 
