@@ -311,3 +311,58 @@ def test_a_detached_deploy_holds_its_lock_and_its_snapshot_until_the_playbook_en
         f"the detached run left its snapshot behind in {snapshots}"
     )
     os.close(pwd_fd)
+
+
+def test_a_detached_deploy_keeps_only_stdio_its_log_and_its_locks(tmp_path):
+    """Issue #3162: the detached child drops every descriptor its caller passed it.
+
+    An inherited pipe of the caller's -- a harness's output capture -- keeps the caller's call
+    open for as long as the playbook runs. This passes `deploy.sh` a stray descriptor on a
+    marker file and reads the child's own /proc/<pid>/fd while the playbook still sleeps: the
+    marker must be gone, and the service lock and the snapshot's owner lock must still be held.
+    """
+    repo, env = _harness(tmp_path, uv_stub=_UV_DETACH_STUB)
+    pwd_fifo, pwd_fd = _pwd_fifo(tmp_path)
+    env["DEPLOY_TEST_PWD_FILE"] = str(pwd_fifo)
+    stray_path = tmp_path / "callers-stray-descriptor"
+    stray = os.open(stray_path, os.O_WRONLY | os.O_CREAT, 0o644)
+    output = tmp_path / "detach-output"
+    try:
+        with output.open("w") as sink:
+            returncode = subprocess.run(
+                [
+                    str(_DEPLOY_SH),
+                    "--detach",
+                    "--tags",
+                    "alpha",
+                    "--skip-tag-check",
+                    "--skip-staleness-check",
+                ],
+                cwd=repo,
+                env=env,
+                stdout=sink,
+                stderr=subprocess.STDOUT,
+                pass_fds=[stray],
+                timeout=120,
+                check=False,
+            ).returncode
+    finally:
+        os.close(stray)
+    assert returncode == 0, output.read_text()
+    snapshot = _playbook_cwd(pwd_fd)
+    pid = detached_pid(output.read_text())
+
+    fds = Path(f"/proc/{pid}/fd")
+    held = {int(link.name): os.readlink(link) for link in fds.iterdir()}
+    assert str(stray_path) not in held.values(), (
+        f"the detached child still holds its caller's descriptor on {stray_path}: {held}"
+    )
+    # The control: the descriptors the child needs are read off the same listing.
+    assert str(tmp_path / "locks" / "server-deploy-alpha.lock") in held.values(), held
+    assert str(snapshot / ".deploy-owner.lock") in held.values(), held
+    assert set(held) - {0, 1, 2} == {
+        fd for fd, target in held.items() if target.endswith(".lock")
+    }, f"the detached child holds descriptors beyond stdio and its locks: {held}"
+
+    assert wait_for_exit(pid), "the detached child never finished"
+    os.close(pwd_fd)

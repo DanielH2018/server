@@ -14,6 +14,8 @@ The child is the process `running in background (pid N)` names. It holds the own
 service locks through descriptors the fork copied, and the parent closes its own copies, so the
 locks follow the child. A flock is released only when every descriptor on its open file
 description is closed.
+Those lock descriptors and stdio are all the child keeps: it closes every other descriptor its
+caller passed down (`close_inherited`), as a detached landing does (issue #3162).
 
 THE CHILD IS A GRANDCHILD, OUTSIDE THE CALLER'S TREE AND CGROUP (issues #3159, #3160).
 `lib/detach_fork.py` forks it twice, so a harness that kills the caller's descendant tree
@@ -38,7 +40,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
 from deploy_tools import deploy_under_locks as locked
 from deploy_tools.deploy_playbook import annotate, run_playbook
-from lib.detach_fork import fork_detached, leave_unit_cgroup
+from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
 from lib.exit_codes import (
     DEPLOY_LOCK_BUSY,
     DEPLOY_LOCK_UNAVAILABLE,
@@ -132,8 +134,9 @@ def child(run: locked.Run, log: Path, notifier: str) -> None:
         os.dup2(null, 0)
         os.dup2(out, 1)
         os.dup2(out, 2)
-        os.close(null)
-        os.close(out)
+        # Every other inherited descriptor goes, `null` and `out` with them, but the locks
+        # `run_playbook` passes on (issue #3162).
+        close_inherited(fd for fd in (*run.service_fds, run.owner_fd) if fd is not None)
         # Before the playbook starts: a child started while the move is pending stays in the
         # unit's cgroup.
         moved = leave_unit_cgroup("deploy")
