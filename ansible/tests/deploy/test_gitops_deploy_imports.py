@@ -38,9 +38,10 @@ QUALIFIED = {"deploy_io", "deploy_alerts", "deploy_alert_text"}
 ALLOWED: dict[str, set[str] | None] = {
     "deploy_changes": set(),
     # The narrowing subprocess and the plan it returns: `deploy_config` for `log`, and
-    # nothing else. It must NOT import `deploy_toolbox`, which imports IT for the
-    # `narrow_deploy_plane` default.
-    "deploy_narrow": {"deploy_config"},
+    # `deploy_git` for `held_tag`, the hold-marker format `broad_hold_cleared_by` reads back
+    # (#3138) — an import-free leaf, so no cycle. It must NOT import `deploy_toolbox`, which
+    # imports IT for the `narrow_deploy_plane` default.
+    "deploy_narrow": {"deploy_config", "deploy_git"},
     # The state directory, the marker table and the line parsers. Import-free by construction:
     # a copy of it ships into every other tree that reads the markers (its header says how),
     # so an import here would have to be satisfiable in a monitor-bridge pod.

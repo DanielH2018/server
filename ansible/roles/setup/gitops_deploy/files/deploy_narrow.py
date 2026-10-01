@@ -20,6 +20,7 @@ import time
 from typing import Callable, NamedTuple
 
 from deploy_config import log
+from deploy_git import held_tag
 
 # What `record_broad_applied` records in the tag slot when a deploy-plane range moves no
 # rendered output at all — a comment-only inventory edit, a variable nothing reads, a macro
@@ -36,7 +37,7 @@ NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
 
 # The playbook the setup arm runs, and the one `narrow_setup.py` derives a tag's reachability
 # against. A literal here rather than `deploy_changes.setup_role_playbook`, which is the
-# authority: `test_gitops_deploy_imports` holds this module to `deploy_config` alone, and
+# authority: `test_gitops_deploy_imports` holds this module to two leaf imports, and
 # `ansible/tests/deploy/test_setup_role_playbooks_agree.py` is what keeps the string honest.
 SETUP_PLAYBOOK = "ansible/initial_setup.yml"
 
@@ -69,8 +70,9 @@ class BroadPlan(NamedTuple):
         playbook: the playbook to run.
         tags: its `--tags` value, empty for the whole playbook.
         apply: False when there is nothing to run, and the ff-merge is the whole apply.
-        hold_tags: what a FAILED apply holds, when that is wider than what it ran. None
+        hold_tags: what a FAILED apply holds, when it differs from what it ran. None
             means the two are the same, which is every plan but the narrowed setup plane.
+            That plane holds each block tag qualified by its role (`deploy_git.held_tag`).
     """
 
     playbook: str
@@ -78,19 +80,14 @@ class BroadPlan(NamedTuple):
     apply: bool
     hold_tags: list[str] | None = None
 
-    # DECIDED: the narrowed setup plane holds the ROLE tags it narrowed FROM, not the block
-    # tags it ran. `broad_hold_cleared_by` compares tag STRINGS, so a hold naming
-    # `gitops-config` is not covered by a later apply of `--tags gitops_deploy`, even though
-    # that run applies that block and every other one in the role. Holding the role tag keeps
-    # the clear-side behaviour this deployer had before #3120, where a later apply of the same
-    # role always clears the hold: the whole-role fallback fires on most ranges, so the
-    # alternative is a hold that survives the apply that fixed it, parking every session's
-    # landing. It over-claims, since the failure may have been one block — and over-claiming a
-    # hold is the safe direction, because issue #878 is the false clear, not the sticky one.
-    # The precise per-block version needs the role in the marker: issue #3138.
+    # The narrowed setup plane holds the block tags it RAN, each qualified by the role tag it
+    # narrowed from: `gitops_deploy:gitops-config`, not `gitops-config` and not the whole
+    # `gitops_deploy` (#3138). A bare block tag would survive the whole-role fallback that
+    # reruns it, and a sticky `hold_sha` parks every session's landing. The whole role
+    # over-claimed: a later apply narrowing to a different block of that role cleared it.
     @property
     def held(self) -> list[str]:
-        """The tags a failed apply records in `hold_plane` and the Discord alert quotes."""
+        """The tags a failed apply records in `hold_plane`."""
         return self.tags if self.hold_tags is None else self.hold_tags
 
 
@@ -264,7 +261,7 @@ def narrowed_setup_tags(
     setup_tags: set[str],
     setup_roles: dict[str, str],
     now: Callable[[], float] = time.monotonic,
-) -> list[str]:
+) -> dict[str, list[str]]:
     """`setup_tags`, with each role tag replaced by the block tags its own diff reaches (#3120).
 
     Args:
@@ -277,7 +274,8 @@ def narrowed_setup_tags(
             test can spend the budget without sleeping.
 
     Returns:
-        The sorted union of what each role needs. `--tags initial_setup` selects about 440
+        Each tag of `setup_tags`, mapped to the sorted tags that role needs. The apply runs
+        their union; a failed apply holds each one qualified by the key it came from. `--tags initial_setup` selects about 440
         tasks; since #3116 every one of them carries a tag narrower than `crons`, so the tags
         a changed file maps to can be derived — and a run that applies only those is a
         smaller blast radius for a bad template and a shorter setup-plane tick.
@@ -294,21 +292,30 @@ def narrowed_setup_tags(
     `ansible/requirements.yml`'s, mapped to no role directory, so there is nothing to derive
     it from — and dropping it would leave the collections uninstalled with nothing said.
     """
-    out: set[str] = set()
+    out: dict[str, list[str]] = {}
     deadline = now() + NARROW_SETUP_TOTAL_BUDGET_S
     for tag in sorted(setup_tags):
         role = setup_roles.get(tag)
         if role is None:
-            out.add(tag)
+            out[tag] = [tag]
             continue
         left = deadline - now()
         if left <= 0:
-            out |= _whole_role(role, tag, "this tick's narrowing budget is spent")
+            out[tag] = sorted(
+                _whole_role(role, tag, "this tick's narrowing budget is spent")
+            )
             continue
-        out |= _one_setup_role(
-            narrow_setup, config, target, role, tag, min(NARROW_SETUP_TIMEOUT_S, left)
+        out[tag] = sorted(
+            _one_setup_role(
+                narrow_setup,
+                config,
+                target,
+                role,
+                tag,
+                min(NARROW_SETUP_TIMEOUT_S, left),
+            )
         )
-    return sorted(out)
+    return out
 
 
 def _one_setup_role(
@@ -391,10 +398,14 @@ def plan(
     """
     plans = []
     if setup_tags:
-        tags = narrowed_setup_tags(
+        by_role = narrowed_setup_tags(
             narrow_setup, config, target, setup_tags, setup_roles
         )
-        plans.append(BroadPlan(SETUP_PLAYBOOK, tags, True, sorted(setup_tags)))
+        tags = sorted({t for role_tags in by_role.values() for t in role_tags})
+        held = sorted(
+            held_tag(r, t) for r, role_tags in by_role.items() for t in role_tags
+        )
+        plans.append(BroadPlan(SETUP_PLAYBOOK, tags, True, held))
     if deploy_plane:
         deploy = _deploy_plane(narrow, config, target)
         if digest_diff is not None:

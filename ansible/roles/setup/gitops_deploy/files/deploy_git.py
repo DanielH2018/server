@@ -244,6 +244,34 @@ def hold_plane_marker(playbook: str, tags: list[str] | None) -> str:
     return f"{playbook} {','.join(tags or [])}".strip()
 
 
+# Between a role tag and one of its block tags in a held tag (#3138). No Ansible tag in
+# `initial_setup.yml` or under `roles/setup/` contains one, so a held tag splits unambiguously.
+HELD_ROLE_SEP = ":"
+
+
+def held_tag(role_tag: str, tag: str) -> str:
+    """A held tag that remembers the role it was narrowed from: `<role tag>:<block tag>`.
+
+    A narrowed setup apply runs block tags, and a later whole-role apply (`--tags <role>`)
+    reruns every one of them. A bare `gitops-config` in the marker cannot say which role
+    tag covers it, so `broad_hold_cleared_by` reads the qualified form. A tag that IS the
+    role tag stays bare, which is also every hold written before #3138.
+    """
+    return tag if tag == role_tag else f"{role_tag}{HELD_ROLE_SEP}{tag}"
+
+
+def _held_tag_covered(held: str, applied: set[str]) -> bool:
+    """Did an apply of the tags `applied` run the held tag `held`?
+
+    `<role>:<block>` is covered by the block tag itself or by its whole-role tag, which
+    selects every block in the role. A bare tag is covered only by itself.
+    """
+    role, sep, block = held.partition(HELD_ROLE_SEP)
+    if not sep:
+        return held in applied
+    return block in applied or role in applied
+
+
 # Between the entries of a `hold_plane` that more than one failed apply wrote. Not a newline:
 # every reader outside this role prints the marker on one line.
 HOLD_PLANE_SEP = "; "
@@ -280,6 +308,11 @@ def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> b
     playbook, so it covers any tag set held against it; a tagged run covers a held tag set it
     is a superset of, and covers an UNTAGGED hold not at all — that hold names the whole
     playbook, of which a tagged run applies one part. An empty `held` means nothing is held.
+
+    A held `<role>:<block>` tag (`held_tag`) is covered by that block or by the role's own
+    tag (#3138). A narrowed setup apply therefore holds only the blocks it ran: the role's
+    whole-role apply clears it, and a narrowed apply of a DIFFERENT block of that role does
+    not.
     """
     if not held.strip():
         return True
@@ -290,7 +323,7 @@ def broad_hold_cleared_by(held: str, playbook: str, tags: list[str] | None) -> b
     if not applied:
         return True
     wanted = {t for t in held_tags.split(",") if t}
-    return bool(wanted) and wanted.issubset(applied)
+    return bool(wanted) and all(_held_tag_covered(t, applied) for t in wanted)
 
 
 def is_diverged(

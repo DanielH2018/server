@@ -96,8 +96,8 @@ apply, each dropped by an apply covering it (`clear_broad_hold` / `clear_service
 untagged run covers any tag set, a tagged run a held set it is a superset of, never an untagged
 hold. Every consumer gates on `hold_sha` alone, so an early clear turns the tile green over an
 unapplied plane (#878). A hand `ansible-playbook` run clears nothing, and the deploy UI's Clear
-button drops EVERY entry at once as the operator's override. **A narrowed setup apply holds its
-ROLE tag**: this match is over tag strings (#3138).
+button drops EVERY entry as the operator's override. **A narrowed setup apply holds
+`<role>:<block>`**, which the role's own tag also covers (#3138).
 
 ## Traps
 
