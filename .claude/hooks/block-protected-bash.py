@@ -13,7 +13,7 @@ file and `tee docs/reference/services.md` each returned NO decision from both Pr
 hooks. `bash-write-fanout.sh` already closes this gap for the four PostToolUse
 Edit|Write hooks; it does not re-drive a PreToolUse deny, so this does.
 
-THREE ARMS, TWO DECISIONS, ON PURPOSE.
+TWO ARMS, TWO DECISIONS, ON PURPOSE.
 
   1. WRITES -> `ask`, never `deny`. The path extraction here is a heuristic over command text,
      not a shell parse, and `bash-write-fanout.sh` states the bargain a heuristic has to keep:
@@ -31,15 +31,9 @@ THREE ARMS, TWO DECISIONS, ON PURPOSE.
      itself names, so a false positive costs one narrower re-run while a false negative costs a
      rotation.
 
-  3. WRITES THAT LEAVE AN ISOLATED SESSION'S WORKTREE -> `deny`. A different question from
-     arm 1 — not WHICH file, but WHERE — so it takes the stronger decision. `isolation-guard.sh`
-     denies an Edit or Write landing in a git checkout outside `.claude/worktrees/`, and it
-     matches `Edit|Write|NotebookEdit` only, so the Bash surface auto mode instructs was
-     uncovered. Measured 2026-09-06 18:17:54: a worktree-isolated agent ran
-     `cd /home/ubuntu/server && python3 - <<'EOF' ... EOF`, the heredoc wrote to the PRIMARY
-     checkout, and nothing stopped it. The stray edit left that tree dirty, which parked the
-     GitOps deployer, and the agent's own verification grep ran under the same `cd` and read
-     the escaped copy back — so the failure was silent from the inside. Issue #1419.
+A third arm, a write that leaves a worktree-isolated session's worktree (#1419), moved to the
+dotfiles `claude_guard` package as `checks/worktree_escape.py` (#2818): it reads nothing
+this repo owns, so every repo's sessions now get it.
 
 Reads the hook JSON on stdin. Emits a decision or stays silent -> normal permission flow.
 """
@@ -50,14 +44,7 @@ import os
 import re
 import sys
 
-from _hook_common import Unsplittable, emit_pretooluse_decision, segments
-
-# Arm 3 splits the command with the dotfiles package's segmenter (#2053), through
-# `_hook_common.segments` since every Bash guard consumes it (#2134): the same separator set
-# the hand-rolled regex it replaced used, but quote- and nesting-aware, with heredoc bodies
-# lifted off the segment text. Arms 1 and 2 need no segmenter and keep running when the
-# package is not deployed; arm 3 turns that into an `ask` rather than silence -- see
-# `escaping_write_reason`.
+from _hook_common import emit_pretooluse_decision
 
 
 def _load_classify():
@@ -204,181 +191,8 @@ def read_reason(command, repo_root):
     return None
 
 
-# ── arm 3: a write that escapes an isolated session's worktree ───────────────────────
-#
-# Scoped to a session whose cwd is itself under `.claude/worktrees/`. Outside one this arm is
-# inert, so an ordinary session in the primary checkout is untouched.
-
-# The marker `isolation-guard.sh` uses, spelled with separators on both sides so a directory
-# merely NAMED worktrees does not match.
-_WORKTREES = f"{os.sep}.claude{os.sep}worktrees{os.sep}"
-
-# Command words that take a heredoc and then write files the command text never names. This is
-# the incident's own shape: `python3 - <<'EOF'` carries no redirect, so `written_paths` returns
-# nothing and there is no target to judge — only the directory the write lands in.
-# `uv` is here because `uv run python - <<EOF` is how this repo invokes its pinned interpreter.
-_HEREDOC_INTERPRETERS = frozenset(
-    {"python", "python3", "bash", "sh", "zsh", "perl", "ruby", "node", "uv"}
-)
-
-_CD = re.compile(r"^\s*(?:cd|pushd)\s+([^\s;&|<>()]+)\s*$")
-_ENV_ASSIGN = re.compile(r"^[A-Za-z_][A-Za-z0-9_]*=")
-
-
-def _in_a_worktree(path):
-    return _WORKTREES in os.path.abspath(path) + os.sep
-
-
-def _inside_a_git_checkout(path):
-    """True if `path` sits under a directory holding a `.git`.
-
-    Pure filesystem, no subprocess: this runs in front of every Bash call. A path outside any
-    repo — /tmp, a scratch directory, ~/.claude/artifacts — is not a checkout edit and is left
-    alone, the same scope `isolation-guard.sh` states.
-    """
-    current = os.path.abspath(path)
-    while True:
-        if os.path.exists(os.path.join(current, ".git")):
-            return True
-        parent = os.path.dirname(current)
-        if parent == current:
-            return False
-        current = parent
-
-
-def _escapes(path):
-    """True if a write to `path` lands in a git checkout outside any `.claude/worktrees/`."""
-    return not _in_a_worktree(path) and _inside_a_git_checkout(path)
-
-
-def _heredoc_interpreter(segment):
-    """The interpreter this segment feeds a heredoc to, or None."""
-    if "<<" not in segment:
-        return None
-    for token in segment.split():
-        if _ENV_ASSIGN.match(token):
-            continue
-        word = os.path.basename(token)
-        return word if word in _HEREDOC_INTERPRETERS else None
-    return None
-
-
-def _could_write(command):
-    """True if arm 3 could ever act on this text: a named write target, or a heredoc.
-
-    Read off the raw command, so it holds without the segmenter. Everything arm 3 denies
-    passes through `written_paths` or `_heredoc_interpreter`, and both need one of these.
-    """
-    return "<<" in command or bool(written_paths(command))
-
-
-def escaping_write_reason(command, session_cwd, split=segments):
-    """(decision, reason) for a write outside the isolated worktree; (None, None) otherwise.
-
-    The decision is `deny` for an escape and `ask` where the segmenter cannot say.
-
-    Walks the command a segment at a time, carrying the directory a leading `cd` or `pushd`
-    moves it to — that carry is the whole point, because the incident's relative writes were
-    only outside the worktree by virtue of the `cd` in front of them. The segments are the
-    package's (`claude_guard.segment.parse`): split on the same separators the hand-rolled
-    regex used, but a `;` inside quotes stays inside its word, so `echo 'x; cd /primary'`
-    no longer reads as a `cd` the shell never performs (#2053). Heredoc bodies come back
-    lifted off the segment text, which is what keeps a Markdown `>` in prose from being
-    read as a redirect (`bash-write-fanout.sh` records that trap).
-
-    Two decisions. A real escape is a `deny`. Text the segmenter refuses (an unbalanced
-    quote, an unclosed substitution) or a missing segmenter is an `ask` carrying the reason:
-    the package's contract is that a non-ok parse is never read as "nothing here", and a
-    deny on a typo would put the strongest decision in the repo on the weakest evidence.
-
-    Two verdicts per segment, and the split is what keeps this from over-denying. When the
-    segment names write targets, those targets are judged, so `cd /home/ubuntu/server &&
-    cat foo > /tmp/x` stays clean. Only when a writer is present and names nothing — the
-    interpreter-heredoc case — does the effective directory decide.
-    """
-    if not _in_a_worktree(session_cwd):
-        return None, None
-    try:
-        parsed = split(command)
-    except Unsplittable as exc:
-        if not _could_write(command):
-            return None, None
-        if exc.missing:
-            return (
-                "ask",
-                f"This session is isolated in {session_cwd}, but the worktree-escape guard "
-                f"(#1419) cannot split this command: the `claude_guard` package is not "
-                f"deployed ({exc.detail}). Run `chezmoi apply` on this host, or "
-                f"confirm the write lands inside the worktree.",
-            )
-        return (
-            "ask",
-            f"This session is isolated in {session_cwd}, and the worktree-escape guard "
-            f"(#1419) cannot read this command ({exc.status}), so it cannot tell where "
-            f"the write lands. Fix the quoting, or confirm the write stays inside the "
-            f"worktree.",
-        )
-    cwd = os.path.abspath(session_cwd)
-    for segment in (seg.text for seg in parsed):
-        if not segment.strip():
-            continue
-        moved = _CD.match(segment)
-        if moved:
-            destination = moved.group(1).strip("\"'")
-            if "$" in destination or destination == "-":
-                # An unresolvable destination: every later segment's directory is unknown, so
-                # stop rather than judge against a directory the command is not in.
-                return None, None
-            cwd = os.path.abspath(os.path.join(cwd, os.path.expanduser(destination)))
-            continue
-        targets = [p.strip("\"'") for p in written_paths(segment)]
-        if targets:
-            for target in targets:
-                resolved = (
-                    target if os.path.isabs(target) else os.path.join(cwd, target)
-                )
-                if _escapes(resolved):
-                    return "deny", (
-                        f"`{os.path.abspath(resolved)}` is in a git checkout outside "
-                        f"`.claude/worktrees/`, and this session is isolated in "
-                        f"{session_cwd}. Write inside the worktree instead. If the edit "
-                        f"genuinely belongs to another checkout, make it from a session "
-                        f"that is not worktree-isolated. See issue #1419."
-                    )
-            continue
-        interpreter = _heredoc_interpreter(segment)
-        if interpreter and _escapes(cwd):
-            return "deny", (
-                f"This command runs `{interpreter}` on a heredoc from {cwd}, a git checkout "
-                f"outside `.claude/worktrees/`, while this session is isolated in "
-                f"{session_cwd}. The heredoc names no target, so the directory it runs in "
-                f"decides where its writes land — that is how a stray edit reached the "
-                f"primary checkout and parked the GitOps deployer on 2026-09-06. Drop the "
-                f"`cd` and write inside the worktree. See issue #1419."
-            )
-    return None, None
-
-
-def decide(command, repo_root, session_cwd=None, split=segments):
-    """Return (decision, reason), or (None, None) for normal permission flow.
-
-    `session_cwd` is the directory the tool call runs in, which arm 3 reads to tell an isolated
-    session from an ordinary one. It defaults to `repo_root` because the payload supplies one
-    value for both; the tests pass them separately so arm 3's scoping is provable in CI, where
-    the checkout is not under `.claude/worktrees/`. `split` is arm 3's segmenter; the tests
-    hand it one that raises, to stand on the host where the package is not deployed.
-    """
-    # DECIDED: arm 3 runs FIRST, and denies where arm 1 only asks. `cd /home/ubuntu/server &&
-    # sed -i s/a/b/ ansible/vars/secrets.yml` matches both, and an `ask` there would let the
-    # escape be approved on the strength of a prompt about the wrong thing. The asymmetry
-    # arm 1's docstring argues does not apply here: a heuristic that wrongly asks costs a
-    # prompt, but a write outside an isolated session's worktree is never the right call, so
-    # a wrong deny costs one re-run from the right directory while a wrong allow parks the
-    # deployer for every session. The known cost is that a deliberate edit to the chezmoi
-    # checkout from a server worktree is denied; the reason string names the way through.
-    decision, escaped = escaping_write_reason(command, session_cwd or repo_root, split)
-    if decision:
-        return decision, escaped
+def decide(command, repo_root):
+    """Return (decision, reason), or (None, None) for normal permission flow."""
     reason = read_reason(command, repo_root)
     if reason:
         return "deny", reason
@@ -410,9 +224,7 @@ def decision(payload):
     # — and an empty prefix resolves against the process cwd implicitly, the same silent
     # probe `read_cwd`'s docstring refuses for `git -C ""`. Naming the directory says which
     # checkout those paths resolve in. The shim's `cd /home/ubuntu/server` makes it the
-    # primary checkout, a real repo root, so arms 1 and 2 keep a tree to read; arm 3 reads
-    # the same thing either way, because `_in_a_worktree` of the primary checkout is False
-    # and the escape guard is inert on a missing `cwd` under both spellings. Issue #2135.
+    # primary checkout, a real repo root, so both arms keep a tree to read. Issue #2135.
     repo_root = payload.get("cwd") or os.getcwd()
     verdict, reason = decide(command, repo_root)
     return (verdict, reason) if verdict else None

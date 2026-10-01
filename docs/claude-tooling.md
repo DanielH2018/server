@@ -465,17 +465,13 @@ It also **denies** a content-printing read (`cat`, `head`, `grep` without `-o`/`
 deployed host script that renders a credential inline;
 `scripts/secrets_mgmt/secret_bearing_host_paths.py` derives that set from the tree.
 
-A third arm **denies** a Bash write that leaves an isolated session's worktree.
+A Bash write that leaves an isolated session's worktree is **denied** by the dotfiles
+`claude_guard` package, not by this hook (`checks/worktree_escape.py`, moved there by #2818).
 `isolation-guard.sh` covers `Edit|Write` only, so `cd /home/ubuntu/server && python3 - <<'EOF'`
-escaped into the primary checkout and parked the GitOps deployer on 2026-09-06 (#1419). The arm
-carries the `cd` through the command a segment at a time, and is inert outside a
-`.claude/worktrees/` session. It denies where a protected-file write only asks, because a write
-outside the worktree is never the right call.
+escaped into the primary checkout and parked the GitOps deployer on 2026-09-06 (#1419). The
+check reads nothing this repo owns, so it runs from `guard-pre-tool-use.sh` in every repo.
 
-The segments are the dotfiles package's (`claude_guard.segment.parse`, #2053), so a quoted `;`
-stays inside its word. Text it cannot split — no `claude_guard` deploy on the host, or an
-unbalanced quote — is an **ask** naming the fix, never a silent pass. `block-footguns` and
-`nudge-land-sh` split with the same segment parser through `_hook_common.split_stages` (#2134), so a
+`block-footguns` and `nudge-land-sh` split with the same segment parser through `_hook_common.split_stages` (#2134), so a
 newline separates stages for them too, and a here-document body is never one. On text it cannot split,
 `block-footguns` asks when the command names a binary one of its rules keys on and stays silent
 otherwise; `nudge-land-sh` stays silent, since a missed nudge costs one hand-written poll. The
