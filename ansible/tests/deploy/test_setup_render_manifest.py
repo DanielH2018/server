@@ -221,7 +221,7 @@ def test_other_setup_roles_stamp_their_own_artifacts():
     manifest-prune-check, and stamping them here would claim coverage this host cannot provide.
     """
     expected = {
-        "ansible/roles/setup/gitops_deploy/tasks/install.yml",
+        "ansible/roles/setup/gitops_deploy/tasks/service.yml",
         "ansible/roles/setup/renovate_notify/tasks/service.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
@@ -301,7 +301,7 @@ def test_every_role_that_deploys_code_declares_its_pairs():
     a derivation would demand pairs for all of them.
     """
     expected = {
-        "ansible/roles/setup/gitops_deploy/tasks/install.yml",
+        "ansible/roles/setup/gitops_deploy/tasks/code.yml",
         "ansible/roles/setup/renovate_notify/tasks/code.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
@@ -461,7 +461,7 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
 
 _STAMP_SITES = (
     "ansible/roles/setup/k3s/tasks/health-crons.yml",
-    "ansible/roles/setup/gitops_deploy/tasks/install.yml",
+    "ansible/roles/setup/gitops_deploy/tasks/service.yml",
     "ansible/roles/setup/renovate_notify/tasks/service.yml",
     "ansible/roles/setup/fake_remux/tasks/main.yml",
     "ansible/roles/setup/initial_setup/tasks/crons.yml",

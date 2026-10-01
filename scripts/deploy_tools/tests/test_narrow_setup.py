@@ -138,9 +138,10 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
     }
 
 
-# The setup task files #3134 and #3135 made narrowable, each with the answer `tags_of` gives.
-# Before them, `crons.yml` refused on its `always` preamble and the other three roles had one
-# untagged `main.yml`, so every change to them applied the whole role.
+# The setup task files #3134, #3135 and #3154 made narrowable, each with the answer `tags_of`
+# gives. Before them, `crons.yml` refused on its `always` preamble, three roles had one untagged
+# `main.yml`, and `gitops_deploy` and `hypervisor` reached their task files only through
+# `include_tasks`, so every change to them applied the whole role.
 NARROWED_SETUP_FILES = {
     ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
     ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
@@ -148,6 +149,18 @@ NARROWED_SETUP_FILES = {
     ("renovate_agent", "tasks/service.yml"): {"renovate-agent-service"},
     ("renovate_notify", "tasks/code.yml"): {"renovate-notify-code"},
     ("renovate_notify", "tasks/service.yml"): {"renovate-notify-service"},
+    ("gitops_deploy", "tasks/code.yml"): {"gitops-deploy-code"},
+    ("gitops_deploy", "tasks/service.yml"): {"gitops-deploy-service"},
+    ("gitops_deploy", "tasks/retired.yml"): {"gitops-deploy-retired"},
+    ("gitops_deploy", "tasks/github_checks.yml"): {
+        "cron",
+        "gitops-deploy-github-checks",
+    },
+    ("gitops_deploy", "tasks/teardown.yml"): {"gitops-deploy-teardown"},
+    ("hypervisor", "tasks/network.yml"): {"hypervisor-network"},
+    ("hypervisor", "tasks/etcd_drill.yml"): {"hypervisor-etcd-drill"},
+    ("hypervisor", "tasks/reap_staging.yml"): {"hypervisor-reap-staging"},
+    ("hypervisor", "tasks/teardown.yml"): {"hypervisor-teardown"},
 }
 
 

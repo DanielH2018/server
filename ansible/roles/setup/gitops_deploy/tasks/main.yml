@@ -2,11 +2,17 @@
 # Dispatcher, the docker_install shape. The role is included unconditionally and has_gitops
 # picks the half, so a host with has_gitops: false still reaps what an earlier true run
 # installed.
+#
+# Both halves are STATIC imports, so `narrow_setup` can follow them and the deployer can apply
+# one subject's change under its own tag (#3154); `install.yml` names the subjects. The `when:`
+# here is attached to every imported task, which keeps the include's behaviour because no task
+# in the role changes has_gitops. The two imports carry no tags: a tag here would be inherited
+# by every task under it, and a narrowed run would apply the whole role.
 
 - name: Install the GitOps deployer on the host that owns it
-  ansible.builtin.include_tasks: install.yml
+  ansible.builtin.import_tasks: install.yml
   when: has_gitops
 
 - name: Reap the deployer units from a host that is not the GitOps deployer
-  ansible.builtin.include_tasks: teardown.yml
+  ansible.builtin.import_tasks: teardown.yml
   when: not has_gitops

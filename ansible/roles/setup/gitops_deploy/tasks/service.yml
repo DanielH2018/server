@@ -1,0 +1,99 @@
+---
+- name: Write deployer config (secrets, host-only)
+  tags: [gitops-deploy-service]
+  ansible.builtin.template:
+    src: config.env.j2
+    dest: /etc/gitops-deploy/config.env
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0600"
+  become: true
+  no_log: true
+  notify: Run gitops-deploy once
+
+- name: Install systemd units
+  tags: [gitops-deploy-service]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    mode: "0644"
+  loop:
+    - gitops-deploy.service
+    - gitops-deploy.timer
+  become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Write the alert webhook where only systemd reads it
+  tags: [gitops-deploy-service]
+  ansible.builtin.template:
+    src: alert-webhook.env.j2
+    dest: /etc/gitops-deploy/alert-webhook.env
+    owner: root
+    group: root
+    mode: "0600"
+  become: true
+  no_log: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+# The unit reads the webhook through EnvironmentFile and contains no secret, so 0644 is the
+# honest mode. A 0600 unit would not protect an embedded value: systemd serves unit content over
+# the system bus regardless of file mode, so `systemctl show gitops-deploy-alert -p ExecStart`
+# prints the full webhook URL to an unprivileged user. With EnvironmentFile the same command
+# prints the literal `${ALERT_WEBHOOK}`.
+- name: Install the alert unit
+  tags: [gitops-deploy-service]
+  ansible.builtin.template:
+    src: gitops-deploy-alert.service.j2
+    dest: /etc/systemd/system/gitops-deploy-alert.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Run gitops-deploy once
+
+- name: Allow the deploy user to trigger a tick without root (polkit)
+  tags: [gitops-deploy-service]
+  ansible.builtin.template:
+    src: 50-gitops-deploy.rules.j2
+    dest: /etc/polkit-1/rules.d/50-gitops-deploy.rules
+    owner: root
+    group: root
+    mode: "0644"
+  become: true
+  # No handler: polkitd watches rules.d and reloads a changed rule on its own, so
+  # there is nothing to restart. The rule's own header explains the narrow scope
+  # (this unit, `start` only) and why it must not test subject.active.
+
+- name: Enable and start the timer
+  tags: [gitops-deploy-service]
+  ansible.builtin.systemd:
+    name: gitops-deploy.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+
+# Render provenance for manifest-prune-check.sh's stale-script arm. Last in this file, after
+# every template it stamps, so a failed run leaves the previous checksums rather than claiming
+# these.
+- name: Stamp the rendered gitops-deploy units
+  tags: [gitops-deploy-service]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: gitops-deploy
+    stamp_render_templates:
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
+      - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
+      - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2
+      # The two .env.j2 sources are stamped too. Stamping does not leak a secret:
+      # stamp_render.yml hashes the REPO SOURCE (:56), and the arm re-hashes that same source
+      # (manifest-prune-check.sh.j2:284), so neither side reads the rendered file with the
+      # secret in it. Omitting them would let a change to the deployer's budget or CI lines
+      # render stale unnoticed.
+      - ansible/roles/setup/gitops_deploy/templates/config.env.j2
+      - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2

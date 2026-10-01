@@ -29,10 +29,9 @@ from lib import yaml_fast
 
 # include_tasks and import_tasks read alike here: the only place they diverge is a
 # runtime-templated target (`include_tasks: "{{ var }}.yml"`), and _gates_in already skips
-# that case (`"{{" in target`) rather than following it. A static include_tasks -- the
-# docker_install/gitops_deploy dispatcher shape, `include_tasks: install.yml` under
-# `when: has_gitops` -- carries that when: to the file it pulls in the same way a static
-# import_tasks does.
+# that case (`"{{" in target`) rather than following it. A literal include_tasks --
+# `include_tasks: install.yml` under a `when:` -- carries that when: to the file it pulls in
+# the same way a static import_tasks does.
 _IMPORT_KEYS = (
     "ansible.builtin.import_tasks",
     "import_tasks",

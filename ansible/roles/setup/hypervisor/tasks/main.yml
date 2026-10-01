@@ -1,14 +1,21 @@
 ---
 # Dispatcher. Included unconditionally; has_hypervisor chooses which half runs.
 #
+# Both halves are STATIC imports, so `narrow_setup` can follow them and the GitOps deployer can
+# apply one subject's change under its own tag (#3154): `hypervisor-host`, `hypervisor-network`,
+# `hypervisor-etcd-drill`, `hypervisor-reap-staging` or `hypervisor-teardown`. The `when:` here
+# is attached to every imported task, which keeps the include's behaviour because no task in the
+# role changes has_hypervisor. The two imports carry no tags: a tag here would be inherited by
+# every task under it, and one run of `--tags hypervisor-etcd-drill` would apply the whole role.
+#
 # Both directions exist, deliberately. A role gated in the playbook is skipped entirely when
 # its flag flips to false, so nothing declarative reaps what was left behind. A flag that only
 # one direction honours describes an intention, not a state.
 
 - name: Install and configure the KVM/libvirt hypervisor
-  ansible.builtin.include_tasks: install.yml
+  ansible.builtin.import_tasks: install.yml
   when: has_hypervisor
 
 - name: Remove the hypervisor from a host that should not run VMs
-  ansible.builtin.include_tasks: teardown.yml
+  ansible.builtin.import_tasks: teardown.yml
   when: not has_hypervisor

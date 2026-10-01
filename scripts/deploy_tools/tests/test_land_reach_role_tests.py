@@ -5,11 +5,11 @@ A role's own `tests/*.py` must not fall through to the ROLE-level reach: `tests/
 shipped directory, and with no playbook gate the role-level reach is all three hosts, so
 `remaining_setup_hosts_note`'s union over a PR's files would widen the box-only answer for the
 role's `files/*.py` back out to every host. The role dispatches on `has_gitops` inside
-`tasks/main.yml`, and `setup_file_hosts` follows that `include_tasks` gate.
+`tasks/main.yml`, and `setup_file_hosts` follows that `import_tasks` gate.
 
 Each narrowing has a reject half. The reject here is `tasks/teardown.yml`: a change to the
 half of the dispatcher that runs where `has_gitops` is false must still name daniel-server
-and daniel-pi, through the `not has_gitops` gate on the include that pulls it in; this file pins
+and daniel-pi, through the `not has_gitops` gate on the import that pulls it in; this file pins
 the answer, so a later narrowing of `tasks/` cannot silence it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_role_tests.py
@@ -48,7 +48,7 @@ def test_the_paths_under_test_still_exist():
     missing = [p for p in named if not (REPO_ROOT / p).exists()]
     assert not missing, f"paths moved, so these cases check nothing: {missing}"
     main = (REPO_ROOT / "ansible/roles/setup/gitops_deploy/tasks/main.yml").read_text()
-    assert "include_tasks: teardown.yml" in main, (
+    assert "import_tasks: teardown.yml" in main, (
         "the dispatcher shape this file pins moved"
     )
 
@@ -66,15 +66,15 @@ def test_a_role_test_file_reaches_no_host():
 
 
 def test_a_shipped_file_still_reaches_the_gitops_host_only():
-    """The include gate is followed."""
+    """The import gate is followed."""
     assert land_reach.setup_file_hosts(_ROLE, _FILES) == frozenset({"daniel-box"})
 
 
 def test_the_teardown_half_still_reaches_the_other_hosts():
     """The reject half: `tasks/` is NOT dropped (`is_role_test_path`'s docstring says why),
     and the file that runs where `has_gitops` is false must keep naming those hosts. A
-    `tasks/` path reads the include chain above it, so each half of the dispatcher
-    names exactly the hosts its `include_tasks` gate admits."""
+    `tasks/` path reads the import chain above it, so each half of the dispatcher
+    names exactly the hosts its `import_tasks` gate admits."""
     assert land_reach.setup_file_hosts(_ROLE, _TEARDOWN) == frozenset(
         {"daniel-server", "daniel-pi"}
     )

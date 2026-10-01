@@ -24,7 +24,7 @@ CONFIG_TEMPLATE = ROLE / "templates" / "config.env.j2"
 UNIT = ROLE / "templates" / "gitops-deploy.service.j2"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 MARKERS = ROLE / "files" / "gitops_markers.py"
-INSTALL = ROLE / "tasks" / "install.yml"
+INSTALL = ROLE / "tasks" / "retired.yml"
 
 # The keys the tick read the gate through. Named rather than matched by a `STAGING_` prefix:
 # a prefix check passes on an empty file, and these are the four a revival would re-add.
@@ -100,11 +100,11 @@ def test_the_install_path_reaps_the_retired_alert_marker_and_keeps_the_ledgers()
     """
     install = INSTALL.read_text()
     assert REAPED_STATE in install, (
-        f"install.yml no longer removes {REAPED_STATE}, so the retired gate's dedupe marker "
+        f"retired.yml no longer removes {REAPED_STATE}, so the retired gate's dedupe marker "
         "stays on daniel-box with no reader (#3079)."
     )
     present = [path for path in KEPT_STATE if path in install]
-    assert not present, f"install.yml now reaps kept staging evidence: {present}"
+    assert not present, f"retired.yml now reaps kept staging evidence: {present}"
 
 
 def test_the_unit_budget_no_longer_counts_a_staging_pair():

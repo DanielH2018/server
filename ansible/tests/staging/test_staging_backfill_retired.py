@@ -1,9 +1,9 @@
 """The retired staging-backfill ratchet is reaped from the deployer, not only from other hosts.
 
 `teardown.yml` runs only where `has_gitops` is false, so it never reaches daniel-box, the one
-host that ran the ratchet. Deleting the templates from `install.yml` alone would have left the
+host that ran the ratchet. Deleting the templates from the install path alone would have left the
 timer ticking there from its last rendered unit file, driving a harness that no longer exists.
-These tests pin the tasks in `install.yml` that converge daniel-box.
+These tests pin the tasks in `retired.yml`, on the install path, that converge daniel-box.
 
 Run: uv run pytest ansible/tests/staging/test_staging_backfill_retired.py
 """
@@ -11,7 +11,7 @@ Run: uv run pytest ansible/tests/staging/test_staging_backfill_retired.py
 from _helpers import SETUP_ROLES, load_tasks, task_named
 
 ROLE = SETUP_ROLES / "gitops_deploy"
-INSTALL = ROLE / "tasks" / "install.yml"
+INSTALL = ROLE / "tasks" / "retired.yml"
 
 UNITS = {
     "/etc/systemd/system/staging-backfill.service",
