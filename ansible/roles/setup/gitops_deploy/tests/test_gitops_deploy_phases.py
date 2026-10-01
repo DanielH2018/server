@@ -238,6 +238,22 @@ def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
     assert "not parking" in capsys.readouterr().out
 
 
+def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
+    gitops_deploy, tick, settings
+):
+    """#3111, the 2026-10-01 range: a role change (#3080) below a tests-only tip (#3081). The
+    tip reaches no role, so sonarr's line must name the commit its own landing deployed."""
+    role_change, tests_only = "1" * 40, "2" * 40
+    template = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
+    tick.paths = [template, "ansible/tests/k8s/test_sonarr.py"]
+    tick.commits = [(tests_only, [tick.paths[1]]), (role_change, [template])]
+    plan = deploy_phases.plan_tick(
+        tick.tools, gitops_deploy.STATE, settings, _target(gitops_deploy)
+    )
+    assert plan.cs.k8s == {"sonarr"}
+    assert plan.cs.k8s_origins == {"sonarr": role_change}
+
+
 # ── handle_dirty() ────────────────────────────────────────────────────────────────────────
 def test_handle_dirty_logs_the_paths_on_every_tick(
     gitops_deploy, tick, state_dir, capsys, settings

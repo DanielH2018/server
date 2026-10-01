@@ -32,6 +32,7 @@ LATER = "c" * 40
 
 
 def _tools(**kwargs) -> DeployTools:
+    kwargs.setdefault("digest_provable", lambda _repo, _roles: set())
     return DeployTools(discord_post=lambda _webhook, _content: True, **kwargs)
 
 
@@ -53,6 +54,25 @@ def test_a_deferred_k8s_role_is_recorded_with_the_sha_and_the_stamp(
         (e.origin, e.service, e.at) for e in gitops_deploy.STATE.k8s_unapplied_pending()
     ]
     assert (origin, service) == (ORIGIN, "authelia")
+
+
+def test_each_line_names_the_commit_that_changed_its_service(
+    gitops_deploy, state_dir, settings
+):
+    """#3111: sonarr changed at APPLIED, below a later tip. Its landing's record names APPLIED,
+    so a line at the tip would never discharge. authelia has no attribution and keeps the tip."""
+    deploy_defer.alert_and_record_deferred(
+        _tools(),
+        gitops_deploy.STATE,
+        settings,
+        ORIGIN,
+        set(),
+        ChangeSet(k8s={"sonarr", "authelia"}, k8s_origins={"sonarr": APPLIED}),
+        declared_k8s={"sonarr", "authelia"},
+    )
+    assert sorted(
+        (e.service, e.origin) for e in gitops_deploy.STATE.k8s_unapplied_pending()
+    ) == [("authelia", ORIGIN), ("sonarr", APPLIED)]
 
 
 def test_a_range_with_no_k8s_role_records_nothing(gitops_deploy, state_dir, settings):
@@ -328,6 +348,46 @@ def test_a_role_acting_outside_the_digest_ignores_a_matching_render(
         == []
     )
     assert "game-stats-lib" not in deploy_defer.DIGEST_PROVABLE_ROLES
+
+
+# ── a service's own line takes the render proof when its role is digest-provable (#3110) ──
+def _discharge_own(state, settings, digest_provable):
+    """authelia's record predates the line; its render at LATER matches the applied bytes."""
+    return deploy_defer.discharge_k8s_unapplied(
+        _tools(
+            release_commit=lambda _svc: APPLIED,
+            is_ancestor=lambda _repo, _origin, commit: commit == LATER,
+            render_proof=lambda _svc: LATER,
+            digest_provable=digest_provable,
+        ),
+        state,
+        settings,
+    )
+
+
+def test_an_own_line_discharges_on_a_matching_render_when_provable(pending, settings):
+    """FLAGGED half: a comment-only template change, never redeployed, bytes unmoved."""
+    assert _discharge_own(pending, settings, lambda _r, roles: set(roles)) == [
+        "authelia"
+    ]
+
+
+@pytest.mark.parametrize(
+    "digest_provable",
+    [
+        pytest.param(lambda _r, _roles: set(), id="acts-outside-the-digest"),
+        pytest.param(
+            lambda _r, _roles: (_ for _ in ()).throw(ValueError("bad json")),
+            id="derivation-fails",
+        ),
+    ],
+)
+def test_an_own_line_ignores_a_matching_render_unless_provable(
+    pending, settings, digest_provable
+):
+    """CLEAN half: a role that writes a host file or calls an API is not proved by bytes."""
+    assert _discharge_own(pending, settings, digest_provable) == []
+    assert [e.service for e in pending.k8s_unapplied_pending()] == ["authelia"]
 
 
 # ── the release record reader ──────────────────────────────────────────────────────────────

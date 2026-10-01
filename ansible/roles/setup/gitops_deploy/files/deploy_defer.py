@@ -396,10 +396,17 @@ def alert_and_record_deferred(
     same service would hold a line in both markers and the SessionStart banner would name it
     twice — once as a deferred bump, once as an unapplied role. The paging marker wins: it
     already carries the service, and its line is the one with a threshold behind it.
+
+    EACH LINE NAMES THE COMMIT THAT CHANGED ITS SERVICE (#3111), from `cs.k8s_origins`, and
+    `origin` only where that map has no answer: the discharge asks whether a release record
+    descends from the line, and a landing's record names its own commit, not the tick's tip.
     """
-    state.record_k8s_unapplied(
-        origin, cs.k8s - pending_k8s_deferred(state), time.time()
-    )
+    now = time.time()
+    by_commit: dict[str, set[str]] = {}
+    for service in cs.k8s - pending_k8s_deferred(state):
+        by_commit.setdefault(cs.k8s_origins.get(service, origin), set()).add(service)
+    for commit, services in by_commit.items():
+        state.record_k8s_unapplied(commit, services, now)
     deploy_alerts.alert_deferred(
         tools, state, config, origin, deployed, cs, declared_k8s
     )
@@ -441,6 +448,11 @@ def discharge_k8s_unapplied(
     `DIGEST_PROVABLE_ROLES` a caller also carries it when a render at a commit descending
     from the line's matches its applied digests (`deploy_release.render_proof`, #3057): that
     caller's bytes are what the change renders, so there is nothing left to apply there.
+
+    A SERVICE'S OWN LINE TAKES THE SAME RENDER PROOF (#3110) when its role acts only through
+    the bytes the digest covers, as `scripts/deploy_tools/digest_provable.py` derives it. The
+    derivation runs only for a line its record did not already drop, and a failure reads as
+    "no role is", which keeps the line.
     """
     pending = state.k8s_unapplied_pending()
     records = {e.service: tools.release_commit(e.service) for e in pending}
@@ -456,11 +468,20 @@ def discharge_k8s_unapplied(
             return True
         return by_digest and descends(tools.render_proof(service), origin)
 
+    provable = _digest_provable(
+        tools,
+        config,
+        {
+            e.service
+            for e in pending
+            if records[e.service] and not descends(records[e.service], e.origin)
+        },
+    )
     discharged = []
     for entry in pending:
         own = bool(records[entry.service])
         tags = {entry.service} if own else callers.get(entry.service)
-        by_digest = not own and entry.service in DIGEST_PROVABLE_ROLES
+        by_digest = entry.service in (provable if own else DIGEST_PROVABLE_ROLES)
         if tags and all(carries(t, entry.origin, by_digest) for t in tags):
             discharged.append(entry.service)
     if discharged:
@@ -472,23 +493,20 @@ def discharge_k8s_unapplied(
     return sorted(discharged)
 
 
-# DECIDED: only `manifests` discharges on a render digest (#3057). A digest match proves the
-# bytes `manifests_digest` and `secret_digest` cover, and nothing a role does outside them.
-# `manifests` renders those bytes, so most of its changes either move a caller's digest or
-# take effect on the next deploy of any caller without being "behind". The gap taken is a
-# change to HOW it applies — the prune, the Secret-key reconcile, an apply flag — which can
-# leave live state different from what that change would produce while no digest moves: the
-# line discharges and the difference waits for the next deploy. `probe.py releases` has taken
-# the same gap since #3046, where a CURRENT digest clears a `manifests/tasks/` path hit. A
-# line that never discharged until a full deploy was the defect (#2643), so the gap is
-# accepted. Every other
-# shared role acts outside the digest: `volume-claim` stages its PVC in a sibling directory
-# the digest never stats, `image-builder`'s `build-job.yaml.j2` is outside it (only the build
-# CONTEXT reaches a caller's bytes, through the content tag), `arr-notification` writes an
-# app's database over its API, and `cronjob-gate`, `longhorn-api`, `volume-snapshot` and
-# `volume-revert` render nothing at all. A digest match would drop their lines with nothing
-# applied, so they keep the record-only rule. Widen this only for a role whose whole effect
-# is bytes a caller's digest covers.
+# DECIDED: only `manifests` discharges on a render digest among SHARED roles (#3057); a
+# service's own role is derived, not listed (#3110, `scripts/deploy_tools/digest_provable.py`).
+# A digest match proves the bytes `manifests_digest` and `secret_digest` cover, and nothing a
+# role does outside them. `manifests` renders those bytes, so most of its changes either move
+# a caller's digest or take effect on the next deploy of any caller without being "behind".
+# The gap taken is a change to HOW it applies — the prune, the Secret-key reconcile, an apply
+# flag — which can leave live state different from what that change would produce while no
+# digest moves: the line discharges and the difference waits for the next deploy. `probe.py
+# releases` has taken the same gap since #3046. A line that never discharged until a full
+# deploy was the defect (#2643), so the gap is accepted. Every other shared role acts outside
+# the digest: `volume-claim` stages its PVC in a sibling directory the digest never stats,
+# `image-builder`'s `build-job.yaml.j2` is outside it, `arr-notification` writes an app's
+# database over its API, and `cronjob-gate`, `longhorn-api`, `volume-snapshot` and
+# `volume-revert` render nothing at all, so they keep the record-only rule.
 DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 
 
@@ -510,6 +528,25 @@ def _shared_callers(
             f"({type(exc).__name__}: {exc}) — keeping their lines"
         )
         return {}
+
+
+def _digest_provable(
+    tools: DeployTools, config: Config, services: set[str]
+) -> set[str]:
+    """`tools.digest_provable` for `services`, or none of them when it fails.
+
+    None is the safe reading for the reason `_shared_callers` gives: it keeps every line.
+    """
+    if not services:
+        return set()
+    try:
+        return tools.digest_provable(config.repo, services)
+    except Exception as exc:
+        log(
+            f"k8s_unapplied: could not derive which of {', '.join(sorted(services))} a "
+            f"render digest proves ({type(exc).__name__}: {exc}) — keeping their lines"
+        )
+        return set()
 
 
 def log_k8s_unapplied(state: DeployerState) -> None:
