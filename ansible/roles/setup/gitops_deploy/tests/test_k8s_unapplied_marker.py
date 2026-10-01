@@ -246,16 +246,22 @@ def shared_pending(gitops_deploy, state_dir, settings):
     return gitops_deploy.STATE
 
 
-def _discharge_shared(state, settings, behind=(), shared_role_callers=None):
+def _discharge_shared(
+    state, settings, behind=(), shared_role_callers=None, render_proof=None
+):
     tools = _tools(
-        release_commit=lambda svc: None if svc == "game-stats-lib" else APPLIED + svc,
+        release_commit=lambda svc: None if svc in SHARED else APPLIED + svc,
         is_ancestor=lambda _repo, _origin, commit: commit[40:] not in behind,
         shared_role_callers=shared_role_callers
         or (
             lambda _repo, roles: {r: {"terraria-stats", "valheim-stats"} for r in roles}
         ),
+        render_proof=render_proof or (lambda _svc: None),
     )
     return deploy_defer.discharge_k8s_unapplied(tools, state, settings)
+
+
+SHARED = {"game-stats-lib", "manifests"}
 
 
 def test_a_shared_role_whose_callers_all_carry_the_change_is_discharged(
@@ -292,6 +298,36 @@ def test_a_shared_role_with_no_derivable_caller_is_kept(
     assert [e.service for e in shared_pending.k8s_unapplied_pending()] == [
         "game-stats-lib"
     ]
+
+
+# ── a render whose digests match stands in for a caller's deploy, for `manifests` (#3057) ──
+def _render_proved(svc):
+    """valheim-stats' render, at a commit descending from the change, matches its digests."""
+    return LATER + "render" if svc == "valheim-stats" else None
+
+
+def test_a_manifests_line_discharges_on_a_matching_render(
+    gitops_deploy, state_dir, settings
+):
+    """FLAGGED half: valheim-stats was never redeployed, but its bytes did not move."""
+    gitops_deploy.STATE.record_k8s_unapplied(ORIGIN, {"manifests"}, 1000.0)
+    assert _discharge_shared(
+        gitops_deploy.STATE, settings, {"valheim-stats"}, None, _render_proved
+    ) == ["manifests"]
+
+
+def test_a_role_acting_outside_the_digest_ignores_a_matching_render(
+    shared_pending, settings
+):
+    """CLEAN half: `game-stats-lib` is not in `DIGEST_PROVABLE_ROLES`, so a render proves
+    nothing for it and the caller whose record predates the change keeps the line."""
+    assert (
+        _discharge_shared(
+            shared_pending, settings, {"valheim-stats"}, None, _render_proved
+        )
+        == []
+    )
+    assert "game-stats-lib" not in deploy_defer.DIGEST_PROVABLE_ROLES
 
 
 # ── the release record reader ──────────────────────────────────────────────────────────────

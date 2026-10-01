@@ -431,33 +431,65 @@ def discharge_k8s_unapplied(
     one loses the only record that the change was never applied.
 
     A SHARED ROLE HAS NO RECORD OF ITS OWN (#2643). `manifests`, `image-builder` and the rest
-    carry no `containers_list` entry, so the question moves to the tags that apply them: the
-    line drops when every one of those, as `shared_role_callers.py` derives them, holds a
-    record at or after the line's commit. The derivation is asked once per tick, and only
-    when a pending line has no record. If it fails, or names no tag, the line is kept.
+    carry no `containers_list` entry, so the question moves to every tag whose deploy runs
+    them, as `shared_role_callers.py:caller_tags` derives them: the line drops when each of
+    those carries the change. The derivation is asked once per tick, and only when a pending
+    line has no record. If it fails, or names no tag, the line is kept.
+
+    A caller carries the change when its release record descends from the line's commit —
+    the fast path, which drops a line minutes after a deploy. For a role in
+    `DIGEST_PROVABLE_ROLES` a caller also carries it when a render at a commit descending
+    from the line's matches its applied digests (`deploy_release.render_proof`, #3057): that
+    caller's bytes are what the change renders, so there is nothing left to apply there.
     """
     pending = state.k8s_unapplied_pending()
     records = {e.service: tools.release_commit(e.service) for e in pending}
     callers = _shared_callers(tools, config, {s for s, c in records.items() if not c})
 
-    def carries(service: str, origin: str) -> bool:
+    def descends(commit: str | None, origin: str) -> bool:
+        return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
+
+    def carries(service: str, origin: str, by_digest: bool) -> bool:
         if service not in records:
             records[service] = tools.release_commit(service)
-        commit = records[service]
-        return bool(commit) and tools.is_ancestor(config.repo, origin, commit)
+        if descends(records[service], origin):
+            return True
+        return by_digest and descends(tools.render_proof(service), origin)
 
     discharged = []
     for entry in pending:
-        tags = {entry.service} if records[entry.service] else callers.get(entry.service)
-        if tags and all(carries(t, entry.origin) for t in tags):
+        own = bool(records[entry.service])
+        tags = {entry.service} if own else callers.get(entry.service)
+        by_digest = not own and entry.service in DIGEST_PROVABLE_ROLES
+        if tags and all(carries(t, entry.origin, by_digest) for t in tags):
             discharged.append(entry.service)
     if discharged:
         state.clear_k8s_unapplied(discharged)
         log(
-            f"k8s_unapplied discharged for {', '.join(sorted(discharged))}: the release "
-            f"record names a commit that carries the change"
+            f"k8s_unapplied discharged for {', '.join(sorted(discharged))}: a release "
+            f"record or a matching render names a commit that carries the change"
         )
     return sorted(discharged)
+
+
+# DECIDED: only `manifests` discharges on a render digest (#3057). A digest match proves the
+# bytes `manifests_digest` and `secret_digest` cover, and nothing a role does outside them.
+# `manifests` renders those bytes, so most of its changes either move a caller's digest or
+# take effect on the next deploy of any caller without being "behind". The gap taken is a
+# change to HOW it applies — the prune, the Secret-key reconcile, an apply flag — which can
+# leave live state different from what that change would produce while no digest moves: the
+# line discharges and the difference waits for the next deploy. `probe.py releases` has taken
+# the same gap since #3046, where a CURRENT digest clears a `manifests/tasks/` path hit. A
+# line that never discharged until a full deploy was the defect (#2643), so the gap is
+# accepted. Every other
+# shared role acts outside the digest: `volume-claim` stages its PVC in a sibling directory
+# the digest never stats, `image-builder`'s `build-job.yaml.j2` is outside it (only the build
+# CONTEXT reaches a caller's bytes, through the content tag), `arr-notification` writes an
+# app's database over its API, and `cronjob-gate`, `longhorn-api`, `volume-snapshot` and
+# `volume-revert` render nothing at all. A digest match would drop their lines with nothing
+# applied, so they keep the record-only rule. Widen this only for a role whose whole effect
+# is bytes a caller's digest covers.
+DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
 
 
 def _shared_callers(

@@ -170,7 +170,12 @@ def handle_broad(
     applies = bool(setup_tags) or cs.broad_deploy
     plans = (
         deploy_narrow.plan(
-            tools.narrow_deploy_plane, config, target, setup_tags, cs.broad_deploy
+            tools.narrow_deploy_plane,
+            config,
+            target,
+            setup_tags,
+            cs.broad_deploy,
+            tools.digest_diff,
         )
         if applies
         else []

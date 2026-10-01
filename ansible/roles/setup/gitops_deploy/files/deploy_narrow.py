@@ -173,7 +173,7 @@ def shared_callers_argv(roles) -> list[str]:
 
 
 def shared_role_callers(repo: str, roles) -> dict[str, set[str]]:
-    """Ask `shared_role_callers.py` which tags' release records prove each role applied.
+    """Ask `shared_role_callers.py` which tags' deploys run each shared role.
 
     A subprocess for the reason `narrow_deploy_plane` is one. The one reader,
     `deploy_defer.discharge_k8s_unapplied`, keeps every line on any exception this raises.
@@ -204,6 +204,7 @@ def plan(
     target,
     setup_tags: set[str],
     deploy_plane: bool,
+    digest_diff: Callable[[str], dict[str, list[str]]] | None = None,
 ) -> list[BroadPlan]:
     """What this broad tick applies, in order: the setup plane's tags, then the deploy plane's.
 
@@ -213,6 +214,8 @@ def plan(
         target: the tick's `TickTarget`, for the two commits bounding the range.
         setup_tags: `setup_tags_for(paths)`, non-empty for a setup-plane change.
         deploy_plane: `cs.broad_deploy` — the range moved a deploy-plane path.
+        digest_diff: `deploy_release.digest_diff`, read for the shadow log alone. None skips
+            the log.
 
     A range that carries both planes gets both plans. Until 2026-09-18 this was an if/else
     and the setup arm won: a `roles/setup/` edit landing beside a `host_vars/` edit applied
@@ -225,8 +228,47 @@ def plan(
     if setup_tags:
         plans.append(BroadPlan("ansible/initial_setup.yml", sorted(setup_tags), True))
     if deploy_plane:
-        plans.append(_deploy_plane(narrow, config, target))
+        deploy = _deploy_plane(narrow, config, target)
+        if digest_diff is not None:
+            log_digest_shadow(digest_diff, target.origin, deploy)
+        plans.append(deploy)
     return plans
+
+
+# DECIDED: shadow mode first (#3045). The render-digest diff is LOGGED beside what the
+# narrowing chose and decides nothing yet. A render record exists only for a service
+# `render_targets.py` lists — a daniel-box k8s entry whose role includes `k8s/manifests` — and
+# the hourly producer writes it at the newest green commit, so at a tick that has just
+# fetched a merge the commit being applied usually has no render at all. A week of these
+# lines is what measures how often the diff could answer; a service with no usable record
+# would keep this function's answer, and the full run stays the fallback either way.
+def log_digest_shadow(digest_diff, origin: str, deploy: BroadPlan) -> None:
+    """Log the tags a render-digest diff at `origin` would apply, beside `deploy`'s answer.
+
+    Never raises: it runs before the ff-merge, where an escaped exception parks every landing.
+    """
+    try:
+        verdicts = digest_diff(origin)
+    except Exception as exc:
+        log(f"narrow shadow: no digest diff ({type(exc).__name__}: {exc})")
+        return
+    drifted = verdicts.get("drifted", [])
+    unknown = ", ".join(
+        f"{key.split(': ', 1)[1]} {len(names)}"
+        for key, names in sorted(verdicts.items())
+        if key.startswith("unknown: ")
+    )
+    if not deploy.apply:
+        chose = "nothing"
+    elif deploy.tags:
+        chose = ",".join(deploy.tags)
+    else:
+        chose = "the full play"
+    log(
+        f"narrow shadow: render digest at {origin[:8]} would apply "
+        f"{','.join(drifted) or 'nothing'} (current {len(verdicts.get('current', []))}; "
+        f"unknown: {unknown or 'none'}); the narrowing chose {chose}"
+    )
 
 
 def _deploy_plane(narrow, config, target) -> BroadPlan:

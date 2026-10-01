@@ -1,11 +1,15 @@
 # ansible/roles/setup/gitops_deploy/files/deploy_release.py
-"""Reading the k8s release records this deployer did not write.
+"""Reading the k8s release and render records this deployer did not write.
 
 `roles/k8s/manifests/tasks/release_stamp.yml` records, per service, the commit that produced
 its applied manifests — after EVERY real apply, including one an operator ran by hand. That
 last part is the whole reason this module exists: an operator's `./scripts/deploy.sh` is
 invisible to the deployer, and the record is the only evidence of it this host holds.
 `deploy_defer.discharge_k8s_unapplied` is the reader, and its docstring carries the design.
+
+The render records (`roles/k8s/manifests/tasks/render_record.yml`) come from the hourly
+`render_records` producer. `render_proof` lets a render stand in for a deploy of a shared role
+(#3057), and `digest_diff` feeds the deploy-plane shadow log (#3045).
 
 Its own module rather than a section of `deploy_io.py`, which is at its length ceiling and
 whose allowlist entry only ever falls.
@@ -44,3 +48,119 @@ def release_commit(service: str, release_dir: str = K8S_RELEASE_DIR) -> str | No
         return None
     commit = record.get("commit") if isinstance(record, dict) else None
     return commit or None
+
+
+# Mirrors `manifests_render_record_dir` in the same defaults file, for the reason
+# `K8S_RELEASE_DIR` does. `tests/test_k8s_unapplied_marker.py` asserts the two agree.
+K8S_RENDER_DIR = "/var/lib/homelab/k8s-renders.d"
+
+# The three answers `digest_verdict` gives, spelled as `probe_lib/releases_render.py` spells
+# them. `tests/test_deploy_release_digest.py` runs both functions over the same records.
+CURRENT = "current"
+DRIFTED = "drifted"
+UNKNOWN = "unknown"
+
+
+def _record(service: str, directory: str) -> dict | None:
+    """`<directory>/<service>.json` as a dict, or None for anything unreadable."""
+    try:
+        record = json.loads(pathlib.Path(directory, f"{service}.json").read_text())
+    # Split clauses for the reason `release_commit` gives.
+    except OSError:
+        return None
+    except ValueError:
+        return None
+    return record if isinstance(record, dict) else None
+
+
+def _incomparable(release: dict | None, render: dict | None, ref: str) -> str:
+    """Why the two records' digests cannot be compared at `ref`, or '' when they can.
+
+    A stdlib restatement of `probe_lib/releases_render.py:_comparable`, which this unit
+    cannot import. That module's docstring carries the reasoning behind every refusal. The
+    reason string exists for the shadow log, which counts why a service had no answer.
+    """
+    if not release:
+        return "no release record"
+    if not render:
+        return "no render record"
+    if render.get("commit") != ref:
+        return "render is of another commit"
+    if render.get("tree_dirty") is not False:
+        return "render tree was dirty"
+    if not release.get("host") or release.get("host") != render.get("host"):
+        return "host differs"
+    if not release.get("manifests_digest") or not render.get("manifests_digest"):
+        return "no manifests digest"
+    names, render_names = (
+        release.get("secret_manifests"),
+        render.get("secret_manifests"),
+    )
+    if names is None or render_names is None:
+        return "no secret manifest list"
+    if (names or render_names) and not (
+        release.get("secret_digest") and render.get("secret_digest")
+    ):
+        return "no secret digest"
+    return ""
+
+
+def digest_verdict(
+    release: dict | None, render: dict | None, ref: str
+) -> tuple[str, str]:
+    """`(CURRENT | DRIFTED | UNKNOWN, why unknown)` for one service's two records at `ref`."""
+    why = _incomparable(release, render, ref)
+    if why or release is None or render is None:
+        return UNKNOWN, why
+    names = release.get("secret_manifests")
+    if (
+        release["manifests_digest"] != render["manifests_digest"]
+        or names != render.get("secret_manifests")
+        or (names and release.get("secret_digest") != render.get("secret_digest"))
+    ):
+        return DRIFTED, ""
+    return CURRENT, ""
+
+
+def render_proof(
+    service: str,
+    release_dir: str = K8S_RELEASE_DIR,
+    render_dir: str = K8S_RENDER_DIR,
+) -> str | None:
+    """The commit whose render matches `service`'s applied bytes, or None.
+
+    A render at commit C whose digests equal the release record's proves the applied
+    manifests ARE what C renders, whenever the apply happened. The probe reader asks that only
+    at the tip of origin/master; this asks it at the render's own commit, and the caller asks
+    whether C descends from the change. The hourly producer's commit descends from a merge
+    within about an hour, where "the render is of the tip" holds for minutes a day (#3057).
+    """
+    render = _record(service, render_dir)
+    commit = render.get("commit") if render else None
+    if not commit:
+        return None
+    release = _record(service, release_dir)
+    return commit if digest_verdict(release, render, commit)[0] == CURRENT else None
+
+
+def digest_diff(
+    ref: str, release_dir: str = K8S_RELEASE_DIR, render_dir: str = K8S_RENDER_DIR
+) -> dict[str, list[str]]:
+    """`digest_verdict` at `ref` for every service holding either record, grouped.
+
+    Keys are `CURRENT`, `DRIFTED`, and `UNKNOWN: <why>` for each refusal seen; each value is
+    a sorted service list. The deploy-plane shadow log reads this (#3045).
+    """
+    names = {
+        path.stem
+        for directory in (release_dir, render_dir)
+        for path in pathlib.Path(directory).glob("*.json")
+        if not path.name.endswith(".previous.json")
+    }
+    out: dict[str, list[str]] = {}
+    for service in sorted(names):
+        verdict, why = digest_verdict(
+            _record(service, release_dir), _record(service, render_dir), ref
+        )
+        out.setdefault(f"{verdict}: {why}" if why else verdict, []).append(service)
+    return out

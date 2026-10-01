@@ -1,28 +1,19 @@
 #!/usr/bin/env python3
-"""Which deploy tags' release records prove a shared k8s role's change was applied.
+"""Which deploy tags run a shared k8s role, record or no record.
 
-THE PROBLEM. `deploy_defer.discharge_k8s_unapplied` drops a `k8s_unapplied` line when the
-service's release record names a commit carrying the change. A shared role — `manifests`,
-`image-builder`, `game-stats-lib` — has no `containers_list` entry, so it never gets a record
-of its own, and its line stood until somebody ran `gitops_state.py clear-k8s-unapplied` by
-hand (#2643). A full deploy on 2026-09-26 applied every caller of all three and left all three
-lines in place.
+THE PROBLEM. A shared role — `manifests`, `image-builder`, `volume-claim` — has no
+`containers_list` entry, so a `--tags` run cannot select it and no release record names it.
+Two readers need the tags that DO run it.
 
-WHAT THIS DERIVES. For each role, the declared tags whose deploy runs it, followed through a
-caller that is itself shared (`narrow_broad._role_tags`, the expansion `Release Staleness
-Drift` and the deploy-plane narrowing already use), then kept only where that tag's deploy
-also runs `manifests`, whose `tasks/release_stamp.yml` writes the record.
-
-WHO CALLS IT. The deployer, as a SUBPROCESS through `deploy_narrow.shared_role_callers`,
-because this parses YAML and the unit runs under `uv run --no-project` — the boundary
-`narrow_setup.py` sits behind for the same reason. It prints one JSON object, role to sorted
-tag list. An empty list means no record can ever prove the role applied, and the deployer
-keeps that line.
-
-`caller_tags` and `expand_shared_tags` ask the question a CHANGE asks: which tags deploy a
-shared role at all, record or no record. `deploy_run` reads them to turn `deploy.sh --tags
-volume-snapshot` into a deploy of every caller, and `land_tags` reads them to deploy a shared
-role's callers instead of reporting `needs-manual-apply` (#2704).
+WHO CALLS IT. `deploy_run` reads `expand_shared_tags` to turn `deploy.sh --tags
+volume-snapshot` into a deploy of every caller, and `land_tags` reads `caller_tags` to deploy a
+shared role's callers instead of reporting `needs-manual-apply` (#2704). The deployer runs
+`main` as a SUBPROCESS through `deploy_narrow.shared_role_callers`, because this parses YAML
+and the unit runs under `uv run --no-project` — the boundary `narrow_setup.py` sits behind for
+the same reason. It prints one JSON object, role to sorted `caller_tags`, and
+`deploy_defer.discharge_k8s_unapplied` drops a shared role's `k8s_unapplied` line once every
+one of those tags carries the change (#2643). How a tag proves that, by its release record or
+by a matching render, is the deployer's question; this module only names the tags (#3057).
 
 Usage: shared_role_callers.py [--repo PATH] ROLE [ROLE ...]
 """
@@ -35,20 +26,13 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 import argparse
 import json
 
-from deploy_tools.narrow_broad import CannotNarrow, Context, _role_tags, context_for
-
-# The shared role whose tasks write every k8s release record.
-RECORD_WRITER = "manifests"
+from deploy_tools.narrow_broad import context_for
 
 
-def _tags(role: str, ctx: Context) -> set[str]:
-    """`_role_tags` for one role, with a role no tag reaches read as reaching nothing."""
-    try:
-        return _role_tags({role}, ctx)
-    except CannotNarrow:
-        return set()
-
-
+# DECIDED: transitive. `longhorn-api` and `volume-revert` are called only by shared roles, so a
+# walk that stopped at the first hop would name no tag for them and their `k8s_unapplied` lines
+# would need a hand to clear. #2704 replaced the land side's first-hop `covered_roles` with this
+# for the same reason.
 def caller_tags(
     role: str, declared: set[str], callers: dict[str, set[str]]
 ) -> set[str]:
@@ -108,54 +92,15 @@ def expand_shared_tags(
     return out, replaced
 
 
-# DECIDED: transitive, as `caller_tags` is. The land-side check that stopped at the first
-# hop (`covered_roles`) was replaced by `caller_tags` in #2704. Here the question is whether
-# the fleet has been redeployed since, and a non-transitive answer
-# would leave `longhorn-api` and `volume-revert` — whose only callers are shared — with a
-# line nothing but a hand clears, which is the defect this exists to remove.
-# DECIDED: a caller that never runs `manifests` is dropped rather than required. It writes
-# no record, so requiring it keeps the line forever. `n8n-images` was the one live instance
-# until #2813 folded it into n8n: of the declared entries, its role was the only one that
-# rendered no manifest, so `image-builder`'s set dropped it. That means an `image-builder` line can
-# discharge while `n8n-images` alone is behind. That line is a banner entry that never
-# pages, and a permanent one is the always-red surface #2570 refused, so the gap is taken. A
-# role left with no recording caller at all still keeps its line.
-#
-# `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries is
-# how to re-derive whether a second instance has appeared.
-#
-# An entry declaring a SECOND tag was the other way a recording caller hid from `_role_tags`,
-# which stops at a role with an entry and never reads that entry's other tags: `n8n-images`
-# declared `tags: [n8n-images, n8n]`, so a `--tags n8n` deploy ran the builder and wrote
-# `n8n.json` while the derivation saw nothing (#2666). `_co_applied` widened the answer to
-# cover it. #2813 folded n8n-images into n8n, no entry has declared a second tag since, and
-# #2876 deleted the widening; restore it from git history if one does.
-def _writer_tags(ctx: Context) -> set[str]:
-    """The tags whose deploy runs `manifests`, and so writes a release record.
-
-    Expanded caller by caller rather than in one `_tags(RECORD_WRITER)` call. A caller no tag
-    applies — a role committed ahead of its `containers_list` entry, or read from a tree ahead
-    of `ctx.ref` — applies nothing, and must not empty every other caller's tags with it. In
-    one call it raised `CannotNarrow` for the whole set, and every shared role read as having
-    no recording caller at all (#2813).
-    """
-    return {
-        tag
-        for caller in ctx.callers.get(RECORD_WRITER) or ()
-        for tag in _tags(caller, ctx)
-    }
-
-
-def recorded_callers(roles, ctx: Context) -> dict[str, list[str]]:
-    """For each role, the declared tags that apply it AND write a release record.
-
-    `discharge_k8s_unapplied` requires a record from EVERY tag here, so a wider answer only
-    ever makes a line harder to drop.
-    """
-    writers = _writer_tags(ctx)
-    return {role: sorted(_tags(role, ctx) & writers) for role in roles}
-
-
+# DECIDED: every caller counts, including one whose deploy writes no release record (#3057).
+# Until #3057 the deployer's caller set kept only tags whose deploy also ran `manifests`,
+# because a caller with no record could never discharge a line and would keep it forever. No
+# declared entry has that shape — `cronjob-gate`, `volume-snapshot` and `volume-revert`, the
+# three roles that never include `k8s/manifests`, are all shared — so the filter dropped
+# nothing and cost a second walk. Should one appear, its shared roles' lines stay until a hand
+# clears them, which names the gap rather than discharging past a caller nothing proved.
+# `grep -rL k8s/manifests ansible/roles/k8s/*/tasks/main.yml` against the declared entries
+# re-derives whether one has.
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(description=__doc__.splitlines()[0])
     parser.add_argument("roles", nargs="+", help="role directories under roles/k8s/")
@@ -164,7 +109,15 @@ def main(argv: list[str] | None = None) -> int:
     )
     args = parser.parse_args(argv)
     ctx = context_for("HEAD", args.repo)
-    print(json.dumps(recorded_callers(args.roles, ctx), sort_keys=True))
+    print(
+        json.dumps(
+            {
+                role: sorted(caller_tags(role, ctx.declared, ctx.callers))
+                for role in args.roles
+            },
+            sort_keys=True,
+        )
+    )
     return 0
 
 
