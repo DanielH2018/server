@@ -1,4 +1,4 @@
-"""The snapshot-space cap gate `k8s/volume-snapshot` runs before it snapshots (#1560).
+"""The snapshot-space cap gate `k8s/volume-snapshot` runs before it snapshots.
 
 Longhorn refuses new snapshots once a volume reaches `spec.snapshotMaxSize`; it does not
 prune to make room. `claim.yml` snapshots first and prunes second -- correct against a
@@ -8,7 +8,7 @@ service fails identically.
 
 The gate reads the cap and the space in use and fails with both numbers named. What is
 guarded here is that it fires when the cap is genuinely full AND that it stays silent
-everywhere else, because "everywhere else" is all 13 opted-in services on every deploy:
+everywhere else, because "everywhere else" is every opted-in service on every deploy:
 
   * `"0"` is Longhorn's UNCAPPED value and the fleet default -- a gate that read it as a
     cap of zero bytes would stop every deploy in the fleet;

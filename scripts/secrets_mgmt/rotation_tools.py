@@ -9,11 +9,11 @@ other module in the package can import. The one fact both files hold is the tier
 each spells the literal out; `DEFAULT_TIER_DAYS` below says why, and which test holds the two
 equal.
 
-WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` and `decrypted_values` build
-an argv whose exact shape is the security property: a freshly minted token travels on stdin,
-never in `/proc/<pid>/cmdline` (the 2026-08-27 fix). A test that replaces the whole field
-with a fake stops checking that argv. Injecting the runner instead lets a test drive the REAL
-builder and keep asserting what it hands the process.
+WHY THE REAL IMPLEMENTATIONS TAKE A `run` KEYWORD. `sops_set` and `decrypted_values` build an
+argv whose exact shape is the security property: a freshly minted token travels on stdin,
+never in `/proc/<pid>/cmdline`. A test that replaces the whole field with a fake stops
+checking that argv. Injecting the runner instead lets a test drive the REAL builder and keep
+asserting what it hands the process.
 """
 
 import contextlib

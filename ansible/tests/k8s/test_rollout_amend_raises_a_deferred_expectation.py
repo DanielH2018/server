@@ -1,16 +1,15 @@
 """`k8s/manifests` tasks/rollout_amend.yml raises an expectation the stamp could not decide.
 
 release_stamp.yml runs before the owning role's private apply, so for a workload whose own
-manifest that later apply carries — pihole's instance 2, a deferred manifest since #2899 — it
+manifest that later apply carries — pihole's instance 2, a deferred manifest — it
 cannot decide `restart`. The entry declares `rolled_by_role: true`, the record says
-`restart: false`, and this file is what the owner calls afterwards (#2902).
+`restart: false`, and this file is what the owner calls afterwards.
 
 Two properties, each with the input it must accept and the input it must reject:
 
   * only a `kubectl rollout restart` raises the expectation, because it is the only roll that
     stamps a `restartedAt`. A pod template the owner's own apply changed rolls the workload and
-    stamps nothing, so raising it there would fail a roll that happened — the state #2884 avoided
-    by dropping the entry altogether;
+    stamps nothing, so raising it there would fail a roll that happened;
   * the amend can lower an expectation to nothing and never invent one. A record that is missing
     or unreadable leaves `restart: false`, which is no expectation rather than a false one.
 
@@ -52,8 +51,7 @@ _RECORDED = [
 
 def test_a_restart_the_owning_role_issued_raises_the_recorded_expectation():
     """The accept half. roll_one.yml restarted pihole-2, so a `restartedAt` newer than the
-    record's `applied_at` exists and `probe.py health` must require it — that is the post-hoc
-    check #2902 filed as missing."""
+    record's `applied_at` exists and `probe.py health` must require it."""
     amended = _amended(_RECORDED, restart=True)
     assert amended["pihole-2"]["restart"] is True
     assert amended["pihole-2"]["rolled_by_role"] is True, (
@@ -67,7 +65,7 @@ def test_a_restart_the_owning_role_issued_raises_the_recorded_expectation():
 def test_a_roll_the_owning_apply_did_leaves_the_expectation_alone():
     """The reject half, and the one that matters most. When apply_instance_2.yml rolled pihole-2
     by changing its pod template, no `restartedAt` was stamped — so raising the expectation would
-    fail a roll that did happen, which is exactly what #2884 avoided by dropping the entry. The
+    fail a roll that did happen. The
     amend must leave `restart: false` on that run."""
     amended = _amended(_RECORDED, restart=False)
     assert amended["pihole-2"]["restart"] is False

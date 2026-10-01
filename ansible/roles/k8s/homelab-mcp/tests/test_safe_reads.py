@@ -335,7 +335,7 @@ def test_tls_context_states_the_protocol_floor():
     assert tls_context().minimum_version == ssl.TLSVersion.TLSv1_2
 
 
-# --- cert_target_allowed (#1931) ---------------------------------------------------------
+# --- cert_target_allowed ---------------------------------------------------------
 # cert_expiry hands its host/port to socket.create_connection; this predicate is what keeps a
 # bearer holder from using the pod as a TCP-connect oracle. Each shape has a clean and a
 # flagged half so the guard cannot stop matching unnoticed.

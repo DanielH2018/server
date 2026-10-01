@@ -5,8 +5,7 @@
 # Every unattended job here inherits a far smaller environment than the shell it was
 # written in, and the resulting failures do not crash. They return empty and exit 0,
 # which is strictly worse: nothing alerts, and the output looks plausible. Two are
-# documented on this host (both found on 2026-08-07, the second only after the first
-# was "fixed" — so finding one is evidence the other is live):
+# documented on this host (finding one is evidence the other is live):
 #
 #   1. PATH. Cron runs with PATH=/usr/bin:/bin. /usr/local/bin is NOT on it, and that
 #      is where kubectl lives (a symlink to k3s). ssh, docker and coreutils are in

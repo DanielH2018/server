@@ -3,7 +3,7 @@
 
 The consumer is `scripts/deploy_tools/land_tags.py`: a helper role whose callers were ALL
 deployed is already applied, and reporting it as `needs-manual-apply` sends an operator at a
-full `deploy.yml` for nothing (issue #1397). A census that silently returned an empty map
+full `deploy.yml` for nothing. A census that silently returned an empty map
 would suppress no note at all here, but the same map is what decides suppression — so the
 non-vacuity half below names the roles it must find rather than counting them.
 

@@ -21,9 +21,9 @@ import checks.logs
 
 from lib.repo_paths import REPO as _REPO
 
-# ── HA ip_ban arm (2026-08-23: a banned infra IP 403'd the probes into a crash loop) ────────
+# ── HA ip_ban arm ───────────────────────────────────────────────────────────────────────────
 # HA's ban middleware keys on the peer address, so a burst of bad /api/ calls can ban the node's
-# pod-network gateway. The probes now exec curl to 127.0.0.1 and are immune; this arm is what
+# pod-network gateway. The probes exec curl to 127.0.0.1 and are immune; this arm is what
 # keeps the ban itself from being silent.
 # Two limits, so this guard is not over-trusted:
 #   1. It reads each constant's IN-CODE DEFAULT. `env-secret.yaml.j2` overrides LOKI_STREAM at
@@ -33,11 +33,10 @@ from lib.repo_paths import REPO as _REPO
 #   2. The vocabulary below came from one k8s pod stream. LOKI_STREAM selects file-tail streams,
 #      which may legitimately carry labels this set does not list. Widen the set against a live
 #      stream if a genuine selector ever fails — do not delete the guard.
-# Promtail's k8s stream vocabulary, read off a live Loki stream on 2026-08-23. `app` is NOT in
-# it — HA_BAN_SELECTOR shipped with app="home-assistant", matched no stream, and reported "no
-# ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
+# Promtail's k8s stream vocabulary, read off a live Loki stream. `app` is NOT in it — a
+# selector with app="home-assistant" matches no stream and reports "no ip_ban events" forever. A fail-open arm cannot tell "nothing to report" from "wrong question",
 # so the selector label has to be checked by something other than the check's own verdict.
-# Transcribed from a live stream on 2026-08-23. Kept as a FLOOR rather than the whole answer:
+# Transcribed from a live stream. Kept as a FLOOR rather than the whole answer:
 # `filename`, `stream` and `service_name` are added by Alloy/Loki itself and appear in no
 # config, so deriving alone would under-count and reject a valid selector.
 _LOKI_STREAM_LABELS_OBSERVED = frozenset(
@@ -90,15 +89,14 @@ def _selector_labels(selector):
 def _logql_selector_names(cfg):
     """Every `Config` field that holds a LogQL stream selector, found by shape.
 
-    Derived rather than listed. The hardcoded four were the selectors that existed when this
-    was written, so LOKI_PI_STREAM -- added for the Pi's own promtail -- would have joined
-    them unchecked (2026-08-25 review M-11). A selector this cannot see is a selector that can
+    Derived rather than listed. A hardcoded list would let a later selector, such as
+    LOKI_PI_STREAM, join unchecked. A selector this cannot see is a selector that can
     name a label promtail does not emit and go permanently green, which is the exact failure
     the test exists for.
 
     Matched on the LEADING `{...}` only, deliberately: a selector may carry line filters
     after the closing brace (`{...} |~ "Banned IP"`), and requiring the string to END in `}`
-    silently dropped HA_BAN_SELECTOR -- narrowing the roster while looking like it widened it.
+    silently drops HA_BAN_SELECTOR -- narrowing the roster while looking like it widened it.
     """
     return sorted(
         f.name
@@ -144,7 +142,7 @@ def _deployed_selector_values():
 
 def test_the_selector_roster_covers_the_known_selectors(cfg):
     """A shape-derived roster that matches nothing passes every assertion vacuously, and one
-    that matches less than the hardcoded list it replaced is a silent narrowing."""
+    that matches fewer than the known selectors is a silent narrowing."""
     names = set(_logql_selector_names(cfg))
     known = {
         "LOKI_STREAM",
@@ -185,13 +183,12 @@ def test_deployed_loki_selectors_use_real_stream_labels():
     """The in-code-default arm above cannot see a deploy-time override.
 
     This is the other half: `LOKI_STREAM` and `LOG_ERROR_SELECTOR` both ship a different selector
-    than their check.py default (env-secret.yaml.j2), and neither ever ran through
-    `_selector_labels` until now.
+    than their check.py default (env-secret.yaml.j2).
 
-    Right now this is a regression guard, not an active finding: both deployed selectors select on
-    `job`, which is a real promtail label, so this passes today. It exists for the NEXT edit to
-    either constant -- the precedent is HA_BAN_SELECTOR (see this role's CLAUDE.md), which shipped
-    an `app=` label that matched no stream and read "no ip_ban events" permanently green.
+    This is a regression guard, not an active finding: both deployed selectors select on
+    `job`, which is a real promtail label. It exists for the NEXT edit to either constant --
+    HA_BAN_SELECTOR is the precedent (see this role's CLAUDE.md): an `app=` label matched no
+    stream and read "no ip_ban events" permanently green.
     """
     for name, selector in _deployed_selector_values().items():
         unknown = _selector_labels(selector) - LOKI_STREAM_LABELS
@@ -363,7 +360,7 @@ def test_check_loki_ingestion_docker_stream_silent_is_down(monkeypatch, cfg):
 
 
 def test_check_loki_ingestion_filetail_silent_is_down(monkeypatch, cfg):
-    # file-tail-only failure (the 2026-07-07 blind spot): the docker stream keeps flowing,
+    # file-tail-only failure: the docker stream keeps flowing,
     # but authlog/syslog/traefik went silent. Arm 1's selector must EXCLUDE the docker stream
     # (which carries a `container` label) so a healthy container stream can't mask a dead
     # file-tail pipeline — the file-tail arm must page.

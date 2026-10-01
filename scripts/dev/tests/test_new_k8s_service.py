@@ -1,10 +1,9 @@
 """The k3s scaffolder writes a role that renders, and an entry the inventory can still parse.
 
-WHY THIS EXISTS. `new_k8s_service.py` replaced "copy a close sibling" as step 1 of the
-`new-k8s-service` skill (#2855), so its output is now the starting point every new service
-inherits. A generated Deployment that fails to render, or an entry appended where
-`containers_list` no longer parses, is a failure the author meets only after they have
-already written the rest of the service.
+WHY THIS EXISTS. `new_k8s_service.py` is step 1 of the `new-k8s-service` skill, so its output
+is the starting point every new service inherits. A generated Deployment that fails to
+render, or an entry appended where `containers_list` no longer parses, is a failure the
+author meets only after they have already written the rest of the service.
 
 The rendering half goes through `validate.k8s_manifests`'s own machinery rather than a second
 Jinja environment, so what these tests accept cannot drift from what the repo's validator
@@ -193,7 +192,7 @@ def test_authelia_without_a_route_is_refused(capsys):
 
 
 def test_the_generated_role_ships_no_service_or_route_template(args, tmp_path):
-    """The payoff of #2872 and #3043: four files, and neither a Service nor an IngressRoute."""
+    """Four files, and neither a Service nor an IngressRoute."""
     written = {
         p.relative_to(tmp_path / "widget").as_posix()
         for p in scaffold.write_role(args, tmp_path)

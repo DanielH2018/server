@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
-"""Tests for the banner's missing-hook-script arm (issue #2697).
+"""Tests for the banner's missing-hook-script arm.
 
 `.claude/settings.json` names every hook by an absolute path into the PRIMARY checkout, so a
 worktree cut from a fresher `origin/master` registers scripts that checkout does not have,
 `/bin/sh` exits 127, and the tool call runs with the guard skipped. `fanout_lib/launch.py`
 closed the fan-out half; this arm is how a hand-made worktree hears about it.
 
-Issue #2709 added the second half: `settings.json` names only the `.sh` shims, and each shim
-runs a `.py` sibling it resolves itself, so a present `session-health.sh` beside a missing
-`session-health.py` used to read as covered. That one fails quieter than the 127 — the shim runs
-— so it gets its own banner line, and the pairs below hold the two diagnoses apart.
+`settings.json` names only the `.sh` shims, and each shim runs a `.py` sibling it resolves
+itself, so a present `session-health.sh` beside a missing `session-health.py` must not read as
+covered. That one fails quieter than the 127 — the shim runs — so it gets its own banner line,
+and the pairs below hold the two diagnoses apart.
 
 Every test drives `hooklib.hook_registration_lines` through its `checkout`, `read_settings` and
 `exists` seams rather than patching a module attribute, because the monkeypatch ratchet
@@ -216,7 +216,7 @@ def test_the_repos_own_settings_registers_the_hooks_this_walk_must_find():
     assert {"session-health.sh", "bash-pretool.sh", "block-protected-edits.sh"} <= names
 
 
-# --- the `.py` sibling each shim resolves for itself (issue #2709) -------------------------
+# --- the `.py` sibling each shim resolves for itself -------------------------
 
 # The idiom every shim in this repo uses, and the only one `sibling_py_paths` rules on.
 _SHIM_BODY = (

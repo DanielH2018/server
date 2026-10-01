@@ -3,7 +3,7 @@
 
 Renovate writes a bump by replacing the WHOLE span its matchString matched. With no template it
 substitutes currentValue -> newValue inside that span, which is why `pinDigests: true` refreshed
-every pin that already carried an @sha256 suffix and added one to no tag-only pin (#2392). The
+every pin that already carried an @sha256 suffix and added one to no tag-only pin. The
 template is what appends a digest — and because the span starts at `_image:` rather than at the
 value, a template missing that literal prefix rewrites every pin the manager touches.
 
@@ -24,12 +24,12 @@ from _renovate import (
     render_auto_replace,
 )
 
-# A bare pin is the shape the template exists for (#2392): without one, Renovate substitutes
+# A bare pin is the shape the template exists for: without one, Renovate substitutes
 # currentValue -> newValue inside the matched text and there is no digest to substitute, so
 # `pinDigests: true` never added an @sha256 suffix to a tag-only pin. Each shape is named rather
 # than counted, so a rename breaks these guards loudly instead of leaving them asserting over an
-# empty set. The bare pin is the one #2392's verify-by step names; the digest pin is a k8s role
-# default rather than the one in roles/setup/k3s, which several sessions edit at once.
+# empty set. The digest pin is a k8s role default rather than the one in roles/setup/k3s, which
+# several sessions edit at once.
 TEMPLATE_BARE_PIN = "bazarr_k8s_image"
 TEMPLATE_DIGEST_PIN = "homepage_k8s_image"
 
@@ -92,8 +92,8 @@ def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -
         + "\n".join(corrupted)
     )
 
-    # Proof this guard can go RED: the same template without its literal `_image: ` prefix is
-    # the form #2392's reviewer first proposed, and it corrupts the very first span it touches.
+    # Proof this guard can go RED: the same template without its literal `_image: ` prefix
+    # corrupts the very first span it touches.
     path, line, m = spans[0]
     assert render_auto_replace(
         template.replace("_image: ", "", 1),
@@ -108,11 +108,11 @@ def test_the_k8s_image_template_round_trips_every_live_pin(tracked: list[str]) -
 def test_the_k8s_image_template_pins_a_digest_onto_a_bare_tag(
     tracked: list[str],
 ) -> None:
-    """The behaviour #2392 exists for: a tag-only pin gains an @sha256 suffix.
+    """The behaviour the template exists for: a tag-only pin gains an @sha256 suffix.
 
-    `pinDigests: true` has been on since 5ba111de8 and added a digest to nothing, because the
-    templateless rewrite can only substitute a digest that is already there. The `#if newDigest`
-    block is what appends one, and it must leave an unpinnable update (no newDigest) alone.
+    `pinDigests: true` alone adds a digest to nothing, because the templateless rewrite can only
+    substitute a digest that is already there. The `#if newDigest` block is what appends one,
+    and it must leave an unpinnable update (no newDigest) alone.
     """
     template = _k8s_image_manager()["autoReplaceStringTemplate"]
     bare = next(
@@ -153,7 +153,7 @@ def test_a_pin_digest_automerges_unless_the_role_is_denied_auto_deploy():
     """Renovate types the update this template makes possible as `pinDigest`, not `digest`.
 
     A rule matching only `digest` automerged none of the tag-only pins, so each opened a
-    hand-merge PR (#2481). The denylist rule must stay unscoped by update type, or a denied
+    hand-merge PR. The denylist rule must stay unscoped by update type, or a denied
     role's pinDigest would fall through to the automerge rule above it.
     """
     rules = _RENOVATE_CONFIG["packageRules"]

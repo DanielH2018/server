@@ -9,12 +9,12 @@ That is invisible until the pinned tree goes away. `prune_worktrees.py --prune` 
 merged worktree is enough: from then until the entry expires, every play these tests spawn dies
 with rc 127 on a path that no longer exists, in every tree, including a clean master.
 
-Measured 2026-08-22, on master at 78358ddb with no local changes:
+The failure reads:
 
     The module interpreter '.../worktrees/git-identity-leak-fix/.venv/bin/python3.14'
     was not found.
 
-Four tests failed that way. Nothing about the failure points at the cache: the tests assert on
+Nothing about the failure points at the cache: the tests assert on
 playbook output, so it surfaces as `assert 'GUARD_PASSED' in ''`, and `interpreter_python =
 auto_silent` (ansible.cfg:21) suppresses the discovery message that would name the substitution.
 
@@ -32,7 +32,7 @@ from _helpers import REPO as _REPO
 _SCAN_DIRS = (_REPO / "ansible/tests", _REPO / "scripts")
 _ENV_KEY = "ANSIBLE_PYTHON_INTERPRETER"
 
-# The spawn sites known when this guard was written. Asserted below so that a refactor which
+# The known spawn sites. Asserted below so that a refactor which
 # moves or renames them fails loudly here rather than leaving the guard matching nothing and
 # passing vacuously.
 _KNOWN = {

@@ -1,6 +1,5 @@
 """The bouncer-prune cron's decision: which rows `cscli bouncers prune` removes, and when a run
-refuses because the prune could delete the last row holding the edge's key (`files/bouncer_prune.py`,
-issue #2762).
+refuses because the prune could delete the last row holding the edge's key (`files/bouncer_prune.py`).
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_bouncer_prune.py
 """
@@ -33,8 +32,8 @@ def _row(name, pulled=None, created=timedelta(days=60)):
 
 
 LIVE = _row("k8straefik@10.42.0.207", pulled=timedelta(seconds=40))
-# The shape observed on 2026-09-27: a base row last pulled in August, rows for past pod IPs,
-# and the retired Docker bouncer that never pulled.
+# The observed shape: a base row last pulled long ago, rows for past pod IPs, and a bouncer
+# row that never pulled.
 OBSERVED = [
     _row("k8straefik", pulled=timedelta(days=49)),
     _row("k8straefik@10.42.0.12", pulled=timedelta(days=3)),

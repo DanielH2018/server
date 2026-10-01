@@ -43,8 +43,7 @@ def _role_tasks() -> list[tuple[Path, dict]]:
     """Every task in the role, both files.
 
     Both files, because `main.yml` is where someone writes "and bring it back up" — and a census
-    that reads only `claim.yml` cannot see it. Measured 2026-08-21: an unguarded
-    `--replicas=1` appended to `main.yml` left all 27 tests green.
+    that reads only `claim.yml` cannot see it.
     """
     return [(path, task) for path in (_CLAIM, _MAIN) for task in _tasks(path)]
 
@@ -56,10 +55,8 @@ def _mutating_tasks() -> list[tuple[Path, dict]]:
     never happen, so an unguarded wait polls for a transition nobody requested and burns its
     whole timeout before failing a dry run that changed nothing.
 
-    Recognises a write by its kubectl verb rather than by the one verb this role happens to use
-    today, and recognises `kubernetes.core.*` as mutating whatever the module. The previous
-    version saw only `uri`, `scale` and `until`; an appended `kubectl patch pvc/...` was
-    invisible to it.
+    Recognises a write by its kubectl verb rather than by the one verb this role happens to use,
+    and recognises `kubernetes.core.*` as mutating whatever the module.
     """
     out = []
     for path, task in _role_tasks():
@@ -128,19 +125,16 @@ def test_the_role_never_scales_back_up() -> None:
     this role restores the Deployment. Scaling back here would roll the workload twice and race the
     apply.
 
-    Both files, and the class rather than the literal. Measured 2026-08-21: appending an unguarded
-    `kubectl scale ... --replicas=1` to `main.yml` left all 27 tests green, because the check read
-    `claim.yml` alone; and a scale-back can equally be written `--replicas={{ n }}`,
+    Both files, and the class rather than the literal: a scale-back can equally be written `--replicas={{ n }}`,
     `kubernetes.core.k8s_scale`, or `kubectl patch -p '{"spec": {"replicas":1}}'`.
     """
     for _path, task in _role_tasks():
         body = _body(task)
         assert "k8s_scale" not in body, task["name"]
         for match in re.finditer(r"replicas", body):
-            # `=0` and then a non-digit, not merely the two characters `=0`. Measured
-            # 2026-08-21: a decoy `--replicas=01` — a scale to ONE, spelled to look like zero —
-            # satisfied the two-character check and passed. Nothing else caught it either,
-            # except the pinned census count, and that stops helping the moment someone
+            # `=0` and then a non-digit, not merely the two characters `=0`. A decoy
+            # `--replicas=01` is a scale to ONE spelled to look like zero, and it satisfies the
+            # two-character check. The pinned census count would not catch it either once someone
             # legitimately adds an eighth mutating task and bumps the number.
             assert re.match(r"=0(?![0-9])", body[match.end() :]), (
                 f"{task['name']!r} names a replica count that is not zero: "
@@ -162,11 +156,9 @@ def test_every_mutation_is_guarded_on_k8s_no_mutate() -> None:
     promised not to.
 
     WHICH TEST COVERS WHICH GUARD. Nine tasks in `claim.yml` carry the guard, and three mechanisms
-    divide them — jointly exhaustive as of 2026-09-01, and nothing makes them stay that way:
+    divide them, and nothing keeps that division exhaustive:
 
-      * seven by this census — the scale-down, the three waits and the three API calls. It was
-        eight until 2026-09-01, when the seeded-annotation strip went: it paired with
-        k8s/volume-claim's short-circuit, and that short-circuit no longer exists;
+      * seven by this census — the scale-down, the three waits and the three API calls;
       * one by `test_nothing_unguarded_reads_a_guarded_tasks_output` — the frontend assert,
         caught through its read of `volume_revert_attached` rather than as a mutation;
       * one by two dedicated tests — `Fail when no snapshot matches this deploy`, which is a
@@ -237,13 +229,13 @@ def test_nothing_unguarded_reads_a_guarded_tasks_output() -> None:
 
     Under `--check` the guarded task is skipped, its output is undefined, and the consumer
     fails the dry run — a run that promised to change nothing instead changes nothing and dies.
-    Measured 2026-08-21: deleting the guard from the frontend assert, whose `that` reads
-    `volume_revert_attached`, left all 27 tests green, because an `assert` is not a mutation.
+    An `assert` is not a mutation, so the mutation census cannot see an unguarded frontend
+    assert whose `that` reads `volume_revert_attached`.
 
     Output means `register` AND `set_fact`. A guarded `set_fact` is skipped exactly like a
     guarded command, and its keys are undefined for the same reason — `volume_revert_snapshot`
     is that shape today, produced by a `set_fact` and read by the guarded revert. No guarded
-    `set_fact` exists as of 2026-08-21, so this half of the rule currently names nothing; it is
+    `set_fact` exists, so this half of the rule names nothing; it is
     here so the next one is covered by the rule rather than by whoever writes it being careful.
     """
     guarded_outputs = _guarded_outputs()

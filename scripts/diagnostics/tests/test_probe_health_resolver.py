@@ -23,7 +23,7 @@ from diagnostics.probe_lib import health, health_kubectl
 # Roles whose manifests declare no Deployment, DaemonSet or StatefulSet, each with what they
 # declare instead. Membership here means `probe.py health <role>` legitimately has nothing to
 # check, which the notifier skips — so a role arriving here by accident is a gate that stopped
-# running, exactly the PR #685 failure. Verified against the rendered manifests 2026-09-01.
+# running.
 _ROLES_WITH_NO_WORKLOAD = {
     "configarr": "a CronJob and its Secret; the sync runs to completion, nothing stays up",
     "deploy-ui": "a selector-less Service, its EndpointSlice and an IngressRoute onto deploy-ui.service on daniel-box",
@@ -61,9 +61,9 @@ _MULTI_WORKLOAD_ROLES = {
     "scrutiny": {"scrutiny-collector", "scrutiny-influxdb", "scrutiny-web"},
 }
 
-# Workloads that do not live in the default namespace. `probe.py health` asked the default
-# namespace for every name until 2026-09-01, so dri-device-plugin's DaemonSet — the only thing
-# its role deploys — was unreachable and the gate skipped it.
+# Workloads that do not live in the default namespace. A health read that asks the default
+# namespace for every name cannot reach dri-device-plugin's DaemonSet — the only thing its
+# role deploys — and the gate would skip it.
 _NON_DEFAULT_NAMESPACES = {
     "observability": "observability",
     "dri-device-plugin": "kube-system",
@@ -76,8 +76,8 @@ _DEFAULT_NS = "homelab"
 def _resolved():
     """{role: [(namespace, kind, name)]} for every k8s role the resolver handles.
 
-    Cached: this renders every role in the tree (~3s), six tests read it, and until 2026-09-01
-    each paid for its own render. The tree does not change under a test run.
+    Cached: this renders every role in the tree (~3s), and six tests read it. The tree does
+    not change under a test run.
     """
     from validate import k8s_manifests as validator
 
@@ -198,8 +198,8 @@ def test_pod_selector_matches_a_workloads_own_labels():
 def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
     """A pod selector that would differ from the workload name must be flagged.
 
-    pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matched no pods at all, and
-    `app=pihole` matched BOTH piholes' — confirmed live 2026-09-01.
+    pihole-2's Deployment selects `app: pihole`. `app=pihole-2` matches no pods at all, and
+    `app=pihole` matches BOTH piholes'.
     """
     selector = health_kubectl.pod_selector(_workload("pihole-2", {"app": "pihole"}))
     assert selector == "app=pihole"
@@ -207,7 +207,7 @@ def test_pod_selector_is_flagged_when_it_would_differ_from_the_name():
 
 
 def test_pod_selector_separates_two_instances_sharing_one_selector():
-    """The accept half of the pihole fix (issue #802).
+    """The accept half of the pihole fix.
 
     `spec.selector` is immutable, so both pihole Deployments select `app: pihole` and neither can
     be given a discriminating selector label. The pod template carries `instance:` instead, and
@@ -228,9 +228,9 @@ def test_pod_selector_separates_two_instances_sharing_one_selector():
 def test_pod_selector_is_flagged_when_it_reads_only_the_shared_selector():
     """The reject half.
 
-    Reading `spec.selector.matchLabels` — what this did until 2026-09-02 — returns the same
-    string for both instances, so each one's pod query matched the union of the two. A test that
-    only asserted the selector is non-empty would pass just as well with that rule back in place.
+    Reading `spec.selector.matchLabels` returns the same string for both instances, so each one's
+    pod query matches the union of the two. A test that only asserted the selector is non-empty
+    would pass just as well with that rule back in place.
     """
     shared = {"app": "pihole"}
     templates = [
@@ -326,7 +326,7 @@ def test_every_rendered_workload_yields_a_usable_pod_selector():
 
 
 def test_no_two_rendered_workloads_share_a_pod_selector():
-    """The tree-wide pin for issue #802.
+    """The tree-wide pin.
 
     Two workloads resolving to the same `-l` expression means each reads the union of both's
     pods, so a restart in either fails the gate for both. The unit tests above pin the pihole
@@ -343,9 +343,9 @@ def test_no_two_rendered_workloads_share_a_pod_selector():
 def test_a_workload_selecting_labels_other_than_its_own_name_still_exists():
     """The reject half.
 
-    `app=<name>` was the assumption until 2026-09-01, and it is right for every workload but one —
-    so a test asserting only that the selector is non-empty would pass just as well with the
-    assumption back in place. This names the counter-example.
+    `app=<name>` is the naive assumption, and it is right for every workload but one — so a test
+    asserting only that the selector is non-empty would pass just as well with the assumption back
+    in place. This names the counter-example.
     """
     divergent = {
         (role, (doc.get("metadata") or {}).get("name"))

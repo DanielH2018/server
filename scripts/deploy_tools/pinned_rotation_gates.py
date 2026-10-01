@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Run the stop conditions of the pinned-secret procedure in `docs/secret-rotation.md`, exit code naming the first failure.
 
-A pinned secret anchors existing data: `authelia_storage` encrypts the TOTP secrets and
-WebAuthn credentials in Authelia's SQLite database, and `change-key` re-encrypts that database
-IN PLACE, so the instant it succeeds the old key opens nothing and the pre-rotation snapshot is
-the only way back. The runbook's discipline is a staged cutover whose safety is the order of
-its steps; here the conditions that must hold before `change-key` are verdicts over what the
-registry, the cluster and this shell answered, the runner stops at the first failure, and the
-exit code is the gate number (#2216, the shape `k3s_upgrade_gates.py` set in #2162).
+A pinned secret anchors existing data: `authelia_storage` encrypts the TOTP secrets and WebAuthn credentials in Authelia's
+SQLite database, and `change-key` re-encrypts that database IN PLACE, so the instant it succeeds the old key opens nothing
+and the pre-rotation snapshot is the only way back. The runbook's discipline is a staged cutover whose safety is the order
+of its steps; here the conditions that must hold before `change-key` are verdicts over what the registry, the cluster and
+this shell answered, the runner stops at the first failure, and the exit code is the gate number (the shape
+`k3s_upgrade_gates.py` sets).
 
 This script checks the preconditions and nothing more. It never generates, prints or handles
 a key, and it is safe to run from anywhere — the `change-key` commands are not, which is what
@@ -29,7 +28,7 @@ The gates, in the order the runbook gives them:
      server's kubeconfig, and a key typed into a Claude session is transcribed, which is the
      exposure the runbook exists to prevent.
 
-Every cluster read goes through `lib.kubectl` with the cluster named `prod` (#1663).
+Every cluster read goes through `lib.kubectl` with the cluster named `prod`.
 
 Exit codes:
   0      every gate passed

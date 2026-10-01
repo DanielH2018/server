@@ -2,10 +2,9 @@
 """Tests for longhorn_reap_logic.py, the pure classifier both reap-orphan entry points share.
 
 Every floor gets an `..._is_clean` / `..._is_flagged` pair per CLAUDE.md's red-proof rule: one
-input the floor must keep, one it must reap. The FLOOR 1 case additionally reproduces the
-2026-08-16 incident from test_longhorn_reap_guard.py's original docstring: FLOOR 1 shipped
-inoperative because kubectl jsonpath cannot iterate a label MAP, and nothing caught it because
-the dry run's own "0 reapable" output read as success.
+input the floor must keep, one it must reap. The FLOOR 1 case additionally covers a FLOOR 1 that is
+inoperative because kubectl jsonpath cannot iterate a label MAP: nothing else catches it,
+because the dry run's own "0 reapable" output reads as success.
 
 Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_reap_logic.py
 """
@@ -93,10 +92,10 @@ def test_abort_reason_is_clean_with_no_volumes_and_no_backups():
 
 
 def test_abort_reason_is_flagged_with_no_volumes_but_backups_that_exist():
-    # #1062. A `kubectl get volumes` that succeeds with zero items -- wrong namespace, a
+    # A `kubectl get volumes` that succeeds with zero items -- wrong namespace, a
     # context with no Longhorn, an RBAC that lists nothing rather than erroring -- puts every
     # labelled backup in .orphaned, and --apply-deleted-volumes then deletes the whole B2 set
-    # with no floor. This case read as None until the guard existed.
+    # with no floor.
     reason = logic.abort_reason(volume_count=0, owner_count=0, backup_count=47)
     assert reason is not None
     assert "ABORT" in reason
@@ -108,7 +107,7 @@ def test_abort_reason_is_clean_when_every_group_resolves_to_a_job():
 
 
 def test_abort_reason_is_flagged_when_a_group_label_resolves_to_no_job():
-    # #1063. One missing or renamed RecurringJob CR leaves a nonzero job count, so the rule
+    # One missing or renamed RecurringJob CR leaves a nonzero job count, so the rule
     # above stays clean, while every volume in that group gets owner "" and its current-tier
     # snapshots read as stranded.
     reason = logic.abort_reason(
@@ -131,8 +130,8 @@ def test_unresolved_owner_count_counts_only_the_volumes_that_resolved_to_nothing
 def test_abort_reason_fires_when_the_recurringjob_list_is_empty_but_volumes_carry_the_label():
     # snapshot_owner_map records an entry for every volume with a group label EVEN WHEN
     # group_job is empty (the value is just ""), so owner_count alone passes the check above --
-    # verified: with recurringjobs.longhorn.io returning [], every current-tier snapshot on a
-    # labelled volume misread as stranded and 3 were deleted on a dry run before this check.
+    # with recurringjobs.longhorn.io returning [], every current-tier snapshot on a
+    # labelled volume would misread as stranded.
     reason = logic.abort_reason(
         volume_count=3, owner_count=3, recurringjob_count=0, volumes_with_group_label=3
     )
@@ -180,9 +179,9 @@ def test_resolve_kubeconfig_uses_readonly_when_no_delete_is_requested():
 
 
 def test_resolve_kubeconfig_refuses_a_delete_run_without_the_admin_kubeconfig():
-    # --apply used to run under the read-only ServiceAccount, so every delete came back
-    # Forbidden; with no return-code check the loop ran to completion and reported success
-    # having deleted nothing. Refusing before any kubectl call is the fix.
+    # --apply under the read-only ServiceAccount makes every delete come back Forbidden; with
+    # no return-code check the loop would run to completion and report success having deleted
+    # nothing. Refusing before any kubectl call prevents that.
     path, err = logic.resolve_kubeconfig(
         needs_admin=True,
         admin_readable=False,
@@ -229,8 +228,8 @@ def test_floor1_is_flagged_when_current_tier_has_produced_backups_past_the_floor
 
 
 def test_floor1_is_clean_when_current_tier_has_produced_nothing():
-    # The 2026-08-16 incident: wg-easy-config's tier had produced zero backups of its own, so
-    # every one of its daily-era strays is the entire recovery this volume has. None reapable.
+    # A tier that has produced zero backups of its own (wg-easy-config here) leaves every one
+    # of its daily-era strays as the entire recovery the volume has. None reapable.
     owner = {"wg-easy-config": "weekly-backup-d3"}
     backups = [
         _backup("stray-5", "wg-easy-config", "2026-08-16T00:00:00Z", "daily-backup"),
@@ -251,8 +250,7 @@ def test_floor1_is_clean_when_current_tier_has_produced_nothing():
 
 
 def test_a_hand_triggered_probe_backup_cannot_stand_in_as_tier_evidence():
-    """wg-easy-config's recorded 3-of-5 incident, reproduced with the fixture that can actually
-    catch a regression of it.
+    """A hand-triggered probe backup must not count as tier evidence.
 
     The jsonpath bug's effect was an EMPTY ownership map (OWNER_COUNT==0 for every volume), so
     `owner.get(vol, "")` returned "" for wg-easy-config specifically -- not a mismatched real
@@ -314,7 +312,7 @@ def test_backups_of_a_deleted_volume_land_in_orphaned_not_candidates():
     owner: dict[str, str] = {}  # the volume is gone, so it resolves to no owner
     backups = [_backup("stray", "gone-vol", "2026-08-14T00:00:00Z", "daily-backup")]
     # One live volume, so this is "gone-vol was deleted" and not "the volume read returned
-    # nothing" -- the two must stay distinguishable, which is what #1062 was.
+    # nothing" -- the two must stay distinguishable.
     result = logic.classify_backups(backups, owner, existing_volumes={"live-vol"})
     assert result.candidates == []
     assert [n for n, *_ in result.orphaned] == ["stray"]
@@ -354,7 +352,7 @@ def test_classify_backups_is_clean_when_one_volume_of_several_was_deleted():
 
 
 def test_classify_backups_is_flagged_when_the_volume_list_is_empty():
-    # #1062. Without the refusal every one of these lands in .orphaned and
+    # Without the refusal every one of these lands in .orphaned and
     # --apply-deleted-volumes deletes the whole B2 backup set. The entry point cannot make this
     # call itself: it runs abort_reason before it has read the backups.
     backups = [
@@ -374,9 +372,9 @@ def test_classify_backups_is_clean_when_an_empty_volume_list_has_no_backups_to_l
 
 def test_a_stray_with_an_empty_snapshotcreatedat_is_kept_not_reaped():
     # `_newest_first` sorts `created` as a raw string; "" sorts as the OLDEST value in a
-    # descending sort, so a stray with an empty timestamp used to lose the FLOOR 2 newest-stray
+    # descending sort, so a stray with an empty timestamp would lose the FLOOR 2 newest-stray
     # slot to a real-timestamped sibling and fall through to `.candidates` on the strength of an
-    # unknown age. Parity with bash's `sort -k3,3r`. classify_backups now keeps it outright.
+    # unknown age. Parity with bash's `sort -k3,3r`. classify_backups keeps it outright.
     owner = {"vol-a": "weekly-backup-d3"}
     backups = [
         _backup("current-1", "vol-a", "2026-08-20T00:00:00Z", "weekly-backup-d3"),
@@ -524,7 +522,7 @@ def test_an_already_removed_snapshot_is_skipped_silently_not_reaped_again():
 
 
 def test_a_removed_newest_snapshot_does_not_consume_the_floor_slot():
-    # #1080: the newest record for a volume can be already-removed (Longhorn hasn't coalesced
+    # The newest record for a volume can be already-removed (Longhorn hasn't coalesced
     # it yet). If already-removed is checked AFTER the FLOOR 1 claim, that removed snapshot
     # eats the floor slot and the real newest LIVE snapshot behind it gets no protection at
     # all -- it falls straight through to the age floor and becomes reapable, even though it
@@ -645,7 +643,7 @@ def test_classify_snapshots_is_clean_when_every_group_label_resolved_to_a_job():
 
 
 def test_classify_snapshots_is_flagged_when_one_recurringjob_cr_is_missing():
-    # #1063. weekly-backup was renamed or deleted, so vol-a's group resolves to "" while
+    # If weekly-backup is renamed or deleted, vol-a's group resolves to "" while
     # daily-backup still resolves -- the RecurringJob count is nonzero and the all-empty guard
     # stays silent. `owner_job and owner_job.startswith(job)` is False against "", so every
     # current-tier snapshot on vol-a past the age floor would have become a candidate.

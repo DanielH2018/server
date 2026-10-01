@@ -23,8 +23,7 @@ from pathlib import Path as _Path
 # `probe_lib` is a namespace package under `scripts/`, so reaching it by package name needs
 # `scripts/` on sys.path: a directly-invoked script — which is how this one runs — gets only
 # its own directory, and pyproject's `pythonpath` is a pytest setting. This has to sit ABOVE
-# the imports below. It used to be supplied as a side effect of `import probe` executing its
-# own insert first, which made the order of these four lines load-bearing and unremarked.
+# the imports below.
 sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from diagnostics.probe_lib import core
@@ -46,9 +45,9 @@ def host_cluster():
     """The cluster this host is a node of, named for every kubectl read below.
 
     Derived from the hostname rather than taken as a flag: postflight is a host script, so the
-    cluster it should read about is the one it stands in. Until 2026-09-19 both kubectl reads
-    took `lib.kubectl`'s default (`prod`), which was correct on daniel-box and raised
-    `WrongCluster` out of the check on daniel-stage — the shape #1663 fixed in probe.py.
+    cluster it should read about is the one it stands in. A kubectl read that took
+    `lib.kubectl`'s default (`prod`) would be correct on daniel-box and raise `WrongCluster`
+    on daniel-stage.
 
     Raises:
         Skip: the host is a node of no known cluster (the Pi), so there is nothing here to
@@ -64,14 +63,7 @@ def host_cluster():
 
 
 def service_ip(name):
-    """The workload's k8s Service ClusterIP, or Skip if there is no Service to read.
-
-    This resolved a Docker bridge IP until 2026-08-25, which meant every check reaching a
-    workload directly — the three *arr keys, the jellyfin key, Authelia — had been dead on
-    both cluster nodes since the 2026-08-14 Docker retirement, failing with
-    `FileNotFoundError: 'docker'` rather than checking anything. probe.py's `arr` subcommand
-    was fixed for exactly this on 2026-08-07; postflight kept the old resolver.
-    """
+    """The workload's k8s Service ClusterIP, or Skip if there is no Service to read."""
     try:
         return health_docker.resolve_service_ip(name, host_cluster())
     except SystemExit as exc:
@@ -104,10 +96,10 @@ def get_via_service(service, path, port, header=None):
     The ClusterIP is one hop with no TLS and no edge, so it stays the fast path. It only answers
     a caller on the node the pod is scheduled on, though: each workload's NetworkPolicy admits
     specific pod selectors and no ipBlock for the node. postflight runs on daniel-box and
-    nowhere else, so until this fallback existed every check below was structurally SKIP
-    whenever its pod sat on daniel-server — a check that never runs rather than a false alarm
-    (#1633). The route reaches either node, pinned to the MetalLB ingress VIP because this
-    host's resolver does not answer `.local` names with the cluster edge.
+    nowhere else, so without this fallback every check below would be structurally SKIP whenever
+    its pod sat on daniel-server — a check that never runs rather than a false alarm. The route
+    reaches either node, pinned to the MetalLB ingress VIP because this host's resolver does not
+    answer `.local` names with the cluster edge.
 
     Returns (status, body). status 0 means curl failed on BOTH paths — then the pod really is
     unreachable from here. Raises Skip when there is no Service at all, which means the
@@ -131,9 +123,9 @@ def _forward_auth_intercepted(app, status):
     still holds if a service's `use_authelia` is flipped later.
 
     The *arr monitoring routes carry no forward-auth and admit daniel-box as well as
-    daniel-server since #1642, so a 3xx from one of those three now means the request missed
-    that route's PathPrefix and fell through to the app's own Authelia'd route — check
-    `ARR_MONITORED_PATH` against the role's `ingressroute-monitoring.yaml.j2`.
+    daniel-server, so a 3xx from one of those three means the request missed that route's
+    PathPrefix and fell through to the app's own Authelia'd route — check `ARR_MONITORED_PATH`
+    against the role's `ingressroute-monitoring.yaml.j2`.
     """
     return SKIP, (
         f"{app}'s route answered HTTP {status} — Authelia forward-auth intercepted it, so the "
@@ -175,8 +167,8 @@ def check_kuma_drift():
 
     The check above counts what the exporter emits, which is also the denominator, so a tile
     that vanishes cannot move it. `probe.py kuma-drift` compares that set against the
-    declaration file instead; see its docstring for the 2026-08-20 instance and for why a push
-    monitor inside its own interval after a Kuma restart is PENDING rather than missing.
+    declaration file instead; see its docstring for why a push monitor inside its own interval
+    after a Kuma restart is PENDING rather than missing.
     """
     status, body = _cluster_prom_query('monitor_status{job="uptime-kuma"}')
     if status != 200:
@@ -188,15 +180,14 @@ def check_kuma_drift():
     live.discard(None)
     # These four names live in `probe_lib.monitors`, not in `probe.py` — reading them off
     # `probe` raised AttributeError and the section reported FAIL, which reads as drift found
-    # rather than as a check that never ran (#1562).
+    # rather than as a check that never ran.
     with open(monitors.STATIC_MONITORS_PATH) as f:
         declared = monitors.parse_declared_monitors(f.read())
     # gate_states is not optional here. Passing none excuses EVERY gated monitor whatever its
-    # secret says, which is what this section did until 2026-09-10: all seven gated monitors
-    # read "gated on <var>, which could not be read" while the line said [OK] (#1632). A gated
-    # monitor is the one nothing else watches, so the drift half could not see the case it
-    # exists for. resolve_gate_states is `probe.py kuma-drift`'s own constructor — shared, so a
-    # caller cannot omit it by forgetting it.
+    # secret says: all seven gated monitors would read "gated on <var>, which could not be
+    # read" while the line said [OK]. A gated monitor is the one nothing else watches, so the
+    # drift half could not see the case it exists for. resolve_gate_states is `probe.py
+    # kuma-drift`'s own constructor — shared, so a caller cannot omit it by forgetting it.
     text, code = monitors.format_kuma_drift(
         declared,
         live,
@@ -233,27 +224,26 @@ def _unreachable(app, detail):
     """A ClusterIP that does not answer the host is a placement fact, not a bad credential.
 
     `core.get_status()` returns status 0 when curl itself failed. Reporting that as "the key doesn't
-    match" sends someone to rotate a key that is fine. Each *arr's NetworkPolicy admits
-    specific pod selectors and no ipBlock for the node, so a host-originated GET only
-    reaches an app scheduled on THIS node — confirmed 2026-08-17 and again 2026-08-25,
-    both times with prowlarr on daniel-server while sonarr and radarr answered.
+    match" sends someone to rotate a key that is fine. Each *arr's NetworkPolicy admits specific pod
+    selectors and no ipBlock for the node, so a host-originated GET only reaches an app scheduled on
+    THIS node.
 
-    Since #1633 this is the LAST resort rather than the first: `get_via_service` tries the
-    service's Traefik route before a caller gets here, so reaching this means neither the
-    ClusterIP nor the edge answered.
+    This is the LAST resort rather than the first: `get_via_service` tries the service's Traefik
+    route before a caller gets here, so reaching this means neither the ClusterIP nor the edge
+    answered.
     """
     return SKIP, f"{app} unreachable from this host (pod on another node?) — {detail}"
 
 
 # The path each *arr's `-monitoring` IngressRoute admits, which is the only path the route
-# half of `get_via_service` can reach. It read `/api/<ver>/system/status` until 2026-09-10 and
-# that path is on no route's PathPrefix, so the fallback 302'd into Authelia and the check was
-# structurally SKIP whenever the pod sat on the other node (#1642). A 200 here with the SOPS
-# key proves the credential just as well as system/status did: both are authenticated reads.
+# half of `get_via_service` can reach. `/api/<ver>/system/status` is on no route's PathPrefix,
+# so the fallback would 302 into Authelia and the check would be structurally SKIP whenever
+# the pod sat on the other node. A 200 here with the SOPS key proves the credential just as
+# well as system/status did: both are authenticated reads.
 #
 # Kept in step with the three `ingressroute-monitoring.yaml.j2` templates by
 # ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py — a prefix edited on one
-# side alone puts this check back where #1642 found it.
+# side alone breaks the fallback.
 ARR_MONITORED_PATH = {
     "sonarr": "/api/v3/queue",
     "radarr": "/api/v3/queue",
@@ -349,13 +339,13 @@ def check_authelia():
     The reachability half goes through `get_via_service`, so the portal is asked on either
     node. Its own IngressRoute carries no forward-auth — gating the login page behind the
     login page is a redirect loop — so `/api/health` on `auth.local.<domain>` reaches the
-    backend and returns Authelia's own `{"status":"OK"}`. Measured from daniel-box on
-    2026-09-10 with the pod on daniel-server: HTTP 200.
+    backend and returns Authelia's own `{"status":"OK"}`. From daniel-box with the pod on
+    daniel-server it answers HTTP 200.
 
     A status of 0 means curl itself failed on both paths, which is the placement fact
-    `_unreachable` describes for the *arr checks — not an outage. Reporting it as
-    "Authelia is not serving" was a false alarm on the fleet's most load-bearing service
-    whenever the run was on the node Authelia is not on (#1564).
+    `_unreachable` describes for the *arr checks — not an outage. Reporting it as "Authelia
+    is not serving" would be a false alarm on the fleet's most load-bearing service
+    whenever the run was on the node Authelia is not on.
     """
     missing = [
         name
@@ -378,9 +368,8 @@ def check_authelia():
     return OK, f"healthy ({json.loads(body).get('status', '?')}), OIDC material present"
 
 
-# §9.6 was Portainer environments, removed with Portainer itself on 2026-08-09
-# (slice-7 Phase B). The numbering below is left alone so §9.x keeps matching
-# ansible/README.md.
+# §9.6 was Portainer environments, removed with Portainer itself. The
+# numbering below is left alone so §9.x keeps matching ansible/README.md.
 
 CHECKS = [
     ("9.1", "Uptime-Kuma admin", check_kuma_monitors),
@@ -400,11 +389,10 @@ def build_parser():
     """The parser that makes `--help` free.
 
     No arguments beyond the implicit `-h/--help`: the no-argument invocation is the whole
-    interface and stays byte-identical. The parser exists because CLAUDE.md prescribes
-    `uv run python scripts/<dir>/<name>.py --help` as the way to verify a moved or new entry
-    point, and without it that check ran the LIVE sweep — several SOPS decrypts and ~15
-    authenticated requests to production services — while reading as a passing `--help`
-    (#1685).
+    interface and stays byte-identical. The parser exists because CLAUDE.md prescribes `uv
+    run python scripts/<dir>/<name>.py --help` as the way to verify a moved or new entry
+    point, and without it that check would run the LIVE sweep — several SOPS decrypts and
+    ~15 authenticated requests to production services — while reading as a passing `--help`.
     """
     return argparse.ArgumentParser(
         prog="postflight.py",

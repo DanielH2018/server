@@ -1,8 +1,8 @@
 """The Loki read-route witness must go DOWN on the body that broke it, not just on a bad exit code.
 
 `probe.py` runs curl without `-f`, so the 404 Traefik answers when the route's ClientIP guard
-refuses a host (issue #1693) arrives as exit 0 with the body `404 page not found`. The accept
-half below is the live response measured from daniel-server on 2026-09-10; the reject halves are
+refuses a host arrives as exit 0 with the body `404 page not found`. The accept
+half below is the live response measured from daniel-server; the reject halves are
 that 404 and the two shapes a route can answer while carrying nothing.
 
 Run: uv run pytest ansible/roles/setup/initial_setup/tests/test_loki_route_health.py
@@ -29,7 +29,7 @@ def test_a_live_labels_response_is_up():
 
 
 def test_the_404_body_probe_py_reports_with_exit_zero_is_down():
-    """The exact case #1712 exists for — exit 0, and no labels anywhere in the answer."""
+    """The exact case this witness exists for — exit 0, and no labels anywhere in the answer."""
     status, msg = verdict(0, "404 page not found\n")
     assert status == "down"
     assert "404 page not found" in msg

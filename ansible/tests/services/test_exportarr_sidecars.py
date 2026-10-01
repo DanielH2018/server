@@ -14,8 +14,8 @@ in renovate.json. Duplication that a test keeps in lockstep beats a single copy 
 WHAT THIS FILE DELIBERATELY DOES NOT ASSERT. The sidecars carry no readinessProbe, and that
 rule lives in `ansible/tests/k8s/test_readiness_coverage.py` alone: all three are rows in its
 `_NO_READINESS` record, and its `test_the_record_has_no_stale_entries` goes red the moment one
-gains a probe. Asserting it here as well split one rule's rationale across two files (#3055).
-Do not re-add it; add a row there.
+gains a probe. Asserting it here as well would split one rule's rationale across two files.
+Do not add it here; add a row there.
 """
 
 import re
@@ -38,8 +38,8 @@ def _sidecars() -> dict[str, dict]:
 
     Every guard below that reads one field off the sidecar goes through here, so the
     non-vacuity check is written once: a renamed container or a render that dropped a role
-    leaves the dict short, and each caller asserts `set(...) == set(ARRS)` against it. Nine
-    guards in this repo broke by looping `continue` past everything and asserting over nothing.
+    leaves the dict short, and each caller asserts `set(...) == set(ARRS)` against it. A loop
+    that `continue`s past everything asserts over nothing.
     """
     found: dict[str, dict] = {}
     for role, name, doc in _docs():
@@ -114,13 +114,13 @@ def test_the_api_key_is_a_secret_reference_never_a_literal():
 def test_the_sidecar_is_restarted_when_it_wedges():
     """The sidecar keeps a livenessProbe and no readinessProbe, and only one half lives here.
 
-    The readiness half moved to `ansible/tests/k8s/test_readiness_coverage.py`, which records
+    The readiness half lives in `ansible/tests/k8s/test_readiness_coverage.py`, which records
     all three exportarr containers in `_NO_READINESS` with this reason — a readinessProbe on a
     sidecar takes the whole pod out of its *arr's Service whenever the exporter hiccups, so
     monitoring takes down the thing it monitors. That file's
     `test_the_record_has_no_stale_entries` goes red the moment one of the three gains a probe,
-    so asserting it again here only duplicated the rule and split its rationale across two
-    files (#3055). `ARRS` is exactly the three roles recorded there.
+    so asserting it again here would duplicate the rule and split its rationale across two
+    files. `ARRS` is exactly the three roles recorded there.
 
     Liveness is the half no table covers: nothing else in the suite asks whether an exempt
     container is restartable at all, and a wedged exporter with no probe is simply silent.
@@ -137,14 +137,14 @@ def test_the_sidecar_is_restarted_when_it_wedges():
 
 
 def test_the_sidecar_cpu_limit_covers_a_scrape_burst():
-    """The cap is sized against the CFS quota per period, not the average rate (#2017).
+    """The cap is sized against the CFS quota per period, not the average rate.
 
     The sidecar does its work in one burst per scrape, so a limit that looks like 500x the
     24h mean can still throttle every scrape: at 100m sonarr's sidecar hit the quota in
     ~48% of periods. 500m is the smallest shared value whose 50ms-per-period quota covers
     sonarr's measured 25-86ms burst; the comment in the macro carries the measurement.
 
-    Census first (#2036): the loop `continue`s past every container not named `exportarr`,
+    Census first: the loop `continue`s past every container not named `exportarr`,
     so a renamed container or an empty render would otherwise pass with zero assertions.
     """
     limits = {}
@@ -217,7 +217,7 @@ def test_the_image_pins_stay_in_lockstep():
     Drift here is quiet: the three exporters keep working at different versions until one
     upstream release changes a metric name, and then one dashboard panel goes blank.
 
-    Read off the RENDERED container rather than regexed out of each role's defaults (#2809).
+    Read off the RENDERED container rather than regexed out of each role's defaults.
     The pin reaches the pod as a macro ARGUMENT — `exportarr(app, image, ...)` in
     `ansible/templates/exportarr.yml.j2`, passed as `exportarr_image=` by each role — and every
     role renders in its OWN defaults context. So an invocation naming another role's variable
@@ -264,7 +264,7 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
     shared macro takes a parameter rather than a blanket arg.
 
     Non-vacuity first: a renamed role would otherwise leave both halves passing over an empty
-    set, which is the failure mode that broke nine guards in six pull requests.
+    set.
     """
     args = _sidecar_args()
     assert set(args) == set(ARRS), (
@@ -287,9 +287,9 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
 def _scrape_jobs() -> list[dict]:
     """observability's scrape_configs, read from the RENDERED prometheus ConfigMap.
 
-    Through the render rather than the template text (#2809). The text form split
-    `prometheus.yaml.j2` on the job's name and then asked whether two strings appeared
-    anywhere in the slice that followed, which three different mistakes satisfy: `9707` in one
+    Through the render rather than the template text. A text form that splits
+    `prometheus.yaml.j2` on the job's name and then asks whether two strings appear
+    anywhere in the slice that follows is satisfied by three different mistakes: `9707` in one
     of the four prose comments that sit above the job, the `__meta_...port_number` label used
     as a `target_label` instead of in a `keep` rule, or the two appearing in separate relabel
     entries that have nothing to do with each other. The parsed job is what Prometheus loads,
@@ -360,8 +360,8 @@ def test_a_job_that_keeps_on_the_app_label_is_flagged():
                             "action": "keep",
                             "regex": "sonarr|radarr|prowlarr",
                         },
-                        # Present, but as a rename rather than a filter — the slice the text
-                        # form read could not tell this from a keep rule.
+                        # Present, but as a rename rather than a filter — a text scan
+                        # could not tell this from a keep rule.
                         {
                             "source_labels": [
                                 "__meta_kubernetes_pod_container_port_number"

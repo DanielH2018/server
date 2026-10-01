@@ -33,7 +33,7 @@ def test_every_registered_filter_is_the_real_implementation(name: str, dotted: s
 
     A hand-written stub agrees with the real filter on the ordinary inputs a test reaches for
     and diverges on exactly the ones the filter exists for — `bool("false")` being the case
-    that started this (#2074, #2408).
+    that started this.
     """
     env = aje.make_ansible_env([SHARED_TPL])
     registered = env.filters[name]

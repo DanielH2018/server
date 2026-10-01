@@ -69,7 +69,7 @@ def test_the_merged_test_asks_the_forge_because_this_repo_squash_merges():
 
 
 def test_the_gone_tree_branch_deregisters_only_its_own_worktree():
-    """#1677: scoped to this batch's path, where Ruling 37 swept the whole repo.
+    """Scoped to this batch's path, where Ruling 37 swept the whole repo.
 
     `worktree remove` refuses a locked tree, so the launch lock is released first — the same
     ordering Ruling 37's prune needed for the same reason.
@@ -136,7 +136,7 @@ def test_an_unreachable_host_is_a_failure_not_a_kept_tree(tmp_path, capsys):
 
 
 def test_a_traceback_is_reported_by_its_exception_line_not_its_header():
-    """#2788: the header is the one traceback line that names nothing."""
+    """The header is the one traceback line that names nothing."""
     stderr = (
         "warning: `VIRTUAL_ENV` does not match the project environment\n"
         "Traceback (most recent call last):\n"

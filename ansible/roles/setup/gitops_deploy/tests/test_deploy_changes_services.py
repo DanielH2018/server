@@ -38,8 +38,8 @@ def test_unrelated_path_ignored():
 
 
 # A secrets-only push (e.g. a manual rotation of an assisted/external secret from another
-# machine) maps to no service and isn't broad, so it used to fall into the silent
-# `git merge --ff-only; return` path — the rotated value then sat stale in the running
+# machine) maps to no service and isn't broad, so it would fall into the silent
+# `git merge --ff-only; return` path — the rotated value then sits stale in the running
 # container with no redeploy and no alert. It must instead be flagged so the deployer
 # defers-and-alerts. (Adding ansible/vars/ to _BROAD_PREFIXES was rejected: that would also
 # force the /add-secret flow — secrets.yml + the consuming template together — into a manual
@@ -81,10 +81,10 @@ def test_secret_rotation_registry_only_is_not_secrets():
     assert cs.broad is False
 
 
-# M2: a service-scoped change to a bind-mounted CONFIG template or files/ asset (not just the
+# A service-scoped change to a bind-mounted CONFIG template or files/ asset (not just the
 # compose) must map to that service for a scoped, health-gated redeploy — closing the GitOps loop
-# so live config matches master. Previously these fell into the silent ff-merge "docs-only" path
-# (the config sat stale in the running container with no redeploy and no alert).
+# so live config matches master. Otherwise these fall into the silent ff-merge "docs-only" path
+# (the config sits stale in the running container with no redeploy and no alert).
 def test_config_template_change_maps_to_service():
     cs = services_from_changed_paths(
         ["ansible/roles/containers/prometheus/templates/prometheus.yml.j2"]
@@ -95,9 +95,7 @@ def test_config_template_change_maps_to_service():
 
 def test_files_asset_change_maps_to_service():
     # Must be a DOCKER role path: k8s paths defer-and-alert instead of mapping to a
-    # service. ical-proxy was the fixture until its files/ moved into roles/k8s
-    # (2026-08-14) along with the other config-source roles, leaving the Pi's services as
-    # the only Docker ones. The asset name is illustrative -- this parses paths, it does
+    # service. The Pi's services are the only Docker ones. The asset name is illustrative -- this parses paths, it does
     # not stat them.
     cs = services_from_changed_paths(
         ["ansible/roles/containers/glances/files/glances.conf"]
@@ -117,7 +115,7 @@ def test_files_asset_change_maps_to_service():
 )
 def test_a_common_change_is_pi_work_not_broad_and_not_a_service(path):
     # common/ is the Pi's shared Compose deploy path, which daniel-box's play never reads. It
-    # must not buy a full deploy.yml run there (#2805), and it is not a service named `common`.
+    # must not buy a full deploy.yml run there, and it is not a service named `common`.
     cs = services_from_changed_paths([path])
     assert cs.pi_shared is True
     assert cs.broad is False
@@ -253,7 +251,8 @@ def test_role_readme_md_stays_silent_like_claude_md():
 
 def test_template_and_meta_same_service_deploys_and_flags_meta():
     # A push changing both a template and meta/ for the same service deploys it (scoped --tags)
-    # and records the meta flag too — the combined-push case that used to swallow the meta change.
+    # and records the meta flag too — the combined-push case where the meta change must not be
+    # swallowed.
     cs = services_from_changed_paths(
         [
             "ansible/roles/containers/dozzle/templates/docker-compose.yml.j2",
@@ -274,7 +273,7 @@ def test_config_change_with_compose_change_dedupes_to_one_service():
     assert cs.services == {"traefik"}
 
 
-# ── role_of: the one answer to "which role directory is this path in" (#3048) ──────────────
+# ── role_of: the one answer to "which role directory is this path in" ──────────────
 @pytest.mark.parametrize(
     "path,expected",
     [

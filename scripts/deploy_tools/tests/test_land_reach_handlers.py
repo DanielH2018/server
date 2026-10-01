@@ -1,23 +1,19 @@
 #!/usr/bin/env python3
-"""A `handlers/` change reaches the hosts that run the tasks notifying it (#2624).
+"""A `handlers/` change reaches the hosts that run the tasks notifying it.
 
-WHAT WENT WRONG. `setup_file_hosts` narrowed `templates/`, `files/`, `tasks/` and (since
-#2610) `defaults/`/`vars/` to the hosts that actually run the task behind each path. A
-`handlers/main.yml` fell through to the role-level reach, which for a dispatcher is the
-union of both halves. `docker_install/handlers/main.yml` read as all three hosts while its
-only handler is notified from `teardown.yml`, the `not has_docker` half, which daniel-pi
-never runs.
+A `handlers/main.yml` must not fall through to the role-level reach, which for a dispatcher is
+the union of both halves: `docker_install/handlers/main.yml` has one handler, notified from
+`teardown.yml`, the `not has_docker` half, which daniel-pi never runs, so the file does not
+reach daniel-pi.
 
 `_handler_notifier_chains` reads a handlers file's reach from the tasks that `notify:` the
 handlers it defines, and narrows only when EVERY handler has a notifying task -- the reject
 half below, because one handler resolved by name says nothing about the next.
 
-WHAT THIS DOES NOT FIX. Issue #2624's Verify-by asks for
-`setup_file_hosts('gitops_deploy', '.../handlers/main.yml') == {'daniel-box'}`. That answer
-is wrong, and `test_the_deployer_handlers_still_reach_every_host` holds the measured one:
-`gitops_deploy/handlers/main.yml` defines `Reload systemd` as well as `Run gitops-deploy
-once`, and `tasks/teardown.yml` notifies `Reload systemd` under `when: not has_gitops`
-(693a0bcc2, 2026-09-09). The handler really does run on daniel-server and daniel-pi.
+The deployer's handlers are NOT narrowed: `gitops_deploy/handlers/main.yml` defines
+`Reload systemd` as well as `Run gitops-deploy once`, and `tasks/teardown.yml` notifies
+`Reload systemd` under `when: not has_gitops`, so the handler really does run on daniel-server
+and daniel-pi. `test_the_deployer_handlers_still_reach_every_host` holds that answer.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach_handlers.py
 """
@@ -66,8 +62,7 @@ def test_the_docker_teardown_handler_skips_the_only_docker_host():
 
 def test_the_deployer_handlers_still_reach_every_host():
     """Not every dispatcher narrows, and this one must not. `Reload systemd` is notified
-    from both halves of `gitops_deploy`, so the file's reach is the union -- the answer
-    #2624's Verify-by asks to replace with `{daniel-box}`."""
+    from both halves of `gitops_deploy`, so the file's reach is the union."""
     assert land_reach.setup_file_hosts(
         "gitops_deploy", "ansible/roles/setup/gitops_deploy/handlers/main.yml"
     ) == frozenset(land_reach._HOSTS)

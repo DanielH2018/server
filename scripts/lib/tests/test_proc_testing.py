@@ -1,6 +1,6 @@
 """`lib.proc_testing` — the shared test runner and fake-binary writer.
 
-This module's subject IS the three decisions `proc_testing` centralises (#3056): the launch
+This module's subject IS the three decisions `proc_testing` centralises: the launch
 flags, the `PATH` prefix and the exec bit. It therefore writes executables and `PATH` strings
 by hand, and is exempt from the guard in
 `scripts/tests/test_tests_share_the_subprocess_helpers.py` for that reason.

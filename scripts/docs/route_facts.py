@@ -53,8 +53,8 @@ def ingressroute_templates(role_dir: Path) -> list[Path]:
     """Every ingressroute template a role's route is rendered from, or [] if it has no route.
 
     The role's own `templates/ingressroute*.j2`, plus the shared default under
-    `ansible/templates/` when the role names `ingressroute.yaml` and ships no template for it
-    (#3043). The shared one has to be included or `reachability` reads the role's remaining
+    `ansible/templates/` when the role names `ingressroute.yaml` and ships no template for
+    it. The shared one has to be included or `reachability` reads the role's remaining
     templates alone: sonarr keeps only `ingressroute-monitoring.yaml.j2`, which calls
     `monitoring_route()` and never `ingressroute()`, so the service would report LAN-only.
     """

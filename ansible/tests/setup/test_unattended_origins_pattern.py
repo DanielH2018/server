@@ -9,13 +9,13 @@ and one of them fails silently against a repo that publishes no `Suite:` field:
 
 `get_allowed_origins_legacy` in /usr/bin/unattended-upgrade rewrites every Allowed-Origins
 entry to `o=X,a=Y`, so the second half can only ever match a package file's `archive`. The
-GitHub CLI repo has none — measured on daniel-box 2026-08-24 via python-apt, its package file
+GitHub CLI repo has none — measured on daniel-box via python-apt, its package file
 reads origin='gh', archive='', codename='stable'. `gh:stable` therefore matched nothing and
 upgraded nothing, while `apt-config dump` listed it and the drop-in read as correct.
 
 That is the failure this test exists to catch: the legacy form is not wrong at parse time, at
 render time, or at deploy time. It is wrong only in what it silently declines to upgrade, which
-nothing else in the repo can see. It shipped that way in 2fc0b537.
+nothing else in the repo can see.
 
 The distro's own 50unattended-upgrades still uses Allowed-Origins for the security pockets and
 is not ours to change; this covers only the extras we add.

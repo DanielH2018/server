@@ -1,5 +1,5 @@
 ---
-# The etcd restore drill's throwaway guest and the cron that drives it (issue #1175, path 1).
+# The etcd restore drill's throwaway guest and the cron that drives it.
 # Runs after network.yml: the domain's interface names the staging network and its DHCP carries
 # this guest's reservation. Ansible prepares what a run needs — the base image, the seed, the
 # domain XML, the pinned host key, the credentials, the two scripts — and never starts the guest
@@ -16,8 +16,7 @@
   # stops and asks to be re-pinned.
   #
   # The orchestrator converts this into the guest's per-run disk (etcd-restore-drill-vm.sh.j2);
-  # ansible only ensures the base image is present. It lived in the retired guest.yml until
-  # 2026-09-29 (#2941), when daniel-stage was removed and the drill became its only reader.
+  # ansible only ensures the base image is present.
   ansible.builtin.get_url:
     url: "{{ hypervisor_base_image_url }}"
     dest: "{{ hypervisor_base_image_path }}"

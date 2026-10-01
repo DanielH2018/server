@@ -4,14 +4,11 @@
 """PreToolUse(Bash) guard: the two file rules that only ever watched the Edit tool.
 
 WHY A SECOND SURFACE. `block-protected-edits.py` denies edits to generated docs pages and to
-SOPS-encrypted files — but it is wired at matcher
-`Edit|Write|MultiEdit|NotebookEdit`, and auto mode injects a standing instruction telling the
-model to make file changes "with sed, heredocs, or short scripts, rather than using the
-dedicated Read, Edit, or Write tools". The instructed path was the unguarded one. Measured
-2026-08-29: an in-place `sed` of `ansible/vars/secrets.yml`, a heredoc into a rendered compose
-file and `tee docs/reference/services.md` each returned NO decision from both PreToolUse Bash
-hooks. `bash-write-fanout.sh` already closes this gap for the four PostToolUse
-Edit|Write hooks; it does not re-drive a PreToolUse deny, so this does.
+SOPS-encrypted files — but it is wired at matcher `Edit|Write|MultiEdit|NotebookEdit`, and auto
+mode injects a standing instruction telling the model to make file changes "with sed, heredocs,
+or short scripts, rather than using the dedicated Read, Edit, or Write tools". The instructed
+path was the unguarded one. `bash-write-fanout.sh` already closes this gap for the four
+PostToolUse Edit|Write hooks; it does not re-drive a PreToolUse deny, so this does.
 
 TWO ARMS, TWO DECISIONS, ON PURPOSE.
 
@@ -30,10 +27,6 @@ TWO ARMS, TWO DECISIONS, ON PURPOSE.
      The reader must be in command position and the path must be one of ~15 files the tree
      itself names, so a false positive costs one narrower re-run while a false negative costs a
      rotation.
-
-A third arm, a write that leaves a worktree-isolated session's worktree (#1419), moved to the
-dotfiles `claude_guard` package as `checks/worktree_escape.py` (#2818): it reads nothing
-this repo owns, so every repo's sessions now get it.
 
 Reads the hook JSON on stdin. Emits a decision or stays silent -> normal permission flow.
 """
@@ -123,8 +116,8 @@ _FLAG = re.compile(r"^-{1,2}[A-Za-z][\w-]*$")
 # `grep -n "cat /usr/local/bin/secret-rotate.sh" notes.md` is text describing the command.
 _CMD_AT = r"(^|[;&|(`])\s*([A-Za-z_][A-Za-z0-9_]*=[^\s]*\s+)*"
 # `[^;&]*` deliberately spans `|`. A pipe separates commands, but it also appears INSIDE a grep
-# alternation — `grep -nE "rotate|--commit|sops set|push" <path>` is the incident's own command,
-# and stopping at the first `|` cut the path off before the match could see it.
+# alternation — `grep -nE "rotate|--commit|sops set|push" <path>` — and stopping at the first
+# `|` would cut the path off before the match could see it.
 _READER_RE = re.compile(_CMD_AT + r"(sudo\s+)?" + _CONTENT_READERS + r"\b([^;&]*)")
 
 

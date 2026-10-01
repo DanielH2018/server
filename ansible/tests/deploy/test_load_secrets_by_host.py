@@ -13,9 +13,9 @@ broken. So the preamble asserts the hosts agree rather than picking a winner, an
 pin both halves: the file is a variable, and the assert that makes the variable safe is still
 there.
 
-Every host reads `secrets.yml` since daniel-stage and `secrets-staging.yml` were retired
-(#2941), so no host exercises the override today. The guard stays because re-adding such a host
-is meant to be a var rather than a code change, and because the assert is what makes that safe.
+Every host reads `secrets.yml`, so no host exercises the override. The guard stays because
+adding a host with its own file is meant to be a var rather than a code change, and because the
+assert is what makes that safe.
 """
 
 import re
@@ -58,8 +58,8 @@ def test_a_mixed_play_is_refused_before_anything_is_loaded():
     """Without this, `run_once` silently applies one host's file to hosts that chose another."""
     tasks = _tasks()
     # Selected by CONTENT, not position. The preamble carries a second, unrelated assert (the
-    # wrong-machine guard, ansible/tests/deploy/test_local_connection_target.py), and this test used to
-    # take the first assert in the file — which silently became that one when it landed.
+    # wrong-machine guard, ansible/tests/deploy/test_local_connection_target.py), and taking the
+    # first assert in the file would silently select that one.
     mine = [
         i
         for i, t in enumerate(tasks)
@@ -104,8 +104,8 @@ def test_production_is_the_default():
 
 
 def test_no_host_overrides_it_today():
-    """The census half. daniel-stage was the only host that ever set this, and it is retired
-    (#2941), so a value appearing here again means a second secrets file arrived with it —
+    """The census half. No host sets this, so a value appearing here means a second secrets
+    file arrived with it —
     and `test_every_file_any_host_names_exists` below is what then has to find that file."""
     overriding = {
         f.stem: value
@@ -135,10 +135,9 @@ def test_every_file_any_host_names_exists():
 def test_only_the_production_secrets_file_is_tracked():
     """The other half of the census above: one file in vars/ means one file to reason about.
 
-    `secrets-staging.yml` was encrypted to daniel-server's key alone and held generated values,
-    so a production host that adopted it would have run with fake credentials rather than with
-    none. It went with daniel-stage (#2941). A second file returning is the point at which the
-    per-host variable stops being latent.
+    A second secrets file is the point at which the per-host variable stops being latent. A file
+    encrypted to one host's key alone and holding generated values would make a production host
+    that adopted it run with fake credentials rather than with none.
     """
     tracked = sorted(p.name for p in VARS_DIR.glob("secrets*.y*ml"))
     assert tracked == [PRODUCTION_FILE], (

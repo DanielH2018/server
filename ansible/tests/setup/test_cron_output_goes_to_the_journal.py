@@ -2,27 +2,24 @@
 
 cron mails whatever a job writes to /var/mail/ubuntu, and nothing opens that spool. A per-run
 success line there is not a record — it is one more message a real failure has to be found
-among. #2418 silenced the infra-map cron's, #2444 drained the spool, and #2466 is the six that
-still mailed: four crons, plus `secret-rotation-audit` and `live-drift`, which the kuma-check
-timer migration had already moved to the journal by passing `kuma_check_cron_name`.
+among.
 
-Each routes BOTH streams through `logger -t <tag>`, not stdout alone: a Python job's log line
-comes from `logging.basicConfig`, which writes to stderr, so a stdout-only redirect would
-change nothing. None of them loses an alert, because none alerted by mail — the reasoning per
-cron is at its own task. The fourth of #2466's four was `TLS cert-expiry watch`, retired with
-its watcher in #3095.
+Each routed cron sends BOTH streams through `logger -t <tag>`, not stdout alone: a Python job's
+log line comes from `logging.basicConfig`, which writes to stderr, so a stdout-only redirect
+would change nothing. None of them loses an alert, because none alerted by mail — the
+reasoning per cron is at its own task.
 
-Those five are instances. The class check (#2487) reads every `ansible.builtin.cron` task that
-installs a job, on both planes. Each job must route both streams of every stage, or appear in
-`MAILS_ONLY_ON_FAILURE` with the reason its healthy run prints nothing. The allowlist fails in
-both directions: an entry whose cron is gone, or whose job is now routed, is stale.
+The class check reads every `ansible.builtin.cron` task that installs a job, on both planes.
+Each job must route both streams of every stage, or appear in `MAILS_ONLY_ON_FAILURE` with the
+reason its healthy run prints nothing. The allowlist fails in both directions: an entry whose
+cron is gone, or whose job is now routed, is stale.
 
 The judge splits a job at top-level `;`, `&&` and `||`, so an unbraced chain is judged stage
 by stage rather than by its last pipe. It does not judge the stderr of a pipeline's earlier
 stages, which prints only on failure. It cannot see inside a script, so an allowlist reason is
-a claim about the script that a person checked. The Kuma and Healthchecks crons used to print
-on a push that failed once and then succeeded on retry; #2511 routed curl's stderr away at
-both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds the ping half.
+a claim about the script that a person checked. The Kuma and Healthchecks crons route curl's
+stderr away at both surfaces, and `ansible/tests/services/test_healthchecks_pings.py` holds
+the ping half.
 
 Run: uv run pytest ansible/tests/setup/test_cron_output_goes_to_the_journal.py
 """
@@ -32,7 +29,7 @@ import re
 import pytest
 from _helpers import ROLES, load_tasks, walk_tasks
 
-# The four crons of #2466 that mail a per-run success line, by `ansible.builtin.cron` name, and
+# The crons that mail a per-run success line, by `ansible.builtin.cron` name, and
 # the `logger` tag each must route to. Named rather than globbed: a census that finds its
 # subject by pattern reads empty the day a file moves, and every job then passes by default.
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
@@ -40,8 +37,7 @@ JOURNAL_ROUTED = {
     "Weekly secret rotation (auto tier)": "secret-rotate",
     "Refresh generated docs": "docs-refresh",
     "Longhorn filesystem trim": "longhorn-trim-cron",
-    # Not one of the four — added with the branch sweep (#2430), which made a previously
-    # near-silent `--gc` job print a line per removed worktree and deleted branch.
+    # The branch sweep's `--gc` job prints a line per removed worktree and deleted branch.
     "Weekly git object-store repair": "worktree-sweep",
 }
 
@@ -97,13 +93,12 @@ def test_the_braced_chain_pipes_the_whole_worktree_sweep_job():
     assert "; } 2>&1 | logger -t worktree-sweep" in job, job
 
 
-# ── every cron (#2487) ───────────────────────────────────────────────────────────────
+# ── every cron ───────────────────────────────────────────────────────────────
 
 _KUMA = "prints nothing on a healthy run; its verdict is a Kuma push"
 
-# Crons whose job routes nowhere, each with the reason its healthy run prints nothing. Every
-# reason was checked against the script when #2487 wrote this list. A cron that prints a
-# success line does not belong here: route it instead.
+# Crons whose job routes nowhere, each with the reason its healthy run prints nothing. A cron
+# that prints a success line does not belong here: route it instead.
 MAILS_ONLY_ON_FAILURE = {
     "Sync peer Claude artifacts": (
         "rsync -a without -v and ssh in BatchMode print nothing on success, and a failure goes "
@@ -145,7 +140,7 @@ MAILS_ONLY_ON_FAILURE = {
     ),
 }
 
-# Named members from both planes and from the files the census used to read, so a glob that
+# Named members from both planes and from the files the census reads, so a glob that
 # stops matching fails here rather than passing over an empty census.
 KNOWN_CRONS = frozenset(
     {

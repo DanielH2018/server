@@ -70,9 +70,9 @@
     - Reload systemd
     - Run renovate-notify once
 
-# 2026-08-23b review M5, the same defect as gitops-deploy-alert.service: embedding the webhook
-# and installing 0600 did not protect it, because `systemctl show <unit> -p ExecStart` serves
-# unit content over the system bus regardless of file mode. 0644 is the honest mode now that the
+# Embedding the webhook in the unit and installing 0600 would not protect it, because
+# `systemctl show <unit> -p ExecStart` serves unit content over the system bus regardless of
+# file mode (the same as gitops-deploy-alert.service). 0644 is the honest mode now that the
 # unit holds no secret.
 - name: Install the alert unit
   ansible.builtin.template:
@@ -93,7 +93,7 @@
   become: true
 
 # Render provenance for manifest-prune-check.sh's stale-script arm — see the gitops_deploy role
-# for why these were previously watched by nothing (2026-08-23b review H1).
+# for the reasoning.
 - name: Stamp the rendered renovate-notify units
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -103,14 +103,12 @@
       - ansible/roles/setup/renovate_notify/templates/renovate-notify-alert.service.j2
       - ansible/roles/setup/renovate_notify/templates/renovate-notify.timer.j2
       # Same reasoning as the gitops_deploy list: the stamp and the check both hash the repo
-      # source, never the rendered file, so an .env.j2 carries no secret into either
-      # (2026-08-24 review M-9).
+      # source, never the rendered file, so an .env.j2 carries no secret into either.
       - ansible/roles/setup/renovate_notify/templates/config.env.j2
       - ansible/roles/setup/renovate_notify/templates/alert-webhook.env.j2
 
-# The notifier's own code was watched by nothing until 2026-08-24 (review M-5): the deployed-code
-# arm hardcoded gitops-deploy's three paths, so this role's three could run any age against a
-# green drift check.
+# The notifier's own code is registered here: the deployed-code arm reads only the paths
+# registered, so an unregistered script could run any age against a green drift check.
 - name: Record the deployed renovate-notify code
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:

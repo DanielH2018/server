@@ -31,17 +31,15 @@
   #
   # Deliberately NOT `gpg --dearmor` via `command`: that creates the file under root's
   # umask, which the initial_setup role tightens to 027 EARLIER IN THE SAME PLAY. On a fresh
-  # host the keyring therefore landed 0640; apt fetches as the unprivileged `_apt` user,
-  # could not read it, and reported the repo as unsigned — failing the play at the cache
-  # refresh below, before Docker was ever installed (daniel-box, 2026-08-01). Existing hosts
-  # never showed it because their keyring predates the umask change and a `creates:` guard
-  # stopped it being regenerated. get_url sets the mode declaratively, so no umask can reach
-  # it. Same idiom as optimize_pi's azlux key.
+  # host the keyring would land 0640; apt fetches as the unprivileged `_apt` user, cannot read
+  # it, and reports the repo as unsigned — failing the play at the cache refresh below, before
+  # Docker is installed. get_url sets the mode declaratively, so no umask can reach it. Same
+  # idiom as optimize_pi's azlux key.
   #
   # force defaults to false, so an existing key is not re-fetched every run; the fingerprint
-  # check below still runs every play, and now validates the exact file apt consumes.
+  # check below still runs every play, and validates the exact file apt consumes.
   #
-  # The checksum is the bytes of the armored key as published 2026-09-21; the fingerprint check
+  # The checksum is the bytes of the armored key as published; the fingerprint check
   # below is the stronger control (it proves WHOSE key this is), and the checksum is the one
   # that fires before apt ever reads the file. A key Docker re-publishes (a new subkey, a
   # re-armor) fails here as a mismatch: re-verify the fingerprint, then update the hash.
@@ -97,9 +95,9 @@
 - name: Remove the superseded dearmored keyring and its download artefact
   tags: [docker-repo]
   # Runs AFTER deb822_repository has repointed Signed-By at the .asc, so apt is never left
-  # referencing a keyring that no longer exists. On a host provisioned before this change
-  # the old file is the 0640 one that broke the cache refresh; leaving it around invites a
-  # future Signed-By pointing back at an unreadable key.
+  # referencing a keyring that no longer exists. A host provisioned earlier may carry the old
+  # 0640 file that breaks the cache refresh; leaving it around invites a future Signed-By
+  # pointing back at an unreadable key.
   ansible.builtin.file:
     path: "{{ item }}"
     state: absent
@@ -110,10 +108,9 @@
 
 - name: Update apt-get repo and cache
   tags: [docker-repo]
-  # Cache refresh only. This task carried `upgrade: true` until 2026-09-18 -- a second full
-  # `apt-get upgrade` on every docker_install run, after initial_setup's dist-upgrade had
-  # already run one, and a second path by which docker-ce moved under running containers
-  # (#1961). initial_setup owns the host upgrade; this role owns the engine's.
+  # Cache refresh only. A second full `apt-get upgrade` here would run after initial_setup's
+  # dist-upgrade and be a second path by which docker-ce moves under running containers.
+  # initial_setup owns the host upgrade; this role owns the engine's.
   ansible.builtin.apt:
     update_cache: true
     force_apt_get: true
@@ -154,7 +151,7 @@
   tags: [docker-engine]
   # A SECOND read, overlapping the docker-ce one above rather than replacing it. That task
   # registers a scalar `.stdout` and `Install Docker` gates its fresh-host `when` on it, so
-  # looping it would move the value to `.results` and silently stop that gate gating (#2407).
+  # looping it would move the value to `.results` and silently stop that gate gating.
   # One extra dpkg-query per package is cheaper than that failure mode.
   # The three read-only flags are load-bearing for the reasons the docker-ce read gives:
   # dpkg-query exits 1 with empty stdout where a package is not installed, and skipping this
@@ -176,12 +173,12 @@
   # Compose project; this task only stops the gap being invisible behind a green run.
   # It reports per PACKAGE, over every key of docker_install_package_versions. Four Renovate
   # managers track containerd.io, docker-compose-plugin and docker-buildx-plugin independently
-  # of docker-ce, and while this compared docker-ce alone a merged bump to any of the other
-  # four printed nothing on an installed host -- only engine-upgrade.yml's apt probe saw it,
-  # and only when someone ran that play (#2407).
+  # of docker-ce, so a comparison on docker-ce alone would print nothing for a merged bump to
+  # any of the others -- only engine-upgrade.yml's apt probe would see it, and only when
+  # someone ran that play.
   # The comparison reads the UPSTREAM version alone -- everything left of the first `-` in
   # `5:29.8.1-1~ubuntu.24.04~noble` -- because that is what the pin names and apt chooses the
-  # Debian revision (docker_install_apt_suffix globs it, #2357). Comparing the whole installed
+  # Debian revision (docker_install_apt_suffix globs it). Comparing the whole installed
   # string against the suffix would report every correctly-pinned host as behind, a glob being
   # nothing a dpkg version equals literally. It assumes a pin carries its `5:` epoch exactly as
   # dpkg reports it -- docker-ce and docker-ce-cli do, the other three have no epoch -- so
@@ -204,7 +201,7 @@
   # The same hold initial_setup's host-basics sets before its dist-upgrade, repeated here for
   # the fresh host that had nothing to hold at that point. Held, `apt-get upgrade`,
   # `dist-upgrade` and unattended-upgrades all leave the engine alone; the only path that
-  # moves it is the tagged upgrade below, which stops the containers first (#1961).
+  # moves it is the tagged upgrade below, which stops the containers first.
   ansible.builtin.dpkg_selections:
     name: "{{ item }}"
     selection: hold
@@ -219,12 +216,11 @@
   # every project back with a forced recreate, so a container that bind-mounts
   # /var/run/docker.sock (docker-proxy) picks up the socket the restarted daemon created.
   #
-  # `never` alone did not keep it out of a role-level run (#1998): initial_setup.yml tags
-  # the whole role `docker_install`, tags inherit onto every task in it, and an explicitly
-  # requested tag overrides `never`. So `--tags docker_install` ran this include -- measured
-  # 2026-09-18 in check mode: the hold released for all five engine packages and re-set,
-  # with nothing pending that day. The variable is the gate no tag reaches; `never` stays
-  # so a bare untagged run still skips it without evaluating the `when`.
+  # `never` alone does not keep it out of a role-level run: initial_setup.yml tags the whole
+  # role `docker_install`, tags inherit onto every task in it, and an explicitly requested
+  # tag overrides `never`. So `--tags docker_install` would run this include and release and
+  # re-set the hold for all five engine packages. The variable is the gate no tag reaches;
+  # `never` stays so a bare untagged run still skips it without evaluating the `when`.
   ansible.builtin.include_tasks:
     file: engine-upgrade.yml
     apply:
@@ -249,7 +245,7 @@
   become: false
   changed_when: false
   # A read, so it runs under --check too: skipped, it leaves no stdout and the group task
-  # below errors on the attribute (#2323).
+  # below errors on the attribute.
   check_mode: false
   register: docker_install_deploy_user
 
@@ -265,7 +261,7 @@
   tags: [docker-daemon, docker-go-runtime, docker-go-runtime-containerd]
   # containerd serves Prometheus metrics at /v1/metrics once `[metrics] address` is set;
   # the cluster scrapes it as `containerd-pi`. Same reason as dockerd's metrics-addr below:
-  # containerd took 53 major faults/s on daniel-pi (#2003) and its live heap is what sizes
+  # containerd takes 53 major faults/s on daniel-pi and its live heap is what sizes
   # a GOMEMLIMIT. The packaged config.toml carries only `disabled_plugins = ["cri"]`, so a
   # marked block is the whole of what this role owns in it.
   #
@@ -293,8 +289,7 @@
 - name: Restart containerd to read its config.toml block # noqa no-handler
   tags: [docker-daemon, docker-go-runtime, docker-go-runtime-containerd]
   # docker.service only `Wants=` containerd, so this does not cascade into dockerd, and
-  # live-restore keeps the containers up. The shim binaries are not replaced here, which is
-  # what made the 2026-09-18 engine upgrade (#1961) different.
+  # live-restore keeps the containers up. The shim binaries are not replaced here.
   ansible.builtin.systemd:
     name: containerd
     state: restarted
@@ -319,26 +314,26 @@
   ansible.builtin.copy:
     dest: /etc/docker/daemon.json
     # live-restore keeps containers running across a daemon restart (e.g. a
-    # docker-ce package upgrade), so a Docker restart doesn't bounce all ~42
-    # containers. Safe on this single-node, non-swarm host.
+    # docker-ce package upgrade), so a Docker restart doesn't bounce every
+    # container. Safe on this single-node, non-swarm host.
     #
     # default-address-pools: Docker's built-in default (172.17-172.31/16 + 192.168.0.0/16
-    # as /20s) is nearly exhausted — all fourteen 172.x /16 slots are used and new isolation
-    # nets have started landing in the 192.168.0.0/16 fallback, which also squats on a common
-    # home-LAN range AND on the RFC1918 blocks Authelia/Unbound/Mullvad treat as trusted. Pin
+    # as /20s) runs out of 172.x /16 slots and then lands new isolation nets in the
+    # 192.168.0.0/16 fallback, which also squats on a common home-LAN range AND on the RFC1918
+    # blocks Authelia/Unbound/Mullvad treat as trusted. Pin
     # new-network allocation to 10.200.0.0/16 in /24s (256 nets): clear of the LAN (`lan_subnet`,
     # 10.0.0.0/24), wg-easy (`wg_client_subnet`, 10.8.0.0/24), the Mullvad tunnel
-    # (10.64.0.0/10), and Docker's own 172.16/12 +
-    # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; the ~20
-    # existing networks keep their current subnets across the restart (live-restore).
+    # (10.64.0.0/10), and Docker's own 172.17-172.31/16 +
+    # 192.168/16 defaults. Only NEW `docker network create` calls draw from this; existing
+    # networks keep their current subnets across the restart (live-restore).
     #
     # metrics-addr: dockerd's own Prometheus endpoint (engine counters and the Go runtime's
     # `go_memstats_*`), on the LAN IP so the cluster's Prometheus scrapes it as `dockerd-pi`
     # (roles/k8s/observability). It exists to size a GOMEMLIMIT: dockerd took 97 major
     # faults/s on daniel-pi, 30% of the host's, each GC cycle faulting a swapped-out heap
-    # back from zram (#2003), and the pairing that cuts that (`GOGC=off` under a limit, as
+    # back from zram, and the pairing that cuts that (`GOGC=off` under a limit, as
     # the Pi Alloy runs) needs the live heap measured first — a limit under the live set is
-    # the continuous-collection treadmill (#932). The UFW allow below is what makes the
+    # the continuous-collection treadmill. The UFW allow below is what makes the
     # listener reachable: Docker-published ports bypass UFW, a host listener does not.
     content: |
       {
@@ -369,7 +364,7 @@
 
 # One Go daemon per import, each with its own tag, so the pairing can land on one daemon a
 # day and the day-after `rate(node_vmstat_pswpin{job="node-pi"}[1d])` reading is
-# attributable (#2003). A role-level or `--tags docker-go-runtime` run applies both at
+# attributable. A role-level or `--tags docker-go-runtime` run applies both at
 # once, which is the intended end state; the stagger is measurement discipline, not a
 # constraint the tasks enforce. Static imports for the reason main.yml gives: an include
 # is a task `--tags` judges first.
@@ -397,14 +392,8 @@
     - monitoring
     - media
     - apps
-    # homepage_private removed 2026-08-14 — retired with homepage at E3; recreating it
-    # here only masked the dangling reference in docker-proxy's compose.
-    - lifecycle  # private net: Watchtower + Autoheal <-> docker-proxy-lifecycle only
+    - lifecycle  # private net: Autoheal <-> docker-proxy-lifecycle only
     - codeserver # isolation net: code-server <-> docker-proxy-codeserver only (keeps the shared docker-proxy off apps — Security M1)
-    # `kopia` removed 2026-08-27 — the role retired 2026-08-13, and daniel-pi (the only Docker
-    # host left) never ran Kopia, so this created an empty isolation net on the wrong machine.
     - terraria   # isolation net: Terraria <-> Traefik only (raw-TCP game port bypasses the CrowdSec chain; keeps a game-protocol exploit off the shared apps net)
-    # `ups` and `mqtt` retired 2026-08-09 with slice-5 B3: their memberships (NUT<->HA,
-    # Mosquitto<->z2m<->HA) all crossed to the cluster or the DOCKER-USER-locked LAN publish.
     - portainer-agent  # isolation net (daniel-pi): single-member — keeps the root-equivalent Docker-socket agent off the Pi's shared proxy bridge (reached only via its host-published :9001)
   become: true

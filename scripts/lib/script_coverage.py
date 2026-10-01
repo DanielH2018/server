@@ -1,10 +1,9 @@
 #!/usr/bin/env python3
 """Which test, if any, exercises a given script — the reference page's Tests column.
 
-Split out of ``scripts/docs/reference/scripts.py`` on 2026-09-04. The direct case
-(``test_<name>.py`` beside the module or in its ``tests/`` sibling) stays in the generator,
-because it is a two-line file check; what lives here is the indirect case, which is where the
-judgement calls are and where every past miscredit came from.
+The direct case (``test_<name>.py`` beside the module or in its ``tests/`` sibling) stays in
+the generator, because it is a two-line file check; what lives here is the indirect case,
+which is where the judgement calls are and where every past miscredit came from.
 
 The census helpers come from ``lib.script_classify`` rather than from the generator: a leaf
 never imports the facade it was split out of, and both modules need the same "which files are
@@ -30,9 +29,8 @@ __all__ = [
 def candidate_test_files(repo: Path, scripts: Path) -> list[Path]:
     """Every pytest file that could be about a script, in any of the test roots.
 
-    A subdirectory's tests live either beside its modules (`scripts/<dir>/test_*.py`, not
-    yet split) or in its own `tests/` sibling (`scripts/<dir>/tests/test_*.py`, the split
-    layout) — both are covered so a mid-migration tree and a finished one both scan clean.
+    A subdirectory's tests live either beside its modules (`scripts/<dir>/test_*.py`) or in
+    its own `tests/` sibling (`scripts/<dir>/tests/test_*.py`); both layouts are covered.
     """
     return (
         sorted(scripts.glob("test_*.py"))
@@ -86,7 +84,7 @@ def indirect_test(
         # `from deploy_tools.land_lib.landing import Landing` names no `landing` after
         # `import`, and the names it does bind are capitalised, so neither of the other two
         # branches sees it. That reported `land_lib/landing.py` untested while
-        # `test_land_landing.py` exercised it (issue #1169). The optional `(?:[\w.]+\.)?`
+        # `test_land_landing.py` exercised it. The optional `(?:[\w.]+\.)?`
         # prefix on the first branch is what admits it, and covers `import pkg.live` too.
         import_re = re.compile(
             rf"^\s*(?:from|import)\s+(?:[\w.]+\.)?{stem}\b"

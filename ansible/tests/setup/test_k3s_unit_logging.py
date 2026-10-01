@@ -3,8 +3,8 @@
 `MaxLevelStore=notice` (initial_setup/tasks/system-tuning.yml) drops every priority-info line
 at the source, and every line k3s writes is priority info: logrus and klog emit plain text with
 no `<N>` prefix, so the unit's `SyslogLevel=info` default applies to INFO, WARN and FATA alike.
-On 2026-09-09 daniel-box's k3s crash-looped ~3000 times over 5h08m and the journal kept only
-systemd's `status=1/FAILURE` lines; why k3s exited is unrecoverable (#1918).
+A k3s crash loop therefore leaves only systemd's `status=1/FAILURE` lines in the journal, and
+why k3s exited is unrecoverable.
 
 tasks/unit-logging.yml sends the unit's stdout and stderr to a logrotated file through a
 drop-in. Every failure here is silent — the unit runs, the journal looks as it always did, and

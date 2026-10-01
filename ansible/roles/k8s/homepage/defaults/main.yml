@@ -1,8 +1,6 @@
 ---
-# Same image the Docker role runs — both copies stay on the same tag through coexistence so a
-# difference in behaviour between them is never the image. Tag KEPT alongside the digest
-# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
-# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 homepage_k8s_image: ghcr.io/gethomepage/homepage:latest@sha256:643bd0be730d40f69d58028a55d1a896739333e8815786df42bc97f109ecbe61
 # The seed-config initContainer just needs `cp`; alpine is the smallest image that has it.
 homepage_k8s_init_image: alpine:3.24@sha256:294b683cb724975bec92580e1e685676bd4b50bda910ddb8c51d4cabeaec77e6
@@ -35,7 +33,7 @@ homepage_k8s_mem_request: 32Mi
 #   - `label_replace` is LOAD-BEARING, and not for display: `or` is set union over series
 #     SIGNATURES, and bare `vector()` samples all carry the empty signature — so without a
 #     distinguishing label the union collapses to ONE result and the tile renders a single
-#     number. Measured 2026-08-23: dropping label_replace returned `result` of length 1, not 4.
+#     number. Dropping label_replace returns `result` of length 1, not 4.
 #     The names it assigns are also what makes the query legible when curled by hand, which is
 #     how you check the widget's positional mappings still line up (services.yaml.j2).
 # Counts, not gauges: cluster and node CPU/memory are already on this dashboard twice

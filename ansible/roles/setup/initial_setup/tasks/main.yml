@@ -1,9 +1,8 @@
 ---
 # Base host provisioning, applied to every host by initial_setup.yml.
 #
-# Split into per-topic task files on 2026-08-15 (main.yml had reached 1107 lines across
-# 90 tasks). These are import_tasks, not include_tasks: imports are static, so every task
-# keeps its own tags and --tags selection is unchanged. Import ORDER is load-bearing —
+# These are import_tasks, not include_tasks: imports are static, so every task keeps its own
+# tags and --tags selection works as usual. Import ORDER is load-bearing —
 # host-basics.yml must stay first (the Pi's swap has to exist before the heavy apt).
 
 - name: Prepare swap, packages and user tooling

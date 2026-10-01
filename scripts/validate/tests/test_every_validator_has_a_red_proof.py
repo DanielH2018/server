@@ -2,19 +2,19 @@
 """Every validator ships with a test that proves it can go RED.
 
 CLAUDE.md requires this of any new validator, guard, health check or probe: one input it must
-accept, and one it must reject. Until now the rule lived only in prose, and the repo has paid
-for that twice — `volume-claim`'s short-circuit shipped behind 16 passing tests and a mutation
-test, then fired for 0 of 25 claims across two full deploys; `image-smoke`'s bare-boot rule
-never caught a real image problem across 11 failures. Both read green throughout. A check is
+accept, and one it must reject. A rule that lives only in prose is not enforced, and the repo has
+paid for that twice — `volume-claim`'s short-circuit shipped behind 16 passing tests and a
+mutation test, then fired for 0 of 25 claims across two full deploys; `image-smoke`'s bare-boot
+rule never caught a real image problem across 11 failures. Both read green throughout. A check is
 only ever observed passing, so without the rejecting half there is no evidence it can fail.
 
 WHAT THIS ENFORCES, AND WHAT IT CANNOT. It looks for a red-proof SIGNAL in the test module's
-source: an assertion that the validator reported a problem, or a `pytest.raises`. That is a
-proxy for "this suite exercises the failing path", and a determined author can satisfy it
-without meaning it. It is not a proxy for the naming convention — an earlier draft matched test
-NAMES and would have failed `test_validate_config_templates.py`, whose red proof is really
-there under the name `test_yaml_error_passes_valid_and_catches_invalid`. A guard that fires on
-a correct suite is worse than no guard, because it gets switched off.
+source: an assertion that the validator reported a problem, or a `pytest.raises`. That is a proxy
+for "this suite exercises the failing path", and a determined author can satisfy it without
+meaning it. It is not a proxy for the naming convention — matching test NAMES would fail
+`test_validate_config_templates.py`, whose red proof is really there under the name
+`test_yaml_error_passes_valid_and_catches_invalid`. A guard that fires on a correct suite is worse
+than no guard, because it gets switched off.
 
 SCOPE IS DELIBERATELY NARROW. The validator modules in `scripts/validate/`, derived by glob rather
 than listed. 46 of 156 test files in this repo carry an explicit rejecting half, but most of the
@@ -97,7 +97,7 @@ def test_the_guard_rejects_a_suite_with_no_red_proof():
     """This guard is itself a check, so it ships with its own rejecting input.
 
     Without this, a RED_PROOF pattern that had silently stopped matching would leave every
-    parametrized test above passing on the empty search it now performs.
+    parametrized test above passing on the empty search it performs.
     """
     accepting_only = (
         "def test_a_valid_template_is_clean():\n    assert validate(GOOD) == []\n"

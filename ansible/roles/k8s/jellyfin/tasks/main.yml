@@ -1,9 +1,7 @@
 ---
-# Slice 4, B5 — the media server, and the slice's exit criterion.
-#
-# jellyfin shares no hardlink seam with the B4c five (it only reads), so it does not need their
-# one-window cutover. What it does need is the GPU: this is the first workload to request the
-# `devic.es/dri` resource the B1 device plugin advertises.
+# The media server. jellyfin only reads the library, so it shares no hardlink seam with the
+# *arrs. What it does need is the GPU: this is the first workload to request the
+# `devic.es/dri` resource the device plugin advertises.
 
 # Create the config volume claim BEFORE deploying the workload, so the pod has a PVC to mount.
 - name: Create the jellyfin config volume claim
@@ -16,7 +14,7 @@
     volume_claim_storage_class: "{{ jellyfin_k8s_storage_class }}"
     volume_claim_size: "{{ jellyfin_k8s_size }}"
 
-# ── the snapshot-space cap (#1478) ──────────────────────────────────────────────────────────
+# ── the snapshot-space cap ──────────────────────────────────────────────────────────
 # The PVC above caps the FILESYSTEM. It does not cap the Longhorn backend, because this role
 # takes a pre-apply snapshot on every deploy and Longhorn's default snapshotMaxSize is "0" —
 # uncapped. These two tasks set it, and they run HERE: after the claim exists (the `longhorn`
@@ -108,7 +106,7 @@
     manifests_files:
       - deployment.yaml
       - service.yaml
-      # The direct-by-IP LAN address, for clients that do not go through Traefik (D7).
+      # The direct-by-IP LAN address, for clients that do not go through Traefik.
       - service-lan.yaml
       - ingressroute.yaml
 
@@ -147,5 +145,5 @@
   ansible.builtin.include_tasks: verify.yml
   # Every proof in verify.yml is about the pod this deploy rolled out. --check rolls nothing
   # out and skips the rollout wait, so the proofs would test the running pod and their reports
-  # would error on check-mode skip results (#2323).
+  # would error on check-mode skip results.
   when: not ansible_check_mode

@@ -1,12 +1,11 @@
 #!/usr/bin/env python3
 """Ansible's variable semantics, reproduced for the k8s manifest render guard.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
-name here, so an existing importer keeps working. These are the pieces that decide what a
-manifest renders WITH — the recursive expansion Ansible does on a variable's value, a role's
-resolved defaults, and the precedence collision the validator asserts is empty. The `bool`
-filter that expansion registers is `lib.ansible_jinja_compat.ansible_bool`, the light-tier shim,
-rather than the real filters `lib.ansible_jinja_env` gives every render guard.
+These are the pieces that decide what a manifest renders WITH — the recursive expansion Ansible
+does on a variable's value, a role's resolved defaults, and the precedence collision the
+validator asserts is empty. The `bool` filter that expansion registers is
+`lib.ansible_jinja_compat.ansible_bool`, the light-tier shim, rather than the real filters
+`lib.ansible_jinja_env` gives every render guard.
 """
 
 import sys as _sys

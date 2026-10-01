@@ -1,9 +1,8 @@
 """Guard: the host forwarder's CoreDNS tarball is verified against its pinned sha256.
 
 WHY. `k3s_host_coredns_sha256` is the only authenticity check on a binary that serves every
-DNS lookup on daniel-box. Until #2391 nothing in Ansible read it: `unarchive` fetched
-`k3s_host_coredns_url` itself, and `unarchive` with a URL source takes no checksum. The pin
-was hand-updated on every Renovate bump and checked by nothing on the host.
+DNS lookup on daniel-box. `unarchive` with a URL source takes no checksum, so the pin counts
+only when a checksummed `get_url` fetches the tarball and `unarchive` reads that local file.
 
 WHY IT NEEDS A GUARD. Dropping the checksum, or pointing `unarchive` back at the URL, renders,
 lints and deploys green. The second shape keeps a checksummed `get_url` in the file while the

@@ -1,8 +1,6 @@
 ---
-# Same image the Docker role runs — both copies stay on the same tag through coexistence so
-# a difference in behaviour between them is never the image. Tag KEPT alongside the digest
-# (repo:latest@sha256) so Renovate's k8s-defaults manager still tracks it for digest-bump PRs —
-# a bare repo@sha256 would freeze it with zero update signal (2026-08-13 pin).
+# Tag KEPT alongside the digest (repo:latest@sha256) so Renovate's k8s-defaults manager still
+# tracks it for digest-bump PRs — a bare repo@sha256 would freeze it with zero update signal.
 cloudflare_ddns_k8s_image: favonia/cloudflare-ddns:latest@sha256:61013368c8f95981c0bb8bf56d962078d8b4e95724a554fa2dabb20d6e478097
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -14,7 +12,5 @@ cloudflare_ddns_k8s_mem_limit: 64Mi
 cloudflare_ddns_k8s_cpu_request: "50m"
 cloudflare_ddns_k8s_mem_request: 16Mi
 
-# (The Kuma heartbeat needs no vars anymore: Kuma runs in this namespace, so the
-# deployments push to the Service URL `http://uptime-kuma:3001` directly. The old
-# hostAliases pin to daniel-server's edge was removed at the slice-7 bridge teardown,
-# which deleted the forward-bridge router that path depended on.)
+# The Kuma heartbeat needs no vars: Kuma runs in this namespace, so the deployments push to
+# the Service URL `http://uptime-kuma:3001` directly.

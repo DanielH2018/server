@@ -1,13 +1,13 @@
 #!/usr/bin/env python3
-"""Guards on the slice-1 k8s manifests — the four things that fail silently.
+"""Guards on the k8s manifests — the four things that fail silently.
 
-Each of these encodes a decision from docs/archive/k3s-migration/slice-1-ingress-sso-leaf.md whose
-failure mode is quiet rather than loud: nothing errors, the deploy goes green, and the
+Each of these encodes a decision whose failure mode is quiet rather than loud: nothing errors,
+the deploy goes green, and the
 consequence shows up later as a moved VIP, a corrupted session, an ungated service, or an
 unprotected edge. A rendered-YAML check cannot catch any of them (the manifests stay valid
 either way) — hence a separate suite from scripts/validate/k8s_manifests.py.
 
-The four split along those consequences on 2026-09-02: the moved VIP is
+The four split along those consequences: the moved VIP is
 `test_k8s_manifests_metallb.py`, the corrupted session and the ungated or unprotected edge
 are `test_k8s_manifests_routes.py`, and the read-only RBAC that keeps Ansible the only write
 path is `test_k8s_manifests_rbac.py`. What stays here is pod-level hygiene — nothing mounts
@@ -32,7 +32,7 @@ def test_the_k8s_play_does_not_filter_an_already_filtered_list():
 
     Sourcing from the mutated fact fails SILENTLY: on daniel-box every entry is platform: k8s,
     so the Docker filter leaves [], the k8s filter of [] is [], and the play reports
-    `ok=10 changed=0 failed=0` having deployed nothing at all (daniel-box, 2026-08-02).
+    `ok=10 changed=0 failed=0` having deployed nothing at all.
     """
     plays = yaml_fast.safe_load((ANSIBLE / "deploy.yml").read_text())
     k8s_play = next(p for p in plays if "k8s" in p["name"].lower())
@@ -75,13 +75,13 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
     `/run/secrets` is the Docker convention for file-mounted credentials and it does not survive
     the port. `/var/run/secrets` symlinks to `/run/secrets`, which is where Kubernetes projects
     the ServiceAccount token — a read-only Secret volume there leaves runc unable to create the
-    mountpoint and the container never starts (daniel-box, 2026-08-02):
+    mountpoint and the container never starts:
 
         mkdirat .../rootfs/run/secrets/kubernetes.io: read-only file system
 
-    Worth a guard rather than a fix in one file: slice 2 ports ~33 more services from compose
-    templates that all use /run/secrets, and the symptom is a CrashLoopBackOff whose message
-    says nothing about the mount the author chose.
+    Worth a guard rather than a fix in one file: a ported compose template that uses
+    /run/secrets fails as a CrashLoopBackOff whose message says nothing about the mount the
+    author chose.
     """
     reserved = ("/run/secrets", "/var/run/secrets")
     for entry in _k8s_entries():
@@ -107,8 +107,8 @@ def test_nothing_mounts_over_the_serviceaccount_token_path():
 
 def test_no_template_names_a_mount_under_run_secrets():
     """The rendered check above only sees deployment.yaml.j2; roles whose workloads live in
-    differently-named templates (scrutiny's web.yaml.j2/influxdb.yaml.j2) slipped past it and
-    CrashLooped on the same runc mountpoint error (2026-08-10, second occurrence). A textual
+    differently-named templates (scrutiny's web.yaml.j2/influxdb.yaml.j2) would slip past it and
+    CrashLoop on the same runc mountpoint error. A textual
     scan over EVERY k8s template needs no render context and catches the whole class."""
     offenders = []
     for tpl in K8S.glob("*/templates/*.j2"):
@@ -126,28 +126,12 @@ def test_no_template_names_a_mount_under_run_secrets():
     assert not offenders, f"ServiceAccount-token-shadowing mounts: {offenders}"
 
 
-# test_every_deployment_disables_service_link_env_vars lived here until 2026-09-17 and MOVED
-# to test_pod_template_hygiene.py as test_every_pod_template_disables_service_link_env_vars.
-# It rendered `deployment.yaml.j2` per role through `_render`, so 16 Deployments in other
-# filenames and every DaemonSet, Job and CronJob were never checked, and deleting the field
-# from observability/templates/grafana.yaml.j2 passed the suite (#1858). The replacement reads
-# the whole rendered corpus. The Authelia incident that justifies the guard is in its docstring.
+# The service-link env var guard is test_pod_template_hygiene.py's
+# test_every_pod_template_disables_service_link_env_vars. It reads the whole rendered corpus.
 
 
-# test_routes_stay_lan_only_while_the_k8s_edge_has_no_crowdsec lived here and was REMOVED
-# rather than repaired, because it had become inert in two independent ways and its green said
-# nothing:
-#
-# 1. It detected the bouncer by SUBSTRING over raw template text. Once the CrowdSec gating
-#    landed, every occurrence sat inside `{% if traefik_k8s_manage_crowdsec %}`, so both
-#    strings were present whatever the flag said and the comparison read True unconditionally.
-# 2. It read `k8s_public_route` from group_vars/all.yml only, so a host overriding it was never
-#    evaluated — daniel-stage sets both it and the CrowdSec flag false, a consistent pair the
-#    guard never looked at.
-#
-# The replacement is test_the_public_route_and_the_bouncer_move_together in
-# test_crowdsec_optional.py: per host, on RENDERED output, with a reading proven to track the
-# flag (True on daniel-box, False on daniel-stage) rather than the template text.
+# The public-route and bouncer pairing guard is test_the_public_route_and_the_bouncer_move_together
+# in test_crowdsec_optional.py: per host, on RENDERED output, not on template text.
 
 
 #

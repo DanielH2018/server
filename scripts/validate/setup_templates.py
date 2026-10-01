@@ -6,8 +6,8 @@ The other render guards stop short of `ansible/roles/setup/`: `config_templates.
 anywhere and `unit_templates.py` covers `*.service.j2` / `*.timer.j2`. Nothing rendered a
 setup-plane `*.yaml.j2`, `*.env.j2`, `*.conf.j2` or Corefile, and `ansible-lint` lints the task
 that calls `lookup('template', ...)`, never the template's own render. A setup template with an
-undefined variable, a Jinja syntax error, or a rename its consumer missed therefore passed the
-whole gate green (GitHub issue #1468).
+undefined variable, a Jinja syntax error, or a rename its consumer missed therefore passes the
+whole gate green.
 
 The setup plane is hand-applied by construction, which makes the gap worse rather than better:
 no routine deploy exercises it, so the first run of a bad template is a bring-up someone reaches

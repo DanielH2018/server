@@ -2,7 +2,7 @@
 """autoheal's Discord webhook only notifies if its payload key is overridden.
 
 `willfarrell/autoheal` POSTs `{"<WEBHOOK_JSON_KEY>": "<message>"}` and defaults that key to
-`text` (read out of `/docker-entrypoint` on the live Pi container, 2026-09-10). Discord's
+`text` (read out of `/docker-entrypoint`). Discord's
 webhook API reads `content` and answers a `text` payload with a 400. So a compose file that
 sets `WEBHOOK_URL` and leaves the key alone posts on every restart, gets rejected every time,
 and notifies nobody — while the container stays healthy and the deploy reads green. Nothing
@@ -13,7 +13,7 @@ dropped, and a `WEBHOOK_JSON_KEY`-only test would pass with the URL dropped, so 
 asserted is the implication between them, exercised against an input that must be clean and an
 input that must be flagged.
 
-The check reads the RENDERED environment, not the template text (#2809). A substring scan
+The check reads the RENDERED environment, not the template text. A substring scan
 passed a template whose key line was commented out as `# - WEBHOOK_JSON_KEY=content`, which
 ships the image's `text` default. The webhook URL renders as a stub, so the check keys on the
 `WEBHOOK_URL` field being set, never on its value.
@@ -36,7 +36,7 @@ def notification_gaps(environment: list[str]) -> list[str]:
     """The notification properties a rendered compose environment lacks.
 
     Empty for a service that either notifies correctly or does not notify at all — an
-    autoheal with no `WEBHOOK_URL` is the pre-#1452 state, not a broken payload.
+    autoheal with no `WEBHOOK_URL` notifies nobody by design, which is not a broken payload.
     """
     env = _env(environment)
     if not env.get("WEBHOOK_URL"):

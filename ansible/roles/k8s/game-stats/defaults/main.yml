@@ -12,14 +12,13 @@ game_stats_k8s_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b6
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "games — companions to the hand-operated terraria and valheim servers. ALSO Recreate + RWO PVCs holding irreplaceable stats — two independent reasons"  # noqa var-naming[no-role-prefix]
 
-# terraria-stats-data is created by k8s/volume-claim and was seeded once at cutover from the
-# Docker-era DB. It rides the weekly backup tier: a tiny file of irreplaceable totals.
+# terraria-stats-data is created by k8s/volume-claim. It rides the weekly backup tier: a tiny
+# file of irreplaceable totals.
 game_stats_terraria_pvc_size: 1Gi
 
-# valheim-stats-data has NO seed: Valheim was archived in January, long before this Loki
-# existed, so there is no history anywhere to import and the totals started at zero on first
-# deploy. Backed-up tier all the same — from the first session onward the file is the only copy
-# of numbers that cannot be recomputed (Loki only retains 31 days).
+# valheim-stats-data has NO seed: there is no history anywhere to import, so the totals start
+# at zero. Backed-up tier all the same — the file is the only copy of numbers that cannot be
+# recomputed (Loki only retains 31 days).
 game_stats_valheim_claim: valheim-stats-data
 game_stats_valheim_pvc_size: 1Gi
 game_stats_valheim_storage_class: longhorn

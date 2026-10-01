@@ -6,10 +6,9 @@ struct tag is `omitempty` disappears from the live object when it holds its zero
 writing it explicitly puts it in two of those three places and never the third. The merge
 finds a patch every time and the apply never converges.
 
-`globalDefault: false` on a PriorityClass is exactly that field, and it read that way here
-until 2026-08-27. Measured on daniel-stage: two consecutive applies of the old file both
-printed "configured" for all four classes; with the field removed the first converges and the
-second prints "unchanged".
+`globalDefault: false` on a PriorityClass is exactly that field: two consecutive applies of a
+file that states it both print "configured" for all four classes; with the field removed the
+first converges and the second prints "unchanged".
 
 It is worth a test rather than a comment because the field is the kind a reviewer ADDS. It
 looks like explicitness — stating the default so nobody has to look it up — and the cost is

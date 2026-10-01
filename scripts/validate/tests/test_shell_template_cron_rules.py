@@ -205,13 +205,13 @@ _RETRY_COUNT = re.compile(r"--retry\s+\d+")
 
 def test_home_allowlist_curls_all_retry():
     # The monitor this script pushes is push-type with max_retries 0, so ONE transient curl
-    # failure is an immediate DOWN — 9 down/up cycles in the 3 days to 2026-08-24, none of them
+    # failure is an immediate DOWN — 9 down/up cycles in 3 days, none of them
     # a real allowlist problem. Both `bash -n` and shellcheck pass a script with the flags
     # stripped, so the DECIDED comment above them is the only thing holding them today, and a
     # comment is not enforcement. Pin every curl instead.
     #
     # The WAN probes are the ONE exemption, and it is a different rule rather than a hole in this
-    # one (#2793). Their failure is not a lost verdict to ride out — it IS the verdict the script
+    # one. Their failure is not a lost verdict to ride out — it IS the verdict the script
     # reads, so a retry would delay the answer and spend budget the */5 period does not have.
     # `ansible/tests/services/test_crowdsec_allowlist_wan_skip.py` pins their flags equal to
     # kuma-push-lib.sh's copy, including the absence of `--retry`, so the exemption is enforced
@@ -244,8 +244,8 @@ def test_a_home_allowlist_curl_with_the_retry_flags_stripped_is_flagged():
 
 def test_home_allowlist_fail_logs_the_status_down_prefix():
     # `probe.py alerts` reconstructs host-cron episodes from `{job="syslog"} |= "status=down"`
-    # (parse_syslog_down_line). This script logged a bare message until 2026-08-24, so 7 days of
-    # flaps left zero rows there and nothing to diagnose from once Kuma's current state cleared.
+    # (parse_syslog_down_line). A script that logs a bare message leaves zero rows there, and
+    # nothing to diagnose from once Kuma's current state clears.
     fail_line = next(
         ln for ln in HOME_ALLOWLIST.read_text().splitlines() if ln.startswith("fail()")
     )
@@ -304,7 +304,7 @@ def test_kubeconfig_flags_a_nonroot_cron_touching_the_cluster(tmp_path):
 
 
 def test_kubeconfig_passes_a_root_cron(tmp_path):
-    # k3s.yaml is 0640 root:root, so root needs no KUBECONFIG. Measured on daniel-box 2026-08-27.
+    # k3s.yaml is 0640 root:root, so root needs no KUBECONFIG. Measured on daniel-box.
     tpl = _cron_role(tmp_path, user="root")
     assert cc.cron_kubeconfig_error(tpl, K3S_BARE, roles=tmp_path) is None
 
@@ -389,7 +389,7 @@ def test_kubeconfig_reads_the_user_of_the_matching_task_not_the_file(tmp_path):
 
 
 def test_cron_targets_resolve_a_looped_template_task(tmp_path):
-    # The looped src/dest form was invisible until 2026-08-27, which hid every longhorn wrapper.
+    # The looped src/dest form must be resolved, or every longhorn wrapper goes unchecked.
     tpl = _cron_role(tmp_path, user="ubuntu", loop=True)
     assert tpl in ct.cron_job_scripts(tmp_path)
 
@@ -440,8 +440,8 @@ UV_EXPORT = 'export UV_PYTHON_INSTALL_DIR="/home/ubuntu/.local/share/uv/python"\
 
 
 def test_uv_interpreter_flags_a_root_cron_with_no_install_dir(tmp_path):
-    # The crowdsec remote-allowlist cron's first run, 2026-09-21 13:15: root's uv found no
-    # interpreter under /root and --no-python-downloads forbade fetching one.
+    # A root cron's uv finds no interpreter under /root, and --no-python-downloads forbids
+    # fetching one.
     tpl = _cron_role(tmp_path, user="root")
     err = cc.cron_uv_interpreter_error(tpl, UV_PINNED, roles=tmp_path)
     assert err is not None

@@ -1,7 +1,6 @@
 """The rendered AutoKuma static entity set, shared by the guards over it.
 
-Split out of `test_kuma_static_monitors.py` when that module crossed the 500-line cap, and
-kept as a `_`-prefixed sibling for the same reason `ansible/tests/k8s/_manifest_guards.py` is
+Kept as a `_`-prefixed sibling for the same reason `ansible/tests/k8s/_manifest_guards.py` is
 one: pytest prepends a test's own directory to `sys.path`, so both guard modules reach this by
 bare name without it being collected as a test itself.
 """
@@ -64,15 +63,14 @@ STUBS = {
     "secret_rotation_push_token": "t" * 32,
     # Both of these gate their monitor behind `{% if <token> %}`, so omitting the stub does not
     # fail a test — it renders the entity away and every guard below silently stops covering it.
-    # Added 2026-08-21, when the email-tier guard was the first assertion to notice.
     "manifest_prune_push_token": "t" * 32,
     "etcd_snapshot_push_token": "t" * 32,
     "etcd_drill_full_push_token": "t" * 32,
     "etcd_drill_fence_push_token": "u" * 32,
     "release_staleness_push_token": "t" * 32,
-    # Armed 2026-09-10 (#1627), so unlike the four above this one is declared unguarded and the
-    # stub is what the render needs rather than what keeps the tile from disappearing. Dropping
-    # it now fails the render outright instead of silently un-covering the guards below.
+    # Unlike the four above, this one is declared unguarded, so the stub is what the render needs
+    # rather than what keeps the tile from disappearing. Dropping it fails the render outright
+    # instead of silently un-covering the guards below.
     "monitor_bridge_snapshot_headroom_push_token": "t" * 32,
 }
 

@@ -3,9 +3,8 @@
 Host-side tools quote these addresses as compile-time constants. `otelq` and
 `otel-sweep` (chezmoi, `home/dot_local/bin/`) try the node-local hostPort first
 and the ClusterIP second, which is what lets them keep working when a reboot
-reschedules a backend onto the other node — the 2026-08-23 failure, where all
-three Deployments moved to daniel-server and every loopback probe from
-daniel-box read "unreachable" while telemetry was entirely healthy.
+reschedules a backend onto the other node, where every loopback probe from the
+first node reads "unreachable" while telemetry is entirely healthy.
 
 That fallback is only sound while the addresses cannot change under it. A
 Service with no `clusterIP:` draws whatever the allocator hands out the next
@@ -34,8 +33,8 @@ PINNED = {
 ALL_VARS_FILE = ALL_VARS
 
 # Every pinned ClusterIP in the repo, with the file that owns it. The distinctness check below
-# is only meaningful over the whole set: it used to read this role's three and pass while the
-# other two lived in group_vars/all.yml, outside its scope (2026-08-23b review M10).
+# is only meaningful over the whole set: a check reading only this role's three would pass
+# while the other two live in group_vars/all.yml.
 #
 # Deliberately an explicit registry rather than a glob over `*_cluster_ip`. A glob also collects
 # `pihole_k8s_dns_cluster_ip: "{{ dns_k8s_cluster_ip }}"` (pihole/defaults/main.yml:47), which is
@@ -52,7 +51,7 @@ CROSS_ROLE_PINS = {
 
 # k3s's default Service CIDR. An address outside it is not merely unconventional — the API
 # server rejects it at apply time, so a typo like 10.0.0.158 for 10.43.0.158 passes an
-# is_private check and fails only on the cluster (2026-08-23b review L10).
+# is_private check and fails only on the cluster.
 SERVICE_CIDR = ipaddress.ip_network("10.43.0.0/16")
 
 

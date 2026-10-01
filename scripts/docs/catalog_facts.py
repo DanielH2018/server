@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
 """Route and auth-tier derivations for one ``containers_list`` entry.
 
-Split out of ``scripts/docs/service_catalog.py`` on 2026-09-04. Reachability itself comes from
-``route_facts`` so this page and ``docs/reference/networking.md`` cannot disagree about the
-same service; what lives here is the per-entry dispatch — which platform's rule applies, and
-what the cell says when no rule does.
+Reachability itself comes from ``route_facts`` so this page and
+``docs/reference/networking.md`` cannot disagree about the same service; what lives here is
+the per-entry dispatch — which platform's rule applies, and what the cell says when no rule
+does.
 """
 
 import sys as _sys
@@ -49,7 +49,7 @@ def k8s_route(
     name = entry["name"]
     role_dir = k8s_roles / name
     # Own template or the shared default: 16 roles' IngressRoute moved to
-    # `ansible/templates/ingressroute-default.yaml.j2` (#3043), and asking the role directory
+    # `ansible/templates/ingressroute-default.yaml.j2`, and asking the role directory
     # alone printed "no route" for every one of them.
     if manifest_template(name, "ingressroute.yaml", k8s_roles) is None:
         return "no route (infra role)"
@@ -67,9 +67,8 @@ def k8s_route(
 
 def docker_route(entry: dict[str, Any]) -> str:
     # daniel-pi is the only Docker host and is LAN-only: a service's compose file publishes
-    # its UI on the host's LAN IP, never behind a Traefik route. The Docker Traefik-label
-    # path, and the switch that chose between it and LAN exposure, were deleted in #2385, so
-    # there is no other shape to derive.
+    # its UI on the host's LAN IP, never behind a Traefik route. There is no Docker
+    # Traefik-label path to derive, so there is no other shape.
     return "LAN-direct (no Traefik route)"
 
 

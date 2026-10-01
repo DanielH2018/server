@@ -265,22 +265,21 @@ def test_the_live_tree_classifies_the_names_we_already_know(live_verdicts):
         "deploy_tags.py": "gate",
         "deploy_staleness.py": "gate",
         "smoke_extract.py": "gate",
-        # "scheduled" rather than "gate" since issue #947: release-staleness-check.sh.j2 (a
-        # daniel-box cron, roles/setup/k3s) invokes `probe.py releases --stale-only`, and
-        # "scheduled" outranks "gate" in _PRECEDENCE. probe.py is still a gate too (deploy.sh,
-        # hooks) -- the cron adds a caller, it doesn't drop one.
+        # "scheduled" rather than "gate": release-staleness-check.sh.j2 (a daniel-box cron,
+        # roles/setup/k3s) invokes `probe.py releases --stale-only`, and "scheduled" outranks
+        # "gate" in _PRECEDENCE. probe.py is still a gate too (deploy.sh, hooks) -- the cron
+        # adds a caller, it doesn't drop one.
         "probe.py": "scheduled",
         "docs_provenance.py": "library",
         "core.py": "library",
-        # "gate" rather than "adhoc" since 2026-08-29, and the call graph changed rather than
-        # the classifier. The staging gate has always ended in `deploy.sh`, but it reached it
-        # through a script PIPED over ssh, which is invisible to a scan of the tree. The
-        # restricted key's dispatcher is a role template, so the chain
-        # dispatcher -> staging_gate_remote.sh -> deploy.sh is now visible and deploy.sh
-        # inherits the caller's kind. A person still runs it by hand too; the gate is simply no
-        # longer the caller nobody could see.
+        # "gate" rather than "adhoc" because of the call graph, not the classifier. The staging
+        # gate has always ended in `deploy.sh`, but it reached it through a script PIPED over
+        # ssh, which is invisible to a scan of the tree. The restricted key's dispatcher is a
+        # role template, so the chain dispatcher -> staging_gate_remote.sh -> deploy.sh is
+        # visible and deploy.sh inherits the caller's kind. A person also runs it by hand; the
+        # gate is simply a caller the classifier can see.
         "deploy.sh": "gate",
-        "etcd_restore_drill.sh": "gate",  # a role copies it (#1175); its crons hide behind wrappers
+        "etcd_restore_drill.sh": "gate",  # a role copies it; its crons hide behind wrappers
     }
     assert {name: verdicts[name][0] for name in expected} == expected
 
@@ -343,9 +342,9 @@ def test_an_import_counts_even_from_another_scripts_test(live_script_rows):
     """The reject above is about path mentions; an import is real exercise.
 
     Asserted on the MECHANISM and on the credited file really importing the module, not on
-    which filename wins. Several tests import `core`, so pinning one name made this
-    fail the moment probe.py was split and a different importer sorted first -- a rename in
-    the suite is not a regression in the classifier.
+    which filename wins. Several tests import `core`, so pinning one name would fail
+    whenever a different importer sorts first -- a rename in the suite is not a regression
+    in the classifier.
     """
     rows = {r["name"]: r for r in live_script_rows}
     credited = rows["core.py"]["indirect_tests"]
@@ -381,8 +380,8 @@ _MEMBERS = {p.stem for p in (g.SCRIPTS / "infra_map").glob("*.py")} - {"gen_infr
 def test_every_package_member_import_counts_as_coverage(live_script_rows):
     """`from infra_map import live` is an import, not a mention.
 
-    The census is derived; listing it froze it at `("live.py", "render.py")`, so the four
-    members added 2026-09-04 went unchecked. `_IMPORTED` is the non-vacuity floor: #1113.
+    The census is derived; a hand-written list would freeze it and leave later members
+    unchecked. `_IMPORTED` is the non-vacuity floor.
     """
     assert _IMPORTED | _FACADE_ONLY <= _MEMBERS, sorted(_MEMBERS)
     rows = {r["name"]: r for r in live_script_rows}
@@ -460,10 +459,10 @@ def test_no_two_scripts_share_a_basename():
     """The page keys verdicts, importers and test credits on a script's bare filename.
 
     Two files with the same basename in different `scripts/` subdirectories therefore
-    merge into one row, and the merged row states things that are false: renaming
-    `infra_map_common.py` to `common.py` in PR #825 made the page claim
+    merge into one row, and the merged row states things that are false: a rename of
+    `infra_map_common.py` to `common.py` would make the page claim
     `scripts/availability_bots/`'s bots import infra_map's module, because
-    `availability_bots/common.py` already existed. The rename shipped as `constants.py`
+    `availability_bots/common.py` already exists. The rename shipped as `constants.py`
     instead, and this is what stops the next one landing silently.
 
     Keying by path would relocate the ambiguity rather than remove it. The evidence that

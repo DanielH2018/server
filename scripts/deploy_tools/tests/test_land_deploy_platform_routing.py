@@ -1,4 +1,4 @@
-"""The landing's platform filter on host routing (issues #2718, #2730).
+"""The landing's platform filter on host routing.
 
 `wg-easy` is declared twice -- a `platform: k8s` entry on daniel-box and a Compose entry on
 daniel-pi -- and a k3s change reaches the tag through the k8s caller graph or through a path
@@ -28,7 +28,7 @@ def _ready(landing, fakes=None, **opts):
 
 
 def test_caller_expanded_tags_reach_the_merge_commit_read_as_k8s_only(landing):
-    """Issue #2718: `wg-easy` is k8s on daniel-box and Compose on daniel-pi, and a `manifests`
+    """`wg-easy` is k8s on daniel-box and Compose on daniel-pi, and a `manifests`
     change reaches it through the k8s caller graph alone. The routing read has to be told so,
     or it adds an ssh deploy of the Pi's container that the change never touched."""
     ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-box": ["wg-easy"]}))
@@ -54,14 +54,14 @@ def test_the_primary_fallback_carries_the_same_k8s_only_subset(landing):
 
 def test_a_landing_that_proved_no_platform_sends_no_restriction(landing):
     """REJECTING half: the flag is absent when `classify` proved nothing, so a tag whose
-    paths span both role trees (#2730) keeps reaching every host that declares it."""
+    paths span both role trees keeps reaching every host that declares it."""
     ln, calls = _ready(landing, Fakes(hosts="daniel-pi\talloy\n", hosts_at=None))
     ln.resolved_tags = ["alloy"]
     assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
     assert [c[1] for c in calls if c[0] == "deploy_tags"] == [("hosts", "alloy")]
 
 
-# ── where the fallback derivation's own k8s_only comes from (issue #2738) ──
+# ── where the fallback derivation's own k8s_only comes from ──
 
 _K8S_PATH = "ansible/roles/k8s/wg-easy/templates/deployment.yaml.j2"
 
@@ -87,8 +87,8 @@ def test_the_fallback_proves_a_platform_from_the_diffs_own_paths(landing):
     )
     deploy.derive_from_diff(ln)
     assert ln.k8s_only == ["wg-easy"]
-    # Through the seam to the routing read, which is #2738's own verify-by: the attribute
-    # `record_k8s_only` set has to reach `deploy_by_host`'s `landing_hosts_at` call.
+    # Through the seam to the routing read: the attribute `record_k8s_only` set has to
+    # reach `deploy_by_host`'s `landing_hosts_at` call.
     assert deploy.deploy_by_host(ln, at=MERGE_SHA) == 0
     assert [c[2]["k8s_only"] for c in calls if c[0] == "landing_hosts_at"] == [
         ["wg-easy"]
@@ -103,7 +103,7 @@ def test_the_fallback_proves_a_platform_from_the_diffs_own_paths(landing):
 
 def test_a_fallback_tag_named_in_both_trees_keeps_both_hosts(landing):
     """REJECTING half: the derivation proves nothing for a tag whose paths span both role
-    trees, and the landing must then keep deploying the Pi (issue #929)."""
+    trees, and the landing must then keep deploying the Pi."""
     ln, _calls = _fallback(
         landing, Fakes(changed="wg-easy\n", diff_paths=[_K8S_PATH], path_k8s_only=[])
     )

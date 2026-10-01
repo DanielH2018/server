@@ -1,14 +1,13 @@
 #!/usr/bin/env python3
 """The staging libvirt network must render, parse, and not collide with anything.
 
-It outlived the daniel-stage guest (#2941): the etcd restore drill's throwaway guest attaches
-to it, so "the guest" below is that one.
+The etcd restore drill's throwaway guest attaches to it, so "the guest" below is that one.
 
-WHY THIS RENDERS RATHER THAN GREPS. Two bugs in this role reached a real host in one
-afternoon, both structurally valid and both invisible to every check that only parses the
-file they live in: an assert on `ansible_processor_flags` (not an Ansible fact), and a
-verification whose become_user session predated the group it needed. ansible-lint on the
-production profile, prek and the whole suite passed over both.
+WHY THIS RENDERS RATHER THAN GREPS. Two kinds of bug reach a real host past every check
+that only parses the file they live in, because both are structurally valid: an assert on
+`ansible_processor_flags` (not an Ansible fact), and a verification whose become_user session
+predates the group it needs. ansible-lint on the production profile, prek and the whole suite
+pass over both.
 
 Nothing else in the repo validates libvirt XML -- validate/k8s_manifests.py covers k8s
 templates and validate-compose covers Compose. So this renders the template with the real
@@ -37,7 +36,7 @@ TEMPLATE = "staging-network.xml.j2"
 
 # Ranges daniel-server routes, or that libvirt itself defines. Sources, in order: lan_subnet
 # in group_vars; k3s pod and service CIDRs; the bridges left behind by the Docker purge
-# (#479 removed the packages, not the interfaces); libvirt's own `default` network.
+# (the packages are gone, the interfaces stay); libvirt's own `default` network.
 RESERVED = [
     ipaddress.ip_network("10.0.0.0/24"),
     ipaddress.ip_network("10.42.0.0/16"),
@@ -49,8 +48,7 @@ RESERVED = [
 
 
 def _vars():
-    """The role defaults the template reads. Every name it needs is one of them since
-    daniel-stage was retired (#2941) and the drill guest's reservation became the only one."""
+    """The role defaults the template reads. Every name it needs is one of them."""
     return yaml_fast.safe_load((ROLE / "defaults" / "main.yml").read_text())
 
 

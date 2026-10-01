@@ -12,7 +12,7 @@ frl = importlib.util.module_from_spec(_SPEC)
 _SPEC.loader.exec_module(frl)
 
 MARKERS = frl.DEFAULT_RE_ENCODER_MARKERS
-# The real NTRX file (2026-07-16): a "Bluray-1080p Remux" that is actually a 10.4 s-GOP hevc_qsv encode.
+# The real NTRX file: a "Bluray-1080p Remux" that is actually a 10.4 s-GOP hevc_qsv encode.
 NTRX_ENCODER = "Lavc61.19.101 hevc_qsv"
 NTRX_KEYFRAMES = [0.0, 10.427, 20.854, 31.281]
 
@@ -223,8 +223,7 @@ def test_sanitize_defuses_mentions_and_backticks():
     assert "@" not in frl.sanitize("@everyone `rm -rf`")
 
 
-# Shared by both crons since 2026-08-08: the reconciler always probed on the host, and the scan
-# does too now that it runs on daniel-box, which has no Docker to exec into.
+# Shared by both crons: both probe on the host, which has no Docker to exec into.
 
 
 def test_host_path_rewrites_only_the_leading_data():

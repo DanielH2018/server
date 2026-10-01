@@ -3,8 +3,8 @@
 Client-side `kubectl apply` stores the whole object a second time in the
 `last-applied-configuration` annotation, and annotations are capped at 262144 bytes.
 monitor-bridge's runtime modules total ~255 KB of Python; JSON-escaped into that annotation
-they crossed the cap on 2026-09-01 (PR #725's deploy), and the apply was refused with
-`metadata.annotations: Too long` while the pod kept running the previous code. Server-side
+they cross the cap, and the apply is refused with `metadata.annotations: Too long` while the
+pod keeps running the previous code. Server-side
 apply writes no such annotation, so the cap does not apply.
 
 The rule covers every role with an `Apply the script ConfigMap` task in any of its task files, not just the one that
@@ -100,9 +100,8 @@ def test_monitor_bridge_still_needs_it():
     # lower bound on what client-side apply would store. Pin that it is within a factor of the
     # cap — if this ever fails, the source shrank and the comment in tasks/main.yml is stale.
     files = K8S_ROLES / "monitor-bridge" / "files"
-    # `rglob`: the modules are packages under files/, and a one-level glob summed check.py
-    # alone — a seventh census that stopped seeing its subject on a move, caught here only
-    # because the sum then fell under the cap.
+    # `rglob`: the modules are packages under files/, and a one-level glob would sum check.py
+    # alone.
     total = sum(
         p.stat().st_size
         for p in files.rglob("*.py")

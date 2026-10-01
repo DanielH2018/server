@@ -3,7 +3,7 @@
 Two paths can create the claim, and which one runs is `freshrss_k8s_manage_claim`:
 
 - true  — `k8s/volume-claim` creates it, from that role's own `pvc.yaml.j2`, and copies the
-          pre-migration Docker tree into it.
+          seed tree into it.
 - false — `k8s/manifests` applies `freshrss/templates/pvc.yaml.j2`, and the volume starts empty.
 
 Both creating it is the failure this file exists for, and it is a quiet one: the two templates
@@ -14,7 +14,7 @@ nothing at admission verifies a referenced PVC exists, so that failure surfaces 
 Pending long after the deploy reports green.
 
 Why the flag exists at all: `freshrss_k8s_source_path` is a path on `seed_volume_source_host`
-(daniel-server) that Docker's removal on 2026-08-14 took with it. Prod never notices — its PV
+(daniel-server) that does not exist, because Docker is gone from that host. Prod never notices — its PV
 already carries the seed label, so volume-claim short-circuits and never reads the source. A
 cluster with a fresh PVC has no label, the copy decision resolves to true, and the deploy fails
 trying to tar a directory that is gone.
@@ -44,10 +44,9 @@ _ROLE = "freshrss"
 _TASKS = K8S_ROLES / _ROLE / "tasks" / "main.yml"
 _CLAIM = "freshrss-config"
 _HOST = "daniel-box"
-# The unseeded cluster, as an override rather than a host. daniel-stage carried
-# `freshrss_k8s_manage_claim: false` until it was retired (#2941), and every host in the
-# inventory now seeds — so without this the guard below has no False to observe and a
-# detector stuck on "seeded" would agree with every host.
+# The unseeded cluster, as an override rather than a host. Every host in the inventory
+# seeds, so without this the guard below has no False to observe and a detector stuck on
+# "seeded" would agree with every host.
 _UNSEEDED = {"freshrss_k8s_manage_claim": False}
 
 

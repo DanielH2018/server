@@ -1,9 +1,9 @@
 ---
-# Makes /dev/dri/renderD128 schedulable as `devic.es/dri` (slice 4, B1).
+# Makes /dev/dri/renderD128 schedulable as `devic.es/dri`.
 #
-# WHY THIS EXISTS AT ALL, since a hostPath looks simpler and was the original plan: Kubernetes has
-# no `devices:` field of its own, and a hostPath mount of /dev/dri is NOT enough. Measured
-# 2026-08-07 — the device node appears in the container with the right group and mode, and every
+# WHY THIS EXISTS AT ALL, since a hostPath looks simpler: Kubernetes has
+# no `devices:` field of its own, and a hostPath mount of /dev/dri is NOT enough. Measured:
+# the device node appears in the container with the right group and mode, and every
 # open() still fails with EPERM, because cgroup v2 governs device access via an eBPF filter and
 # nothing had declared the device to the CRI. A device plugin is what declares it, which is what
 # populates the allowlist. See docs/archive/k3s-migration/slice-4-media-cluster.md D2.
@@ -34,7 +34,7 @@
   # `cmd`'s shlex split eats the backslash — kubectl then reads three separate keys and quietly
   # returns empty, a false negative that looked exactly like a broken plugin. The list form
   # hands the argument over verbatim. `wait` returns the moment the kubelet advertises the
-  # resource, and `-o` prints the count once it has; a 120s timeout is the old 24x5s budget.
+  # resource, and `-o` prints the count once it has; a 120s timeout bounds it.
   ansible.builtin.command:
     argv:
       - k3s

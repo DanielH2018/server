@@ -1,8 +1,8 @@
 """`claim` against an issue somebody else already holds: reap a stale claim, refuse a live one.
 
-`next` offers an issue whose claim is stale, on purpose. Until #1274 `claim` refused any claim
-at all, so a session did exactly what `next` told it to and got exit 3 with no route forward —
-and nothing in the repo invoked `reap`, so the issue stayed offered and unclaimable forever.
+`next` offers an issue whose claim is stale, on purpose. A `claim` that refused any held issue
+would leave a session that did what `next` told it to with exit 3 and no route forward, with
+nothing invoking `reap`, so the issue would stay offered and unclaimable forever.
 
 The pairing is the point: a `claim` that reaps everything and one that reaps nothing are
 indistinguishable from a fixture where every claim is stale.
@@ -20,7 +20,7 @@ MINE = "worktree-mine"
 OTHER = "worktree-issue-1132"
 
 # `MINE` is checked out and held by a live session in every fixture here. `cmd_claim`'s
-# stale-at-birth guard reads `--worktree` before it reads any issue (#1278, #1281), so
+# stale-at-birth guard reads `--worktree` before it reads any issue, so
 # without this every test below would refuse for a reason none of them is about — they are
 # all about what happens to SOMEBODY ELSE's claim.
 MINE_TREE = Worktree(
@@ -117,7 +117,7 @@ def test_claim_does_not_reap_an_issue_outside_the_register(capsys):
     """The third refusal `another_claim_blocks` has to know about, beside `manual` and closed.
 
     `_load_issue` has no label filter, so `claim 3` reaches an issue outside the `claude`
-    register — Renovate's Dependency Dashboard is the live example (#1277). If one carried a
+    register — Renovate's Dependency Dashboard is the live example. If one carried a
     stale `Claim:`, reaping first would post a release comment on an issue the very next step
     refuses anyway. `another_claim_blocks` and `plan_claim` must list the same three.
     """
@@ -159,7 +159,7 @@ def test_reclaiming_an_issue_this_worktree_holds_still_reads_the_worktrees_once(
 
     This test used to wire `worktree_facts` to raise, pinning that a batch nothing blocked
     never paid for the read at all — `another_claim_blocks` answered False for the caller's
-    own claim and the lazy read was never reached. The stale-at-birth guard (#1278, #1281)
+    own claim and the lazy read was never reached. The stale-at-birth guard
     retires that: it asks about `--worktree` itself, which every batch has, so the read is
     unconditional and hoisted out of the loop. What survives is the bound that mattered —
     ONE read, not one per issue — which `test_claim_reads_the_worktrees_once_for_a_whole_batch`

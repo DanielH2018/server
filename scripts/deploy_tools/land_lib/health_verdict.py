@@ -68,11 +68,11 @@ def health(ln: Landing) -> NoReturn:
     if ln.plane:
         print(f"  STILL UNAPPLIED, and no deploy tag covers it: {ln.plane}")
         # Both remediations, because this arm ends the landing and the one at the foot of
-        # this function never runs (#2569).
+        # this function never runs.
         if ln.remaining_setup:
             print(remaining_hosts_note(ln.remaining_setup))
         # The tick's own half too: a PR carrying BOTH ends here without ever reading the
-        # deployer's state, so every tick state went unreported (#2579, #2601). Reported,
+        # deployer's state, so every tick state went unreported. Reported,
         # not re-verdicted — `Landing.tick_half_open_lines` carries why.
         for line in ln.tick_half_open_lines():
             print(line)
@@ -131,7 +131,7 @@ def health(ln: Landing) -> NoReturn:
             )
         # CONVERGED says the tick is not deferring this PR, which any session's `git merge
         # --ff-only` also produces — and once local == origin the tick returns `noop` forever,
-        # so a plane it never applied is stranded while this reads `settled` (issue #1537).
+        # so a plane it never applied is stranded while this reads `settled`.
         if not ln.broad_applied_covers(sha):
             print(
                 "  services deployed, but the tick recorded no broad apply covering this PR "
@@ -140,7 +140,7 @@ def health(ln: Landing) -> NoReturn:
             # The same hole `deploy.no_tag_outcome` carries, one arm over and for the same
             # reason: `broad_applied` is written only after the apply returns, and a tick that
             # already ff-merged this PR answers CONVERGED rather than BEHIND, so the
-            # abandoned-watch arm above never sees it (#2448).
+            # abandoned-watch arm above never sees it.
             if ln.tick_watch_abandoned:
                 print(ABANDONED_WATCH_NOTE)
                 ln.finish(
@@ -160,7 +160,7 @@ def health(ln: Landing) -> NoReturn:
     if ln.remaining_setup:
         local = ln.tools.hostname()
         # The note says which hosts and why for each role it names, including the repo-file
-        # case where the tick applied the role on NO host (#2798) -- so this line states what
+        # case where the tick applied the role on NO host -- so this line states what
         # was deployed and hands the rest to the note, rather than asserting a self-apply on
         # `local` that a repo-file-only role never had.
         note = remaining_hosts_note(ln.remaining_setup).lstrip()

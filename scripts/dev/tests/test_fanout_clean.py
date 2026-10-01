@@ -164,7 +164,7 @@ def test_the_lock_is_released_only_for_a_tree_about_to_be_removed():
 
 def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_the_script():
     cmd = remote_clean_command(B)
-    # The active-unit refusal (#1872) is the outermost test; everything else is its else.
+    # The active-unit refusal is the outermost test; everything else is its else.
     assert cmd.startswith(
         "if systemctl --user is-active --quiet fanout-b; then "
         f'echo "kept: {B.worktree} — unit fanout-b still active; stop it first"; '
@@ -172,8 +172,8 @@ def test_the_remote_command_resets_fetches_then_runs_the_worktrees_own_copy_of_t
         "systemctl --user reset-failed fanout-b 2>/dev/null; "
         "git -C /home/ubuntu/server fetch --quiet origin master && "
     )
-    # The interpreter leg is now the else of the tree-exists test (Ruling 30), and still
-    # runs from the primary checkout's cwd against the worktree's own copy of the script.
+    # The interpreter leg is the else of the tree-exists test (Ruling 30), and runs from
+    # the primary checkout's cwd against the worktree's own copy of the script.
     assert (
         "else cd /home/ubuntu/server && "
         "uv run --no-project --no-python-downloads --python 3.14.6 python "

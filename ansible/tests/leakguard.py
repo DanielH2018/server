@@ -5,13 +5,9 @@ entry rather than one directory at a time.
 
 ## Why a plugin rather than another conftest fixture
 
-`_helpers.stub_logger_on_path` and `scripts/deploy_tools/tests/conftest.py` already do this
-one binary and one directory at a time, and each was written after someone found the leak
-somewhere else: issue #1052 found fixture verdicts on the Alert History board, and the
-2026-09-04 sweep that produced #1057 found a test making five authenticated GitHub API calls,
-a SOPS decrypt, two `docker ps` calls and a live Prometheus query on every run. Both are
-after-the-fact detection of something that had been running green for months. This makes the
-next one a red test instead.
+`_helpers.stub_logger_on_path` and `scripts/deploy_tools/tests/conftest.py` cover one binary
+and one directory at a time, and each detects a leak only after it has run green for months.
+This plugin makes the next leak a red test instead.
 
 ## How it works
 
@@ -26,10 +22,9 @@ Either probe firing fails the test that caused it, by nodeid, at teardown.
 
 An exemption lifts BOTH probes. `pytest_runtest_setup` asks `_runs_against_live_infra` once
 and writes the answer to `_state["exempt"]` in the same branch that picks the PATH, so the
-socket probe and the shims cannot disagree. They did disagree between 2026-09-02 and
-2026-09-06: the `ui` marker lifted the shims alone, so a `ui` test making an in-process
-request failed with `LEAKGUARD: blocked a network connect to (...)` — a message naming the
-guard but not the exemption meant to cover it. `guarded_connect` reads the flag as `is True`,
+socket probe and the shims cannot disagree. A `ui` marker that lifted the shims alone would
+fail an in-process request with `LEAKGUARD: blocked a network connect to (...)`, a message
+naming the guard but not the exemption meant to cover it. `guarded_connect` reads the flag as `is True`,
 which keeps the guard on wherever no test owns the process: collection, session-scoped
 fixtures, and the window before the first test's setup. Teardown deliberately leaves the flag
 alone; this hook runs before pytest finalizes fixtures, so clearing it here would fire the
@@ -49,8 +44,8 @@ passing while proving nothing, which is the failure mode this whole guard is abo
 **A `ui`-marked test runs with the real PATH too.** `scripts/diagnostics/tests/test_ui_smoke.py`
 drives a real Chromium against this homelab's LAN routes, and its fixtures read the SOPS
 `domain` and `grafana_admin_password` before anything renders. Reaching live infrastructure is
-the test there, so a stubbed `sops` errors the whole tier in fixture setup — measured
-2026-09-06, all 5 `-m ui -k grafana` tests errored on `could not decrypt domain`. The exemption
+the test there, so a stubbed `sops` errors the whole tier in fixture setup
+with `could not decrypt domain`. The exemption
 keys on the marker rather than on nodeids because that tier is parametrized:
 `test_grafana_dashboard_renders_its_panels` gains a nodeid every time a dashboard is enrolled,
 so a nodeid allowlist would go stale on an enrollment instead of on a rename. `addopts` carries
@@ -58,10 +53,8 @@ so a nodeid allowlist would go stale on an enrollment instead of on a rename. `a
 
 ## What is deliberately NOT shimmed
 
-`git` — too central to intercept safely, and the same sweep established the class is clean:
-every write verb targets a `tmp_path` repo through `git -C`, `GIT_DIR`/`GIT_INDEX_FILE`
-appear in zero child environments, and all twelve `clone`/`fetch` calls name a local
-`tmp_path` origin.
+`git` — too central to intercept safely. Every write verb targets a `tmp_path` repo through `git -C`, no child environment
+carries `GIT_DIR`/`GIT_INDEX_FILE`, and every `clone`/`fetch` names a local `tmp_path` origin.
 
 ## The git hook variables are stripped, not shimmed
 

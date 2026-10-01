@@ -4,11 +4,8 @@
 #
 # It reaps everything install.yml writes: all six systemd units, the polkit rule that lets a
 # non-root caller trigger a tick, the two GitHub crons plus the scripts they run, and the three
-# directories at the end. Until 2026-09-11 the directories stayed on the argument that a host
-# flipped back to has_gitops: true re-renders them anyway. That left a 0600 config.env with the
-# Discord webhook in it, a three-week-stale copy of the deployer, and a state directory on a
-# host the inventory had demoted (#1732) — and the stale copy is the one that ticked for three
-# weeks from a live timer (#1733). A host flipped back gets all three from install.yml.
+# directories at the end. A host flipped back to has_gitops: true gets all three from
+# install.yml.
 
 - name: Check whether the GitOps deploy timers were ever installed here
   ansible.builtin.stat:
@@ -53,7 +50,7 @@
 
 # The two GitHub checks are kuma-check timers (install.yml); the shared task file's absent arm
 # stops the timer, removes its units and removes the cron the timer replaced, so a host that
-# ran the cron before 2026-09-19 is reaped the same way.
+# still has the cron is reaped the same way.
 - name: Remove the GitHub ruleset drift timer
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
   vars:

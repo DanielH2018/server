@@ -3,7 +3,7 @@
 
 Two questions, each behind a landing that read as success over unfinished work:
 
-* `service_tags_at` -- which tags exist AT A REF (issue #1544). Asked of a checkout, a role the
+* `service_tags_at` -- which tags exist AT A REF. Asked of a checkout, a role the
   PR itself registers reads as UNREGISTERED, which is what a role nobody registered reads as
   too, so the landing prints the expensive remedy for work one `--tags` run does.
 * `self_applied_command` -- what a hand runs when the tick CONVERGED without applying the PR
@@ -25,30 +25,28 @@ import land_tags
 from lib.git_testing import git_out, init_repo
 from deploy_tools.land_lib import tools
 
-# THE RETIREMENT CONVENTION, settled in #2432: a retired role is DELETED, and the same PR
-# names its tag here. Roles retired before that moved to `roles/*/archive/<tag>/` instead, and
-# the census below recognised a retirement by that new home — but #2385 deleted the archive
-# tree, and a deleted role is indistinguishable from the reader dropping an entry, so an
-# explicit list is the only honest signal. An entry earns its place for one PR: once the
-# retiring commit is HEAD, the tag is gone from both sides and the line can go. A RENAME loses
-# the old tag the same way a retirement does, so it is named here too, for the same one PR.
+# THE RETIREMENT CONVENTION: a retired role is DELETED, and the same PR names its tag here. A
+# deleted role is indistinguishable from the reader dropping an entry, so an explicit list is
+# the only honest signal. An entry earns its place for one PR: once the retiring commit is
+# HEAD, the tag is gone from both sides and the line can go. A RENAME loses the old tag the
+# same way a retirement does, so it is named here too, for the same one PR.
 #
-# Empty is the resting state, and it stays hand-written for two reasons (#3067). Deriving it as
+# Empty is the resting state, and it stays hand-written for two reasons. Deriving it as
 # `at_head - in_tree` would make the census assert `lost <= lost`, which no dropped entry can
 # fail. And a test that every entry is still declared at HEAD would fail the retiring PR on its
 # own push, because there HEAD is already the retiring commit.
 RETIRED_TAGS: frozenset[str] = frozenset()
 
 
-# ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
+# ── service_tags_at: which tags exist AT A REF, not in the working tree ──
 
 
 @pytest.fixture
 def two_commit_repo(tmp_path):
     """A repo whose SECOND commit registers `pihole-exporter`; yields (repo, first, second).
 
-    The shape of PR #1539: the role and its inventory entry arrive together, so the entry
-    exists at the merge commit and in no checkout until the tick fast-forwards.
+    The role and its inventory entry arrive together, so the entry exists at the merge
+    commit and in no checkout until the tick fast-forwards.
     """
     repo = tmp_path / "repo"
     inventory = repo / "ansible" / "inventory" / "host_vars"
@@ -108,17 +106,15 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     SUBSET, NOT EQUALITY, and the difference is what makes a new service committable. The prek
     `pytest` hook runs before the commit exists, so `HEAD` is the commit BEFORE the one being
     made: a commit that adds a role has that role in the working tree and never at HEAD.
-    Equality therefore failed every new-service commit — gpu-exporter (#1446) was the first to
-    hit it, two hours after this guard landed and so after the last new role.
+    Equality would therefore fail every new-service commit.
 
     The direction still catches what the assertion is for: a working tree that has LOST a tag
     HEAD declares means the reader is dropping entries, and `traefik` plus the floor below
     keep an empty or near-empty read from passing.
 
     A RETIREMENT is the one honest way to lose a tag, and it too is committed against a HEAD
-    that still declares it (glances, #2004). It is told apart by `RETIRED_TAGS` above: a lost
-    tag named there is a retirement, and any other lost tag is still the reader dropping an
-    entry.
+    that still declares it. It is told apart by `RETIRED_TAGS` above: a lost tag named there
+    is a retirement, and any other lost tag is still the reader dropping an entry.
     """
     at_head = land_tags.service_tags_at("HEAD", deploy_tags.REPO)
     in_tree = deploy_tags.service_tags()
@@ -128,7 +124,7 @@ def test_this_repo_at_head_agrees_with_its_own_working_tree():
     assert lost <= RETIRED_TAGS, sorted(lost - RETIRED_TAGS)
 
 
-# ── self_applied_command: the hand-apply the tick would otherwise have done (issue #1537) ──
+# ── self_applied_command: the hand-apply the tick would otherwise have done ──
 
 
 def test_the_command_names_the_role_the_tick_would_have_applied():

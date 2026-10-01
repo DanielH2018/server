@@ -1,9 +1,9 @@
-"""Every task the deploy playbooks run can be reached by some `--tags` value (issue #2704).
+"""Every task the deploy playbooks run can be reached by some `--tags` value.
 
 WHY. A task no tag selects runs only on a full, untagged `ansible-playbook` run. A change to it
 then costs a ~20-minute deploy of the whole fleet, or waits undeployed until the next one.
 
-THE MODEL, measured on ansible-core against a probe playbook on 2026-09-26:
+THE MODEL, measured on ansible-core against a probe playbook:
 
   - A task is selected by its own `tags:` or by tags it inherits.
   - A `roles:` entry, a `block:`, an `import_tasks` and an `import_role` pass their tags down.
@@ -29,7 +29,7 @@ from pathlib import Path
 from lib import yaml_fast
 from _helpers import ANSIBLE
 
-# The playbooks an operator applies. `k3s-bringup.yml` is in scope with the two the issue names:
+# The playbooks an operator applies. `k3s-bringup.yml` is in scope with the two deploy playbooks:
 # a task it cannot select is the same full-run cost, paid on the control plane.
 PLAYBOOKS = ("deploy.yml", "initial_setup.yml", "k3s-bringup.yml")
 # The roles_path entries of ansible/ansible.cfg, in its first-match order.

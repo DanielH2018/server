@@ -62,7 +62,7 @@ def test_parse_reading_never_puts_the_read_output_in_its_message():
 
 
 def test_parse_reading_is_flagged_on_a_short_or_non_numeric_read():
-    # Both older shapes are parse errors now, not a reading with a half guessed at: the
+    # Both older shapes are parse errors, not a reading with a half guessed at: the
     # three-line fleet-only read, and the four-line read that carried the key but no plane.
     with pytest.raises(ValueError):
         parse_reading("daniel-box", FLEET_ONLY)
@@ -145,7 +145,7 @@ def test_a_pin_wins_while_it_has_headroom_and_refuses_when_it_does_not():
 
 
 def test_a_full_login_plane_refuses_a_batch_the_fleet_cap_would_allow():
-    """The 2026-09-10 case: 12G/10G fleet with room, 8G plane full on both hosts."""
+    """12G/10G fleet with room, 8G plane full on both hosts."""
     readings = [
         _r("daniel-box", 12 * GIB, 2 * GIB, plane_cap=8 * GIB, plane_current=8 * GIB),
         _r(

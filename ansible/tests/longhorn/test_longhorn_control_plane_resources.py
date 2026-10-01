@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""longhorn-manager and the csi-* sidecars must carry a memory REQUEST and no LIMIT (#1243).
+"""longhorn-manager and the csi-* sidecars must carry a memory REQUEST and no LIMIT.
 
 Upstream's deploy/longhorn.yaml ships every one of these at `resources: {}` — BestEffort QoS,
 oom_score_adj 1000 — so the kernel eats the storage control plane first under any memory
@@ -8,7 +8,7 @@ block on every run (there's no local copy of the upstream manifest to edit), so 
 be a patch task the role runs AFTER the apply, not a template change.
 
 Only a request, never a limit: a limit set too low turns "killed by OOM badness" into "killed
-by cgroup cap" — a new failure mode the diagnosis rejected outright. `test_a_patch_carrying_a_
+by cgroup cap" — a different failure mode this design rejects. `test_a_patch_carrying_a_
 limits_key_is_rejected` is the pair proving this guard can actually go red rather than
 passing on any resources block it is handed.
 

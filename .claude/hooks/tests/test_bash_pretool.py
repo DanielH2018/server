@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
-"""Tests for the one-process PreToolUse:Bash dispatcher (issue #2394).
+"""Tests for the one-process PreToolUse:Bash dispatcher.
 
-Separate hooks became arms of one process, so the question these answer is whether each arm
-still reaches its verdict THROUGH the dispatcher. Every arm therefore carries an accept/reject
-pair driven through `main()` — the entry point the shim execs — and not through the arm's own
+The hooks are arms of one process, so the question these answer is whether each arm still
+reaches its verdict THROUGH the dispatcher. Every arm therefore carries an accept/reject pair
+driven through `main()` — the entry point the shim execs — and not through the arm's own
 `decision()`, which the per-arm suites already cover. A dispatcher that returned every arm's
 verdict and one that returned none look identical from the accepting side alone.
 
@@ -184,7 +184,7 @@ def test_no_verdict_from_any_arm_emits_nothing():
 
 
 def test_a_deny_still_carries_the_context_arm_s_injection(sandbox, monkeypatch, capsys):
-    """The injector used to be its own hook, so a denied command still got its docs. One
+    """A denied command still gets its docs. One
     object carries both keys; dropping the context on a deny would be a silent loss."""
     out = dispatch(
         "ssh daniel-server 'git log -1 ansible/roles/k8s/home-assistant/tasks/main.yml'",

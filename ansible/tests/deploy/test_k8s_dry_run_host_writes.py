@@ -7,8 +7,8 @@ the crons that run them, and render probe-Job manifests under `/etc/rancher/k3s/
 
 Unguarded, any session's dry run ships its own tree's host half before that tree has landed —
 past the health gate and past the auto-deploy denylist, which both watch the cluster. It is
-also what kept `roles/setup/render_records` disarmed: an hourly fleet dry run would have
-installed origin/master's host plane every hour (#2611, #2614).
+also what keeps `roles/setup/render_records` disarmed: an hourly fleet dry run would install
+origin/master's host plane every hour.
 
 The guard is `k8s_dry_run`, not `k8s_no_mutate`. `template`, `copy`, `file` and `cron` skip
 their own writes under `--check` and report what would change, and the wider fact would turn
@@ -56,7 +56,7 @@ _HOST_REDIRECT = re.compile(r">>?\s*/(?:etc|opt|usr|var|srv)/")
 
 # Roles whose host writes are the dry-run MECHANISM rather than a side effect of it.
 # roles/k8s/manifests renders into a throwaway directory under the flag (test_k8s_dry_run.py
-# pins that), and both issues scope themselves to writes "outside roles/k8s/manifests".
+# pins that), and the rule scopes itself to writes "outside roles/k8s/manifests".
 _HOST_WRITE_EXEMPT = frozenset({"manifests"})
 
 # Non-vacuity. This census globs for its subjects, so a rename or a directory move would empty

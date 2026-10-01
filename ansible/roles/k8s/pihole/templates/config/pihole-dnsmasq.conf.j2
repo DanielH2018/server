@@ -1,8 +1,6 @@
-{# Rendered into roles/k8s/pihole's ConfigMap on daniel-box, its only consumer. It pins the
-   wildcard to daniel-server per slice-6 D7 — the LAN wildcard does NOT move with B3. #}
-{# BT3 (2026-08-10): the wildcard answers the cluster ingress VIP on every Pi-hole — the
-   cluster edge serves k8s natives and reverse-bridges Docker-hosted names. The old
-   default(server_ip) fallback is gone on purpose: it made the answer depend on which host
+{# Rendered into roles/k8s/pihole's ConfigMap on daniel-box, its only consumer. #}
+{# The wildcard answers the cluster ingress VIP on every Pi-hole. There is no
+   default(server_ip) fallback on purpose: it would make the answer depend on which host
    rendered the file. #}
 {# DECIDED (2026-08-24): a matching PUBLIC wildcard `*.local.<domain>` -> this same VIP is
    authoritative on Cloudflare, and it STAYS. It is not managed by this repo — cloudflare-ddns

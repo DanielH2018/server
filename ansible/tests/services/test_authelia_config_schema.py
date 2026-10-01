@@ -2,24 +2,23 @@
 
 Authelia refuses to START on an unrecognised configuration key — it does not warn and carry on
 — and the portal rolls under `Recreate` in front of most public routes, so the old pod is
-already gone when the new one exits. Nothing between the editor and the SSO gate could see that
-before this guard (#1608). `validate/k8s_manifests.py` renders the Secret and parses it as YAML,
-where a bad key parses fine. `--dry-run` hands the Secret to the API server, which validates the
-Secret and never looks inside `stringData`. `prek` runs the same render. Two live instances of
-the class had already been paid for: `disable_startup_check` under `notifier.smtp` (#1464) and
-the `webauthn` key set (#1502), each answered with its own hand-written frozenset of legal keys
-— textual guards standing in for a parser nobody ran.
+already gone when the new one exits. Nothing but this guard sees that between the editor and
+the SSO gate. `validate/k8s_manifests.py` renders the Secret and parses it as YAML, where a bad
+key parses fine. `--dry-run` hands the Secret to the API server, which validates the Secret and
+never looks inside `stringData`. `prek` runs the same render. A hand-written frozenset of legal
+keys per area, such as `disable_startup_check` under `notifier.smtp` or the `webauthn` key set,
+is a textual guard standing in for a parser nobody ran.
 
 Authelia publishes a JSON Schema of its own configuration, per minor release, with
 `additionalProperties: false` throughout. That is the parser's key set as data, so this guard
-replaces the per-area frozensets with one check that needs no cluster, no credentials and no
+is one check in place of per-area frozensets that needs no cluster, no credentials and no
 container runtime. The schema is vendored under `scripts/validate/schemas/authelia.com/` for the
 same reason the CRD schemas are: a hook that resolves DNS fails when DNS is down, and this repo
 IS the DNS. Refresh it with `uv run python scripts/validate/refresh_vendored_schemas.py`.
 
 UNKNOWN KEYS ARE ASSERTED ACROSS THE WHOLE DOCUMENT, values only under
 `authentication_backend.file.password`, and that narrowing is deliberate rather than timidity.
-Measured against the real render on 2026-09-10, whole-document validation reports five errors
+Measured against the real render, whole-document validation reports five errors
 and not one is a defect this guard should fail on: four are the `STUB` stand-ins the test render
 substitutes for SOPS secrets (an OIDC client secret and a JWKS key are checked against hash and
 PEM patterns), and the fifth is `notifier.smtp.sender`, which the schema's own `oneOf` matches
@@ -27,12 +26,12 @@ under both branches. The schema is stricter than the parser on values, which is 
 that makes a blanket value-level gate fail on a working config.
 
 The password block is the one place that strictness is the point, so it gets a value check of
-its own (#1621). It rendered `algorithm: argon2id` with the parameters as flat siblings until
-that issue — a LEGACY spelling the 4.39.21 parser accepts and this schema's enum does not. The
+its own. A render of `algorithm: argon2id` with the parameters as flat siblings is a LEGACY
+spelling the 4.39.21 parser accepts and this schema's enum does not. The
 parser does not ignore it: `validateFileAuthenticationBackendPasswordConfigLegacy` in
 `internal/configuration/validator/authentication.go` maps the alias to `argon2` + the default
 variant and carries the flat parameters across IN LEGACY UNITS, multiplying `memory` by 1024. So
-`memory: 65536` became 64 GiB of effective argon2 memory, passing validation silently because
+`memory: 65536` becomes 64 GiB of effective argon2 memory, passing validation silently because
 `MemoryMax` is `math.MaxUint32`. Logins never noticed, because verification decodes the stored
 `$argon2id$` PHC string and reads the algorithm off that prefix (`crypt.Decode` at
 `internal/authentication/file_user_provider_database.go:517`) — the configured parameters only
@@ -57,7 +56,7 @@ AUTHELIA_DEFAULTS = REPO / "ansible/roles/k8s/authelia/defaults/main.yml"
 
 # Named members the vendored schema must define. A schema that downloaded as an error page, or
 # whose `$defs` were restructured upstream, would otherwise leave every check below validating
-# against nothing and passing. Two of these are the areas that produced #1464 and #1502.
+# against nothing and passing.
 REQUIRED_DEFS = frozenset(
     {"Configuration", "WebAuthn", "NotifierSMTP", "Session", "SessionRedis"}
 )
@@ -119,7 +118,7 @@ def test_a_config_with_no_unknown_keys_is_clean(rendered_config, validator):
 
 
 def test_an_unknown_webauthn_key_is_flagged(rendered_config, validator):
-    """#1502's area. `webauthn` is nested, so this also proves the walk descends."""
+    """The `webauthn` area. It is nested, so this also proves the walk descends."""
     bad = copy.deepcopy(rendered_config)
     bad["webauthn"]["not_a_real_authelia_key"] = True
     assert unknown_config_keys(bad, validator), (
@@ -129,7 +128,7 @@ def test_an_unknown_webauthn_key_is_flagged(rendered_config, validator):
 
 
 def test_the_smtp_key_that_caused_1464_is_flagged(rendered_config, validator):
-    """The literal key from #1464, two levels down under `notifier.smtp`."""
+    """The literal `disable_startup_check` key, two levels down under `notifier.smtp`."""
     bad = copy.deepcopy(rendered_config)
     bad["notifier"]["smtp"]["disable_startup_check"] = True
     paths = [path for path, _msg in unknown_config_keys(bad, validator)]
@@ -154,7 +153,7 @@ def rejected_password_values(document, validator):
 
     Empty when the block is spelled the canonical 4.39 way. A legacy spelling the parser
     silently reinterprets — `argon2id` with flat parameters, where `memory` is multiplied by
-    1024 — is reported here and nowhere else in a deploy (#1621).
+    1024 — is reported here and nowhere else in a deploy.
     """
     found = []
     for error in validator.iter_errors(document):
@@ -170,7 +169,7 @@ def test_the_canonical_password_block_is_clean(rendered_config, validator):
 
 
 def test_the_legacy_argon2id_spelling_is_flagged(rendered_config, validator):
-    """The literal value from #1621, which the parser aliases and reinterprets."""
+    """The legacy `argon2id` value, which the parser aliases and reinterprets."""
     bad = copy.deepcopy(rendered_config)
     bad["authentication_backend"]["file"]["password"]["algorithm"] = "argon2id"
     paths = [path for path, _msg in rejected_password_values(bad, validator)]
@@ -197,11 +196,9 @@ def test_the_flat_legacy_parameters_are_flagged(rendered_config, validator):
 
 # --- the notifier block, where values are asserted too -----------------------------
 #
-# The SMTP branch lost its only boot-level rehearsal when daniel-stage was retired (#2941):
-# that guest rendered this branch on a stand-in credential and proved the config parsed and the
-# pod came up. With the startup check off, nothing at boot touches SMTP, so the half that bites
-# is the parse. This value check covers that half without a cluster (#2945). It cannot prove the
-# pod boots; nothing in the repo does.
+# No boot-level rehearsal covers the SMTP branch. With the startup check off, nothing at boot
+# touches SMTP, so the half that bites is the parse. This value check covers that half without a
+# cluster. It cannot prove the pod boots; nothing in the repo does.
 
 NOTIFIER_PATH = ("notifier",)
 # The one value complaint the real render carries under `notifier`. The schema's `oneOf` for a
@@ -245,7 +242,7 @@ def test_an_smtp_address_with_a_foreign_scheme_is_flagged(rendered_config, valid
 
 
 def test_a_quoted_startup_check_is_flagged(rendered_config, validator):
-    """A string where the parser wants a boolean — the value half of #1464's key."""
+    """A string where the parser wants a boolean — the value half of the `disable_startup_check` key."""
     bad = copy.deepcopy(rendered_config)
     bad["notifier"]["disable_startup_check"] = "true"
     paths = [path for path, _msg in rejected_notifier_values(bad, validator)]

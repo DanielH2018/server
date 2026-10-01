@@ -2,7 +2,7 @@
 
 A hook committed 100644 is silently dead: Claude Code runs the `command` string
 directly, so the exec bit missing yields "permission denied" on every tool call the
-hook matches, and nothing else reports it. `uv-python.sh` shipped that way in #361.
+hook matches, and nothing else reports it.
 
 The assertion reads git's index rather than the working tree, because an on-disk
 `chmod` that never reaches a commit regresses on the next fresh clone or worktree.

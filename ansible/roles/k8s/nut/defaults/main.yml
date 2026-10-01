@@ -1,8 +1,7 @@
 ---
-# Built in-cluster (k8s/image-builder) from this role's Dockerfile — successor to the
-# Docker sidecar's `build: context: .`. Pulled on daniel-server through the agent-side
-# registries.yaml mirror (ClusterIP endpoint); see k8s_registry_cluster_ip in
-# group_vars/all.yml.
+# Built in-cluster (k8s/image-builder) from this role's Dockerfile. Pulled on daniel-server
+# through the agent-side registries.yaml mirror (ClusterIP endpoint); see
+# k8s_registry_cluster_ip in group_vars/all.yml.
 nut_k8s_image: "{{ k8s_registry_pull_host }}/nut:{{ k8s_built_image_tags.get('nut', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -23,27 +22,21 @@ nut_k8s_mem_limit: 128Mi
 nut_k8s_cpu_request: "50m"
 nut_k8s_mem_request: 16Mi
 
-# Seconds on battery before the primary raises FSD and every ARMED secondary shuts down. Made
-# explicit 2026-08-24: it was referenced ONLY as `{{ nut_onbatt_shutdown_delay | default(120) }}`
-# in templates/config-secret.yaml.j2 and defined nowhere in the live tree, so the real value was
-# invisible unless you read the Jinja default. The one remaining definition was in the retired
-# peanut role, which #2385 deleted — `git show
-# 2460d0675fd748e70fcbcde87185371ffd62402b:ansible/roles/containers/archive/peanut/` reads it.
+# Seconds on battery before the primary raises FSD and every ARMED secondary shuts down.
 #
-# RAISED 120 -> 300 on 2026-08-28, as the prerequisite for arming daniel-box. This timer fires
-# that many seconds into ANY mains interruption, not at battery end, so at 120 a three-minute
-# blip cost a full cluster restart. Measured the same day on daniel-server
+# This timer fires that many seconds into ANY mains interruption, not at battery end, so a low
+# value costs a full cluster restart on a short blip. Measured on daniel-server
 # (`upsc apc-ups@127.0.0.1`): battery.runtime 987 at battery.charge 100 and ups.load 43, against
-# ups.realpower.nominal 900. Arming the control-plane node at 120 would have turned "daniel-box
-# rides out a short outage" into "daniel-box stops two minutes in" — a regression dressed as a
-# fix, which is why the arming and this raise land together.
+# ups.realpower.nominal 900. Arming the control-plane node with a low value would stop
+# daniel-box two minutes into a short outage, so the raise to 300 is the prerequisite for
+# arming it.
 #
 # WHY 300 AND NOT THE WHOLE BATTERY. This timer is the ride-out knob, not the safety net.
 # `AT LOWBATT * EXECUTE lowbatt` in templates/config-secret.yaml.j2 raises FSD as soon as the UPS
 # asserts LB, which this unit does at battery.charge.low 10 or battery.runtime.low 120, so the
 # end of the battery is already covered by a different trigger. 300 rides out the blips that
 # dominate residential outages while leaving ~11 minutes of measured runtime for two poweroffs,
-# and that margin absorbs battery ageing and a load above today's 43%. Going higher is a
+# and that margin absorbs battery ageing and a load above 43%. Going higher is a
 # follow-up to take after a drill has shown how long the two hosts actually need, not a free win.
 #
 # There is exactly ONE upssched (the pod, the primary), so FSD is a single global event every

@@ -3,8 +3,7 @@
 `gitops_alive` reads the tick's own heartbeat; `gitops_status` reads the deploy markers — a
 hold, a diverged tree, or a tree parked behind origin. The behind arm exists because a deferred
 BROAD change never fast-forwards: the host parks on an old tree while last_run keeps ticking
-and is_diverged stays false. daniel-server ran a 12-commit-old tree for hours that way on
-2026-08-02 with every GitOps signal green. A held BROAD apply also needs a different
+and is_diverged stays false, so every other GitOps signal reads green. A held BROAD apply also needs a different
 remediation than a held service deploy, so the message says which it is.
 """
 
@@ -17,7 +16,7 @@ import gates
 
 # The last_run marker is written against this epoch and the check reads the same one, so
 # "fresh" and "stale" are exact distances from the 90m default rather than a race with the
-# suite's own runtime (#2158).
+# suite's own runtime.
 GITOPS_NOW = 1_780_000_000.0
 
 
@@ -254,7 +253,7 @@ def test_the_oldest_pending_role_decides(cfg):
 
 
 def test_a_narrowed_row_pages_the_clear_that_names_what_it_applied(cfg):
-    """The page prints the same clear the banner does, not a bare `<role>` (#2349).
+    """The page prints the same clear the banner does, not a bare `<role>`.
 
     A bare clear after a narrowed apply drops a tag a later range added to the row.
     `common`'s empty row gets the bare form, since `--applied` there keeps the line.
@@ -333,7 +332,7 @@ def test_check_gitops_status_reads_the_manual_plane_file(tmp_path, cfg):
     assert "k3s --applied kubeconfig" in msg, "the tags row is read off the mount too"
 
 
-# ── consecutive ticks deferred on a busy service lock (issue #1847) ───────────────────────────
+# ── consecutive ticks deferred on a busy service lock ───────────────────────────
 _CONTENTION = "abc123def4567890 sonarr 1000.0 1900.0 2"
 
 
@@ -403,9 +402,9 @@ def test_check_gitops_status_reads_the_contention_file(tmp_path, cfg):
 def test_the_page_names_the_apply_the_clear_belongs_to(cfg):
     """The clear carries `--applied <the row>`; the apply beside it must name the same tags.
 
-    Without it the page said "apply by hand, then `... --applied kubeconfig`", so an operator
-    who applied an earlier, narrower set and pasted the clear dropped the tags a later range
-    had added (#2371). The whole-role apply carries `maximal_apply_warning`, as every other
+    Without it the page says "apply by hand, then `... --applied kubeconfig`", so an operator
+    who applied an earlier, narrower set and pasted the clear drops the tags a later range
+    added. The whole-role apply carries `maximal_apply_warning`, as every other
     surface printing that command does.
     """
     ok, msg = checks.gitops.gitops_status(
@@ -448,10 +447,10 @@ def test_a_role_no_playbook_applies_is_not_told_to_run_none(cfg):
 
 
 def test_an_undecodable_sidecar_still_pages_the_arm_that_fired(tmp_path, cfg):
-    """An undecodable `manual_plane_tags` sidecar is not a check error (#2371).
+    """An undecodable `manual_plane_tags` sidecar is not a check error.
 
-    Raising here turned `gitops_status` into DOWN "check error" every cycle, which masks the
-    hold, diverged, behind and contention arms — the four this monitor exists to raise.
+    Raising here would turn `gitops_status` into DOWN "check error" every cycle, which would
+    mask the hold, diverged, behind and contention arms — the four this monitor exists to raise.
     """
     cfg = replace(cfg, GITOPS_STATE_DIR=str(tmp_path))
     _gw(tmp_path, "hold_sha", "held123abc456789")

@@ -15,7 +15,7 @@ from _autodeploy import _LITERAL_NAME, _live_tasks, _strip_comments, _task_comma
 
 
 # Anchored to the run of `job/<name>` (or `job.batch/<name>`) tokens immediately following the
-# wait flag (S6/task-3-rulings-2.md), not a scan of the whole command: without the anchor, an
+# wait flag, not a scan of the whole command: without the anchor, an
 # unrelated `job/<name>`-shaped token elsewhere in the same shell command — e.g. a `--from=
 # cronjob/X` on a `kubectl create job` earlier in the same one-liner — is credited as if the
 # wait named it too. `\S+` per token, not `[\w.-]+`, because a token must be validated as a
@@ -35,7 +35,7 @@ def _batch_gated_names(role: Path) -> set[str]:
     Parses tasks/main.yml as YAML rather than matching its raw text, and credits a task only
     after `_task_runs_on_a_normal_deploy` confirms — using tags/when merged down from any
     enclosing `block:` by `_iter_task_dicts` — that it actually executes. A text-matching
-    version of this check was fooled by four constructions that all read as a gate without
+    check is fooled by four constructions that all read as a gate without
     running one: a falsey `when:` (in any of its several spellings — see
     `_when_is_falsy_literal`), `tags: [never]`, `tags: [config]` (excluded from a
     `--skip-tags deploy` run while every real gate task here is `[deploy]`), and — the one that
@@ -103,13 +103,13 @@ def _has_completion_gate(role: Path) -> bool:
     so the four dead-gate constructions it already rejects are rejected here too: a falsey
     `when:`, `tags: [never]`, `tags: [config]`, and either of those sitting on an enclosing
     `block:`. Both accepted forms then apply the same module discipline, and that is what
-    closes the shape this file keeps being caught by:
+    closes that shape:
 
     - `kubectl wait --for=condition=complete`, read from a real `command`/`shell` task via
-      `_task_command_text` and with comments stripped. A whole-file substring test credited
+      `_task_command_text` and with comments stripped. A whole-file substring test credits
       both an `ansible.builtin.debug` whose `msg:` described a wait in prose and a trailing
-      `# we deliberately do not use wait --for=condition=complete` — the comment configarr
-      actually carried, arguing against the very thing it was read as proving.
+      `# we deliberately do not use wait --for=condition=complete`, a comment arguing against
+      the very thing it is read as proving.
     - an `until:` poll naming BOTH terminal conditions, which is what a role must use when the
       workload can fail fast: `wait` names one condition, so with `backoffLimit: 0` a failed
       run settles in seconds while `wait` sits for the whole timeout before reporting it. Read
@@ -135,8 +135,8 @@ def _has_completion_gate(role: Path) -> bool:
 def _has_failure_escalation(role: Path) -> bool:
     """Whether the role runs a task that can fail the deploy outright.
 
-    Routed through `_live_tasks` for the same reason `_has_completion_gate` is: the substring
-    test this replaces (`"ansible.builtin.fail" in text`) was satisfied by
+    Routed through `_live_tasks` for the same reason `_has_completion_gate` is: a substring
+    test (`"ansible.builtin.fail" in text`) is satisfied by
     `ansible.builtin.debug:  # never ansible.builtin.fail here`, and by a real `fail` under
     `when: false` or `tags: [never]`. It is the only thing standing behind `_batch_gated_names`
     crediting every `k8s/cronjob-gate` caller, so it carries more weight than its size suggests.

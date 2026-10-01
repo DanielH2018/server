@@ -14,15 +14,13 @@ import shlex
 from collections.abc import Callable
 from typing import Any
 
-# The stage splitter is the dotfiles package's segmenter. `block-protected-bash.py` consumed
-# it first (#2053); the two hand-rolled splitters that lived here — a `;` walker in front of
-# `shlex.split`, blind to newlines and heredoc bodies — went the same way in #2134. The
-# package's `parse` cuts on the same separators, keeps a quoted `;` inside its word, treats a
-# newline as a separator, and lifts heredoc bodies off the segment text. `_claude_guard`
-# raises when the package is not deployed (its DECIDED marker refuses a stale fallback);
-# `segments` turns that into `Unsplittable`, and each consumer decides what a guard that
-# cannot read its input does — an `ask` for a deny guard with a real cost, no decision for
-# the rest. Never a silent "nothing here".
+# The stage splitter is the dotfiles package's segmenter. The package's `parse` cuts on the
+# same separators, keeps a quoted `;` inside its word, treats a newline as a separator, and
+# lifts heredoc bodies off the segment text. `_claude_guard` raises when the package is not
+# deployed (its DECIDED marker refuses a stale fallback); `segments` turns that into
+# `Unsplittable`, and each consumer decides what a guard that cannot read its input does — an
+# `ask` for a deny guard with a real cost, no decision for the rest. Never a silent "nothing
+# here".
 try:
     import _claude_guard  # noqa: F401  (bootstraps claude_guard onto sys.path)
     from claude_guard.segment import parse as _parse
@@ -159,7 +157,7 @@ def short_flags(stage: list[str]) -> set[str]:
     """Every single-letter flag in `stage`, unbundled.
 
     `-lZ` is `-l` and `-Z`, and a hook that only compared whole arguments to `-Z` would miss
-    the bundled form — which is the form the ugrep incident was actually written in.
+    the bundled form.
     """
     letters: set[str] = set()
     for word in stage:
@@ -212,8 +210,8 @@ def emit_pretooluse_context(context: str) -> None:
 
     The harness accepts `additionalContext` on its own: with no `permissionDecision` the
     call proceeds through the normal permission flow and the text reaches the model beside
-    the tool result (read from the 2.1.267 bundle, `jno` / `uMn`). Keep it under 10,000
-    chars — a longer one is persisted to disk and replaced by a preview stub.
+    the tool result. Keep it under 10,000 chars — a longer one is persisted to disk and
+    replaced by a preview stub.
     """
     print(
         json.dumps(

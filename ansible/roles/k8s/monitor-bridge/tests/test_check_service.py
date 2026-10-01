@@ -16,7 +16,7 @@ import checks.service
 
 
 N8N_NOW = datetime(2026, 6, 8, 12, 0, 0, tzinfo=timezone.utc)
-N8N_ISO = N8N_NOW.isoformat()  # check_n8n gets the same instant, not wall time (#2158)
+N8N_ISO = N8N_NOW.isoformat()  # check_n8n gets the same instant, not wall time
 
 
 def _n8n_ago(minutes):
@@ -186,8 +186,7 @@ def _queue(*records):
 
 
 def test_queue_warnings_flags_warning_status():
-    # The 2026-07-01 incident shape: warning status, importPending state, a statusMessage
-    # naming the executable.
+    # The shape: warning status, importPending state, a statusMessage naming the executable.
     q = _queue(
         {
             "title": "Poisoned.Episode.S01E01.exe",
@@ -241,7 +240,7 @@ def test_queue_warnings_flags_import_blocked_state():
 
 def test_queue_warnings_flags_error_status():
     # Upstream trackedDownloadStatus enum is ok/warning/error — "error" is at least as
-    # actionable as "warning" and was previously skipped (2026-07-02 review L2).
+    # actionable as "warning".
     q = _queue(
         {
             "title": "Errored.Release",
@@ -367,8 +366,7 @@ def test_arr_queue_ok_when_both_clean(monkeypatch, cfg):
 
 def test_arr_queue_urls_include_unknown_items_flags(monkeypatch, cfg):
     # Both flags default FALSE upstream, hiding exactly the unmapped/poisoned queue items
-    # this check exists for. Sonarr got its flag on day one; Radarr's twin was missed
-    # (2026-07-02 review M1) — pin BOTH spellings so neither regresses again.
+    # this check exists for. Pin BOTH spellings, Sonarr's and Radarr's.
     cfg = replace(cfg, SONARR_API_KEY="x", RADARR_API_KEY="x")
     calls = []
 
@@ -523,16 +521,11 @@ def test_prowlarr_indexers_ignore_list_suppresses_page(monkeypatch, seq, cfg):
     assert "ok" in msg
 
 
-# The case that caught nothing before: a deferred BROAD change never fast-forwards, so the host
-# parks on an old tree while last_run keeps ticking and is_diverged stays false. daniel-server ran
-# a 12-commit-old tree for hours that way on 2026-08-02 with every GitOps signal green.
-
-
 # Bazarr holds its OWN copies of Sonarr's and Radarr's API keys, on its PVC and entered
-# through its UI, so no deploy updates them. On 2026-08-29 a rotation missed it and the only
-# signal was an OOM tile that self-clears after an hour. These pin both directions.
+# through its UI, so no deploy updates them. A rotation that misses it leaves only an OOM tile
+# that self-clears after an hour as signal. These pin both directions.
 #
-# Field values are the ones the live app returned on 2026-08-29 with the keys working.
+# Field values are the ones the live app returns with the keys working.
 _HEALTHY_BAZARR = {
     "data": {
         "bazarr_version": "1.5.6",
@@ -549,7 +542,7 @@ def test_bazarr_healthy_status_and_health_report_nothing():
 
 @pytest.mark.parametrize("peer", ["sonarr", "radarr"])
 def test_bazarr_empty_peer_version_is_the_stale_key_signal(peer):
-    """The 2026-08-29 failure itself.
+    """A rejected key, as the app reports it.
 
     Bazarr fills these fields by calling each app with its own stored key, so an
     empty-but-present field is what a rejected key looks like from outside.

@@ -203,7 +203,7 @@ def test_registry_drift_clean_when_in_sync():
     assert registry_drift({"a", "b"}, {"a", "b"}) == ([], [])
 
 
-# ── `source: record` (issue #1914) ──────────────────────────────────────────
+# ── `source: record` ──────────────────────────────────────────
 
 
 def test_sync_preserves_the_record_source_field():
@@ -241,7 +241,7 @@ def test_is_record_reads_only_the_exact_marker():
 
 
 def test_the_live_registry_marks_exactly_the_three_record_keys():
-    """The keys the 2026-08-30 rotation found inert: authelia derives its hash from the live
+    """Keys a rotation can find inert: authelia derives its hash from the live
     Secret and prefers it, healthchecks reads SUPERUSER_PASSWORD only on first boot, and the
     only bazarr_api_key reference in the tree is a monitor-bridge reader."""
     reg = yaml_fast.safe_load(REGISTRY.read_text())

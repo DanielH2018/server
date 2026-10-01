@@ -1,11 +1,10 @@
-"""No entity value carries Tera syntax AutoKuma would try to render (#2076).
+"""No entity value carries Tera syntax AutoKuma would try to render.
 
 AutoKuma runs every entity through the Tera template engine before it parses it
 (`autokuma/src/entity.rs`, `get_entity_from_settings`, unconditional). A value that Tera cannot
 render fails the whole entity, an entity that fails to parse counts as removed, and under
 `ON_DELETE=delete` — kept on purpose, see the DECIDED marker in `templates/deployment.yaml.j2` —
-a removed shared entity deletes every monitor that names it. That is how 107 monitors went on
-2026-09-18. The Liquid templates Kuma renders at send time use the same delimiters, so they
+a removed shared entity deletes every monitor that names it. The Liquid templates Kuma renders at send time use the same delimiters, so they
 travel inside a Tera `raw` block, which Tera strips. This walks every string in every rendered
 entity and refuses a delimiter outside such a block.
 """

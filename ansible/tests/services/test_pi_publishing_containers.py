@@ -8,7 +8,7 @@ can also silently drop a name it was written to cover, which is the failure this
 `selectattr('port', 'defined')` returning four names instead of five reads as a narrowing
 nobody sees, and the arm goes blind to whichever container fell out.
 
-So this asserts the derivation against the names it was written for on 2026-08-27, and
+So this asserts the derivation against the names it was written for, and
 asserts that the three known non-publishers stay out of it. A container legitimately added
 to or removed from the Pi changes the expected set here in the same commit that changes the
 inventory — that edit is the review point, which is exactly what an unpinned derivation
@@ -26,10 +26,7 @@ ENV_SECRET = (
     ANSIBLE / "roles" / "k8s" / "monitor-bridge" / "templates" / "env-secret.yaml.j2"
 )
 
-# Measured against the live glances payload, 2026-08-27: these report a `->` mapping.
-# dozzle was the fifth until it was retired 2026-08-29, node-exporter the fourth until it
-# became a host unit 2026-09-18 (#2005), glances the third until it retired the same day
-# (#2004; see daniel-pi.yml).
+# These report a `->` mapping in the live glances payload.
 EXPECTED_PUBLISHERS = {"alloy", "wg-easy"}
 # These report `ports: ""` permanently. A rule that flagged them would page forever.
 EXPECTED_NON_PUBLISHERS = {"docker-proxy", "autoheal", "docker-proxy-lifecycle"}

@@ -1,11 +1,9 @@
 """Every role `initial_setup.yml` includes sits where the deployer and land.sh can see it.
 
-Written for issue #1916. `nut_host` lived at `ansible/roles/nut_host/` — outside both
-`roles/setup/` and `roles/k8s/` — so PR #1915's change to its tasks matched no deploy tag,
-no `_BROAD_SETUP_PREFIXES` entry and no `land_reach` role dir. The landing reported
-`needs-manual-apply` for `initial_setup` alone, the deployer's `broad_applied` recorded the
-same, and `/usr/local/bin/ups-secondary-health.sh` stayed `0755` on both hosts until a hand
-run. The change landed on master and nothing said it was unapplied.
+A role outside both `roles/setup/` and `roles/k8s/` matches no deploy tag, no
+`_BROAD_SETUP_PREFIXES` entry and no `land_reach` role dir. A change to its tasks then lands on
+master with nothing saying it is unapplied: the landing reports `needs-manual-apply` for
+`initial_setup` alone, and the deployer's `broad_applied` records the same.
 
 Both mappers derive the setup plane from one shape, `ansible/roles/setup/<role>/`:
 `deploy_changes.role_of` on the deployer side, `land_reach._SETUP_ROLES_DIR` on the

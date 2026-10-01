@@ -1,4 +1,4 @@
-"""The push boundary caps `msg` so Discord cannot reject the alert (#2013).
+"""The push boundary caps `msg` so Discord cannot reject the alert.
 
 Kuma puts a push monitor's `msg` into the Discord DOWN embed as a field value capped at 1024
 chars and never truncates, so an oversized msg is a 400 and a page nobody receives. Each rule

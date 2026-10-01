@@ -7,8 +7,8 @@ of this file when their env vars are unset, and halts on a missing `SITE_ROOT`. 
 truncated the file would satisfy every "the owned lines are gone" assertion perfectly, so the
 survival check is not a nicety here; it is the half that can go wrong silently.
 
-`SECRET_KEY` moved from survivor to casualty on 2026-09-10 (#1491), when it gained a SOPS key
-and a Secret entry to be read from. Its sibling `S3_SECRET_KEY` is a real `hc/settings.py`
+`SECRET_KEY` is owned: the role renders it from a SOPS key through the Secret. Its sibling
+`S3_SECRET_KEY` is a real `hc/settings.py`
 name the role does NOT own, and is the prefix collision the column-0 anchor exists to survive.
 
 The fixture is shaped like the real file: the assignments the 2023 copy carries, plus the
@@ -115,7 +115,7 @@ def test_email_use_ssl_is_removed_too():
     assert removed == 1
 
 
-# --- the convention that made this script's first deploy a silent no-op -----------
+# --- the `__main__` guard convention for scripts piped into a pod -----------------
 
 FILES = Path(__file__).resolve().parents[1] / "files"
 TASKS = (Path(__file__).resolve().parents[1] / "tasks" / "main.yml").read_text()

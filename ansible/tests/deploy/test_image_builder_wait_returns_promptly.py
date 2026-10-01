@@ -2,14 +2,12 @@
 """Guards that k8s/image-builder's build wait ends as soon as the Job reaches EITHER outcome.
 
 `kubectl wait` takes one condition per invocation, and a failed Job never gets
-`condition=complete`. The role used to sequence the two waits with `||`, which reads as a race
-and is a fallback: the failed-wait could not start until the complete-wait had already burned
-the full `image_builder_timeout`. Measured 2026-09-10 on code-server (`image_builder_timeout:
-1800`), a Job that reached BackoffLimitExceeded 6s in still had the deploy blocked on it ~17
-minutes later, and would have sat there ~30 minutes (#1535).
+`condition=complete`. Sequencing the two waits with `||` reads as a race and is a fallback: the failed-wait cannot
+start until the complete-wait has burned the full `image_builder_timeout`, so a Job that
+reaches BackoffLimitExceeded in seconds still blocks the deploy for the whole timeout.
 
-The replacement is an `until:` poll naming both condition types, the shape k8s/cronjob-gate
-already uses. These tests evaluate that `until` through Ansible's own templar against the
+The role uses an `until:` poll naming both condition types instead, the shape
+k8s/cronjob-gate already uses. These tests evaluate that `until` through Ansible's own templar against the
 stdout each Job state produces, rather than asserting its text — a reworded expression that
 still stops on `Failed` must pass, and a rewritten one that does not must fail.
 
@@ -19,7 +17,7 @@ Three properties, the first two being the red-proof pair:
    `Failed` half is the whole change: it is what a one-sided wait cannot see.
 2. A Job reporting neither does NOT satisfy it. Without this half, an `until` that were simply
    true would pass property 1 while never waiting for a build at all.
-3. The retries and delay still span `image_builder_timeout`, so shortening the wait did not
+3. The retries and delay still span `image_builder_timeout`, so the poll cannot
    quietly shorten the deadline a slow first build depends on.
 
 Run: uv run pytest ansible/tests/deploy/test_image_builder_wait_returns_promptly.py
@@ -35,8 +33,7 @@ TASKS = ANSIBLE / "roles" / "k8s" / "image-builder" / "tasks" / "main.yml"
 
 WAIT = "Wait for the build to finish"
 
-# What `-o jsonpath={.status.conditions[*].type}` prints, read off live build Jobs on
-# 2026-09-10: a completed one carries SuccessCriteriaMet beside Complete.
+# What `-o jsonpath={.status.conditions[*].type}` prints, read off live build Jobs: a completed one carries SuccessCriteriaMet beside Complete.
 COMPLETE = "SuccessCriteriaMet Complete"
 FAILED = "Failed"
 RUNNING = ""
@@ -74,8 +71,8 @@ def _poll_satisfied(stdout: str) -> bool:
 def test_either_terminal_condition_ends_the_poll(conditions, state):
     """Both outcomes end the wait, and the FAILED one is the whole point of the change.
 
-    A failed build used to block the deploy for the full timeout — 15 minutes at the role
-    default, 30 at code-server's — while the Job had said so within seconds.
+    A failed build must not block the deploy for the full timeout — 15 minutes at the role
+    default, 30 at code-server's — when the Job has said so within seconds.
     """
     assert _poll_satisfied(conditions), (
         f"a Job whose conditions are {conditions!r} does not satisfy the poll, so a {state} "

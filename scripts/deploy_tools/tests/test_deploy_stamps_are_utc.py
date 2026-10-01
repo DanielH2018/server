@@ -4,7 +4,7 @@
 `deploy.sh`'s Python halves name its snapshot worktree and its `--detach` log after a stamp,
 and `gitops_tick.sh` builds the `journalctl --since` window from a `date` one. A stamp in host-local time
 is ambiguous across a DST fold and the window shifts with the host's zone; `-u` makes both
-independent of where the script runs (issue #2154). Both hosts run `Etc/UTC` today, so this
+independent of where the script runs. Both hosts run `Etc/UTC` today, so this
 guards a future zone change rather than a live defect.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_deploy_stamps_are_utc.py
@@ -64,7 +64,7 @@ def test_the_pattern_stays_linear_on_a_run_of_flags():
     assert time.perf_counter() - start < 1.0
 
 
-# deploy.sh stamps its snapshot and its --detach log in Python since #2412.
+# deploy.sh stamps its snapshot and its --detach log in Python.
 _PYTHON_STAMPERS = (
     REPO / "scripts" / "deploy_tools" / "deploy_under_locks.py",
     REPO / "scripts" / "deploy_tools" / "deploy_detach.py",

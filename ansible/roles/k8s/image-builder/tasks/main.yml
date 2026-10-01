@@ -1,15 +1,13 @@
 ---
 # Build one image inside the cluster and push it to the in-cluster registry.
 #
-# Written generically because three services in this fleet are built rather than pulled (n8n,
-# n8n-runners, and metabase/code-server behind them), and because the alternative — a build
-# block inside each service's role — would copy the securityContext reasoning into every one of
-# them, where it would drift.
+# Written generically because a build block inside each service's role would copy the
+# securityContext reasoning into every one of them, where it would drift.
 #
 # Callers set image_builder_name / _dockerfile / _context / _tag; see defaults/main.yml.
 #
 # EVERY BUILD PUSHES TWO NAMES for one manifest: the mutable `image_builder_tag` (`latest`) every
-# consumer references today, and an immutable `image_builder_content_tag` (`sha-<12 hex>`) derived
+# consumer references, and an immutable `image_builder_content_tag` (`sha-<12 hex>`) derived
 # from the build inputs. Both resolve to the same digest, so the digest comparisons below are
 # unaffected by which one a manifest names.
 #
@@ -19,8 +17,8 @@
 # build, the pre- and post-build digests are read from the same unchanged tag and compare equal,
 # so `k8s_rebuilt_images` correctly stays empty and no workload is queued for a rollout.
 #
-# Left unguarded, every dry run reached "Fail on an unsuccessful build" — check mode skips the
-# Job apply, so nothing ever succeeded — and failed the whole play with an empty build log.
+# Left unguarded, every dry run would reach "Fail on an unsuccessful build" — check mode skips
+# the Job apply, so nothing ever succeeds — and fail the whole play with an empty build log.
 #
 # THE BUILD IS ALSO SKIPPED when the rendered context is byte-identical to the last run's and
 # the registry already serves the tag. `image_builder_building` (below) is the single fact every
@@ -75,7 +73,7 @@
       sha-{{ ((lookup('template', 'context-configmap.yaml.j2') | from_yaml)['data']
               | dictsort | to_json | hash('sha256'))[:12] }}
 
-# Published for the roles that DEPLOY these images. Every one builds its own since #2813, but a
+# Published for the roles that DEPLOY these images. A
 # consumer reads `k8s_built_image_tags.get('<name>', 'latest')` in its own image pin,
 # so a deploy that skips the building role falls back to the mutable alias rather than naming a
 # tag nothing pushed.
@@ -107,7 +105,7 @@
     src: "{{ item }}.j2"
     dest: "/etc/rancher/k3s/manifests/build-{{ image_builder_name }}/{{ item }}"
     # 0600 and no_log because a build context is templated with the same variables everything
-    # else here is, so it CAN carry a secret even though neither of n8n's two files does today.
+    # else here is, so it CAN carry a secret even though no context file does.
     # Treated like a rendered Secret manifest rather than the 0644 a plain manifest gets, so the
     # first context that does carry one is already handled.
     mode: "0600"
@@ -121,7 +119,7 @@
   # This register IS the build gate — `template` already compares content, so nothing else has
   # to hash it. On a loop the flag is the OR across items, which is what the gate wants: either
   # file changing means rebuild. `no_log` censors the register's CONTENT, not its `changed`
-  # flag; measured 2026-08-22 in both the looped and unlooped shapes, because a suppressed flag
+  # flag; verified in both the looped and unlooped shapes, because a suppressed flag
   # would fail silently as a permanently stale image rather than as an error.
   register: image_builder_render
   when: not k8s_dry_run | bool
@@ -150,8 +148,8 @@
 # bearing rather than decorative.
 #
 # The read above asks about `:latest`, and `:latest` being served says nothing about whether the
-# hash tag a consumer references exists. The first deploy after this role started computing a
-# content tag is exactly that state: the context is unchanged, `:latest` is served, every other
+# hash tag a consumer references exists. The first deploy that computes a content tag is
+# exactly that state: the context is unchanged, `:latest` is served, every other
 # clause reads "nothing to do" — and no `sha-…` tag has ever been pushed, so a consumer naming one
 # would fail to pull. 404 here forces the build that creates it.
 #
@@ -176,9 +174,9 @@
 # A build that FAILS leaves its rendered context on disk, so the next run's template task
 # reports `ok`, the registry still serves the previous tag, and every other clause of the gate
 # below reads "nothing to do" — while the workload keeps running the OLD image behind a
-# `failed=0` recap. Observed 2026-09-10 on code-server, where a transient 429 from lscr.io
-# failed the build and the next deploy skipped straight to "Confirm the registry now serves the
-# built tag" (#1534). A failed build is exactly the state where the inputs are unchanged and a
+# `failed=0` recap. A transient 429 from the base-image registry is enough to fail a build and
+# send the next deploy straight to "Confirm the registry now serves the built tag". A failed
+# build is exactly the state where the inputs are unchanged and a
 # rebuild is nevertheless required.
 #
 # `--ignore-not-found`, so an ABSENT Job reads as empty output with rc 0 rather than an error.
@@ -205,8 +203,8 @@
   # A read, like the two digest reads around it — running it is what keeps check mode honest.
   check_mode: false
 
-# The gate. Every image here rebuilt on every full deploy before this existed, costing ~106s
-# across the seven of them for a result that was byte-identical five times out of seven.
+# The gate. Without it every full deploy rebuilds every image, costing ~106s across the seven
+# of them for a result that is usually byte-identical.
 #
 # It answers only "is there anything to build". Whether we are ALLOWED to build stays a separate
 # `not k8s_no_mutate` clause on each task below, deliberately not folded in here: that guard is
@@ -281,11 +279,11 @@
 # Polls BOTH terminal conditions, rather than waiting on one and falling back to the other.
 #
 # `kubectl wait` takes a single condition, and `--for=condition=complete` alone hangs until its
-# deadline when a build FAILS, because a failed Job never gets that condition. The previous
-# shape sequenced two waits with `||`, which is a fallback and not a race: the failed-wait could
-# not start until the complete-wait had already burned the whole timeout. Measured 2026-09-10 on
-# code-server, whose role sets `image_builder_timeout: 1800` — the Job reached BackoffLimitExceeded
-# 6s in and the task was still blocked on it ~17 minutes later (#1535). `backoffLimit: 0` in
+# deadline when a build FAILS, because a failed Job never gets that condition. Sequencing
+# two waits with `||` is a fallback and not a race: the failed-wait cannot start until the
+# complete-wait has burned the whole timeout. On code-server, whose
+# role sets `image_builder_timeout: 1800`, a Job that reaches BackoffLimitExceeded 6s in leaves
+# the task blocked ~17 minutes. `backoffLimit: 0` in
 # build-job.yaml.j2 is what makes that gap so wide: a failed build settles in seconds.
 #
 # The poll is the same shape k8s/cronjob-gate uses for the same reason, down to the jsonpath —
@@ -294,8 +292,7 @@
 #
 # `failed_when: false` covers a non-zero rc on the attempt that satisfied `until` — the Job
 # vanishing between two polls, say. It does NOT suppress retry exhaustion: a build that reaches
-# neither condition fails this task, which is the same thing the previous shape did when both
-# waits timed out.
+# neither condition fails this task.
 - name: Wait for the build to finish for {{ image_builder_name }}
   tags: [deploy]
   when:
@@ -435,9 +432,8 @@
 #   2. The digest did NOT move on this run, because the build short-circuited on a byte-identical
 #      context with the tag already served — while the pod in front of it is still stale from (1).
 #
-# Keying this on a digest change would see (1) and be blind to (2), which is the half that hides.
-# nut sat on a week-old image for 90 minutes across two deploys on 2026-08-27, behind a green 1/1
-# and a passing `probe.py health`, because run 2 short-circuited and reported nothing.
+# Keying this on a digest change would see (1) and be blind to (2), which is the half that hides:
+# run 2 short-circuits and reports nothing, behind a green 1/1 and a passing `probe.py health`.
 #
 # DECIDED: hangs off "Read the post-build digest", which is deliberately NOT gated on
 # image_builder_building — unlike the build, the result read and the failure paths above. That is
@@ -447,8 +443,8 @@
 - name: Record the registry digest for the drift gate of {{ image_builder_name }}
   tags: [deploy]
   # No `k8s_no_mutate` guard: this is recorded on a dry run and under --check too. n8n stamps
-  # this digest into its pod template, so skipping it there rendered `unstaged` and a dry run's
-  # render digest never matched a deploy's (#2588). The drift gate, the other reader, skips
+  # this digest into its pod template, so skipping it there would render `unstaged` and a dry
+  # run's render digest would never match a deploy's. The drift gate, the other reader, skips
   # itself on both modes (post_tasks/k8s_image_drift_gate.yml).
   ansible.builtin.set_fact:
     # noqa var-naming[no-role-prefix] — deliberately play-scoped, read by post_tasks/.

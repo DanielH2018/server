@@ -116,8 +116,8 @@ def test_a_closing_keyword_inside_a_sentence_is_stray(body):
         "**Fixes #12**",
         "Filed for later: #2509",
         "See #2509 for the follow-up.",
-        # The three shapes the corpus of 60 merged bodies turned up on 2026-09-24. A rule
-        # keyed on the LINE rather than the clause flagged all of them.
+        # The three shapes the corpus of merged PR bodies contains. A rule keyed on the
+        # LINE rather than the clause flagged all of them.
         "Closes #2428, closes #2429.",
         "Three test-tree issues from one fan-out batch. Closes #2379. Closes #2404.",
         "**`Closes #2413` — the SSH directory task hardened root's `.ssh`.**",
@@ -128,7 +128,7 @@ def test_a_deliberate_close_and_a_bare_reference_are_clean(body):
 
 
 def test_arm_merge_refuses_a_body_that_would_close_an_unfixed_issue(landing):
-    """Issue #2513: "not fixed: #N" closes #N on merge, so the arm refuses before merging."""
+    """A body saying "not fixed: #N" closes #N on merge, so the arm refuses before merging."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -250,7 +250,7 @@ def test_arm_merge_fallback_decision(state, mss, expected):
 
 
 def test_a_clean_pr_falls_through_to_a_direct_merge(landing):
-    """Issue #1008: --auto rejects a CLEAN PR; the fallback merges it directly."""
+    """--auto rejects a CLEAN PR; the fallback merges it directly."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -313,7 +313,7 @@ def test_a_merge_that_lands_while_arming_reads_as_success(landing):
 
 
 def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing):
-    """Issue #1029: --auto exited 0 on PR #1026 and autoMergeRequest stayed null."""
+    """--auto exited 0 but autoMergeRequest stayed null."""
     ln, calls = landing(
         Fakes(
             gh_views={
@@ -332,7 +332,7 @@ def test_an_auto_exit_0_with_no_auto_merge_request_merges_directly(landing):
 
 
 def test_an_unarmed_pr_that_is_not_clean_dies_rather_than_merging(landing):
-    """The reject half of #1029: direct-merging a BLOCKED PR would fail the same way."""
+    """The reject half: direct-merging a BLOCKED PR would fail the same way."""
     ln, calls = landing(
         Fakes(
             gh_views={

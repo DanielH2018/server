@@ -2,7 +2,7 @@
 """Unit tests for filter_by_platform in filter_plugins/toposort.py.
 
 This filter decides which containers a deploy touches at all. Its default is
-load-bearing: all 46 existing containers_list entries omit `platform`, so a
+load-bearing: existing containers_list entries omit `platform`, so a
 default of anything but "docker" would silently skip every service on the next
 deploy. The default-behaviour tests below are the guard against that.
 

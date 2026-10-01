@@ -16,9 +16,8 @@ import pytest
 import land_tags
 
 # A fixture, not live inventory. These tests pin the DERIVATION, and reading containers_list
-# would make them fail whenever a service is retired -- `dozzle` was in this file until it was
-# removed from the cluster on 2026-08-29. The live set is checked once, separately, by
-# test_the_shared_roles_are_still_undeclared.
+# would make them fail whenever a service is retired. The live set is checked once,
+# separately, by test_the_shared_roles_are_still_undeclared.
 _DECLARED = frozenset(
     {
         "artifacts",
@@ -124,12 +123,9 @@ def test_missing_changed_files_count_falls_back_rather_than_guessing():
 
 
 def test_a_build_role_pulls_in_the_workload_that_runs_its_image():
-    """PR #570's real shape: a build role must pull in the workload that runs its image.
+    """A build role must pull in the workload that runs its image.
 
-    Renovate bumped only the two n8n Dockerfiles. Deriving the build role alone built the images
-    and rolled nothing, because k8s_rebuilt_images is play-scoped -- the 2026-08-08 `@n8n/di`
-    failure, caught landing #570 on 2026-08-29. Since #2813 the n8n role builds its own images,
-    so the Dockerfiles derive the workload's tag directly.
+    The n8n role builds its own images, so the Dockerfiles derive the workload's tag directly.
     """
     files = [
         "ansible/roles/k8s/n8n/templates/Dockerfile.j2",
@@ -150,13 +146,13 @@ def test_an_ordinary_role_is_not_widened():
 
 
 def test_a_setup_plane_pr_is_not_nothing_to_deploy():
-    """PR #587's real shape: a setup-plane PR is not nothing-to-deploy.
+    """A setup-plane PR is not nothing-to-deploy.
 
     It carried no k8s or containers role, so zero deploy tags — but it changed the deployer and
-    land.sh reported `nothing-to-deploy` and exited 0 (2026-08-29). The deployer applies its own
-    role itself since #719, so the note is empty now and the landing is instead verified against the
-    deployer's state (`self_applied` below); what still needs a hand is a setup role
-    initial_setup.yml does not include.
+    land.sh reported `nothing-to-deploy` and exited 0. The deployer applies its own role itself, so
+    the note is empty and the landing is instead verified against the deployer's state
+    (`self_applied` below); what still needs a hand is a setup role initial_setup.yml does not
+    include.
     """
     files = [
         "ansible/roles/setup/k3s/defaults/main.yml",
@@ -169,9 +165,9 @@ def test_a_setup_plane_pr_is_not_nothing_to_deploy():
 
 
 def test_a_self_applied_setup_role_is_not_owed_to_a_hand():
-    """#723 changed gitops_deploy and renovate_notify — both applied by the tick — and land.sh
-    exited 1 with `needs-manual-apply` naming the two playbook runs the next tick was about
-    to perform itself (2026-09-01)."""
+    """gitops_deploy and renovate_notify are both applied by the tick, so land.sh must not
+    exit 1 with `needs-manual-apply` naming the two playbook runs the next tick is about
+    to perform itself."""
     files = [
         "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
@@ -231,9 +227,9 @@ def test_a_mixed_pr_reports_both_a_tag_and_a_manual_apply():
     assert land_tags.plane_note(files) != ""
 
 
-# PR #617's real 32-path file list, read from `gh pr view 617 --json files` on 2026-08-29.
-# 22 of its role directories have a containers_list entry; `manifests` and `volume-claim` do
-# not, and naming either in --tags makes deploy.sh refuse the whole list.
+# A real PR's 32-path file list, read from `gh pr view <n> --json files`. 22 of its role
+# directories have a containers_list entry; `manifests` and `volume-claim` do not, and
+# naming either in --tags makes deploy.sh refuse the whole list.
 _PR_617_FILES = [
     "ansible/roles/k8s/artifacts/defaults/main.yml",
     "ansible/roles/k8s/autofix-bridge/defaults/main.yml",
@@ -275,7 +271,7 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
 
     `manifests` and `volume-claim` have no containers_list entry, so including them made deploy.sh
     exit 2 and refuse the 22 valid services beside them -- land.sh printed nothing-to-deploy and 22
-    digest pins sat undeployed (2026-08-29).
+    digest pins sat undeployed.
     """
     tags, source = land_tags.derive(_PR_617_FILES, changed_files=len(_PR_617_FILES))
     assert source == "pr"
@@ -286,7 +282,7 @@ def test_pr_617_derives_its_services_and_not_the_shared_roles():
 
 
 def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plane():
-    """Dropped from the tags, the shared roles deploy through their callers instead (#2704).
+    """Dropped from the tags, the shared roles deploy through their callers instead.
 
     Dropped from the report with no callers to deploy would be the setup-plane silence again.
     """
@@ -294,9 +290,9 @@ def test_pr_617_deploys_the_shared_roles_callers_and_reports_only_the_setup_plan
     assert {"sonarr", "jellyfin"} <= reached["manifests"] & reached["volume-claim"]
     note = land_tags.plane_note(_PR_617_FILES)
     assert "manifests" not in note and "ansible/deploy.yml" not in note
-    # `k3s-bringup.yml`, NOT `initial_setup.yml`, which this asserted until 2026-09-01. The
-    # k3s role appears only in the bring-up playbook, so the old expectation was pinning a
-    # command that exits 0 having matched no task — see `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`.
+    # `k3s-bringup.yml`, NOT `initial_setup.yml`. The k3s role appears only in the bring-up
+    # playbook, so `initial_setup.yml` is a command that exits 0 having matched no task — see
+    # `_SETUP_ROLES_OUTSIDE_INITIAL_SETUP`.
     assert "ansible/k3s-bringup.yml --tags k3s" in note, (
         "roles/setup/k3s is in this PR too"
     )
@@ -338,11 +334,11 @@ def test_the_shared_roles_are_still_undeclared(monkeypatch):
 
 
 def test_a_secrets_rotation_is_flagged():
-    """PR #695's real shape: a secrets rotation touching no role derives zero tags.
+    """A secrets rotation touching no role derives zero tags.
 
     It rotated `ruleset_drift_push_token` and touched no role at all, so land.sh reported
     `nothing-to-deploy` and exited 0. Both consumers -- the uptime-kuma tile and the gitops_deploy
-    pusher cron -- kept rendering the old value (2026-09-01). A secret's value lives in no role's
+    pusher cron -- kept rendering the old value. A secret's value lives in no role's
     template, so changed-file tag scoping is structurally blind to a rotation and the note is the
     only signal.
     """
@@ -401,17 +397,17 @@ def test_a_secrets_rotation_beside_a_service_is_flagged():
     assert land_tags.plane_note(files) != ""
 
 
-# --- a broad path whose change is comments only (issue #848) --------------------------------
+# --- a broad path whose change is comments only --------------------------------
 #
-# PR #843 changed three comments in `roles/setup/k3s/defaults/main.yml` and land.sh printed
+# A PR that changes three comments in `roles/setup/k3s/defaults/main.yml` must not print
 # `needs-manual-apply`, naming `k3s-bringup.yml --tags k3s` for a file whose rendered content
-# had not moved. The operator either runs a bring-up playbook for three comments or learns to
+# has not moved. The operator either runs a bring-up playbook for three comments or learns to
 # second-guess the verdict, and the second is the expensive one: `needs-manual-apply` is
 # load-bearing for the changes that genuinely need it.
 #
-# The path was never in `_BROAD_MANUAL_PREFIXES` -- those are the three bring-up playbooks --
-# so the comment-only read that shipped with PR #746 could not reach it. It is an UNROUTABLE
-# setup role: k3s lives in k3s-bringup.yml rather than initial_setup.yml.
+# The path is not in `_BROAD_MANUAL_PREFIXES` -- those are the three bring-up playbooks -- so
+# the comment-only read for those cannot reach it. It is an UNROUTABLE setup role: k3s lives
+# in k3s-bringup.yml rather than initial_setup.yml.
 #
 # `quiet` is the set `deploy_tags.comment_only_paths` returns from the PR's own diff. These
 # tests pass it directly; the diff read itself is covered by the deployer's own suite
@@ -426,7 +422,7 @@ _K3S_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 
 
 def test_a_comment_only_setup_role_edit_is_owed_to_nobody():
-    """PR #843's file list, with its one broad path read as comments only."""
+    """A file list with one broad path read as comments only."""
     assert land_tags.plane_note(_PR_843, quiet={_K3S_DEFAULTS}) == ""
     assert land_tags.self_applied(_PR_843, quiet={_K3S_DEFAULTS}) is False
 

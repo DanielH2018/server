@@ -1,16 +1,11 @@
 ---
-# Dispatcher. This role used to be install-only, gated in initial_setup.yml by
-# `when: has_docker` — so flipping a host to has_docker: false skipped it entirely and
-# nothing declarative ever reaped what Docker left behind. daniel-server's 2026-08-14
-# uninstall was therefore done imperatively, and it missed things (a still-enabled
-# docker-compose-qbittorrent.service Requires= a docker.service that no longer exists,
-# plus the redeploy/tdarr crons of retired Compose services). The role now owns both
-# directions and is included unconditionally; has_docker chooses which half runs.
+# Dispatcher. The role owns both directions and is included unconditionally; has_docker
+# chooses which half runs, so flipping a host to has_docker: false reaps what Docker left
+# behind instead of skipping the role.
 #
 # Static imports, not include_tasks. A dynamic include is itself a task that `--tags`
-# judges first, and these two carried no tags, so `--tags docker-daemon` skipped the include
-# and reached nothing inside it (measured 2026-09-18: `ok=17 changed=2`, all of them
-# optimize_pi; #1998). Tagging the include would not help either -- an include's tags
+# judges first, and these two carry no tags, so `--tags docker-daemon` would skip the include
+# and reach nothing inside it. Tagging the include would not help either -- an include's tags
 # inherit onto every task it loads, so every granular tag would select every task. An
 # import inlines the tasks at parse time, each keeps its own tags, and the `when:` below is
 # applied to each of them.

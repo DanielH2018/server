@@ -22,9 +22,9 @@ from renovate_rebase import (
 
 BODY = f"This PR contains the following updates:\n\n---\n\n{UNTICKED}\n\nSome text\n"
 
-# The shapes `gh pr view --json statusCheckRollup` really returns, copied off PRs #2335
-# (soaking) and #2620 (soak over) on 2026-09-26. A CI check is a `CheckRun` with
-# `name`/`conclusion`; the soak is a `StatusContext` with `context`/`state`.
+# The shapes `gh pr view --json statusCheckRollup` really returns, copied off a soaking
+# PR and a PR whose soak is over. A CI check is a `CheckRun` with `name`/`conclusion`;
+# the soak is a `StatusContext` with `context`/`state`.
 CI_RUN = {
     "__typename": "CheckRun",
     "name": "pytest (shard 1 of 6)",
@@ -156,8 +156,8 @@ def test_main_refuses_to_tick_a_soaking_pr():
 
 
 def test_main_names_the_soak_on_a_pr_whose_box_is_already_ticked():
-    """#2335's state: the box was ticked, Renovate answered 'Rebase not applied', and exit 0
-    read as 'the rebase is coming' for 38 hours (#2368)."""
+    """A soaking PR's state: the box was ticked, Renovate answered 'Rebase not applied', and exit 0
+    would read as 'the rebase is coming'."""
     gh, calls = _gh(BODY.replace(UNTICKED, TICKED), rollup=[SOAK_PENDING])
     out = io.StringIO()
     assert main(["123"], gh=gh, out=out) == 3
@@ -190,7 +190,7 @@ def test_a_pending_or_absent_soak_status_is_not_cleared():
 
 
 def test_retick_unticks_then_reticks_a_spent_box_after_the_soak():
-    """#2655: two separate edits, because one write of an unchanged body changes nothing."""
+    """Two separate edits, because one write of an unchanged body changes nothing."""
     ticked = BODY.replace(UNTICKED, TICKED)
     gh, calls = _gh(ticked, rollup=[SOAK_DONE])
     out = io.StringIO()

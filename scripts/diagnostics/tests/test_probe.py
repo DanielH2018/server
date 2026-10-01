@@ -85,8 +85,8 @@ def test_k8s_service_ip_args_target_the_service():
     assert "homelab" in argv
 
 
-# These replace the `probe.py metric … | python3 -c "…reshape JSON…"` one-liners
-# that kept prompting: the reshape now lives in the allow-listed script instead.
+# The reshape lives in the allow-listed script, so `probe.py metric … | python3
+# -c "…reshape JSON…"` one-liners are not needed.
 
 
 def test_format_metric_vector_prints_labels_and_value_per_series():
@@ -204,8 +204,8 @@ def test_monitors_subcommand_parses():
 
 
 def test_pi_subcommand_accepts_only_containers():
-    # `pi fs`/`pi mem` streamed the glances API until it retired (#2004); a stale habit must
-    # fail at the parser rather than reach a curl that no longer exists.
+    # `pi fs`/`pi mem` do not exist; a stale habit must fail at the parser rather
+    # than reach a curl that no longer exists.
     p = cli_parser._build_parser()
     assert p.parse_args(["pi", "containers"]).subpath == "containers"
     with pytest.raises(SystemExit):
@@ -245,8 +245,8 @@ def test_loki_query_defaults_to_formatted_with_json_escape_hatch():
     assert p.parse_args(["loki-query", '{job="x"}', "--json"]).json is True
 
 
-# Replaces `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3`,
-# which both prompted AND leaked the key into argv / shell history / the log.
+# A `docker exec <arr> curl -H "X-Api-Key: <hex>" …/api/… | python3` pipeline
+# both prompts AND leaks the key into argv / shell history / the log.
 
 
 def test_arr_url_sonarr_defaults_to_api_v3_and_port_8989():
@@ -300,9 +300,9 @@ def test_arr_request_never_puts_key_in_argv():
 
 
 def test_resolve_arr_ip_uses_kubectl_not_docker(monkeypatch):
-    # Regression guard for the dead command: sonarr/radarr/prowlarr have run as k8s
-    # Deployments since 2026-08-07 and have no Docker container to `docker inspect` an IP
-    # from — resolve_arr_ip must reach the app's ClusterIP via kubectl instead.
+    # Regression guard for the dead command: sonarr/radarr/prowlarr run as k8s
+    # Deployments and have no Docker container to `docker inspect` an IP from —
+    # resolve_arr_ip must reach the app's ClusterIP via kubectl instead.
     monkeypatch.setattr(core, "k8s_namespace", lambda: "homelab")
 
     class FakeResult:
@@ -401,7 +401,7 @@ def test_get_reports_curl_failure_as_status_zero(monkeypatch):
 
 
 def test_get_reports_a_curl_that_never_returns_as_status_zero(monkeypatch):
-    """The subprocess timeout is what turns a hung curl into a status-0 reply (issue #2156)."""
+    """The subprocess timeout is what turns a hung curl into a status-0 reply."""
 
     def hang(argv, **kw):
         raise subprocess.TimeoutExpired(argv, kw["timeout"])

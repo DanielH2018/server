@@ -1,19 +1,17 @@
 """Guards for eval-run.sh's commit-failure path (initial_setup role, tag `crons`).
 
-This cron carried the body that parked every deploy on daniel-box: `git commit || git reset`
-unstages and nothing more, so evals/history.json stayed MODIFIED in the primary checkout,
-deploy_git.py read the porcelain output as dirty, and gitops_deploy.py took its healthy-skip
-path while still writing `last_run`. docs-refresh.sh had the identical body and did exactly
-that on 2026-09-04 and again on 2026-09-05, 25 consecutive skipped ticks the second time
-(#1155). This is the same fix one script over, with one difference the tests below pin: the
-staged file here is a week of paid API calls, not generator output, so it is copied outside the
-checkout before the tree is put back.
+This cron's commit-failure path must not park every deploy on daniel-box. `git commit || git
+reset` unstages and nothing more, so evals/history.json stays MODIFIED in the primary
+checkout, deploy_git.py reads the porcelain output as dirty, and gitops_deploy.py takes its
+healthy-skip path while still writing `last_run`. docs-refresh.sh carries the same fix, with
+one difference the tests below pin: the staged file here is a week of paid API calls, not
+generator output, so it is copied outside the checkout before the tree is put back.
 
 The functions are executed, not pattern-matched. Each is lifted out of the template by name and
 sourced into a scratch git repository, so what runs is the production code rather than a copy of
 its logic. Every behaviour carries the half that proves the test can go red.
 
-`say_failure` is here for the same reason one script over (#1188): prek keeps going past a
+`say_failure` is here for the same reason as in docs-refresh.sh: prek keeps going past a
 failure and mkdocs-strict is the last hook, so an unfiltered tail of a rejected commit always
 ends `...Passed` and names nothing. Its fallback carries more weight here than in docs-refresh —
 two of the three call sites pass a log that has never been near a hook.
@@ -37,7 +35,7 @@ CRONS = (ANSIBLE / "roles/setup/initial_setup/tasks/crons.yml").read_text()
 # every test below sourcing an empty string and passing on nothing at all.
 SOURCED = ("say_failure", "keep_failure_log", "restore_history")
 
-# The pre-fix body, kept as a fixture so the tests that accept the real one can be shown to
+# A bare `git reset` body, kept as a fixture so the tests that accept the real one can be shown to
 # reject something. Without it every assertion below would pass on a `git reset` that never
 # cleaned anything, which is the state this file exists to make impossible.
 OLD_BODY = "restore_history() { git reset >/dev/null 2>&1; }"
@@ -126,7 +124,7 @@ def test_the_restore_leaves_no_modified_history_behind(tmp_path):
 
 
 def test_the_old_reset_only_body_leaves_the_tree_dirty(tmp_path):
-    """REJECT: the pre-fix body against the same fixture, which is what parked the deployer.
+    """REJECT: a bare `git reset` body against the same fixture, which is what parks the deployer.
 
     `git reset` unstages and nothing else, so the file stays modified and `git status
     --porcelain` still prints it — the one thing gitops_deploy.py reads to decide it must skip.
@@ -158,8 +156,8 @@ def test_the_restore_keeps_the_sweep_outside_the_checkout(tmp_path):
 def test_a_copy_that_failed_is_reported_as_a_lost_sweep(tmp_path):
     """REJECT: the note must not claim a copy that never happened.
 
-    `cp` is silenced, so a $STAMP_DIR that cannot be created — initial_setup not yet run since
-    this landed, a full disk, wrong ownership — would otherwise leave the alert asserting
+    `cp` is silenced, so a $STAMP_DIR that cannot be created — initial_setup not yet run, a
+    full disk, wrong ownership — would otherwise leave the alert asserting
     `sweep kept at <path>` with nothing at that path. An alert reporting an outcome it did not
     confirm is the failure mode the rest of this script exists to keep out.
     """
@@ -190,7 +188,7 @@ def test_the_restore_leaves_no_untracked_history_behind(tmp_path):
     """A history.json with no HEAD version needs `rm`, not `git checkout HEAD --`.
 
     The checkout fails on it and leaves the file UNTRACKED, and `git status --porcelain` counts
-    untracked — so a checkout-only fix parks the deployer just as surely as the old body did.
+    untracked — so a checkout-only fix parks the deployer just as surely as a bare `git reset` does.
     """
     repo, stamp = _tree(tmp_path), tmp_path / "stamp"
     _bash(
@@ -240,9 +238,9 @@ def _alert(log_text: str, tmp_path: Path) -> str:
 def test_the_alert_names_the_failing_hook(tmp_path):
     """ACCEPT: prek keeps going past a failure and mkdocs-strict is the last hook.
 
-    The 400-byte tail of the whole run therefore always ends `...Passed`. This log is the shape
-    of the 2026-09-04 and 2026-09-05 docs-refresh alerts: the failure is early and buried under
-    far more than 400 bytes of later output, so both readers saw only `Passed` lines.
+    The 400-byte tail of the whole run therefore always ends `...Passed`. This log has that
+    shape: the failure is early and buried under far more than 400 bytes of later output, so
+    a plain tail sees only `Passed` lines.
     """
     log = (
         "Check YAML.........Passed\n"
@@ -278,10 +276,10 @@ def test_the_alert_falls_back_to_the_plain_tail_when_no_hook_failed(tmp_path):
 
 
 def test_neither_cron_tails_the_whole_log_unfiltered():
-    """The plain-tail body is the bug #1188 and #1162 fixed; keep it out of both scripts.
+    """The plain-tail body is the bug; keep it out of both scripts.
 
-    The two crons share the failure-alert shape, and eval-run kept the pre-#1162 body for a day
-    after docs-refresh lost it. A guard on one script only would let the next one drift back.
+    The two crons share the failure-alert shape. A guard on one script only would let the next
+    one drift back.
     """
     for name, text in (("eval-run", SCRIPT), ("docs-refresh", DOCS_REFRESH)):
         assert 'say_failure() { alert "$1: $(tr' not in text, (
@@ -295,8 +293,8 @@ def test_neither_cron_tails_the_whole_log_unfiltered():
 def test_neither_cron_reads_the_exit_code_through_a_negation():
     """`if ! git commit` makes `$?` the status of the negation, which is always 0.
 
-    Both scripts report git's exit code now, because "hook rejection?" was a guess: #1155 was
-    filed with the cause undiagnosed precisely because the alert named none.
+    Both scripts report git's exit code, because "hook rejection?" is a guess and an alert
+    that names no cause leaves the failure undiagnosed.
     """
     for name, text in (("eval-run", SCRIPT), ("docs-refresh", DOCS_REFRESH)):
         # Anchored to a statement, not a substring: both scripts name the rejected form in the

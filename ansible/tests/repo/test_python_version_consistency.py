@@ -6,7 +6,7 @@ copy can't silently leave CI testing a different interpreter than the repo targe
 copied into policy code and fixtures" anti-pattern). Fails the instant any copy drifts.
 
 The comparison is on major.minor. `.python-version` names the minor the repo targets and stays
-two-part; a workflow pin is three-part (#2152), because a two-part `python-version:` has
+two-part; a workflow pin is three-part, because a two-part `python-version:` has
 setup-python resolve the patch from whatever the runner's toolcache holds that day, and only a
 full literal moves through Renovate. A workflow pin on a different minor still fails here.
 """
@@ -67,7 +67,7 @@ def test_ci_workflows_pin_the_canonical_python():
 
 
 def test_ci_workflows_pin_a_full_patch_release():
-    """The rejecting half of #2152: a two-part `python-version: "3.14"` floats on the toolcache."""
+    """The rejecting half of the three-part rule: a two-part `python-version: "3.14"` floats on the toolcache."""
     pins = _workflow_pins()
     assert pins, (
         "no python-version pins found in .github/workflows — regex or layout changed"

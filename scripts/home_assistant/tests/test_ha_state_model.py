@@ -351,9 +351,7 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
     structurally upstream of the import, so it stays green either way.
 
     Red-proof: delete the `scripts/` sys.path insert in ha_state_model.py and this fails
-    with `ModuleNotFoundError: No module named 'diagnostics'`. It used to need a SECOND
-    insert adding `scripts/diagnostics` itself, because the probe modules imported each
-    other by bare name; they are the `probe_lib` package now, so one insert does it.
+    with `ModuleNotFoundError: No module named 'diagnostics'`.
     """
     import os
     import sys

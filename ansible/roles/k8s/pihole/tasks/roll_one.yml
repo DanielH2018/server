@@ -4,8 +4,8 @@
 #
 # Skipped entirely when the shared apply just created the Deployment (mirrors the guard in
 # roles/k8s/manifests/tasks/main.yml): its pod has not appeared yet, so a `rollout restart` here
-# races the initial rollout instead of following it. That apply only ever creates instance 1 since
-# #2884, so for pihole-2 the block runs and apply_instance_2.yml carries the `created` guard
+# races the initial rollout instead of following it. That apply only ever creates instance 1, so
+# for pihole-2 the block runs and apply_instance_2.yml carries the `created` guard
 # instead — it has to, because it is the task that would do the creating.
 - name: Roll instance if this run did not just create it {{ pihole_instance }}
   tags: [deploy]
@@ -36,9 +36,9 @@
       changed_when: false
 
     # The wait above cannot tell a serving sibling from a terminating one. A pod that has begun
-    # terminating keeps phase `Running` and condition `Ready` for its whole grace period, so on
-    # 2026-09-28 the check passed against a `pihole-2` pod that was already going away and the
-    # play restarted `pihole` into a LAN-wide DNS outage it reported as failed=0 (#2884).
+    # terminating keeps phase `Running` and condition `Ready` for its whole grace period, so the
+    # check can pass against a sibling pod that is already going away, and the play would restart
+    # this instance into a LAN-wide DNS outage it reports as failed=0.
     #
     # Both Deployments are `replicas: 1` with `Recreate`, so the sibling legitimately has exactly
     # one pod here and none of it terminating. Any `deletionTimestamp` at all is therefore the
@@ -57,7 +57,7 @@
       failed_when: (pihole_sibling_terminating.stdout | default('') | trim) != ''
 
     # Instance 2's Deployment is applied HERE, not by the shared role, and this is what makes an
-    # image-pin bump reach the two instances one at a time (#2884). It runs after the checks
+    # image-pin bump reach the two instances one at a time. It runs after the checks
     # above, so instance 1 is serving before instance 2's pod template is allowed to change.
     - name: Apply the second Pi-hole instance's Deployment
       ansible.builtin.include_tasks: apply_instance_2.yml
@@ -67,17 +67,14 @@
     # image-pin bump does -- and only the restart is skipped: the checks above and the rollout
     # wait below still run, so the play follows that roll instead of adding a second one.
     #
-    # Which apply depends on the instance, and until #2884 this comment claimed the play followed
-    # the shared apply's roll "one instance at a time", which for an image bump was false: that
-    # apply carried both Deployments and rolled both in the same second. It now carries instance 1
+    # Which apply depends on the instance. The shared apply carries instance 1
     # alone (`manifests_rolled_by_apply`), and instance 2 is rolled by apply_instance_2.yml above
     # (whose verdict arrives as `pihole_k8s_rolled_by_own_apply`, keyed by instance name the
     # same way, so the gate below reads one shape for both) after instance 1 is serving again.
     #
-    # A second roll here deleted the pod the apply had just created
-    # while the kubelet was mid-pull, and on these Recreate Deployments the wait below sat
-    # out the whole pull before the next ReplicaSet could appear (#1994, the self-rollout
-    # half of #1988). `manifests_rolled_by_apply` is the shared role's fingerprint verdict, keyed
+    # A second roll here would delete the pod the apply had just created
+    # while the kubelet is mid-pull, and on these Recreate Deployments the wait below would sit
+    # out the whole pull before the next ReplicaSet could appear. `manifests_rolled_by_apply` is the shared role's fingerprint verdict, keyed
     # by workload name; a name it never fingerprinted (an image-only trigger, where the
     # template is unchanged) reads false and restarts, as it must.
     - name: Restart Pi-hole instance {{ pihole_instance }}
@@ -89,7 +86,7 @@
       # task and when it never ran at all, which is exactly "no restartedAt was stamped".
       register: pihole_k8s_restarted
       when:
-        # The trigger, per instance (#3127, mirroring #3115). The include in main.yml also fires
+        # The trigger, per instance. The include in main.yml also fires
         # on rendered bytes alone for pihole-2, because it has to run apply_instance_2.yml to
         # learn whether that apply changed anything, so the restart re-checks the verdicts here.
         # Each config trigger is the render AND the matching apply's own `changed`: the shared
@@ -116,7 +113,7 @@
       become: true
       changed_when: false
 
-    # pihole-2 only, and only after the wait above proved the roll finished (#2902). The release
+    # pihole-2 only, and only after the wait above proved the roll finished. The release
     # record was written before this file ran, and for pihole-2 it could not decide `restart` at
     # all — `rolled_by_role: true` in tasks/main.yml has the derivation. This is the moment the
     # answer exists: the restart above either ran, stamping a `restartedAt` newer than the

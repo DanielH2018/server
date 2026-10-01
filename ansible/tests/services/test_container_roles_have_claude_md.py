@@ -1,10 +1,9 @@
 """Every ansible/roles/containers/ role has a CLAUDE.md, and none of them is over the ceiling.
 
-Written for issue #2920. The character ceiling from #2826 reached two of the three role planes:
-`ansible/tests/k8s/test_k8s_roles_have_claude_md.py` walks `ansible/roles/k8s/` and
-`ansible/tests/setup/test_setup_roles_have_claude_md.py` walks `SETUP_ROLES`. Nothing walked
-`CONTAINER_ROLES`, so `wg-easy/CLAUDE.md` sat at 8,974 characters — over the inject hook's
-budget, which means a session read it truncated to its head — and no test said so.
+The character ceiling applies to all three role planes:
+`ansible/tests/k8s/test_k8s_roles_have_claude_md.py` walks `ansible/roles/k8s/`,
+`ansible/tests/setup/test_setup_roles_have_claude_md.py` walks `SETUP_ROLES`, and this guard
+walks `CONTAINER_ROLES`. A doc over the inject hook's budget is read truncated to its head.
 
 The unit and the ceiling come from `_doc_size`, the module the other two guards share, so all
 three planes agree on what the ceiling is and on what a justified `OVER_CEILING` entry must say.
@@ -19,14 +18,11 @@ There is no warning band here. The band reports a doc approaching the ceiling th
 doc easy to miss; this plane is five roles on one host, and the setup guard carries no band
 either.
 
-`OVER_CEILING` starts EMPTY: `wg-easy`'s retired peer-pull history moved out to
-`ansible/roles/k8s/pi-peer-backup/CLAUDE.md`, which owns that mechanism, in the commit that
-added this guard. A plane whose docs all fit needs no exemptions, and minting one on day one
+`OVER_CEILING` is EMPTY. A plane whose docs all fit needs no exemptions, and minting one
 would be the loosening half of the ratchet.
 
 Red-proof pairs use fixture roles under `tmp_path`, and non-vacuity pins both a census floor
-and `wg-easy` by name — the role the issue was filed on, and the one a broken glob would stop
-measuring.
+and `wg-easy` by name — the one a broken glob would stop measuring.
 """
 
 from pathlib import Path
@@ -40,7 +36,7 @@ MIN_NON_BLANK_LINES = 8
 # Roles whose CLAUDE.md is allowed over MAX_CHARS, each with the reason. An entry is a
 # justification, not a waiver: it names the operating rule that cannot move to a docs/ page or
 # to the role that owns the mechanism, and the section to move out next. A doc that grows past
-# its recorded count fails (#2679), and an entry for a doc that has since shrunk fails too, so
+# its recorded count fails, and an entry for a doc that has since shrunk fails too, so
 # the list shrinks rather than settling. Same shape as the k8s and setup planes' lists.
 OVER_CEILING: dict[str, str] = {}
 
@@ -48,9 +44,9 @@ OVER_CEILING: dict[str, str] = {}
 def _role_dirs(roles_dir: Path = CONTAINER_ROLES) -> list[Path]:
     """Every role under `roles_dir`, a dotted directory and a retired role's shell skipped.
 
-    A shell is a directory holding only a gitignored `__pycache__/` after the deployer's
-    fast-forward removed the role's tracked files; reading it as a role made this guard raise
-    `FileNotFoundError` on its missing `CLAUDE.md` (#2964).
+    A shell is a directory holding only a gitignored `__pycache__/`, left after the deployer's
+    fast-forward removes a role's tracked files; reading it as a role would raise
+    `FileNotFoundError` on its missing `CLAUDE.md`.
     """
     return [d for d in role_dirs(roles_dir) if not d.name.startswith(".")]
 
@@ -96,7 +92,7 @@ def test_every_container_role_has_an_adequate_claude_md():
 def test_census_finds_the_pi_roles_it_must_measure():
     """Non-vacuity, per CLAUDE.md's "a check that finds its own subject by pattern" rule.
 
-    `wg-easy` is the role #2920 was filed on; `common` is the include-only shared deploy path,
+    `wg-easy` is a role a broken census must still find; `common` is the include-only shared deploy path,
     which is the member a guard copied from the k8s plane would have failed on its deploy tag.
     """
     found = {d.name for d in _role_dirs()}

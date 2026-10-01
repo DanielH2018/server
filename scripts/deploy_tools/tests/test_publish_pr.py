@@ -1,4 +1,4 @@
-"""publish_pr.py: the sequence three crons used to carry inline, now executed rather than grepped.
+"""publish_pr.py: the sequence three crons run, executed rather than grepped.
 
 The textual guards in ansible/tests/setup/test_cron_scripts_publish_via_pr.py pinned four
 properties of the inline block -- a PR is opened, only the run's branch is pushed, the failure
@@ -112,7 +112,7 @@ def test_a_failed_push_leaves_the_commit_local_and_says_so():
 def test_a_failed_push_deletes_the_dead_local_branch():
     """The branch never reached origin, so it is a dead local ref at the same commit as
     master. Left behind, a retry inside the same UTC minute fails at `git branch` with
-    "already exists" and reports the wrong cause (issue #1086)."""
+    "already exists" and reports the wrong cause."""
     rec = Recorder(
         {"git push": _cp(1, err="remote: declined due to repository rule violations")}
     )
@@ -143,7 +143,7 @@ def test_a_failed_reset_reports_master_still_ahead_and_stops_before_the_pr():
     """A reset failure (index lock, tree dirtied between the guard and here) must not be
     swallowed: pressing on would report "PR opened ... with auto-merge" while master is
     still one commit ahead of origin, and gitops-deploy's --ff-only parks silently once the
-    squash lands under a new SHA (issue #1086)."""
+    squash lands under a new SHA."""
     rec = Recorder({"git reset": _cp(1, err="Unable to create '.git/index.lock'")})
     out = _publish(rec)
     assert out.rc == publish_pr.PUBLISH_PUSHED_NO_PR
@@ -311,7 +311,7 @@ def test_a_remote_head_with_no_open_pr_is_the_stuck_code():
 
 
 def test_an_open_pr_on_a_sibling_branch_does_not_clear_an_orphan():
-    """Two heads under one prefix is the state issue #1066 says orphans accumulate into.
+    """Two heads under one prefix is the state orphans accumulate into.
 
     Matching the PR by prefix would return the sibling's number, downgrade the stuck state to
     the benign one, and name the wrong branch while doing it.

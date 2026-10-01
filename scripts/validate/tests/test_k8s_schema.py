@@ -6,9 +6,6 @@ and a schema version that drifts from the cluster. The CRD half covers what the 
 catalog schemas do catch (a misspelled key, a missing required field) and, deliberately, what
 they do not.
 
-Split out of scripts/validate/tests/test_validate_k8s_manifests.py on 2026-09-04, with the
-code it covers.
-
 Run: uv run pytest scripts/validate/tests/test_k8s_schema.py
 """
 
@@ -75,9 +72,8 @@ def test_a_wrong_type_is_rejected():
 
 def test_a_crd_falls_through_to_its_vendored_schema():
     # Traefik's IngressRoute and friends define their shape in the cluster, not in the upstream
-    # spec, so kubernetes_validate raises SchemaNotFoundError for every one. This used to be
-    # reported as skipped and counted — honest, but 60 objects went unvalidated. They now fall
-    # through to the vendored catalog schema, so a well-formed one PASSES rather than skips.
+    # spec, so kubernetes_validate raises SchemaNotFoundError for every one. They fall through
+    # to the vendored catalog schema, so a well-formed one PASSES rather than skips.
     crd = {
         "apiVersion": "traefik.io/v1alpha1",
         "kind": "IngressRoute",
@@ -179,8 +175,8 @@ def test_a_cap_one_minor_behind_the_schema_is_rejected():
 
 # ── CRD schema validation ───────────────────────────────────────────────────────────────────
 # kubernetes_validate has no schema for a CRD — a CRD's schema lives in the cluster, not in the
-# upstream OpenAPI spec — so every Traefik object in this tree used to be counted as skipped and
-# checked by nothing: 46 IngressRoute, 11 Middleware, 3 TLSOption. They now validate against the
+# upstream OpenAPI spec — so every Traefik object in this tree (IngressRoute, Middleware,
+# TLSOption) would be counted as skipped and checked by nothing. They validate against the
 # schemas vendored under scripts/validate/schemas/.
 
 

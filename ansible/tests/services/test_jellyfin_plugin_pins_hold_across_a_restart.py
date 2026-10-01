@@ -3,12 +3,12 @@
 
 Jellyfin's own `Update Plugins` scheduled task downloads a newer build of an installed plugin
 into its own `<Name>_<Version>` directory, seconds after startup, and the server then loads the
-newest one it finds. Until #2905 every installer here exited on `already installed` BEFORE its
-superseded-version sweep, so that unpinned directory survived every restart: the pod ran Media
-Cleaner 3.7.0.101109 against a repo that pinned 3.4.0.101109, unverified by any checksum.
+newest one it finds. An installer that exited on `already installed` BEFORE its
+superseded-version sweep would leave that unpinned directory in place across every restart,
+running a build no checksum verified.
 
-Two behaviours close that, and both live on the path where the pinned version is already on the
-PVC — the path the old early exit skipped:
+Two behaviours prevent that, and both live on the path where the pinned version is already on the
+PVC:
 
 - the superseded sweep runs, removing a sibling directory the pin does not name;
 - `autoUpdate: false` is written into the installed plugin's `meta.json`, which is what stops
@@ -139,7 +139,7 @@ def test_an_installer_turns_auto_update_off_on_every_start(container, tmp_path):
 
 
 def test_the_sweep_guard_rejects_an_installer_that_exits_early(tmp_path):
-    """Red proof: the #2905 shape — an early exit before the sweep — must fail the check."""
+    """Red proof: an early exit before the sweep must fail the check."""
     script = _script("install-media-cleaner")
     early = '    print("media-cleaner " + VERSION + " already installed")'
     assert early in script, "fixture drift: the already-installed branch moved"

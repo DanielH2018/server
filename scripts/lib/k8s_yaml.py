@@ -1,12 +1,8 @@
 #!/usr/bin/env python3
 """YAML parsing for rendered k8s manifests: the strict loaders and the ``lookup()`` stub.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports
-``yaml_error``, ``make_lookup`` and the loaders, so an existing importer keeps working.
-
-``StrictKeyLoader`` and ``AppTagLoader`` carried a leading underscore while they were private
-to the validator. They cross a module boundary now — ``lib/k8s_pvc.py``'s ``parse_docs`` loads
-with the strict one — so they carry public names.
+``StrictKeyLoader`` and ``AppTagLoader`` have public names because they cross a module
+boundary: ``lib/k8s_pvc.py``'s ``parse_docs`` loads with the strict one.
 """
 
 import sys as _sys

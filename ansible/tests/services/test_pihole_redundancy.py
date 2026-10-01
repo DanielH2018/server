@@ -3,16 +3,16 @@
 Each of them fails green — the deploy succeeds and DNS goes down anyway:
 
   * one instance instead of two: the Service has a single backend and its Recreate gap is
-    a LAN-wide DNS outage, which is the state this replaced;
+    a LAN-wide DNS outage;
   * both restarted at once: the shared manifests role fires restarts back to back and defers
     waiting to the end-of-batch drain, so a reintroduced `manifests_rollout` would take both
     down within a second of each other and the redundancy would be decorative;
-  * both APPLIED at once, which is how it actually broke on 2026-09-28 (#2884): `kubectl apply -f
-    <dir>/` applies every file in a directory in one request, both Deployments rendered into one
-    file, and a `pihole/pihole` image-pin bump changed both pod templates in the same second. The
-    controller Recreate-cycled both instances before any restart task ran, LAN DNS was down 52s,
-    and both new pods failed their image pull against the resolver they had just replaced. The
-    play reported failed=0. Sequencing the restarts cannot help, so the apply is sequenced too;
+  * both APPLIED at once: `kubectl apply -f <dir>/` applies every file in a directory in one
+    request, so with both Deployments rendered into one file a `pihole/pihole` image-pin bump
+    changes both pod templates in the same second. The controller Recreate-cycles both instances
+    before any restart task runs, LAN DNS goes down, and both new pods fail their image pull
+    against the resolver they just replaced. The play reports failed=0. Sequencing the restarts
+    cannot help, so the apply is sequenced too;
   * split across nodes: every VIP is announced from daniel-box only (marked PERMANENT in
     setup/k3s metallb-pool.yaml.j2), and with externalTrafficPolicy: Local a pod on the other
     node receives nothing, so half the capacity would silently serve no traffic.
@@ -247,7 +247,7 @@ def test_roll_one_skips_an_instance_this_run_just_created():
     )
 
 
-# ── #2884: the APPLY is sequenced, not only the restart ──────────────────────────────────────
+# ── the APPLY is sequenced, not only the restart ─────────────────────────────────────────────
 
 MANIFEST_ROOT = "/etc/rancher/k3s/manifests"
 
@@ -265,7 +265,7 @@ def test_each_instance_is_rendered_from_its_own_template():
     """One file per instance is what lets the two be applied separately.
 
     Asserting the mapping rather than just "two distinct files" is deliberate: a change that
-    rendered both Deployments back into `deployment.yaml` — the state that caused the outage —
+    rendered both Deployments back into `deployment.yaml` — the shared-apply shape —
     would satisfy a count-only check on documents while failing this one, and so would swapping
     which file carries which instance (`manifests_files` names `deployment.yaml`, so the swap
     would put instance 2 in the shared apply and instance 1 in the sequenced one)."""
@@ -277,8 +277,8 @@ def test_each_instance_is_rendered_from_its_own_template():
 
 def test_the_shared_apply_carries_instance_one_only():
     """`manifests_files` is the directory the shared role applies in one request. Naming
-    `deployment-2.yaml` there would put both Deployments back in that request and re-open #2884
-    with every other guard in this file still green."""
+    `deployment-2.yaml` there would put both Deployments back in that request and re-open the
+    simultaneous-apply outage with every other guard in this file still green."""
     for task in load_tasks(_TASKS):
         if task.get("ansible.builtin.include_role", {}).get("name") == "k8s/manifests":
             files = task.get("vars", {}).get("manifests_files", [])
@@ -295,9 +295,9 @@ def test_instance_two_is_staged_outside_the_pruned_directory():
     """Its own directory, not a subdirectory of the one the shared prune owns.
 
     The shared role deletes every file in `<root>/pihole/` that `manifests_files` does not name
-    and applies that directory in one request, so staging instance 2 there would be #2884 again
-    plus a permanently `changed` prune item. Since #2899 the render is the shared role's, through
-    `manifests_deferred_files`, so this reads the directory the shared role derives from pihole's
+    and applies that directory in one request, so staging instance 2 there would reproduce the
+    simultaneous-apply outage plus a permanently `changed` prune item. The render is the shared
+    role's, through `manifests_deferred_files`, so this reads the directory the shared role derives from pihole's
     `manifests_deferred_dir_name` rather than a fact pihole sets itself — and the apply has to
     read the same fact, or it would apply a directory the deploy never writes.
     """
@@ -335,7 +335,7 @@ def test_the_deferred_render_is_what_triggers_instance_twos_apply():
     """A change to `deployment-2.yaml.j2` alone moves none of the shared role's three restart
     facts — it renders into another directory, so `manifests_render` never sees it. Without the
     fourth trigger the apply that carries instance 2 would simply not run, and the deploy would
-    report success having shipped nothing (#2884, re-pointed at the shared register by #2899)."""
+    report success having shipped nothing."""
     when = str(task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")["when"])
     assert "manifests_deferred_render" in when, when
     assert "pihole_k8s_instance_2_render" not in when, (
@@ -346,7 +346,7 @@ def test_the_deferred_render_is_what_triggers_instance_twos_apply():
 
 def test_a_deferred_only_change_rolls_instance_two_alone():
     """A `deployment-2.yaml.j2` change moves instance 2's manifests only, so the fourth trigger
-    must fire the `pihole-2` iteration and skip `pihole` (#2957). The include's `when` is
+    must fire the `pihole-2` iteration and skip `pihole`. The include's `when` is
     evaluated per loop item, so this renders every clause once per instance."""
     task = task_named(load_tasks(_TASKS), "Roll the Pi-hole instances")
     unchanged = {"changed": False}
@@ -375,7 +375,7 @@ def test_a_deferred_only_change_rolls_instance_two_alone():
     }
     assert fires("pihole", **changed)
     assert fires("pihole-2", **changed)
-    # Reject (#3127): moved bytes with an unchanged shared apply is a comment-only edit.
+    # Reject: moved bytes with an unchanged shared apply is a comment-only edit.
     assert not fires("pihole", manifests_render={"changed": True})
     assert not fires(
         "pihole-2",
@@ -385,7 +385,7 @@ def test_a_deferred_only_change_rolls_instance_two_alone():
 
 
 def test_instance_twos_bytes_reach_the_release_digest():
-    """The point of moving the render into the shared role (#2899): the deferred file is stat'd
+    """The point of rendering through the shared role: the deferred file is stat'd
     into `manifests_release_files`, so `manifests_digest` covers it and
     `probe.py releases --stale-only` can clear or catch a change to it. A render alone would not
     have done that — the digest loops a list, not a directory."""
@@ -438,7 +438,7 @@ def _roll_one_index(fragment: str) -> int:
 def test_instance_two_is_applied_only_after_its_sibling_is_verified_serving():
     """The apply that rolls instance 2 sits between the sibling checks and the rollout wait.
 
-    Ahead of the checks it is the 2026-09-28 outage again — instance 2's pod template changing
+    Ahead of the checks it reproduces the simultaneous-apply outage — instance 2's pod template changing
     while instance 1 may not be serving. After the wait it would roll instance 2 with nothing
     left to block on, so the play would report success before the second resolver came back.
     The `when` matters as much as the position: without it the include fires on the `pihole`
@@ -455,8 +455,8 @@ def test_instance_two_is_applied_only_after_its_sibling_is_verified_serving():
 
 def test_the_sibling_check_refuses_a_terminating_pod():
     """A terminating pod keeps phase `Running` and condition `Ready` for its whole grace period,
-    so the readiness wait passed against a `pihole-2` pod that was already going away and the play
-    restarted `pihole` into a full DNS outage (#2884).
+    so a readiness wait can pass against a `pihole-2` pod that is already going away, and the play
+    would restart `pihole` into a full DNS outage.
 
     The accept/reject pair is over the real `failed_when`: an empty read (no pod carries a
     `deletionTimestamp`) must pass, and any timestamp at all must fail. A check that only ran the

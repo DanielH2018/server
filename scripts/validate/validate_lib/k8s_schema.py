@@ -1,9 +1,6 @@
 #!/usr/bin/env python3
 """Schema validation for a rendered k8s object: the core OpenAPI check and the vendored CRDs.
 
-Split out of ``scripts/validate/k8s_manifests.py`` on 2026-09-04; that module re-exports every
-name here, so an existing importer keeps working.
-
 ``CRD_SCHEMA_DIR`` is built from ``repo_paths.SCRIPTS`` rather than from this file's own
 ``__file__``, because the vendored schemas stay beside the validator that reads them
 (``scripts/validate/schemas/``) and ``refresh_vendored_schemas.py`` writes them there.

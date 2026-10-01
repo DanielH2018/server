@@ -5,12 +5,6 @@ building role falls back to the `:latest` alias every build is pushed beside. Ei
 Deployment spec is byte-identical while what the registry serves has moved. Nothing in the spec
 changed, so nothing rolls, and the new image sits in the registry unused behind a green deploy.
 
-Hit for real 2026-08-27, on nut. Run 1 built the new base, pushed it, then died at "Read the build
-result" — before the digest comparison that queues the rollout. Run 2 short-circuited the build,
-because the rendered context was byte-identical AND the registry already served the tag, so it
-recorded no change and queued nothing. The pod ran a week-old image for 90 minutes behind a 1/1
-Deployment, a clean rollout and a passing `probe.py health`.
-
 WHAT THIS FILE PROMISES
 -----------------------
 It is a SHAPE check, not a correctness test. It cannot run the gate — that needs a cluster, a
@@ -137,10 +131,10 @@ def test_the_builder_records_every_image_not_only_changed_ones():
 
 
 def test_a_dry_run_records_the_digest_n8n_stamps_and_the_gate_skips_it():
-    """n8n's `checksum/image` annotation reads this fact, so a dry run must record it too (#2588).
+    """n8n's `checksum/image` annotation reads this fact, so a dry run must record it too.
 
-    Guarded on `k8s_no_mutate`, the record was skipped on every dry run, n8n rendered `unstaged`,
-    and its dry-run render digest could never match a deploy's. Dropping the guard is safe only
+    Guarded on `k8s_no_mutate`, the record would be skipped on every dry run, n8n would render
+    `unstaged`, and its dry-run render digest could never match a deploy's. Dropping the guard is safe only
     because every gate task that reads the fact skips itself on a dry run and under --check.
     """
     for task in _tasks(_BUILDER):
@@ -206,11 +200,10 @@ def _evaluate_gate(pods, built_image):
     Everything above is a shape check. This is not: it lifts the condition straight out of the task
     file and runs it, so a Jinja bug fails here instead of on a live deploy.
 
-    It exists because the first version of this gate shipped with one and reached master. The
-    expression reached the pod list with `.items`, and Jinja resolves a dotted name to the ATTRIBUTE
-    before the key — `items` is a Python dict method, so `rejectattr` was handed a bound method and
-    every image-building deploy died with "'method' object is not iterable". Seven structural tests
-    and a full `prek run` passed over it, because none of them evaluated the template.
+    It exists because Jinja resolves a dotted name to the ATTRIBUTE before the key: reaching the pod
+    list with `.items` hands `rejectattr` a bound Python dict method, and every image-building
+    deploy dies with "'method' object is not iterable". Structural tests and a full `prek run`
+    pass over it, because none of them evaluate the template.
     """
     import json
 
@@ -292,10 +285,9 @@ def _fail_msg() -> str:
 def test_the_failure_names_both_causes_and_their_different_fixes():
     """One symptom, two causes — and the remedy for one is a no-op for the other.
 
-    The message named only "nothing rolled" until 2026-09-02, when terraria hit the OTHER cause:
-    the pod DID roll and the node served its cached `:latest`, because the Deployment carried
-    `imagePullPolicy: IfNotPresent`. An operator following the message ran the forced rebuild it
-    prescribes, which pushed the same digest the node was already refusing to fetch and changed
+    A message naming only "nothing rolled" misleads when the pod DID roll and the node served its
+    cached `:latest`, because the Deployment carries `imagePullPolicy: IfNotPresent`: the forced
+    rebuild it prescribes pushes the same digest the node already refuses to fetch and changes
     nothing. A remediation that cannot work for the case in front of you is worse than none: it
     spends a deploy and reads as "the fix didn't take".
     """

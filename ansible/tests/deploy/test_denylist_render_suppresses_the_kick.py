@@ -1,7 +1,7 @@
 """The deployer's denylist re-render and the handler it must suppress stay wired together.
 
 `deploy_phases.reconcile_denylist` runs `initial_setup.yml --tags gitops_deploy` from INSIDE
-`gitops-deploy.service` to re-derive `K8S_AUTODEPLOY_DENYLIST` (issue #1294). Rendering
+`gitops-deploy.service` to re-derive `K8S_AUTODEPLOY_DENYLIST`. Rendering
 config.env notifies the role's "Run gitops-deploy once" handler, whose `systemctl start`
 blocks until that unit's activation finishes — the activation the render is itself running
 under. So the render passes `gitops_deploy_kick_after_change=false` and the handler reads that
@@ -61,7 +61,7 @@ def test_the_render_suppresses_the_kick_by_the_name_the_handler_reads():
 
 
 def test_an_ungated_kick_handler_is_flagged():
-    """The rejecting half: the handler as it read before the reconcile existed.
+    """The rejecting half: the handler without the gate.
 
     Without it this file would pass just as happily against a handler that always kicks, which
     is the shape that deadlocks.

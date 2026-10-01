@@ -1,25 +1,24 @@
 #!/usr/bin/env python3
 """Every rule carrying the denylist marker puts `k8s_autodeploy: false` in the PR title, not the branch alone.
 
-Issue #2646. Renovate applies a group's `commitMessageTopic` — `{{{groupName}}}`, which is
-where the marker lives — only to a branch holding more than one upgrade, and titles a
-one-dependency group `Update <dep> …` instead. #2620 was a denied role's pin titled `Update
-klutchell/unbound Docker tag to v1.26.1`, with the marker only in its branch slug, and #2258
-shows the same shape on a per-package rule. `groupSingleUpdates: true` applies the group
-settings to a single upgrade too, so the title carries the marker as well — which is what an
-interactive session following the `renovate-prs` triage table reads.
+Renovate applies a group's `commitMessageTopic` — `{{{groupName}}}`, which is where the
+marker lives — only to a branch holding more than one upgrade, and titles a one-dependency
+group `Update <dep> …` instead. A denied role's pin would then be titled `Update
+klutchell/unbound Docker tag to v1.26.1`, with the marker only in its branch slug.
+`groupSingleUpdates: true` applies the group settings to a single upgrade too, so the title
+carries the marker as well — which is what an interactive session following the `renovate-prs`
+triage table reads.
 
-The flag cannot move the branch slug, and that was the risk worth checking before setting it:
-Renovate's `generateBranchName` takes the group's `branchTopic` whenever a `groupName` is set,
-with no upgrade-count condition, which is why #2620's branch already carried the slugified
-marker while its title did not. So no open `manual —` PR is abandoned and reopened, and the
-branch tell the `renovate_agent` prompt reads (`k8s_autodeploy-false`, #2641) stays put.
+The flag cannot move the branch slug: Renovate's `generateBranchName` takes the group's
+`branchTopic` whenever a `groupName` is set, with no upgrade-count condition. So no open
+`manual —` PR is abandoned and reopened, and the branch tell the `renovate_agent` prompt reads
+(`k8s_autodeploy-false`) stays put.
 
-#2654 widened the flag from the two denylist rules to every rule whose `groupName` carries the
-marker: the per-package manual rules (meilisearch, the CrowdSec bouncer plugin, n8n and the
+The flag covers every rule whose `groupName` carries the marker, not only the two denylist
+rules: the per-package manual rules (meilisearch, the CrowdSec bouncer plugin, n8n and the
 rest) group one dependency most of the time too. Their title then reads `Update <group name> to
 <version>`, so the manual work order in front of the marker reaches the title as well. A PR
-raised before the flag still arrives bare-titled, so the prompt keeps reading both tells.
+raised before the flag arrives bare-titled, so the prompt keeps reading both tells.
 
 This guard sits apart from `test_renovate_automerge_follows_the_autodeploy_denylist.py`, which
 owns the two denylist rules, only because that module is at its 500-line cap and

@@ -4,7 +4,7 @@ Headlamp does not authorise anything under OIDC — it forwards the browser's `i
 API SERVER decides — so every value here is correct only relative to something outside this
 role. `ansible/tests/setup/test_k3s_oidc_trusts_authelia.py` owns the API server's half.
 
-Split out of `test_k8s_manifests_rbac.py`, which owns the RBAC grants these logins land on.
+`test_k8s_manifests_rbac.py` owns the RBAC grants these logins land on.
 """
 
 from lib import yaml_fast
@@ -58,10 +58,9 @@ def _oidc_arg_names(args: list[str]) -> set[str]:
 def test_headlamp_with_oidc_off_browses_as_its_serviceaccount():
     """The fallback branch: no OIDC flags at all, the SA-token flag present.
 
-    `headlamp_k8s_oidc_enabled` is passed explicitly rather than left to the role default,
-    which is what this test did until the default was armed (#1390 part 3, 2026-09-10) and
-    the assertion then read the ON branch. Both halves of the pair pin their own branch, so
-    neither tracks whichever default happens to be set.
+    `headlamp_k8s_oidc_enabled` is passed explicitly rather than left to the role default.
+    Both halves of the pair pin their own branch, so neither tracks whichever default
+    happens to be set.
     """
     args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=False)["containers"][0]["args"]
     assert "-unsafe-use-service-account-token" in args
@@ -129,8 +128,8 @@ def test_headlamp_oidc_scopes_leave_openid_to_headlamp():
 def test_headlamp_sends_logins_to_the_public_authelia_name():
     """Headlamp reads its issuer ONCE at server start and uses that one provider for every
     request (`oidcAuthConfig.IdpIssuerURL`, backend/cmd/headlamp.go at v0.45.0), so this single
-    value decides where BOTH routes' logins go. The LAN name sent public-route logins to a host
-    an off-LAN browser cannot resolve, which is the defect this pins against; the public name
+    value decides where BOTH routes' logins go. The LAN name would send public-route logins to a
+    host an off-LAN browser cannot resolve, which this pins against; the public name
     is reachable from both sides. `roles/setup/k3s` trusts both issuers, so the choice is about
     which portal a browser is sent to, not which token the API server accepts.
     """
@@ -152,8 +151,8 @@ def test_headlamp_leaves_the_oidc_callback_to_the_request_host():
 
     Headlamp builds the callback from the incoming request when the config value is blank —
     `getOidcCallbackURL` reads the request host and `X-Forwarded-Proto` — so one instance
-    sends the right `redirect_uri` on each of its two hostnames. Pinning it is what broke the
-    public route's second half: every login was sent to the LAN callback. Omitting the flag is
+    sends the right `redirect_uri` on each of its two hostnames. Pinning it would send every
+    login to one hostname's callback. Omitting the flag is
     not the same as passing it empty, which is why this asserts absence.
     """
     args = _headlamp_pod_spec(headlamp_k8s_oidc_enabled=True)["containers"][0]["args"]

@@ -83,7 +83,7 @@ def due_date(
     Seeding staggers `last_rotated` once, at registration; that alone does not survive a
     rotation, because `rotate` stamps today's date on every secret in the batch and
     `advance_last_rotated` moves a hand-rotated one to its ciphertext's commit date. A
-    batch event therefore used to collapse a whole tier onto one due-date and re-stamp the
+    batch event would otherwise collapse a whole tier onto one due-date and re-stamp the
     cluster intact every cycle. Staggering here instead makes the spread a property of the
     cadence, so it is re-derived after every rotation however `last_rotated` was set.
 

@@ -1,14 +1,11 @@
 ---
-# Reactivated 2026-08-13 straight onto k3s. terraria is the sibling this role copies.
-
-# The upstream repo moved: lloesche/valheim-server-docker is now community-valheim-tools,
-# and only the new package publishes semver tags (the old ghcr.io/lloesche/valheim-server
-# package is stuck on `latest`/`dev`). Pinning the semver tag hands the bump to Renovate —
+# The community-valheim-tools package publishes semver tags (the old
+# ghcr.io/lloesche/valheim-server package is stuck on `latest`/`dev`). Pinning the semver tag hands the bump to Renovate —
 # unlike terraria, this image does NOT need a rolling-tag exception.
 #
 # This tag pins the WRAPPER, not the game. SteamCMD fetches the current Valheim build on every
-# start, so the server is always on the latest release regardless of what this says; 1.2.0
-# (2026-09-09) is the wrapper's own release.
+# start, so the server is always on the latest release regardless of what this says; the tag
+# is the wrapper's own release.
 valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
 
 # The first-boot budget for this server, declared ONCE. Read by the `manifests_rollout_timeout`
@@ -18,13 +15,10 @@ valheim_k8s_image: ghcr.io/community-valheim-tools/valheim-server:1.2.0
 # `--timeout` says, and at a budget below the deadline the drain gives up first and the extra
 # deadline is never reached.
 #
-# 1800s, the larger of the two numbers this role used to carry (#2409). The role declared 900s at
-# the manifests call site and 1800 in the template, and the template's comment named the deadline
-# as the binding one, which stopped being true once the drain started passing a `--timeout`.
-# 1800 rather than 900 because nothing in the repo records a first boot completing inside 900s:
-# the 2026-08-13 measurement is the opposite, a rollout still pulling this image at 10 minutes
-# and marked ProgressDeadlineExceeded at the 600s Kubernetes default while the pod carried on
-# fine underneath. Between that pull and the ~1.8 G SteamCMD download into an empty install PVC,
+# 1800s rather than 900s because nothing in the repo records a first boot completing inside
+# 900s. A measured rollout was still pulling this image at 10 minutes and was marked
+# ProgressDeadlineExceeded at the 600s Kubernetes default, while the pod carried on fine
+# underneath. Between that pull and the ~1.8 G SteamCMD download into an empty install PVC,
 # first boot needs the room; a cached restart rolls in seconds and never spends it.
 #
 # valheim is NOT auto-deployed (`k8s_autodeploy: false`), so this budget is outside
@@ -49,7 +43,6 @@ valheim_k8s_bepinex: "{{ 'true' if valheim_k8s_mods | length > 0 else 'false' }}
 #
 # `valheim`, not `valheim-mods`: k8s/manifests keys `k8s_rebuilt_images` on `manifests_service`,
 # so a rebuilt image rolls the Deployment only when the built image's name matches the role's.
-# n8n-runners is the recorded case of that mismatch shipping an image no pod ever ran.
 valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image_tags.get('valheim', 'latest') }}"
 
 # ── The mod set, and the four-fifths of it that Valheim 1.0 broke ───────────────────────
@@ -70,26 +63,23 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 #
 # The prose below lives ABOVE the list rather than beside each entry: ansible-lint's YAML
 # parser rejects a long comment run inside a collection ("too many consecutive comments before
-# resolving collection entry"), while `yaml.safe_load` accepts it — so the same file parsed
-# clean in a scratch check and failed the commit gate.
+# resolving collection entry"), while `yaml.safe_load` accepts it.
 #
-# WHY EACH DISABLED ENTRY IS DISABLED, measured on `l-1.0.7` unless noted, 2026-09-09. Each
+# WHY EACH DISABLED ENTRY IS DISABLED, measured on `l-1.0.7` unless noted. Each
 # error was attributed by reading the boot log between consecutive `Loading [...]` lines, so
 # it belongs to the plugin named above it.
 #
 #   MouseTweaks 1.0.3
-#       Worked on l-1.0.7 (live from 2026-09-09). Broke when SteamCMD auto-updated the game to
-#       l-1.0.12, observed 2026-09-13: TypeLoadException, "Could not resolve type with token
-#       01000021 from typeref (expected class 'Element' in assembly '')". No newer Thunderstore
-#       release exists to bump to — 1.0.3 is still the latest published version. This is the
-#       UPDATE_CRON risk this file already documents landing, not a new mod ever having failed
-#       vetting.
+#       Worked on l-1.0.7 and breaks on l-1.0.12 (SteamCMD auto-update): TypeLoadException,
+#       "Could not resolve type with token 01000021 from typeref (expected class 'Element' in
+#       assembly '')". No newer Thunderstore release exists to bump to — 1.0.3 is the latest
+#       published version. This is the UPDATE_CRON risk, not a mod that failed vetting.
 #   AAABuildMenu 1.0.1
-#       Same story, same boot: ArgumentException, "Undefined target method for patch method
+#       Same cause as MouseTweaks (l-1.0.12): ArgumentException, "Undefined target method for patch method
 #       static void AAABuildMenu.EnhancedBuildMenuPatches::Player_PlacePiece_TrackUsage",
 #       rethrown as a HarmonyException. No newer release exists; 1.0.1 is still latest.
 #   Jotunn 2.29.3 (ReefTeam fork)
-#       Works, and is disabled only because nothing needs it now — it is a dependency of
+#       Works, and is disabled only because nothing needs it — it is a dependency of
 #       AdvancedPortals and MultiUserChest, never a request. Upstream ValheimModding-Jotunn
 #       2.29.2 does NOT work: it buffers the join handshake and its `SynchronizeInitialData`
 #       throws on `ZRoutedRpc.Everybody`, leaving the player connected but frozen with the
@@ -110,26 +100,23 @@ valheim_k8s_mods_image: "{{ k8s_registry_pull_host }}/valheim:{{ k8s_built_image
 #       HarmonyException, `Undefined target method` for `RecipeTracking.InventoryAddItemPatch`.
 #   Serverside_Simulations 1.1.9
 #       MissingMethodException on `ZoneSystem.GetZone(Vector3)` from
-#       `ZNetScene.CreateDestroyObjects`, EVERY FRAME — 4431 in three minutes. Last release
-#       2025-09-27.
+#       `ZNetScene.CreateDestroyObjects`, EVERY FRAME — 4431 in three minutes.
 #   AzuAutoStore 3.0.14
 #       Never deployed. Its assembly still references `ZRoutedRpc.Everybody`, the signature
 #       that leaves AzuCraftyBoxes dead, so adding it would reintroduce a known-broken plugin.
 #
 # A SERVERSYNC VERSION LINE IS NOT PROOF A MOD WORKS. The log prints
 # `Sending AzuCraftyBoxes version 1.8.15 ... to the client` on every join because ServerSync
-# registers statically — it kept printing for a plugin whose type initializer had thrown. That
-# line was read as evidence three mods were healthy, and they were not.
+# registers statically — it kept printing for a plugin whose type initializer had thrown.
 #
-# The two live entries were vetted before being added, by checking each assembly for a
-# `ZRoutedRpc.Everybody` reference. That is necessary, NOT sufficient: the Harmony
+# Vet each entry before adding it, by checking each assembly for a `ZRoutedRpc.Everybody`
+# reference. That is necessary, NOT sufficient: the Harmony
 # `Undefined target method` failures above are invisible to any string check, so the boot log
 # is what decides. Re-enable a disabled entry ONE AT A TIME and read the log between its own
 # `Loading [...]` line and the next before adding another.
 valheim_k8s_mods:
-  # Added 2026-09-13. Vetted the same way as the two disabled below were originally: neither DLL references
-  # ZRoutedRpc.Everybody, the field l-1.0.7 removed that killed five sibling mods (see the
-  # block above). Necessary, not sufficient — confirm by the boot log's `Loading [...]`
+  # Vetted by checking that neither DLL references ZRoutedRpc.Everybody, the field l-1.0.7
+  # removed that killed five sibling mods (see the block above). Necessary, not sufficient — confirm by the boot log's `Loading [...]`
   # lines, not by pod Ready.
   - name: Server_devcommands
     version: 1.113.0
@@ -181,7 +168,7 @@ valheim_k8s_mods:
   #   url: https://thunderstore.io/package/download/Azumatt/AzuAutoStore/3.0.14/
   #   sha256: 33b3dfd672da55938b7b99f4f6e8bd1e31ea66f6dc8e6dfe336c05fea2980a9b
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
-# Two independent reasons, added 2026-08-16 with the pilot clearing: (1) probe-less — the
+# Two independent reasons: (1) probe-less — the
 # Deployment renders no readinessProbe at all, same shape as terraria; (2) migrating state —
 # strategy is Recreate and valheim-config is seeded through k8s/volume-claim (hardcoded
 # ReadWriteOnce), holding worlds/lists/prefs. Either alone would justify the denylist entry.
@@ -195,13 +182,9 @@ k8s_autodeploy_reason: "two reasons: (1) probe-less — no readinessProbe at all
 valheim_k8s_claim: valheim-config
 valheim_k8s_size: 5Gi
 valheim_k8s_storage_class: longhorn
-# Seeded from the Docker copy that has sat idle on daniel-server since the world's last save
-# (2025-11-22). The whole directory came over, config/backups included; the image's own
-# rotation (BACKUPS_MAX_AGE=3 days) pruned those 385 M of 2025 zips on its first cycle.
-# The hourly zips now go to /opt/valheim/backups on the nobackup claim (BACKUPS_DIRECTORY in
-# the deployment), so this claim carries only the world and the lists. Nothing is moved —
-# the originals stay on daniel-server as the rollback.
-# The files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
+# The hourly zips go to /opt/valheim/backups on the nobackup claim (BACKUPS_DIRECTORY in
+# the deployment), so this claim carries only the world and the lists.
+# The seed files are root-owned but world-readable (644/755), so unlike terraria's 600 worlds
 # this needs no sudo staging; the seed pod's `tar -p --numeric-owner` restores uid 0, which
 # is also the uid the server runs as (PUID/PGID default to 0).
 
@@ -225,23 +208,20 @@ valheim_k8s_server_claim: valheim-server
 valheim_k8s_server_size: 20Gi
 valheim_k8s_server_storage_class: longhorn-nobackup
 # The largest single transient an update writes to the claim: the fourth install copy in
-# bepinex.tmp, 2.2 G measured on 2026-09-17, declared as 3 GiB so the floor fires before the
+# bepinex.tmp, 2.2 G measured, declared as 3 GiB so the floor fires before the
 # copy is refused rather than at it. monitor-bridge's PVC_MIN_FREE names this claim with this
-# value (#1875): the percentage arm cannot warn before a step-shaped peak, so the check pages
+# value: the percentage arm cannot warn before a step-shaped peak, so the check pages
 # while free bytes are below the transient, whatever the percentage reads. The number lives
 # here because the workload's own updater is the only thing that knows it; nothing exports
 # it. monitor-bridge/tests/test_check_pvc_floors.py fails when the two declarations drift.
 valheim_k8s_server_update_transient_bytes: 3221225472
 
 # ── server identity ─────────────────────────────────────────────────────────────────────
-# Name and world are unchanged from the pre-migration server, so returning players' saved
-# entries and the existing world keep matching. The password did NOT carry over: the old value was
-# hardcoded in this PUBLIC repo's history (c3330c5a replaced it with a variable but the
-# plaintext is still in the log), so it is treated as disclosed and a fresh one lives in
-# SOPS as valheim_server_pass.
+# The name stays stable so returning players' saved entries keep matching. The password lives
+# in SOPS as valheim_server_pass; an earlier value is in this PUBLIC repo's history, so it is
+# treated as disclosed and never reused.
 valheim_k8s_server_name: "DBoy's Server"
-# A NEW world, at the operator's request (2026-09-09), created on first boot because no
-# worlds_local entry of this name exists.
+# Created on first boot because no worlds_local entry of this name exists.
 #
 # The old `Dedicated` world is NOT deleted, and nothing in the image touches it once this name
 # changes: the server is launched with `-world "$WORLD_NAME"` (valheim-server), and the hourly
@@ -250,7 +230,7 @@ valheim_k8s_server_name: "DBoy's Server"
 # worth keeping, because it is the VANILLA save and a modded world is not reliably readable by
 # a vanilla server afterwards.
 valheim_k8s_world_name: Midgard
-# Listed in the in-game community browser, as before. Steam's server query (port 2457) only
+# Listed in the in-game community browser. Steam's server query (port 2457) only
 # answers for public servers; a private server is join-by-IP only.
 valheim_k8s_server_public: "true"
 
@@ -261,18 +241,15 @@ valheim_k8s_admin_ids: "76561198091839404"
 
 # Extra Valheim CLI arguments, appended to the launch line by the image's `SERVER_ARGS`.
 #
-# `portals casual` lets ore and metal through portals, at the operator's request 2026-09-09.
-# It is a VANILLA world modifier — the game gained these with the world-modifier system, so
-# this needs no mod at all, which is why AdvancedPortals coming out costs nothing here.
+# `portals casual` lets ore and metal through portals. It is a VANILLA world modifier — the game gained these with the world-modifier system, so
+# this needs no mod at all, which is why AdvancedPortals being disabled costs nothing here.
 # The other values are `hard` (the default: no metals) and `veryhard` (no items at all).
 #
 # A modifier applies at launch and is not written into the world, so changing this line and
 # redeploying is the whole procedure, in both directions.
 valheim_k8s_server_args: "-modifier portals casual"
 
-# Originally mirrored the archived resources('4.0', '6144M', '0.5', '2048M'). Bumped 1.5x on
-# 2026-09-13 at the operator's request — the dedicated server simulates the whole world in
-# RAM and wants headroom, not a tight cap.
+# The dedicated server simulates the whole world in RAM and wants headroom, not a tight cap.
 valheim_k8s_cpu_limit: "6"
 valheim_k8s_mem_limit: 9216Mi
 valheim_k8s_cpu_request: "750m"

@@ -1,9 +1,8 @@
 """The cloudflare_ips allowlist against Cloudflare's published ranges.
 
 `cloudflare_ips_verdict` is pure and decides drift, a match, or an implausibly short page.
-`cloudflare_ips_drift` caches a success for a day and re-probes after any failure, which is
-the whole reason the check moved here from a daily host cron: a red tile clears one cycle
-after the list is fixed instead of at the next day's slot. The fetch and the cache are
+`cloudflare_ips_drift` caches a success for a day and re-probes after any failure, so a red
+tile clears one cycle after the list is fixed instead of at the next day's slot. The fetch and the cache are
 parameters of the check, so nothing here patches the module.
 """
 

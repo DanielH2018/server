@@ -2,38 +2,37 @@
 
 observability (its restart loop) and pihole (roll_one.yml) set `manifests_rollout: ''`, opt out
 of the shared restart and the batch drain, and restart their workloads through a private task
-after `k8s/manifests` returns. Two issues are pinned here, over the harness in
+after `k8s/manifests` returns. These properties are pinned here, over the harness in
 `_release_expectation.py`:
 
-Issue #1902: they declare those workloads to the record as `manifests_self_rollouts`, and
+They declare those workloads to the record as `manifests_self_rollouts`, and
 three things hold -- the record decides `restart` for them from the same facts (the red-proof
 pair: a changed render names grafana `restart: true`, an unchanged one `false`), each role's
 declaration equals the loop its private restart iterates (a seventh workload added to the loop
 alone re-opens the gap with both halves of the pair still green), and the private restart runs
 after the include_role that writes the record.
 
-Issue #1994: the skip #1988 added to the shared restart reaches those two private restarts.
-The pod-template fingerprints cover every `manifests_self_rollouts` entry, each private
+The skip the shared restart takes when the apply rolled a workload reaches those two private
+restarts. The pod-template fingerprints cover every `manifests_self_rollouts` entry, each private
 restart reads `manifests_rolled_by_apply` for its own workload, and observability's entries
 carry the namespace the fingerprints must read in -- the fingerprints default to
 `k8s_namespace`, its six workloads live in `observability`, and a read in the wrong namespace
-fails on both sides and reads as "not rolled", which is the double roll the issue names.
+fails on both sides and reads as "not rolled", which is the double roll.
 pihole's gate sits on the restart task inside roll_one.yml rather than on the include, so the
 sibling check and the rollout wait still follow a roll the apply started.
 
-Issue #2858 narrowed observability's declaration a second way, per SIGNAL rather than per
+Observability's declaration is also narrowed per SIGNAL rather than per
 workload. Each entry carries `restart_on`, so the record decides `restart` from the same key
 the private restart selects its targets with. Five of the six no longer restart for a changed
 render at all — their ConfigMaps are hashed into their own pod templates — and a record that
 still expected one would fail `probe.py health` as NOT ROLLED.
 
-Issue #2884 took `pihole-2` out of pihole's declaration, because the shared apply carries
-`deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied later, by
-tasks/apply_instance_2.yml, and the record is written before that task runs -- so a plain
-`pihole-2` entry would name a `restart: true` no `restartedAt` ever satisfies.
+The shared apply carries `deployment.yaml`, which holds `pihole` alone: `pihole-2` is applied
+later, by tasks/apply_instance_2.yml, and the record is written before that task runs -- so a
+plain `pihole-2` entry would name a `restart: true` no `restartedAt` ever satisfies.
 
-Issue #2902 puts it back, behind `rolled_by_role: true`. The marker says the stamp may not
-decide: the entry is recorded with `restart: false` and out of the pod-template fingerprints,
+The `pihole-2` entry therefore declares `rolled_by_role: true`. The marker says the stamp may
+not decide: the entry is recorded with `restart: false` and out of the pod-template fingerprints,
 and roll_one.yml raises the expectation afterwards through the shared
 `k8s/manifests` `tasks/rollout_amend.yml` -- `restart: true` only where it issued a
 `rollout restart`, which is the only roll that stamps a `restartedAt`. What this file pins is
@@ -84,7 +83,7 @@ _SELF_ROLLOUT_READERS_IN_MAIN = (
 
 
 def test_a_self_rolling_role_records_only_what_it_declares():
-    """The var reaches the record and the fingerprints (#1994) and nothing else: the shared
+    """The var reaches the record and the fingerprints and nothing else: the shared
     restart's loop and the drain queue read `manifests_extra_rollouts`, never
     `manifests_self_rollouts`. Those roles opted out of both, and a declaration that
     re-enrolled them would take both Pi-holes down at once."""
@@ -105,7 +104,7 @@ def test_a_self_rolling_role_records_only_what_it_declares():
         manifests_extra_rollouts=[],
         manifests_self_rollouts=include_role_vars(PIHOLE)["manifests_self_rollouts"],
     )
-    # Instance 1 only (#2884), even though the declaration now names both (#2902): the shared
+    # Instance 1 only, even though the declaration names both: the shared
     # apply does not touch pihole-2's pod template, so fingerprinting it across that apply could
     # only ever read "not rolled" — two kubectl calls for a known answer. `rolled_by_role` is
     # what excludes it; apply_instance_2.yml fingerprints it across its OWN apply and writes the
@@ -130,7 +129,7 @@ def _observability_rollouts(**over):
 
 
 def test_observability_a_changed_render_expects_nothing_to_roll():
-    """#2858's red half. Every workload here declares `restart_on` without `config`, because
+    """The red half. Every workload here declares `restart_on` without `config`, because
     each ConfigMap is hashed into its own pod template — the apply rolls the one that changed
     and `manifests_rolled_by_apply` reports it, so no restart TASK runs and the record must
     expect no `restartedAt`. Expecting one is not a quiet failure: `probe.py health` reads it
@@ -178,7 +177,7 @@ def test_observability_a_created_workload_is_not_expected_to_roll():
 
 def test_observability_declares_the_same_workloads_its_private_restart_rolls():
     """A seventh workload added to the restart loop alone would re-open the gap with the pair
-    above still green. Since #2858 the loop and the declaration read ONE variable, so they
+    above still green. The loop and the declaration read ONE variable, so they
     cannot drift — assert that rather than comparing two literals, which would pass vacuously
     once one of them stopped being a literal."""
     assert (
@@ -204,7 +203,7 @@ def test_observability_private_restart_reads_the_same_facts_as_the_record():
         assert ingredient in FACT_EXPR, ingredient
     assert " created" in when
     assert "manifests_rolled_by_apply.get(item.name, false)" in when
-    # The narrowing is the other half of the same agreement (#2858): the task selects its
+    # The narrowing is the other half of the same agreement: the task selects its
     # targets by `restart_on` and the record decides `restart` from the same key, so a
     # workload the task skips is a workload the record expects nothing from.
     assert "'secret' in item.restart_on" in when
@@ -231,7 +230,7 @@ def test_observability_declares_the_namespace_the_fingerprints_must_read():
 
 
 def test_observability_skips_its_private_restart_of_a_workload_the_apply_rolled():
-    """The accept/reject pair for #1994, rendered through the private restart's own `when`:
+    """The accept/reject pair, rendered through the private restart's own `when`:
     the template moved (an image bump) skips the restart; a ConfigMap-only change, where the
     template held, still fires it."""
     # The new clause alone: the `created` clause beside it carries a `\.apps/` regex
@@ -296,11 +295,10 @@ def test_pihole_an_image_bump_expects_instance_one_to_roll():
 
 
 def test_pihole_declares_both_instances_and_marks_the_deferred_one():
-    """The declaration covers the whole restart loop again (#2902), with `rolled_by_role: true`
+    """The declaration covers the whole restart loop, with `rolled_by_role: true`
     on the instance whose manifest the shared apply does not carry.
 
-    Both halves matter. Dropping the entry loses the expectation entirely, which is the state
-    #2902 filed. Dropping the marker makes the stamp claim a `restart: true` that an
+    Both halves matter. Dropping the entry loses the expectation entirely. Dropping the marker makes the stamp claim a `restart: true` that an
     apply-rolled instance 2 can never satisfy, failing every image bump at `probe.py health`.
     The loop and the declaration must also still name the same instances, so a third instance
     added to one alone is caught."""
@@ -320,18 +318,18 @@ def test_pihole_declares_both_instances_and_marks_the_deferred_one():
         "manifests_render is changed",
         "manifests_secret_render is changed",
         "manifests_image_changed",
-        # The fourth trigger (#2884, re-pointed by #2899): instance 2's Deployment renders into
+        # The fourth trigger: instance 2's Deployment renders into
         # its own directory, so a change to it alone moves none of the three facts above and the
         # apply that carries it would never run.
         "manifests_deferred_render",
     ):
         assert ingredient in when, ingredient
-    # The fourth ingredient (#1994) gates the restart task inside roll_one.yml, not the
+    # The fourth ingredient gates the restart task inside roll_one.yml, not the
     # include: the sibling check and the rollout wait still follow a roll the apply started.
     assert "manifests_rolled_by_apply" not in when
     gate = str(_pihole_restart_task()["when"])
     assert "manifests_rolled_by_apply.get(pihole_instance, false)" in gate, gate
-    # The second apply's verdict (#2884), keyed the same way.
+    # The second apply's verdict, keyed the same way.
     assert "pihole_k8s_rolled_by_own_apply" in gate, gate
 
 
@@ -364,7 +362,7 @@ def _pihole_restart_fires(instance: str, **overrides) -> bool:
 
 
 def test_pihole_skips_its_restart_of_an_instance_the_apply_rolled_but_still_waits():
-    """The accept/reject pair for #1994 on pihole: an instance whose template moved is not
+    """The accept/reject pair on pihole: an instance whose template moved is not
     restarted again, one whose template held (a ConfigMap-only change) is, and the wait
     that follows carries no such gate -- it is the only thing in the play that follows the
     roll the apply started on a Recreate Deployment."""
@@ -372,7 +370,7 @@ def test_pihole_skips_its_restart_of_an_instance_the_apply_rolled_but_still_wait
     assert not _pihole_restart_fires("pihole", manifests_rolled_by_apply=rolled)
     assert _pihole_restart_fires("pihole-2", manifests_rolled_by_apply=rolled)
     assert _pihole_restart_fires("pihole")
-    # The same pair over the second apply's own verdict (#2884): instance 2 is not restarted on
+    # The same pair over the second apply's own verdict: instance 2 is not restarted on
     # top of the apply that just rolled it, and instance 1's restart is untouched by that answer.
     own = {"pihole-2": True}
     assert not _pihole_restart_fires("pihole-2", pihole_k8s_rolled_by_own_apply=own)
@@ -415,7 +413,7 @@ def test_the_private_restarts_run_after_the_record_is_written():
 
 
 def test_pihole_a_comment_only_edit_restarts_neither_instance():
-    """#3127, the reject half. A YAML-comment edit moves the rendered bytes while the matching
+    """The reject half. A YAML-comment edit moves the rendered bytes while the matching
     apply prints every object `unchanged`, so the restart must wait for that apply's own
     verdict, per instance. Instance 1 reads the shared apply; instance 2 reads its own apply
     for deployment-2.yaml, and the shared apply for the ConfigMap both instances mount."""
@@ -434,7 +432,7 @@ def test_pihole_a_comment_only_edit_restarts_neither_instance():
 
 
 def test_pihole_a_changed_apply_restarts_the_instance_it_carries():
-    """#3127, the accept half. A changed shared apply restarts both instances (the ConfigMap is
+    """The accept half. A changed shared apply restarts both instances (the ConfigMap is
     shared), and a changed pihole-2 apply restarts pihole-2 alone. The secret render and an
     image rebuild still restart without any apply verdict: the first because
     verify_secret_keys.yml patches a Secret after an apply that printed `unchanged`."""
@@ -459,7 +457,7 @@ def test_pihole_a_changed_apply_restarts_the_instance_it_carries():
 
 
 def test_pihole_instance_two_apply_is_changed_only_by_a_real_apply():
-    """#3127: pihole-2's apply verdict now decides a restart, so its `changed_when` must read
+    """pihole-2's apply verdict decides a restart, so its `changed_when` must read
     kubectl's `created`/`configured` and stay false for `unchanged` and for a dry run."""
     task = task_named(
         load_tasks(PIHOLE / "tasks/apply_instance_2.yml"), "Apply pihole-2's Deployment"

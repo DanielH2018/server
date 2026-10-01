@@ -3,9 +3,8 @@
 WHY. The Pi is the one host outside the cluster, and it is contended: load5 of 2.4-6.6 on four
 slow cores, CPU PSI around 30% `some`. A scrape that lands in a contended stretch takes seconds
 rather than its 0.2-0.6s median, and one that crosses Prometheus' 10s default reads as
-`up == 0`. Over the 7 days to 2026-09-03 that was 88 minutes on node-pi and 36 on alloy-pi,
-each a single-cycle DOWN on the Cluster Scrape Targets monitor with a healthy exporter behind
-it (#930). The per-job `scrape_timeout: 30s` is what stops the flap, and a job added for the Pi
+`up == 0`: a single-cycle DOWN on the Cluster Scrape Targets monitor with a healthy exporter
+behind it. The per-job `scrape_timeout: 30s` is what stops the flap, and a job added for the Pi
 later (a third exporter, a cAdvisor) inherits the flap unless it carries the same override.
 
 WHY PER JOB. The override is deliberately NOT global: an in-cluster target that takes 30s is

@@ -12,7 +12,7 @@ from deploy_tools.land_lib.outcome import Outcome
 
 
 # The deployer's record of a broad apply CONTAINING this PR. Converging with origin is not
-# that: any session's `git merge --ff-only` produces it too (issue #1537).
+# that: any session's `git merge --ff-only` produces it too.
 _APPLIED = {"broad_applied": f"{MERGE_SHA} ansible/initial_setup.yml renovate_agent"}
 
 
@@ -25,7 +25,7 @@ def _ready(landing, fakes=None, **opts):
 
 
 def test_each_tag_deploys_on_the_host_that_declares_it(landing, capsys):
-    """Issue #929: `--tags alloy` on daniel-box matched no service; the Pi ran the old container."""
+    """`--tags alloy` on daniel-box matched no service; the Pi ran the old container."""
     ln, calls = _ready(landing, Fakes(hosts="daniel-box\tsonarr\ndaniel-pi\talloy\n"))
     ln.resolved_tags = ["sonarr", "alloy"]
     assert deploy.deploy_by_host(ln) == 0
@@ -46,7 +46,7 @@ def test_tags_no_host_declares_fall_through_to_one_deploy(landing):
 
 
 def test_under_at_the_hosts_are_read_at_the_merge_commit(landing, capsys):
-    """Issue #1839: a PR adding a Pi role and its containers_list entry together declares the
+    """A PR adding a Pi role and its containers_list entry together declares the
     role on daniel-pi in no checkout until the tick fast-forwards. The primary read routed it
     to no host and the landing ran deploy.sh locally, without `-e target=daniel-pi`."""
     ln, calls = _ready(landing, Fakes(hosts="", hosts_at={"daniel-pi": ["newpi"]}))
@@ -111,7 +111,7 @@ def test_a_retry_resumes_at_the_host_that_failed(landing):
 
 
 def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
-    """#1031, the deploy half of the tick's own guard: the sample precedes the attempt.
+    """The deploy half of the tick's own guard: the sample precedes the attempt.
 
     The fake answers once and then goes empty, so a post-attempt read would book nothing --
     but the ORDER assertion is what actually discriminates, since a post-attempt read
@@ -128,7 +128,7 @@ def test_the_lock_holder_is_sampled_before_the_deploy_attempt(landing):
 
 
 def test_a_mapping_failure_dies_with_its_own_verdict(landing):
-    """Closes #1016: this used to surface as a bare `deploy-failed (exit 1)`."""
+    """This must not surface as a bare `deploy-failed (exit 1)`."""
     ln, calls = _ready(landing, Fakes(hosts_rc=1))
     ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
@@ -154,7 +154,7 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
         ),
         (20, "deploy-failed", 1, "some changes are live", "playbook-failed"),
         (75, "lock-busy", 75, "lock stayed busy", ""),
-        # 79: the wrapper got no lock list, took nothing and ran nothing (issue #2054). Its
+        # 79: the wrapper got no lock list, took nothing and ran nothing. Its
         # own arm, so the verdict says "nothing deployed" rather than the bare exit below.
         (
             79,
@@ -171,7 +171,7 @@ def test_a_mapping_failure_dies_with_its_own_verdict(landing):
     ],
 )
 def test_deploy_outcomes(landing, rc, verdict, code, phrase, cause):
-    """#1031: every deploy-failed names its cause, so Loki can tell the shapes apart."""
+    """Every deploy-failed names its cause, so Loki can tell the shapes apart."""
     ln, _ = _ready(landing)
     ln.resolved_tags = ["sonarr"]
     with pytest.raises(Outcome) as exc:
@@ -203,8 +203,8 @@ def test_a_clean_deploy_returns(landing):
             "needs-manual-apply",
             1,
         ),
-        # Converged is not applied: every marker land.sh used to read says settled, and the
-        # tick recorded no apply covering the PR (issue #1537).
+        # Converged is not applied: every marker land.sh reads says settled, and the tick
+        # recorded no apply covering the PR.
         (Fakes(self_applied=True, state={}), "needs-manual-apply", 1),
     ],
 )
@@ -249,14 +249,13 @@ def test_a_broad_diff_fallback_is_handed_to_a_hand(landing):
 
 
 def test_a_stale_tree_waits_on_its_own_merge_commit_before_reticking(landing):
-    """Exit 4 is a resume point. Three landings on 2026-09-02 re-ticked immediately, deferred
-    again and exited 4 again; the fix re-checks blockers, waits on CI, then ticks.
+    """Exit 4 is a resume point.
 
     What it waits on is this landing's OWN merge commit, not the tip. The tick fast-forwards
-    to the newest green commit in the incoming range, so a tip that is still pending no longer
-    holds this PR — waiting on it is what the `tip-outran-retries` verdict measured, six
-    landings in 14 days at 400-614s each. The tip here is deliberately a different SHA, so a
-    wait that still read the tip would fail this.
+    to the newest green commit in the incoming range, so a tip that is still pending does not
+    hold this PR -- waiting on it would lose to a tip that moves again (the
+    `tip-outran-retries` verdict). The tip here is deliberately a different SHA, so a wait
+    that still read the tip would fail this.
     """
     tip = "feedfacefeedfacefeedfacefeedfacefeedface"
     ln, calls = _ready(landing, Fakes(deploy=[4, 0], tip=tip))
@@ -300,9 +299,7 @@ def test_a_stale_retry_is_bounded(landing):
 
 
 def test_losing_every_tip_race_is_not_a_deploy_failure(landing):
-    """#1466: PR #1460 ended `deploy-failed (exit 4)` twice while four sessions merged.
-
-    Exit 4 means NOTHING was deployed and re-running is safe, which is the opposite of what
+    """Exit 4 means NOTHING was deployed and re-running is safe, which is the opposite of what
     `deploy-failed` reads as. Exit 75 is the resume-point code `lock-busy` already uses.
     """
     ln, _ = _ready(landing, Fakes(deploy=[4]))
@@ -323,24 +320,23 @@ def test_a_deploy_that_actually_fails_is_still_a_deploy_failure(landing):
 
 
 def test_a_stale_retry_backs_off_between_attempts(landing):
-    """Issue #1084: PR #1051's landing burned all 3 stale retries in ~25s with no sleep
-    between them, while master CI on the merge commit was still 2m48s from green. Mirror
-    the lock-contention retry's own backoff (`lock_backoff`, already used above)."""
+    """Mirror the lock-contention retry's own backoff (`lock_backoff`, already used above):
+    the stale retries must not burn through with no sleep between them while master CI on the
+    merge commit is still pending."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 4, 4, 0]))
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
     sleeps = [c[1][0] for c in calls if c[0] == "sleep"]
-    # And it DOUBLES: a fixed 60s spends every attempt inside ~4 minutes, which #1466 measured
-    # losing to a merge rate of one every 2 minutes.
+    # And it DOUBLES: a fixed 60s spends every attempt inside ~4 minutes, which loses to a
+    # merge rate of one every 2 minutes.
     b = ln.opts.lock_backoff
     assert sleeps == [b, b * 2, b * 4]
 
 
 def test_a_stale_retry_waits_on_ci_even_when_the_tip_is_unchanged(landing):
-    """Issue #1084: PR #1051's landing hit exit 4 while master CI on the merge commit was
-    still 2m48s from green. The old code gated the CI wait behind `tip_sha != merge_sha`, so
-    an unchanged tip (default Fakes tip == MERGE_SHA) got no wait and no backoff at all. The
-    wait reads the merge commit instead, and it runs on every attempt."""
+    """A landing that hits exit 4 while master CI on the merge commit is still pending must
+    wait on the merge commit on every attempt: an unchanged tip (default Fakes
+    tip == MERGE_SHA) must still get a wait and a backoff."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0]))
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)
@@ -356,7 +352,7 @@ def test_a_blocker_landing_during_the_wait_ends_the_retry_as_blocked(landing):
 
 
 def test_a_contended_retick_inside_the_stale_retry_is_booked(landing):
-    """The #1013 case: the retry's tick loses the lock and must retry and book it, not carry on."""
+    """The retry's tick loses the lock and must retry and book it, not carry on."""
     ln, calls = _ready(landing, Fakes(deploy=[4, 0], tick=[3, 0]))
     ln.resolved_tags = ["sonarr"]
     deploy.deploy_phase(ln)

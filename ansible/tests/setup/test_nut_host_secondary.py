@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Guards on the host-side secondary upsmon — the process that performs the real poweroff.
 
-Until 2026-08-20 this role ran on `ups_host` alone, so daniel-box had no orderly shutdown at all:
-no /etc/nut, no nut-monitor, no cron, no HA automation with a power-off action. Whether that
-mattered turned on a question the repo had never recorded — does daniel-box draw from that UPS —
-and it does: `upsc` sampled against a modulated 16-core burn moved ups.load by ~5 points ≈ 45 W,
-three transitions phase-locked across two cycles.
+daniel-box draws from the UPS: `upsc` sampled against a modulated 16-core burn moves
+ups.load by ~5 points ≈ 45 W, three transitions phase-locked across two cycles. Without a
+secondary upsmon it has no orderly shutdown at all: no /etc/nut, no nut-monitor, no cron,
+no HA automation with a power-off action.
 
 Three properties are load-bearing here, and each one fails in a way that looks like success:
 
@@ -36,7 +35,7 @@ SETUP = (ANSIBLE / "initial_setup.yml").read_text()
 HOST_VARS = ANSIBLE / "inventory" / "host_vars"
 NUT_DEFAULTS = ANSIBLE / "roles" / "k8s" / "nut" / "defaults" / "main.yml"
 
-# Measured on daniel-server 2026-08-28, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
+# Measured on daniel-server, `upsc apc-ups@127.0.0.1`: battery.runtime 987 at
 # battery.charge 100 and ups.load 43. A floor, not a guarantee — it falls with battery age and
 # with load, which is why the ceiling below reserves a large slice of it.
 MEASURED_RUNTIME_S = 987
@@ -127,7 +126,7 @@ def test_no_task_is_tagged_so_the_lookup_cannot_be_split_from_its_consumer():
 # ── The ONBATT timer, once any host beyond ups_host is armed ────────────────────────────────
 #
 # Arming a host makes nut_onbatt_shutdown_delay a load-bearing availability number rather than
-# an agent node's private business, and it can now fail in BOTH directions. Too short stops the
+# an agent node's private business, and it can fail in BOTH directions. Too short stops the
 # control plane during a blip the battery would have carried; too long spends the runtime the
 # poweroffs themselves need. Neither shows up anywhere until a real outage, and a green deploy
 # looks identical either way — so the band is asserted here instead.
@@ -184,7 +183,7 @@ def test_a_delay_inside_the_band_is_clean():
 
 
 def test_a_delay_below_the_blip_window_is_flagged():
-    """The pre-2026-08-28 value, which is what made arming a regression rather than a fix."""
+    """The original short delay, which is what made arming a regression rather than a fix."""
     assert onbatt_delay_verdict(120, True) is not None
 
 
@@ -197,7 +196,7 @@ def test_the_band_binds_only_once_a_second_host_is_armed():
     assert onbatt_delay_verdict(120, False) is None
 
 
-# ── the runtime watchdog on the secondary's upsd link (2026-08-29 review M-8) ────────────
+# ── the runtime watchdog on the secondary's upsd link ────────────
 #
 # The `wait_for` above proves reachability once, at deploy. These guard the check that proves
 # it every 10 minutes afterwards. Each asserts a property whose failure is invisible: a
@@ -248,8 +247,7 @@ def test_the_extractor_never_prints_the_fifth_field():
     """The rejecting half, and the reason this is awk rather than grep.
 
     `grep MONITOR upsmon.conf` returns the whole line — including the credential in field 5 —
-    into syslog and into any transcript that ran the check. This estate has rotated three
-    secrets after exactly that mistake.
+    into syslog and into any transcript that ran the check, so the credential needs rotating.
     """
     assert _FAKE_CREDENTIAL not in _extract_endpoint(_MONITOR_LINE)
 
@@ -277,11 +275,7 @@ def test_the_watchdog_checks_both_the_unit_and_the_link():
 
 
 def test_the_watchdog_logs_above_the_journald_store_cap():
-    """journald here is capped at MaxLevelStore=notice, so an info line never reaches Loki.
-
-    That was 2026-08-29 review M-15, found in live_drift_check.py. Pinned here so this check
-    cannot ship the same bug.
-    """
+    """journald here is capped at MaxLevelStore=notice, so an info line never reaches Loki."""
     assert "daemon.notice" in WATCHDOG
     assert "daemon.info" not in WATCHDOG
 
@@ -303,8 +297,8 @@ def test_the_env_file_selects_the_token_by_host():
     """daniel-box and ups_host (daniel-server) must render DIFFERENT tokens.
 
     Two hosts pushing the same token would let either host's `up` satisfy Kuma's push
-    deadline, masking the other's `down` (issue #952) — the literal-token guard above would
-    pass vacuously for the new leg without this check.
+    deadline, masking the other's `down` — the literal-token guard above would
+    pass vacuously for this leg without this check.
     """
     assert "{% if inventory_hostname == ups_host %}" in WATCHDOG_ENV
     assert "ups_secondary_daniel_server_push_token" in WATCHDOG_ENV
@@ -333,7 +327,7 @@ def test_the_tile_is_gated_on_its_token():
 def test_the_tile_deadline_is_derived_from_the_cron_cadence():
     """A hardcoded interval survives a schedule change and grants the wrong grace.
 
-    A 24h grace against a 23h gap once cleared the DOWN it was added to make sticky.
+    A 24h grace against a 23h gap clears the DOWN it was added to make sticky.
     """
     assert "nut_host_watchdog_interval_minutes" in STATIC_MONITORS
     assert "*/{{ nut_host_watchdog_interval_minutes }}" in TASKS
@@ -355,9 +349,8 @@ def test_the_watchdog_keeps_upsc_stdout_and_stderr_apart():
     """`2>&1` on the upsc call puts its diagnostics inside the VALUE.
 
     upsc writes "Init SSL without certificate database" to stderr on every successful call
-    against this endpoint. Folding the streams made the pushed message multi-line and made the
-    empty-status branch unreachable, since the noise is never empty. Both shipped and were
-    caught on the check's first live cycle, 2026-08-29.
+    against this endpoint. Folding the streams makes the pushed message multi-line and makes the
+    empty-status branch unreachable, since the noise is never empty.
     """
     assert 'upsc "$ENDPOINT" ups.status 2>&1' not in WATCHDOG
     assert 'ups.status 2>"$UPSC_STDERR"' in WATCHDOG

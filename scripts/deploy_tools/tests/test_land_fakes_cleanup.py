@@ -6,13 +6,13 @@ the whole test session. Left to its own implicit finalizer, `TemporaryDirectory`
 pyproject.toml turns that warning into a raised exception during interpreter teardown. Under
 plain CPython this only prints a traceback to stderr (exit code stays 0), but the same warning
 inside a pytest-xdist worker's own atexit handling failed the whole run non-deterministically,
-depending on load (see #1231). The fix registers an explicit `atexit.register(tmp.cleanup)`:
+depending on load. The fix registers an explicit `atexit.register(tmp.cleanup)`:
 `TemporaryDirectory.cleanup()` detaches the weakref finalizer before the implicit one ever
 runs, and atexit calls run LIFO, so our later-registered cleanup always beats the finalizer
 registered when `tempfile`/`weakref` were imported -- deterministic, not load-dependent.
 
 The `ResourceWarning` text on stderr is what's asserted, not an exit code, because the
-exit-code amplification is the load-dependent xdist-specific part (#1231); the warning itself
+exit-code amplification is the load-dependent xdist-specific part; the warning itself
 is what pytest's `filterwarnings = ["error"]` would turn into a failure, and it fires (or
 doesn't) exactly the same way in a bare subprocess.
 
@@ -58,8 +58,8 @@ def test_the_guard_would_catch_the_unfixed_shape():
     Proves the assertion above is exercising something real: without an explicit
     `atexit.register(tmp.cleanup)`, the implicit weakref finalizer runs at interpreter exit,
     calls `warnings.warn(..., ResourceWarning)`, and `filterwarnings("error")` turns that into
-    a printed traceback here (an exit-code failure only under the xdist-worker conditions in
-    #1231, which are load-dependent rather than reproducible in a single subprocess).
+    a printed traceback here (an exit-code failure only under xdist-worker conditions, which
+    are load-dependent rather than reproducible in a single subprocess).
     """
     code = textwrap.dedent("""
         import tempfile, warnings

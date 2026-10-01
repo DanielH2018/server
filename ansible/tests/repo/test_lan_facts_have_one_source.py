@@ -3,29 +3,15 @@ subnet, and the cni0 gateway pair) must have exactly one YAML definition site. E
 else, a `.j2` template, an Ansible task file, or a Python module reads the variable rather
 than re-typing the literal.
 
-A census swept every `192.168.`, `10.0.0.`, `10.42.` and `10.43.` hit across `ansible/`,
-`scripts/` and `docs/` (94 files) and classified each one: a definition site, a correct
-`{{ var }}` reference, a test/fixture value, prose, or a genuine duplicate. Three duplicates
-were real and are fixed
-in the same change that added this guard: `loki-homelab/templates/ingressroute.yaml.j2` and
-netpol-baseline's own `networkpolicy-mosquitto.yaml.j2` / `networkpolicy-nut.yaml.j2` each
-hardcoded the cni0 gateway pair instead of looping `netpol_baseline_node_cidrs`, which now
-itself aliases the new `k3s_cni0_gateways` group_var — the fact loki-homelab (a different
-role) needed to reach it too. A fourth fact, the WireGuard client subnet, had NO variable at
-all (wg-easy v15 picks `10.8.0.0/24` internally; nothing in this repo assigns it) — three
-comments quoted the bare literal, so `wg_client_subnet` was added to group_vars and the
-comments now cite it by name.
-
-What this guard does NOT cover, and why: the census's own grep pattern is broader than the six
-named facts — `10.42.` and `10.43.` also match the k3s pod/Service CIDRs (`k3s_pod_cidr`,
+What this guard does NOT cover, and why: the `10.42.` and `10.43.` prefixes are broader than
+the six named facts — they also match the k3s pod/Service CIDRs (`k3s_pod_cidr`,
 `k3s_service_cidr`) and the per-service ClusterIPs, none of which are LAN facts. Those already
 have their own single source (group_vars, or a role's own `defaults/main.yml`) and are out of
 scope here; duplicating IN the pod CIDR under this guard's name would mean policing a second,
 unrelated class of fact under a title that doesn't own it.
 
 Two failure shapes, and both must fail, per this repo's established pattern for a guard that
-finds its own subject by scanning text (`volume-claim`'s short-circuit and `image-smoke`'s
-bare boot both shipped green while checking nothing): `flagged()` is the pure core, proven by
+finds its own subject by scanning text: `flagged()` is the pure core, proven by
 an `_is_clean` / `_is_flagged` pair below, and `test_the_census_actually_scanned_the_files_this_change_touched`
 asserts the walk visits a NAMED set of paths rather than trusting an empty result.
 """
@@ -37,7 +23,7 @@ from _helpers import REPO
 
 # --- the four LAN-fact literal shapes -----------------------------------------------------
 #
-# Deliberately narrower than the census's own `10.0.0.\|10.42.\|10.43.` sweep — see the module
+# Deliberately narrower than a `10.0.0.`/`10.42.`/`10.43.` prefix sweep — see the module
 # docstring for why the pod/Service CIDRs and per-service ClusterIPs are out of scope. A LAN
 # octet immediately followed by `/` is a CIDR mention (`10.0.0.0/24`, `10.0.0.0/8`), which is
 # either the `lan_subnet` definition itself or a supernet comment, not a duplicated host/VIP
@@ -142,8 +128,8 @@ def _code_lines(text: str) -> list[tuple[int, str]]:
     """Every line that is not a `#` comment or inside a `{# ... #}` Jinja comment block.
 
     A comment can quote a value for narrative reasons ("VIP 10.0.0.244 since it went live")
-    without re-deriving it as data a manifest would render differently if the source changed
-    — that is what the census called (c). Only a value a template or task actually ASSIGNS is
+    without re-deriving it as data a manifest would render differently if the source changed.
+    Only a value a template or task actually ASSIGNS is
     the duplicate this guard cares about.
     """
     lines = []

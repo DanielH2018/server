@@ -11,7 +11,7 @@
     # DaemonSet pod keeps logging in with the old value, behind a green deploy.
     #
     # ACCEPTED COST: that restart is gated on the render changing, not on the SECRET changing,
-    # so any crowdsec manifest edit now rolls both node agents while the engine Deployment is
+    # so any crowdsec manifest edit rolls both node agents while the engine Deployment is
     # itself rolling. Per-node auth.log parsing is blank for that window; the wait-for-lapi
     # init container absorbs up to 120s of it, and the LAPI keeps its own decisions.
     manifests_extra_rollouts:
@@ -22,7 +22,7 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
-      # Phase F drain: per-node auth.log agents (see node-agent-daemonset.yaml.j2).
+      # Per-node auth.log agents (see node-agent-daemonset.yaml.j2).
       - node-agent-acquis.yaml
       - node-agent-daemonset.yaml
     manifests_secret_files:
@@ -40,15 +40,12 @@
   #
   # Without this gate a manifest change makes the role fail against the pod it just restarted
   # — and `no_log` on the task below censors the body, so it surfaces as a bare "Module
-  # failed: non-zero return code" that reads like a credential problem. Bit a 2026-08-16
-  # deploy: 2 of 4 loop items registered, then the pod went down mid-loop.
+  # failed: non-zero return code" that reads like a credential problem.
   #
   # `rollout status`, not `wait --for=condition=Available`: this Deployment is single-replica,
   # so the OLD pod satisfies Available and the wait returns instantly. Returns immediately when
-  # nothing rolled, so the no-change deploy pays nothing. 300s was sized against the worst
-  # measured roll while the Metabase dashboard shared this pod (~3.5 min on a cold metabase
-  # image pull; 73s warm). Metabase was removed 2026-08-22, so the real worst case is now the
-  # engine's own pull — the headroom is kept rather than retuned on one observation.
+  # nothing rolled, so the no-change deploy pays nothing. 300s is headroom over a cold image
+  # pull: the worst measured roll was ~3.5 min cold and 73s warm.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} rollout status deploy/crowdsec --timeout=300s
@@ -59,7 +56,7 @@
   when: not k8s_no_mutate
   tags: [deploy]
   # The image entrypoint only registers ITS OWN pod's agent (AGENT_USERNAME env); the
-  # sidecar in the traefik pod and daniel-server's demoted engine (B2) are additional
+  # sidecar in the traefik pod and the node agents are additional
   # machines and must exist before they can log in. Password travels over exec stdin so
   # it never appears in argv (host `ps`) or the k8s audit trail; no_log keeps it out of
   # Ansible output. Idempotent: adds only when the machine is absent, prints ADDED so
@@ -71,9 +68,6 @@
       { cscli machines add {{ item }} --password "$pw" -f /dev/null && echo ADDED; }'
     stdin: "{{ crowdsec_k8s_agent_password }}"
   loop: "{{ [crowdsec_k8s_agent_username, crowdsec_k8s_authelia_agent_machine] + crowdsec_k8s_node_agent_machines }}"
-  # crowdsec_k8s_server_agent_machine (the demoted Docker agent) left the loop at the
-  # Phase F drain — the node-agent DaemonSet machines above are its successors; the
-  # retirement one-shot deleted the old machine from the LAPI.
   register: crowdsec_k8s_machine_add
   become: true
   no_log: true
@@ -82,9 +76,8 @@
 - name: Create the home-ips allowlist on the LAPI
   when: not k8s_no_mutate
   tags: [deploy]
-  # Moved from the containers/traefik role at B2b: `cscli allowlists` is LAPI-machine-only
-  # ("local API is disabled -- this command must be run on the local API machine" from the
-  # demoted agent, live 2026-08-09), so allowlist management follows the LAPI here.
+  # `cscli allowlists` is LAPI-machine-only ("local API is disabled -- this command must be
+  # run on the local API machine" from an agent), so allowlist management runs on the LAPI.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
@@ -122,9 +115,9 @@
 - name: Schedule the home-allowlist updater
   tags: [cron]
   # root, not sys_user: the script execs into the engine pod, which needs the root
-  # kubeconfig — the readonly SA cannot exec. Every 5 min like its daniel-server
-  # predecessor; it pushes the same Kuma monitor directly (no monitor-bridge hop).
-  # Output goes to the journal under the script's own tag (#2487): cscli prints on every
+  # kubeconfig — the readonly SA cannot exec. Every 5 min; it pushes the Kuma monitor
+  # directly (no monitor-bridge hop).
+  # Output goes to the journal under the script's own tag: cscli prints on every
   # home-IP change and curl on a retried push, and neither is a failure. A failure is the
   # Kuma monitor going down.
   ansible.builtin.cron:
@@ -139,7 +132,7 @@
 - name: Create the remote-ips allowlist on the LAPI
   when: not k8s_no_mutate
   tags: [deploy]
-  # The home-ips sibling above, for the operator's authenticated remote exits (#2123).
+  # The home-ips sibling above, for the operator's authenticated remote exits.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} exec deploy/crowdsec -c crowdsec --
@@ -233,7 +226,7 @@
 - name: Schedule the bouncer prune
   tags: [cron]
   # root, for the same reason as the allowlist crons: it execs into the engine pod. Hourly,
-  # matching the module's 60-minute window (#2762). The wrapper logs its own summary; the
+  # matching the module's 60-minute window. The wrapper logs its own summary; the
   # pipe catches anything else, such as a uv error, rather than mailing it.
   ansible.builtin.cron:
     name: "CrowdSec bouncer prune"
@@ -246,8 +239,7 @@
 
 - name: Deploy the AppSec verifier
   tags: [cron]
-  # Re-homed from the containers/traefik role at E7 — the Docker edge retired and this
-  # is the estate's only WAF-actually-enforcing signal (the bouncer fails open).
+  # This is the estate's only WAF-actually-enforcing signal (the bouncer fails open).
   ansible.builtin.template:
     src: crowdsec-appsec-verify.sh.j2
     dest: /usr/local/bin/crowdsec-appsec-verify.sh
@@ -260,8 +252,8 @@
 
 - name: Schedule the AppSec verifier
   tags: [cron]
-  # root, not sys_user: execs into the engine pod via the root kubeconfig. Every 15 min
-  # like its daniel-server predecessor; pushes the "CrowdSec AppSec" monitor directly.
+  # root, not sys_user: execs into the engine pod via the root kubeconfig. Every 15 min;
+  # pushes the "CrowdSec AppSec" monitor directly.
   ansible.builtin.cron:
     name: "CrowdSec AppSec verify"
     minute: "*/15"
@@ -275,8 +267,8 @@
   # NOT UNDER --check. The gate proves enforcement by mutating real state — it bans a real
   # LAN host, then probes from that host expecting 403. Check mode skips `command`, so the
   # ban never happens; but the probe carries retries/until, and a skipped task has no stdout
-  # for `until: ... == "403"` to match. It therefore burned all 8 retries and failed the run,
-  # every time, on a task that had correctly changed nothing.
+  # for `until: ... == "403"` to match. It would burn all 8 retries and fail the run on a
+  # task that had correctly changed nothing.
   #
   # Skipping is the only honest option: the gate is unprovable in check mode BY CONSTRUCTION,
   # since you cannot demonstrate a ban is enforced without taking the ban. Making it run
@@ -285,6 +277,6 @@
   #
   # `when` on an import_tasks propagates to every task in the file, so this one line covers
   # all four. Nothing is lost: the gate carries no persistent state for --check to drift-detect.
-  # k8s_no_mutate rather than ansible_check_mode alone, so a k8s_dry_run skips it too (#2588).
+  # k8s_no_mutate rather than ansible_check_mode alone, so a k8s_dry_run skips it too.
   when: not k8s_no_mutate
   ansible.builtin.import_tasks: verify.yml

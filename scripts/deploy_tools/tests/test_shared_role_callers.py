@@ -1,4 +1,4 @@
-"""`shared_role_callers.py`: which tags' deploys run a shared role (#2643, #2704)."""
+"""`shared_role_callers.py`: which tags' deploys run a shared role."""
 
 import json
 
@@ -19,7 +19,7 @@ def test_the_deployers_argv_is_one_main_accepts(capsys):
     }
 
 
-# ── which tags deploy a shared role at all, record or no record (#2704) ──
+# ── which tags deploy a shared role at all, record or no record ──
 def test_caller_tags_follows_a_shared_caller_and_skips_a_dead_end():
     """A first-hop-only walk would miss `web`, so `longhorn-api` could never discharge."""
     callers = {"longhorn-api": {"volume-snapshot", "dead"}, "volume-snapshot": {"web"}}

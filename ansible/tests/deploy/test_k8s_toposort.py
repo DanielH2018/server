@@ -1,13 +1,9 @@
 #!/usr/bin/env python3
 """The k8s play toposorts containers_list; this guards that the sort is actually correct.
 
-Until this file, the k8s play deployed in raw list order (deploy.yml, and
-tasks/k8s_batch.yml batching that order at k8s_rollout_batch_width) and a hand-written
-comment above containers_list carried the ordering rules -- the kind of guard that holds
-right up until someone appends a service in the obvious place. deploy.yml now calls
-build_k8s_dep_map + toposort_containers (ansible/filter_plugins/toposort.py), the same
-toposort_containers the Docker play already used, so the two rules that used to be
-enforced by hand position are now graph edges instead:
+deploy.yml calls build_k8s_dep_map + toposort_containers (ansible/filter_plugins/toposort.py),
+so the ordering rules are graph edges rather than hand position in a list -- hand position
+holds right up until someone appends a service in the obvious place. Two rules are derived:
 
   traefik <- every ROUTED role.
       Derived from the containers_list entry's `hostname` (_entry_is_routed), with the
@@ -16,9 +12,9 @@ enforced by hand position are now graph edges instead:
       Fails LOUDLY without the edge, on a fresh cluster: the CRD does not exist, `kubectl
       apply` exits non-zero, the task fails.
 
-      The entry is the primary test because #3043 moved 16 roles' IngressRoute to
-      `ansible/templates/ingressroute-default.yaml.j2`. A route rendered from there leaves
-      no string in the role, so a templates-only derivation would drop the edge for all 16.
+      The entry is the primary test because the shared default,
+      `ansible/templates/ingressroute-default.yaml.j2`, renders a route that leaves no string
+      in the role, so a templates-only derivation would drop the edge for every role using it.
 
   authelia <- every entry with use_authelia: true.
       Derived from the containers_list entry itself. Fails SILENTLY without the edge: the
@@ -33,10 +29,9 @@ Traefik CRD (an IngressRoute) -- which is why K8S_CRD_EDGE_EXEMPT in toposort.py
 crowdsec from the auto-derived traefik edge; without that exemption the two edges would
 cycle and toposort_containers would raise on every deploy.
 
-test_derived_order_matches_todays_hand_ordered_list is the cheapest proof the change is
-sound: today's hand-ordered list is already a valid topological order (the assertions this
-file used to make prove that), and toposort_containers is a stable sort, so running it
-over today's list must reproduce today's list unchanged. If it doesn't, an edge points the
+test_derived_order_matches_todays_hand_ordered_list is the cheapest proof the sort is
+sound: the hand-ordered list is a valid topological order, and toposort_containers is a
+stable sort, so running it over the list must reproduce the list unchanged. If it doesn't, an edge points the
 wrong way.
 
 Run: uv run pytest ansible/tests/deploy/test_k8s_toposort.py
@@ -195,7 +190,7 @@ def test_every_over_derived_role_is_a_real_role_that_still_gets_the_edge(host):
 
 
 def test_a_routed_entry_that_ships_no_route_template_still_gets_the_edge():
-    """The red-proof for #3043: the 16 roles whose IngressRoute is the shared default.
+    """The red-proof for the shared-default route: the roles whose IngressRoute is the shared default.
 
     `_role_renders_traefik_crd` returns False for a role with no templates directory at all,
     so an entry-blind derivation would return an empty dep list here.
@@ -272,9 +267,9 @@ def test_shuffled_list_still_sorts_to_respect_every_edge(host):
 
 
 # Every pairwise ordering a role doc or a containers_list comment states in prose, as the
-# `depends_on:` edge that carries it. Until issue #2167 these held by hand position alone,
-# which the stable sort preserved and nothing checked: dropping the edge, or moving the entry,
-# passed every test above. The value names where the prose lives, so a reader of a red
+# `depends_on:` edge that carries it. Without the edge these hold by hand position alone,
+# which the stable sort preserves and nothing checks: dropping the edge, or moving the entry,
+# would pass every test above. The value names where the prose lives, so a reader of a red
 # failure knows which doc to reconcile.
 DOCUMENTED_ORDERINGS = {
     ("mosquitto", "zigbee2mqtt"): "roles/k8s/mosquitto/CLAUDE.md",

@@ -1,33 +1,26 @@
 """Every ansible/roles/k8s/ role directory carries a CLAUDE.md doc.
 
-Written for issue: 33 of 63 k8s roles had no CLAUDE.md. A role's doc is the
-first thing a session reads before touching that service (repo CLAUDE.md's
-"Where to Look" table routes here), so a missing one means the session reads
-the tasks/templates cold every time.
+A role's doc is the first thing a session reads before touching that service
+(repo CLAUDE.md's "Where to Look" table routes here), so a missing one means the
+session reads the tasks/templates cold every time.
 
 Red-proof pair: a fixture role with no CLAUDE.md is flagged by
 `_check_role_doc`; a fixture role with an adequate one passes clean. Both
 fixtures exercise the exact helper the real test uses, not a re-implementation
 of its logic.
 
-The size ceiling (issues #2126, #2826): a role doc is loaded whole on every
-touch of the role, and `monitor-bridge/CLAUDE.md` had grown to 1539 lines (~34k
-tokens) of incident ledger before its history moved to
-`docs/monitor-bridge-checks.md`. A doc over `MAX_CHARS` fails unless
+The size ceiling: a role doc is loaded whole on every touch of the role, so a
+long one costs its full size each time. A doc over `MAX_CHARS` fails unless
 `OVER_CEILING` names the role with the reason, and an entry there for a role that
 has since shrunk fails too, so the list cannot rot.
 
 The unit is characters, and `MAX_CHARS` is the inject hook's payload budget
-(`_doc_size.MAX_CHARS`). A 400-line ceiling passed 30 of 93 role docs the hook
-already truncates to their head, because it counted lines and the hook counts
-characters (#2826).
+(`_doc_size.MAX_CHARS`). A line-based ceiling passes docs the hook still
+truncates to their head, because the hook counts characters.
 
-The warning band (issue #2557): a ceiling that only fails OVER the ceiling tells
+The warning band: a ceiling that only fails OVER the ceiling tells
 nobody anything until the ceiling is already breached, so the first author to
-learn about it is the one whose bullet does not fit. #2539 reports what that
-costs, and `git log --follow` on monitor-bridge's doc confirms it: the `etcd DB
-Size` bullet went in as one 805-character physical line (d939da86a) and was
-rewrapped four commits later (a42afdbc0). A doc
+learn about it is the one whose bullet does not fit. A doc
 between `WARN_CHARS` and `MAX_CHARS` is reported through a `RoleDocNearCeiling`
 warning, which `pyproject.toml`'s `filterwarnings` shows rather than errors, so
 the signal arrives with room left to write the bullet and the guard still fails
@@ -66,25 +59,8 @@ WARN_CHARS = int(MAX_CHARS * WARN_FRACTION)
 # justification, not a waiver: it names the operating rule that cannot move to a docs/ page,
 # and the section to move out next. An entry for a doc that has since shrunk fails, so a
 # stale waiver cannot survive the trim that earned it, and a doc that GROWS past its recorded
-# count fails too (#2679) — the ratchet is what makes these entries a shrinking list rather
-# than a set of permanent exemptions. Recorded 2026-09-28 when the unit became characters
-# (#2826); #2921 started the trim, and configarr and healthchecks left the list by fitting
-# under the ceiling. #2985 took four more out: cronjob-gate's design rationale, headlamp's
-# plugins and OIDC measurements, game-stats' Valheim parser and n8n's community-package
-# account each moved to a docs/ page. #2989 continued it: traefik's `## Notable` split by
-# subject across two docs/ pages, home-assistant's testing, tooling and traps moved into the
-# role's own docs/ tree, valheim's modding account moved to docs/valheim-modding.md, and
-# autofix-bridge's actuator mechanics to docs/autofix-bridge-actuators.md. #2991 took three
-# more: crowdsec's incident record to docs/crowdsec-waf-record.md, qbittorrent's two outages
-# and prefs plane to docs/qbittorrent-vpn-and-prefs.md, and jellyfin's per-plugin record to
-# docs/jellyfin-plugins.md. #2993 took observability and monitor-bridge out: the OIDC
-# measurements, the idle-vs-broken diagnosis and the verification commands moved to
-# docs/observability-oidc-and-idle-diagnosis.md, and the module table, gate-set membership,
-# operator prerequisites and test seams to docs/monitor-bridge-internals.md. #2995 took homepage
-# and volume-revert out: the grid and stat-block derivations, the browser measurements and the
-# per-widget record moved to docs/homepage-widgets-and-layout.md, and volume-revert's drill
-# timings, timeout derivation, longhorn-manager findings and hand-recovery steps to
-# docs/volume-revert-drill-and-sizing.md. Each remaining reason names its own next section to
+# count fails too — the ratchet is what makes these entries a shrinking list rather
+# than a set of permanent exemptions. Each remaining reason names its own next section to
 # move.
 OVER_CEILING: dict[str, str] = {}
 
@@ -352,8 +328,7 @@ def test_a_band_notice_is_shown_rather_than_raised():
 
     A broken entry needs no test: pytest raises `PytestConfigWarning: Failed to import filter
     module` when it cannot resolve the category, and the blanket `error` turns that into a failure
-    of every test in the run (measured 2026-09-25 by pointing the entry at a module that does not
-    exist). Only a MISSING entry is silent, and that is what this covers.
+    of every test in the run. Only a MISSING entry is silent, and that is what this covers.
     """
     warnings.warn(
         "band reporting self-check, not a real role doc",

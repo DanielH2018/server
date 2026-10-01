@@ -1,10 +1,9 @@
 """Every rendered Deployment pins `revisionHistoryLimit: 3`.
 
 WHY THIS EXISTS. Kubernetes defaults `revisionHistoryLimit` to 10, so an unpinned Deployment
-keeps ten scaled-to-zero ReplicaSets as rollback history. Across this cluster that read as 605
-ReplicaSets against 68 Deployments and 119 pods on 2026-08-28 — 537 of them empty. Nothing
-breaks, but `kubectl get rs -A` stops being usable for reading cluster state, and the count
-grows with every image-pin bump the GitOps tick lands.
+keeps ten scaled-to-zero ReplicaSets as rollback history. Nothing breaks, but
+`kubectl get rs -A` stops being usable for reading cluster state, and the count grows with
+every image-pin bump the GitOps tick lands.
 
 Rollback depth is not the reason to raise the number back. Rollbacks here go through
 `git revert` + a redeploy, not `kubectl rollout undo`, so history beyond the handful needed to
@@ -23,7 +22,7 @@ from _k8s_render import rendered_docs
 
 LIMIT = 3
 
-# Non-vacuity: 62 Deployments render today (2026-09-19). Close enough to notice a contraction.
+# Non-vacuity: 62 Deployments render. Close enough to notice a contraction.
 _MIN_DEPLOYMENTS = 55
 
 

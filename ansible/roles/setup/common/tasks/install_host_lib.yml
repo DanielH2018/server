@@ -4,9 +4,8 @@
 # WHY A SIBLING COPY AND NOT A SHARED PATH. Every consumer is a directly-invoked script, so it
 # gets its own directory on `sys.path` and nothing else (the repo-root CLAUDE.md states the
 # rule). Eight callers across seven roles therefore need a copy of the SAME file in their own
-# /opt directory, and each one wrote its own `copy:` task to get it. That duplication is the
-# finding this file closes: the source path, the `host_lib.py` basename and the 0755 mode were
-# written out eight times, so a change to any of them had eight places to miss.
+# /opt directory. This file holds the source path, the `host_lib.py` basename and the 0755 mode
+# in one place, so a change to any of them has one place to make.
 #
 # WHAT THIS FILE DELIBERATELY DOES NOT DO: write the stamp_deployed pair. Six of the eight
 # sites record `/opt/<x>/host_lib.py` in their role's `stamp_deployed_pairs` (gitops_deploy,
@@ -19,7 +18,7 @@
 # ENFORCED by ansible/tests/setup/test_host_lib_sibling_copies.py, which asserts that every
 # role whose files/ scripts `import host_lib` includes this task file, that the pair a role
 # does declare names the directory it passes here, that a role which stamps its other code
-# stamps this copy too (#2564), and that a `host_lib_notify` handler name exists in the
+# stamps this copy too, and that a `host_lib_notify` handler name exists in the
 # caller's own handlers/.
 #
 # `src` is absolute off `{{ playbook_dir }}` rather than a bare basename. A task file imported

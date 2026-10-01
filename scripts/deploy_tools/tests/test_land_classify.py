@@ -40,7 +40,7 @@ def test_the_range_comes_from_the_pull_ref_and_its_merge_base(landing):
 
 
 def test_an_unreadable_range_is_empty_and_says_so(landing, capsys):
-    """Empty classifies every broad path as loud -- the direction a wrong answer must fall (#848)."""
+    """Empty classifies every broad path as loud -- the direction a wrong answer must fall."""
     ln, _ = landing(Fakes(pull_ref_rc=1))
     assert classify.pr_range(ln) == ""
     assert "every broad path stays owed to a hand" in capsys.readouterr().out
@@ -65,7 +65,7 @@ def test_classify_fills_tags_plane_and_self_applied(landing):
 
 
 def test_classify_deploys_the_callers_of_a_shared_role(landing):
-    """PR #2701's shape: only a shared role changed, so the landing deploys its callers."""
+    """Only a shared role changed, so the landing deploys its callers."""
     ln, _ = landing(
         Fakes(derived=([], "pr"), shared_callers={"helper": {"sonarr", "radarr"}})
     )
@@ -75,7 +75,7 @@ def test_classify_deploys_the_callers_of_a_shared_role(landing):
 
 
 def test_classify_records_which_tags_only_the_caller_graph_named(landing):
-    """Issue #2718: those tags route to a `platform: k8s` entry alone, so the deploy phase has
+    """Those tags route to a `platform: k8s` entry alone, so the deploy phase has
     to be able to tell them from the ones a changed path named."""
     ln, _ = landing(
         Fakes(
@@ -100,7 +100,7 @@ def test_classify_leaves_the_tags_alone_when_no_shared_role_changed(landing):
 
 
 def test_classify_records_the_tags_a_changed_path_proves_are_k3s(landing):
-    """Issue #2730: a PR touching only `roles/k8s/wg-easy/` names a tag the Pi also declares,
+    """A PR touching only `roles/k8s/wg-easy/` names a tag the Pi also declares,
     and the routing read has to be told the change is the cluster's."""
     ln, _ = landing(Fakes(derived=(["wg-easy"], "pr"), path_k8s_only=["wg-easy"]))
     ln.merge_sha = MERGE_SHA
@@ -126,7 +126,7 @@ def test_both_provenances_land_in_one_list(landing):
 def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):
     """REJECTING half: on the FALLBACK path `derive_from_diff` rebuilds the tags in step 5 from
     a diff this classification never reads, so no tag may be restricted here. Step 5 answers
-    the same question over the diff's own paths instead (`deploy.record_k8s_only`, #2738)."""
+    the same question over the diff's own paths instead (`deploy.record_k8s_only`)."""
     ln, _ = landing(
         Fakes(derived=([], "fallback"), path_k8s_only=["wg-easy"]), since="abc"
     )
@@ -135,7 +135,7 @@ def test_a_truncated_file_list_proves_nothing_about_a_platform(landing):
     assert ln.k8s_only == []
 
 
-# ── a role this PR registers is not a role somebody forgot to register (issue #1544) ──
+# ── a role this PR registers is not a role somebody forgot to register ──
 
 _NEW_ROLE_PR = {
     "files": [
@@ -156,7 +156,7 @@ def _real_derivation(ln):
 def test_a_role_this_pr_registers_is_deployed_rather_than_reported_unregistered(
     landing,
 ):
-    """PR #1539's shape: the entry is at the merge commit and in no checkout yet."""
+    """The entry is at the merge commit and in no checkout yet."""
     ln, _ = landing(
         Fakes(
             gh_views={"files,changedFiles": _NEW_ROLE_PR},
@@ -199,7 +199,7 @@ def test_an_unreadable_merge_commit_says_so_and_falls_back_to_this_checkout(
 
 
 def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
-    """Issue #1009: the tick runs on ONE host, so `self_applied` alone leaves the rest silent."""
+    """The tick runs on ONE host, so `self_applied` alone leaves the rest silent."""
     ln, calls = landing(
         Fakes(
             self_applied=True, remaining_setup="`initial_setup` also reaches daniel-pi"
@@ -217,7 +217,7 @@ def test_classify_asks_what_a_self_applied_role_still_owes_other_hosts(landing):
 def test_explicit_tags_skip_derivation_but_not_the_self_applied_half(landing):
     """`--tags` overrides the derivation; it does not opt out of the plane classification.
 
-    The file list is read either way now, so the derivation being skipped is asserted by its
+    The file list is read either way, so the derivation being skipped is asserted by its
     ANSWER not landing: `derived` names radarr and the override's sonarr survives.
     """
     ln, _ = landing(Fakes(derived=(["radarr"], "pr"), self_applied=True), tags="sonarr")
@@ -276,9 +276,8 @@ def test_any_reach_disables_the_shortcut(landing, attr, value):
 def test_a_crashing_classification_helper_dies_named_rather_than_traces(
     landing, attr, label
 ):
-    """bash ran these as subprocesses guarded by `|| die "<name> failed" 1`; in-process, an
-    unhandled exception (a `yaml.YAMLError` reading `host_vars`, say) must still read as
-    `land: <name> failed` rather than a bare traceback (#1085 item 5)."""
+    """An unhandled exception (a `yaml.YAMLError` reading `host_vars`, say) must still read as
+    `land: <name> failed` rather than a bare traceback."""
     ln, _ = landing()
     ln.merge_sha = MERGE_SHA
 

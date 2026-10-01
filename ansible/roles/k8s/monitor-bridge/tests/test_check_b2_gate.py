@@ -1,12 +1,10 @@
 """The B2-reachability gate: the throttled probe, and which failure holds the cache how long.
 
-Split out of test_check_gates.py, which the module-length ratchet caps — the B2 arm is
-self-contained (its own probe cache, its own two cache TTLs) and reads better beside the
-incident it exists for than in the middle of the run-loop wiring tests.
+The B2 arm is self-contained: its own probe cache, its own two cache TTLs.
 
-WHAT THIS ARM IS FOR: on 2026-08-02 B2 refused every request for nine and a half hours while
-the kopia-era state-file checks read green, because they reported their last successful cron
-run rather than current B2 health. `b2_reachable` probes B2 itself, and caches the outcome so
+WHAT THIS ARM IS FOR: state-file checks report their last successful cron run rather than
+current B2 health, so B2 can refuse every request while they read green. `b2_reachable` probes
+B2 itself, and caches the outcome so
 that watching a TRANSACTION cap does not spend it — but caches a transport failure for only
 one cycle, because a connection that never landed was never billed.
 
@@ -49,9 +47,9 @@ def _cap_denial(cfg):
     """The exception a real transaction-cap breach raises.
 
     _get_json re-raises urllib HTTPError UNTOUCHED (check.py, "Re-raise the SAME type") and wraps
-    only non-HTTP failures as RuntimeError. b2_reachable now branches on exactly that distinction
+    only non-HTTP failures as RuntimeError. b2_reachable branches on exactly that distinction
     to pick a cache TTL, so a test that fakes a 403 as a RuntimeError would exercise the transport
-    path and prove the opposite of what it claims. These tests used to do that.
+    path and prove the opposite of what it claims.
     """
     err = urllib.error.HTTPError(
         cfg.B2_PROBE_URL,
@@ -137,10 +135,10 @@ def test_b2_reachable_caches_failure_and_does_not_reprobe(monkeypatch, cfg):
 
 
 def test_b2_reachable_reprobes_a_transport_failure_next_cycle(monkeypatch, cfg):
-    # The REJECT half of the caching pair above, and the 2026-08-30 restart's fix. A failure that
-    # never reached B2 was billed nothing, so the cost argument that justifies the 30-minute cache
-    # does not apply to it — and holding it pinned the gate DOWN for 25 minutes against an 8m35s
-    # outage, because the cache was holding back the RECOVERY as well as the retry.
+    # The REJECT half of the caching pair above. A failure that never reached B2 was billed
+    # nothing, so the cost argument that justifies the 30-minute cache does not apply to it, and
+    # holding it would pin the gate DOWN after the outage ends, because the cache would hold back
+    # the RECOVERY as well as the retry.
     cfg = _reset_b2_probe(cfg, monkeypatch, interval=1800, transport_retry=300)
     calls = []
     # _get_json wraps DNS/connect/timeout failures as RuntimeError; only these take the short TTL.

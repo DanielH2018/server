@@ -1,10 +1,10 @@
 """The Docker engine packages are held, and the hold precedes the dist-upgrade.
 
-On 2026-09-18 initial_setup's `Update and upgrade system packages` replaced containerd.io,
-docker-ce and the plugins on daniel-pi with every container running: autoheal's shim died,
-ssh refused connections for ~20 minutes, and docker-proxy sat unhealthy behind a stale socket
-bind-mount until a hand redeploy recreated it (#1961). `live-restore` keeps containers up
-across a dockerd restart; it does nothing for a shim binary swapped under them.
+A dist-upgrade that replaces containerd.io, docker-ce and the plugins on daniel-pi with every
+container running kills autoheal's shim, makes ssh refuse connections for ~20 minutes, and
+leaves docker-proxy unhealthy behind a stale socket bind-mount until a hand redeploy
+recreates it. `live-restore` keeps containers up across a dockerd restart; it does nothing
+for a shim binary swapped under them.
 
 Three things must stay true for the hold to do its job, and every failure is silent -- an
 unheld package simply upgrades on the next run:
@@ -14,19 +14,19 @@ unheld package simply upgrades on the next run:
    runs after initial_setup in the play, so a hold set only there lands one upgrade late;
 3. teardown unholds before it purges, because apt with -y refuses to change a held package.
 
-A fourth, since #2153 pinned the versions: the install reads `docker_install_package_specs`,
+A fourth: the install reads `docker_install_package_specs`,
 whose keys (`docker_install_package_versions` in the role defaults) must be exactly the hold
 list -- a package pinned and installed under a name the hold never sees floats the same way.
 And no apt task under docker_install says `state: latest`, because that is the calendar
-deciding the engine version; the pin decides now.
+deciding the engine version; the pin decides.
 
-A fifth, since #2357: the spec's Debian revision is a glob, never a literal `-1`. A pin names
+A fifth: the spec's Debian revision is a glob, never a literal `-1`. A pin names
 an upstream version and Docker publishes several revisions of one -- `containerd.io 2.3.4-1`
 and `2.3.4-2` both sit in the noble/arm64 index -- so a literal revision names a package apt
 may not be able to resolve, and neither the install nor the deliberate upgrade can then run.
 
-The behind-pin report and the per-package read under it moved to
-`test_docker_pin_report_covers_every_package.py` when this file crossed the module-length cap.
+The behind-pin report and the per-package read under it live in
+`test_docker_pin_report_covers_every_package.py`.
 
 Run: uv run pytest ansible/tests/setup/test_docker_engine_is_held_before_apt_upgrade.py
 """
@@ -56,7 +56,7 @@ SUFFIX_VAR = "docker_install_apt_suffix"
 MUST_BE_HELD = frozenset({"docker-ce", "containerd.io"})
 
 # Rows of Docker's noble/arm64 index, read from daniel-pi's `apt-cache madison containerd.io`
-# on 2026-09-24. 2.3.4 is published at two revisions, which is the case a literal `-1` in the
+# 2.3.4 is published at two revisions, which is the case a literal `-1` in the
 # suffix cannot express.
 INDEX_ROWS = (
     "2.3.5-1~ubuntu.24.04~noble",
@@ -71,7 +71,7 @@ def apt_resolves(index_version: str, spec_version: str) -> bool:
     fnmatch is the oracle rather than an equality: ansible.builtin.apt fnmatches the spec's
     version against each available version (its own `package_best_match`) and hands apt-get the
     newest match, and apt-get globs its own command line the same way.
-    Measured on daniel-pi 2026-09-24, `containerd.io=2.3.4-*~ubuntu.24.04~noble` in check mode
+    Measured on daniel-pi, `containerd.io=2.3.4-*~ubuntu.24.04~noble` in check mode
     built `apt-get --simulate install 'containerd.io=2.3.4-2~ubuntu.24.04~noble'`.
     """
     return fnmatch.fnmatch(index_version, spec_version)
@@ -166,7 +166,7 @@ def test_install_and_hold_read_the_same_list():
 
 
 def test_the_apt_spec_globs_the_debian_revision():
-    """A pin names an upstream version, and apt chooses the Debian revision (#2357).
+    """A pin names an upstream version, and apt chooses the Debian revision.
 
     Docker publishes several revisions of one upstream version, and Renovate strips the
     revision from the version space it reads, so it can neither propose one nor prove that
@@ -224,7 +224,7 @@ def test_the_hold_precedes_the_dist_upgrade():
 
 
 def test_docker_install_no_longer_runs_a_second_host_upgrade():
-    """`upgrade: true` on the cache refresh was the second path by which docker-ce moved."""
+    """`upgrade: true` on the cache refresh is a second path by which docker-ce moves."""
     upgrading = [
         t["name"]
         for t in load_tasks(INSTALL)
@@ -296,11 +296,11 @@ DEFAULTS = SETUP_ROLES / "docker_install" / "defaults" / "main.yml"
 
 
 def test_the_deliberate_upgrade_is_gated_by_a_variable_no_tag_reaches():
-    """`never` loses to the inherited role tag (#1998); only a variable gate survives it.
+    """`never` loses to the inherited role tag ; only a variable gate survives it.
 
     initial_setup.yml tags the whole role `docker_install`, every task in it inherits that
     tag, and an explicitly requested tag overrides `never` -- so `--tags docker_install`
-    ran the engine upgrade. The include must carry a `when:` on a variable that defaults
+    runs the engine upgrade. The include must carry a `when:` on a variable that defaults
     to false.
     """
     includes = [
@@ -324,7 +324,7 @@ def test_the_deliberate_upgrade_is_gated_by_a_variable_no_tag_reaches():
 def test_the_dispatcher_imports_statically_so_granular_tags_reach_their_tasks():
     """A dynamic include is a task `--tags` judges first; an untagged one is skipped whole.
 
-    `--tags docker-daemon` reached nothing inside install.yml on 2026-09-18 (#1998).
+    `--tags docker-daemon` reaches nothing inside a dynamic include of install.yml.
     Tagging the include would select every task inside it instead. import_tasks inlines
     them, and each keeps its own tags.
     """
@@ -373,7 +373,7 @@ def test_a_pin_outside_the_hold_list_is_detected():
 
 
 def test_a_literal_revision_misses_a_repackage():
-    """The pre-#2357 shape, against an index that publishes the version only at `-2`.
+    """The literal `-1` shape, against an index that publishes the version only at `-2`.
 
     A repackage superseding a withdrawn `-1` is the case that made the hardcoded revision a
     spec apt cannot resolve; the glob resolves the same row.

@@ -1,10 +1,8 @@
 """Guard 1: every `scripts/*.py`/`scripts/*.sh` path a real invoker names must exist.
 
-The repo reorganised `scripts/` into subdirectories (#443), then #447 fixed "49 script paths
-the subdirectory sweep missed", then #450 split `probe.py` into sibling modules, then #451
-cleaned up more stragglers. Four PRs chasing the same class of bug: a cron, a systemd unit, a
-prek hook `entry:`, a CI step, or a `.claude/hooks` wrapper that names a script by its OLD path
-only fails at RUNTIME -- nothing in the existing test suite walks these invocation sites.
+A cron, a systemd unit, a prek hook `entry:`, a CI step, or a `.claude/hooks` wrapper that
+names a script by a stale path only fails at RUNTIME -- no other test walks these invocation
+sites.
 
 `pyproject.toml`'s `pythonpath` list is a pytest-only mechanism (see the repo-root CLAUDE.md,
 the block near line 29): it lets pytest itself resolve a cross-directory import, but a cron or
@@ -168,7 +166,7 @@ def test_every_invoked_script_path_resolves():
     )
 
 
-# Verified by hand (2026-08-27): no `*.service.j2` unit currently execs a `scripts/...` path --
+# Verified by hand: no `*.service.j2` unit currently execs a `scripts/...` path --
 # every ExecStart that reaches this repo's tooling runs a copy already staged to /opt (e.g.
 # gitops-deploy.service.j2 execs /opt/gitops-deploy/gitops_deploy.py, not the scripts/ source
 # tree). Exempted here rather than deleted: the extractor stays live for the day a unit does
@@ -199,9 +197,7 @@ def test_the_scan_is_not_empty():
 
 
 # The literal-token scan above cannot see a path a shell BUILDS at runtime, such as
-# `"$repo_root/scripts/${script}.py"`. The retired `validate-compose.sh` hook did exactly that
-# and invoked three validators at stale paths for weeks. A composed-path arm guarded that shape
-# until #2909 removed it: after #2856 deleted that hook, no file here composes a `scripts/` path,
-# so the arm checked an empty list. When a shim first composes one, restore the arm from git
-# history (`git log -S composed_hook_invocations`) and pin that shim by name, so the arm cannot
-# pass on an empty census.
+# `"$repo_root/scripts/${script}.py"`. No file here composes a `scripts/` path,
+# so a composed-path arm would check an empty list. When a shim first composes one, restore
+# the arm from git history (`git log -S composed_hook_invocations`) and pin that shim by name,
+# so the arm cannot pass on an empty census.

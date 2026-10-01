@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Which k8s roles act ONLY through the bytes their render digest covers (#3110).
+"""Which k8s roles act ONLY through the bytes their render digest covers.
 
 THE QUESTION. The GitOps deployer's `k8s_unapplied` discharge accepts a matching render digest
 as proof that a role's change is live (`deploy_release.render_proof`). That proof covers

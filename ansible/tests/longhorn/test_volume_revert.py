@@ -6,7 +6,7 @@ already have migrated. Nothing exercises this path on a good day, so a defect he
 dormant until the worst moment. That asymmetry is why the tests below are ordering tests as
 much as content tests.
 
-The sequence is drill-proven, not chosen (measured 2026-08-21 on `speedtest-config`, Longhorn
+The sequence is drill-proven, not chosen (measured on `speedtest-config`, Longhorn
 v1.12.1). Two plausible alternatives were measured and both fail:
 
   * a revert with the frontend enabled returns HTTP 500 `failed to revert snapshot for volume
@@ -59,7 +59,7 @@ from _volume_ops import assert_the_role_declares_an_autodeploy_stance
 
 
 def test_the_seam_test_skips_a_missing_cluster_and_fails_a_bad_jsonpath() -> None:
-    """The seam test's own guard, against stderr recorded from kubectl on 2026-08-21.
+    """The seam test's own guard, against stderr recorded from kubectl.
 
     Without this, the guard is only exercised on a machine that happens to be in the state it
     describes — which is never this one, and never CI.
@@ -94,7 +94,7 @@ def test_every_read_a_later_task_depends_on_runs_under_check() -> None:
 
 def test_no_command_uses_a_shlex_split_string() -> None:
     """`ansible.builtin.command` shlex-splits `cmd:`, which silently tears any argument
-    containing a space in half — how slice 4's gate never ran. `argv:` invokes no shell and has
+    containing a space in half. `argv:` invokes no shell and has
     no quoting layer to get wrong."""
     for path in (_CLAIM, _MAIN):
         for task in _tasks(path):
@@ -119,13 +119,12 @@ def test_the_validator_skips_a_role_with_no_manifests() -> None:
     directory.
 
     Read as parsed set literals rather than searched for as a substring: a commented-out entry
-    satisfies a substring search while the validator no longer skips anything, which is the mutation
-    that found this test asserting nothing on 2026-08-21. They are parsed instead of imported
+    satisfies a substring search while the validator no longer skips anything. They are parsed instead of imported
     because importing the validator pulls in `kubernetes_validate` and its sys.path setup for a
     one-line fact.
 
-    The two component sets are read rather than `SKIP_ROLES` itself, which is now their union and so
-    is a BinOp that `ast.literal_eval` refuses. Same trap this test already documents in a different
+    The two component sets are read rather than `SKIP_ROLES` itself, which is their union and so is a
+    BinOp that `ast.literal_eval` refuses. Same trap this test already documents in a different
     spelling: a check that reads source text breaks the moment the source gains an indirection.
     """
     tree = ast.parse(_VALIDATOR.read_text())
@@ -227,7 +226,7 @@ def test_the_listing_jsonpath_parses() -> None:
     """The synthetic listings above are worth something only if the real command produces that
     shape. Run the role's own argv against the live API server.
 
-    kubectl's jsonpath has no `&&` — verified 2026-08-21, `unrecognized character in action:
+    kubectl's jsonpath has no `&&` — `unrecognized character in action:
     U+0026` — which is why the volume filter is one comparison and markRemoved is filtered in
     Jinja. This test is what catches someone folding them back together.
     """

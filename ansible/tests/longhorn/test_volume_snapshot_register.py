@@ -1,22 +1,16 @@
-"""Behaviour anchor for k8s/volume-snapshot's ATTACHED-volume path — the path every one of the
-thirteen roles declaring `k8s_autodeploy_snapshot_pvcs` takes on a normal deploy.
+"""Behaviour anchor for k8s/volume-snapshot's ATTACHED-volume path — the path every role
+declaring `k8s_autodeploy_snapshot_pvcs` takes on a normal deploy.
 
-WHY THIS EXISTS. #2740 removed the retake this was written against, so the exact clobber below
-cannot recur — what survives is the end-to-end proof that the one path every deploy takes
-completes, which no rendered-expression test gives.
+WHY THIS EXISTS. It is the end-to-end proof that the one path every deploy takes completes,
+which no rendered-expression test gives.
 
-Slice 7b's task 5 added a second readiness wait (the retake, for a volume it
-had just attached in maintenance mode) and deliberately registered it to `volume_snapshot_ready`
-— the same name the first wait uses — so that the downstream fail task would "keep working
-unmodified against whichever attempt actually produced a result".
-
-That reasoning is wrong about Ansible, and every existing unit test agreed with it because none
-of them ran the role. **A SKIPPED task still sets the variable it registers to**, to a result
-carrying `skipped: true` and no `stdout` key at all. On the attached path the retake wait is
-skipped, so it overwrote the first wait's genuine `true|false` with a stdout-less skip result,
-and `volume_snapshot_ready.stdout | default('')` downstream rendered `''`. The deploy then
-failed at "Fail on a snapshot that never became usable" over a snapshot that was healthy and
-`readyToUse` — measured 2026-08-21 on speedtest-config during the task-6 drill.
+The hazard is a second readiness wait registered to `volume_snapshot_ready`, the same name the
+first wait uses. **A SKIPPED task still sets the variable it registers to**, to a result
+carrying `skipped: true` and no `stdout` key at all. On the attached path such a wait is
+skipped, so it would overwrite the first wait's genuine `true|false` with a stdout-less skip
+result, and `volume_snapshot_ready.stdout | default('')` downstream would render `''`. The
+deploy would then fail at "Fail on a snapshot that never became usable" over a snapshot that is
+healthy and `readyToUse`.
 
 So this test runs the real role end to end against a stubbed `k3s kubectl` and asserts the
 attached path completes. A rendered-expression test cannot catch this class: the bug is in when
@@ -144,10 +138,10 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
 def test_the_attached_path_completes_against_a_ready_snapshot() -> None:
     """The attached-volume path must complete when the snapshot reports readyToUse.
 
-    Before the fix this went red: the skipped retake wait clobbered `volume_snapshot_ready`, and
-    the role failed with "did not report readyToUse" against a snapshot the stub reported as
-    `true|false`. The assertion on the message is what names the regression if it returns — a
-    bare returncode check would not say which failure came back.
+    A skipped wait that shares the register would clobber `volume_snapshot_ready`, and the role
+    would fail with "did not report readyToUse" against a snapshot the stub reported as
+    `true|false`. The assertion on the message names that failure — a bare returncode check
+    would not say which failure came back.
     """
     result = _run_attached_path()
     assert "did not report readyToUse" not in result.stdout, (

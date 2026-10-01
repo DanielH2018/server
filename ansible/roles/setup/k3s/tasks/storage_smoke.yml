@@ -47,7 +47,7 @@
   # cluster. Left unguarded it fails instead: check mode skips the create, then skips the
   # `command` in "Wait for the PVC to reach Bound", whose skip result carries no `stdout`, so
   # the wait burns every retry and the assert below it errors on the missing key. There is
-  # nothing for `--check` to drift-detect here: the PVC exists only inside this block. #2305.
+  # nothing for `--check` to drift-detect here: the PVC exists only inside this block.
   when: not ansible_check_mode
   block:
     - name: Create the storage smoke PVC

@@ -38,7 +38,7 @@ def _no_inherited_land_env(monkeypatch):
     (`renovate-agent.service.j2`), and every `git commit` it makes runs the prek `pytest`
     hook under that environment. The stubbed `gh` reports the author as `<unknown>`, so
     `land.sh` refused before making any git call and two tests in
-    test_land_arm_merge_through_the_shim.py failed on the agent's own commit (issue #2640).
+    test_land_arm_merge_through_the_shim.py failed on the agent's own commit.
 
     Directory-wide and autouse for the reason `_no_syslog` gives: the modules that run the
     real `land.sh` against stubs are not a closed set, and each builds its subprocess
@@ -58,10 +58,10 @@ def _no_syslog(tmp_path_factory, monkeypatch):
     the host's syslog that way, shipped to Loki, and landed on the Landings dashboard beside
     real landings.
 
-    Measured over the two days to 2026-09-03: 2,169 of the 2,577 landing annotations in Loki
-    were fixtures — 84% of the board. They are not merely extra rows. They carry `pr=999`,
-    `pr=939` and `pr=unknown` with `verdict=aborted`, so any group-by over the dashboard
-    reports a landing failure rate dominated by tests that passed.
+    Unstubbed, fixtures flood the landing annotations in Loki: they were 84% of the board.
+    They are not merely extra rows. They carry `pr=999`, `pr=939` and `pr=unknown` with
+    `verdict=aborted`, so any group-by over the dashboard reports a landing failure rate
+    dominated by tests that passed.
 
     Autouse and directory-wide rather than opt-in per test: the modules that run `land.sh`
     today are not a closed set, and one added later would silently start polluting again. A
@@ -96,7 +96,7 @@ def land_run(capsys, monkeypatch):
     """Run `land.main(argv)` against Fakes; (rc, stdout, stderr, calls, logline).
 
     `primary` is overridden because `Options` defaults it to the real primary checkout,
-    which exists on the deploy host and not in CI -- and the pipeline now refuses a primary
+    which exists on the deploy host and not in CI -- and the pipeline refuses a primary
     that is not a directory. Pass `primary=` to drive that refusal.
     """
     import land

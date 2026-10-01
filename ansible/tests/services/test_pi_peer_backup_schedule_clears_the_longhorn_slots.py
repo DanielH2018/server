@@ -1,11 +1,10 @@
 """The pi-peer-backup CronJob must not attach its PVC at the minute a Longhorn job runs.
 
 Longhorn's recurring jobs fire in UTC; the CronJob follows `tz` (America/Chicago), so the UTC
-minute it lands on moves with DST. Until 2026-09-21 it ran at 23:30 local, chosen to clear the
-03:30 UTC daily tick — and under CDT that is 04:30 UTC, the weekly shard's slot. On 2026-09-19
-the pod's CSI attach landed 1.5 s before weekly-backup-d6 reached the volume, the recurring job
-refused it (`invalid state for recurring job: attaching`), and the shard finished green with the
-volume skipped. The "k3s Longhorn Backup" tile went DOWN 30 h later on staleness.
+minute it lands on moves with DST. A local time that clears the 03:30 UTC daily tick under CST
+lands on 04:30 UTC under CDT, the weekly shard's slot. A pod attaching the PVC at a slot minute
+makes the recurring job refuse the volume (`invalid state for recurring job: attaching`), and
+the shard finishes green with the volume skipped.
 
 The slots are read from the k3s role, not restated here, so moving a Longhorn cron re-runs this
 guard against the new value. Both DST offsets are checked: a slot clear in September is not
@@ -69,5 +68,5 @@ def test_the_deployed_schedule_is_clear_under_both_offsets() -> None:
 
 
 def test_the_slot_that_lost_a_weekly_backup_is_flagged() -> None:
-    """FLAGGED half: 23:30 local, the 2026-09-19 collision, must still be caught."""
+    """FLAGGED half: 23:30 local collides under CDT and must still be caught."""
     assert _collisions("30 23 * * *") == {"weekly shard": (4, 30)}

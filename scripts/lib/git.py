@@ -1,11 +1,11 @@
 """One way to run git from a script, with the repository chosen by ``cwd`` alone.
 
-WHY. Five scripts each carried a private ``_git()`` by 2026-09-01, and they disagreed on
-the two things that matter: whether a non-zero exit raises, and whether an inherited
-``GIT_DIR`` could redirect the call at another repository. The second one is not
-hypothetical -- inside a git hook ``GIT_DIR`` and ``GIT_WORK_TREE`` are both set and point
-at the repo running the hook, and ``git -C`` does not override them, so ``head_sha()`` once
-reported the hook's repo for every path it was handed.
+WHY. Private ``_git()`` copies disagree on the two things that matter: whether a non-zero
+exit raises, and whether an inherited ``GIT_DIR`` can redirect the call at another
+repository. The second one is not hypothetical -- inside a git hook ``GIT_DIR`` and
+``GIT_WORK_TREE`` are both set and point at the repo running the hook, and ``git -C`` does
+not override them, so ``head_sha()`` would report the hook's repo for every path it was
+handed.
 
 Every ``GIT_*`` variable is stripped before the call, so ``cwd`` is the only thing that
 decides which tree is read. This is for reads and worktree bookkeeping: a script that
@@ -114,15 +114,13 @@ def repair_object_store(cwd: str | Path) -> list[str]:
     pass ``gc.auto`` (6700) or packs pass ``gc.autoPackLimit`` (50), and when it does run and
     still finds unreachable loose objects it may not delete it writes ``gc.log`` -- which makes
     the next ``git gc --auto`` print that log and exit instead of running, for ``gc.logExpiry``
-    (one day). Nothing bounds the growth in between. Two sessions saw the warning 20 minutes
-    apart on 2026-09-06 (#1435) and neither could act on it: a worktree-isolated session's git
-    commands are refused against the primary checkout, so the only people who see the symptom are
-    structurally unable to fix it.
+    (one day). Nothing bounds the growth in between. A worktree-isolated session's git
+    commands are refused against the primary checkout, so the sessions that see the warning
+    are structurally unable to fix it.
 
-    Measured on the primary checkout 2026-09-10: 2302 loose objects, 39 packs, and no ``gc.*``
-    setting anywhere in the config -- both under the thresholds, with a ``gc.log`` from
-    2026-09-06 still sitting there. So automatic gc is not switched off; it is simply not
-    reached, and this is what does the work in its place.
+    On the primary checkout, 2302 loose objects and 39 packs sit under both thresholds with no
+    ``gc.*`` setting in the config. Automatic gc is therefore not switched off; it is simply
+    not reached, and this function does the work in its place.
 
     ``--expire=1.day.ago``, NEVER ``--expire=now``. Several sessions write into this object store
     at once, and an object a live session has written but not yet pointed a ref at is unreachable

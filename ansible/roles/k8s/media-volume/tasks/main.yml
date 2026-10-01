@@ -1,5 +1,5 @@
 ---
-# The shared media volume for slice 4's nine workloads. Creates it; does NOT fill it — the
+# The shared media volume for the media stack's nine workloads. Creates it; does NOT fill it — the
 # 19 G copy is opt-in, see sync.yml.
 #
 # An ordinary deploy reports changed=2, not changed=0, and that is deliberate: the hardlink
@@ -123,7 +123,7 @@
 
 - name: Show the hardlink probe result
   tags: [deploy]
-  # --check runs no probe, so there is no log to show (#2323).
+  # --check runs no probe, so there is no log to show.
   when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ media_volume_probe_log.stdout }}"

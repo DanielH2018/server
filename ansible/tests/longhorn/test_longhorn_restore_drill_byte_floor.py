@@ -1,10 +1,9 @@
 """The restore drill's content assertions, run for real against the values the role deploys.
 
-Split from `test_longhorn_restore_drill.py`, which holds the floor's presence but never ran it.
+`test_longhorn_restore_drill.py` holds the floor's presence; this file runs it.
 The floor exists to reject a mounted-but-empty restore; `files > 0` on the line above it already
-does that, so the floor's own job is files that hold nothing. At 1024 it also rejected
-tdarr-configs — five JSON files, 1007 bytes in total, the whole of Tdarr's /app/configs — on
-2026-09-07, and the volume read as unproven for the rest of the 26-night rotation.
+does that, so the floor's own job is files that hold nothing. The floor has to accept
+tdarr-configs, which is five JSON files, 1007 bytes in total, the whole of Tdarr's /app/configs.
 
 Both assertions are waived for a PVC named in `k3s_longhorn_restore_drill_empty_ok_pvcs`, whose
 content is legitimately empty (n8n-files), AND whose source volume is still under
@@ -45,7 +44,7 @@ def _run_floor_guard(
 ) -> subprocess.CompletedProcess:
     """Execute the drill's content assertions with the deployed floor and a stub `fail`.
 
-    `actual_size` defaults to n8n-files' own recorded reading on 2026-09-22 — the observation the
+    `actual_size` defaults to n8n-files' own recorded reading — the observation the
     waiver's ceiling was derived from, so the accept half is measured rather than invented. It
     must be substituted, not left to bash: an unset `ACTUAL_SIZE` is 0 inside `(( ))`, which
     waives everything and would let a rejecting test pass while checking nothing.

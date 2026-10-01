@@ -141,8 +141,7 @@ def cron_uv_interpreter_error(
     `become: false`, under the connection user's `~/.local/share/uv/python`, and root's uv looks
     under /root. With `--no-python-downloads` (which every host invocation carries) the run fails
     on its first line — `A managed Python download is available for Python 3.14.6, but Python
-    downloads are set to 'never'` — which is what the crowdsec remote-allowlist cron did on its
-    first run, 2026-09-21. The export must precede the `uv run` it exists to fix; the k3s
+    downloads are set to 'never'`. The export must precede the `uv run` it exists to fix; the k3s
     reap-orphan shims are the pattern.
     """
     code = strip_comments(rendered)

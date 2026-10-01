@@ -6,11 +6,10 @@ a `[config, deploy]` task and so does `--tags deploy`, which reads as "covered e
 config-only form is `--tags <svc> --skip-tags deploy`, so the dual tag breaks exactly the
 invocation it looks like it protects.
 
-Bit on 2026-08-16 adding `k8s_dry_run`: `manifests_dest_dir` was set by a `set_fact` read by the
-config-tagged renders AND the deploy-tagged apply. Tagged `[config, deploy]` it passed
-`--tags freshrss`, `--tags freshrss --dry-run` and `--check`, then failed
-`--tags freshrss --skip-tags deploy` with `'manifests_dest_dir' is undefined` — ok=61 failed=1,
-on a path that worked before the branch. The fix is `tags: [always]`, which no `--skip-tags`
+Example: `manifests_dest_dir` is set by a `set_fact` read by the config-tagged renders AND the
+deploy-tagged apply. Tagged `[config, deploy]` it passes `--tags freshrss`,
+`--tags freshrss --dry-run` and `--check`, then fails `--tags freshrss --skip-tags deploy` with
+`'manifests_dest_dir' is undefined`. The fix is `tags: [always]`, which no `--skip-tags`
 removes.
 
 WHY IT IS NARROWED TO PRODUCERS. A dual tag on a plain action is a selection choice someone may
@@ -20,7 +19,7 @@ have no legitimate dual-tagged form, because the consumer's run and the producer
 under a single `--skip-tags`. `test_a_dual_tagged_plain_action_is_not_flagged` pins that scope, so
 a later widening has to be deliberate.
 
-WHAT THE REAL-TREE ASSERTION IS AND IS NOT WORTH. The tree holds ZERO violations today, so
+WHAT THE REAL-TREE ASSERTION IS AND IS NOT WORTH. The tree holds ZERO violations, so
 `test_no_value_producer_carries_both_tags` passing is not evidence the rule works — a rule that
 matched nothing at all would pass it identically. The synthetic pairs below are the only proof
 this can go red. That is the whole reason they exist.
@@ -98,7 +97,7 @@ def test_no_value_producer_carries_both_tags() -> None:
 
 
 def test_a_dual_tagged_set_fact_is_flagged() -> None:
-    """The 2026-08-16 shape, verbatim."""
+    """The `manifests_dest_dir` shape, verbatim."""
     doc = yaml_fast.safe_load(
         """
         - name: Resolve the manifest destination

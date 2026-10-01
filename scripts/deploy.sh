@@ -2,7 +2,7 @@
 # deploy.sh — the entry point every doc, skill, hook and consumer names; it execs deploy_run.py.
 #
 # The implementation is scripts/deploy_tools/deploy_run.py, whose docstring carries the usage
-# and the exit codes (docs/archive/deploy-sh-python-port.md, issue #2412).
+# and the exit codes (docs/archive/deploy-sh-python-port.md).
 #
 # No `cd`, unlike land.sh: the run deploys the checkout containing the CALLER's working
 # directory, and a session in a worktree has always deployed its own tree. `--project` makes

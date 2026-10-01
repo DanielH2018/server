@@ -1,11 +1,9 @@
 """No uv-run first-party module carries `from __future__ import annotations`.
 
 `docs/python-code-organization.md` states the rule: on 3.14 PEP 649 defers annotation
-evaluation by default, so the import buys nothing. The rule governed NEW modules only, so
-nothing removed the line from the modules that already had it — half of `scripts/infra_map/`
-carried it and half did not, and the next author adding a module there copies a sibling.
-A convention only holds when the tree agrees with it, which is what this guard checks
-(issue #1112).
+evaluation by default, so the import buys nothing. A convention only holds when the tree
+agrees with it: if some modules in a directory carry the line, the next author adding a
+module there copies a sibling. This guard checks the tree.
 
 The cost of the import is not runtime. It is that a reader cannot tell the convention from
 the exceptions by looking.

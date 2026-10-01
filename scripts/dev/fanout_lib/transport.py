@@ -18,7 +18,7 @@ from pathlib import Path as _Path
 
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 # `scripts/lib` sits two levels up from this package, one above the `scripts/dev` insert
-# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh (issue #2136).
+# above; `lib.git` / `lib.gh` are the one way this tree runs git and gh.
 _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from fanout_lib import signing
@@ -67,12 +67,12 @@ def local_env(environ: dict[str, str], uid: int) -> dict[str, str]:
 
     `systemd-run --user` and `systemctl --user` find the user manager through
     `DBUS_SESSION_BUS_ADDRESS`, or through `XDG_RUNTIME_DIR` (`$XDG_RUNTIME_DIR/bus`). An
-    interactive Claude session's shell carries neither, so on 2026-09-17 the local leg of a
-    launch failed with "Failed to connect to bus: No medium found" after its worktree was
-    already created and locked, and `status` read the unit it could not reach as `failed
-    (exit unknown)` while `systemctl` under a pinned env showed it active (#1872). The ssh
-    leg gets a login environment and never hit this, which is why every remote batch in the
-    same call launched cleanly.
+    interactive Claude session's shell carries neither, so the local leg of a launch would
+    fail with "Failed to connect to bus: No medium found" after its worktree was already
+    created and locked, and `status` would read the unit it could not reach as `failed (exit
+    unknown)` while `systemctl` under a pinned env shows it active. The ssh leg gets a login
+    environment and never hit this, which is why every remote batch in the same call launched
+    cleanly.
 
     Both are derived from the uid rather than hard-coded: `/run/user/<uid>` is where
     systemd-logind puts the runtime directory, and the bus socket has a fixed name inside
@@ -276,7 +276,7 @@ def verified_hosts(
 
     A dropped host is not a failure to retry: its commits would read `verified=false
     reason=unknown_key`, and the PR the agent opens there cannot merge past the
-    verified-signatures rule until someone re-signs the branch by hand (#1615).
+    verified-signatures rule until someone re-signs the branch by hand.
 
     Args:
         readings: the candidate hosts' readings.

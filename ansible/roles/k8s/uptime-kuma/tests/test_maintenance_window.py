@@ -95,7 +95,7 @@ def week_minutes(cron, duration=1):
 
 
 def test_the_window_opens_before_the_reboot_and_closes_after_the_recovery():
-    """07:25 to 08:15 at the committed schedule — the verify-by window in #2802."""
+    """07:25 to 08:15 at the committed schedule — the verify-by window."""
     assert window() == ("25 7 * * 0", 50)
 
 

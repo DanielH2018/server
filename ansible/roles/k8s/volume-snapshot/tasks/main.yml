@@ -6,13 +6,10 @@
 # bump, and the replacement may migrate the on-disk format before anything observes a fault —
 # after which redeploying the previous image is not a rollback, because the old binary can no
 # longer read its own data. Neither `rollout status` nor the stabilisation soak sees this: a
-# schema migration is exactly what a healthy start looks like. Measured 2026-08-21, 31 roles here
-# carry this shape; task 3 declared k8s_autodeploy_snapshot_pvcs for 13 of them (CLAUDE.md names
-# the other 18 as a follow-up, not a gap in this count).
+# schema migration is exactly what a healthy start looks like.
 #
-# WHAT THIS ROLE DOES NOT DO. It never reverts. It creates a recovery point and nothing in the
-# repo consumes it yet — reverting is slice 7b and is a manual sequence today. CLAUDE.md says so
-# plainly, and that limit is the first thing to read before relying on this.
+# WHAT THIS ROLE DOES NOT DO. It never reverts. It creates a recovery point, and k8s/volume-revert
+# consumes it. CLAUDE.md states that limit; read it before relying on this.
 #
 # The caller sets:
 #   volume_snapshot_service  service name; goes in the snapshot name
@@ -36,24 +33,22 @@
     quiet: true
 
 # The deploy tag. `chdir`, NOT `git -C`: `git -C` does not override GIT_DIR, and a stray GIT_DIR
-# in the environment has already made a check in this repo operate on the wrong repository.
+# in the environment makes a check operate on the wrong repository.
 #
 # `delegate_to: localhost` because the SHA is a property of the CONTROLLER's checkout — it names
 # the commit whose templates this run is rendering, which is what makes a snapshot findable by
-# the deploy that created it. Reading it on the target only ever coincided with that: both
-# cluster nodes are `ansible_connection=local` in hosts.ini, so "the target" and "the
-# controller" were the same machine and the same checkout. daniel-stage is the first genuinely
-# remote target, it has no checkout at all, and the task fails there with "Unable to change
-# directory before execution" — a latent bug in a role with 13 callers rather than a staging
-# quirk. ENFORCED by ansible/tests/longhorn/test_volume_snapshot_reads_the_controller_checkout.py.
+# the deploy that created it. Both cluster nodes are `ansible_connection=local` in hosts.ini,
+# so on them "the target" and "the controller" are the same machine and the same checkout. A
+# genuinely remote target such as daniel-stage has no checkout at all, and the task fails there
+# with "Unable to change directory before execution" — a role bug with many callers rather than
+# a staging quirk. ENFORCED by ansible/tests/longhorn/test_volume_snapshot_reads_the_controller_checkout.py.
 #
 # No `become`. The repo checkout belongs to the deploying user, and git refuses a repository it
 # considers to have dubious ownership when read as root.
 #
 # `check_mode: false` because this is a read whose value every task below depends on. A command
 # task is SKIPPED under --check by default, and a skipped read does not fail — it fails the
-# downstream consumer several tasks later with an undefined attribute. That class cost nine
-# roles a fix already.
+# downstream consumer several tasks later with an undefined attribute.
 - name: Resolve the deploy tag for {{ volume_snapshot_service }}
   tags: [deploy]
   delegate_to: localhost
@@ -72,7 +67,7 @@
   tags: [deploy]
   # The read above has no `failed_when: false`, so a git failure already aborts. What this
   # covers is a rc-0 empty answer, which would name every snapshot `autodeploy-<svc>-` and make
-  # 7b's reconstruction ambiguous across deploys — a silently useless recovery point.
+  # the revert's reconstruction ambiguous across deploys — a silently useless recovery point.
   ansible.builtin.assert:
     that:
       - volume_snapshot_sha.stdout | default('') | trim | length > 0
@@ -82,13 +77,14 @@
       snapshot slice 7b would not be able to find.
     quiet: true
 
-# Set ONCE here, not inside claim.yml's per-claim loop. Redeploying an older commit is the
-# manual rollback this slice exists to enable, and `autodeploy-<svc>-<sha8>-<claim>` alone
+# Set ONCE here, not inside claim.yml's per-claim loop. Redeploying an older commit is a
+# manual rollback, and `autodeploy-<svc>-<sha8>-<claim>` alone
 # already names a Snapshot CR from that commit's earlier deploy — markRemoved but not yet gone,
 # because the delete's finalizer only clears at the next detach (see CLAUDE.md). `apply` against
 # that name reports "unchanged" rather than taking a new snapshot, so the rollback would either
 # reuse a stale recovery point or fail against a markRemoved CR. Appending this token makes every
-# run's name distinct while `autodeploy-<svc>-<sha8>-<claim>` survives as a PREFIX 7b reconstructs.
+# run's name distinct while `autodeploy-<svc>-<sha8>-<claim>` survives as a PREFIX the revert
+# reconstructs.
 #
 # `now(utc=true, ...)` needs no gathered facts, unlike `ansible_date_time`. A token recomputed
 # inside the per-claim loop would drift mid-role: the wait task a few steps later polls for the

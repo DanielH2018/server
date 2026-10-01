@@ -1,12 +1,11 @@
-"""The artifacts peer sync mails once per outage (#2467) and pushes a Kuma verdict every run (#2516).
+"""The artifacts peer sync mails once per outage and pushes a Kuma verdict every run.
 
 `sync-artifacts.sh` runs every 5 minutes on daniel-box and pulls daniel-server's artifact tree.
-cron mails whatever the job writes, and the old script wrote a line on every failure: 145
-messages reached /var/mail/ubuntu between 2026-08-20 and 2026-09-24, in two shapes. One was the
-peer being unreachable, which is ordinary — daniel-server is not always on. The other was
-`bind [127.0.0.1]:8182: Address already in use`, a LocalForward this host's ssh config attaches
-to that peer, which `ClearAllForwardings=yes` now drops because rsync's transport needs no
-forward.
+cron mails whatever the job writes, so a line on every failure would mail on every run. Two
+failure shapes matter. One is the peer being unreachable, which is ordinary — daniel-server is
+not always on. The other is `bind [127.0.0.1]:8182: Address already in use`, a LocalForward
+this host's ssh config attaches to that peer, which `ClearAllForwardings=yes` drops because
+rsync's transport needs no forward.
 
 The script is run for real here, with `rsync` and `logger` stubbed as exported bash functions —
 bash resolves a function name before it searches PATH. What the runs prove is the streak: every

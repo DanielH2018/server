@@ -4,10 +4,7 @@ CLAUDE.md's own rule: "A check that finds its subject by pattern ships with a na
 must find." A census that globs for the files it checks returns an EMPTY set the moment those
 files are renamed or move a directory down, and an `all(...)` over nothing still passes — a
 second way to be green while checking nothing, on top of the missing-rejecting-half failure
-mode `test_every_validator_has_a_red_proof.py` covers. Nine guards broke this way across six
-consecutive PRs (#838, #846, #852, two in #858, four in the monitor-bridge package move); every
-one was caught solely by a non-vacuity assertion, and the guards that lacked one had to be
-found by running the entry point instead.
+mode `test_every_validator_has_a_red_proof.py` covers.
 
 This is the mechanical half of recurring-failure class 4, "a guard's selector drifts from the
 hazard's extent" (docs/failure-classes.md). It cannot see whether a census covers the right
@@ -15,15 +12,11 @@ SET, only whether it is defended against covering an empty one — the rest of t
 a human judgment call.
 
 SCOPE IS DELIBERATELY NARROW: `ansible/tests/repo/`, `scripts/tests/`, and `scripts/*/tests/`.
-Measured before writing, per the same class's own cautionary tale: a proposed repo-wide
-"every validator needs a negative test" check was measured first and would have dropped the
-two best-paired validators in the repo, because a fixed name vocabulary missed how they
-actually wrote their rejecting half. The same trap applies here — a crude "assert nearby"
-regex over `ansible/tests/{k8s,deploy,longhorn,setup,services,staging}` flags roughly half of
-the ~68 glob-using files there, and most of those are `tmp_path` fixtures or lists already
-asserted elsewhere, not real gaps; sorting the two apart needs a human reading each file. The
-scope above was checked file-by-file and holds a real invariant: every glob-using file in it
-already carries a truthy/count/named-member assertion.
+A crude "assert nearby" regex over `ansible/tests/{k8s,deploy,longhorn,setup,services,staging}`
+flags roughly half of the ~68 glob-using files there, and most of those are `tmp_path` fixtures
+or lists already asserted elsewhere, not real gaps; sorting the two apart needs a human reading
+each file. The scope above holds a real invariant: every glob-using file in it already carries
+a truthy/count/named-member assertion.
 
 Run: uv run pytest ansible/tests/repo/test_glob_census_non_vacuity.py
 """

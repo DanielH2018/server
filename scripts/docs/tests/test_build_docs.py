@@ -46,11 +46,11 @@ def test_run_generators_reports_which_failed(monkeypatch):
 
 
 def test_a_generator_that_raises_is_one_failure_not_an_aborted_run():
-    """The reject half of the in-process driver (#2406).
+    """The reject half of the in-process driver.
 
     A subprocess could only fail by exiting non-zero. An imported generator can raise, and
-    an uncaught exception would abort every generator after it -- the failure mode process
-    isolation used to make impossible.
+    an uncaught exception would abort every generator after it -- a failure mode process
+    isolation made impossible.
     """
 
     def boom():
@@ -86,7 +86,7 @@ def test_a_generator_that_exits_with_a_message_is_still_one_failure():
 
 
 def test_a_generator_that_overruns_its_timeout_is_one_failure():
-    """The reject half of the SIGALRM guard that replaced `subprocess.run(timeout=...)`.
+    """The reject half of the SIGALRM guard.
 
     `reference/backlog.py` reaches the network. Without a deadline a hung read holds the
     git-tree lock the docs cron takes for its whole life.
@@ -205,7 +205,7 @@ def test_the_served_directory_keeps_its_inode(tmp_path, monkeypatch):
 
     Replacing the directory leaves the pod mounted on the old inode, which the cleanup
     then deletes -- nginx serves an empty tree and answers 403 until someone restarts
-    the pod. That happened on 2026-08-24; this is the regression guard.
+    the pod.
     """
     final = tmp_path / "site"
     final.mkdir()
@@ -244,9 +244,8 @@ def test_the_build_stamp_is_written_into_the_site_not_the_repo(tmp_path):
 def test_the_stamp_says_when_the_generators_did_not_run(tmp_path):
     """build-info.json IS the freshness signal -- docs-refresh.sh runs no deadman because
     this file is the deadman. But its dirty-tree and open-PR paths rebuild the site with
-    --skip-generators, and the stamp refreshed anyway: it read fresh while the pages behind
-    it had not been regenerated at all, and a stuck-open PR made that self-perpetuating
-    (2026-08-25 review M-4).
+    --skip-generators, and the stamp must not refresh then: it would read fresh while the
+    pages behind it had not been regenerated at all.
     """
     site = tmp_path / "site"
     site.mkdir()

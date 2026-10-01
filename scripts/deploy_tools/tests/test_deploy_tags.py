@@ -158,8 +158,7 @@ def test_describe_does_not_change_lists_own_shape(capsys):
 
 def test_changed_prints_tags_for_a_service_and_k8s_change(capsys, monkeypatch):
     # Both names must be live containers_list entries: `changed` splits shared roles out of
-    # the tag list against real inventory, so a retired service now reads as shared. `dozzle`
-    # stood here until it was retired on 2026-08-29.
+    # the tag list against real inventory, so a retired service would read as shared.
     monkeypatch.setattr(
         deploy_tags,
         "_git_diff_paths",
@@ -196,9 +195,7 @@ def test_split_shared_roles_calls_nothing_shared_when_all_are_declared(host_vars
 
 
 def test_changed_drops_a_shared_role_and_deploys_the_rest(capsys, monkeypatch):
-    """PR #617's shape.
-
-    Emitting `manifests` as a tag makes deploy.sh refuse the whole list (exit 2), so the valid
+    """Emitting `manifests` as a tag makes deploy.sh refuse the whole list (exit 2), so the valid
     service beside it never deploys.
     """
     monkeypatch.setattr(
@@ -287,7 +284,7 @@ def test_changed_default_ref_is_origin_master():
 
 
 def test_tags_by_host_routes_each_tag_to_the_host_declaring_it(host_vars):
-    """Issue #929: a Pi-only tag deployed on the cluster node matched nothing and read settled."""
+    """A Pi-only tag deployed on the cluster node matches nothing and would read settled."""
     assert deploy_tags.tags_by_host(["dozzle", "jellyfin"], host_vars) == {
         "host_a": ["jellyfin"],
         "host_b": ["dozzle"],
@@ -328,7 +325,7 @@ def test_hosts_prints_one_tab_separated_line_per_host(capsys, monkeypatch, host_
 
 
 def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(capsys):
-    """`--k8s-only`, the CLI half of #2718, against the live inventory: `wg-easy` is a k8s
+    """`--k8s-only` against the live inventory: `wg-easy` is a k8s
     entry on daniel-box and a Compose entry on daniel-pi, and a caller-expanded change reaches
     only the first. Reading the real inventory is also this pair's non-vacuity -- a fixture
     would keep passing the day the repo stopped declaring one tag on two platforms."""
@@ -340,22 +337,22 @@ def test_hosts_routes_a_k8s_only_tag_to_its_k8s_host_alone(capsys):
 
 
 def test_real_inventory_routes_the_pi_log_shipper_to_the_pi():
-    """Non-vacuity against the live inventory: the tag from issue #929 resolves to daniel-pi."""
+    """Non-vacuity against the live inventory: `alloy` resolves to daniel-pi."""
     assert deploy_tags.tags_by_host(["alloy"]) == {"daniel-pi": ["alloy"]}
     assert deploy_tags.tag_platforms("alloy") == {"docker"}
 
 
 def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):
-    """Issue #935's follow-through: `hosts` must not route a tag to a host land.sh cannot reach.
+    """`hosts` must not route a tag to a host land.sh cannot reach.
 
     daniel-stage declared the staging-subset tags, and land.sh runs `deploy.sh -e target=<host>`
     for every host `hosts` prints. daniel-box could not route to the staging guest, so that
     deploy failed unreachable after the box's own succeeded. `tags_by_host` keeps listing such a
     host (it answers who declares the tag); only the landing shape drops it.
 
-    daniel-stage declares no tag in the live inventory since #2941, so this synthetic
-    host_vars tree is what makes the filter fire at all — and a filter that stopped filtering
-    would otherwise pass every test in this file.
+    No live-inventory host is one land.sh never deploys to, so this synthetic host_vars tree is
+    what makes the filter fire at all — and a filter that stopped filtering would otherwise pass
+    every test in this file.
     """
     (tmp_path / "daniel-box.yml").write_text(
         "containers_list:\n  - name: node-exporter\n    platform: k8s\n"
@@ -378,10 +375,9 @@ def test_landing_hosts_drops_an_undeployable_host_but_keeps_the_pi(tmp_path):
 
 
 def test_no_undeployable_host_reaches_the_landing_loop(capsys):
-    """The filter is at zero members since daniel-stage was retired (#2941), so this pins the
-    premise rather than the filtering: every host that declares a tag is one land.sh may
-    deploy to. A host added to the constant without being added to the inventory, or the
-    reverse, is the drift #935 is about."""
+    """The filter has zero members, so this pins the premise rather than the filtering:
+    every host that declares a tag is one land.sh may deploy to. A host added to the constant
+    without being added to the inventory, or the reverse, is the drift to catch."""
     declaring = {host for host, _platform, _tag in deploy_tags.service_records()}
     assert declaring, "no host declares any tag — this test would pass over nothing"
     assert not (declaring & render_guard.HOSTS_LAND_SH_NEVER_DEPLOYS), (
@@ -397,10 +393,9 @@ def test_no_undeployable_host_reaches_the_landing_loop(capsys):
 def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
     """The deploy_logic importers must not grow sys.path.
 
-    They used to `sys.path.insert` the role dir on every call and never remove it (#1046).
-    The entry is put there once at module scope now; calling them twice must leave the count
-    exactly where it was. There were three until #2541 folded `_is_broad_manual` into
-    `land_changes.changes_for`.
+    They must not `sys.path.insert` the role dir on every call and never remove it. The
+    entry is put there once at module scope; calling them twice must leave the count exactly
+    where it was.
     """
     import sys
 
@@ -417,9 +412,9 @@ def test_deploy_logic_importers_do_not_grow_sys_path_per_call():
 #
 # `deploy.sh --at <sha>` renders a snapshot of <sha>, so the tags it deploys are the ones
 # <sha> declares. A PR that adds a role and its containers_list entry together declares its
-# tag in NO working tree until the tick fast-forwards, which is how the first landing of a
-# new service read as a tag miss (the same read `land_lib.tools.declared_tags_at` fixes one
-# layer up, issue #1544).
+# tag in NO working tree until the tick fast-forwards, so the first landing of a new
+# service would read as a tag miss (`land_lib.tools.declared_tags_at` fixes the same read
+# one layer up).
 
 
 def test_known_tags_at_a_ref_still_carries_the_block_tags(host_vars):

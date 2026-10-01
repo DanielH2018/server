@@ -11,18 +11,17 @@
 # the pre- and post-build digests differ. Every step in that chain reports success independently
 # of whether a pod ever picked the image up.
 #
-# WHY IT STILL COMPARES DIGESTS RATHER THAN NAMES. #2234 proposed re-deriving this as a name
-# comparison once the content tag existed. Both tags resolve to one manifest, so the digest read
-# is unchanged by the content tag AND strictly stronger than comparing names: it still catches the
-# cached-tag case below, where the node serves old bytes under a name that says otherwise. A name
-# comparison cannot see that at all.
+# WHY IT COMPARES DIGESTS RATHER THAN NAMES. Both tags resolve to one manifest, so the digest
+# read is strictly stronger than comparing names: it still catches the cached-tag case below,
+# where the node serves old bytes under a name that says otherwise. A name comparison cannot see
+# that at all.
 #
-# Hit for real 2026-08-27, on nut. Run 1 built the new debian-bookworm-slim base, pushed it, and
-# then died at "Read the build result" — before the digest comparison that queues the rollout. Run 2
-# short-circuited the build, because the rendered context was byte-identical AND the registry
-# already served the tag, so it recorded no change and queued nothing. The pod ran a week-old image
-# for 90 minutes behind a 1/1 Deployment, a clean rollout, and a passing `probe.py health`. The only
-# signal that disagreed was comparing the pod's imageID against the registry by hand.
+# THE CACHED-TAG CASE. A first run builds and pushes a new base image, then dies before the
+# digest comparison that queues the rollout. A second run short-circuits the build, because the
+# rendered context is byte-identical AND the registry already serves the tag, so it records no
+# change and queues nothing. The pod then runs a stale image behind a 1/1 Deployment, a clean
+# rollout, and a passing `probe.py health`; only comparing the pod's imageID against the registry
+# shows it.
 #
 # WHY IT IS A POST_TASK. The comparison is only meaningful after the rollouts have drained: at the
 # point k8s/image-builder finishes, the workload legitimately still runs the OLD pod, because
@@ -54,7 +53,7 @@
 #     ansible/tests/deploy/test_built_image_drift_gate.py.
 #
 # ASSUMPTION: single-architecture images, so the registry's manifest digest and the pod's imageID
-# digest are the same object. Verified 2026-08-27 — nut's pod reported the registry digest exactly.
+# digest are the same object. Verified — nut's pod reported the registry digest exactly.
 # If anything here is ever built as a multi-arch manifest LIST, the builder reads the index digest
 # while the pod reports the platform manifest digest, and the two never match: the gate would then
 # report drift forever and get muted, which is worse than not having it. An imageID that carries no

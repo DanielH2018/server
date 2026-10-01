@@ -2,8 +2,7 @@
 
 The subcommand is read-only against the *arr app, which says nothing about what it does to
 the transcript. A Discord Connect notification's `webHookUrl` is a live credential and the
-*arr API labels it `privacy: normal`, so the API's own label cannot carry this on its own
-(issue #1388).
+*arr API labels it `privacy: normal`, so the API's own label cannot carry this on its own.
 
 Every rule here is a `..._is_redacted` / `..._is_printed` pair: a rule that silently stopped
 matching, and one that started matching everything, both fail their own test.

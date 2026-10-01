@@ -1,10 +1,9 @@
 """terraria-stats runs exactly as many pods as the terraria server does.
 
 The exporter tails the game server's console out of loki-homelab, so at
-`terraria_k8s_replicas: 0` it polls for a server that cannot log (issue #2877). It rendered
-`replicas: 1` unconditionally because the count was a terraria role default and role defaults
-do not cross a role boundary — a `terraria_k8s_replicas | default(1)` written in game-stats
-would have rendered 1 forever and said nothing. The value lives in `group_vars/all.yml` now,
+`terraria_k8s_replicas: 0` it polls for a server that cannot log. A count that is a terraria
+role default does not cross a role boundary — a `terraria_k8s_replicas | default(1)` written
+in game-stats would render 1 forever and say nothing. The value lives in `group_vars/all.yml`,
 and three renders read it.
 
 The scrape job is the third, and it is tested here rather than filed as a follow-up: a

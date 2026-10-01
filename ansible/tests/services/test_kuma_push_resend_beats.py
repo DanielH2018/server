@@ -1,10 +1,9 @@
-"""Kuma's `resendInterval` is a count of consecutive DOWN beats, not a duration (#1838).
+"""Kuma's `resendInterval` is a count of consecutive DOWN beats, not a duration.
 
-The value shipped as `kuma_push_resend_interval_minutes: 360`, and the k3s Workload Health
-tile's own log showed the resend arriving once a DAY across a 3.5-day outage: a bridge-fed tile
-takes one DOWN beat per bridge push plus one per heartbeat window, 15 an hour. The spacing is
-derivable from the two cadences the repo already declares, so a value that reads as hours again
-fails here rather than in the next multi-day outage. Its own module because
+A bridge-fed tile takes one DOWN beat per bridge push plus one per heartbeat window, 15 an hour,
+so a value written as minutes (360) resends once a DAY. The spacing is derivable from the two
+cadences the repo already declares, so a value that reads as hours fails here rather than in a
+multi-day outage. Its own module because
 `test_kuma_static_monitors.py` sits at the 500-line test cap.
 """
 

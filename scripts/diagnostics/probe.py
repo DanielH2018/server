@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Read-only homelab diagnostics.
 
-One allow-listed surface for the queries that used to be hand-written `curl`/`openssl`
+One allow-listed surface for the queries that would otherwise be hand-written `curl`/`openssl`
 one-offs.
 
 The monitoring stack (Prometheus, Loki, Scrutiny, uptime-kuma) does NOT publish
@@ -126,8 +126,8 @@ def main(argv=None):
     `docker inspect`/kubectl. `metric`/`loki-query` without `--json`/`--dry-run` use the
     formatted view; every other subcommand falls through to the streaming `curl` pipeline
     built by `plan()`. `targets --pi` and `pi` are checked ahead of that fallback: plain
-    `targets` still streams, and `pi` has no streaming form since its glances API retired
-    (#2004), so only these need a real handler.
+    `targets` still streams, and `pi` has no streaming form, so only these need a real
+    handler.
     """
     argv = list(sys.argv[1:] if argv is None else argv)
     # Handled on raw argv, ahead of `_build_parser().parse_args`: the subparsers below are

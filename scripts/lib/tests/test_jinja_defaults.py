@@ -71,7 +71,7 @@ def test_an_ansible_only_filter_stays_as_written(tree):
 
 
 def test_the_real_tree_resolves_gitops_deploys_tick_interval():
-    """Non-vacuity against the live inventory: the example #2829 was filed about."""
+    """Non-vacuity against the live inventory."""
     jinja_defaults._inventory_values.cache_clear()
     role = jinja_defaults.INVENTORY.parent / "roles" / "setup" / "gitops_deploy"
     assert "{{" not in resolve(

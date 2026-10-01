@@ -1,9 +1,8 @@
-"""kuma_notify_failures: a notification Kuma tried to send and dropped, and why (#1891, #1895).
+"""kuma_notify_failures: a notification Kuma tried to send and dropped, and why.
 
-The fixtures are the 2026-09-15 14:50 and 2026-09-17 17:00 lines as Loki returned them, byte
-for byte: Kuma's colour logger wraps the stamp, the `[MONITOR]` tag and `ERROR:` in ANSI
+The fixtures are real lines as Loki returned them, byte for byte: Kuma's colour logger wraps the stamp, the `[MONITOR]` tag and `ERROR:` in ANSI
 escapes, the drop line ends at the notification name, and the reason is the NEXT line, also at
-ERROR level — #1895 filed it as debug-only, and it is not.
+ERROR level.
 """
 
 import bridge.net
@@ -84,7 +83,7 @@ def test_one_dropped_send_is_flagged_by_name_and_reason():
 
 
 def test_reasons_are_counted_as_a_set_and_a_missing_one_is_named_not_assumed():
-    # Four drops in two seconds on 2026-09-09 20:20 is why reasons are not joined to drops one
+    # Four drops can arrive in two seconds, which is why reasons are not joined to drops one
     # to one; a drop whose reason line fell outside the window says so rather than borrowing a
     # neighbour's.
     ok, msg = kuma_notify_failures(

@@ -5,12 +5,9 @@
 
 THE PROBLEM. `scripts/deploy_tools/land.sh` exists so that merging a PR is followed through to
 a verified deploy in one backgrounded command: it waits for master CI on the merge commit,
-ticks, deploys what the tick deferred, and prints a VERDICT line. CLAUDE.md says so, and
-records that hand-polling cost 835 polls across 213 wait episodes before it existed.
+ticks, deploys what the tick deferred, and prints a VERDICT line. CLAUDE.md says so.
 
-It is still happening. Over the seven days to 2026-08-29 the session transcripts hold 173
-`gh pr checks`, 75 `gh run list` and 61 `gh run watch` calls against 29 invocations of
-land.sh. A paragraph in CLAUDE.md has not closed that gap, so this hook does.
+A paragraph in CLAUDE.md does not close that gap, so this hook does.
 
 WHAT IT REFUSES, AND WHAT IT LEAVES ALONE. Two shapes, for two different reasons:
 
@@ -23,7 +20,7 @@ WHAT IT REFUSES, AND WHAT IT LEAVES ALONE. Two shapes, for two different reasons
 
 Everything else passes untouched -- `gh pr view`, `gh pr merge`, `gh api`, and the first two
 status reads. So does a read aimed at another repository (`--repo`/`-R` or a GitHub URL naming
-one), since land.sh lands only this repo's PRs and its advice is wrong elsewhere (#2901). So
+one), since land.sh lands only this repo's PRs and its advice is wrong elsewhere. So
 does `gh run view --log`/`--log-failed`, which reads a finished run's log rather than polling
 a running one. The hook can only ever DENY; it never approves, so it cannot widen what the
 classifier would otherwise allow.
@@ -50,8 +47,8 @@ _STATUS_COMMANDS = (
 )
 
 # The repository land.sh lands. A read that names any other one is out of this hook's scope:
-# on 2026-09-28 it refused `gh pr checks` and `gh run view --log-failed` against the dotfiles
-# repo, and the refused agents switched to `gh api` poll loops the hook cannot see (#2901).
+# land.sh lands only this repo's PRs, and a refused agent would switch to `gh api` poll loops
+# the hook cannot see.
 _THIS_REPO = ("danielh2018", "server")
 
 # `gh run view` flags that read a finished run's log. Neither polls: gh refuses them while
@@ -136,7 +133,7 @@ def classify(command: str, split=split_stages) -> str | None:
                 continue
             # `--watch` turns a one-shot read into a blocking wait. Only the long form: on
             # both `gh pr checks` and `gh run view`, `-w` is `--web`, which opens a browser
-            # and returns, and `gh pr checks` has no short form of `--watch` at all (#2959).
+            # and returns, and `gh pr checks` has no short form of `--watch` at all.
             if "--watch" in stage:
                 return "watch"
             return "status"

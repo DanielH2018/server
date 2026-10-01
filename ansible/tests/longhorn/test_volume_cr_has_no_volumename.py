@@ -5,9 +5,8 @@ A jq or jsonpath expression that reads it off a Volume gets `null` — and `null
 to nothing, so the filter silently matches an empty set. There is no error and no empty-result
 warning; the caller just proceeds with nothing.
 
-It has already cost a night's work. `longhorn-restore-drill.sh.j2` compared a Volume's
-`.status.volumeName` against the backed-up set and left the drill with an empty candidate set
-every night. The fix is recorded in a comment at that line, which is where this rule comes from:
+`longhorn-restore-drill.sh.j2` records the trap in a comment at the line that avoids it, which
+is where this rule comes from:
 
     # .metadata.name, NOT .status.volumeName: a Volume CR has no status.volumeName — that
     # field belongs to Backup CRs, and comparing the null it yields here matched nothing at
@@ -22,7 +21,7 @@ Comment lines are skipped deliberately. Three of the live mentions are prose exp
 trap, and a guard that flagged its own documentation would be untenable — the first person to hit
 it would delete the explanation to make the check pass.
 
-WHAT THE REAL-TREE ASSERTION IS WORTH. Zero violations today, so it passing is not evidence the
+WHAT THE REAL-TREE ASSERTION IS WORTH. The tree has zero violations, so it passing is not evidence the
 rule works. The synthetic pairs are that evidence, and the guard was additionally observed
 failing against a violation injected into a real template.
 """

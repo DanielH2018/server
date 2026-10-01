@@ -9,18 +9,14 @@ Every OTHER workload a role renders is restarted only if the role names it in
 `manifests_extra_rollouts`. A role that forgets is green either way, which is what makes this
 worth a test rather than a comment.
 
-Found on 2026-08-30 (cloudflare-ddns): a role setting `manifests_rollout: ""` to opt out of the
-shared WAIT took the RESTART with it. Rotating the two Kuma push tokens updated the Secret,
-restarted nothing, left both pods 7d14h old, and both monitors went DOWN behind `ok=340
-changed=31 failed=0`.
+A role setting `manifests_rollout: ""` to opt out of the shared WAIT takes the RESTART with it:
+rotating a Secret updates the Secret, restarts nothing, and leaves the pods on the old value
+behind a `failed=0` recap.
 
-Found again on 2026-09-01 (crowdsec), which is why this guard's selector is what it is. The
-first version keyed on `manifests_rollout == ""` and greped `kind: Deployment`. crowdsec sets a
-perfectly ordinary `manifests_rollout: crowdsec` and the workload that misses out is a
-DaemonSet, so the guard shipped alongside the first fix could not see the second instance of
-the same defect — a guard written beside its fix inherits the fix's scope. The selector below
-is derived from the mechanism instead: any workload of any kind, in any role that renders a
-Secret, which reads a Secret through `secretKeyRef` or `envFrom.secretRef`.
+A role can also set an ordinary `manifests_rollout` while the workload that misses out is a
+DaemonSet. So the selector is derived from the mechanism, not from `manifests_rollout == ""` or
+`kind: Deployment`: any workload of any kind, in any role that renders a Secret, which reads a
+Secret through `secretKeyRef` or `envFrom.secretRef`.
 
 WHY ENV AND NOT EVERY SECRET CONSUMER. A Secret consumed through a plain volume mount is
 refreshed in place by the kubelet, so it is a different mechanism with a different remedy and it
@@ -66,10 +62,9 @@ _METADATA_NAME = re.compile(
 
 # Workloads that read a rendered Secret through env and are NOT restarted by their role.
 #
-# Empty as of the karakeep-time-tagger fix (roles/k8s/karakeep/tasks/main.yml): every workload
-# this guard's selector reaches is now named in some role's manifests_rollout or
-# manifests_extra_rollouts. Left as a set literal, not deleted, so the next gap has somewhere to
-# be pinned with the same reasoning this one carried.
+# Empty: every workload this guard's selector reaches is named in some role's manifests_rollout
+# or manifests_extra_rollouts. Left as a set literal, not deleted, so the next gap has somewhere
+# to be pinned with its reasoning.
 _KNOWN_UNCOVERED: set[tuple[str, str]] = set()
 
 
@@ -331,7 +326,7 @@ def test_the_extra_rollouts_restart_is_not_gated_on_manifests_rollout():
     conditions = " ".join(str(c) for c in extras[0].get("when") or [])
     # `manifests_rollout_kind` is a DIFFERENT variable and legitimately appears here, so match
     # the name only where no identifier character follows it. A bare substring test flags the
-    # kind and fails on correct code — which it did on the first run of this file.
+    # kind and fails on correct code.
     gated = re.search(r"\bmanifests_rollout\b(?!_)", conditions)
     assert not gated, (
         "the extra-rollouts restart has grown a manifests_rollout condition. That is the exact "

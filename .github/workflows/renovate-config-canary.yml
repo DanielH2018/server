@@ -5,11 +5,10 @@ name: renovate-config-canary
 # when renovate.json is next touched. The reasoning for validating unpinned is on the
 # `renovate-config` job in ci.yml, which runs the same script on a PR that touches the file.
 #
-# This ran on every push to master until 2026-09-10 (#1269). Per-merge bought nothing over
+# This does not run on every push to master. Per-merge buys nothing over
 # daily — Mend rolls its Renovate forward on its own cadence and deprecates config keys a
-# release ahead — and it cost a failure of its own: Renovate publishes to npm ~8 times a day,
-# and for a few minutes after each publish the tarball 404s. Three master pushes went red in
-# two hours that night, none of them a config problem. The script retries the install now,
+# release ahead — and it costs a failure of its own: Renovate publishes to npm ~8 times a day,
+# and for a few minutes after each publish the tarball 404s. The script retries the install,
 # and a daily run lands in one of those windows minutes-per-day rather than every merge.
 #
 # A red run here is on whatever SHA is master's head at 09:00 UTC; it is not that commit's
@@ -26,7 +25,7 @@ on:
   workflow_dispatch: # after touching renovate.json on master, or when a Renovate major lands
 
 # One run at a time. A `workflow_dispatch` fired near 09:00 UTC otherwise overlaps the
-# scheduled run, and the two answer the same question against the same master head (#2152).
+# scheduled run, and the two answer the same question against the same master head.
 # The superseded run is cancelled rather than queued: no run here is a commit's verdict (see
 # above), so a cancelled one loses nothing the next one does not re-establish.
 concurrency:

@@ -95,13 +95,11 @@
     - Reload systemd
     - Run gitops-deploy once
 
-# 2026-08-23b review M5. This unit used to embed the webhook and was installed 0600 to protect
-# it. The mode was real and did not protect the value: `systemctl show gitops-deploy-alert
-# -p ExecStart` as an unprivileged user with no sudo printed the full webhook URL, because
-# systemd serves unit content over the system bus regardless of file mode. Reproduced here, and
-# reproduced again to confirm the fix — with EnvironmentFile the same command prints the literal
-# `${ALERT_WEBHOOK}` and the value appears nowhere in `systemctl show` output. 0644 is now the
-# honest mode: the unit no longer contains a secret, and the 0600 was only ever guarding one.
+# The unit reads the webhook through EnvironmentFile and contains no secret, so 0644 is the
+# honest mode. A 0600 unit would not protect an embedded value: systemd serves unit content over
+# the system bus regardless of file mode, so `systemctl show gitops-deploy-alert -p ExecStart`
+# prints the full webhook URL to an unprivileged user. With EnvironmentFile the same command
+# prints the literal `${ALERT_WEBHOOK}`.
 - name: Install the alert unit
   ansible.builtin.template:
     src: gitops-deploy-alert.service.j2
@@ -186,10 +184,9 @@
   become: true
   notify: Reload systemd
 
-# Removing a unit file does not clear a `failed` state systemd already recorded for it, and the
-# ratchet's service and its OnFailure= target could both be failed at retirement. Left alone,
-# they sit in `systemctl --failed` as not-found units until a reboot. The same pair of tasks
-# as the fwupd purge in optimize_pi.
+# Removing a unit file does not clear a `failed` state systemd already recorded for it. Left
+# alone, the units sit in `systemctl --failed` as not-found until a reboot. The same pair of
+# tasks as the fwupd purge in optimize_pi.
 - name: Check the retired staging-backfill units for a stale failed state # noqa command-instead-of-module
   ansible.builtin.command: systemctl is-failed {{ item }}
   loop:
@@ -210,10 +207,8 @@
   changed_when: true
   become: true
 
-# The staging gate's own per-SHA alert marker, left behind when #2859 removed the tick's
-# staging consultation and #2941 retired the cluster. No reader names it: it was never an
-# `ALERT_SLOTS` member, so the #3047 marker collapse could not fold it in either, and it sat on
-# daniel-box as 40 unread bytes (#3079). `teardown.yml` removes the whole state directory, but
+# The staging gate's own per-SHA alert marker. No reader names it, because it was never an
+# `ALERT_SLOTS` member. `teardown.yml` removes the whole state directory, but
 # only on a host that is NOT the deployer — so the deployer converges here, the way
 # `hypervisor/tasks/reap_staging.yml` reaps the guest from its install path.
 #
@@ -227,10 +222,7 @@
     state: absent
   become: true
 
-# Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
-# hardcoded the k3s role's template directory, so these units were watched by nothing at all —
-# and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
-# Last in the role so a failed run leaves the previous checksums rather than claiming these.
+# Render provenance for manifest-prune-check.sh's stale-script arm. Last in the role so a failed run leaves the previous checksums rather than claiming these.
 - name: Stamp the rendered gitops-deploy units
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
   vars:
@@ -240,17 +232,16 @@
       - ansible/roles/setup/gitops_deploy/templates/gitops-deploy-alert.service.j2
       - ansible/roles/setup/gitops_deploy/templates/gitops-deploy.timer.j2
       - ansible/roles/setup/gitops_deploy/templates/50-gitops-deploy.rules.j2
-      # The two .env.j2 sources were left out on the theory that stamping them would leak a
-      # secret. They would not: stamp_render.yml hashes the REPO SOURCE (:56), and the arm
-      # re-hashes that same source (manifest-prune-check.sh.j2:284) — the rendered file with
-      # the secret in it is never read by either side. Omitting them meant a change to the
-      # deployer's budget or CI lines rendered stale and nothing saw it (2026-08-24 review M-9).
+      # The two .env.j2 sources are stamped too. Stamping does not leak a secret:
+      # stamp_render.yml hashes the REPO SOURCE (:56), and the arm re-hashes that same source
+      # (manifest-prune-check.sh.j2:284), so neither side reads the rendered file with the
+      # secret in it. Omitting them would let a change to the deployer's budget or CI lines
+      # render stale unnoticed.
       - ansible/roles/setup/gitops_deploy/templates/config.env.j2
       - ansible/roles/setup/gitops_deploy/templates/alert-webhook.env.j2
 
-# These three were the only pairs manifest-prune-check.sh's deployed-code arm knew about, and it
-# knew them by hardcoding. Declaring them here instead is what lets the sibling roles declare
-# theirs (2026-08-24 review M-5).
+# manifest-prune-check.sh's deployed-code arm reads these pairs from the role's declaration,
+# which is what lets the sibling roles declare theirs.
 - name: Record the deployed gitops-deploy code
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
   vars:
@@ -312,11 +303,9 @@
         src: ansible/roles/setup/common/files/host_lib.py
 
 - name: Remove the retired staging gate's ssh identity
-  # The gate and the daniel-stage guest were removed on 2026-09-29 (#2941) and
-  # `staging_gate_ssh_key` was dropped from SOPS with them, so the private half must not be left
-  # lying on this host. teardown.yml removes /etc/gitops-deploy wholesale, but that file only
-  # runs on a host whose has_gitops went false — never on the deployer, which is the one host
-  # that ever held this key.
+  # The private half of the retired staging gate's key must not stay on this host.
+  # teardown.yml removes /etc/gitops-deploy wholesale, but that file only runs on a host whose
+  # has_gitops went false — never on the deployer, which is the one host that held this key.
   ansible.builtin.file:
     path: "{{ gitops_deploy_retired_staging_gate_key_path }}"
     state: absent
@@ -324,10 +313,9 @@
 
 - name: Deploy the GitHub ruleset drift check
   tags: [cron]
-  # The ruleset is the merge gate this deployer's CI verdict rests on, and nothing watched it:
-  # an edit in the GitHub UI changed it with no commit and no signal. Two in-repo records of it
-  # had already gone stale unnoticed by 2026-08-31. Pushes its own Kuma monitor directly, in the
-  # cloudflare-ip-drift shape, with no monitor-bridge hop.
+  # The ruleset is the merge gate this deployer's CI verdict rests on, and an edit in the
+  # GitHub UI changes it with no commit and no signal. The check pushes its own Kuma monitor
+  # directly, in the cloudflare-ip-drift shape, with no monitor-bridge hop.
   ansible.builtin.template:
     src: github-ruleset-drift.sh.j2
     dest: /usr/local/bin/github-ruleset-drift.sh
@@ -343,7 +331,7 @@
   # not about catching drift fast — and GitHub's unauthenticated limit is 60 req/hr per source
   # IP, shared with renovate_notify on this same host.
   #
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears — two calls an hour at worst, inside the
   # unauthenticated limit even on the anonymous fallback.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
@@ -378,7 +366,7 @@
   # Daily, ten minutes after the ruleset check. The setting only moves when it expires, so the
   # cadence is about how long a lapse can go unnoticed (one day) rather than about load.
   #
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears. The re-arm PUT is idempotent, so a rerun is
   # the same reconcile again.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"

@@ -1,15 +1,13 @@
-"""One Gmail app password now feeds three services, and two of them can break silently.
+"""One Gmail app password feeds three services, and two of them can break silently.
 
-`smtp_notify_app_password` was already Uptime Kuma's second alert channel and the credential
-monitor-bridge's `email_backstop` re-authenticates on a throttle. Healthchecks and Authelia
-joined it, and each brought a failure mode that renders clean:
+`smtp_notify_app_password` is Uptime Kuma's second alert channel, the credential
+monitor-bridge's `email_backstop` re-authenticates on a throttle, and the credential
+Healthchecks and Authelia send with. The last two each have a failure mode that renders clean:
 
 - **Healthchecks.** Gmail authenticates the account its app password was minted for, so
   `EMAIL_HOST_USER` in the Secret must be the same address the Deployment's
   `DEFAULT_FROM_EMAIL` sends as. They are two keys in two files, and Django reports a
-  mismatch as a generic auth failure at send time — long after the deploy is green. This is
-  the state the role sat in from 2026-08-30: host, port and user all configured, no password,
-  every send failing auth.
+  mismatch as a generic auth failure at send time — long after the deploy is green.
 - **Authelia.** `disable_startup_check` belongs to `notifier`, not to `notifier.smtp`.
   Indented one level deeper it is still valid YAML, the manifest validator still parses it,
   and Authelia refuses to boot — which under this role's `Recreate` strategy means SSO is
@@ -76,7 +74,7 @@ def smtp_identity_is_consistent(secret, env):
 def smtp_password_is_present(secret):
     """True when a password renders at all.
 
-    The 2026-08-30 state is the thing this rejects: EMAIL_HOST/PORT/USE_TLS/USER all set and
+    This rejects EMAIL_HOST/PORT/USE_TLS/USER all set and
     the password key simply absent, so Django attempts SMTP and fails auth on every send
     instead of skipping it.
     """
@@ -135,9 +133,9 @@ TRANSPORTS = {
 def uses_the_proven_gmail_transport(env):
     """True when the transport is implicit TLS on 465, and coherently so.
 
-    Gmail answered STARTTLS on 587 with `535 Username and Password not accepted` on
-    2026-09-09, using the account and app password it accepts on 465. Every other consumer
-    here — Authelia, Uptime Kuma, monitor-bridge's `email_backstop` — was already on 465, so
+    Gmail answers STARTTLS on 587 with `535 Username and Password not accepted`, using the
+    account and app password it accepts on 465. Every other consumer
+    here — Authelia, Uptime Kuma, monitor-bridge's `email_backstop` — is on 465, so
     this pins healthchecks to the one transport with live evidence behind it.
     """
     return (
@@ -259,7 +257,7 @@ def test_sender_from_another_account_is_flagged():
 
 
 def test_filesystem_notifier_is_flagged():
-    """The pre-change state — codes written to a file in the pod, no SMTP block at all."""
+    """No SMTP block at all: codes written to a file in the pod."""
     assert not smtp_notifier_is_wired(
         {"filesystem": {"filename": "/config/notification.txt"}}
     )

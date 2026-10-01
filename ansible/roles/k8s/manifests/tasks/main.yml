@@ -12,10 +12,8 @@
 #                           does NOT apply -- the owning role applies them itself, later and in
 #                           its own order. Staged in `manifests_deferred_dir_name`, a sibling
 #                           directory this role's prune and its `kubectl apply -f <dir>/` never
-#                           touch. Issue #2899: pihole's instance 2 was rendered by the pihole
-#                           role instead, so its bytes were outside `manifests_digest` and
-#                           `probe.py releases --stale-only` could neither clear nor catch a
-#                           change to its template.
+#                           touch. Its bytes reach `manifests_digest`, so a change to a
+#                           deferred template is visible to `probe.py releases --stale-only`.
 #   manifests_deferred_dir_name  the sibling directory basename under
 #                           /etc/rancher/k3s/manifests/. Required with the above, and reserved
 #                           the way `<service>-netpol` is -- see
@@ -27,17 +25,17 @@
 #                           expectation for them it holds for the shared restart's targets,
 #                           and the pod-template fingerprints below, so the owning role can
 #                           skip its private restart of a workload the apply already rolled
-#                           (#1994) -- never the shared restart or the drain, which such a
+#                           -- never the shared restart or the drain, which such a
 #                           role opted out of. `namespace` defaults to k8s_namespace; a role
 #                           whose workloads live elsewhere (observability) names it, or the
-#                           fingerprints read nothing and it restarts twice. Issue #1902.
+#                           fingerprints read nothing and it restarts twice.
 #                           `rolled_by_role: true` (present only when true) says THIS role
 #                           cannot decide the entry's `restart`: the owning role applies the
 #                           workload's own manifest after the record is written, so the record
 #                           is stamped `restart: false` and the owner raises it through
 #                           tasks/rollout_amend.yml once it knows. Such an entry is also left
 #                           out of the fingerprints below, which would read "not rolled" for it
-#                           by construction. Issue #2902.
+#                           by construction.
 #
 # Derived here, not passed in:
 #   manifests_image_changed  true when k8s/image-builder rebuilt this service's image to a new
@@ -46,8 +44,8 @@
 #   manifests_rolled_by_apply  {name: bool} -- which fingerprint targets the apply itself rolled,
 #                            read off each pod template before and after the apply. A true
 #                            entry skips the `rollout restart` for that workload, in the two
-#                            shared restart tasks (#1988) and in the owning role's private
-#                            restart of a self rollout (#1994)
+#                            shared restart tasks and in the owning role's private
+#                            restart of a self rollout
 #
 # Named `manifests` rather than `common` so its ansible-lint variable prefix does not
 # collide with the Docker-side roles/containers/common namespace.
@@ -190,14 +188,11 @@
 - name: Render manifests for {{ manifests_service }}
   tags: [config]
   # The caller's own template wins; `manifests_shared_defaults` supplies a SHARED one under
-  # ansible/templates/ for a basename the caller names but ships no template for (#2872). Only
-  # `service.yaml` has such a default today, and only the ~22 roles whose Service was a
-  # byte-identical wrapper around the `service()` macro reach it.
+  # ansible/templates/ for a basename the caller names but ships no template for.
   #
   # Resolved per file rather than by a separate task, so `manifests_files` stays the one list
   # the prune keep-set and `manifests_digest` both read. A default rendered outside that list
-  # would be pruned on the next deploy and would move no digest -- the #2899 failure, silent
-  # on both sides.
+  # would be pruned on the next deploy and would move no digest, silently on both sides.
   #
   # A basename with no default and no own template falls through to the own path, so the
   # failure is still the "Could not find or access .../templates/<name>.j2" every caller
@@ -276,7 +271,7 @@
   tags: [config]
   # The deferred directory is this role's to prune for the same reason the caller's own is: the
   # caller applies the whole directory, so a file merely dropped from the list keeps re-applying
-  # its objects on every deploy (2026-08-13, the claude-otel-ingest IngressRoute). Skipped under
+  # its objects on every deploy. Skipped under
   # dry-run, where the directory is a fresh tempfile and `manifests_deferred_staged` was never
   # registered.
   ansible.builtin.file:
@@ -292,7 +287,7 @@
 
 - name: Record the render digest for {{ manifests_service }}
   tags: [deploy]
-  # Render-only mode (#2574): the digest the staleness reader compares against the release
+  # Render-only mode: the digest the staleness reader compares against the release
   # record's. Straight after the renders, so nothing an apply does can reach the bytes.
   ansible.builtin.include_tasks: render_record.yml
   when:
@@ -312,9 +307,7 @@
   tags: [config]
   # `kubectl apply -f <dir>/` sweeps every file in the directory, so a file merely dropped
   # from manifests_files keeps re-applying its objects on every deploy — the retirement
-  # renders green while the live object resurrects. Bit for real 2026-08-13: the retired
-  # claude-otel-ingest IngressRoute was deleted live at 18:51 and silently re-created by the
-  # 18:53 deploy from its stale staged file. Deleting the file here makes dropping a name
+  # renders green while a deleted live object resurrects from its stale staged file. Deleting the file here makes dropping a name
   # from the list the complete staging-side retirement; the already-live object still needs
   # one kubectl delete, which the manifest-prune-check cron flags.
   #
@@ -389,9 +382,8 @@
 # `rollout restart` could follow this apply for -- the primary and every
 # manifests_extra_rollouts entry (the two shared restart tasks below), plus every
 # manifests_self_rollouts entry (the owning role's private restart, which this role never
-# issues but which reads manifests_rolled_by_apply for the same skip, #1994). Listed once so
-# the two fingerprints and the fact they feed read one list. Self rollouts were left out
-# until #1994, so an image-pin bump on pihole or observability rolled each workload twice.
+# issues but which reads manifests_rolled_by_apply for the same skip). Listed once so
+# the two fingerprints and the fact they feed read one list.
 - name: List the workloads whose pod template is fingerprinted for {{ manifests_service }}
   tags: [deploy]
   ansible.builtin.set_fact:
@@ -408,10 +400,9 @@
 # the apply is a workload the apply already rolled, and the `rollout restart` below would be
 # a SECOND roll of it. On a RollingUpdate Deployment that costs a spare pod; on a Recreate one
 # it deletes the pod the apply just created while the kubelet is still pulling its image, and
-# the drain waits out the whole pull before the next ReplicaSet can appear (#1988: karakeep
-# 0.32.0 -> 0.33.2 sat Terminating for ten minutes and failed the 300s drain).
+# the drain waits out the whole pull before the next ReplicaSet can appear.
 #
-# `.spec.template`, not `.metadata.generation` as the issue proposed. Generation bumps on ANY
+# `.spec.template`, not `.metadata.generation`. Generation bumps on ANY
 # spec change -- navidrome and terraria template `replicas:` -- so a replicas change landing
 # beside a ConfigMap change would read as "rolled" and skip the restart the ConfigMap needs.
 # The template is the signal the controller itself acts on.
@@ -449,17 +440,15 @@
   # TRAP: `apply` only prunes map keys (Secret/ConfigMap data entries) on objects it has a
   # last-applied baseline for. An object first created by anything else — `kubectl create`,
   # a bootstrap script — silently KEEPS removed keys forever while the deploy reports green.
-  # Bit the static-monitors Secret 2026-08-10, and TWICE more on 2026-08-14 (the
-  # monitor-bridge-env CHECKS_SKIP crashloop; the zombie-monitor resurrection) — the
-  # earlier "kubectl replace it once" advice was itself the re-breaker: replace strips the
-  # last-applied annotation, so the crack reopens on every use. Secrets are therefore
-  # key-reconciled explicitly after this apply (verify_secret_keys.yml below).
+  # `kubectl replace` does not fix it: replace strips the last-applied annotation, so the
+  # crack reopens on every use. Secrets are therefore key-reconciled explicitly after this
+  # apply (verify_secret_keys.yml below).
   #
   # `--dry-run=server` under k8s_dry_run: the request goes to the real API server and through
   # schema validation, defaulting and admission, and is discarded instead of persisted. That is
   # the whole point of the mode — the manifests are judged by the same code path that would
   # accept them for real.
-  # PRUNE (#1076), opt-in via manifests_prune — see the DECIDED comment in defaults/main.yml
+  # PRUNE, opt-in via manifests_prune — see the DECIDED comment in defaults/main.yml
   # for why this is armed per-role rather than globally. `-l homelab/role={{ manifests_service
   # }}` is what keeps a wrong prune from ever reaching another role's objects: a live object
   # this apply did not itself label is invisible to the selector and structurally cannot be
@@ -472,9 +461,8 @@
   # layer: even a mislabeled object outside this namespace cannot be listed as a candidate.
   #
   # `--prune-allowlist` takes exactly ONE <group/version/kind> per flag, repeated for more —
-  # unlike most kubectl list flags it does NOT accept a comma-joined value. #1092 shipped it
-  # comma-joined (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`) and every deploy
-  # of the one armed role (registry) failed at this task with `error: invalid
+  # unlike most kubectl list flags it does NOT accept a comma-joined value.
+  # `--prune-allowlist=apps/v1/Deployment,core/v1/Service,...` fails with `error: invalid
   # GroupVersionKind format: ...`, because kubectl parses the whole comma string as a single
   # GVK. `map('regex_replace', ...)` renders one `--prune-allowlist=<kind>` token per entry
   # instead of one token holding all of them.
@@ -527,7 +515,7 @@
 - name: Note which workloads the apply itself rolled for {{ manifests_service }}
   tags: [deploy]
   # name -> bool, read by the two restart tasks, by the private restarts in pihole and
-  # observability (#1994) and by release_stamp.yml, which must decide `rollouts[].restart` from
+  # observability and by release_stamp.yml, which must decide `rollouts[].restart` from
   # the same answer or `probe.py health` fails the skipped restart as NOT ROLLED. Both reads must have succeeded for a difference to count: a read that
   # failed on one side only (a transient kubectl error) reads as "not rolled" and restarts.
   ansible.builtin.set_fact:
@@ -554,14 +542,13 @@
 
 # Whether k8s/image-builder rebuilt THIS service's image to a new digest earlier in the play.
 # Keyed on manifests_service because every built image is named after the role that deploys it
-# — k8s_rebuilt_images is play-scoped, so it would work across roles too, as it did while n8n's
-# images were built by a separate n8n-images role (folded in by #2813).
+# — k8s_rebuilt_images is play-scoped, so it would work across roles too.
 #
 # "named after the role" holds for six of the seven built images. It does NOT hold for
 # n8n-runners, which the n8n role builds under its own name and deploys as a second Deployment — so
-# `manifests_service in k8s_rebuilt_images` was False for a runners-only rebuild, and the
-# rollout below targets a single Deployment name anyway. A rebuilt runners image therefore
-# reached the registry and never reached a pod, with the deploy reporting green. Roles that
+# `manifests_service in k8s_rebuilt_images` is False for a runners-only rebuild, and the
+# rollout below targets a single Deployment name anyway. A rebuilt runners image would
+# otherwise reach the registry and never reach a pod, with the deploy reporting green. Roles that
 # deploy more than one Deployment declare the rest in manifests_extra_rollouts.
 - name: Note whether a rebuilt image needs rolling for {{ manifests_service }}
   tags: [deploy]
@@ -600,7 +587,7 @@
   # Skipped when the apply itself rolled the Deployment -- its pod template changed across the
   # apply, which is an image-pin bump, a checksum annotation, anything in the template. The
   # restart would be a second roll of a workload already rolling, and on a Recreate Deployment
-  # it kills the new pod mid-pull (#1988). See the fingerprint tasks above the apply. A
+  # it kills the new pod mid-pull. See the fingerprint tasks above the apply. A
   # ConfigMap/Secret change leaves the template untouched, so that case still restarts.
   #
   # The k8s_dry_run guard has to be explicit rather than falling out of the change conditions
@@ -616,8 +603,8 @@
     - not k8s_dry_run | bool
     - manifests_rollout | default(manifests_service) | length > 0
     # `manifests_render is changed` alone compares rendered FILE bytes, so a YAML comment or
-    # whitespace edit rolled the pods while the apply reported every object `unchanged`
-    # (#3115). The apply's own `changed` -- 'created' or 'configured' in its stdout -- is the
+    # whitespace edit rolls the pods while the apply reports every object `unchanged`.
+    # The apply's own `changed` -- 'created' or 'configured' in its stdout -- is the
     # signal that an object moved. A ConfigMap whose data changed prints `configured`, so it
     # still restarts. The secret trigger stays on its own register: verify_secret_keys.yml can
     # patch a stale key out of a Secret AFTER an apply that printed `unchanged`.
@@ -642,8 +629,8 @@
   # exactly the wrong mental model for a fact that outlives this role.
   # DOES NOT WAIT. The rollout is watched by roles/k8s/manifests/tasks/drain.yml, invoked from
   # ansible/tasks/k8s_batch.yml at the end of this role's batch, together with every other
-  # rollout the batch started — 1386s of serial waiting
-  # across 31 services on 2026-08-15 becomes max() per batch instead of sum().
+  # rollout the batch started, so the wait is
+  # max() per batch instead of sum().
   #
   # `changed` is recorded here, not recomputed at the drain: it decides whether the stabilisation
   # gate watches this workload, and manifests_render/manifests_secret_render are role-scoped facts
@@ -675,8 +662,7 @@
 # Everything above handles ONE Deployment per role. A role that renders several (freshrss:
 # freshrss-feed-cache; prowlarr: flaresolverr; n8n: n8n-runners; karakeep: karakeep-meilisearch)
 # names the others here as {name, image} pairs, where `image` is the k8s/image-builder name
-# whose rebuild should roll it. Optional and empty by default, so every single-Deployment role
-# behaves exactly as before. Every current extra is kind: Deployment; an entry can set its own
+# whose rebuild should roll it. Optional and empty by default. Every current extra is kind: Deployment; an entry can set its own
 # `kind` and falls back to manifests_rollout_kind, same as the primary rollout, when it omits
 # one. observability is the precedent for one role legitimately rolling both kinds together, though
 # it does so via its own private loop rather than manifests_extra_rollouts.
@@ -693,7 +679,7 @@
     label: "{{ item.name }}"
   when:
     - not k8s_dry_run | bool
-    # Same apply-changed conjunction as the primary rollout above (#3115).
+    # Same apply-changed conjunction as the primary rollout above.
     - (manifests_render is changed and manifests_apply is changed)
       or manifests_secret_render is changed
       or (item.image | default(item.name)) in (k8s_rebuilt_images | default([]))

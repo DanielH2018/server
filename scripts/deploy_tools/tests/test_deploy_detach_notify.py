@@ -86,11 +86,11 @@ def test_check_one_skips_a_role_that_declares_no_workload():
 
 
 def test_check_one_flags_a_declared_pi_container_that_is_absent():
-    """The reject half of the skip above, and the safety-critical half of the 2026-09-01 fix.
+    """The reject half of the skip above, and the safety-critical half.
 
     A Pi service daniel-pi's inventory declares, with no container on the host, is a deploy that
-    failed. It shared the undeclared case's "not found (not created" message until then, so it
-    reported `skipped` and the verdict stayed `settled`.
+    failed. It must not share the undeclared case's "not found (not created" message, or it
+    would report `skipped` and the verdict would stay `settled`.
     """
 
     def run(argv, **kwargs):
@@ -110,8 +110,8 @@ def test_check_one_flags_a_declared_pi_container_that_is_absent():
 
 
 def test_check_one_flags_a_resolved_k8s_workload_that_is_absent():
-    """observability deploys six workloads and none is named observability, so the old gate asked
-    for a name nothing carries, got "no Deployment or DaemonSet", and skipped. Now the role's
+    """observability deploys six workloads and none is named observability, so a gate asking
+    for a name nothing carries would get "no Deployment or DaemonSet" and skip. The role's
     manifests name the workloads, and one of them missing is a failed deploy."""
 
     def run(argv, **kwargs):
@@ -129,7 +129,7 @@ def test_check_one_flags_a_resolved_k8s_workload_that_is_absent():
 
 
 def test_gate_fails_on_a_resolved_workload_that_is_absent():
-    """The whole point, at the verdict level: this used to come back settled."""
+    """The whole point, at the verdict level: this must not come back settled."""
 
     def run(argv, **kwargs):
         return _result(
@@ -158,8 +158,8 @@ def test_check_one_unhealthy_is_not_confused_with_not_applicable():
 
 
 def test_check_one_probes_a_docker_only_tag_on_the_pi_and_never_the_cluster():
-    """Issue #929: `alloy` is the Pi's log shipper and the name of loki-homelab's cluster
-    DaemonSet. Probing k8s first found the DaemonSet's 2/2 ready and reported the Pi's
+    """`alloy` is the Pi's log shipper and the name of loki-homelab's cluster
+    DaemonSet. Probing k8s first would find the DaemonSet's 2/2 ready and report the Pi's
     undeployed container healthy. A tag only a Docker host declares asks the Pi alone."""
     calls = []
 
@@ -349,7 +349,7 @@ def test_notify_leaves_sys_path_as_it_found_it_when_the_post_succeeds(
     """The other exit from the try, beside the raising one the test above covers.
 
     A `finally` that restores on one path and not the other is the same leak, and the
-    succeeding path is the one production takes (issue #1033).
+    succeeding path is the one production takes.
     """
     host_lib = tmp_path / "host_lib.py"
     host_lib.write_text(

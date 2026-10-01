@@ -24,7 +24,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[2]))
 
 from lib.repo_paths import REPO
 
-# The URL builders live in obs_api, which homelab-mcp's image also carries (#2860). Re-exported
+# The URL builders live in obs_api, which homelab-mcp's image also carries. Re-exported
 # here so every `core.prom_query_url(...)` call site and test keeps its spelling.
 from diagnostics.probe_lib.obs_api import (  # noqa: F401
     loki_labels_url,
@@ -100,9 +100,9 @@ def observability_loki_ip():
     )
 
 
-# The two Loki stores and what each holds. `probe.py loki-query` asked only the first until
-# #2210, and a `{service_name="claude-code"}` query against it returned an empty result that
-# read as "the OTEL stream is gone" while 1.07M lines sat in the second.
+# The two Loki stores and what each holds. A `{service_name="claude-code"}` query against
+# the first store returns an empty result that reads as "the OTEL stream is gone" while the
+# lines sit in the second.
 LOKI_STORES = ("homelab", "observability")
 LOKI_STORE_HELP = (
     "which Loki to ask: `homelab` (loki-homelab: pod, syslog and monitor-bridge logs) or "
@@ -121,7 +121,7 @@ def pick_loki_store(logql, requested):
 
     Pure. `requested` is the `--loki` value, None when unset. Only the claude-code selector
     is judged: it has exactly one home, and asking the other store returns a well-formed
-    empty result rather than an error (#2210). Unset, that selector routes to observability
+    empty result rather than an error. Unset, that selector routes to observability
     with a note; every other query keeps the homelab default with no note.
 
     Raises:
@@ -196,11 +196,7 @@ HOSTS_INI_PATH = os.path.join(
 
 
 def prom_endpoint():
-    """The cluster prometheus's query-only IngressRoute endpoint.
-
-    The Docker prometheus — the old resolve_ip("prometheus") target — retired
-    2026-08-14 with the drain.
-    """
+    """The cluster prometheus's query-only IngressRoute endpoint."""
     return k8s_endpoint("prometheus")
 
 
@@ -287,7 +283,7 @@ def get_status(url, config_body=None, timeout=DEFAULT_TIMEOUT, resolve=None):
         argv[-1:-1] = ["--config", "-"]
     # `--max-time` bounds curl's own transfer; the subprocess timeout is the backstop for a
     # curl that never gets that far (a wedged DNS resolver, a stalled TLS handshake). Either
-    # way the caller reads a transport failure rather than hanging (#2156).
+    # way the caller reads a transport failure rather than hanging.
     try:
         out = subprocess.run(
             argv,
@@ -308,10 +304,10 @@ class NonJsonResponse(SystemExit):
     """fetch() returned a body `json.loads` cannot read — an HTTP error page, in practice.
 
     `curl -sS` without `--fail` exits 0 on a 4xx/5xx and hands the error body back as the
-    response, so a rejected query used to reach `json.loads` and die as a JSONDecodeError that
-    named the probe rather than the server (#1790). Raising SystemExit with the body means an
-    uncaught one prints the server's own words and exits 1; a caller that can read the body
-    (alerts' cap clamp) catches it and does.
+    response, so a rejected query would reach `json.loads` and die as a JSONDecodeError that
+    names the probe rather than the server. Raising SystemExit with the body means an uncaught
+    one prints the server's own words and exits 1; a caller that can read the body (alerts'
+    cap clamp) catches it and does.
     """
 
     def __init__(self, url, body):
@@ -372,15 +368,13 @@ def sops_extract(key_name):
 # --- log-secret redaction -------------------------------------------------------------------
 #
 # Home Assistant writes the Google Cast system user's `refresh_token` in plaintext into its own
-# log whenever a cast fails in `_handle_signal_show_view` (issue #3015): the record formats the
-# `cast_show_view` signal args, which carry the token. That record reaches HA's `system_log` and
-# `/api/error_log`, so `probe.py ha get error_log` prints a live HA API credential into whatever
-# reads its stdout — measured 2026-09-30, when it landed in an agent transcript.
+# log whenever a cast fails in `_handle_signal_show_view`: the record formats the `cast_show_view`
+# signal args, which carry the token. That record reaches HA's `system_log` and `/api/error_log`,
+# so `probe.py ha get error_log` prints a live HA API credential into whatever reads its stdout.
 #
 # Redaction happens HERE rather than upstream because probe.py cannot fix HA's logger. The Alloy
-# stage in `roles/k8s/loki-homelab` keeps the token out of Loki from now on; this keeps it out of
-# THIS tool's output, including for the records Loki already holds until its 744h retention
-# expires.
+# stage in `roles/k8s/loki-homelab` keeps the token out of Loki; this keeps it out of THIS tool's
+# output, including for the records Loki already holds until its 744h retention expires.
 #
 # Only the token is replaced, never the surrounding record: `docs/platform.md` tells the operator
 # to query `|= "_handle_signal_show_view"` to catch a timed-out cast, and a redaction that ate the

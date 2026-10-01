@@ -1,4 +1,4 @@
-"""cert_expiry refuses a target outside the routed zone BEFORE any socket is opened (#1931).
+"""cert_expiry refuses a target outside the routed zone BEFORE any socket is opened.
 
 The predicate lives in safe_reads and has its own table; this file proves the wiring in
 app.py calls it first. app.py imports mcp, httpx and starlette, none of which the test env

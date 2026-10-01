@@ -91,7 +91,7 @@ _PROCESS_STARTERS = (
 
 def test_the_pre_lock_gate_parses_ansible_playbook_without_running_one():
     """The gate names "ansible-playbook" above the lock, which is allowed only because it
-    never starts one -- it hands the argv to `PlaybookCLI.parse()` (issue #3024).
+    never starts one -- it hands the argv to `PlaybookCLI.parse()`.
 
     Asserted on the source rather than by calling it: a gate that grew a `--syntax-check`
     subprocess would deploy nothing and still pass every behavioural test in
@@ -327,7 +327,7 @@ def test_a_budgeted_deploy_shares_one_deadline_between_its_wait_and_its_run():
 def test_a_separately_budgeted_wait_is_flagged():
     """FLAGGED half for the guard above, which can only ever be observed passing.
 
-    This is the pre-fix shape: the same `timeout` handed to the lock helper and to `run`.
+    This is the shape to reject: the same `timeout` handed to the lock helper and to `run`.
     """
     before = _one_function(
         "def deploy_k8s(repo, services, timeout):\n"
@@ -350,8 +350,8 @@ def test_the_service_lock_helper_takes_the_all_lock_before_any_service():
     """The ordering both sides depend on, asserted where the deployer fixes it.
 
     `all` first, then sorted names, and `service_locks` walks `plan` rather than restating
-    it -- `deploy.sh` reads the same `plan` off the CLI, so a second statement of the order
-    anywhere is what issue #2054 removed. Reversing either half reintroduces a lock cycle
+    it -- `deploy.sh` reads the same `plan` off the CLI, so there is no second statement of the
+    order anywhere. Reversing either half reintroduces a lock cycle
     between a full run and a scoped one.
     """
     source = _DEPLOY_LOCKS.read_text()

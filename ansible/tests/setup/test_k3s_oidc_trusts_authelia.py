@@ -7,10 +7,10 @@ role — the Authelia issuer hosts, the Authelia client id, and the group name
 `roles/k8s/headlamp` binds. Each of those drifts silently: the login succeeds and the dashboard
 renders an empty cluster, with nothing in any log.
 
-The trust moved from six `--kube-apiserver-arg=oidc-*` flags to an `AuthenticationConfiguration`
-file on 2026-09-10, because Authelia mints a different `iss` per hostname and the flag took one
-value. That move is why this file checks a rendered YAML document rather than an argument
-string, and why two of the checks below are about the flags NOT being there.
+The trust is an `AuthenticationConfiguration` file, not six `--kube-apiserver-arg=oidc-*`
+flags, because Authelia mints a different `iss` per hostname and the flag takes one value.
+That is why this file checks a rendered YAML document rather than an argument string, and
+why two of the checks below are about the flags NOT being there.
 
 See `roles/setup/k3s/defaults/main.yml` and `templates/authentication-config.yaml.j2` for why
 each value is what it is.
@@ -28,7 +28,7 @@ K3S = ANSIBLE / "roles" / "setup" / "k3s"
 HEADLAMP = ANSIBLE / "roles" / "k8s" / "headlamp"
 
 # The two hostnames Authelia answers on, and the two `iss` values they mint. Measured
-# 2026-09-10 against `/.well-known/openid-configuration` on each name. Named rather than
+# against `/.well-known/openid-configuration` on each name. Named rather than
 # counted: a count of 2 passes while one of them has been swapped for something else, and the
 # whole point of the file is that BOTH are trusted.
 REQUIRED_ISSUER_HOSTS = frozenset(
@@ -177,14 +177,14 @@ def test_both_authelia_issuers_are_trusted():
     """The reason this is a file rather than a flag.
 
     Authelia derives `iss` from the host the request arrived on, so Headlamp's two routes mint
-    two different issuers. Trusting one of them is the bug this replaced: the login completes
+    two different issuers. Trusting only one of them is the failure: the login completes
     at Authelia and the API server refuses the token.
     """
     assert _missing_issuers(_rendered_auth_config()) == []
 
 
 def test_the_issuer_check_rejects_a_config_that_trusts_only_the_lan_name():
-    """The rejecting half, and it reproduces the ORIGINAL defect rather than a generic one.
+    """The rejecting half, and it reproduces the specific defect rather than a generic one.
 
     Without it the check above passes on a config with no `jwt` entries at all — a set
     difference against nothing is empty — and passes just as happily once `_issuer_hosts` has
@@ -218,7 +218,7 @@ def test_every_issuer_names_the_client_id_as_its_audience():
 
 
 def test_username_prefixing_is_disabled_with_an_empty_string_not_a_hyphen():
-    """The one field whose meaning CHANGED in the move off the flags.
+    """The one field whose meaning differs from the flags it replaces.
 
     `--oidc-username-prefix=-` was a sentinel meaning "no prefix", because the flag path
     prefixed the username with the issuer URL plus `#` for any claim other than `email`. The

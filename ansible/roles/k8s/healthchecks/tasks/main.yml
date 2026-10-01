@@ -43,11 +43,9 @@
 
 # `/config/local_settings.py` on the PVC beats everything this role renders. `hc/settings.py`
 # ends by importing it, AFTER the environment is read, so a name it assigns is a name the
-# Deployment and the Secret only appear to control. This instance's copy dates from January
-# 2023 and pinned all six email settings, which is why three separate email fixes on
-# 2026-09-09 all deployed green and changed nothing Django saw. It also carried the only copy
-# of `SECRET_KEY` until 2026-09-10 (#1491); the Secret now renders a fresh one and the script
-# deletes the file's assignment, which is a one-off round of logged-out sessions.
+# Deployment and the Secret only appear to control. The script strips the settings this role
+# owns from that file, so the Deployment and the Secret decide them. Deleting the file's
+# `SECRET_KEY` assignment makes the Secret's key take effect, which logs sessions out once.
 #
 # Ordered AFTER the rollout gate above, like every other exec in this role: exec'ing before
 # the gate targets whichever pod is still running, which during a manifest change is the

@@ -1,10 +1,8 @@
 #!/usr/bin/env python3
 """Red-proof for observability's three dashboard prunes.
 
-A retired Grafana board stayed live because the ConfigMap kept a key no file justified, and #517
-shipped a prune for it that was INERT — #520's own commit message says so: "Correcting #517. Its
-diagnosis was wrong and the task it added was inert." #520 then shipped three more prunes, and
-none of the four ever had a test.
+A retired Grafana board stays live when the ConfigMap keeps a key no file justifies, and a
+prune that is INERT leaves it there.
 
 Nothing else covers them. `test_deploy_annotations.py` asserts only that the ConfigMap is built
 `--from-file` the annotated tree, and `roles/setup/k3s/files/live_drift_check.py` EXPLICITLY
@@ -14,7 +12,7 @@ green. The only evidence they work is one operator's manual observation.
 
 So this is the paired proof the repo's own rule asks for — for each prune, one fixture where an
 orphan MUST be selected for deletion, and one where the sets agree and NOTHING may be selected.
-The second half is the one that would have caught #517: a prune that selects nothing on every
+The second half is the one that catches an inert prune: a prune that selects nothing on every
 input is indistinguishable from a working prune, from the passing side.
 
 WHY IT ALSO PINS THE REGISTER NAMES. Rendering these expressions against hand-written fixture
@@ -228,12 +226,10 @@ def test_the_expressions_read_the_registers_the_find_tasks_set() -> None:
 
 
 def test_the_prune_set_has_not_grown_unguarded() -> None:
-    """A fourth set-difference prune added later would inherit no coverage, which is how the
-    first three got here.
+    """A set-difference prune added later would inherit no coverage.
 
     Keyed on `difference(`, not on the task name: dashboards.yml also holds three one-shot
-    `Remove ...` cleanups (the client-side apply directory, and the retired vendored Claude Code
-    manifest and its ConfigMap) which delete a fixed path and have no set logic to prove. It is
+    `Remove ...` cleanups which delete a fixed path and have no set logic to prove. It is
     the difference expressions that can silently select nothing.
     """
     prunes = [t for t in load_tasks(DASHBOARDS) if "difference(" in str(t)]

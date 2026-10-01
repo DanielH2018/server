@@ -39,9 +39,7 @@ from deploy_logic import role_of
 
 # The one directory under the role trees that is not a service: `common`, the shared Docker
 # deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
-# selecting nothing. `archive` sat here too until #2540 — it classified DIFF paths rather than
-# a tree at a ref, so it had to outlive the tree #2385 deleted until the deployer's `local`
-# was past that merge commit.
+# selecting nothing.
 _NOT_SERVICES = frozenset({"common"})
 
 
@@ -57,15 +55,12 @@ def role_for(path: str) -> str | None:
     `containers_list` entry, and eight of them do not.
 
     A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
-    mapper already gives: `services_from_changed_paths` drops one ahead of every plane branch,
-    because a document is not something a playbook applies. This mapper did not, so a PR whose
-    only change under `roles/k8s/manifests/` was that role's CLAUDE.md came out of
-    `shared_roles` as a tag-less role owed to a hand, and land.sh ended `needs-manual-apply`
-    asking for a full `ansible/deploy.yml` run for prose (issue #1701).
+    mapper gives: `services_from_changed_paths` drops one ahead of every plane branch,
+    because a document is not something a playbook applies.
     `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
 
     The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
-    index, so one function answers which role a path sits in (#3048). The `.md` rule and
+    index, so one function answers which role a path sits in. The `.md` rule and
     `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
     DIFF paths rather than a tree at a ref.
     """
@@ -83,25 +78,25 @@ def is_role_test_path(path: str) -> bool:
     Answers about segment 4 of `ansible/roles/<plane>/<role>/<sub>/...` alone, so it is only
     meaningful for a path `role_for` has already named a role for. `shared_roles` and `tag_for`
     are the callers, and both drop such a path: a role's `tests/` is work no deploy applies, the same class as the
-    `.md` rule in `role_for` (#1701). Pytest guards over the role's `files/*.py` are staged by
+    `.md` rule in `role_for`. Pytest guards over the role's `files/*.py` are staged by
     nothing — `ansible/tests/repo/test_no_role_ships_a_test_file.py` holds that tree-wide — so
     they reach no cluster and no deploy can apply them. `_is_real_change` in
     `scripts/diagnostics/probe_lib/releases.py` drops a role's `tests/` for that reason.
 
-    `tasks/` is NOT dropped, which is what issue #1729 proposed and three facts refute. A role
+    `tasks/` is NOT dropped, for three reasons. A role
     with no `containers_list` entry and no caller has no path to being applied at all, and a
     tasks-only PR adding one must still be reported
-    (`tests/test_land_classify.py:110`, issue #1544). A helper's tasks apply live state to each
+    (`tests/test_land_classify.py:110`). A helper's tasks apply live state to each
     caller separately — arr-notification's seed a Discord Connect notification into the *arr's
     own database — so deploying one caller is not the change applied
-    (`tests/test_land_tags_caller_coverage.py:76`, issue #1397). And `_supplies_manifest_bytes`,
-    the predicate #1729 cites as its precedent, puts `volume-claim` in the reported set by name:
+    (`tests/test_land_tags_caller_coverage.py:76`). And `_supplies_manifest_bytes`
+    puts `volume-claim` in the reported set by name:
     the role ships `templates/pvc.yaml.j2`.
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
     own `services_from_changed_paths`. The segment itself comes off `role_of`, which already
-    carries it, rather than off a fourth `split("/")` of the same path (#3048).
+    carries it, rather than off a fourth `split("/")` of the same path.
     """
     at = role_of(path)
     return at is not None and at.subdir == "tests"
@@ -123,7 +118,7 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
     These are the shared k3s plane — `manifests` is the apply-and-roll path every workload
     includes, `volume-claim` and `volume-revert` are storage paths several include. Naming one
     in `--tags` makes deploy.sh refuse the ENTIRE list (exit 2), so they must be split off the
-    tags and reported as work a human still owes. PR #617 is the measured case.
+    tags and reported as work a human still owes.
 
     A role's own `tests/` does not put it here at all — `is_role_test_path`.
     """
@@ -133,14 +128,14 @@ def shared_roles(files, declared: set[str] | None = None) -> list[str]:
 
 
 def shared_caller_tags(files, declared: set[str] | None = None) -> dict[str, set[str]]:
-    """For each shared role `files` changes, the tags of the roles that run it (#2704).
+    """For each shared role `files` changes, the tags of the roles that run it.
 
     A helper role has no tag of its own, but `deploy.yml` runs it under the tag of every role
-    whose tasks include it, so deploying all of its callers applies it (#1397). All of them,
-    not one: PR #617 deployed 22 of `manifests`' callers, which re-applied it for those 22
-    alone. Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
+    whose tasks include it, so deploying all of its callers applies it. All of them,
+    not one: a caller deployed alone re-applies the helper for that caller only.
+    Transitive, so `longhorn-api` reaches the services behind `volume-snapshot`.
 
-    `narrowed` is the one exception, and the module docstring has its argument (#3124).
+    `narrowed` is the one exception, and the module docstring has its argument.
 
     The landing deploys these tags, and `land_tags.plane_note` drops every role this gives a
     non-empty set. An empty set is a role nothing deploys, which stays in the note.

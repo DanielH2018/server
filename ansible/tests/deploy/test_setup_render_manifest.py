@@ -2,22 +2,18 @@
 
 manifest-prune-check.sh's third arm compares each template's source checksum against the one
 stamped at render time, so a `template:`-rendered artifact that is NOT stamped is invisible to it
-— the same silent-omission shape the arm exists to close (found 2026-08-23, when
-/usr/local/bin/longhorn-backup-health.sh had been two commits stale for two days behind a
-"deployed scripts match the repo" heartbeat).
+— the same silent-omission shape the arm exists to close.
 
-Two coverage bugs in that mechanism were closed on 2026-08-23b and this file guards both:
+This file guards two coverage properties of that mechanism:
 
-  * **Scope** (review H1). The manifest was one file of bare filenames joined onto a hardcoded
-    `roles/setup/k3s/templates`, so it could not see another role's artifacts at all. Nine on
-    daniel-box were watched by nothing, including secret-rotate.sh — a weekly state-changing cron
-    that commits and pushes. Entries now carry a repo-relative path, and four other roles stamp
-    their own.
+  * **Scope.** An entry carries a repo-relative path, so the manifest sees every role's
+    artifacts, not only those under `roles/setup/k3s/templates`. Four other roles stamp their
+    own.
 
-  * **Granularity** (review M6). That one file was rewritten wholesale by every partial run, and
-    it was written BEFORE any `template:` task. So `--tags manifest-prune` — the natural command
-    for redeploying the drift check itself — restamped all eight k3s scripts while rendering one,
-    and the seven it never touched read as fresh. Stamps are now per tag family and run last.
+  * **Granularity.** Stamps are per tag family and run last. One file rewritten wholesale by
+    every partial run, or written BEFORE any `template:` task, would make `--tags
+    manifest-prune` — the natural command for redeploying the drift check itself — restamp all
+    the k3s scripts while rendering one, so the ones it never touched read as fresh.
 
 A shell template added to the k3s role without being stamped is a coverage regression nothing
 else would report, so it fails here instead.
@@ -34,10 +30,9 @@ _ROLE = _REPO / "ansible/roles/setup/k3s"
 _TEMPLATES = _ROLE / "templates"
 _HEALTH_CRONS = _ROLE / "tasks/health-crons.yml"
 _MANIFEST_DIR = "/var/lib/homelab/setup-render-manifest.d"
-# Arms 2 and 3 moved out of manifest-prune-check.sh.j2 on 2026-08-29 (review M-10): that script
-# is installed only on k3s server hosts, so daniel-server rendered the whole UPS shutdown chain
-# with no reader at all. Both consumers now source this library, and the guards below assert
-# against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
+# Arms 2 and 3 live in a library that both consumers source: manifest-prune-check.sh.j2 is
+# installed only on k3s server hosts, and daniel-server renders the whole UPS shutdown chain.
+# The guards below assert against the file that literally holds the loops — a guard pointed at a wrapper asserts nothing
 # about the code that runs.
 _ARMS_LIB = _REPO / "ansible/roles/setup/initial_setup/files/setup-drift-lib.sh"
 _ARM_CONSUMERS = (
@@ -48,10 +43,7 @@ _ARM_CONSUMERS = (
 # Shell templates that are NOT rendered onto this host as standalone scripts, each with the
 # reason. Anything here is exempt from the manifest; everything else must be in it.
 #
-# Empty, and that is the correct state. It held "kuma-push-lib.sh.j2" until 2026-08-23b review
-# L8, which is not in this directory and never was — the shared push library lives in
-# roles/setup/initial_setup/files/ as a plain .sh, so it is `copy:`-deployed and outside this
-# glob entirely. A dead exemption is worse than none: it reads as precedent for exempting the
+# Empty, and that is the correct state. A dead exemption is worse than none: it reads as precedent for exempting the
 # next thing, and it silently widens what the check tolerates. test_every_exemption_is_real
 # below is what keeps that from recurring.
 _NOT_STANDALONE_SCRIPTS: set[str] = set()
@@ -100,7 +92,7 @@ def test_the_manifest_names_no_template_that_stopped_existing():
 
 
 def test_declared_paths_are_repo_relative_and_resolve():
-    """The whole point of the H1 fix: an entry carries its own path.
+    """An entry carries its own path.
 
     The check joins nothing onto a hardcoded role directory. A bare filename here would silently
     stop resolving.
@@ -113,7 +105,7 @@ def test_declared_paths_are_repo_relative_and_resolve():
 
 
 def test_no_template_is_stamped_by_two_groups():
-    """A template in two groups is restamped by either family's run, which re-opens M6 for it."""
+    """A template in two groups is restamped by either family's run, which restamps its members from a run that did not render them."""
     seen: dict[str, str] = {}
     for group in _groups():
         for tpl in group["templates"]:
@@ -125,15 +117,14 @@ def test_no_template_is_stamped_by_two_groups():
 
 
 def test_each_stamp_task_carries_exactly_its_groups_tag_family():
-    """The M6 guard proper.
+    """The per-family stamp guard.
 
-    The old single stamp carried [backup-health, disk-health, manifest-prune] and omitted
-    etcd-snapshot, while checksumming all eight scripts — so three families restamped the etcd
-    script they never rendered, and `--tags etcd-snapshot` skipped the stamp entirely. Membership
-    and tags have to agree, and only a test can hold them there.
+    A single stamp carrying several families' tags while checksumming every script would let
+    each family restamp scripts it never rendered, and `--tags etcd-snapshot` skip the stamp
+    entirely. Membership and tags have to agree, and only a test can hold them there.
     """
     # Parsed as YAML, not matched with a regex: the tasks ARE structured data, and a pattern
-    # spanning task boundaries is both fragile and — as written the first time — quadratic.
+    # spanning task boundaries is both fragile and quadratic.
     tasks = yaml_fast.safe_load(_HEALTH_CRONS.read_text())
     by_group = {
         task["vars"]["stamp_render_name"]: task
@@ -222,9 +213,9 @@ def test_the_k3s_readers_note_rewording_still_matches_the_library():
 
 
 def test_other_setup_roles_stamp_their_own_artifacts():
-    """H1's actual finding: nine rendered artifacts outside the k3s role were watched by nothing.
+    """Rendered artifacts outside the k3s role must be watched.
 
-    Each owning role now includes the shared stamp, and this fails if one stops.
+    Each owning role includes the shared stamp, and this fails if one stops.
 
     daniel-pi's optimize_pi scripts are deliberately absent — that host runs no
     manifest-prune-check, and stamping them here would claim coverage this host cannot provide.
@@ -234,15 +225,12 @@ def test_other_setup_roles_stamp_their_own_artifacts():
         "ansible/roles/setup/renovate_notify/tasks/main.yml",
         "ansible/roles/setup/fake_remux/tasks/main.yml",
         "ansible/roles/setup/initial_setup/tasks/crons.yml",
-        # Added 2026-08-24 (review M-4). claude_code landed the morning after the sweep that
-        # wrote this list, rendering five files and stamping none — the gap this test exists
-        # for, reopened by a role too new to be in the enumeration. THIS LIST IS STILL AN
-        # ENUMERATION and inherits that failure mode: it cannot see the next new role either.
-        # Deriving it means asserting that every `src:`-referenced .j2 under roles/setup/ is
-        # stamped, which today would demand ~18 new stamp entries across roles whose artifacts
-        # nothing has decided to watch (staged k8s manifests, netplan, fail2ban, the two
-        # daniel-pi scripts that are deliberately exempt). That is a bigger change than the
-        # finding, so it is a named follow-up, not a silent omission.
+        # THIS LIST IS AN ENUMERATION: it cannot see the next new role. Deriving it means
+        # asserting that every `src:`-referenced .j2 under roles/setup/ is stamped, which would
+        # demand many new stamp entries across roles whose artifacts nothing has decided to
+        # watch (staged k8s manifests, netplan, fail2ban, the two daniel-pi scripts that are
+        # deliberately exempt). That is a bigger change than this test, so it is a known limit,
+        # not a silent omission.
         "ansible/roles/setup/claude_code/tasks/main.yml",
     }
     for rel in sorted(expected):
@@ -257,11 +245,10 @@ _DEPLOYED_DIR = "/var/lib/homelab/setup-deployed-manifest.d"
 
 
 def test_the_deployed_code_arm_derives_its_pairs_from_fragments():
-    """M-5.
+    """A hardcoded path list could only prove the code its author had in mind.
 
-    The arm hardcoded three paths — all gitops-deploy's — so it could only ever prove the code its
-    own author had in mind. Nine other `copy:`-deployed files on this host were watched by nothing
-    while the same script reported "deployed code matches the repo".
+    Other `copy:`-deployed files would go unwatched while the same script reports "deployed
+    code matches the repo".
 
     A fragment directory makes it per-host by construction, the same shape the stale-script arm
     already uses: a pair exists only where the role that deploys it ran.
@@ -290,7 +277,7 @@ def test_a_deleted_source_is_drift_not_an_exemption():
     an unreadable source means the file was deleted from the repo while the artifact is still
     live. That is drift, and arm 3 reports the same case as "template gone from the repo".
     Returning 0 swallows it, and the entry still counts toward DEPLOYED_ENTRIES: armed, and
-    checking nothing. Introduced and caught in the same change.
+    checking nothing.
     """
     script = _ARMS_LIB.read_text()
     fn = re.search(r"^_check_deployed\(\) \{.*?^\}", script, re.MULTILINE | re.DOTALL)
@@ -340,11 +327,8 @@ def test_an_absent_manifest_is_not_reported_as_drift():
 
 
 def test_an_empty_fragment_cannot_disarm_the_arm():
-    """L2.
-
-    The guard was `[[ -r … ]]`: a zero-byte manifest is readable, so it took the present branch,
-    contributed no comparisons, and the check reported a confident green while watching nothing at
-    all.
+    """A `[[ -r … ]]` guard lets a zero-byte manifest, which is readable, take the present branch,
+    contribute no comparisons, and report a confident green while watching nothing at all.
     """
     script = _ARMS_LIB.read_text()
     assert re.search(r'\[\[\s+-s\s+"\$fragment"', script), (
@@ -358,12 +342,10 @@ def test_the_two_halves_hash_the_same_bytes():
 
     Ansible's file lookup strips a trailing newline by default, so `lookup('file', x) |
     hash('sha256')` hashes the file minus its final byte, while manifest-prune-check.sh compares
-    against `sha256sum x`, which does not. Every stamped entry would have read stale from the
-    first armed run — eight simultaneous alerts on a perfectly healthy host.
+    against `sha256sum x`, which does not. Every stamped entry would read stale from the
+    first armed run — simultaneous alerts on a perfectly healthy host.
 
-    Nothing caught it in review because the arm has never executed: it shipped 2026-08-23, the
-    host has not run initial_setup.yml since, and with no manifest present the check takes its
-    absent branch. This asserts the two spellings that make the digests agree, and the assertion
+    This asserts the two spellings that make the digests agree, and the assertion
     below proves the arithmetic rather than trusting the flag's name.
     """
     stamp_task = (
@@ -396,10 +378,9 @@ def test_the_two_halves_hash_the_same_bytes():
 def test_every_exemption_is_real():
     """An exemption naming a template that does not exist excuses nothing and misleads everyone.
 
-    `kuma-push-lib.sh.j2` sat in _NOT_STANDALONE_SCRIPTS while living in another role's files
-    directory as a plain .sh — so it was never in this glob, the exemption never fired, and it
-    read as precedent for exempting the next script that came along (2026-08-23b review L8).
-    Same shape as the stale-exemption guard in the k3s join-port symmetry test.
+    An exemption for `kuma-push-lib.sh.j2` would never fire: that library lives in another
+    role's files directory as a plain .sh, outside this glob, and the exemption would read as
+    precedent for exempting the next script that came along. Same shape as the stale-exemption guard in the k3s join-port symmetry test.
     """
     on_disk = {p.name for p in _TEMPLATES.glob("*.sh.j2")}
     stale = _NOT_STANDALONE_SCRIPTS - on_disk
@@ -411,12 +392,12 @@ def test_every_exemption_is_real():
 
 
 def test_the_tag_scoping_actually_selects_one_stamp_per_family():
-    """The behavioural half of M6, and the reason it is here rather than left to the YAML check
-    above: reading the tag off the task proves the tag is written, not that Ansible selects on it.
+    """The behavioural half of the per-family stamp guard, and the reason it is here rather than
+    left to the YAML check above: reading the tag off the task proves the tag is written, not
+    that Ansible selects on it.
 
-    That is theme 3 of the 2026-08-23b review — a guard that reads the right thing and asserts
-    nothing about behaviour. `--tags <family>` must reach exactly that family's stamp task and no
-    other; a stamp restamped by a run that did not render its templates is M6 verbatim.
+    `--tags <family>` must reach exactly that family's stamp task and no other; a stamp
+    restamped by a run that did not render its templates is the defect.
 
     `--list-tasks` executes nothing and needs no cluster, secrets or become password. The k3s role
     is reached from k3s-bringup.yml, NOT initial_setup.yml — the four other roles' stamps live in
@@ -461,10 +442,10 @@ def test_the_tag_scoping_actually_selects_one_stamp_per_family():
             f"is rendered by that family, so exactly one may be restamped by it."
         )
         # It must be the task that WRITES the fragment, not a wrapper that pulls it in. That
-        # distinction is the whole test: with `include_tasks` the wrapper was selected and its
-        # children were not, so `--tags disk-health` printed `included: .../stamp_render.yml`,
-        # reported changed=0, and wrote no fragment. Only a deploy caught it — the first version
-        # of this test matched the wrapper's own name and passed throughout.
+        # distinction is the whole test: with `include_tasks` the wrapper is selected and its
+        # children are not, so `--tags disk-health` prints `included: .../stamp_render.yml`,
+        # reports changed=0, and writes no fragment. A test that matches the wrapper's own name
+        # passes throughout.
         #
         # `import_tasks` is static, so --list-tasks prints the imported task's name before
         # `stamp_render_name` is resolved. Every group therefore shows the same literal, and the
@@ -489,17 +470,17 @@ _STAMP_REF = '"{{ role_path }}/../common/tasks/stamp_render.yml"'
 
 
 def test_every_stamp_site_imports_rather_than_includes():
-    """`include_tasks` silently disarms every tag-scoped stamp, and only a deploy showed it.
+    """`include_tasks` silently disarms every tag-scoped stamp.
 
     A DYNAMIC include's children inherit the parent's tags, but `--tags` selection still filters
-    those children on tags they do not carry. So under `--tags disk-health` the wrapper was
-    selected, Ansible printed `included: .../stamp_render.yml`, the `copy:` inside it was
-    filtered out, and the run reported changed=0 with no fragment on disk. `import_tasks` is
+    those children on tags they do not carry. So under `--tags disk-health` the wrapper is
+    selected, Ansible prints `included: .../stamp_render.yml`, the `copy:` inside it is
+    filtered out, and the run reports changed=0 with no fragment on disk. `import_tasks` is
     static — the tags are attached to the imported tasks at parse time, so they are selected too.
 
-    The four other roles hid it. Their stamps sit under a ROLE-level tag (`gitops_deploy`,
-    `renovate_notify`, `fake_remux`), which does reach a dynamic include's children — so three
-    of the eight fragments wrote correctly on the first deploy and four did not.
+    The four other roles do not show it. Their stamps sit under a ROLE-level tag
+    (`gitops_deploy`, `renovate_notify`, `fake_remux`), which does reach a dynamic include's
+    children.
     """
     for rel in _STAMP_SITES:
         text = (_REPO / rel).read_text()

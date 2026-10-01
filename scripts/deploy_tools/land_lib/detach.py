@@ -2,10 +2,8 @@
 
 WHAT THIS REPLACES. A session had to write three things around every landing, by hand, in the
 exact shape the `land-after-merge` skill spelled out: `git rev-parse origin/master` for
-`--since`, a redirect to a logfile under `$CLAUDE_JOB_DIR/tmp`, and
-`timeout 1200 tail -f -n +1 <log> | grep -m1 '^VERDICT:'` to block on the result. Each was a
-step to get wrong, and the skill was 418 lines partly because it had to explain all three
-(issue #2853).
+`--since`, a redirect to a logfile under `$CLAUDE_JOB_DIR/tmp`, and `timeout 1200 tail -f -n +1
+<log> | grep -m1 '^VERDICT:'` to block on the result.
 
 THE REDIRECT IS THE POINT, NOT AN ASIDE. Ansible refuses to start on a non-blocking stdout or
 stderr ("Ansible requires blocking IO on stdin/stdout/stderr"), and a backgrounded Bash call
@@ -15,17 +13,17 @@ also holds can have it set again. A file opened here, by this process, cannot: t
 whole fix has always been "redirect to a file", and why doing it inside the script is safer
 than asking a caller to remember.
 
-WHY NOT `deploy_detach.py`. Issue #2853 proposed reusing it. It does not survive contact: its
-`run` takes the tree lock, reaps snapshots, makes one, takes per-service locks and hands the
-child a `locked.Run`, and its `child` posts a health verdict through
-`deploy_detach_notify.py`. The genuinely shared part is four `dup2` calls. Factoring those out
-would mean editing the deploy hot path for nothing, so the fork is written here.
+WHY NOT `deploy_detach.py`. It cannot be reused: its `run` takes the tree lock, reaps snapshots,
+makes one, takes per-service locks and hands the child a `locked.Run`, and its `child` posts a
+health verdict through `deploy_detach_notify.py`. The genuinely shared part is four `dup2` calls.
+Factoring those out would mean editing the deploy hot path for nothing, so the fork is written
+here.
 
-THE CHILD'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. `await_verdict` reaps the child first
-and reads the log afterwards. A landing can exit with no `VERDICT:` line at all -- PR #2437 did,
-on a truncated file list (`tests/test_land_broad_fallback_verdict.py`) -- and a parent that
-exited on the grep alone would either race the child's last flush or wait out its whole budget
-on a run that had already finished.
+THE CHILD'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. `await_verdict` reaps the child first and
+reads the log afterwards. A landing can exit with no `VERDICT:` line at all
+(`tests/test_land_broad_fallback_verdict.py` covers a truncated file list), and a parent that
+exited on the grep alone would either race the child's last flush or wait out its whole budget on
+a run that had already finished.
 """
 
 import contextlib
@@ -47,9 +45,8 @@ from lib.exit_codes import LAND_GAVE_UP
 LOG_DIR_ENV = "CLAUDE_JOB_DIR"
 FALLBACK_LOG_DIR = Path("/tmp/homelab-landings")
 
-# How long `--await-verdict` waits for the child, and how often it looks. The default is the
-# `timeout 1200` the skill's wait command carried, so a landing that used to be watched for
-# twenty minutes still is.
+# How long `--await-verdict` waits for the child, and how often it looks. The default is
+# twenty minutes (the `timeout 1200` the skill's wait command carries).
 AWAIT_TIMEOUT_S = 1200
 AWAIT_POLL_S = 2.0
 

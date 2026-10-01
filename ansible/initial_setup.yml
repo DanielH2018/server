@@ -25,8 +25,7 @@
     - { role: initial_setup, tags: ["initial_setup"] }
     - { role: sops_setup, tags: ["sops_setup"] }
     # Unconditional: the role dispatches on has_docker internally (install.yml vs
-    # teardown.yml). Gating it here is what let daniel-server's retired Compose units and
-    # crons survive the 2026-08-14 uninstall — a skipped role reaps nothing.
+    # teardown.yml). A role gated here is skipped, and a skipped role reaps nothing.
     - { role: docker_install, tags: ["docker_install"] }
     # Unconditional for the same reason as docker_install: the role dispatches on
     # has_hypervisor internally, so a host that turns it off still gets the teardown half.
@@ -40,8 +39,8 @@
     # Per-user, become: false throughout — they manage the connecting user's home, not
     # root's. Placed after docker_install so the OS is fully set up before the dotfiles
     # land on top of it.
-    # Before chezmoi_setup, but no longer as a credential dependency: the dotfiles repo is
-    # public and clones anonymously (#2805). What the order still buys is the rendered
+    # Before chezmoi_setup, though not as a credential dependency: the dotfiles repo is
+    # public and clones anonymously. What the order buys is the rendered
     # ~/.gitconfig. The dotfiles template writes the `gh auth git-credential` helper only when
     # `gh` is already on PATH at the moment chezmoi renders it, and falls back to a timed
     # credential cache otherwise — a fallback that then stands until the next apply.
@@ -62,17 +61,16 @@
     #
     # ups_host runs it unconditionally — it owns the USB UPS. Any OTHER host runs only the
     # client half, and only once nut_host_secondary_armed is set for it. daniel-box is armed
-    # as of 2026-08-28 (host_vars/daniel-box.yml); before that it drew from the same UPS
-    # (measured 2026-08-20) and took a hard cut at battery end. A secondary upsmon's job is to
+    # (host_vars/daniel-box.yml): it draws from the same UPS (measured) and would otherwise
+    # take a hard cut at battery end. A secondary upsmon's job is to
     # power the machine off, so arming a further host without the console-attended
     # `upsmon -c fsd` drill risks an unplanned shutdown of it.
     - role: nut_host
       tags: ["nut_host"]
       when: inventory_hostname == ups_host or nut_host_secondary_armed | bool
     - { role: optimize_pi, tags: ["optimize_pi"], when: inventory_hostname == 'daniel-pi' }
-    # Slice 4, B7c: the fake-remux detector + reconciler follow the media stack onto daniel-box.
-    # Host-conditional like optimize_pi/renovate_notify — the scripts still live in the
-    # autofix-bridge role, which keeps its sidecar and disk-prune on daniel-server.
+    # The fake-remux detector + reconciler run on the media stack's host (fake_remux_host).
+    # Host-conditional like optimize_pi/renovate_notify.
     - { role: fake_remux, tags: ["fake_remux"], when: inventory_hostname == fake_remux_host }
   handlers:
     - name: Restart fail2ban
@@ -138,8 +136,8 @@
         msg: "Rebooting to apply low-level hardware changes (GPU/Watchdog/Log2Ram)"
 
     # i915 loads from the initramfs, so a modprobe.d option only reaches it once the
-    # initramfs is regenerated. update-grub is NOT run: it was in the hand-written runbook
-    # but kernel module parameters set this way don't touch the boot loader config.
+    # initramfs is regenerated. update-grub is NOT run: kernel module parameters set this way
+    # don't touch the boot loader config.
     - name: Rebuild initramfs for i915
       ansible.builtin.command: update-initramfs -u
       changed_when: true

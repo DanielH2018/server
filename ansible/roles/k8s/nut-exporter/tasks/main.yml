@@ -1,8 +1,7 @@
 ---
 # nut-exporter: DRuggeri/nut_exporter as a NUT network client, turning upsd's variables into
-# first-class Prometheus series. Before this role, UPS state reached Grafana only as `hass_*`
-# series scraped out of Home Assistant — which routes a power-loss signal through a workload the
-# UPS itself protects. The scrape job lives in observability's prometheus.yaml.j2 (job_name: nut).
+# first-class Prometheus series. Reading upsd directly keeps the power-loss signal out of Home
+# Assistant, a workload the UPS itself protects. The scrape job lives in observability's prometheus.yaml.j2 (job_name: nut).
 
 - name: Deploy nut-exporter to the cluster
   ansible.builtin.include_role:

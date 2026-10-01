@@ -38,7 +38,7 @@ MERGE_SHA = "0123456789abcdef0123456789abcdef01234567"
 # exception raised inside atexit processing -- non-deterministically, since it depends on
 # whether pytest's warnings plugin has already restored the original filters by the time the
 # interpreter tears this module down. An explicit `.cleanup()` registered here runs first and
-# removes the directory, so the implicit finalizer finds nothing left to warn about (see #1231).
+# removes the directory, so the implicit finalizer finds nothing left to warn about.
 _PRIMARY_TMP = tempfile.TemporaryDirectory(
     prefix="land-primary-", ignore_cleanup_errors=True
 )
@@ -75,12 +75,12 @@ class Fakes:
     hosts_at: dict[str, list[str]] | None = None
     changed: str = ""
     changed_rc: int = 0
-    # `deploy_tags.py narrow`, the second derivation a broad `changed` refusal falls back to
-    # (#2520). It refuses by default, which is what every range written before it did.
+    # `deploy_tags.py narrow`, the second derivation a broad `changed` refusal falls back to.
+    # It refuses by default, which is what every range written before it did.
     narrowed: str = ""
     narrowed_rc: int = DEPLOY_BROAD
     # `git diff --name-only <since>...HEAD`: the paths the fallback derivation proves a tag's
-    # platform from (#2738), and the return code of the read.
+    # platform from, and the return code of the read.
     diff_paths: list[str] = field(default_factory=list)
     diff_rc: int = 0
     gate: tuple[bool, list[str]] = field(
@@ -97,7 +97,7 @@ class Fakes:
     # `land_tags.shared_caller_tags`: each shared role the PR changes, to the tags that run it.
     shared_callers: dict[str, set[str]] = field(default_factory=dict)
     # `land_platform.k8s_only_tags`: the derived tags whose every changed path sits under the
-    # k8s role tree, so the landing may route them to a `platform: k8s` entry alone (#2730).
+    # k8s role tree, so the landing may route them to a `platform: k8s` entry alone.
     path_k8s_only: list[str] = field(default_factory=list)
     # What `containers_list` declares at the merge commit. None is the read having failed,
     # which is what every land_lib reader falls back to its own tree on.
@@ -115,7 +115,7 @@ class Fakes:
     # What `tools.own_narrowing` answers on the fast path: role tag -> this PR's derivation.
     own_narrowing: dict[str, frozenset[str]] = field(default_factory=dict)
     # The paths `tools.paths_a_hand_must_apply` drops: a shared role's change that moves no
-    # rendered manifest (#2462). None leaves the list as the PR's own.
+    # rendered manifest. None leaves the list as the PR's own.
     plane_paths_dropped: frozenset[str] = frozenset()
     lock_holder: list[str] = field(default_factory=lambda: ["42 flock deploy"])
     hostname: str = "daniel-box"
@@ -152,7 +152,7 @@ def build_classifier(f: Fakes, calls: list | None = None) -> Classifier:
 
     def k8s_only_tags(paths, declared=None):
         # The paths are recorded: the fallback derivation must hand the DIFF's paths rather
-        # than the PR's file list, which `gh` truncated (#2738).
+        # than the PR's file list, which `gh` truncated.
         record.append(("k8s_only_tags", tuple(paths), {}))
         return list(f.path_k8s_only)
 
@@ -176,8 +176,8 @@ def build_tools(f: Fakes) -> tuple[Tools, list]:
         k: (list(v) if isinstance(v, list) else [v]) for k, v in f.gh_views.items()
     }
     views.setdefault("mergeCommit", [{"mergeCommit": {"oid": MERGE_SHA}}])
-    # An arm that reads back as armed, so every existing --arm-merge test still says
-    # "auto-merge armed" rather than taking #1029's direct-merge path.
+    # An arm that reads back as armed, so every --arm-merge test still says
+    # "auto-merge armed" rather than taking the direct-merge path.
     views.setdefault(
         "state,mergeStateStatus,autoMergeRequest",
         [

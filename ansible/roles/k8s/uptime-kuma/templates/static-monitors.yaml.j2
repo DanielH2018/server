@@ -289,10 +289,7 @@ stringData:
     {"type": "push", "name": "Kubelet CSI Mount Read-Only", "description": "monitor-bridge reads node_filesystem_readonly for /var/lib/kubelet/plugins mounts. DOWN: a Longhorn volume's ext4 remounted read-only after an iSCSI stall (#1243); Longhorn's own state stays healthy through it. Scale the workload to 0, wait for detached, scale back.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_kubelet_readonly_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/longhorn-disaster-recovery/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
   daniel-box-disk.json: |
     {"type": "push", "name": "daniel-box Disk", "description": "A daniel-box cron runs df on / every 10 min, independent of Prometheus. DOWN means the root LV is over 75 percent used, the point where Longhorn stops scheduling replicas, or df returned nothing. Run df -h / on daniel-box; Longhorn replicas, container images and etcd all live on that volume.", "interval": 1200, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ daniel_box_disk_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
-{# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). The script has
-   pushed to `registry_gc_push_token` since it shipped, but the secret and this tile only exist
-   since 2026-09-18 (#1937), so every earlier run logged `registry_gc_push_token not set` and
-   only the off-site healthchecks.io `registry-gc` dead-man saw it. INTERVAL IS DERIVED FROM THE
+{# The weekly registry garbage collection (k8s/registry role, registry-gc.sh). INTERVAL IS DERIVED FROM THE
    CRONTAB: `20 4 * * 0` (registry_k8s_gc_cron_* in the registry defaults), a 604800s period,
    plus one hour — the same grace the dead-man carries (docs/healthchecks-io-deadman.md) and
    comfortably over registry_k8s_gc_deadline_s (1200s) plus the scale-up wait. Gated on the
@@ -307,12 +304,10 @@ stringData:
    tile sits red from creation until the secret exists. Carries `email` because a dead secondary
    is only discovered at a power cut, which is exactly when Discord is unreachable.
 
-   ONE TILE PER HOST, never shared: nut_host's watchdog now runs on both daniel-box and
+   ONE TILE PER HOST, never shared: nut_host's watchdog runs on both daniel-box and
    daniel-server (ups_host), each pushing its OWN token (kuma-push.env.j2 selects by
    inventory_hostname). Two hosts on one push token would let either host's `up` satisfy the
-   deadline, masking the other's `down` (issue #952). The filename (AutoKuma's entity id) and
-   token for the daniel-box tile are UNCHANGED from before this split — only its display name
-   moved from the generic "(host)" to "(daniel-box)" — so its Kuma history survives. #}
+   deadline, masking the other's `down`. #}
 {% if ups_secondary_push_token | default('') %}
   ups-secondary.json: |
     {"type": "push", "name": "UPS Secondary (daniel-box)", "description": "The ups-secondary-health.sh cron on daniel-box runs every 10 min and reads upsmon.conf, systemctl is-active nut-monitor and upsc ups.status. DOWN means the secondary upsmon there is not configured, not running, or cannot reach upsd, so daniel-box would not power off on FSD. Run those two commands on daniel-box.", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ ups_secondary_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
@@ -321,12 +316,12 @@ stringData:
   ups-secondary-daniel-server.json: |
     {"type": "push", "name": "UPS Secondary (daniel-server)", "description": "The ups-secondary-health.sh cron on daniel-server runs every 10 min and reads upsmon.conf, systemctl is-active nut-monitor and upsc ups.status. DOWN means its secondary upsmon is not configured, not running, or cannot reach upsd, so daniel-server would not power off on FSD. Run those two commands on daniel-server.", "interval": {{ nut_host_watchdog_interval_minutes | default(10) * 60 * 2 }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ ups_secondary_daniel_server_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
-{# The Loki read route's only witness (issue #1712). Its caller is a host process, and the route's
+{# The Loki read route's only witness. Its caller is a host process, and the route's
    guard is a ClientIP set of node-owned addresses, so no pod can probe it — see
    roles/setup/initial_setup/templates/loki-read-route-health.sh.j2.
 
    ONE TILE PER NODE, for the same reason as the UPS pair above: each host arrives at the route as
-   a different source address, which is exactly what #1693 broke on one node and not the other, so
+   a different source address, so the route can break on one node and not the other, and
    a shared token would let daniel-box's `up` cover a dead route from daniel-server.
 
    7200s: the deadline must exceed the PRODUCER'S period, and the producer is an hourly cron.
@@ -400,10 +395,10 @@ stringData:
   manifest-prune-check.json: |
     {"type": "push", "name": "Manifest Prune Drift", "description": "Deployed-artifact drift on the primary node: a live cluster object no staged manifest declares (`kubectl apply` removes nothing it stopped declaring), a copy:-deployed setup file that differs from its source, or a template:-rendered setup script whose source changed since it was rendered. The message names the arm and the object. Runs from the daily kuma-check-manifest-prune timer on daniel-box, which reruns every 30 min while red; systemctl status kuma-check-manifest-prune there.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ manifest_prune_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
 {% endif %}
-{# Issue #947: the durable signal for a deferred k8s role change gitops_deploy.py's `cs.k8s`
+{# The durable signal for a deferred k8s role change gitops_deploy.py's `cs.k8s`
    branch ff-merges with only a one-shot Discord page. `probe.py releases --stale-only` reads the
-   release records against origin/master; see this role's cron in roles/setup/k3s (issue #947,
-   this role's CLAUDE.md).
+   release records against origin/master; see this role's cron in roles/setup/k3s (this role's
+   CLAUDE.md).
    INTERVAL IS 2x THE CRON, not chosen: the cron runs every 30 min
    (k3s_release_staleness_cron_minute), so 3600s tolerates exactly one missed push before paging
    -- the same margin the */10 heartbeats keep against their 600s cron. Move both together. #}
@@ -413,7 +408,7 @@ stringData:
 {% endif %}
 {# The same two drift arms, on the hosts the monitor above cannot see: manifest-prune-check is
    installed only on k3s server nodes, so daniel-server rendered the whole UPS shutdown chain
-   with nothing able to report it stale (review M-10). Gated on the token like its siblings —
+   with nothing able to report it stale. Gated on the token like its siblings —
    the cron skips its push until the secret exists, so an ungated monitor would sit red from
    creation. Daily cron, hence the same 90000s interval. #}
 {% if setup_drift_push_token | default('') %}
@@ -444,8 +439,8 @@ stringData:
   etcd-snapshot-offbox.json: |
     {"type": "push", "name": "Off-box etcd Snapshot", "description": "A daily 02:45 daniel-box cron takes a k3s etcd snapshot and uploads it to R2, then checks the cluster token hash against the stamped off-box copy. DOWN means the snapshot or upload failed, or the cluster token rotated so held snapshots are undecryptable. Run journalctl -t etcd-snapshot-offbox first.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_snapshot_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
-{# The FULL restore drill, run monthly in a throwaway guest on daniel-server (roles/setup/hypervisor,
-   issue #1175). Distinct from monitor-bridge's `etcd Restore Drill` tile, which reads daniel-box's
+{# The FULL restore drill, run monthly in a throwaway guest on daniel-server (roles/setup/hypervisor).
+   Distinct from monitor-bridge's `etcd Restore Drill` tile, which reads daniel-box's
    weekly list-only stamp and by design never accepts a `full` one. DEADLINE IS DERIVED FROM THE
    CRONTAB: etcd_drill_full_kuma_interval_s in group_vars is the cron's longest period plus slack;
    the pin is in ansible/tests/staging/test_etcd_drill_vm.py. Email tier: a restore drill that has
@@ -454,8 +449,8 @@ stringData:
   etcd-restore-drill-full.json: |
     {"type": "push", "name": "etcd Restore Drill (full)", "description": "A monthly cron on daniel-server (1st, 11:20) boots a throwaway libvirt guest, restores the newest off-box etcd snapshot there with a real k3s and reads the object graph back. DOWN means a preflight failed or the restore did not pass; the message says which. Read the run evidence under the drill log root.", "interval": {{ etcd_drill_full_kuma_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ etcd_drill_full_push_token }}", "tag_names": [{"name": "tag-severity", "value": "critical"}, {"name": "tag-runbook", "value": "https://docs.local.{{ domain }}/k3s-etcd-restore/"}], "notification_name_list": ["{{ kuma_notification_id }}", "email"]}
 {% endif %}
-{# The egress-fence leg of that same run, pushed from the same cron and so on the same deadline
-   (issue #3021). It is a SECOND tile rather than a line in the message above because the drill
+{# The egress-fence leg of that same run, pushed from the same cron and so on the same deadline.
+   It is a SECOND tile rather than a line in the message above because the drill
    tile cannot express the leg's non-fatal outcome: an unmeasured fenced range leaves the restore
    passing, so the drill tile is `up` and the only record is the message text of a green push,
    which alerts nobody. NEITHER `tag-severity: critical` NOR email, unlike the drill tile above,
@@ -565,16 +560,15 @@ stringData:
   # the re-arm happened. A missed beat here means the lapse window is open again.
   github-interaction-limit.json: |
     {"type": "push", "name": "GitHub Interaction Limit", "description": "The daily 06:50 kuma-check-github-interaction-limit timer on daniel-box re-PUTs the repo collaborators_only interaction limit, which GitHub only offers as a six-month expiring setting; it reruns every 30 min while red. DOWN means gh is not logged in, the PUT failed, or the readback did not match the declared limit. Run gh auth status as the deploy user, then check the limit in repo settings; systemctl status kuma-check-github-interaction-limit on daniel-box.", "interval": 90000, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ interaction_limit_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# The hourly render-record producer (setup/render_records, #2587). A producer that stopped
+{# The hourly render-record producer (setup/render_records). A producer that stopped
    must read as red, never as a fleet with nothing to compare, so the timer pushes up only when
    every renderable service's record was refreshed at the chosen commit. The interval is
    render_records_push_interval_s in group_vars/all.yml, derived there from the same hourly
    cadence the timer runs on. Gated on the token like its siblings.
 
-   It carried a second, inner gate on render_records_enabled while the producer shipped
-   disarmed (#2615), so kuma-drift excused the missing tile. The producer is armed (#2587), and
-   the gate is gone: an excuse would hide a tile that failed to appear. Setting
-   render_records_enabled false again leaves this tile red until the producer is re-armed. #}
+   This tile has no inner gate on render_records_enabled: such a gate would make kuma-drift
+   excuse a missing tile, and an excuse would hide a tile that failed to appear. Setting
+   render_records_enabled false leaves this tile red until the producer is re-armed. #}
 {% if render_records_push_token | default('') %}
   render-records.json: |
     {"type": "push", "name": "k8s Render Records", "description": "The hourly kuma-check-render-records timer on daniel-box dry-runs every renderable k8s service at the newest green origin/master commit and writes /var/lib/homelab/k8s-renders.d, which probe.py releases --stale-only reads. DOWN names the services whose record was not refreshed; a missing beat means the producer stopped or keeps deferring on a pending CI walk. journalctl -u kuma-check-render-records on daniel-box.", "interval": {{ render_records_push_interval_s }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ render_records_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
@@ -625,21 +619,20 @@ stringData:
     {"type": "push", "name": "Loki Log Ingestion", "description": "One of Loki's three stream arms went silent: the file-tailed syslog/authlog union, the container stream, or daniel-pi's Alloy. Loki itself answers; the shipper does not.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_loki_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
   monitor-bridge-promtail-dropped.json: |
     {"type": "push", "name": "Log Shipper Dropped Entries", "description": "Alloy dropped entries client-side or Loki discarded them server-side, over 3000 in an hour, or the OTel collector failed to export telemetry at all in the last 15 min. `too_far_behind` after a shipper restart is a re-tail, not loss; anything else is throughput or limits.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_promtail_dropped_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# Minted 2026-09-17 for #1869. kuma-push-lib.sh logs a lost push and returns 0 by design, so
-   a host cron's DOWN verdict that never reached its tile was reported only by that tile's
+{# kuma-push-lib.sh logs a lost push and returns 0 by design, so
+   a host cron's DOWN verdict that never reaches its tile is reported only by that tile's
    heartbeat deadline — the one-period-plus-an-hour margin the DECIDED marker above the drift
    tiles keeps. monitor-bridge reads the library's final `push failed` line out of Loki and
    pages here within a cycle, but ONLY when a sibling cron landed a push in the same window: a
    fleet-wide loss is the edge or host tiles' page, and a plain count of push failures was
    measured and rejected for paging on exactly those (uptime-kuma/CLAUDE.md). The exception is
-   a push Kuma itself rejected (`by=kuma` on the line, #1803): a token no monitor here holds
+   a push Kuma itself rejected (`by=kuma` on the line): a token no monitor here holds
    has no tile to go red, so it pages here whatever its status and company. #}
   monitor-bridge-swallowed-verdicts.json: |
     {"type": "push", "name": "Swallowed Push Verdicts", "description": "A host cron pushed status=down and the push failed while a sibling cron's push landed, so the verdict was lost rather than the network. The message names the cron; run it by hand and read its logger lines.", "interval": {{ kuma_bridge_push_interval }}, "max_retries": 0, "resendInterval": {{ kuma_push_resend_down_beats }}, "push_token": "{{ monitor_bridge_swallowed_verdicts_push_token }}", "notification_name_list": ["{{ kuma_notification_id }}"]}
-{# Minted 2026-09-17 for #1891. Kuma logs `Cannot send notification to <name>` and does not
-   retry, so the transition or resend behind that line reached nobody — twice during the
-   qbittorrent lockout (2026-09-10 18:00, 2026-09-15 14:50), both Discord HTTP 429s. The
-   verdict names the status Kuma logged beside each drop (#1895). The
+{# Kuma logs `Cannot send notification to <name>` and does not
+   retry, so the transition or resend behind that line reaches nobody — typically a Discord
+   HTTP 429. The verdict names the status Kuma logged beside each drop. The
    Discord Delivery tile GET-verifies the webhook and cannot see a dropped POST. This tile
    notifies EMAIL as well as Discord on purpose: a page for a dropped Discord send that goes
    only over the Discord webhook is the failure it reports. #}

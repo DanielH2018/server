@@ -1,4 +1,4 @@
-"""The deployer's stdlib reading of the render records (#3045, #3057).
+"""The deployer's stdlib reading of the render records.
 
 `deploy_release.digest_verdict` restates `probe_lib/releases_render.py:digest_verdict`, which
 the deployer cannot import, so the first test runs both over the same record pairs. The rest

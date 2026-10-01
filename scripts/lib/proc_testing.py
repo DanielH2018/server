@@ -61,7 +61,7 @@ __all__ = [
 
 # Every launch this module makes is bounded. 60s is two orders of magnitude above what a test
 # launch here actually takes (`pytest scripts/deploy_tools/tests/test_deploy_at_sha.py
-# --durations=5` on daniel-server, 2026-10-01: slowest case 0.39s), so it leaves room for a
+# --durations=5` on daniel-server: slowest case 0.39s), so it leaves room for a
 # loaded CI runner without any caller needing to raise it. It is also far below pytest's own
 # patience, which is the point — a child that wedges fails its own test rather than parking the
 # run. A caller whose subject is genuinely slow passes its own `timeout=`; the `ansible-lint`

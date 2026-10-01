@@ -1,7 +1,7 @@
 ---
-# Ships STOPPED, like claude-rc did. The role installs the script, config and units on every
-# run; this var alone decides whether the timer is enabled and started. Setting it back to
-# false stops AND disables both, which is the rollback.
+# Ships STOPPED. The role installs the script, config and units on every run; this var alone
+# decides whether the timer is enabled and started. Setting it to false stops AND disables
+# both, which is the rollback.
 #
 # It is false by default because the first arming is a decision with a spend attached and a
 # blast radius (the session merges PRs and deploys), not because the role is unfinished.
@@ -42,8 +42,8 @@ renovate_agent_run_timeout_s: 5400
 renovate_agent_unit_timeout: 100min
 
 # 06:00 America/Chicago — after Renovate's own "before 6am" cycle (UTC, so it closes at
-# midnight/1am CT depending on DST) has opened the day's PRs. This now runs BEFORE the 13:00
-# UTC renovate-notify digest classifies them, reversing the original "wait for both" ordering.
+# midnight/1am CT depending on DST) has opened the day's PRs. This runs BEFORE the 13:00
+# UTC renovate-notify digest classifies them.
 # The explicit timezone keeps the wall-clock time fixed across the DST change instead of
 # drifting an hour twice a year.
 renovate_agent_oncalendar: "*-*-* 06:00:00 America/Chicago"

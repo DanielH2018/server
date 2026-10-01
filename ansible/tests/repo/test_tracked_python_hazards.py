@@ -6,14 +6,10 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
 
 1. No file walks from repo root with `.rglob(`.
    Recurring-failure class 7 (docs/failure-classes.md): "the execution context is not the
-   shell you developed in." Its most recent instance was `_helpers.discover_docs()` and
-   `test_documented_paths_exist.py`'s corpus walk, both of which used a root-anchored `rglob`
-   and therefore descended into `.claude/worktrees/<name>/` — a full checkout per live session,
-   holding OLDER copies of the same docs. The guards then judged this commit against another
-   session's history. It broke `docs-refresh`'s commit for at least one cycle before anyone
-   noticed (see `_helpers.discover_docs`'s docstring and `test_documented_paths_exist.py:71`).
-   Both were fixed by switching to `git ls-files`, which answers with what the commit actually
-   contains. A tracked `.py` file must not call `.rglob(` on `REPO`, `REPO_ROOT`, `repo_root`
+   shell you developed in." A root-anchored `rglob` descends into `.claude/worktrees/<name>/` —
+   a full checkout per live session, holding OLDER copies of the same docs — so a guard judges
+   this commit against another session's history. `git ls-files` answers with what the commit
+   actually contains (see `_helpers.discover_docs`). A tracked `.py` file must not call `.rglob(` on `REPO`, `REPO_ROOT`, `repo_root`
    or `repo`. Scoping an `rglob` under a narrower subdirectory (`ansible/rglob(...)`,
    `ROLES.rglob(...)`) is fine: `.claude/worktrees/` sits at repo root, not under any of those.
 
@@ -23,24 +19,23 @@ separate red-proof pairs: merging the walk must not merge the evidence that each
    distance is usually fine and occasionally straddles a threshold — an exact day count
    crossing midnight, a "fresh" marker read after a slow collection, a `1.0 days ago` message
    that rounds to `1.1`. Every function these tests exercise takes a `now` (or a `clock`), so
-   the deterministic form is a fixed epoch per module handed to both sides (#2158). A
+   the deterministic form is a fixed epoch per module handed to both sides. A
    subprocess-driven test is no exception: the Longhorn reader and reaper entry points take
    `main(..., now=None)`, and their harnesses run them through a one-line `runpy` shim that
    calls `main` with a fixed epoch — still a subprocess, still the real env parsing, but no
-   seam the cron's environment can reach (#2220). `SUBPROCESS_DRIVEN` is the list of files
+   seam the cron's environment can reach. `SUBPROCESS_DRIVEN` is the list of files
    still excused on that ground; it is empty, and the guard fails if a listed file stops
    reading the clock, so it can only shrink.
 
 3. No test calls an argparse `main()` with no argv, because that argv is PYTEST'S.
    With no argument, `parser.parse_args()` falls back to `sys.argv[1:]`. Inside a test that is
    pytest's own command line, so any flag the entry point does not define exits its parser with
-   status 2 before the check under test runs. Three tests in
-   `scripts/diagnostics/tests/test_postflight.py` called `postflight.main()` bare, passed under
-   `uv run pytest` (xdist workers carry an argv postflight happened to accept), and failed only
-   under the `-n0 -vv --durations=0` run that `pytest_shard.py --record` uses. That made
-   `--record` impossible for the whole repo (#1799, #1801; fixed by PR #1797).
-   The predicate is the hazard, not the call shape. Measured before writing: 35 zero-arg
-   `main()` calls in the tree, and nearly all are harmless — hook `main()`s read stdin,
+   status 2 before the check under test runs. Under `uv run pytest`, xdist workers can carry an
+   argv the entry point happens to accept, so the failure shows only under the
+   `-n0 -vv --durations=0` run that `pytest_shard.py --record` uses, which would make `--record`
+   impossible for the whole repo.
+   The predicate is the hazard, not the call shape. Most zero-arg
+   `main()` calls in the tree are harmless — hook `main()`s read stdin,
    `renovate_notify` does a membership test on `sys.argv` that cannot exit,
    `shell_templates.main(which=...)` takes an injected callable. So a call is flagged only when
    the resolved callee's `main` routes argv into `parse_args` — `parse_args()` bare,
@@ -128,7 +123,7 @@ def test_the_pattern_rejects_a_root_anchored_rglob_and_accepts_a_scoped_one():
 
 # ---- rule 2: no live clock in a test
 
-# A subprocess-driven test whose `now` cannot cross the process boundary. Empty since #2220;
+# A subprocess-driven test whose `now` cannot cross the process boundary. Empty;
 # an entry here needs a reason the `runpy` shim in `_reap_entrypoint_harness.py` does not
 # cover, and is removed again the moment the file sheds its clock read.
 SUBPROCESS_DRIVEN: frozenset[str] = frozenset()

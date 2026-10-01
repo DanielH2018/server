@@ -4,17 +4,17 @@
 `providers.longhorn.url` in `settings.yaml` holds the connection; the `- longhorn:` entry in
 `widgets.yaml` holds only the display options. A `url:` written beside those options is IGNORED:
 homepage logs `<longhorn> Missing Longhorn URL` on every refresh, the tile renders empty, and the
-Deployment stays 1/1 throughout. PR #1391 shipped exactly that, and nothing caught it — the config
-is valid YAML, the manifests render, and `probe.py health homepage` exits 0.
+Deployment stays 1/1 throughout. Nothing else catches it — the config is valid YAML, the
+manifests render, and `probe.py health homepage` exits 0.
 
 Same shape as `test_headlamp_widget_mapping_order.py`: a homepage widget whose config is accepted
 by every mechanical check while meaning something other than it reads.
 
-Reads both files RENDERED out of homepage's config Secret (`_homepage_config`). The previous form
-scanned `settings.yaml.j2` and `widgets.yaml.j2` line by line, with its own indentation tracking
-and its own comment skipping, because a Jinja template is not loadable YAML. Rendered, the two
-files are ordinary mappings: `providers.longhorn` is a dict lookup and a commented-out `url:`
-cannot reach the parse at all, so the two parser cases that needed their own tests are gone.
+Reads both files RENDERED out of homepage's config Secret (`_homepage_config`). A Jinja
+template is not loadable YAML, so scanning `settings.yaml.j2` and `widgets.yaml.j2` would need
+its own indentation tracking and comment skipping. Rendered, the two files are ordinary
+mappings: `providers.longhorn` is a dict lookup and a commented-out `url:` cannot reach the
+parse at all.
 
 Paired, per the repo's red-proof rule.
 

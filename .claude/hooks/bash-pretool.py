@@ -94,7 +94,7 @@ def _attributed(arm_name, reason):
 
     The OTEL `tool_decision` stream names the hook that decided, and since the merge that
     hook is `bash-pretool.sh` for every Bash verdict. The prefix puts back what the stream
-    lost: which arm decided, greppable in the reason itself (#2469).
+    lost: which arm decided, greppable in the reason itself.
     """
     return f"[{arm_name}] {reason}"
 

@@ -1,11 +1,11 @@
-"""Guards the fix for #2977: UFW's own sysctl file must not undo the role's hardening.
+"""Guards that UFW's own sysctl file must not undo the role's hardening.
 
 `ansible.posix.sysctl` writes /etc/sysctl.conf and sets the live value. UFW keeps a SECOND
 sysctl file, `/etc/ufw/sysctl.conf` (`IPT_SYSCTL` in /etc/default/ufw), and re-applies it on
 every `ufw enable`/`reload` and at boot. Ubuntu ships it with
 `net/ipv4/conf/{all,default}/log_martians=0` uncommented, so `Enable UFW firewall` — twenty
-tasks after the hardening loop, in the SAME file — put the key back to 0 on daniel-server.
-The role reported `changed` for those two keys on every run and never kept them.
+tasks after the hardening loop, in the SAME file — puts the key back to 0. The role then
+reports `changed` for those two keys on every run and never keeps them.
 
 ORDER IS THE GUARD. The rewrite has to run before the hardening loop; after it, the run would
 end with UFW's 0 live again. So this file checks position, not just presence.

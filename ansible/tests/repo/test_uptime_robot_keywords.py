@@ -5,7 +5,7 @@ console by hand, no API key exists in the tree, and nothing here can read the co
 What this test CAN check is the rule the console is meant to apply — that each documented
 URL serves its documented keyword, case-sensitively, the way the monitor reads it. A body
 that stops carrying the keyword pages Uptime Robot; a doc row that drifts from what the
-endpoint serves is caught here first (issue #2168).
+endpoint serves is caught here first.
 
 The rows are parsed from the doc's *What is configured* table, so the doc is the oracle:
 changing a documented keyword to a string the endpoint does not serve turns this red, and
@@ -13,9 +13,9 @@ adding a monitor to the table enrols it here without a code change.
 
 **Marked `ui`, so CI never runs it.** It fetches the public hostnames over the real network,
 which is what `-m ui` lifts the leakguard for. One GET per URL per run — bursting a public
-name self-bans this host over IPv6 (`homelab-burst-tests-self-ban-over-ipv6`). Measured
-2026-09-21 from daniel-box: both endpoints answered 200 in 0.31-0.38 s across three
-requests, so the 10 s timeout is 25x the observed latency.
+name self-bans this host over IPv6 (`homelab-burst-tests-self-ban-over-ipv6`). Both
+endpoints answered 200 in 0.31-0.38 s across three requests from daniel-box, so the 10 s
+timeout is 25x the observed latency.
 
     uv run pytest -m ui -k uptime_robot
 """
@@ -37,7 +37,7 @@ _ROW = re.compile(
     re.MULTILINE,
 )
 
-# The two monitors live since 2026-08-30. The parse is a regex over prose, so a reworded table
+# The two monitors the table lists. The parse is a regex over prose, so a reworded table
 # would otherwise yield an empty set and a vacuously green parametrize.
 KNOWN_MONITORS = frozenset({"Auth Health", "Jellyfin Health"})
 

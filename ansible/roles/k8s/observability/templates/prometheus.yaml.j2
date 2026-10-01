@@ -15,7 +15,7 @@
   storage_operation_duration.
 
   That matters because the cap here is BYTES, not series: retention.size is
-  `observability_prometheus_retention_size` (7GB as of 2026-08-31) against a 12Gi PVC
+  `observability_prometheus_retention_size` (7GB) against a 12Gi PVC
   (deliberately under it — the WAL, the head and compaction share the volume). Doubling the
   series roughly doubles the block growth rate, so the visible effect of keeping every bucket
   would be retention quietly falling from 30 days to under three weeks. Nothing would report

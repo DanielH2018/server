@@ -1,13 +1,11 @@
 ---
-# This instance is the alerting spine (cutover 2026-08-10, slice-7-phase-d-kuma.md).
+# This instance is the alerting spine.
 uptime_kuma_k8s_image: louislam/uptime-kuma:2.5.5
 # Pinned: the k8s-defaults Renovate manager only tracks
-# versioned pins. v2.0.0 is what the KD5 gate verified (docker.enabled, static-file
-# notification entities, on_delete semantics); 2.1.0-rc.2 is a deliberate prerelease, taken on
-# 2026-08-21 because it is the only release where `resendInterval` reaches a push monitor — see
-# the caveat under kuma_push_resend_down_beats.
+# versioned pins. 2.1.0-rc.2 is a deliberate prerelease: it is the only release where
+# `resendInterval` reaches a push monitor — see the caveat under kuma_push_resend_down_beats.
 #
-# Two rc-2 mechanisms this deployment now depends on, read from the tagged source rather than
+# This deployment depends on two rc-2 mechanisms, read from the tagged source rather than
 # the changelog: `@/path` in an env value reads the file and strips one trailing newline
 # (kuma-client/src/config.rs, resolve_file_ref), and a health/metrics HTTP server listens on
 # 8090 unless AUTOKUMA__HEALTHCHECK_PORT is emptied (autokuma/src/config.rs). The published
@@ -25,15 +23,13 @@ autokuma_k8s_image: ghcr.io/bigboot/autokuma:2.1.0-rc.2
 k8s_autodeploy: false  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "observability — the alerting spine; a broken deploy cannot page about being broken. ALSO Recreate + RWO volume-claim PVC (migrating-state shape) — two independent reasons. COUPLING NOTE for a future promotion: two PVCs (uptime-kuma-data, autokuma-data) that must revert together; a partial revert desyncs AutoKuma's entity-ID map from Kuma's DB, the same shape as the recorded KD5 migration finding"  # noqa var-naming[no-role-prefix]
 
-# 1.5 G live at planning (heartbeat history) — `longhorn`, BACKED UP, which the Docker copy
-# deliberately never was (kopiaignore). The migration upgrades the DB from "unrecoverable"
-# to "nightly Longhorn backup".
+# Heartbeat history, 1.5 G at sizing.
 uptime_kuma_k8s_claim: uptime-kuma-data
 uptime_kuma_k8s_size: 4Gi
 uptime_kuma_k8s_storage_class: longhorn
 
-# AutoKuma's OWN entity-id map (1.1 M live). It must move with Kuma's DB or the new
-# instance manages nothing and static files would recreate duplicates (KD5 gate finding).
+# AutoKuma's OWN entity-id map (1.1 M at sizing). It must move with Kuma's DB, or AutoKuma
+# manages nothing and static files recreate duplicates.
 uptime_kuma_k8s_autokuma_claim: autokuma-data
 uptime_kuma_k8s_autokuma_size: 1Gi
 
@@ -59,19 +55,15 @@ autokuma_k8s_mem_request: 32Mi
 
 # Consecutive DOWN heartbeats before Kuma re-notifies about a monitor that is STILL down. Kuma's
 # own default is 0, which means "notify once on the down transition and then never again" — so
-# until 2026-08-16 every one of the static push monitors produced exactly one Discord message per
-# outage, however long it ran. A tile that went down at 04:30 was silent by breakfast and stayed
-# silent all day.
+# a static push monitor would produce exactly one Discord message per outage, however long it
+# ran.
 #
 # A BEAT COUNT, NOT MINUTES. Kuma compares `downCount` against `resendInterval` on every DOWN
 # beat (server/model/monitor.js and the push route in server/routers/api-router.js) and the UI
-# labels the field "Resend Notification if Down X times consecutively". This variable was named
-# `..._interval_minutes: 360` from 2026-08-16 to 2026-09-17 on the reading that it was minutes,
-# and the 3.5-day qbittorrent outage (#1838) measured what 360 really bought: a bridge-fed tile
+# labels the field "Resend Notification if Down X times consecutively". A bridge-fed tile
 # accumulates one DOWN beat per bridge push (every 300s) plus one per heartbeat window
-# (kuma_bridge_push_interval, 1200s) — 15 an hour, which Kuma's own log showed as `Down Count`
-# climbing 5 per 20 minutes and resetting past 360 — so the resend came once a DAY, not every
-# six hours.
+# (kuma_bridge_push_interval, 1200s) — 15 an hour — so a count of 360 would resend once a DAY,
+# not every six hours.
 #
 # 90 is six hours at that cadence. Six hours rather than hourly: these monitors watch things
 # that take a human intervention to fix, so a faster resend would mostly train the reader to
@@ -82,8 +74,7 @@ autokuma_k8s_mem_request: 32Mi
 # the estate, so no tile can beat faster than its 12 pushes an hour plus its own window's
 # watchdog beats: at the narrowest window (360s) that is 22 an hour and 90 beats is ~4h, the
 # floor `test_kuma_push_resend_beats.py` holds. Applied uniformly and asserted by a test,
-# rather than set per-tile, so a new monitor cannot be added without one (the GitOps tile was
-# the known instance; the gap was every push monitor).
+# rather than set per-tile, so a new monitor cannot be added without one.
 kuma_push_resend_down_beats: 90
 
 # Heartbeat window for the 34 push monitors monitor-bridge feeds. The bridge pushes each of them
@@ -91,15 +82,14 @@ kuma_push_resend_down_beats: 90
 # flips the tile DOWN — and, because a push monitor's watchdog is the only thing that notices a
 # dead bridge, it is also the detection latency for the bridge itself.
 #
-# 1200 = 4x the loop, tolerating THREE missed pushes; it was 600, tolerating one. The 2026-08-30
-# restart is what moved it: hosts went down at 07:36:31 and the last pod reached Ready at 07:45:06,
-# an 8m35s outage, but the bridge's last push landed before 07:36 and its first after was ~07:45 —
-# a gap over 600s, so nine bridge-fed tiles flipped DOWN and notified for a single event that had
-# already ended. At 1200 that gap is absorbed and a genuinely dead bridge still pages, 20 min in
-# rather than 10.
+# 1200 = 4x the loop, tolerating THREE missed pushes. A host restart leaves the bridge silent
+# for a gap over 600s (measured: an 8m35s outage, last push before the hosts went down, first
+# push ~9 minutes later), so a 600s window flipped nine bridge-fed tiles DOWN and notified for
+# an event that had already ended. At 1200 that gap is absorbed and a genuinely dead bridge
+# still pages, 20 min in rather than 10.
 #
 # NOT `max_retries`, which is the other way to buy the same tolerance and is the reason this knob
-# exists instead. Every push monitor holds max_retries=0 deliberately (2026-06-12, see the
+# exists instead. Every push monitor holds max_retries=0 deliberately (see the
 # monitor-bridge CLAUDE.md): with retries, Kuma parks a pushed `down` in PENDING and its own
 # heartbeat watchdog — which only `up` pushes satisfy — crosses maxretries first, so the Discord
 # message reads "No heartbeat in the time window" instead of the check's named offender. Widening
@@ -112,23 +102,15 @@ kuma_push_resend_down_beats: 90
 # honest, deriving bridge membership from the bridge's own env-secret rather than from a list here.
 kuma_bridge_push_interval: 1200
 
-# HISTORY, measured 2026-08-21: on AutoKuma v2.0.0 this value reached the 25 http monitors and
-# NONE of the 50 push monitors. v2.0.0 declared `resendInterval` on MonitorHttp, MonitorJsonQuery
-# and MonitorKeyword only; MonitorPush had no such field, so serde dropped it and every push tile
-# notified once per outage — the exact failure the fleet-wide 360 was introduced to fix. Upstream
-# moved the field into `with_monitor_common_fields_impl!` in 2.1.0-rc.1 (#152), where every
-# variant carries it, and taking that prerelease on 2026-08-21 is what closed the gap.
+# AutoKuma v2.0.0 declares `resendInterval` on MonitorHttp, MonitorJsonQuery and MonitorKeyword
+# only. MonitorPush has no such field there, so serde drops it and every push tile notifies once
+# per outage. 2.1.0-rc.1 moved the field into `with_monitor_common_fields_impl!`, where every
+# variant carries it, so the AutoKuma pin must stay at or above that release.
 
-# No monitor is held at 0. `k3s Longhorn Backup` was, from 2026-08-16 to 2026-08-21, while the
-# weekly tier had never completed a backup and every sharded volume reported uncovered — a
-# condition no operator could clear, so a 6-hourly resend would only have trained the channel to
-# be muted. The hold lifted on 2026-08-21: the weekly tier completed its shard run at 04:30 and
-# the tile went green, so the fleet-wide 360 above now covers this monitor like every other.
-#
-# Kept as a comment because the shape recurs: a tile that is down, cannot recover without an
-# event nobody controls, and notifies email as well as Discord is the case a hold is for. Add
-# the override back plus an entry in test_kuma_static_monitors.py's RESEND_HELD, and write the
-# condition that lifts it.
+# No monitor is held at 0. A tile that is down, cannot recover without an event nobody
+# controls, and notifies email as well as Discord is the case a hold is for: a 6-hourly resend
+# would only train the channel to be muted. To hold one, add the override plus an entry in
+# test_kuma_static_monitors.py's RESEND_HELD, and write the condition that lifts it.
 
 # ── status page group sync ─────────────────────────────────────────────────────────────────
 # Kuma's status page at /status/<slug> — the one Homepage's `uptimekuma` widget reads
@@ -149,14 +131,14 @@ kuma_cli_k8s_image: ghcr.io/bigboot/kuma:2.1.0-rc.2
 kuma_status_page_sync_image: python:3.14-alpine@sha256:9e9fde4d32eedce0b661d9ab91e826b62dddf28e928c230ec55f1866cac66b01
 kuma_status_page_sync_schedule: "*/15 * * * *"
 # The job WAITS OUT a Kuma restart rather than failing through it. Kuma is unreachable on two
-# routine events, and the 300s deadline this carried until 2026-09-06 covered neither:
+# routine events:
 #   - a deploy rollout. `strategy: Recreate` plus autokuma's startupProbe (the pod is NotReady,
-#     and so out of the Service endpoints, until autokuma's first full reconcile lands) left a
-#     103s endpoint gap on 2026-09-06 — SIGTERM 11:03:35, pod Ready 11:05:18.
+#     and so out of the Service endpoints, until autokuma's first full reconcile lands) leaves
+#     an endpoint gap of about 103s, from SIGTERM to pod Ready.
 #   - the Sunday "Weekly system restart" cron (initial_setup/tasks/crons.yml, 07:30 +
-#     `shutdown -r +5`). On 2026-09-06 daniel-server was down 07:35 to 07:48:25 and Kuma was
-#     Ready again at ~07:51, so the 07:45 run had no chance. That one is a GUARANTEED weekly
-#     failure, not a race.
+#     `shutdown -r +5`). daniel-server is down 07:35 to about 07:48 and Kuma is Ready again at
+#     ~07:51, so the 07:45 run has no chance. That one is a GUARANTEED weekly failure, not a
+#     race.
 # 800s stays inside the 900s cron period, so `concurrencyPolicy: Forbid` skips at most the one
 # following tick. Move this and the schedule together.
 kuma_status_page_sync_deadline_seconds: 800
@@ -165,18 +147,18 @@ kuma_status_page_sync_deadline_seconds: 800
 # and for the render/apply/beat stages that follow.
 kuma_status_page_sync_dump_budget_seconds: 350
 # Measured worst case for one dump attempt: kuma-client gives up on the connect after ~9s
-# (42s / 3 attempts on the failed 2026-09-06 07:45 run, minus the 5s sleep), plus that sleep,
+# (42s / 3 attempts on a failed run, minus the 5s sleep), plus that sleep,
 # plus slack. The template divides the budget above by this to get the attempt count, so the
 # loop exits with its own `kuma read failed` diagnostic rather than being killed mid-attempt
 # by the deadline — a deadline kill reports DeadlineExceeded and says nothing about Kuma.
 kuma_status_page_sync_dump_attempt_seconds: 15
 # How long a finished Job — and so its pods and logs — stays visible. Without a TTL a failed
-# Job sits in `get pods` as Init:Error until two LATER failures displace it, which is how one
-# run that hit the #2076 monitor wipe read as a live fault 14h later (#2120). The Status Page
+# Job sits in `get pods` as Init:Error until two LATER failures displace it, so a stale
+# failure reads as a live fault. The Status Page
 # Sync push monitor goes DOWN after 30 min of silence and its description sends the reader to
 # the newest Job logs, so the TTL has to outlive that window with room to be read. Two hours
 # does, and the render stage's output is in Loki (`{namespace="homelab", container="render"}`)
-# past that; a day kept a red row in Headlamp far longer than anyone needed it (2026-09-19).
+# past that; a day keeps a red row in Headlamp far longer than anyone needs it.
 # `failedJobsHistoryLimit: 2` still caps how many sit inside the window.
 kuma_status_page_sync_job_ttl_seconds: 7200
 
@@ -216,9 +198,8 @@ kuma_status_page_groups:
       # with Services.
       - "^homelab-edge-allclear$"
       - "^claude-otel-health$"
-      # One tile per cluster node, both watching the same route from different source addresses
-      # (issue #1712). An edge/observability signal rather than a per-app tile, like the
-      # all-clear probe above.
+      # One tile per cluster node, both watching the same route from different source addresses.
+      # An edge/observability signal rather than a per-app tile, like the all-clear probe above.
       - "^loki-read-route-"
   - name: Backups & Storage
     match:
@@ -226,7 +207,7 @@ kuma_status_page_groups:
       - "^monitor-bridge-(longhorn-volumes|pvc-fullness|kubelet-readonly)$"
       - "^monitor-bridge-snapshot-headroom$"
       - "^monitor-bridge-(b2-reachable|b2-storage|r2-usage)$"
-      # The registry PVC's only space reclaim (#1937): a storage tile, not an automation one.
+      # The registry PVC's only space reclaim: a storage tile, not an automation one.
       - "^registry-gc$"
       - "^etcd-"
   - name: Hosts & Power
@@ -274,10 +255,10 @@ kuma_status_page_sync_mem_request: 32Mi
 
 # ── weekly-reboot maintenance window ───────────────────────────────────────────────────────
 # Kuma suppresses a monitor's notifications while a maintenance window covering it is open.
-# The `Weekly system restart` cron takes every host down on Sunday morning, and until #2802
-# each of the ~85 monitors paged Discord for it. One blanket window over every monitor is the
-# operator's decision of 2026-09-28, with its cost accepted in the same breath: a REAL outage
-# starting inside the window is silent until the window closes.
+# The `Weekly system restart` cron takes every host down on Sunday morning, and each of
+# the ~85 monitors would page Discord for it. One blanket window over every monitor is the
+# operator's decision, with its cost accepted: a REAL outage starting inside the window is
+# silent until the window closes.
 #
 # AutoKuma cannot declare it. `autokuma/src/entity.rs` at the pinned 2.1.0-rc.2 has
 # DockerHost, Notification, Monitor, Tag and StatusPage and no Maintenance variant, so the
@@ -302,7 +283,7 @@ kuma_maintenance_window_lead_minutes: 5
 # +00:00 in winter only and would drift an hour every summer.
 # `test_the_window_is_declared_on_the_reboot_cron_s_clock` holds the offset.
 kuma_maintenance_window_timezone: Atlantic/Reykjavik
-# How long after the reboot itself the window stays open. Measured on 2026-09-06: daniel-server
+# How long after the reboot itself the window stays open. Measured: daniel-server
 # was down 07:35 to 07:48:25 and Kuma was Ready again at ~07:51, and the status-page sync
 # records ~16 minutes with no Service endpoint at all. 40 minutes is that recovery plus room
 # for a slow boot (07:38 and 07:41 on the two preceding Sundays) and for the bridge-fed tiles,

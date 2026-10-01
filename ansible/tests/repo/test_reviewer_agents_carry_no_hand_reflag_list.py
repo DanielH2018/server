@@ -1,9 +1,8 @@
 """The reviewer agents point at one shared don't-re-flag source instead of carrying a copy.
 
-#2169: three reviewer agents each carried an inline "Honor accepted designs (don't re-flag):
-..." list, and the copies drifted. The design facts now live once, in
-`.claude/skills/homelab-review/accepted-designs.md`, one section per reviewer domain; the
-findings register (`--accepted` / `--refuted` closes) is rendered by the docs-refresh cron
+The design facts live once, in `.claude/skills/homelab-review/accepted-designs.md`, one
+section per reviewer domain; an inline "Honor accepted designs (don't re-flag): ..." list in
+each agent would drift. The findings register (`--accepted` / `--refuted` closes) is rendered by the docs-refresh cron
 into the *Settled findings* table of `docs/reference/backlog.md`. Each agent names both.
 
 This guards the shape, not the content: an inline list creeping back into an agent, a

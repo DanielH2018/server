@@ -196,7 +196,7 @@ def test_the_guard_rejects_a_template_missing_the_step(what, victim):
         )
 
 
-# ── Renovate coverage (#1616, the finding #1557 exists for) ──────────────────────────────────
+# ── Renovate coverage ────────────────────────────────────────────────────────────────────────
 # renovate.json's k8s-images manager keys on `_image:`, so a plugin version, its URL and its
 # checksum are invisible to every manager without a dedicated one — and a pin with no update
 # signal reads exactly like a plugin with no updates available.

@@ -4,9 +4,9 @@
 expect a fresh `restartedAt`: the ordinary render changed, the secret render changed, or
 `k8s/image-builder` rebuilt the role's image. All three are per-ROLE, which is wrong for a role
 that renders several workloads: observability renders six from eight manifests, so one changed
-manifest read as "all six changed" and restarted all six (issue #2858).
+manifest read as "all six changed" and restarted all six.
 
-A rollout entry can now name a subset in `restart_on`. An entry that names none is the role
+A rollout entry can name a subset in `restart_on`. An entry that names none is the role
 saying nothing it renders needs a restart TASK for that workload — its config is hashed into
 its own pod template, so the apply rolls it and `manifests_rolled_by_apply` reports it.
 
@@ -15,7 +15,7 @@ Two ways that goes quiet, both guarded here:
   * **A misspelt signal.** `restart_on: [secrets]` matches nothing, so the workload is never
     restarted for a rotation and the release record never expects one. Nothing fails.
   * **The default stops naming all three.** Every role that does not narrow relies on it, so a
-    dropped signal silently stops restarting ~63 roles.
+    dropped signal silently stops restarting every role that does not narrow.
 
 What a narrowed entry then DOES is rendered through Ansible's own filters in
 `ansible/tests/k8s/test_self_rollouts_follow_the_apply.py`, over the harness in

@@ -1,13 +1,12 @@
 #!/usr/bin/env python3
 """Resolve a generated doc's `{{ … }}` to the value every host would get, or leave it as written.
 
-The glance blocks and `docs/reference/crons.md` used to print every Jinja expression as
-written, on the reasoning that a variable "cannot be resolved without a real deploy". For
-most schedule and user variables that is not so. When a variable comes from the role's
+The glance blocks and `docs/reference/crons.md` print the resolved value wherever one
+exists. When a variable comes from the role's
 `defaults/main.yml` or `group_vars/all.yml`, and no `host_vars` file sets it, every host in
 the inventory resolves it to the same value. Printing `{{ '%02d' |
 format(gitops_deploy_ruleset_drift_cron_hour | int) }}` then hides a fixed value behind
-syntax a reader has to evaluate by hand (#2829).
+syntax a reader has to evaluate by hand.
 
 An expression resolves only when all of these hold; otherwise it is printed as written,
 which keeps the old guarantee for every case that really does vary:

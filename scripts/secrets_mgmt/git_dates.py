@@ -49,8 +49,7 @@ SECRETS_GIT_PATH = "ansible/vars/secrets.yml"
 # `"<name>": "<name>"` as an api-key assignment and fails the commit on it. Merge a rename
 # that does not share a prefix in with `|`.
 RENAMED_FROM: dict[str, str] = {
-    # Kopia retired 2026-08-13 and its B2 credentials became Longhorn's, keeping the dead
-    # tool's name until 2026-09-09. See
+    # The B2 credentials Kopia held became Longhorn's. See
     # docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md.
     f"longhorn_b2_{suffix}": f"kopia_b2_{suffix}"
     for suffix in ("application_key", "bucket", "endpoint", "key_id")
@@ -65,7 +64,7 @@ RENAMED_FROM: dict[str, str] = {
 # needs. Names only, never values: the same rule `sops_names` keeps.
 RETIRED: frozenset[str] = frozenset(
     {
-        # 44136b0d 2026-05-29 — beszel, foundry and wallabag left with Duplicati.
+        # beszel, foundry and wallabag left with Duplicati.
         "beszel_agent_key",
         "beszel_password",
         "beszel_system",
@@ -75,19 +74,19 @@ RETIRED: frozenset[str] = frozenset(
         "wallabag_db_password",
         "wallabag_db_user",
         "wallabag_mysql_root_password",
-        # 7762dd4a 2026-06-09 — split into the gitops alive/status tokens, minted fresh.
+        # Split into the gitops alive/status tokens, minted fresh.
         "gitops_deploy_kuma_push_token",
-        # 89a88f05 2026-07-03 — dead since the wg0.conf migration.
+        # WireGuard settings that wg0.conf replaced.
         "wireguard_interface_address",
         "wireguard_interface_dns",
         "wireguard_peer_endpoint",
         "wireguard_peer_public_key",
-        # f82c2d3b 2026-07-17 — recyclarr retired for configarr.
+        # recyclarr's monitor token.
         "monitor_bridge_recyclarr_push_token",
-        # 580da2dd 2026-08-09 — portainer retired.
+        # portainer's credentials.
         "portainer_agent_secret",
         "portainer_api_key",
-        # 4616b116 .. 8edb11cd 2026-08-10..13 — kopia and its monitors retired for Longhorn
+        # kopia and its monitors, which Longhorn replaced
         # (docs/adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md).
         "kopia_password",
         "kopia_restore_drill_push_token",
@@ -97,42 +96,35 @@ RETIRED: frozenset[str] = frozenset(
         "monitor_bridge_kopia_push_token",
         "monitor_bridge_maintenance_push_token",
         "monitor_bridge_verify_push_token",
-        # b6cad82e 2026-08-12 — the Docker prometheus remote-write reader is gone.
+        # The Docker prometheus remote-write reader's token.
         "monitor_bridge_remote_write_push_token",
-        # 6894e352 2026-08-13 — orphaned by the E7 drain.
         "crowdsec_bouncer_api_key",
         "crowdsec_bouncer_docker_traefik_key",
         "pihole_api_key",
-        # e5ee2be7 2026-08-14 — Docker uninstalled from daniel-server.
+        # Docker-era fleet and disk-prune monitors.
         "docker_fleet_push_token",
         "monitor_bridge_disk_prune_push_token",
-        # ca5ae25b 2026-08-15 — dead after the k3s migration.
+        # beszel's Authelia hash, the docker-user monitor and traefik basic-auth.
         "authelia_beszel_password_hash",
         "monitor_bridge_docker_user_push_token",
         "traefik_password",
         "traefik_user",
-        # b01a2455 2026-08-24 — wg-easy's hash moved out of SOPS in the review remediation.
+        # wg-easy's hash lives outside SOPS.
         "wg_easy_password_hash",
-        # 59d0165a 2026-08-30 — crowdsec's console password and the healthchecks SMTP
-        # password retired with the transcript-exposure rotation.
+        # crowdsec's console password and the healthchecks SMTP password.
         "crowdsec_password",
         "healthchecks_smtp_password",
-        # 429d4ffb 2026-09-10 — a duplicate of a value held elsewhere; the Django signing
-        # key added in the same commit is a different credential, not this one renamed.
+        # A duplicate of a value held elsewhere; the Django signing
+        # key is a different credential, not this one renamed.
         "healthchecks_smtp_user",
-        # 2026-09-24 — the staging-backfill ratchet's Kuma push token, retired with the
-        # ratchet (#2414).
+        # The staging-backfill ratchet's Kuma push token.
         "monitor_bridge_staging_backfill_push_token",
-        # 2026-09-28 — the remember log-rotation check's Kuma push token, retired with the
-        # remember plugin (#2852).
+        # The remember log-rotation check's Kuma push token.
         "remember_logs_push_token",
-        # 2026-09-28 — the Cluster Prometheus gate's Kuma push token, retired with the gate
-        # (#2825). Both Prometheus URLs had named one Service since 2026-08-14, so the tile
-        # could not go red on its own.
+        # The Cluster Prometheus gate's Kuma push token.
         "monitor_bridge_cluster_prometheus_push_token",
-        # 2026-09-29 — the staging gate's restricted ssh identity, retired with the gate and
-        # the daniel-stage guest (#2941). Its public halves stay in the hypervisor role's
-        # files/staging-gate-retired/ so every host withdraws the authorization.
+        # The staging gate's restricted ssh identity. Its public halves stay in the hypervisor
+        # role's files/staging-gate-retired/ so every host withdraws the authorization.
         "staging_gate_ssh_key",
     }
 )

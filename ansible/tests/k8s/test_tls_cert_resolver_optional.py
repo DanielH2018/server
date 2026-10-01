@@ -3,13 +3,12 @@
 Prod resolves certificates through Traefik's `cloudflare` ACME DNS-01 resolver. The staging
 cluster has no Cloudflare token and must never issue against the real domain's ACME account or
 rate limit, so `k8s_tls_cert_resolver` is empty there and Traefik serves its own default
-self-signed certificate (docs/archive/staging-cluster.md, Decision 4).
+self-signed certificate.
 
 The load-bearing property is what stays rather than what goes. An IngressRoute on the `https`
 entrypoint with NO `spec.tls` is not a losing router — it is a NON-TLS router, so an HTTPS
 request is never matched against it at all. That failure is invisible from the object: it
-applies cleanly, `kubectl get` shows it, and Traefik logs nothing. It cost most of 2026-08-07,
-and the obvious way to implement an optional resolver — wrapping the whole `tls:` block in the
+applies cleanly, `kubectl get` shows it, and Traefik logs nothing. The obvious way to implement an optional resolver — wrapping the whole `tls:` block in the
 conditional — reintroduces it on staging only, where nobody would be looking.
 
 `test_k8s_manifests.py` already fails a rendered route that serves https without a tls block,

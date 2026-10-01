@@ -1,15 +1,15 @@
 """Pins the relationship between k8s/volume-revert's per-claim timeouts and the rollback
-redeploy's own budget (task 6b).
+redeploy's own budget.
 
 WHY THIS EXISTS. The rollback redeploy's `K8S_ROLLBACK_TIMEOUT_S`
 (`gitops_deploy_k8s_rollback_timeout_s`) has to cover `worst_case_revert` below: the longest a
 two-claim service's revert can run before its own fate (success or failure) is decided.
 `volume_revert_state_timeout` and `volume_revert_api_timeout` bound one claim's three state
 waits and three API calls, and a service can declare more than one claim (`tdarr`,
-`code-server` each declare two, via `k8s_autodeploy_snapshot_pvcs`). Nothing enforced that
-relationship until this test — a later change to either side (a bumped per-claim timeout, a
-service declaring a third claim, a cut to the rollback budget) could silently reopen the gap
-Task 6's drill was measuring against, and every other test would stay green.
+`code-server` each declare two, via `k8s_autodeploy_snapshot_pvcs`). This test enforces that
+relationship: a later change to either side (a bumped per-claim timeout, a service declaring a
+third claim, a cut to the rollback budget) could silently reopen the gap, and every other test
+would stay green.
 
 WHAT `worst_case_revert` MEANS, precisely, because it is easy to misread. Every wait in
 `k8s/volume-revert/tasks/claim.yml` is `until:` with no `ignore_errors` and no `failed_when`, so
@@ -35,24 +35,22 @@ which the abort-on-first-failure semantics above rule out entirely.
 Sized against `ansible/roles/k8s/volume-revert/CLAUDE.md`'s task-6 numbers: at
 `volume_revert_state_timeout`/`volume_revert_api_timeout` = 90/30, a two-claim service's
 `worst_case_revert` is 720s, inside `gitops_deploy_k8s_rollback_timeout_s` — which is 1320s, not
-the 900s this docstring claimed until 2026-08-22, leaving 600s rather than 180s for the
-realistic (not worst-case) cost of the rest of that run. The assertions always read the live
-YAML, so only this prose was ever stale — but it is the prose an operator reads when the test
-fails, which is the worst moment to hand them a wrong number.
+leaving 600s for the realistic (not worst-case) cost of the rest of that run. The assertions
+read the live YAML, but this prose is what an operator reads when the test fails, which is the
+worst moment to hand them a wrong number.
 
-THE MULTI-SERVICE AXIS (2026-08-22 review H2). Everything above reasons per SERVICE and about
+THE MULTI-SERVICE AXIS. Everything above reasons per SERVICE and about
 CLAIMS within it. That is the wrong axis for the batch: one tick can promote several services
 into a single playbook run, each paying its own snapshot+revert phase serially, so the cost is
-additive across services while this budget covers one. The claims-only arithmetic here passed
-green throughout, which is exactly why the gap survived. `test_batch_of_claim_services_fits_the_
+additive across services while this budget covers one. `test_batch_of_claim_services_fits_the_
 rollback_budget` below closes it by reading the per-tick cap, and it takes the rollout term as a
 `max()` over promoted roles rather than a `sum()` — a `sum()` would demand a budget larger than
 reality, since only one service's rollout wait is ever the binding one (k8s/manifests/tasks/drain.yml
 batches them).
 
-IN-ROLE WAITS ARE A THIRD TERM (#2399). What a role waits for in its own `tasks/` — prowlarr's
-flaresolverr isolation probe waits 300s for a Job — runs before the drain and adds to it, and
-both derivations here counted the drain alone. `_role_tasks.in_role_wait_s` reads the term and
+IN-ROLE WAITS ARE A THIRD TERM. What a role waits for in its own `tasks/` — prowlarr's
+flaresolverr isolation probe waits 300s for a Job — runs before the drain and adds to it, so a
+derivation that counts the drain alone undercounts. `_role_tasks.in_role_wait_s` reads the term and
 excludes an inline `rollout status` gate, which waits for a rollout the drain also waits for.
 """
 
@@ -131,9 +129,9 @@ _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 
 
 def _rollout_timeout_s(role: str) -> int:
-    # Shared with the gitops_deploy budget test and the inline-gate census, because the literal
-    # read this replaced returned the 300s default for a role that names its budget in a
-    # variable (sonarr) — sizing a 660s service as a 300s one, green.
+    # Shared with the gitops_deploy budget test and the inline-gate census, because a literal
+    # read returns the 300s default for a role that names its budget in a variable (sonarr) —
+    # sizing a 660s service as a 300s one, green.
     return manifests_rollout_timeout_s(_K8S_ROLES / role)
 
 
@@ -155,7 +153,7 @@ def _promoted_claim_roles() -> list[tuple[str, int]]:
 
 
 def test_batch_of_claim_services_fits_the_rollback_budget():
-    """The multi-service axis the per-claim test above structurally cannot see (review H2).
+    """The multi-service axis the per-claim test above structurally cannot see.
 
     `deploy_k8s` joins the whole promoted set into ONE ansible-playbook run under one
     `K8S_ROLLBACK_TIMEOUT_S`, and each claim-declaring service pays its own snapshot+revert
@@ -196,9 +194,9 @@ def test_batch_of_claim_services_fits_the_rollback_budget():
     # The worst batch the cap still permits: the `cap` most expensive claim-declaring services.
     #
     # The cost key is the whole per-service cost, not the claim count alone. Every promoted
-    # claim-declaring role declares exactly one claim today, so a claims-only key left every
-    # candidate tied and `sorted` picked the alphabetically first — bazarr, at the shared
-    # rollout default — while prowlarr cost 980s more (#2399).
+    # claim-declaring role declares exactly one claim, so a claims-only key leaves every
+    # candidate tied and `sorted` picks the alphabetically first — bazarr, at the shared
+    # rollout default — while prowlarr costs 980s more.
     per_claim = snapshot_timeout + 3 * (state_timeout + api_timeout)
 
     def cost(role: str, claims: int) -> int:

@@ -39,7 +39,7 @@ def test_every_snapshot_role_restores_its_own_replicas() -> None:
     """
     roles = _snapshot_roles()
     # A floor, and only as a sanity check on the reader itself: the guard below is the loop,
-    # which covers however many roles opt in. Thirteen opted in as of 2026-08-21.
+    # which covers however many roles opt in.
     assert len(roles) >= 13, (
         f"only found {len(roles)} snapshot roles; the reader is broken"
     )

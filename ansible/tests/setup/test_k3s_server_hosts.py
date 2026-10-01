@@ -1,8 +1,7 @@
 """`k3s-bringup.yml` installs a k3s server only on a host named in `k3s_server_hosts`.
 
-The play used to assert `inventory_hostname == 'daniel-box'`. Staging adds a second cluster
-whose single node is also a server, so the assert had to admit more than one name — and the
-direction it was widened in is the whole point.
+The play admits more than one server name, because staging is a second cluster whose single
+node is also a server — and the direction the assert widens in is the whole point.
 
 An allowlist refuses a host nobody thought about. A denylist (`not in k3s_agent_hosts`)
 admits one, which is the same shape as the accident the assert exists to prevent: standing

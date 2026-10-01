@@ -270,9 +270,8 @@ def check_lock(
                     )
                 )
         # A citation ADDED to an already-verified section. `status` grades the unit OUT for
-        # it (relations.unrecorded), but until now nothing in CI did: the guard walked the
-        # recorded atoms alone, so a new fact could be added to a locked section and land
-        # unsupported behind a green master.
+        # it (relations.unrecorded), and this check reports it too, so a new fact cannot be
+        # added to a locked section and land unsupported behind a green master.
         recorded_atoms = rec.get("atoms", {})
         for atom, c in sorted(cited.items()):
             if atom in recorded_atoms or c.form not in HASHED_FORMS:

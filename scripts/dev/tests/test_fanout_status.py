@@ -32,7 +32,7 @@ HEADROOM = f"1\n12884901888\n1\n12884901888\n0\n{HOST_KEY}\n"
 
 RUNNING = "=== b\nActiveState=active\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
 # `B` runs on the landing host, so a finished batch carries `land.sh`'s verdict as well as
-# the PR url — the `--- verdict` section `_one` greps out of the batch's land log (#2890).
+# the PR url — the `--- verdict` section `_one` greps out of the batch's land log.
 LANDED = "--- verdict\nVERDICT: settled\n"
 DONE = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
@@ -86,7 +86,7 @@ DONE_WITH_MARKER_INSIDE_A_PROPERTY = (
     '{"type":"result","result":"Opened https://github.com/o/r/pull/9"}\n' + LANDED
 )
 
-# Issue #2816: a turn that ended on a progress report exits the process as cleanly as a
+# A turn that ended on a progress report exits the process as cleanly as a
 # finished one, and the final text is non-empty either way.
 STOPPED_ON_A_PROGRESS_REPORT = (
     "=== b\nActiveState=inactive\nResult=success\nExecMainStatus=0\n--- stderr\n--- report\n"
@@ -198,7 +198,7 @@ def test_a_stray_marker_line_inside_stderr_does_not_split_the_block():
 
 def test_a_done_shaped_block_whose_result_reports_an_error_is_failed():
     # The pair: the same unit properties read `done` without is_error, so this asserts the
-    # is_error arm fires rather than that everything now reads failed.
+    # is_error arm fires rather than that everything reads failed.
     errored = parse_status([B], DONE_SHAPED_BUT_ERRORED)[0]
     assert errored.state == "failed" and errored.is_error
     assert errored.terminal_reason == "max turns reached"
@@ -214,7 +214,7 @@ def test_a_property_value_holding_the_section_marker_does_not_truncate_the_prope
 
 
 def test_a_final_text_without_a_pr_url_is_not_done():
-    """The flagged half of #2816; DONE above is the clean half with the same unit properties."""
+    """The flagged half; DONE above is the clean half with the same unit properties."""
     stopped = parse_status([B], STOPPED_ON_A_PROGRESS_REPORT)[0]
     assert stopped.state == "no-pr" and stopped.pr_url == ""
     assert parse_status([B], DONE)[0].state == "done"
@@ -424,7 +424,7 @@ def test_cli_status_reports_a_cleaned_batch_without_reading_the_host(tmp_path, c
 
 
 def test_a_landing_host_batch_with_a_pr_and_no_verdict_is_not_done(tmp_path, capsys):
-    """#2890's flagged half; DONE is the clean half with the same unit properties."""
+    """The flagged half; DONE is the clean half with the same unit properties."""
     stopped = parse_status([B], OPENED_BUT_NOT_LANDED)[0]
     assert stopped.state == "no-verdict"
     assert stopped.pr_url == "https://github.com/DanielH2018/server/pull/1500"

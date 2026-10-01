@@ -12,7 +12,7 @@ Two halves. `SKIPPED_IN_CHECK_MODE`, `skips_in_check_mode`, `excludes_check_mode
 `importer_guards`, `walk_with_inherited` and `walk_with_inherited_when` answer "does a `--check`
 run reach this task at all". `SKIP_MISSING`, `unguarded_deref` and `lazily_guarded` answer "does this expression survive
 meeting a skip result". `POST_MODULE_KEYS` names the third question, "does Ansible evaluate this
-expression at all on the run that produced the skip result". #2315.
+expression at all on the run that produced the skip result".
 
 Its own module rather than a section of `_helpers`: that file is at its length cap, and this
 is a subject a reader looks up by name rather than a path or a YAML walk.
@@ -48,9 +48,9 @@ SKIPPED_IN_CHECK_MODE = frozenset(
 # wraps both in `if 'skipped' not in result`, so a task check mode SKIPS never reaches either
 # — while its module args and its `when:` are templated before the skip and are read on every
 # run. `POST_MODULE_KEYS` is therefore text to drop when the CONSUMER is itself skipped under
-# `--check`, and text to keep in every other case (#2375).
+# `--check`, and text to keep in every other case.
 #
-# `until` is NOT one of them, though #2375 asked for it. Its retry loop sits outside that
+# `until` is NOT one of them. Its retry loop sits outside that
 # guard and evaluates against the skip result, which is the premise
 # `test_retried_commands_survive_check_mode.py` rests on: "a `--check` run burns every retry
 # on a skip result and fails the play". A read there is reachable and stays judged.
@@ -69,7 +69,7 @@ def skips_in_check_mode(task: dict, inherited_check_mode=None) -> bool:
     children, so a child under `check_mode: false` runs under `--check` without carrying the
     key. Unlike `when:`, the nearest declaration WINS rather than accumulating: a task's own
     `check_mode:` overrides its block's, so the task's key is read first and the inherited
-    value is consulted only when the task declares none (#2379).
+    value is consulted only when the task declares none.
     """
     if not SKIPPED_IN_CHECK_MODE & set(task):
         return False
@@ -154,7 +154,7 @@ def walk_with_inherited(
     `check_mode:` is an override — the innermost declaration wins — so the caller gets one
     scalar, replaced only where a node actually declares the key. `None` therefore means
     "nobody declared one", which is why a declared `check_mode: null` is not propagated: the
-    two are indistinguishable downstream and only the declared one should override (#2379).
+    two are indistinguishable downstream and only the declared one should override.
     """
     for task in tasks or []:
         if not isinstance(task, dict):
@@ -180,7 +180,7 @@ def walk_with_inherited_when(tasks, inherited=()) -> Iterator[tuple[dict, list]]
 #
 # `stdout_lines`, `stderr_lines` and `delta` are listed separately rather than left to the
 # bare names: `unguarded_deref` anchors on `\b<reg>.<attr>\b`, and `_` is a word character,
-# so there is no boundary inside `stdout_lines` for the `stdout` entry to match (#2351).
+# so there is no boundary inside `stdout_lines` for the `stdout` entry to match.
 SKIP_MISSING = ("stdout", "stdout_lines", "stderr", "stderr_lines", "rc", "delta")
 
 SKIP_FILTERS = (
@@ -197,15 +197,12 @@ def expressions(task: dict, drop: tuple[str, ...] = ()) -> str:
     `drop` names further keys to leave out. Its one caller passes `POST_MODULE_KEYS` for a
     consumer check mode skips: those conditions are evaluated on a result, and a skipped task
     produces none, so a read inside them cannot happen on the run whose skip result is at
-    issue (#2375).
+    issue.
 
     `block:`, `rescue:` and `always:` are dropped. `walk_with_inherited_when` yields each
     child on its own, so a wrapper that kept them would show a child's expressions twice —
     once as the child, once as part of the wrapper — and report the child's read against the
-    wrapper's name, pointing the reader at the wrong task. `initial_setup`'s
-    "Keep the info-level forwarding out of /var/log/syslog" block was flagged that way for
-    a `failed_when:` on its own child, which Ansible never evaluates on a skipped task
-    (#2352).
+    wrapper's name, pointing the reader at the wrong task.
     """
     skip = set(_NESTING_KEYS) | set(drop)
     body = {key: value for key, value in task.items() if key not in skip}

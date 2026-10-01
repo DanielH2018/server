@@ -1,6 +1,6 @@
 """Host board/CPU temperature: the two limit arms, and the coverage that must stay exhaustive.
 
-The check landed 2026-08-28. Its failure mode is not a wrong threshold — it is silence. A
+The check's failure mode is not a wrong threshold — it is silence. A
 sensor that ends up with no limit reads green through a fire, and nothing in production
 distinguishes that from a cool machine. So every rule below is a pair (one input it must
 accept, one it must reject), and `test_host_temp_covers_every_sensor...` is the one that
@@ -19,7 +19,7 @@ import gates
 import registry
 
 # The role directory, for the manifests these tests read back. `tests/` is its sibling, so this
-# is one hop up — it used to be derived from `check.__file__`, which pointed at `files/`.
+# is one hop up — `check.__file__` points at `files/`, not here.
 _ROLE = Path(__file__).resolve().parents[1]
 
 
@@ -78,7 +78,7 @@ def test_declared_max_is_flagged_above_the_ratio():
 
 
 def test_declared_crit_is_clean_below_the_ratio():
-    """issue #995: a driver that publishes crit but no max must not fall to the flat ceiling."""
+    """A driver that publishes crit but no max must not fall to the flat ceiling."""
     limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-server", "coretemp_crit_only", "temp1", 60.0)],
         [],
@@ -108,7 +108,7 @@ def test_declared_crit_is_flagged_above_the_ratio():
 def test_declared_max_wins_over_crit_when_both_are_plausible():
     """hwmon's own convention has crit as the LATER shutdown point, not the earlier warning.
 
-    Measured live 2026-09-03: daniel-server's NVMe declares max 85.85 and crit 86.85. Ratioing
+    Measured live: daniel-server's NVMe declares max 85.85 and crit 86.85. Ratioing
     crit instead of max would page closer to hardware failure than the 90%-of-max this estate
     already runs on, so max must win whenever both are declared and plausible.
     """
@@ -138,14 +138,14 @@ def test_the_sentinel_crit_is_treated_as_undeclared():
 
 
 def test_k10temp_tctl_declares_neither_max_nor_crit_and_falls_back_and_says_so():
-    """issue #995's actual regression: daniel-box's k10temp/Tctl, as read live 2026-09-03.
+    """The regression this guards: daniel-box's k10temp/Tctl, as read live.
 
     `/sys/class/hwmon/hwmon2/` on daniel-box carries only `temp1_input` and `temp1_label` for
     this chip — no `temp1_max`, no `temp1_crit` — so `node_hwmon_temp_max_celsius` and
     `node_hwmon_temp_crit_celsius` both have no series for it. Nothing can invent a limit this
     driver never declared, so this pins the no-rating arm. Not a Tctl offset: k10temp subtracts
     none here (#1003, and the `DECIDED:` markers in verdicts.host). In production this sensor
-    takes the rated arm instead — AMD's 100C Tjmax, held by test_host_temp_rated.py (#1152).
+    takes the rated arm instead — AMD's 100C Tjmax, held by test_host_temp_rated.py.
     """
     limits = checks.host_thermal.hwmon_temp_limits(
         [_temp("daniel-box", "pci0000:00_0000:00:18_3", "temp1", 93.5)],
@@ -183,7 +183,7 @@ def test_fallback_is_flagged_above_the_ceiling():
 
 
 def test_the_sentinel_max_is_treated_as_undeclared():
-    """The regression this check was designed around, measured live on 2026-08-28.
+    """The regression this check was designed around, measured live.
 
     Three NVMe sensors declare 65261.85 for "no max declared". Trusting it yields a limit of
     58735C, which no temperature reaches — the sensor is then covered on paper and unwatched in
@@ -297,7 +297,7 @@ def test_an_estate_wide_breach_counts_the_sensors_it_does_not_list():
 def test_covers_every_sensor_it_does_not_deliberately_exclude():
     """The anti-silence guard: no scraped sensor may end up without a limit.
 
-    Built from the live 2026-08-28 label shapes — declared, sentinel and absent maxes mixed
+    Built from the live label shapes — declared, sentinel and absent maxes mixed
     across all three hosts. A future edit that narrows the join drops this count and fails
     here, instead of going quiet in production.
     """
@@ -372,7 +372,7 @@ def test_the_check_fetches_the_crit_series_it_prefers(monkeypatch, cfg):
     """The pure tests are handed `crits`; only this one proves check_host_temp fetches them.
 
     Same shape as test_the_check_fetches_the_names_it_reports and for the same reason: the crit
-    metric is a separate query (issue #995), so a wiring that forgets it still passes every pure
+    metric is a separate query, so a wiring that forgets it still passes every pure
     hwmon_temp_limits test above while the live check silently never sees a crit-only sensor.
     """
     bridge.streaks._down_streaks.pop("host_temp", None)
@@ -431,15 +431,14 @@ def test_the_kuma_tile_exists_for_the_token():
 
 
 # ── host-coverage floor (HWMON_TEMP_ORIGINS_MIN) ──────────────────────────────────────────────
-# THE GAP THESE PIN (2026-08-29 review M-9): hwmon_temp_verdict pages only on a WHOLLY empty
-# list, so any non-empty subset passed. Lose one host's hwmon collector — node-exporter still
-# up, which is its documented normal failure mode — and the surviving hosts answered "all below
-# limit" for the whole estate. check_cluster_targets catches a TOTAL node outage; nothing caught
-# the partial one, which is the shape of the 2026-08-23 incident that produced HOST_ORIGINS_MIN.
+# THE GAP THESE PIN: hwmon_temp_verdict pages only on a WHOLLY empty list, so any non-empty
+# subset would pass. Lose one host's hwmon collector — node-exporter still up, which is its
+# documented normal failure mode — and the surviving hosts answer "all below limit" for the
+# whole estate. check_cluster_targets catches a TOTAL node outage; only the coverage floor
+# catches the partial one.
 #
-# The refuted first fix is worth naming: it added an env key nothing read, leaving hwmon on the
-# shared floor of 2, so two of three hosts still satisfied it. Every test here therefore drives
-# check_host_temp() rather than asserting a constant.
+# An env key nothing reads leaves hwmon on the shared floor of 2, which two of three hosts still
+# satisfy. Every test here therefore drives check_host_temp() rather than asserting a constant.
 
 ALL_THREE = ("daniel-server", "daniel-box", "daniel-pi")
 
@@ -490,8 +489,8 @@ def test_a_missing_host_pages_once_the_grace_expires(monkeypatch, cfg):
 def test_a_short_coverage_gap_is_held(monkeypatch, cfg):
     """The accepting half: a short coverage gap must be held, not paged on.
 
-    The Pi's hwmon series went absent for about 20 minutes over the 7d to 2026-08-29, so a floor
-    with no grace would page on a healthy estate.
+    The Pi's hwmon series goes absent for about 20 minutes at a time, so a floor with no grace
+    would page on a healthy estate.
     """
     _reset()
     _stub_prom(monkeypatch, _cool_estate(("daniel-server", "daniel-box")))
@@ -580,8 +579,8 @@ def test_a_host_whose_only_sensors_are_excluded_does_not_count(monkeypatch, cfg)
 
 
 def test_the_floor_and_its_grace_are_pinned_and_overridable(cfg):
-    """Pins the shipped values and their env keys together — the refuted M-9 fix was a key
-    nothing read, which is indistinguishable from this test's absence."""
+    """Pins the shipped values and their env keys together — a key nothing reads is
+    indistinguishable from this test's absence."""
     assert cfg.HWMON_TEMP_ORIGINS_MIN == 3, (
         "3, not the shared HOST_ORIGINS_MIN of 2: all three hosts declare non-excluded hwmon "
         "sensors (measured 2026-08-29: 9 / 5 / 2), so a floor of 2 is met by any two of them"
@@ -617,9 +616,9 @@ def test_a_dead_node_exporter_suppresses_this_check():
 def test_every_job_carrying_hwmon_series_suppresses_this_check(job):
     """The reject half of the test above: a `node`-only map leaves the Pi double-paging.
 
-    daniel-pi scrapes under job=node-pi (measured 2026-08-29), so its exporter death drops the
+    daniel-pi scrapes under job=node-pi, so its exporter death drops the
     two hwmon origins the floor counts while Scrape Targets pages for the same fact. Asserting
-    only the `node` key passes with the Pi's gap wide open, which is how it was missed.
+    only the `node` key passes with the Pi's gap wide open.
     """
     suppressed = set()
     for down in gates.down_exporters([({"job": job}, 0)]):

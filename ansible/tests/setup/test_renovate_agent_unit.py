@@ -77,7 +77,7 @@ def test_path_carries_the_user_local_bin(unit: str) -> None:
 
 def test_the_unit_pins_land_sh_to_renovates_prs(unit: str) -> None:
     """The contract's "never a PR by another author" is held by `land.sh --arm-merge`,
-    which reads LAND_REQUIRE_AUTHOR (#2170). The login must be the one the wrapper's own
+    which reads LAND_REQUIRE_AUTHOR. The login must be the one the wrapper's own
     census filters on (`RENOVATE_AUTHOR`), read from its source rather than typed here."""
     # fact: ansible/roles/setup/renovate_agent/CLAUDE.md#Autonomous-role contract (it merges and deploys with no human in the loop)
     envs = directive(unit, "Environment")
@@ -194,8 +194,6 @@ def test_the_unit_holds_no_push_token(unit: str) -> None:
     """A unit line is public. `systemctl show <unit> -p ExecStartPost` serves it over the
     system bus to any local user, so a token interpolated into an Exec line is readable
     without sudo — the same reasoning that keeps the alert webhook out of the unit above.
-    Until 2026-09-09 this unit inlined the whole push URL, and the harness guard that denies
-    `systemctl cat` named `systemctl show -p <Property>` as the safe alternative. Issue #1489.
     """
     # The `{% if %}` gate naming the token is fine and is asserted above — what must not
     # appear is the interpolation that renders its VALUE into a line systemd publishes.
@@ -263,9 +261,9 @@ RENOVATE = ANSIBLE.parent / "renovate.json"
 
 # The tell is read out of renovate.json, not typed here: the manual rule's groupName is what
 # Renovate puts in the PR title, and a rename there that the prompt did not follow is exactly
-# the drift this guard exists to catch (issue #1939). The denylist rule leads its parenthetical
+# the drift this guard exists to catch. The denylist rule leads its parenthetical
 # with the tell; a per-package rule whose pin a denied role owns ends its own with it (the
-# crowdsec bouncer plugin, issue #1963), so the tell is collected from anywhere inside a
+# crowdsec bouncer plugin), so the tell is collected from anywhere inside a
 # `(manual …)` parenthetical and every rule must spell it the same way.
 _MANUAL_TELL = re.compile(r"\(manual[^)]*?(?P<tell>k8s_autodeploy: [a-z]+)")
 
@@ -287,12 +285,12 @@ def branch_slug_tell(marker: str) -> str:
     """The marker as it survives in a branch name: Renovate slugifies its groupName.
 
     A group holding ONE dependency is titled `Update <dep> …` and drops the group name, so the
-    branch can be the only place the marker reaches — #2620 was
+    branch can be the only place the marker reaches: for example
     `Update klutchell/unbound Docker tag to v1.26.1` on
-    `renovate/k8s-image-klutchellunbound-(manual-k8s_autodeploy-false-…)` (issue #2641).
-    Every rule carrying the marker sets `groupSingleUpdates: true` since #2646 and #2654, which
-    puts the marker in their titles too; every PR raised before that flag landed still titles
-    bare, so both tells stay load-bearing.
+    `renovate/k8s-image-klutchellunbound-(manual-k8s_autodeploy-false-…)`.
+    Every rule carrying the marker sets `groupSingleUpdates: true`, which puts the marker in
+    their titles too; a PR raised before that flag existed still titles bare, so both tells stay
+    load-bearing.
     Derived rather than typed, for the reason `denylist_marker` is read out of renovate.json:
     a rename of the rule's marker must fail this guard rather than leave the prompt behind.
     """
@@ -365,8 +363,8 @@ def test_a_prompt_missing_any_one_of_them_is_flagged(
 # ── the manual hand-off: the prompt must hand its own superseding PR to a person ──
 #
 # A finished `manual —` bump ends as a PR the session opened itself, which LAND_REQUIRE_AUTHOR
-# refuses to arm. The operator chose to hand that PR off rather than land it (#2746), and the
-# refusal message used to suggest `--any-author`, so the prompt has to rule the override out.
+# refuses to arm. The operator hands that PR off rather than landing it, so the prompt has
+# to rule out the `--any-author` override.
 
 
 def prompt_handoff_problems(prompt: str) -> list[str]:
@@ -423,7 +421,7 @@ def test_a_prompt_missing_any_handoff_rule_is_flagged(
 
 
 def test_the_branch_slug_tell_is_the_marker_renovate_would_put_in_a_branch() -> None:
-    """`: ` becomes `-`; the underscore and the word survive, as #2620's branch shows."""
+    """`: ` becomes `-`; the underscore and the word survive."""
     assert branch_slug_tell("k8s_autodeploy: false") == "k8s_autodeploy-false"
 
 

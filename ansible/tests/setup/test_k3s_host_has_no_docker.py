@@ -2,38 +2,30 @@
 """Guards that the k3s nodes never get Docker installed on them.
 
 One invariant, pinned at both layers: the inventory must not ask for Docker on a k3s node,
-and the k3s role must refuse to install onto a host that already has it. Two incidents, one
-per layer, and each is the reason the other is not enough on its own.
+and the k3s role must refuse to install onto a host that already has it. Each layer is the
+reason the other is not enough on its own.
 
-THE INVENTORY LAYER (daniel-box, 2026-08-01). k3s ships its own containerd plus
-flannel/kube-proxy iptables rules, and daniel-box was chosen to host the cluster
-first precisely because it had no container runtime — see
-docs/archive/k3s-migration/slice-0-cluster-foundation.md.
+THE INVENTORY LAYER. k3s ships its own containerd plus flannel/kube-proxy iptables rules,
+and daniel-box was chosen to host the cluster first precisely because it had no container
+runtime — see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
 
-A bare `initial_setup.yml` run (no --tags) then installed Docker there, because
-docker_install was unconditional. That put Docker's DOCKER/DOCKER-USER chains and
-FORWARD-policy handling alongside k3s networking, and tripped the k3s role's own
-fail-closed guard:
+A bare `initial_setup.yml` run (no --tags) installs Docker on a host where docker_install
+is unconditional. That puts Docker's DOCKER/DOCKER-USER chains and FORWARD-policy handling
+alongside k3s networking, and trips the k3s role's own fail-closed guard:
 
     Docker is installed on daniel-box. This role targets a host with no container
     runtime; k3s brings its own containerd and its iptables rules would land [...]
 
-which blocked k3s-bringup.yml from re-running. Docker was purged the same day.
+which blocks k3s-bringup.yml from re-running.
 
 The k3s role's guard catches this at k3s-install time, but only *after* Docker is
 already on the host. `has_docker` is the half that stops it landing in the first
-place — the original note said to remember `--tags`, and relying on that is exactly
-what let it happen.
+place; relying on a remembered `--tags` is what lets it happen.
 
-THE ROLE LAYER (daniel-server, 2026-08-19). That install-time guard existed in
-tasks/server.yml from the start, carrying a comment that named the hazard exactly.
-tasks/agent.yml listed the same assert as *deliberately* omitted, which was correct
-while the Docker drain was in progress and wrong the moment it finished.
-
-Nothing noticed the difference. daniel-server — the agent — had docker-ce purged on
-2026-08-14 and reinstalled on 2026-08-19 at 22:37, then ran a second container runtime
-for eight days. Every repo-side check read green throughout, because the only host the
-guard covered was the one that never had Docker.
+THE ROLE LAYER. The install-time guard lives in tasks/server.yml, carrying a comment that
+names the hazard exactly. tasks/agent.yml must carry the same assert: an agent without it
+can run a second container runtime next to k3s while every repo-side check reads green,
+because the only host the guard covers is the one that never had Docker.
 
 A guard on one of two symmetric paths is not a guard. The last two tests assert both
 node roles carry it, so removing either one fails the suite instead of quietly halving
@@ -51,9 +43,8 @@ from _helpers import ANSIBLE
 
 
 # The k3s-bringup.yml play asserts `inventory_hostname == 'daniel-box'`, so the
-# cluster *server* is a single named host rather than an inventory group today.
-# daniel-server joined as an agent node on 2026-08-14, when its Docker workload
-# finished draining and Docker was uninstalled — both nodes must stay Docker-free.
+# cluster *server* is a single named host rather than an inventory group.
+# daniel-server is an agent node with Docker uninstalled — both nodes must stay Docker-free.
 K3S_HOSTS = ("daniel-box", "daniel-server")
 
 K3S_TASKS = ANSIBLE / "roles" / "setup" / "k3s" / "tasks"
@@ -69,15 +60,12 @@ def _load(path: Path):
 
 
 def test_docker_install_is_gated_on_has_docker():
-    """The install half must stay gated on has_docker — now inside the role.
+    """The install half must stay gated on has_docker, inside the role.
 
-    The gate moved on 2026-08-17. It used to be `when: has_docker` on the
-    initial_setup.yml role entry, which stopped Docker landing on the k3s node but
-    also skipped the role wholesale — so a host flipped to has_docker: false got no
-    teardown either, and daniel-server's 2026-08-14 uninstall left an enabled
-    docker-compose-qbittorrent.service and two crons for retired services behind.
-    tasks/main.yml now dispatches on has_docker, so the role is included
-    unconditionally and this asserts the gate at its new home.
+    A `when: has_docker` on the initial_setup.yml role entry would stop Docker landing on the
+    k3s node but also skip the role wholesale, so a host flipped to has_docker: false would
+    get no teardown either. tasks/main.yml dispatches on has_docker, so the role is included
+    unconditionally and this asserts the gate there.
     """
     plays = _load(ANSIBLE / "initial_setup.yml")
     roles = [r for play in plays for r in play.get("roles", [])]
@@ -92,7 +80,7 @@ def test_docker_install_is_gated_on_has_docker():
         )
 
     tasks = _load(ANSIBLE / "roles/setup/docker_install/tasks/main.yml")
-    # Static imports since #1998 (so the granular tags reach their tasks); the gate is the
+    # Static imports (so the granular tags reach their tasks); the gate is the
     # same `when:` either way, and this guard is about the gate.
     gates = {
         t.get("ansible.builtin.import_tasks", t.get("ansible.builtin.include_tasks")): (
@@ -112,11 +100,11 @@ def test_docker_install_is_gated_on_has_docker():
 
 
 def test_has_docker_defaults_false_fleet_wide():
-    """A host nobody thought about must inherit no engine (#2861).
+    """A host nobody thought about must inherit no engine.
 
-    The default was true while every host but daniel-pi overrode it false, so the
-    inventory layer described above depended on someone remembering the override. The
-    teardown arm this default selects is a no-op on a host that never had Docker.
+    A default of true would make the inventory layer described above depend on someone
+    remembering the override. The teardown arm the false default selects is a no-op on a host
+    that never had Docker.
     """
     all_vars = _load(ANSIBLE / "inventory" / "group_vars" / "all.yml")
     assert all_vars.get("has_docker") is False, (
@@ -157,7 +145,7 @@ def _docker_entries(containers_list) -> list[str]:
 @pytest.mark.parametrize("host", K3S_HOSTS)
 def test_k3s_host_declares_no_docker_service(host):
     """A `platform: docker` entry on a k3s node names a service the Docker play would try to
-    deploy on a host with no Docker. Held since the 2026-08-14 uninstall, never asserted."""
+    deploy on a host with no Docker."""
     containers_list = _load(ANSIBLE / "inventory" / "host_vars" / f"{host}.yml").get(
         "containers_list"
     )

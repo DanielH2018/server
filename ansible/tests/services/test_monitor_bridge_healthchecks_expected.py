@@ -1,7 +1,7 @@
 """monitor-bridge's Healthchecks.io expectations agree with the crons and with the deadman doc.
 
-`monitor_bridge_healthchecks_expected` is what checks/healthchecks.py holds the live console to
-(#2566). It is a literal because the cron variables live in three other roles' defaults, which
+`monitor_bridge_healthchecks_expected` is what checks/healthchecks.py holds the live console to.
+It is a literal because the cron variables live in three other roles' defaults, which
 the deploy play cannot read from monitor-bridge's templates. This guard is what stops the
 literal drifting from its sources: each slug's period or cron expression must equal what the
 deadman-cadences fragment assembles from the cron variables, and each slug's schedule type and
@@ -93,7 +93,7 @@ def test_every_expectation_matches_the_cron_that_pings_it_is_clean():
 
 
 def test_a_cron_moved_without_the_expectation_is_flagged():
-    # The #2563 shape, on the repo side: the CronJob moved to `0 23`, the expectation did not.
+    # The repo side of a drift: the CronJob moved to `0 23`, the expectation did not.
     expected = _expected()
     expected["pi-peer-backup"] = dict(
         expected["pi-peer-backup"], schedule="30 23 * * *"

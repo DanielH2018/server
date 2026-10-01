@@ -2,8 +2,7 @@
 
 A _BROAD_MANUAL_PREFIXES change anywhere in the incoming range stops the tick
 fast-forwarding, which guarantees deploy.sh refuses as stale (exit 4) however green CI
-turns out. Landing PR #570 on 2026-08-29 spent ~6 minutes waiting for CI and then failed
-at step 4, with the blocker visible in the range before the wait began.
+turns out.
 """
 
 import sys as _sys

@@ -18,8 +18,7 @@ B2_CLASS_C_DAILY_CAP = 2500
 # Headroom for everything this model does not count: monitor-bridge's two B2 probes
 # (check_b2_reachable, and check_b2_storage's daily listing), and the per-prune extras beyond the
 # block walk — the deletion lock check, the backups/ name list, and one cfg GET per retained
-# backup. NOT kopia: it was retired with the k3s migration and issues no B2 traffic at all. Only
-# the `longhorn_b2_*` SOPS key names survive, and they are Longhorn's credentials now.
+# backup.
 B2_BUDGET_RESERVE = 400
 
 
@@ -81,19 +80,17 @@ def format_backup_budget(vols, shards, names=None, retain=2, owners=None):
     for shard in sorted(byshard):
         members = sorted(byshard[shard], key=lambda kv: -kv[1]["prune"])
         total = sum(v["prune"] for _, v in members)
-        # Backups beyond `retain` are STRANDED, not queued for deletion. Longhorn enforces
-        # retain only when the owning RecurringJob runs against a volume still in its `groups:`,
-        # and it counts only ITS OWN backups — so the daily-era backups on a volume that moved to
-        # a weekday shard are pruned by nothing, ever. Measured 2026-08-17: radarr-config sat at
-        # 4 daily-backup + 1 weekly-backup-d2 against retain 4 and deleted none, because the
-        # weekly job saw 1 of its own. `longhorn-reap-orphan-backups.sh` is what clears these.
+        # Backups beyond `retain` are STRANDED, not queued for deletion. Longhorn enforces retain
+        # only when the owning RecurringJob runs against a volume still in its `groups:`, and it
+        # counts only ITS OWN backups — so the daily-era backups on a volume that moved to a
+        # weekday shard are pruned by nothing, ever. For example radarr-config can sit at 4
+        # daily-backup + 1 weekly-backup-d2 against retain 4 and delete none, because the weekly
+        # job sees 1 of its own. `longhorn-reap-orphan-backups.sh` is what clears these.
         #
-        # The consequence for this projection: a shard's prune cost does not begin until that
-        # job has more than `retain` of its own backups, and until then its blocks only grow.
+        # The consequence for this projection: a shard's prune cost does not begin until that job
+        # has more than `retain` of its own backups, and until then its blocks only grow.
         # STRANDED means "no job will ever prune this", which is NOT the same as "past retain"
-        # — and until 2026-08-19 this line computed the latter, `max(0, backups - retain)`,
-        # while the comment above described the former. It under-reported by 4.7x: 7 against a
-        # true 33, on the number an operator reads before deciding what to delete.
+        # (`max(0, backups - retain)`).
         #
         # A backup is stranded when the job that produced it is not the job that now selects the
         # volume. Longhorn's retain counts only a job's OWN backups, so a daily-era backup on a

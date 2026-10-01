@@ -99,9 +99,8 @@ def task_gates_shipping_repo_path(role_dir: Path, repo_path: str) -> list[tuple]
 
     Two setup-role tasks copy a file from the repo checkout rather than from the role's own
     `templates/`/`files/`, with `src: "{{ playbook_dir }}/../<repo-relative path>"`:
-    hypervisor's etcd drill script and `common`'s release pruner. (A third, hypervisor's
-    staging-gate runner, went with the gate in #2941.) `setup_file_hosts` cannot see either of
-    them, because it keys on the path being under `ansible/roles/setup/<role>/`.
+    hypervisor's etcd drill script and `common`'s release pruner. `setup_file_hosts` cannot see
+    either of them, because it keys on the path being under `ansible/roles/setup/<role>/`.
 
     The match is the repo-relative PATH, not the basename `task_gates_naming` uses. A
     basename is the right key for a file under the role's own directory, where the role
@@ -211,10 +210,10 @@ def var_consumer_chains(role_dir: Path, vars_file: Path) -> list[tuple] | None:
 
     A `defaults/main.yml` is not itself shipped, so no task names it and `setup_file_hosts`
     fell back to the role-level reach -- which for a `has_gitops` dispatcher is all three
-    hosts. PR #2553 changed `gitops_deploy/defaults/main.yml` and its landing prescribed
+    hosts. For example `gitops_deploy/defaults/main.yml` must not prescribe
     `initial_setup.yml --tags gitops_deploy` on daniel-server and daniel-pi, where the role
-    runs `teardown.yml` alone and every one of those vars is read by `install.yml` (#2610).
-    A var reaches the hosts that run a task consuming it, so this collects the chain on each
+    runs `teardown.yml` alone and every one of those vars is read by `install.yml`. A var
+    reaches the hosts that run a task consuming it, so this collects the chain on each
     consumer: a leaf task naming the var, or a `templates/`/`files/` file naming it, under
     the chain of the task that ships that file.
 
@@ -286,7 +285,7 @@ def handler_notifier_chains(role_dir: Path, handlers_file: Path) -> list[tuple] 
 
     A handler is shipped nowhere and no task names its file, so a `handlers/` path fell
     through to the role-level reach -- which for a `has_gitops` dispatcher like
-    `gitops_deploy` is the union of both halves, all three hosts (#2624). A handler runs
+    `gitops_deploy` is the union of both halves, all three hosts. A handler runs
     where the tasks that `notify:` it run, so this collects the chain on each notifying
     leaf task.
 

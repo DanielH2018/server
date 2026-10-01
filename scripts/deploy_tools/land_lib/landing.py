@@ -6,9 +6,9 @@ which attribute, so a reader does not have to derive the contract from seven cal
 
 TAGS ARE A `list[str]` FOR THE WHOLE LANDING. `resolved_tags` is built as a list by
 `classify`, and joined to a comma string only where a subprocess argv or an operator-facing
-line needs one -- `tags_csv` is that join. It used to be joined at `classify.py` and split
-again at `health_verdict.py`, and it is named `resolved_tags` rather than `tags` because
-`Options.tags` is the (unresolved) command-line value and the two shadowed each other.
+line needs one -- `tags_csv` is that join. It is named `resolved_tags` rather than `tags`
+because `Options.tags` is the (unresolved) command-line value and the two would shadow each
+other.
 """
 
 import subprocess
@@ -61,12 +61,12 @@ class Landing:
         self.resolved_tags = [t for t in opts.tags.split(",") if t]
         self.plane = ""
         # What `plane` was classified from, kept so `classify.narrow_plane` can re-render it
-        # once the tick has recorded this PR's range in the deployer's narrowing (#2307).
+        # once the tick has recorded this PR's range in the deployer's narrowing.
         self.pr_paths: list[str] = []
         self.pr_range = ""
         self.declared: set[str] | None = None
-        # `pr_paths` minus what a shared role changed that moves no rendered manifest
-        # (#2462). Both `plane_note` calls read it -- step 1's and `narrow_plane`'s re-render
+        # `pr_paths` minus what a shared role changed that moves no rendered manifest.
+        # Both `plane_note` calls read it -- step 1's and `narrow_plane`'s re-render
         # -- which must not disagree about what is owed to a hand.
         self.plane_paths: list[str] = []
         self.quiet: set[str] = set()
@@ -75,13 +75,13 @@ class Landing:
         self.remaining_setup = ""
         self.needs_diff = False
         # The tags in `resolved_tags` this PR PROVES are a k3s change, from two provenances:
-        # `shared_caller_tags` reached them by walking the k8s role-caller graph (#2718), or
-        # every changed path naming them sits under `ansible/roles/k8s/` (#2730).
+        # `shared_caller_tags` reached them by walking the k8s role-caller graph, or
+        # every changed path naming them sits under `ansible/roles/k8s/`.
         # `deploy.deploy_by_host` routes these to a `platform: k8s` entry alone, because a tag
         # name can select a Docker entry too (`wg-easy` on daniel-pi) and that service's change
         # is not in this PR. A tag neither provenance covers -- one whose paths span both
         # role trees, say -- stays routed to every declaring host, which is the direction a
-        # wrong answer here must fall (issue #929).
+        # wrong answer here must fall.
         self.k8s_only: list[str] = []
         self.deployed_hosts: set[str] = set()
         # The commit the deploy phase rendered, when it rendered one that is not the primary
@@ -92,7 +92,7 @@ class Landing:
         # True once a tick attempt returned TICK_STILL_RUNNING: this landing stopped WATCHING
         # a tick that was still applying. Every later read of the deployer's markers is then
         # racing that apply, so `behind_since` set with `hold_sha` empty is the state of a run
-        # in flight rather than a settled deferral (issue #1607).
+        # in flight rather than a settled deferral.
         self.tick_watch_abandoned = False
 
     @property
@@ -170,7 +170,7 @@ class Landing:
 
         `holder` is the sample the caller took BEFORE the losing attempt. By the time the
         attempt returns, the holder has usually released and a fresh read is empty, so the
-        given one wins whenever it is non-empty (issue #1031).
+        given one wins whenever it is non-empty.
         """
         self.ledger.lock_waited += seconds
         if self.ledger.lock_holder:
@@ -207,12 +207,12 @@ class Landing:
         own: a readable hold is `HELD` whatever `behind_since` does, so an unreadable
         second marker cannot downgrade a real hold to `UNKNOWN`.
 
-        **`behind_since` alone is no longer enough to answer BEHIND.** The tick fast-forwards
+        **`behind_since` alone is not enough to answer BEHIND.** The tick fast-forwards
         to the newest GREEN ancestor of the master tip rather than gating the whole range on
         it, so a tick that applied this very PR still ends behind the tip and still writes the
         marker — that is what keeps the 6h watchdog armed for a tail that never goes green.
-        Reading the marker alone therefore reported `deferred` (exit 75) for work already
-        live, on most landings rather than a rare one. `merge_applied` settles it: a tick that
+        Reading the marker alone would therefore report `deferred` (exit 75) for work already
+        live. `merge_applied` settles it: a tick that
         crossed this PR's merge commit is not deferring it, whatever the tip is doing.
         """
         hold = self.state("hold_sha")
@@ -246,15 +246,14 @@ class Landing:
         CONVERGED is not that answer. It says local == origin, which any session's `git merge
         --ff-only` also produces — and once it holds, `next_action()` returns `noop` for every
         later tick, so a setup plane the tick never applied is stranded permanently while this
-        landing reports `settled`. PR #1529 landed that way on 2026-09-10 and its
-        `renovate_agent` change was four days stale on disk (issue #1537).
+        landing reports `settled`.
 
         `broad_applied` is written by `deploy_handlers.handle_broad` only after
         `deploy_io.deploy_broad` returned, and holds the origin SHA that apply ran at. `sha`
         being an ancestor of it means A BROAD APPLY RAN AT A COMMIT CONTAINING THIS PR — not
         that it named this PR's own roles, since `handle_broad` scopes `--tags` to the roles in
         the range it crossed. That is the right strength for the bug: the tick that crosses this
-        landing's range carries its paths, and the failure #1537 describes leaves the marker at
+        landing's range carries its paths, and the failure this guards against leaves the marker at
         an OLDER commit, which fails the ancestry test.
 
         False for an absent marker, an unreadable state directory, and a marker whose SHA this
@@ -268,13 +267,13 @@ class Landing:
         return self.git("merge-base", "--is-ancestor", sha, applied).returncode == 0
 
     def tick_half_unrecorded(self) -> bool:
-        """Is this PR's self-applied half converged-but-unapplied — the #1537 shape?
+        """Is this PR's self-applied half converged-but-unapplied?
 
         True only for that one state: the PR carries something the TICK applies, the tick
         answers CONVERGED, and it recorded no broad apply covering the merge commit. HELD,
         BEHIND and UNKNOWN are false here — each has a verdict of its own at the foot of
         `health_verdict.health` and `deploy.no_tag_outcome`, and `tick_half_open_lines` is
-        what reports them at an arm that ends above those verdicts (#2601).
+        what reports them at an arm that ends above those verdicts.
         """
         return (
             bool(self.self_applied)
@@ -302,7 +301,7 @@ class Landing:
 
         Empty when the PR carries no self-applied half, and when the tick's half is settled.
         Otherwise one report per `tick_state()`: the hold, the deferral, the unreadable state
-        directory, or the converged-but-unapplied #1537 shape and its remediation.
+        directory, or the converged-but-unapplied shape and its remediation.
 
         DECIDED: this REPORTS the tick's state, it does not re-verdict the landing. The arms
         that call it end at `needs-manual-apply` for a plane only a hand can apply, and every
@@ -349,9 +348,8 @@ class Landing:
         """Did the tick's recorded deploy-plane apply already deploy `tags` on THIS host?
 
         The question step 5 asks before paying a second deploy of a service the tick has
-        just applied. On 2026-09-19 PR #2092's tick applied the whole deploy plane at the
-        merge commit; step 5 then queued 1203s behind the next tick for a snapshot that
-        failed, and the landing read `deploy-failed` about work that was live (issue #2094).
+        just applied: queueing behind the next tick's tree lock for the same render only adds a
+        way to fail.
 
         True only when every part of the marker says so: its SHA contains `sha` (the
         `broad_applied_covers` test), the primary checkout carries `sha` (`merge_applied`,
@@ -397,7 +395,7 @@ def retry_while_locked(
     `opts.lock_backoff` between attempts.
 
     The holder is sampled BEFORE each attempt on purpose: read afterwards, it has usually
-    released and the landing books an empty one (issue #1031). For the deploy phase the
+    released and the landing books an empty one. For the deploy phase the
     sample precedes the WHOLE per-host loop, so contention arising at a later host can name
     the holder seen before the first one; `note_lock_contention`'s `holder or ...` fallback
     covers the case where that sample was empty.

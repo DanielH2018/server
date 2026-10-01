@@ -6,11 +6,8 @@ different things: `runAsUser`/`fsGroup` are pod-level, while `capabilities`,
 with no `securityContext` keeps the runtime's default capability set (CHOWN, DAC_OVERRIDE,
 SETUID, SETGID, NET_RAW, ...) however locked-down the pod block looks.
 
-That distinction is why this went unnoticed. A grep for `securityContext` across the fleet
-matched the pod block and reported the templates clean, and a 2026-08-15 review recorded
-securityContext as verified across all 48 deployment templates on that basis. Five templates
-had no container block at all — loki-homelab plus four of observability's — and one role
-(observability) was internally inconsistent, since its kube-state-metrics manifest did carry one.
+A grep for `securityContext` across the fleet matches the pod block and reports a template
+clean, so this check reads the container.
 
 Nothing else enforces this: the cluster has no PodSecurity admission labels on any namespace,
 so an absent container securityContext is simply honoured.
@@ -37,21 +34,19 @@ _PRIVILEGED = {
     # descriptors. It is privileged so the nine media workloads consuming `devic.es/dri` do
     # not have to be.
     ("dri-device-plugin", "generic-device-plugin"),
-    # SMART reads: the Docker cap set plus a CharDevice hostPath is not enough under k8s, as
-    # the device cgroup still refuses the open. Resolved as a deliberate trade 2026-08-10.
+    # SMART reads: capabilities plus a CharDevice hostPath are not enough under k8s, as
+    # the device cgroup still refuses the open. A deliberate trade.
     ("scrutiny", "collector"),
 }
 
 
 # Roles this guard's corpus does NOT contain, each with the reason it is out.
 #
-# THE BLIND SPOT THIS PINS (2026-08-23): rendered_docs() filters on
+# THE BLIND SPOT THIS PINS: rendered_docs() filters on
 # validate.k8s_manifests.SKIP_ROLES — a list maintained for a DIFFERENT purpose, namely what the
-# manifest validator can render standalone. Coverage of this security guard was therefore a side
-# effect of someone else's list. volume-claim was on it while it still rendered a seed pod that
-# ran `runAsUser: 0` with no container securityContext at all, so every assertion in this file
-# passed while that pod was never examined. (That pod went with the rest of the seeding in
-# 05f990a1d, 2026-09-01; the role renders only a PVC since.) Pinning the exempt set turns a role
+# manifest validator can render standalone. Coverage of this security guard is therefore a side
+# effect of someone else's list: a role on it that renders a pod spec is never examined, and
+# every assertion in this file passes anyway. Pinning the exempt set turns a role
 # joining it into a failure here instead of a silent contraction; anything added below needs a
 # justification and, if it renders a pod spec, its own test. A justification that names a file
 # must name one that exists: test_uncovered_roles_justifications_resolve.py checks every
@@ -67,7 +62,7 @@ _UNCOVERED_ROLES = {
     # rootless BuildKit (build-job.yaml.j2). That reason covers only the two profiles, where
     # exemption here also waives uid, privileged, capabilities.add, hostPath and host
     # namespaces — so per the contract above it has its own test:
-    # test_image_builder_security_context.py owns those (2026-08-23b review M17).
+    # test_image_builder_security_context.py owns those.
     "image-builder",
     # No manifest templates — each resolves a fact or drives kubectl/the Longhorn API directly.
     "cronjob-gate",
@@ -167,15 +162,13 @@ def test_the_corpus_covers_every_role_except_a_named_set():
 
 # Containers that do NOT assert `runAsNonRoot: true`, grouped by the mechanism that stops them.
 #
-# The 2026-08-31 review reported this as a karakeep defect against "~10 other roles". Both halves
-# were wrong: 38 of 50 roles carried no assertion, and the reviewer had inferred root from image
-# names — karakeep-chrome was reported root and measured uid 1000, node-exporter was assumed to
-# need root for host access and measured 65534. A census then measured every container live, by
-# cgroup or container id rather than a `ps` name grep, and the sets below are its result.
+# Each member was measured live, by cgroup or container id rather than a `ps` name grep, because
+# inferring root from an image name is wrong in both directions: karakeep-chrome measures uid
+# 1000, and node-exporter measures 65534 despite its host access.
 #
-# The allowlist is the guard, exactly as _PRIVILEGED above is: the 42 assertions that now exist
-# are individually near-worthless restatements of measured facts, and collectively they are what
-# makes this list small enough to read. A new container fails until it either asserts or is added
+# The allowlist is the guard, exactly as _PRIVILEGED above is: the assertions are individually
+# near-worthless restatements of measured facts, and collectively they are what makes this list
+# small enough to read. A new container fails until it either asserts or is added
 # here with a mechanism.
 
 # LSIO images: PID 1 is `s6-svscan` as uid 0, which chowns /config and hands the app to uid 1000
@@ -212,13 +205,11 @@ _ENTRYPOINT_DROPS = {
     # Entrypoint chowns the data dir then gosu-drops to 1000.
     ("scrutiny", "influxdb"),
     # s6-svscan at uid 0, like the LSIO set above, except this one does NOT drop: `node
-    # dist/index.js` and next-server both measure uid 0 too. Filed as non-root by image default
-    # on 2026-08-31 from a census summary, corrected the same day by measuring it.
+    # dist/index.js` and next-server both measure uid 0 too.
     ("karakeep", "karakeep"),
     # Starts as root to read its config and drops to the unbound user — SETUID/SETGID are granted
-    # for exactly that, and the template says so at the container. The census measured the settled
-    # process at uid 101 and missed the entrypoint, which is the same steady-state-vs-PID-1 error
-    # that mis-filed karakeep. Asserting here would refuse the container at admission.
+    # for exactly that, and the template says so at the container. The settled process runs at
+    # uid 101 but PID 1 starts as root, so asserting here would refuse the container at admission.
     ("pihole", "unbound"),
     # su-exec drop. Mounts only an emptyDir and a read-only ConfigMap, so whether it tolerates
     # starting unprivileged is a deploy test rather than a template question.
@@ -242,14 +233,14 @@ _ROOT_BY_DESIGN = {
     ("code-server", "seed-workspace-claim"),
     ("wg-easy", "config-chown"),
     # Copies the crowdsec image's 0600 root:root datafiles into the agent's data volume as
-    # world-readable, so the non-root sidecar can read them (#990). Root over root-owned data
+    # world-readable, so the non-root sidecar can read them. Root over root-owned data
     # it reads as the owner; DAC_READ_SEARCH covers the sources if the image reowns them.
     ("traefik", "crowdsec-data-install"),
-    # Same container in the authelia pod, for the same reason (#1177). Both pods run the
+    # Same container in the authelia pod, for the same reason. Both pods run the
     # crowdsec agent sidecar non-root, so both need the datafiles copied in readable.
     ("authelia", "crowdsec-data-install"),
     # Copies the crowdsec image's root-only staged hub tree into /etc/crowdsec world-readable,
-    # so the parser configs that symlink into it resolve for the non-root sidecar (#1211).
+    # so the parser configs that symlink into it resolve for the non-root sidecar.
     # DAC_READ_SEARCH covers the root-only sources; it writes into a root-owned emptyDir.
     ("traefik", "crowdsec-hub-install"),
     ("authelia", "crowdsec-hub-install"),
@@ -278,12 +269,7 @@ _ROOT_OWNED_DATA = {
     ("karakeep", "meilisearch"),
 }
 
-# Emptied 2026-08-31, one deploy after it was written, by measuring every member instead of
-# trusting the census summary that produced it. Seven were real and are now pinned and asserted in
-# their templates. Three were never non-root at all — karakeep's app, meilisearch and time-tagger
-# measure uid 0 — and moved to _ENTRYPOINT_DROPS and _ROOT_OWNED_DATA below.
-#
-# Kept as an empty named set rather than deleted, because the category is the thing worth
+# Empty by design. Kept as a named set rather than deleted, because the category is the thing worth
 # remembering: a container that lands non-root only from its image's USER needs `runAsUser` pinned
 # alongside the assertion, since `runAsNonRoot` alone makes the kubelet refuse a container whose
 # image NAMES its user rather than numbering it. A future one belongs here until it is measured.
@@ -299,17 +285,10 @@ _UID_PIN_DECLINED = {
 
 # Short-lived init and probe containers with no uid declared and no persistent process to measure.
 # Unclassified rather than cleared: the census could not observe them, and guessing from an image
-# name is the error that produced the finding this list came from.
-#
-# karakeep's two — `wait-for-deps` and `wait-for-karakeep` — left this set in #2672, along with
-# `("karakeep", "time-tagger")` from _ROOT_OWNED_DATA above. All three ran the stock uv image,
-# which could only run as root because its uv cache sat behind Debian's 0700 /root; the role now
-# builds that image through k8s/image-builder and all three assert uid 1000.
+# name is an error.
 _UNMEASURED_SHORT_LIVED = {
     ("crowdsec", "config-install"),
-    # Added by the LAPI startup gate that landed in #675, one PR before this guard. Neither PR
-    # could see the other: PR CI is scoped to changed files, so both were green and master was
-    # not. It is a `nc` retry loop from the crowdsec image, whose default user is root — the same
+    # The LAPI startup gate: a `nc` retry loop from the crowdsec image, whose default user is root — the same
     # image whose node-agent is allowlisted above under _HOST_OR_NETWORK_ROOT.
     ("crowdsec", "wait-for-lapi"),
     ("headlamp", "probe"),

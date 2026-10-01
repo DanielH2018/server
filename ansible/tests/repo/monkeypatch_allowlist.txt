@@ -1,5 +1,4 @@
-# Test modules that patch a first-party module, as counted when the ratchet landed
-# (2026-09-04).
+# Test modules that patch a first-party module, with the number of such patches in each.
 #
 # Format: `<repo-relative-path> <max_calls>`, one line per file, in `LC_ALL=C sort` order
 # (codepoint order, which is what Python's own `sorted()` gives). The cap is 0: a
@@ -17,21 +16,9 @@
 # patches in a file that already has a line as well as in one that does not.
 #
 # The counting heuristic and its blind spots are in ansible/tests/_ratchet.py's module
-# docstring. The three test_gitops_deploy_* entries below were added on 2026-09-05 by the
-# widening that resolves a fixture-parameter name against the conftest fixture that returns
-# the module -- the patches were always there, counting 0. On 2026-09-06 the counter began
-# reading the string-target form `monkeypatch.setattr("mod.attr", ...)`, which added
-# test_prune_worktrees.py (14) and test_watcher.py (5) and raised test_session_health.py from
-# 33 to 36 -- again patches that were always there, counting 0. On 2026-09-06 the
-# `master_moved_problems` tests moved to a new sibling module, test_session_health_master_moved.py,
-# when issue #1306's rejecting half pushed test_session_health.py past the 500-line cap: that
-# split moved 7 of its patches, so its entry fell 36 -> 29 and the new file got its own.
-# On 2026-09-10 (issue #1678) the docker and scrape-target sections moved to
-# hooklib/service_lines.py, taking 14 more patches with them: its entry fell 29 -> 15, and the
-# new sibling test_hooklib_service_lines.py needs no entry because it drives that module
-# through `run` and `scaled_to_zero` seams instead of patching it.
+# docstring.
 #
-# To see a file's count now, lower its entry here by 1 and run the guard -- the failure names
+# To see a file's count, lower its entry here by 1 and run the guard -- the failure names
 # the real number:
 #   uv run pytest ansible/tests/repo/test_module_length_ratchet.py -k no_test_module_patches
 .claude/hooks/tests/test_auto_mode_bridge.py 1

@@ -6,11 +6,10 @@ doc into a Bash session. `.claude/hooks/inject-nested-docs.py:INLINE_MAX_CHARS` 
 under 7,500 characters and injects a larger one as its HEAD, so a doc over the ceiling is one
 a session reads truncated. `MAX_CHARS` is pinned equal to it, and
 `ansible/tests/repo/test_role_doc_ceiling_matches_the_hook.py` fails the day the two drift
-apart. The ceiling was 400 `wc -l` lines until #2826, which measured 30 of 93 role docs past
-the hook's budget while the line ceiling passed them all.
+apart.
 
 `recorded_count_problems` holds an `OVER_CEILING` entry to the character count its reason
-records (#2679). Both `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and
+records. Both `ansible/tests/k8s/test_k8s_roles_have_claude_md.py` and
 `ansible/tests/setup/test_setup_roles_have_claude_md.py` call it, so the two ceilings agree on
 what a justified entry must say.
 
@@ -25,10 +24,9 @@ It is a module of its own for two reasons, both mechanical:
 - xdist serializes a warning by its category's module name and the CONTROLLER re-imports that
   module. `pythonpath` puts `ansible/tests` on the path but not its subdirectories, so a
   category defined in `ansible/tests/k8s/<guard>.py` crashes the worker with
-  `ModuleNotFoundError` and takes the whole run down with an `INTERNALERROR` (measured
-  2026-09-25). The category has to live at this directory's root.
-- `_helpers.py`, the obvious home at that root, sat at exactly its 500-line ratchet cap
-  (`ansible/tests/repo/test_module_length_ratchet.py`), so adding to it fails CI.
+  `ModuleNotFoundError` and takes the whole run down with an `INTERNALERROR`. The category has to live at this directory's root.
+- `_helpers.py`, the obvious home at that root, is near its 500-line ratchet cap
+  (`ansible/tests/repo/test_module_length_ratchet.py`), so adding to it risks failing CI.
 """
 
 import re

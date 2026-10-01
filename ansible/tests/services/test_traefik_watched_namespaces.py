@@ -1,7 +1,7 @@
 """Traefik's two namespace lists must agree, and must be a list.
 
 `rbac.yaml.j2` renders one namespaced Role per watched namespace; `static-config.yaml.j2`
-lists the same set as `providers.kubernetesCRD.namespaces`. Both now read one variable,
+lists the same set as `providers.kubernetesCRD.namespaces`. Both read one variable,
 `traefik_k8s_watched_namespaces`, so they cannot drift — this file is what holds that true
 once someone wraps one side in a filter or reintroduces a literal list.
 
@@ -15,10 +15,9 @@ Why the two failure modes are asymmetric, and why the list is per-cluster:
 
 - A namespace Traefik watches but has no Role in fails SILENTLY. Its informers never sync,
   so an IngressRoute there applies cleanly, reports nothing wrong, and the host 404s.
-- A Role for a namespace that does not exist fails LOUDLY, at apply time. That is how this
-  surfaced: the first staging Traefik deploy aborted with
-  `namespaces "observability" not found`, because observability is not in that cluster's
-  subset and nothing else creates the namespace.
+- A Role for a namespace that does not exist fails LOUDLY, at apply time: a cluster whose
+  subset lacks observability aborts with `namespaces "observability" not found`, because
+  nothing else creates the namespace.
 
 Neither is something a render can see on its own, which is the point of checking the pair.
 """
@@ -33,9 +32,8 @@ from _k8s_render import render_role_template
 
 _ROLE = "traefik"
 _HOST = "daniel-box"
-# A cluster that watches a narrower set, as an override rather than a host. daniel-stage
-# narrowed the list until it was retired (#2941); the pair below is what shows both readings
-# follow the variable rather than the template text.
+# A cluster that watches a narrower set, as an override rather than a host. The pair below
+# shows both readings follow the variable rather than the template text.
 _NARROWED = {"traefik_k8s_watched_namespaces": ["homelab", "longhorn-system"]}
 
 
@@ -127,8 +125,7 @@ def test_a_narrowed_list_reaches_both_readings() -> None:
     """The rejecting half. A cluster with no observability must not name `observability` — that
     aborts the RBAC apply — and both readings have to follow the variable to say so.
 
-    daniel-stage was the live example of such a cluster until #2941 retired it, so the narrowed
-    list is now supplied as an override. Without this pair, a reading hardcoded to prod's three
+    The narrowed list is supplied as an override. Without this pair, a reading hardcoded to prod's three
     namespaces would agree with every host.
     """
     assert "observability" not in _provider_namespaces(_HOST, _NARROWED)
@@ -169,8 +166,8 @@ def empty_services_problem(provider: dict) -> str | None:
     """None when the CRD provider keeps a router whose Service has no ready endpoints.
 
     Dropping that router unmaps its host's TLS options, so a handshake in the window records
-    `default` and SNICheck answers that connection 421 for life once the router returns
-    (#2747, #2758). The DECIDED marker in static-config.yaml.j2 has the mechanism.
+    `default` and SNICheck answers that connection 421 for life once the router returns.
+    The DECIDED marker in static-config.yaml.j2 has the mechanism.
     """
     if provider.get("allowEmptyServices") is not True:
         return (

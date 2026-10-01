@@ -8,9 +8,8 @@ and only while `/etc/crowdsec/config.yaml` is absent. About twenty staged files 
 skips the block, so the pod settles at 2/2 Running with one restart on the clock.
 
 That restart is not cosmetic: `probe.py health <svc>` fails closed on any container restart
-inside its 180s window, so `land.sh` reported `VERDICT: unhealthy` for every authelia deploy
-whose gate ran early (#1173). Traefik had already paid this (#976) and fixed it by running the
-rsync in its init container; authelia's init container was never given the same line.
+inside its 180s window, so `land.sh` reports `VERDICT: unhealthy` for a deploy whose gate
+runs early. Traefik avoids it by running the rsync in its init container, and so must authelia.
 
 Nothing about this is visible from a passing render or from pod status — both pods read
 healthy afterwards — so a guard over the rendered command text is the only cheap check. The
@@ -38,8 +37,8 @@ def _seeds_the_staged_tree(command: str) -> bool:
     Exit 23 is partial transfer — the files it skips are the LAPI and online credentials, which
     the agent regenerates (`cscli lapi register`) on start. It also skips the bundled hub tree,
     which is NOT re-downloaded in time for the parser load; `crowdsec-hub-install` stages that
-    explicitly and test_crowdsec_hub_install_stages_the_hub_tree.py holds both pods to it
-    (#1211). Any other status is a real seed failure and must fail the init container, so a
+    explicitly and test_crowdsec_hub_install_stages_the_hub_tree.py holds both pods to it.
+    Any other status is a real seed failure and must fail the init container, so a
     blanket `|| true` is rejected: it would start an agent on a half-populated config with
     nothing saying so.
     """
@@ -85,7 +84,7 @@ def test_the_rendered_commands_are_accepted() -> None:
 @pytest.mark.parametrize(
     ("label", "command"),
     [
-        # Authelia's command as it stood before #1173: seeds only its own files.
+        # A command that seeds only its own files.
         (
             "no rsync at all",
             "/bin/sh -c install -m 644 /seed/acquis.yaml /etc/crowdsec/ && "

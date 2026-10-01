@@ -1,5 +1,5 @@
 """The remote-ips allowlist cron's decisions: which requests count as authenticated, which
-addresses may enter, and what one run writes (`files/remote_allowlist.py`, issue #2123).
+addresses may enter, and what one run writes (`files/remote_allowlist.py`).
 
 Run: uv run pytest ansible/roles/k8s/crowdsec/tests/test_remote_allowlist.py
 """
@@ -53,7 +53,7 @@ def _line(router, status, host):
 
 
 def test_router_name_matches_the_live_traefik_router():
-    # Observed in Traefik's access log on 2026-09-21; the oracle for the sha256 derivation.
+    # Observed in Traefik's access log; the oracle for the sha256 derivation.
     assert ra.router_name("homelab", "karakeep-public-api-trpc", TRPC_MATCH) == (
         "homelab-karakeep-public-api-trpc-121339d25e3ce6f2e046@kubernetescrd"
     )
@@ -73,8 +73,8 @@ def test_a_2xx_on_an_authelia_router_from_a_public_address_is_clean():
 
 
 def test_a_cloudflare_chain_counts_its_rightmost_entry_and_never_the_client_sent_one():
-    # The shape measured on 2026-09-24: the client sent XFF, Cloudflare appended the address
-    # it saw, and Traefik logged the whole header (#2446).
+    # The measured shape: the client sent XFF, Cloudflare appended the address it saw, and
+    # Traefik logged the whole header.
     lines = [_line(AUTH_ROUTER, 200, "8.8.8.8, 9.9.9.9,173.249.254.219")]
     assert ra.authenticated_clients(lines, {AUTH_ROUTER}) == {"173.249.254.219"}
 

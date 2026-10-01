@@ -9,15 +9,15 @@ TWO TABLES, ONE REGISTER. The first is the open backlog. The second is the settl
 every finding closed `--accepted` (true, and the operator lives with it) or `--refuted` (a
 skeptic disproved it), grouped by reviewer domain with the close reason beside it. The
 reviewer agents under .claude/agents/ point at that table instead of carrying a hand-copied
-"don't re-flag" list each -- three copies drifted apart before this page held the register
-(#2169). `findings.py open` refuses to re-file either outcome; this table is where a reviewer
-reads the same ruling before it spends a pass re-deriving it.
+"don't re-flag" list each, which would drift. `findings.py open` refuses to re-file either
+outcome; this table is where a reviewer reads the same ruling before it spends a pass
+re-deriving it.
 
 WHAT IT READS. `findings_lib/issue_model.py`'s row model over the three narrow `gh issue
 list` calls `gh_calls.load_backlog_issues` runs — the open findings, the closed `refuted`
 ones and the closed `accepted` ones. The open rows feed the backlog table and the two
 settled sets feed the settled one. It does NOT read the whole register: that fetch grew past
-its own timeout and left this page silently stale behind a bare `gh failed` (#2892).
+its own timeout and left this page silently stale behind a bare `gh failed`.
 The docs-refresh cron runs as the user whose gh is already authenticated to open the docs
 PR, so this generator needs nothing it does not already have. A gh failure fails THIS
 generator loudly; build_docs.py keeps rendering the others and exits non-zero, which is the
@@ -91,7 +91,7 @@ def _open_table(rows: list[dict]) -> list[str]:
         title = md_cell(r["title"]) + (" — " + ", ".join(flags) if flags else "")
         # Through `md_cell` like the title above it: a claim is a branch name, and a branch
         # name may carry a `|`, which silently adds a column and renders the table wrong.
-        # The author check in `current_claim` is what keeps the VALUE trustworthy (#1280);
+        # The author check in `current_claim` is what keeps the VALUE trustworthy;
         # this keeps the row's shape intact whatever the value is.
         claimed = md_cell(r.get("claimed") or "-")
         verify_by = "✓" if r.get("verify_by") else "-"
@@ -143,7 +143,7 @@ def _settled_section(rows: list[dict]) -> list[str]:
 def main(argv: list[str] | None = None) -> int:
     # The FIRST NON-BLANK line, not `[1]`. Line 1 of a module docstring is the blank line
     # after the summary, so `[1]` passed argparse an empty description and `--help` printed
-    # none at all (#1272). `findings.py`'s `main` carries the same spelling.
+    # none at all. `findings.py`'s `main` carries the same spelling.
     summary = next(line for line in __doc__.splitlines() if line.strip())
     parser = argparse.ArgumentParser(description=summary)
     parser.add_argument("--out", type=Path, required=True, help="output file path")

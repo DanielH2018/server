@@ -5,7 +5,7 @@ Both roles deploy host code — a reader, its verdict logic, and the shared `hos
 `/opt/<role>-health`, where a cron runs it. `setup-drift-lib.sh`'s deployed-code arm compares
 only the pairs a role declared in `/var/lib/homelab/setup-deployed-manifest.d/`, so a script
 that is copied but not declared runs stale behind a check reporting "deployed code matches the
-repo" (#2590, the same shape as #2564 one role wider).
+repo".
 
 WHY A DERIVATION RATHER THAN A LIST. The copy task already names the scripts, in a `loop:` an
 author edits when they add one. Reading that loop means a new reader is in scope the moment it

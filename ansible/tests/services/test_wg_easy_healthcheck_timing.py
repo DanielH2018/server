@@ -2,13 +2,13 @@
 
 The image ships `wg show | grep -q interface` as its HEALTHCHECK, and the role's CLAUDE.md
 forbids a redundant `test:`. Its Dockerfile puts the timing flags inside the CMD string, so
-`Config.Healthcheck` carried none and the container ran Docker's 30s/30s/3 defaults while
-#1910 widened every other Pi probe to the host's `container_healthcheck_*` values. A
+`Config.Healthcheck` carries none and the container runs Docker's 30s/30s/3 defaults unless
+the role sets the other Pi probes' `container_healthcheck_*` values. A
 `healthcheck:` with timing and NO `test:` closes that: dockerd fills `Test` from the image
-(`merge()` in daemon/commit.go, verified on daniel-pi's Docker 29.5.3 + Compose v5.1.4 on
-2026-09-17). This pins both halves — the timing reads the host vars, and no `test:` appears —
+(`merge()` in daemon/commit.go, verified on daniel-pi's Docker 29.5.3 + Compose v5.1.4).
+This pins both halves — the timing reads the host vars, and no `test:` appears —
 because either drift is silent: a `test:` would duplicate the probe the rule forbids, and a
-hardcoded timing would put wg-easy back outside the tunable the other Pi probes read (#1921).
+hardcoded timing would put wg-easy outside the tunable the other Pi probes read.
 
 Run: uv run pytest ansible/tests/services/test_wg_easy_healthcheck_timing.py
 """

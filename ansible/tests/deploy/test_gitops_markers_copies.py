@@ -3,7 +3,7 @@
 `ansible/roles/setup/gitops_deploy/files/gitops_markers.py` is the one source for the state
 directory, the marker basenames and the line parsers; `scripts/dev/gen_gitops_markers.py`
 copies it into each tree that reads the markers, because none of them can import the
-deployer's `files/` (issue #2063). This is the freshness half of that arrangement, the same
+deployer's `files/`. This is the freshness half of that arrangement, the same
 shape as `test_every_committed_fragment_matches_what_the_generator_writes_now` for the docs
 fragments: a committed copy that differs from what the generator writes now fails here, and
 so does a copy the generator knows about that the consumer role does not ship.

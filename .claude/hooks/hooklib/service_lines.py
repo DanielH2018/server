@@ -111,7 +111,7 @@ _STALE_NAMED = 3
 # The headline `bridge.msgfmt._render` puts first in every DOWN verdict: a count, the unit,
 # then `stale` followed by `: ` (the one-service shape) or ` — ` (both plural shapes). The
 # space inside the character class is load-bearing — tidying it to `[:—]` drops both plural
-# shapes into the unrecognised branch, which is the bug this pattern exists to end (#2390).
+# shapes into the unrecognised branch, which is the bug this pattern exists to end.
 _STALE_HEADLINE = re.compile(r"^(\d+) services? stale[: —]")
 
 # The one shape that carries a service name outside a parenthesised group.
@@ -171,7 +171,7 @@ def stale_release_problems(run):
     its own journal tag every `k3s_release_staleness_cron_minute`, then pushes the same text
     to Kuma. That journal entry is the one place the verdict exists on the host: reading the
     release records here instead would re-run the git derivation the cron just paid for, and
-    the banner must not (#1993). `--since -2h` keeps a dead cron's last verdict off the
+    the banner must not. `--since -2h` keeps a dead cron's last verdict off the
     banner — the Kuma tile pages for the dead cron itself. A host that never runs the cron
     (an agent node, a laptop) has no such entry and stays silent.
 

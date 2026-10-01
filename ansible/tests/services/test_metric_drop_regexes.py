@@ -62,7 +62,7 @@ def _drops(job_name: str, metric: str) -> bool:
     return any(pattern.match(metric) for pattern in _drop_regexes(job))
 
 
-# (job, metric) pairs the config must keep dropping. Series counts measured 2026-08-29.
+# (job, metric) pairs the config must keep dropping.
 MUST_DROP = [
     ("kubernetes-cadvisor", "container_blkio_device_usage_total"),
     ("kubernetes-cadvisor", "container_tasks_state"),
@@ -152,9 +152,9 @@ def test_the_longhorn_drop_is_separate_from_the_control_plane_macro():
 
 
 def test_the_kubelet_family_all_scrapes_at_one_minute():
-    """The four control-plane jobs were relaxed to 1m for BYTES; kubelet-resource was missed.
+    """Every job in the family sets its own 1m interval, because the retention cap is on BYTES.
 
-    It is in the family because it is a kubelet endpoint on the same node SD, and it emits
+    kubelet-resource is in the family because it is a kubelet endpoint on the same node SD, and it emits
     container_* names that collide with the cadvisor job — so an interval mismatch here shows up
     as uneven sampling on series a consumer cannot tell apart.
     """

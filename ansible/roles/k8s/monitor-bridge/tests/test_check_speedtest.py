@@ -1,7 +1,7 @@
 """speedtest-tracker's newest result row.
 
 `speedtest_verdict` judges one row of /api/v1/results. The rows here are trimmed copies of real
-ones (ids 780 and 745, fetched 2026-08-24) — including `created_at`'s bare, offset-less UTC
+ones (ids 780 and 745) — including `created_at`'s bare, offset-less UTC
 serialization, which is the detail the age arm turns on.
 """
 
@@ -18,7 +18,7 @@ import verdicts.host
 
 # ── speedtest-tracker's newest result row ────────────────────────────────────────────────
 # speedtest_verdict judges one row of /api/v1/results. The rows below are trimmed copies of
-# real ones (ids 780 and 745, fetched 2026-08-24) — including `created_at`'s bare, offset-less
+# real ones (ids 780 and 745) — including `created_at`'s bare, offset-less
 # UTC serialization, which is the detail the age arm turns on.
 ST_NOW = datetime(2026, 8, 24, 12, 0, 0, tzinfo=timezone.utc)
 
@@ -43,7 +43,7 @@ def test_speedtest_fast_completed_run_is_ok():
 
 
 def test_speedtest_below_floor_pages_and_names_the_server():
-    # TWO sub-floor results, because one is a slow run rather than a slow link (#2785).
+    # TWO sub-floor results, because one is a slow run rather than a slow link.
     ok, msg = verdicts.host.speedtest_verdict(
         _st_row(
             download_bits=13_800_312,
@@ -110,22 +110,20 @@ def test_speedtest_stale_run_pages_even_when_it_was_fast():
 def test_speedtest_stale_message_names_both_causes_and_asserts_neither():
     """The staleness arm must not diagnose, because it cannot.
 
-    It said "the 6-hourly schedule has stopped" until #1483. A failed Ookla run writes no row
-    at all — 25 consecutive rows read `completed` on 2026-09-10, ids 825-849 — so a stopped
-    scheduler and a failing run reach this function as the same absent row. Asserting either
-    one sends the operator down the wrong path half the time.
+    A failed Ookla run writes no row at all, so a stopped scheduler and a failing run reach this
+    function as the same absent row. Asserting either one sends the operator down the wrong path
+    half the time.
 
     The discriminator is outside the API: the container logs one line per scheduled tick, so a
     tick with no row is a failing run and a missing tick is a stopped scheduler. It does not
-    survive the pod — Loki held nothing from the pod running at the one real miss, 2026-09-09
-    17:00 UTC, while holding other pods' logs from that minute.
+    reliably survive the pod: Loki held nothing from the pod running at one real miss.
     """
     ok, msg = verdicts.host.speedtest_verdict(
         _st_row(created_at="2026-08-23 11:00:00"), 100.0, 8.0, now=ST_NOW
     )
     assert not ok
     assert "25.0h ago" in msg
-    # The claim it must no longer make.
+    # The claim it must not make.
     assert "schedule has stopped" not in msg
     # Both hypotheses, and where to go to settle it.
     assert "scheduler" in msg
@@ -215,7 +213,7 @@ def test_speedtest_requests_the_newest_rows_not_the_oldest(monkeypatch, cfg):
     # The API defaults to ASCENDING order, so an unsorted request returns the oldest row in
     # the 30-day window — permanently stale, and stale in a way that looks like a real verdict.
     # The page size is asserted here rather than in a test of its own: the floor arm's history
-    # comes from THIS request, so a page of one row could never show a run (#2785).
+    # comes from THIS request, so a page of one row could never show a run.
     cfg = replace(
         cfg,
         SPEEDTEST_URL="http://speedtest",
@@ -239,12 +237,11 @@ def test_speedtest_requests_the_newest_rows_not_the_oldest(monkeypatch, cfg):
 # --- a held BROAD apply needs a different remediation than a held service deploy ----------
 
 
-# ── the floor arm's run of RESULTS (#2785) ───────────────────────────────────────────────
+# ── the floor arm's run of RESULTS ───────────────────────────────────────────────
 
 
 def test_speedtest_one_sub_floor_result_holds_up_with_a_streak_note():
-    # A test runs every 6h, so paging on one result held the tile red for ~6h — three times in
-    # the 14 days to 2026-09-27. The note has to say a fault is accumulating.
+    # A test runs every 6h, so paging on one result holds the tile red for ~6h. The note has to say a fault is accumulating.
     ok, msg = verdicts.host.speedtest_verdict(
         _st_row(download_bits=81_500_000),
         100.0,

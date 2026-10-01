@@ -2,8 +2,8 @@
 
 The public `x.<domain>` names are Cloudflare-proxied, so a connection there comes from a
 Cloudflare edge and Traefik's default rateLimit keying (the remote address) hands every client
-behind that edge one shared 300/min bucket — a guessing loop throttled everyone else and the
-attacker rotated edges (#1955). `ipStrategy.depth: 1` keys on the client Cloudflare appends to
+behind that edge one shared 300/min bucket — a guessing loop throttles everyone else and the
+attacker rotates edges. `ipStrategy.depth: 1` keys on the client Cloudflare appends to
 X-Forwarded-For. The `.local.` names are DNS-only and reached direct, where the remote address
 IS the client and no XFF arrives; Traefik's DepthStrategy returns "" for a missing header, so
 depth there would pool the whole LAN into one bucket. The two hosts therefore sit on separate
@@ -21,7 +21,7 @@ the pairing honest however a route is next hand-rolled:
 Both predicates are applied to the rendered tree behind a named non-vacuity set, and each has
 a rejecting fixture so a predicate that stopped matching fails its own test. The livesync
 file-provider routers live in a Secret's stringData rather than in an IngressRoute, so they
-are parsed out of that document explicitly — they were the first routers to carry the bug.
+are parsed out of that document explicitly.
 
 Run: uv run pytest ansible/tests/k8s/test_rate_limit_keys_on_the_client.py
 """
@@ -205,9 +205,9 @@ def test_limiter_guard_accepts_a_correctly_keyed_middleware(name, rate_limit):
 @pytest.mark.parametrize(
     ("name", "rate_limit"),
     [
-        # The pre-#1955 shape: a proxied limiter on the remote address.
+        # A proxied limiter on the remote address.
         ("rate-limit-proxied", {"average": 300, "burst": 150, "period": "1m"}),
-        # The issue's literal prescription: depth on the direct limiter.
+        # Depth on the direct limiter.
         (
             "rate-limit",
             {"average": 300, "sourceCriterion": {"ipStrategy": {"depth": 1}}},
@@ -257,7 +257,7 @@ def test_keying_guard_accepts_a_matched_pair(match, middlewares):
 @pytest.mark.parametrize(
     ("match", "middlewares"),
     [
-        # The pre-#1955 macro output: one Rule for both hosts, one limiter.
+        # One Rule for both hosts, one limiter.
         ("Host(`x.example.com`) || Host(`x.local.example.com`)", ["rate-limit"]),
         ("Host(`x.example.com`)", ["rate-limit"]),
         ("Host(`x.local.example.com`)", ["rate-limit-proxied"]),

@@ -1,10 +1,10 @@
-"""`land_platform.k8s_only_tags`: which derived tags a PR's paths prove are k3s (#2730).
+"""`land_platform.k8s_only_tags`: which derived tags a PR's paths prove are k3s.
 
-#2718 restricted the tags the k8s caller graph named to a `platform: k8s` entry. A tag a
+The tags the k8s caller graph names are restricted to a `platform: k8s` entry. A tag a
 changed PATH named kept routing to both hosts, so a PR touching only
 `ansible/roles/k8s/wg-easy/templates/` still ran `deploy.sh -e target=daniel-pi --tags
 wg-easy`. The rejecting halves here are the more important ones: narrowing host routing is
-how issue #929 (a landing that read `settled` while the Pi ran old code) comes back.
+how a landing reads `settled` while the Pi runs old code.
 
 `test_land_tags_landing_hosts_at.py` owns the routing rule this feeds, and
 `test_land_deploy_platform_routing.py` owns whether the landing hands it over.
@@ -97,9 +97,9 @@ def test_the_live_tree_declares_wg_easy_on_two_platforms():
     """The fixture is real, not synthetic: if the repo held `wg-easy` on one platform only,
     every case above would pass while covering a shape nothing here has.
 
-    It is the only such tag, 1 of 62 on 2026-09-27, so this fails the day the Pi's wg-easy
-    retires. Repoint the fixture at whatever tag is two-platform by then; if none is, the
-    restriction covers nothing live and these tests go with it.
+    It is the only such tag, so this fails the day the Pi's wg-easy retires. Repoint the
+    fixture at whatever tag is two-platform by then; if none is, the restriction covers
+    nothing live and these tests go with it.
     """
     platforms = {
         platform
@@ -112,7 +112,7 @@ def test_the_live_tree_declares_wg_easy_on_two_platforms():
 
 
 def test_diff_range_is_the_range_deploy_tags_changed_reads(tmp_path):
-    """Non-vacuity for the fallback derivation (#2738): the landing reads this range's paths to
+    """Non-vacuity for the fallback derivation: the landing reads this range's paths to
     prove a platform, while `deploy_tags.changed` derives the tags from its own spelling. A
     two-dot range would prove the platform of a different file set with every case above still
     green, so this holds the two against each other on a history where they disagree -- the

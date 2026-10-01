@@ -35,11 +35,10 @@ def provisioned_datasource_ids(
 ) -> set[str]:
     """uids AND names of every provisioned datasource.
 
-    Since the Docker grafana role's deploy machinery retired (2026-08-14) the live declaration is
-    the cluster grafana's provisioning ConfigMap (observability grafana.yaml.j2). That file carries
-    Jinja, so the datasource entries are extracted by line rather than yaml-parsed whole; including
-    names as well as uids means a legacy name-form ref ("datasource": "Prometheus") also resolves —
-    a valid Grafana reference, not a bug.
+    The live declaration is the cluster grafana's provisioning ConfigMap (observability
+    grafana.yaml.j2). That file carries Jinja, so the datasource entries are extracted by line
+    rather than yaml-parsed whole; including names as well as uids means a legacy name-form ref
+    ("datasource": "Prometheus") also resolves — a valid Grafana reference, not a bug.
     """
     ids: set[str] = set()
     in_datasources = False
@@ -114,8 +113,7 @@ def dashboard_uids(dashboards_dir: Path = DASHBOARDS_DIR) -> dict[str, list[str]
     Exposed rather than built inline in `validate` so a test can assert the census actually
     found the boards it is supposed to check. Every rule here finds its subject by glob, so a
     renamed or moved dashboards directory yields an empty census, no errors, and a guard that
-    passes over zero boards. The dashboards have moved before: five folders came into
-    observability from the retired Docker grafana role on 2026-08-14.
+    passes over zero boards.
 
     An unparseable file is skipped here — `validate` reports the parse failure itself.
     """
@@ -147,9 +145,9 @@ def duplicate_dashboard_uids(boards: dict[str, list[str]]) -> list[str]:
     health cannot see dead panels", one layer further up: here nothing renders wrong, the
     updates simply never land.
 
-    It bit on 2026-08-28. `export_grafana_dashboards.py` names files `slug(title).json`, so
-    running it against boards that had hand-written filenames wrote a second copy of eight
-    dashboards beside the originals rather than replacing them.
+    `export_grafana_dashboards.py` names files `slug(title).json`, so running it against
+    boards that had hand-written filenames wrote a second copy of eight dashboards beside the
+    originals rather than replacing them.
     """
     errors = []
     for uid, paths in sorted(boards.items()):

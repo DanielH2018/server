@@ -174,10 +174,9 @@ def test_the_patch_maintained_exemption_names_its_mechanism():
 
 
 def test_routing_and_policy_kinds_are_covered():
-    # A live survey on 2026-09-04 (issue #1077) found every IngressRoute/Middleware/
-    # TLSOption/NetworkPolicy in the cluster client-side applied with the last-applied
-    # annotation, closing the gap manifest-prune-check.sh already covers for EXISTENCE but
-    # not for a live spec change. Asserted as a set, not a count: a rename or a KINDS edit
+    # Every IngressRoute/Middleware/TLSOption/NetworkPolicy in the cluster is client-side
+    # applied with the last-applied annotation, which closes the gap manifest-prune-check.sh
+    # already covers for EXISTENCE but not for a live spec change. Asserted as a set, not a count: a rename or a KINDS edit
     # that dropped one of these would leave a bare membership check green.
     assert {"ingressroute", "middleware", "tlsoption", "networkpolicy"} <= set(
         ldc.KINDS
@@ -205,7 +204,7 @@ def test_other_longhorn_kinds_stay_foreign():
 
 
 def test_boot_grace_holds_the_run_just_after_boot():
-    # 12s of uptime is the 2026-08-30 case: the check must push nothing and exit 1 so the
+    # 12s of uptime is the just-booted case: the check must push nothing and exit 1 so the
     # kuma-check timer reruns it once the cluster is up.
     assert ldc.boot_grace_active(12.0, 420) is True
 
@@ -232,17 +231,17 @@ def test_drift_is_a_failure_naming_the_objects():
 
 def test_an_unannotated_object_is_a_failure_naming_it():
     # `kubectl apply` cannot prune removed keys on a client-side-applied object with no
-    # baseline, which is the class that bit the static-monitors Secret and monitor-bridge-env
-    # twice. Every entry reaching verdict() is one of those, so all of them are named.
+    # baseline, which is the class that bit the static-monitors Secret and monitor-bridge-env.
+    # Every entry reaching verdict() is one of those, so all of them are named.
     code, message = ldc.verdict([], ["configmap homelab/new"], [])
     assert code == 1
     assert "configmap homelab/new" in message
 
 
 def test_the_first_unannotated_entries_are_not_excused_by_position():
-    # The bug this replaced: `unannotated[UNANNOTATED_FLOOR:]` excused the first two entries
-    # BY POSITION, so on 2026-09-02 a third entry sorting ahead of them pushed an innocent
-    # object into the message and hid the arrival. Every entry must be named.
+    # Excusing the first two entries BY POSITION would let a third entry sorting ahead of
+    # them push an innocent object into the message and hide the arrival. Every entry must
+    # be named.
     entries = ["configmap homelab/arrived", "configmap observability/known"]
     code, message = ldc.verdict([], entries, [])
     assert code == 1
@@ -274,7 +273,7 @@ def test_a_client_side_applied_object_is_not_skipped():
 def test_the_migration_residue_manager_does_not_count_as_server_side():
     # `kubectl-last-applied` carries operation "Apply" but owns only the annotation kubectl
     # migrated. Treating it as server-side would exempt every object that was ever
-    # client-side applied — 7 of them live, all still client-side managed for pruning.
+    # client-side applied, all of which are still client-side managed for pruning.
     assert not ldc.is_server_side_applied(_meta(("kubectl-last-applied", "Apply")))
     assert ldc.is_server_side_applied(
         _meta(("kubectl-last-applied", "Apply"), ("kubectl", "Apply"))
@@ -307,7 +306,7 @@ def test_a_read_failure_outranks_a_clean_comparison():
 #
 # push()'s docstring says its syslog line is what makes this check visible to `probe.py
 # alerts` and the Alert History board. That is only true if the level it logs at is one the
-# host actually stores. It was not, for the up path, from creation until 2026-08-29.
+# host actually stores.
 #
 # Derived from the Ansible source rather than hardcoded, so it goes RED from either side: if
 # the check drops back to INFO, or if the host cap is tightened past NOTICE.

@@ -1,4 +1,4 @@
-"""Guards for the opt-in live prune added by #1076.
+"""Guards for the opt-in live prune.
 
 `kubectl apply -f <dir>/` only adds/updates; it never removes a live object whose entry was
 dropped from a role's `manifests_files`. `manifest-prune-check.sh` pages about that after the
@@ -53,7 +53,7 @@ _BASE_CONTEXT = {
 
 
 def test_prune_flags_are_absent_when_not_armed() -> None:
-    """The default (manifests_prune unset) — 63 of 64 k8s roles today — must never prune."""
+    """The default (manifests_prune unset) must never prune."""
     rendered = _render(_BASE_CONTEXT)
     assert "--prune" not in rendered
 
@@ -89,13 +89,12 @@ def test_prune_flags_render_when_armed_with_kinds() -> None:
 def test_prune_allowlist_uses_one_flag_per_kind_not_a_comma_joined_value() -> None:
     """kubectl apply --prune-allowlist takes exactly one <group/version/kind> per flag.
 
-    #1092 shipped it with the kinds comma-joined into ONE flag value
-    (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`), and kubectl parses the whole
-    string as a single GroupVersionKind and rejects it outright: `error: invalid
-    GroupVersionKind format: apps/v1/Deployment,core/v1/Service,...`. Every deploy of the one
-    armed role (registry) failed at this task. Pinned against the exact comma-joined shape that
-    used to read green here, so a regression back to `join(',')` fails this test instead of
-    only failing a real deploy.
+    Kinds comma-joined into ONE flag value
+    (`--prune-allowlist=apps/v1/Deployment,core/v1/Service,...`) are parsed by kubectl as a
+    single GroupVersionKind and rejected outright: `error: invalid GroupVersionKind format:
+    apps/v1/Deployment,core/v1/Service,...`, failing every deploy of an armed role. Pinned
+    against the exact comma-joined shape, so a regression back to `join(',')` fails this test
+    instead of only failing a real deploy.
     """
     rendered = _render(
         {

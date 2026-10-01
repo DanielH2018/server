@@ -144,7 +144,7 @@ jobs:
     + _GATE_STEP
 )
 
-# A job in neither the gate's `needs` nor the ruleset: advisory-only, the shape #1127 names.
+# A job in neither the gate's `needs` nor the ruleset: advisory-only.
 _ADVISORY = (
     _GATED
     + """  smoke:

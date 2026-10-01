@@ -85,8 +85,8 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
     assert cs.broad is True
     assert cs.services == set()
     # pyproject.toml / uv.lock churn weekly (lockFileMaintenance) and the broad path never ff-merges,
-    # so flagging them broad parked the host and blocked every downstream image bump behind the stuck
-    # lockfile (2026-07-15 review H1). They map to no service and aren't secrets, so they take the
+    # so flagging them broad would park the host and block every downstream image bump behind the stuck
+    # lockfile. They map to no service and aren't secrets, so they take the
     # silent ff-merge path; CI `uv lock --check` + the deploy health-gate back them up.
     for p in ("pyproject.toml", "uv.lock"):
         cs = services_from_changed_paths([p])
@@ -97,7 +97,7 @@ def test_ansible_cfg_is_broad_but_lockfiles_are_not():
         assert cs.meta == set(), p
 
 
-# review-M1 (2026-07-16): a broad change is sub-classified by which manual playbook applies it, so
+# A broad change is sub-classified by which manual playbook applies it, so
 # the defer-alert names the RIGHT one. deploy.yml runs only container roles; the setup plane
 # (roles/setup/, requirements.yml, bring-up playbooks) is applied by initial_setup.yml. Sending a
 # setup-plane change to deploy.yml is a silent no-op that leaves it unapplied while a plain ff-merge
@@ -146,7 +146,7 @@ def test_broad_both_planes_flags_both():
 def test_setup_tags_for_refuses_a_role_initial_setup_cannot_apply():
     """THE SILENT FAILURE. A tag matching nothing exits 0, so the deployer records a success.
 
-    This is the automatic arm, not the alert text: returning `k3s` here made the tick run
+    This is the automatic arm, not the alert text: returning `k3s` here would make the tick run
     `initial_setup.yml --tags k3s`, change nothing, and report the change applied.
     """
     assert setup_tags_for(["ansible/roles/setup/k3s/tasks/node.yml"]) == set()
@@ -175,9 +175,9 @@ def test_setup_roles_are_recorded_for_both_broad_setup_arms():
 
 # --- broad three-way split -------------------------------------------------------------
 #
-# `broad` used to mean one thing: defer and alert. It now splits into what the deployer
-# applies itself and what it must never touch, so every case below states which side it
-# lands on. The manual set is the bring-up playbooks alone.
+# `broad` splits into what the deployer applies itself and what it must never touch, so
+# every case below states which side it lands on. The manual set is the bring-up
+# playbooks alone.
 
 BROAD_AUTO_SETUP = ["ansible/roles/setup/renovate_notify/tasks/main.yml"]
 BROAD_AUTO_SELF = ["ansible/roles/setup/gitops_deploy/files/gitops_deploy.py"]
@@ -193,11 +193,10 @@ def test_ordinary_setup_role_is_clean_for_auto_apply():
 
 
 def test_the_deployers_own_role_applies_itself():
-    """roles/setup/gitops_deploy/ sat in the manual set until 2026-09-01 on the claim that its
-    handler restarts the unit running the tick. It does not: the handler is `state: started`,
-    which Ansible's systemd module skips for an `activating` unit. Parking it instead stopped
-    every other session's landing three times that day (#707, #712, #714). The DECIDED marker
-    above `_BROAD_MANUAL_PREFIXES` carries the evidence."""
+    """roles/setup/gitops_deploy/ is not in the manual set. Its handler is `state: started`,
+    which Ansible's systemd module skips for an `activating` unit, so it does not restart the
+    unit running the tick. The DECIDED marker above `_BROAD_MANUAL_PREFIXES` carries the
+    evidence."""
     cs = services_from_changed_paths(BROAD_AUTO_SELF)
     assert cs.broad and cs.broad_setup
     assert not cs.broad_manual
@@ -239,7 +238,7 @@ def test_setup_tag_derivation_skips_the_manual_set():
 
 
 def test_broad_stays_true_for_every_split_arm():
-    """`broad` keeps its old meaning so every existing consumer is unchanged."""
+    """`broad` is true on every arm, so every consumer that reads it is unaffected by the split."""
     for paths in (
         BROAD_AUTO_SETUP,
         BROAD_AUTO_SELF,
@@ -302,7 +301,7 @@ def _deploy_yml_task_imports() -> set[str]:
 
 
 def test_task_import_parsing_reads_the_dict_form_too():
-    """The dict form is equally valid Ansible, and deploy.yml uses only the string form today.
+    """The dict form is equally valid Ansible, and deploy.yml uses only the string form.
 
     Without this, converting a call site to `include_tasks: {file: ...}` would drop it from the
     guard while the guard stayed green on the remaining imports.
@@ -325,13 +324,13 @@ def test_task_import_parsing_reads_the_dict_form_too():
 def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
     """A file deploy.yml imports must not classify as an EMPTY ChangeSet.
 
-    `ansible/deploy.yml` was broad, but its sibling task dirs matched nothing: `role_of` is
+    `ansible/deploy.yml` is broad, but its sibling task dirs match nothing: `role_of` is
     anchored to `ansible/roles/`. main() has no catch-all — `if not cs.services:`
     ff-merges unconditionally and the alert helpers no-op on empty fields — so an
-    empty-because-unclassified ChangeSet was indistinguishable from an empty-because-docs one:
+    empty-because-unclassified ChangeSet is indistinguishable from an empty-because-docs one:
     silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
 
-    Derived from the playbook rather than pinned to today's three paths, so a newly-imported task
+    Derived from the playbook rather than pinned to a path list, so a newly-imported task
     file cannot fall through the classifier the same way.
     """
     imports = _deploy_yml_task_imports()
@@ -349,8 +348,8 @@ def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
 
 # --- comment-only edits to the manual set --------------------------------------------------
 #
-# The classifier decides by path alone, so PR #746's one-line comment edit to k3s-bringup.yml
-# parked every session's landing on 2026-09-02. comment_only_broad_changes reads both sides
+# The classifier decides by path alone, so a one-line comment edit to k3s-bringup.yml would
+# park every session's landing. comment_only_broad_changes reads both sides
 # and names the paths a caller may drop. The deployer is stdlib-only, so this compares content
 # lines rather than parsed YAML; every reject case below is a change that MUST stay broad.
 
@@ -390,7 +389,7 @@ def _quiet(
 
 
 def test_a_comment_only_edit_to_a_bringup_playbook_is_not_broad():
-    """PR #746's actual diff: one full-line comment reworded."""
+    """One full-line comment reworded."""
     after = _PLAYBOOK.replace(
         "ansible/tests/test_k3s_server_hosts.py",
         "ansible/tests/setup/test_k3s_server_hosts.py",
@@ -457,12 +456,12 @@ def test_a_comment_only_edit_on_the_deploy_plane_is_not_reported():
     )
 
 
-# --- comment-only edits to a setup ROLE (issue #848) ---------------------------------------
+# --- comment-only edits to a setup ROLE ----------------------------------------------------
 #
-# The widening past the bring-up playbooks. PR #843 changed three comments in
-# `roles/setup/k3s/defaults/main.yml` -- not a manual path at all, but an UNROUTABLE setup
-# role, k3s living in k3s-bringup.yml rather than initial_setup.yml -- and land.sh ended
-# `needs-manual-apply` naming a bring-up playbook with nothing to apply.
+# The read extends past the bring-up playbooks. A comment-only change to
+# `roles/setup/k3s/defaults/main.yml` is not a manual path at all, but an UNROUTABLE setup
+# role, k3s living in k3s-bringup.yml rather than initial_setup.yml. Without this read,
+# land.sh ends `needs-manual-apply` naming a bring-up playbook with nothing to apply.
 
 _K3S_DEFAULTS = """\
 # The etcd restore drill. Five structural failures are documented in the script.
@@ -477,7 +476,7 @@ _SETUP_DEFAULTS = "ansible/roles/setup/k3s/defaults/main.yml"
 
 
 def test_a_comment_only_edit_to_a_setup_role_is_not_broad():
-    """PR #843's shape: only comment lines moved."""
+    """Only comment lines moved."""
     after = _K3S_DEFAULTS.replace(
         "# The etcd restore drill. Five structural failures are documented in the script.\n",
         "# The etcd restore drill.\n# Five structural failures are documented in the script.\n",

@@ -4,8 +4,8 @@
 WHY THIS EXISTS. Deleting a backup chain through Longhorn costs on the order of hundreds of
 Class C transactions, because a prune walks the whole block tree once per deleted backup, and
 B2's free tier allows 2,500 Class C a day. Doing it through the API costs one listing for the
-whole store (5 Class C, measured 2026-08-19) plus deletes, which are Class A and unmetered.
-Scoping: docs/archive/b2-api-drain-scoping.md.
+whole store (5 Class C) plus deletes, which are Class A and unmetered. Scoping:
+docs/archive/b2-api-drain-scoping.md.
 
 WHY IT IS SAFE TO DELETE A WHOLE PREFIX. Longhorn namespaces blocks under each volume's own
 prefix — `volumes/<xx>/<yy>/<volume>/blocks/<aa>/<bb>/<sha256>.blk`. The same content hash
@@ -23,9 +23,9 @@ WHAT STOPS IT DELETING SOMETHING LIVE. Three things, in order:
 
 WHY IT LISTS VERSIONS AND NOT NAMES. B2 keeps superseded versions, and a delete writes a hide
 marker over the upload version rather than removing it. b2_list_file_names would therefore
-under-report what has to go, and — as this repo found on 2026-08-19 — reading `action ==
-"upload"` as "still live" makes a finished deletion look like a no-op. Current state is the
-FIRST version returned for a name; the rest are retained history.
+under-report what has to go, and reading `action == "upload"` as "still live" makes a finished
+deletion look like a no-op. Current state is the FIRST version returned for a name; the rest
+are retained history.
 
 Usage (credentials come from the environment; ansible/prune_backups.yml -e prune_mode=b2-drain
 supplies them):

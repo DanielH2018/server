@@ -3,14 +3,14 @@
 
 `k8s/manifests` renders `manifests_deferred_files` into
 `/etc/rancher/k3s/manifests/<manifests_deferred_dir_name>/`, prunes that directory from the same
-list, and leaves the apply to the owning role — pihole's instance 2 is the one caller today
-(#2899, and #2884 for why its apply is sequenced by hand). A role that later took that directory
+list, and leaves the apply to the owning role — pihole's instance 2 is the one caller. A role
+that later took that directory
 name as its own `manifests_service` would prune the manifest pihole applies and sweep it into its
 own `kubectl apply -f <dir>/`, which is the single request the deferral exists to escape.
 
 That is the same reservation `<service>-netpol` and `<service>-claims` carry, and
-test_no_role_stages_files_in_a_pruned_manifest_dir.py holds those. It cannot hold this one: since
-#2899 the path is built inside `k8s/manifests` from a variable, so its raw-text path reader finds
+test_no_role_stages_files_in_a_pruned_manifest_dir.py holds those. It cannot hold this one: the
+path is built inside `k8s/manifests` from a variable, so its raw-text path reader finds
 nothing, and `pihole-instance-2` would be reserved by nothing at all.
 
 Run: uv run pytest ansible/tests/k8s/test_deferred_manifest_dir_is_reserved.py
@@ -27,7 +27,7 @@ from test_no_role_stages_files_in_a_pruned_manifest_dir import (
 )
 
 # Named rather than counted, so a rename cannot empty the census and leave the invariant below
-# passing over nothing (.claude/rules/python-layout.md). Verified against the tree on 2026-09-29.
+# passing over nothing (.claude/rules/python-layout.md).
 KNOWN_DEFERRED_DIRS = {"pihole-instance-2": "pihole"}
 
 

@@ -10,7 +10,7 @@ forwardAuth, which is the entrypoint chain's first slot.
 The plugin is local (files/cloudflare-realip/, projected from a ConfigMap), and four names
 have to agree for Traefik to load it. A mismatch renders and applies cleanly, passes
 `--dry-run`, and at startup disables EVERY plugin — the crowdsec bouncer included, which is
-the #1322 whole-edge 404. The last test pins that agreement.
+a whole-edge 404. The last test pins that agreement.
 
 Checked on the RENDERED templates, the same way as the sibling
 ansible/tests/services/test_traefik_http_entrypoint_crowdsec.py.

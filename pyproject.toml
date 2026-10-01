@@ -12,7 +12,7 @@ dev = [                              # `dev` is uv's default group for `uv run`/
   "ansible-core==2.21.4",           # test_toposort imports ansible.errors; also runs deploys via `uv run ansible-playbook`.
   # Pinned exactly, not `>=`: the hosts install the same literal as a uv tool
   # (initial_setup/tasks/host-basics.yml) and a lockstep test holds the two
-  # equal, so this is the one place the deploy-side ansible version is chosen (#2148).
+  # equal, so this is the one place the deploy-side ansible version is chosen.
   "pyyaml",                         # validate.compose_templates
   "jinja2>=3",                      # validate.compose_templates
   "requests",                       # community.docker modules (docker_container_info dependency check)
@@ -63,7 +63,7 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 # every k8s role. A single `--durations` run showed that one fixture three times over, at 22s,
 # 24s and 28s of setup.
 #
-# Measured 2026-09-03, `-n 4` (the GitHub runner's width), the two modes run interleaved on the
+# Measured at `-n 4` (the GitHub runner's width), the two modes run interleaved on the
 # same box so a busy neighbour could not favour either — an earlier non-interleaved pair read
 # 148s vs 47s and was contention, not signal:
 #   --dist load:      56.5s / 56.9s wall, ~160s CPU
@@ -86,14 +86,14 @@ testpaths = [                        # single source of truth for WHAT runs; exc
 #
 # No `-q` here, deliberately. `-q` is what a reader adds on the command line to shorten a scoped
 # run, and pytest COUNTS the flag: with `-q` already in addopts, a hand-typed `-q` becomes `-qq`,
-# which suppresses the summary line entirely. Measured 2026-09-05 on `scripts/lib/tests`: with
+# which suppresses the summary line entirely. Measured on `scripts/lib/tests`: with
 # `-q` in addopts, `uv run pytest scripts/lib/tests -q | tail -3` printed progress dots and no
 # count for a 152-test pass, and `-k nosuchtestname -q` printed only `bringing up nodes...` — a
-# run that collected nothing read exactly like one that passed. Three reviewers in the
-# module-split plan overrode addopts to get a count back (issue #1203). The default verbosity
+# run that collected nothing read exactly like one that passed. Reviewers had to override
+# addopts to get a count back. The default verbosity
 # costs ~2 header lines per xdist worker and prints the count every time.
 addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config -p leakguard"
-# Every warning is a failure. Measured before enabling (2026-09-02): the only classes that
+# Every warning is a failure. Measured before enabling: the only classes that
 # fired were ResourceWarnings, each a real leak — HTTPError test doubles built on a tempfile
 # nothing closed, an sqlite connection the Valheim store never closed, and the deployer's
 # subprocess pipes left open on the timeout path. A DeprecationWarning from a dependency
@@ -101,7 +101,7 @@ addopts = "-n auto --dist loadscope -m 'not ui' --strict-markers --strict-config
 filterwarnings = [
   "error",
   # The one exception, and it is a signal rather than a tolerated wart: the role-doc size band
-  # (issue #2557) has to REPORT a doc approaching the character ceiling while the author
+  # has to REPORT a doc approaching the character ceiling while the author
   # still has room to write the bullet, and a blanket `error` would turn that report into
   # the failure the band exists to arrive before. `always` shows every occurrence in pytest's warnings summary.
   # Raised only by ansible/tests/k8s/test_k8s_roles_have_claude_md.py.
@@ -188,8 +188,7 @@ extend-exclude = [
 # four of which had an equal-length invariant nothing asserted). Both classes fail by producing
 # a plausible wrong answer rather than an error, which is the block-footguns criterion.
 #
-# The rest pass the same test, and each was measured against the tree before it was enabled
-# (2026-09-02):
+# The rest pass the same test, and each was measured against the tree before it was enabled:
 # - E402 + RUF100 together. 131 `# noqa: E402` comments sat on the sys.path bootstrap imports
 #   with E402 never selected, so the comments enforced nothing and nobody could tell; RUF100
 #   found 156 such dead directives (BLE001, S310 and S506 among them). E402 makes the bootstrap
@@ -206,18 +205,17 @@ extend-exclude = [
 # and it is a narrow one. Those five check the SHAPE of a docstring that already exists: a
 # one-line summary ending in `.`, `?` or `!`, a blank line, the body, and the closing quotes on
 # their own line. That shape is a written convention with a rule file behind it
-# (~/.claude/rules/python.md, from Google's Python style guide section 3.8), and PR #785 applied
-# it across 226 files and 900-odd docstrings. `ruff format` does not touch docstring bodies, so
+# (~/.claude/rules/python.md, from Google's Python style guide section 3.8) that holds across
+# 226 files and 900-odd docstrings. `ruff format` does not touch docstring bodies, so
 # unlike the E7 checks this table turns off, no formatter can hold the convention — it either
-# gets linted or it drifts back. 47 fixes outside tests when this landed, D205 already at 0
-# because #785 cleared all 228 of them.
+# gets linted or it drifts back.
 #
 # The undocumented-symbol rules stay OFF, deliberately, and the numbers are here so nobody has to
 # re-measure to reopen it: D103 118, D102 28, D107 9 outside tests. Ruff's versions have no size
 # threshold, where the rule we actually adopted asks for a docstring when a function is public
 # API, non-trivial in size, or non-obvious in logic. Selecting them means writing 155 docstrings
-# on mostly-trivial functions — a wider rule than #785 applied, so it needs its own PR and its
-# own argument rather than riding in on this one.
+# on mostly-trivial functions — a wider rule than the docstring-layout rules above, so it
+# needs its own argument.
 select = [
   "F", "E9", "E402", "E711", "E712", "E722", "B",
   "DTZ",
@@ -227,7 +225,7 @@ select = [
 ]
 # Explicit codes above, never the bare `D` prefix: D203/D211 and D212/D213 are mutually
 # incompatible pairs, and selecting the prefix makes ruff warn and then silently drop one of
-# each. `[tool.ruff.lint.pydocstyle] convention` is deliberately absent — measured 2026-09-02 on
+# each. `[tool.ruff.lint.pydocstyle] convention` is deliberately absent — measured on
 # this repo's pinned ruff, it does not filter an explicitly-selected code, so beside these codes
 # it would be redundant rather than load-bearing.
 
@@ -249,21 +247,19 @@ select = [
   "D210",
 ]
 
-# Test modules are exempt from TWO of the five layout rules, and the exemption is the reason this
-# gate could land at all — it is not an oversight to tidy away later. Google makes a test module's
-# docstring optional, and says a test docstring exists only to carry something beyond "Tests for
-# foo": a run instruction, a setup pattern, an external dependency. PR #785 left tests alone on
-# that basis, so behind this ignore sit 253 D205 and 202 D209. Removing these two entries turns a
-# 4-fix gate into a 455-error wall, which is how a later session "cleaning up" the ignore ends up
-# reverting the whole thing instead.
+# Test modules are exempt from TWO of the five layout rules, and the exemption is the reason
+# this gate could land at all — it is not an oversight to tidy away later. Google makes a test
+# module's docstring optional, and says a test docstring exists only to carry something beyond
+# "Tests for foo": a run instruction, a setup pattern, an external dependency. The layout rules
+# leave tests alone on that basis, so behind this ignore sit 253 D205 and 202 D209. Removing
+# these two entries turns a 4-fix gate into a 455-error wall, which is how a later session
+# "cleaning up" the ignore ends up reverting the whole thing instead.
 #
-# D415, D212 and D210 are NOT exempt, and that is deliberate. PR #832 repaired all 111 test
-# docstrings that #785 split at a colon; with D415 exempt here, nothing would stop them silently
-# regressing — a fix with no gate behind it lasts until the next mechanical pass. It cost 4 fixes
-# to close: three multi-line summaries in the k8s manifest guards, and one docstring opening with
-# a quoted word, whose leading space existed only to avoid four consecutive quotes.
+# D415, D212 and D210 are NOT exempt, and that is deliberate. With D415 exempt here, nothing
+# would stop 111 test docstrings from silently regressing at a colon — a fix with no gate
+# behind it lasts until the next mechanical pass.
 # (Counts measured with `--isolated --exclude '*.md' --exclude ansible/collections`, which is what
-# bypasses these very entries; a plain `--select` run cannot see behind them. 2026-09-02.)
+# bypasses these very entries; a plain `--select` run cannot see behind them.)
 "**/tests/**" = ["D205", "D209"]
 "**/test_*.py" = ["D205", "D209"]
 "**/conftest.py" = ["D205", "D209"]
@@ -350,10 +346,8 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # turning one on is a PR of its own with its own measurement, which is the point of recording
 # the number here.
 #
-# unresolved-attribute (32, measured 2026-09-02 after the invalid-argument-type pass below).
-#   That pass took it from 66 without touching it: 34 of the 66 were the
-#   `spec_from_file_location` loader dance, and asserting the spec and its loader are present
-#   narrows both rules at once.
+# unresolved-attribute (32). Asserting that a `spec_from_file_location` spec and its loader
+#   are present narrows both rules at once.
 # invalid-assignment (10). Monkeypatch doubles, plus three production sites.
 # unsupported-operator (14). Eight are arithmetic on monitor-bridge's `_env` helper, which is
 #   annotated to return a union including `str`; retyping that one helper is the whole fix.
@@ -362,29 +356,17 @@ exclude = ["ansible/collections", "site", ".claude/worktrees"]
 # [[tool.ty.overrides]] block below removed as well as the rule flipped. There is no per-file
 # exemption for invalid-argument-type — every file in the source roots is gated on it.
 #
-# invalid-argument-type went from a measured 91 to zero on 2026-09-02. Three root causes carried
-# 50 of the 91, which is why the count was misleading as a size estimate: four function
-# signatures taking `set`/`dict`/`Callable[[Sized], str]` when they only READ the argument, so
-# wanting AbstractSet / Mapping / a type variable (24 sites); the loader dance above (15); and
-# `render_or_error` returning `tuple[str | None, str | None]`, whose correlation a destructuring
-# loses, so `if err:` narrowed the wrong name at four call sites (11).
+# invalid-argument-type is at zero. Its diagnostics cluster on three causes: signatures taking
+# `set`/`dict`/`Callable[[Sized], str]` when they only READ the argument, so wanting
+# AbstractSet / Mapping / a type variable; the loader dance above; and `render_or_error`
+# returning `tuple[str | None, str | None]`, whose correlation a destructuring loses, so
+# `if err:` narrows the wrong name. A test's monkeypatch idiom is not among them, so tests get
+# no per-file exemption.
 #
-# The issue that proposed this rule recorded its test half as "almost entirely the monkeypatch
-# idiom" and floated a per-file exemption on that basis. That was wrong: not one of the 91 was a
-# monkeypatch, and the dominant test-half cluster was the same unnarrowed Optional as the
-# production half.
-#
-# Eleven of the 91 were closed by WIDENING rather than narrowing: six annotations that say
-# `Any` where the value really is heterogeneous — `_state` in the two mkdocs plugins, `hosts` in
-# infra_map, and three dict literals in tests whose bare inference produced a value union that
-# then read as indexing a str. Those make ty stop asking; they do not make anything safer, and
-# each is a place a real type would be better if the shape were ever pinned down.
-#
-# It also found one live annotation bug. `duplicate_dashboard_uids` declared
-# `boards: dict[str, str]` while its body ran `len(paths) > 1` and `", ".join(paths)` — a test
-# that is true for any two-character uid if the value really were a str. Every caller had always
-# passed `dict[str, list[str]]`, so nothing misbehaved; the declared contract said the opposite
-# of what the code required.
+# Widening an annotation to `Any` where the value really is heterogeneous — `_state` in the two
+# mkdocs plugins, `hosts` in infra_map, three dict literals in tests — makes ty stop asking
+# without making anything safer; each is a place a real type would be better if the shape were
+# ever pinned down.
 invalid-argument-type = "error"
 unresolved-attribute = "ignore"
 invalid-assignment = "ignore"
@@ -393,8 +375,7 @@ unsupported-operator = "ignore"
 # only while something else in the process has imported the submodule, which is a dependency on
 # an import in a file you are not reading.
 #
-# The four sites this found were all LATENT, not live — worth stating plainly, because the
-# commit that turned the rule on read as though it had caught a running defect. checks/b2.py
+# The sites this rule finds are LATENT, not live. checks/b2.py
 # reaches `urllib.error.HTTPError` and imports only `urllib.parse`, but it also imports
 # `bridge.net`, which imports `urllib.error` — so in the real monitor-bridge process it always
 # resolved. validate/k8s_manifests.py gets `yaml.constructor` the same way, via `yaml.loader`.
@@ -434,7 +415,7 @@ unresolved-import = "ignore"
 # Same collateral as above: `test_claude_guard_import.py` also loses
 # the check on `import _claude_guard`, a first-party, `extra-paths`-covered import — a typo there
 # would surface as a hook crash instead. `_claude_guard.py` imports nothing else first-party.
-# `_hook_common.py` (#2053, moved there from `block-protected-bash.py` by #2134) imports only
+# `_hook_common.py` imports only
 # `_claude_guard` first-party, and every hook test module imports it, so a typo there fails
 # those suites at collection instead.
 include = [
@@ -447,10 +428,10 @@ unresolved-import = "ignore"
 
 [[tool.ty.overrides]]
 # `claude_worktree` is the same kind of import as `claude_guard` above: the dotfiles repo
-# deploys it to `~/.local/share/claude-worktree` (#2133), and `scripts/dev/_claude_worktree.py`
-# bootstraps it at runtime. ty read its signatures from an in-tree CI stand-in until #2812
-# replaced that copy with a CI checkout of the dotfiles repo. The pruner's reader calls lost
-# their type check with it, and the import test lost the check on `import _claude_worktree`.
+# deploys it to `~/.local/share/claude-worktree`, and `scripts/dev/_claude_worktree.py`
+# bootstraps it at runtime. ty cannot read its signatures, because CI checks out the dotfiles
+# repo rather than carrying an in-tree copy. The pruner's reader calls lose their type check
+# with it, and the import test loses the check on `import _claude_worktree`.
 # `test_claude_worktree_import.py` and `test_prune_worktrees.py` run against the real module
 # in CI and on every host, and that is what catches a renamed reader.
 include = [

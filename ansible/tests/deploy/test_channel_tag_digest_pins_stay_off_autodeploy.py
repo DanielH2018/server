@@ -1,15 +1,14 @@
 #!/usr/bin/env python3
 """A channel-tag-plus-digest `_image:` pin whose regression is expensive stays off auto-deploy.
 
-Issue #1524. A pin of the shape `<image>:latest@sha256:<64 hex>` moves only its digest when
+A pin of the shape `<image>:latest@sha256:<64 hex>` moves only its digest when
 Renovate bumps it: the tag text never changes, so the diff carries no version to compare and a
 digest resolving to an OLDER release is indistinguishable from one resolving to a newer one.
-PR #1440 proposed exactly that downgrade on n8n through nine green checks (issue #1493).
 
 n8n's group is `automerge: false` and a human reads the PR. On `roles/k8s/*/defaults/main.yml`
 the same shape is automerged (renovate.json's digest rule) AND auto-deployable, so there is no
-human in it at all. Since #1886 the fence has a second arm: a denied role's bump no longer
-automerges either (test_renovate_automerge_follows_the_autodeploy_denylist.py), so for the
+human in it at all. The fence has a second arm: a denied role's bump does not
+automerge either (test_renovate_automerge_follows_the_autodeploy_denylist.py), so for the
 expensive three a human reads the PR as well as deploying it.
 
 # DECIDED: the class is accepted for the services whose regression is cheap, and fenced by the
@@ -40,7 +39,7 @@ _PIN = re.compile(
     re.MULTILINE,
 )
 
-# The roles #1524 named as the expensive subset: a torrent client mid-transfer, a transcoder
+# The roles that are the expensive subset: a torrent client mid-transfer, a transcoder
 # holding a queue, and the service every OTHER check reports through. Named rather than derived
 # — "expensive" is a judgement about what a regression costs, which no file states.
 _EXPENSIVE = frozenset({"qbittorrent", "tdarr", "healthchecks"})

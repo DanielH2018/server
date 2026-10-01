@@ -3,10 +3,7 @@
 `scripts/deploy_tools/narrow_broad.py` asks which service tags a deploy-plane change reaches.
 `scripts/deploy_tools/narrow_setup.py` asks which `--tags` value a setup-role change needs.
 Different questions over different trees, and both answer them by reading a file at a git ref,
-parsing it as a YAML mapping, and refusing whenever a rule cannot say. Each carried its own
-copy of those three primitives until #2419, and the copies had drifted: two `CannotNarrow`
-classes that no `except` could catch together, two `git show` wrappers, and two inline key
-diffs, only one of which survived a recursive YAML alias.
+parsing it as a YAML mapping, and refusing whenever a rule cannot say.
 
 WHY ONE `CannotNarrow` AND NOT TWO. The two modules already meet — `shared_role_reach` imports
 the setup half and `probe_lib/releases` catches the broad half — so a raise crossing that

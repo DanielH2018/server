@@ -2,8 +2,8 @@
 """The host reach of a setup-role change: `land_reach.py`.
 
 Every narrowing here has a reject half, because the failure this guards is a note that
-falls silent for a host still running the old file (issue #1009) -- and the accept half
-guards the inverse, a note that sends an operator to hosts that never install it (#1254).
+falls silent for a host still running the old file -- and the accept half
+guards the inverse, a note that sends an operator to hosts that never install it.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_reach.py
 """
@@ -27,8 +27,8 @@ def _synthetic_setup_inventory(tmp_path):
 
     Pins the derivation tests below the way this file's own module docstring already
     requires for `_DECLARED` ("A fixture, not live inventory... reading containers_list
-    would make them fail whenever a service is retired"). `setup_role_hosts` had no
-    injection point for that until now; this mirrors `deploy_tags.py`'s own
+    would make them fail whenever a service is retired"). `setup_role_hosts` takes the
+    inventory through an injection point; this mirrors `deploy_tags.py`'s own
     `host_vars: Path = HOST_VARS` pattern.
     """
     playbook = tmp_path / "initial_setup.yml"
@@ -131,11 +131,10 @@ def test_setup_role_hosts_census_is_not_vacuous():
     too.
 
     A vacuous parse (an empty dict, a wrong key) would make every remaining-hosts note
-    silently empty -- the same shape nine guards broke across PRs #838/#846/#852/#858 and the
-    monitor-bridge move, caught only by an assertion like this one. A parse that found every
-    NAME but read every `when:` as None would be a subtler version of the same failure:
-    `setup_role_hosts` would then reach ALL THREE hosts for every role, silently re-breaking
-    #723 with every test above still green (they use a synthetic tree, not this parse).
+    silently empty, a failure only an assertion like this one catches. A parse that found
+    every NAME but read every `when:` as None would be a subtler version of the same failure:
+    `setup_role_hosts` would then reach ALL THREE hosts for every role, silently, with every
+    test above still green (they use a synthetic tree, not this parse).
     """
     roles = land_reach._initial_setup_roles()
     assert {
@@ -159,8 +158,8 @@ def test_setup_role_hosts_census_is_not_vacuous():
 
 
 def test_remaining_setup_hosts_note_flags_pr_1002():
-    """PR #1002's real shape: `initial_setup` reaches all three hosts, the tick converges on
-    daniel-box alone, and the other two are owed a hand-run (issue #1009)."""
+    """`initial_setup` reaches all three hosts, the tick converges on
+    daniel-box alone, and the other two are owed a hand-run."""
     files = ["ansible/roles/setup/initial_setup/files/kuma-push-lib.sh"]
     note = land_reach.remaining_setup_hosts_note(files, "daniel-box")
     assert "daniel-server" in note
@@ -169,9 +168,8 @@ def test_remaining_setup_hosts_note_flags_pr_1002():
 
 
 def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
-    """PR #2568's real shape: the library, plus `setup/k3s`, which `initial_setup.yml` does
-    not include and a hand applies through `k3s-bringup.yml`. The k3s half must not suppress
-    the library's — that pairing is how the #1009 failure reached two hosts again (#2569).
+    """The library, plus `setup/k3s`, which `initial_setup.yml` does not include and a hand
+    applies through `k3s-bringup.yml`. The k3s half must not suppress the library's.
     """
     files = [
         "ansible/roles/setup/initial_setup/files/kuma-push-lib.sh",
@@ -182,15 +180,14 @@ def test_remaining_setup_hosts_note_survives_a_hand_applied_plane_beside_it():
     assert "daniel-pi" in note
     assert "initial_setup" in note
     # The pairing itself, not two independent facts: the k3s half really is a plane a hand
-    # applies, which is what makes it the arm that used to end the landing first.
+    # applies, which is what makes it the arm that ends the landing first.
     assert "k3s" in land_tags.plane_note(files)
 
 
 def test_remaining_setup_hosts_note_stays_empty_for_pr_723():
     """The reject half. gitops_deploy and renovate_notify both reach daniel-box alone, so
-    flagging them here would re-break the fix #723 exists to protect -- `plane_note`'s own
-    docstring records land.sh exiting 1 with `needs-manual-apply` for this same file list
-    while the very next tick applied it (2026-09-01)."""
+    flagging them here would make land.sh exit 1 with `needs-manual-apply` for work the very
+    next tick applies (see `plane_note`'s docstring)."""
     files = [
         "ansible/roles/setup/gitops_deploy/files/deploy_logic.py",
         "ansible/roles/setup/renovate_notify/files/renovate_notify.py",
@@ -344,7 +341,7 @@ def test_setup_file_hosts_reads_the_gate_on_the_task_that_ships_the_file(
         "ansible/roles/setup/config_files/templates/docs-refresh.sh.j2",
         **kw,
     ) == frozenset({"daniel-box"})
-    # The accept half: an ungated task reaches wherever the role does (the #1009 shape).
+    # The accept half: an ungated task reaches wherever the role does.
     assert land_reach.setup_file_hosts(
         "config_files", "ansible/roles/setup/config_files/files/kuma-push-lib.sh", **kw
     ) == frozenset({"daniel-box", "daniel-server", "daniel-pi"})
@@ -371,8 +368,7 @@ def test_setup_file_hosts_follows_include_tasks_the_same_as_import_tasks(
 ):
     """The docker_install/gitops_deploy dispatcher shape: a file shipped behind an
     `include_tasks` gate narrows the same way one behind `import_tasks` does. Without this,
-    a dispatcher's teardown-only file reads as reaching every host the role does, which is
-    the exact #723 regression this repo already paid for once."""
+    a dispatcher's teardown-only file reads as reaching every host the role does."""
     playbook, all_vars, host_vars_dir, roles_dir = _synthetic_setup_role_tree
     assert land_reach.setup_file_hosts(
         "config_files",

@@ -7,10 +7,10 @@ Log2Ram ships both of its syncs as::
 
 `--sparse` makes rsync seek over a run of NUL bytes in the source rather than write
 it, and `--inplace` makes the destination the live file — so the previous file's
-bytes survive at those offsets. On daniel-pi that clobbered the trailing NULs of the
-gzip ISIZE field in 6 of 9 rotated /var/log/apt/history.log.*.gz (#2694): every CRC32
-matched byte for byte, and only the last one or two bytes carried stale data, so
-`gzip -t` reported "invalid compressed data--length error" over intact content.
+bytes survive at those offsets. On daniel-pi that clobbers the trailing NULs of the
+gzip ISIZE field in rotated /var/log/apt/history.log.*.gz: every CRC32 matches byte for
+byte, and only the last one or two bytes carry stale data, so `gzip -t` reports
+"invalid compressed data--length error" over intact content.
 
 `optimize_pi` patches `--sparse` out of both command lines. Two things about that
 patch have to survive, and neither is visible from reading the task alone:

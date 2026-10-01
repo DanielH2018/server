@@ -2,7 +2,7 @@
 """Tests for the session-worktree pruner: the removal decision, and what it does with it.
 
 The readers -- the porcelain parser, the lock-liveness check, the cherry and merge-tree
-verdicts -- live in the deployed `claude_worktree` module (#2133) and are tested in the
+verdicts -- live in the deployed `claude_worktree` module and are tested in the
 dotfiles repo beside it; `test_claude_worktree_import.py` covers the bootstrap. What is
 tested here is what stays in this repo: `classify` takes the facts the git calls produce,
 `is_merged` gates the readers on exit status, and `remove`/`prune_all`/`main` act.
@@ -220,11 +220,11 @@ def test_removable_reason_for_a_never_locked_tree_says_unlocked():
     assert reason.endswith("unlocked")
 
 
-# pr_head_says_merged moved into claude_worktree with the lookup that calls it (dotfiles
-# #629); its tests live in that package's tests/test_readers.py.
+# pr_head_says_merged lives in claude_worktree with the lookup that calls it; its tests
+# live in that package's tests/test_readers.py.
 
 
-# --- the --brief / --prune dispatch (#1190) ---------------------------------------------
+# --- the --brief / --prune dispatch ---------------------------------------------
 #
 # These drive main() rather than brief(), because the bug was in the dispatch: `if
 # args.brief: return brief()` returned before the prune block, so brief() itself was
@@ -342,7 +342,7 @@ def test_worktree_facts_ok_is_true_when_git_succeeds_with_no_worktrees(monkeypat
     assert trees == []
 
 
-# --- the orphan-branch sweep (#2430) ----------------------------------------------------
+# --- the orphan-branch sweep ----------------------------------------------------
 #
 # Real git throughout, for the reason the on-disk removal test above gives: what is claimed
 # is that git ACCEPTS the sequence. `git branch -d` refusing a rebase-landed branch is the

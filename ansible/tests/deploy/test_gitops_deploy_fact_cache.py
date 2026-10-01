@@ -1,9 +1,9 @@
-"""The GitOps deployer's playbooks read a fact cache no worktree writes (#2862).
+"""The GitOps deployer's playbooks read a fact cache no worktree writes.
 
 `ansible.cfg` caches facts per HOST in `~/.cache/ansible/facts`, shared by every checkout on
 the machine, and the cache carries `discovered_interpreter_python` — the `.venv` of whichever
-checkout gathered last. The 2026-09-03 12:36 broad apply of `initial_setup.yml --tags
-renovate_agent` died at fact gathering on a pruned worktree's interpreter that way.
+checkout gathered last. A broad apply of `initial_setup.yml --tags
+renovate_agent` dies at fact gathering on a pruned worktree's interpreter that way.
 `gitops-deploy.service.j2` points the deployer at a cache of its own through
 `ANSIBLE_CACHE_PLUGIN_CONNECTION`.
 

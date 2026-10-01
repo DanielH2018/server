@@ -6,10 +6,10 @@ root -- are redirected into a tmp_path, so these runs neither queue behind a liv
 nor make one queue behind them. `ansible-playbook` is a stub that sleeps, which is what gives
 a `--detach` parent something to return in front of.
 
-THE SERIALIZE/OVERLAP PROPERTY IS NOT MEASURED HERE ANY MORE (#2415). Three wall-clock cases
-proved "same service waits, different service does not, a full run excludes a scoped one" by
-starting two real deploys and timing them, at about 10s a run. Each half is now pinned
-cheaply somewhere that reads the same code:
+THE SERIALIZE/OVERLAP PROPERTY IS NOT MEASURED HERE. Timing two real deploys at about 10s a
+run would be the only way to prove "same service waits, different service does not, a full run
+excludes a scoped one" by wall clock, so each half is pinned cheaply somewhere that reads the
+same code:
 
 - A busy service lock really blocking `deploy.sh`, cross-process, with a real external `flock`
   holder: `test_wrapper_lock_wait_lines.py` (the wait line it prints, and exit 75 when the
@@ -45,9 +45,8 @@ from lib.repo_paths import REPO as _REPO
 _DEPLOY_SH = _REPO / "scripts" / "deploy.sh"
 
 # The playbook stub's sleep, and the bound the `--detach` case checks its parent returned
-# inside. It only has to outlast a `git worktree add` and a bash startup -- 0.1s measured here
-# on 2026-09-11, and the CI runner is ~4x slower per test. 2s, down from 4 (#2226), and the
-# three wall-clock serialize cases it also sized are gone (#2415).
+# inside. It only has to outlast a `git worktree add` and a bash startup -- 0.1s measured, and
+# the CI runner is ~4x slower per test.
 _SLEEP_S = 2
 
 _UV_STUB = """#!/bin/bash
@@ -103,8 +102,8 @@ def test_a_snapshot_whose_owner_lock_is_held_survives_another_runs_reap(tmp_path
     """CLEAN half: a live snapshot is not collected, however dead its name's pid looks.
 
     `--detach` runs its playbook in a subshell whose `$$` is the parent's pid, and the parent
-    exits immediately — so under the pid-based reaper this directory was deleted out from under
-    a running deploy by the next invocation of anything, `--check` included.
+    exits immediately — so a pid-based reaper would delete this directory out from under a
+    running deploy at the next invocation of anything, `--check` included.
     """
     repo, env = _harness(tmp_path)
     env["DEPLOY_TEST_SLEEP"] = "0"
@@ -131,7 +130,7 @@ def test_an_unlocked_invocation_reaps_nothing_while_the_tree_lock_is_held(tmp_pa
 
     For those seconds the directory exists with no owner, and a `--check` run — which takes no
     lock at all — would have reaped a worktree another process was in the middle of creating.
-    Reaping moved inside the tree lock, so `--check` no longer reaps; this plants exactly that
+    Reaping happens inside the tree lock, so `--check` does not reap; this plants exactly that
     ownerless directory, holds the tree lock the way the creating process would, and asserts a
     concurrent `--check` leaves it alone.
     """

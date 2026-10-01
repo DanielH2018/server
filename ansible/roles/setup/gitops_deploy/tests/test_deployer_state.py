@@ -1,18 +1,15 @@
 """`DeployerState` reads the same files, at the same paths, with the same three outcomes.
 
-Marker files were read through a bare `_read_marker(path)` helper and a module constant each.
-`deploy_io.DeployerState` wraps them, and since issue #2051 `MARKERS` is the only table of
-them. Nothing about the on-disk layout changed, so what this module pins is that nothing
-about it changed:
+`deploy_io.DeployerState` wraps the marker files, and `MARKERS` is the only table of them.
+This module pins the on-disk layout:
 
 - the table is exactly the named pairs below, and each resolves under the host directory;
-- a MISSING file, an EMPTY file and an UNREADABLE directory are still told apart the way the
-  old helper told them apart — the first two read as None, the third RAISES.
+- a MISSING file, an EMPTY file and an UNREADABLE directory are told apart — the first two
+  read as None, the third RAISES.
 
-That third case is the one worth writing down. `_read_marker` caught `FileNotFoundError` only,
-so a state directory with the wrong mode propagated an `OSError` and the tick paged. Widening
-that to a bare `except OSError` would be the `land_lib` defect the same review files separately
-(finding 13): a host that is HELD would report converged, because "cannot read hold_sha" and
+That third case is the one worth writing down. The reader catches `FileNotFoundError` only,
+so a state directory with the wrong mode propagates an `OSError` and the tick pages. A bare
+`except OSError` would make a HELD host report converged, because "cannot read hold_sha" and
 "there is no hold" would produce the same answer.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deployer_state.py
@@ -36,8 +33,7 @@ def state(tmp_path: pathlib.Path) -> deploy_io.DeployerState:
 # ── the paths did not move ────────────────────────────────────────────────────────────────
 # Every marker by name, as `MARKERS` key -> basename on disk. A frozenset of pairs rather
 # than a count: a renamed basename or a swapped pair fails naming the marker, where a count
-# would pass either. Add a pair here when a marker is added, and nowhere else (issue #2051 —
-# these were 22 module-level constants in gitops_deploy.py with no production reader).
+# would pass either. Add a pair here when a marker is added, and nowhere else.
 EXPECTED_MARKERS = frozenset(
     {
         ("hold", "hold_sha"),
@@ -193,7 +189,7 @@ def test_clearing_the_last_role_removes_the_marker_entirely(state):
     assert not os.path.exists(state.path("manual_plane"))
 
 
-# ── the manual_plane_tags sidecar (#2307) ─────────────────────────────────────────────────
+# ── the manual_plane_tags sidecar ─────────────────────────────────────────────────
 
 
 def test_the_narrow_tags_of_a_pending_role_round_trip(state):
@@ -233,9 +229,9 @@ def test_a_refusal_widens_a_role_that_was_already_narrowed(state):
 
 
 def test_a_line_that_predates_the_range_with_no_row_is_flagged_as_the_whole_role(state):
-    """Unknown joined with anything is the whole role (#2307 review, finding 2).
+    """Unknown joined with anything is the whole role.
 
-    A line written by the deployer from before the sidecar has no row, so what its range
+    A line written by a deployer that predates the sidecar has no row, so what its range
     needed is unknown. Narrowing it to the NEXT range's answer would leave the first change
     unapplied behind a clear command.
     """
@@ -311,7 +307,7 @@ def test_the_marker_key_is_the_role_name_for_every_pending_role():
         assert deploy_changes.setup_role_tag(role) == role, role
 
 
-# ── the contention_since marker (issue #1847) ─────────────────────────────────────────────
+# ── the contention_since marker ─────────────────────────────────────────────
 def test_a_contention_streak_keeps_its_first_seen_and_counts(state):
     first = state.record_contention(SHA, "sonarr", 1000.0)
     assert (first.first_seen, first.last_seen, first.count) == (1000.0, 1000.0, 1)
@@ -352,11 +348,11 @@ def test_an_operators_clear_removes_the_marker(state):
     assert state.read("contention") is None
 
 
-# ── the k8s_deferred marker (issue #2449) ─────────────────────────────────────────────────
+# ── the k8s_deferred marker ─────────────────────────────────────────────────
 def test_a_deferred_bump_keeps_its_first_seen_stamp_and_its_origin(state):
     """The age monitor-bridge pages on, so a second deferral must not reset it.
 
-    THE ORIGIN IS KEPT TOO, where `k8s_unapplied` advances it (#2644). This marker is cleared
+    THE ORIGIN IS KEPT TOO, where `k8s_unapplied` advances it. This marker is cleared
     by a tick deploying the service, never off the origin, and `deploy_defer.unrecord` resets
     the tree — so an advanced SHA here would name a commit the host no longer carries.
     """
@@ -406,9 +402,9 @@ def test_a_torn_k8s_deferred_line_naming_the_service_is_cleared(state):
     assert state.read("k8s_deferred") is None
 
 
-# ── the alert dedupe slots, and the migration into their one file ─────────────────────────
+# ── the alert dedupe slots, and their one file ─────────────────────────
 def test_every_alert_slot_lives_in_the_one_keyed_file(state):
-    """Each slot round-trips, and writing one leaves the others standing (#3047)."""
+    """Each slot round-trips, and writing one leaves the others standing."""
     state.record_alerted("broad", SHA)
     state.record_alerted("ci", "deadbeef" * 5)
     assert state.alerted_sha("broad") == SHA
@@ -430,7 +426,7 @@ def test_clearing_a_slot_leaves_the_others_and_removes_an_emptied_file(state):
 
 
 def test_an_unknown_alert_slot_is_a_typo_not_a_new_channel(state):
-    """The check `path()` gave each slot while it was its own marker."""
+    """Each slot name is validated, so a misspelling raises instead of opening a channel."""
     with pytest.raises(KeyError):
         state.record_alerted("k9s", SHA)
     with pytest.raises(KeyError):

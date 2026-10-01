@@ -141,7 +141,7 @@ def _own(number: int, branch: str) -> al.OpenPR:
 
 
 class TestHandedOff:
-    """#2769: the superseding PR is the session account's, so app/renovate's census misses it."""
+    """The superseding PR is the session account's, so app/renovate's census misses it."""
 
     RUN = "worktree-renovate-auto"
 
@@ -186,7 +186,7 @@ class TestRenderDigest:
         assert "still open: #2" in text
 
     def test_a_superseded_pr_is_flagged_not_resolved(self) -> None:
-        """#2755: closing a `manual —` bump in favour of a hand-off PR lands nothing."""
+        """Closing a `manual —` bump in favour of a hand-off PR lands nothing."""
         text = al.render_digest(
             al.parse_run(_result(result="superseded #1 with #50"), 0, False),
             al.delta([_pr(1)], [], {1: "CLOSED"}),
@@ -384,7 +384,7 @@ _LISTING = json.dumps(
 
 
 def _listing_tools(login=(0, "me\n")) -> renovate_agent.AgentTools:
-    """A gh that answers the repository listing, and refuses the search form (#2772)."""
+    """A gh that answers the repository listing, and refuses the search form."""
 
     def run(argv, cwd=None, timeout=120):
         if argv[:3] == ["gh", "api", "user"]:
@@ -440,7 +440,7 @@ def _records(tmp_path) -> list[dict]:
 
 
 class TestRunRecord:
-    """The per-tick line the 30-day usage count reads (#2864): measured PRs, not the summary."""
+    """The per-tick line the 30-day usage count reads: measured PRs, not the summary."""
 
     def test_a_run_records_what_moved_is_clean(self) -> None:
         moved = al.delta(

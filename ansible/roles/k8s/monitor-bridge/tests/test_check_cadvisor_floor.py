@@ -2,8 +2,7 @@
 
 restarts/oom/cpu filter a per-pod vector down to offenders, so empty is the HEALTHY answer and
 a blind query is indistinguishable from it. The floor requires a minimum pod count before it
-will read empty as healthy. That split ran live from the Phase G retarget to 2026-08-24 with
-all three logging OK, found by reading the code rather than by an alert.
+will read empty as healthy.
 """
 
 from dataclasses import replace
@@ -17,9 +16,7 @@ import check
 
 # --- cAdvisor coverage floor -------------------------------------------------------------
 # restarts/oom/cpu filter a per-pod vector down to offenders, so empty-after-filtering is the
-# HEALTHY answer and an empty query is indistinguishable from it. That split ran live from the
-# Phase G retarget to 2026-08-24 with all three logging OK, found by reading the code rather than
-# by an alert. Each pair below is one input the floor must accept and one it must reject.
+# HEALTHY answer and an empty query is indistinguishable from it. Each pair below is one input the floor must accept and one it must reject.
 
 
 def _reset_cadvisor(cfg, monkeypatch, min_pods=20, consecutive=2):
@@ -40,7 +37,7 @@ def test_cadvisor_coverage_below_the_floor_is_flagged():
 
 
 def test_cadvisor_empty_vector_is_flagged():
-    # The 2026-08-24 shape exactly: an origin-pinned selector matched nothing.
+    # An origin-pinned selector that matched nothing.
     msg = checks.cluster.cadvisor_coverage_shortfall(0, 20, "CPU throttling")
     assert msg is not None
     assert "matching nothing" in msg
@@ -133,11 +130,9 @@ def test_cadvisor_floor_is_overridable_from_the_env_secret():
 def _runtime_module_sources():
     """Every runtime module beside check.py, not just the entrypoint.
 
-    The checks are moving out of check.py by domain (the 2026-09-01 split), so a walk pinned to
-    `check.__file__` would stop seeing a cAdvisor check the day it moved — the guard-scope class
-    this test was written to close, recreated one level up. `rglob`, not `glob`: the modules
-    then moved into packages (`checks/cluster.py`), and a one-level walk returned nothing —
-    the same class, recreated one level DOWN, caught only by the `assert builders` below.
+    A walk pinned to `check.__file__` would miss a cAdvisor check that lives in another module.
+    `rglob`, not `glob`: the modules live in packages (`checks/cluster.py`), and a one-level
+    walk returns nothing, caught only by the `assert builders` below.
     """
     files = Path(check.__file__).resolve().parent
     return [
@@ -152,13 +147,12 @@ def _runtime_module_sources():
 def _functions_calling(name):
     """Every top-level function in the runtime modules whose body calls `name`, by AST rather
     than by text. Matches both the bare `name(...)` form and the qualified `mod.name(...)` form,
-    since the split moved `cadvisor_sel` behind `bridge.net.`.
+    since `cadvisor_sel` lives in `bridge.net`.
 
     Derived, not enumerated. `_CADVISOR_METRICS` above is a literal tuple and the assertion it
-    drives is about origin-pinning, not about the empty-vector floor — so before this, a FOURTH
-    cAdvisor-derived check added later would inherit the pre-#495 "empty vector reads green"
-    defect with every test still passing. That is the guard-scope class the estate has now carried
-    five runs: a guard written alongside its fix inherits the fix's scope.
+    drives is about origin-pinning, not about the empty-vector floor, so a fourth cAdvisor-derived
+    check added later would inherit the "empty vector reads green" defect with every test still
+    passing.
     """
     import ast
 
@@ -183,9 +177,8 @@ def test_every_cadvisor_query_is_floored():
     """A cAdvisor check that skips the floor reads GREEN on an empty vector.
 
     cAdvisor series carry no `origin` label, so an outage or a relabel change empties the vector
-    rather than erroring — and `all(...)` over nothing is True. #495 applied `_cadvisor_blind` to
-    the three checks that existed; this derives the set instead, so a fourth fails here rather
-    than shipping the old defect.
+    rather than erroring — and `all(...)` over nothing is True. This derives the set of floored
+    checks, so a fourth fails here rather than shipping the defect.
     """
     builders = _functions_calling("cadvisor_sel")
     floored = _functions_calling("_cadvisor_blind")

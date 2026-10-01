@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
-"""Tests for the SessionStart banner's pending-setup-role line (issue #1774).
+"""Tests for the SessionStart banner's pending-setup-role line.
 
-A range carrying `roles/setup/k3s/` or `roles/setup/common/` no longer parks the deployer: the
+A range carrying `roles/setup/k3s/` or `roles/setup/common/` does not park the deployer: the
 tick fast-forwards and records the role in `/var/lib/gitops-deploy/manual_plane`. So
 `behind_since` is empty, the park line says nothing, and the change sits merged and unapplied
 where no session but the one that landed it is told. This line is where it reaches the rest.
@@ -125,7 +125,7 @@ def test_a_raising_manual_read_does_not_take_the_dirty_line_with_it():
     assert len(lines) == 1 and "primary checkout" in lines[0]
 
 
-# ── #2307: the narrow tag the deployer derived, not the whole-role tag ──────────────────────
+# ── the narrow tag the deployer derived, not the whole-role tag ──────────────────────
 
 
 def test_a_narrowed_role_names_the_tag_its_own_change_needs():
@@ -146,7 +146,7 @@ def test_a_role_with_no_narrowing_still_names_the_role_tag():
         assert "ansible/k3s-bringup.yml --tags k3s" in line
 
 
-# ── #2345: the banner warns about a command that arms the control plane ─────────────────
+# ── the banner warns about a command that arms the control plane ─────────────────
 
 
 def test_a_whole_role_apply_carries_the_control_plane_warning():

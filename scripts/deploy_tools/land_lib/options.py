@@ -23,7 +23,7 @@ MERGE_POLL_ENV = "LAND_MERGE_POLL"
 REQUIRE_AUTHOR_ENV = "LAND_REQUIRE_AUTHOR"
 # Named as a set so the deploy-tools tests can clear all of them: the renovate agent's unit
 # exports LAND_REQUIRE_AUTHOR, and a test that inherited it exercised a refusal rather than the
-# landing it was written for (issue #2640).
+# landing it was written for.
 ENV_KNOBS = (PRIMARY_ENV, MERGE_POLL_ENV, REQUIRE_AUTHOR_ENV)
 
 
@@ -41,7 +41,7 @@ def _require_author_from_env() -> str:
     """`LAND_REQUIRE_AUTHOR`: the only PR author `--arm-merge` may merge, or "" for any.
 
     renovate-agent.service sets it, because that role's contract is "never a PR by another
-    author" (`ansible/roles/setup/renovate_agent/CLAUDE.md`) and nothing checked it (#2170).
+    author" (`ansible/roles/setup/renovate_agent/CLAUDE.md`) and nothing checked it.
     An interactive session leaves it unset, so a person's own PR arms as before; the agent's
     session inherits it from the unit and cannot arm a human's PR without `--any-author`.
     """
@@ -77,8 +77,8 @@ class Options:
     primary: Path = PRIMARY_CHECKOUT
     deployer_state: Path = Path(STATE_DIR)
     # `--detach` forks the landing into a logfile this script names; `--await-verdict` then
-    # blocks on that child's own VERDICT line. Both default off, so every invocation written
-    # before 2026-09-30 reaches the same code it always did (issue #2853).
+    # blocks on that child's own VERDICT line. Both default off, so an invocation that omits
+    # them reaches the same code path as a plain landing.
     detach: bool = False
     await_verdict: bool = False
     # Where `--detach` writes. Empty means `$CLAUDE_JOB_DIR/tmp`, or `detach.FALLBACK_LOG_DIR`

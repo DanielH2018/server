@@ -1,7 +1,7 @@
 ---
 # Role defaults for sops_setup. The SOPS binary pin lives here, not in `tasks/main.yml`, so
 # that `scripts/validate/asset_pins.py` can see it: that checker reads `defaults/main.yml`
-# alone, and a URL inline in `tasks/` leaves the digest unpaired and unfetchable (#2313).
+# alone, and a URL inline in `tasks/` leaves the digest unpaired and unfetchable.
 
 # The SOPS release every host installs, and the per-arch binary it is fetched as.
 #
@@ -15,7 +15,7 @@
 # fetches both URLs below and prints the hash that does not match. The release's
 # `sops-<ver>.checksums.txt` is the same answer from upstream. An unattended renovate_agent
 # run has no raw `curl … | sha256sum` to produce either with — the auto-mode classifier
-# denies it, which is what stalled the uv bump in #2297 (#2301, #2313).
+# denies it, which stalls a bump that needs it.
 #
 # ONE url + digest pair per architecture, rather than one pair whose digest is a Jinja
 # conditional on `ansible_facts.architecture`: `asset_pins.py` renders a pin against this

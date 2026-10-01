@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Guards the three control-plane hardening controls added 2026-08-20.
+"""Guards the three control-plane hardening controls.
 
 Each test here encodes a way one of them fails while every surface still reads green:
 
@@ -268,10 +268,10 @@ READ_VERBS = {"get", "list", "watch"}
 def test_secret_reads_are_logged_at_metadata():
     """Encryption defends the etcd snapshot; only this rule records an API-level read.
 
-    Position is the whole test. Until 2026-08-22 the policy's first rule dropped every
-    `get`/`list`/`watch` unconditionally, so a Metadata rule naming secrets was present in
-    spirit and matched nothing — a `kubectl get secrets` the readonly SA was refused left no
-    trace at all. Asserting only that some rule logs secrets passes with that bug live.
+    Position is the whole test. A policy whose first rule drops every `get`/`list`/`watch`
+    unconditionally makes a later Metadata rule naming secrets match nothing — a `kubectl get
+    secrets` the readonly SA was refused would leave no trace at all. Asserting only that some
+    rule logs secrets passes with that bug live.
     """
     rules = _audit_policy()["rules"]
     at = next(
@@ -370,7 +370,7 @@ def test_psa_does_not_enforce():
 
 
 def test_both_namespaces_carry_the_psa_labels():
-    """Labels on one namespace and not the other is the asymmetry slice 5 already produced."""
+    """Labels on one namespace and not the other leave the two namespaces enforcing different policy."""
     obs = (
         ANSIBLE
         / "roles"

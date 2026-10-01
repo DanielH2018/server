@@ -1,8 +1,8 @@
 ---
 # The time-tagger's image, a one-layer chown over the pinned uv base so the tagger can run as
-# uid 1000 (#2672). Built under the name `karakeep`, not `karakeep-time-tagger`: k8s/manifests
+# uid 1000. Built under the name `karakeep`, not `karakeep-time-tagger`: k8s/manifests
 # keys `k8s_rebuilt_images` on `manifests_service`, so a mismatched name pushes an image whose
-# rebuild rolls no pod — the recorded `n8n-runners` failure. The rollout it needs is the tagger's,
+# rebuild rolls no pod. The rollout it needs is the tagger's,
 # which `manifests_extra_rollouts` below already queues on every manifest change, and a rebuild
 # changes the manifest because the pin below names the content tag.
 - name: Build the karakeep time-tagger image
@@ -37,16 +37,16 @@
     # `secretKeyRef` in deployment-time-tagger.yaml.j2. Its script IS a plain (non-subPath)
     # ConfigMap mount, so kubelet syncs a changed script and the `while true; sleep 900` loop
     # re-execs it without a restart — but that mechanism only covers the script file, not the
-    # env var, which resolves once at pod start same as crowdsec's node agents (#689). Without
+    # env var, which resolves once at pod start same as crowdsec's node agents. Without
     # this line a rotated KARAKEEP_PYTHON_API_KEY lands in the Secret while the tagger keeps
     # calling the API with the old key.
     #
-    # chrome is still absent: it mounts no role-rendered config at all.
+    # chrome is absent: it mounts no role-rendered config at all.
     #
     # ACCEPTED COST: the restart is gated on the render changing, not on the SECRET changing, so
-    # any karakeep manifest edit now also rolls time-tagger, and this extra rollout is queued for
-    # the batch drain like any other, so the deploy waits on it. Unlike crowdsec's node agents
-    # (#689), that wait should be cheap: time-tagger has no readinessProbe
+    # any karakeep manifest edit also rolls time-tagger, and this extra rollout is queued for
+    # the batch drain like any other, so the deploy waits on it. Unlike crowdsec's node agents,
+    # that wait should be cheap: time-tagger has no readinessProbe
     # (deployment-time-tagger.yaml.j2, and karakeep_autodeploy_reason cites this as
     # "probe-less"), so a pod counts Ready as soon as its main container starts, which needs only
     # the wait-for-karakeep initContainer's TCP probe of the karakeep Service to succeed — and
@@ -56,7 +56,7 @@
       - name: karakeep-meilisearch
       - name: karakeep-time-tagger
     # networkpolicy-chrome.yaml and networkpolicy-meilisearch.yaml are listed HERE rather than
-    # in netpol-baseline on purpose (#1620, the same defect #1609 closed for authelia). The
+    # in netpol-baseline on purpose, as for authelia's redis policy. The
     # `wait-for-deps` initContainer in deployment.yaml.j2 retries karakeep-chrome:9222 and
     # karakeep-meilisearch:7700 in an unbounded loop, so with either policy absent a
     # `--tags karakeep` deploy stages a pod that sits in Init forever. Co-located, the three

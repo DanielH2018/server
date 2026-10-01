@@ -54,7 +54,7 @@ def test_argv_picks_ssh_for_a_remote_host_and_bash_for_the_local_one():
 
 
 def test_the_local_leg_pins_the_user_bus_when_the_shell_has_none():
-    """FLAGGED half for #1872: an interactive session's shell exports neither variable, and
+    """FLAGGED half: an interactive session's shell exports neither variable, and
     `systemd-run --user` then dies with "Failed to connect to bus: No medium found"."""
     from fanout_lib.transport import local_env
 
@@ -148,7 +148,7 @@ def test_the_worktree_command_fetches_before_adding_from_origin_master():
 
 
 def test_the_primary_checkout_is_fast_forwarded_between_the_fetch_and_the_add():
-    """Issue #2675: hooks are named by an absolute path into the primary checkout.
+    """Hooks are named by an absolute path into the primary checkout.
 
     A worktree cut from a fresher `origin/master` than the primary checkout registers hook
     scripts that checkout lacks, and every skipped guard is a non-blocking hook error Claude
@@ -217,7 +217,7 @@ def test_the_systemd_run_command_is_a_transient_user_service_reading_the_brief()
 
 
 def test_the_unit_is_bounded_by_a_runtime_cap_and_a_budget():
-    """Issue #2816: nothing bounded a headless batch's wall clock or its spend."""
+    """Nothing bounded a headless batch's wall clock or its spend."""
     cmd = systemd_run_command("b")
     assert f"-p RuntimeMaxSec={RUNTIME_MAX_S} " in cmd
     assert cmd.index("RuntimeMaxSec") < cmd.index("claude -p")
@@ -452,7 +452,7 @@ def test_saving_a_manifest_leaves_no_temporary_file_behind(tmp_path):
 
 
 def test_a_save_that_fails_mid_write_leaves_the_previous_manifest_intact(tmp_path):
-    """#1677: `clean` saves after every removal, so a crash mid-write is not a rare edge.
+    """`clean` saves after every removal, so a crash mid-write is not a rare edge.
 
     An in-place write would truncate the file: `remote_fanout_lines` then skips the run in
     the SessionStart banner without a word, and `cmd_clean` cannot load it at all, leaving

@@ -173,84 +173,69 @@ nav:
       # The long-form documents three of the records above compress. They sit under Decisions
       # rather than in a section of their own: each one is the working-out behind a single
       # ADR, and a reader who wants that depth arrives from the record, not from a
-      # top-level heading. The former "Design" section held exactly these three plus the D2
-      # plan, and ADR-0007, ADR-0009, ADR-0010 and ADR-0015 now carry all four decisions.
+      # top-level heading.
       - Background:
           - "Longhorn backup tiering (ADR-0007)": longhorn-backup-tiering.md
           - "NetworkPolicy default-deny (ADR-0009)": networkpolicy-default-deny.md
-          # The per-slice record, split out of the page above when it reached 778 lines. It is
+          # The per-slice record. It is
           # the answers each deploy settled by observation, and slice 5's four decisions govern
           # how the baseline selects pods — live content, not archive material.
           - "NetworkPolicy — what each slice settled": networkpolicy-slice-answers.md
           - "Argo and Flux evaluation (ADR-0010)": archive/gitops-argo-flux-evaluation.md
-  # Runbooks and Operations were separate sections split on whether a procedure drives the
-  # system or recovers it. The split leaked in both directions — an upgrade is both, and a
-  # reader looking for "how do I do X" had to guess which heading X was filed under. One
-  # section, ordered day-to-day first and recovery last.
+  # One section, ordered day-to-day first and recovery last. An upgrade is both a
+  # driving and a recovery procedure, so a reader looking for "how do I do X" should not
+  # have to guess which heading X is filed under.
   - Operations:
       - Deploying by hand: deploying.md
       # The long form behind the `land-after-merge` skill. The skill carries the invocation
-      # and the verdict decoder; this page carries the measurement behind each rule, which is
-      # what kept the skill at 418 lines and 47 commits (#2853).
+      # and the verdict decoder; this page carries the measurement behind each rule, which
+      # keeps the skill short.
       - Landing a merged PR: landing.md
       - The GitOps pipeline: gitops-pipeline.md
-      # The "(drafted)" suffix was dropped when the claim protocol and the /issue-fanout
-      # skill landed: the page now describes a system that exists, not one still specced.
       - Issue claiming and fan-out: issue-claiming-and-fanout.md
       - Secret rotation: secret-rotation.md
       - Claude shell permissions: claude-shell-permissions.md
       - Claude tooling reference: claude-tooling.md
       - Failure classes: failure-classes.md
       # Layout decisions, module conventions and the ranked structural findings from the
-      # 2026-09-04 review of land_lib, monitor-bridge and gitops_deploy.
+      # review of land_lib, monitor-bridge and gitops_deploy.
       - Python code organization: python-code-organization.md
       - Security tools: security-tools.md
       - WireGuard private access: wireguard-private-homelab-access.md
       - Healthchecks.io deadman: healthchecks-io-deadman.md
       - Uptime Robot monitors: uptime-robot-monitors.md
       # The per-check record behind monitor-bridge's role CLAUDE.md: measurements, incidents
-      # and retirements, kept off the file a session loads on every touch of the role (#2126).
+      # and retirements, kept off the file a session loads on every touch of the role.
       - monitor-bridge check history: monitor-bridge-checks.md
-      # Same split as the line above, for k8s/volume-snapshot (#2699): the drill records and the
-      # measured traps, kept off the role CLAUDE.md a session loads on every touch of the role.
+      # The pages below each take the working-out of one role CLAUDE.md: drill records,
+      # measured traps, board provenance and design records. The role doc keeps the operating
+      # rules, within the inject hook's character budget, and a session reads the page only
+      # when it edits that code.
       - volume-snapshot drill record: volume-snapshot-drills.md
-      # And again for k8s/observability (#2925): the board provenance and the panel-query traps a
-      # 2026-09-10 audit measured, kept off the role CLAUDE.md, which keeps the editing rules.
       - observability dashboard record: observability-dashboards.md
-      # Four more of the same split (#2985), each taking one role CLAUDE.md back under the
-      # inject hook's character budget. The role doc keeps the operating rules; the page takes
-      # the working-out a session reads only when it edits that code.
       - cronjob-gate design record: cronjob-gate-design.md
       - headlamp plugins and OIDC record: headlamp-oidc-and-plugins.md
       - game-stats internals: game-stats-internals.md
       - n8n community node packages: n8n-community-packages.md
-      # And the same split again (#2989), continuing the trim through the remaining
-      # over-budget role docs.
       - renovate_notify internals: renovate-notify-internals.md
       - Traefik startup and plugins: traefik-plugins-and-startup.md
       - Traefik client identity and TLS: traefik-client-identity-and-tls.md
       - Valheim modding: valheim-modding.md
       - autofix-bridge actuators: autofix-bridge-actuators.md
-      # The same split once more (#2991), for the five largest remaining role docs.
       - CrowdSec record: crowdsec-waf-record.md
       - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
       - Jellyfin plugins: jellyfin-plugins.md
       - claude-rc caps: claude-code-rc-caps.md
       - Claude memory store copy: claude-memory-sync.md
       - hypervisor libvirt internals: hypervisor-libvirt-internals.md
-      # The same split again (#2993), working the remaining over-budget role docs smallest first.
       - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
       - observability OIDC and idle diagnosis: observability-oidc-and-idle-diagnosis.md
       - monitor-bridge internals: monitor-bridge-internals.md
-      # And again (#2995), on the three smallest of the ten role docs still over the budget.
       - homepage widgets and layout: homepage-widgets-and-layout.md
       - volume-revert drill and sizing: volume-revert-drill-and-sizing.md
       - renovate_agent bounds and digest: renovate-agent-bounds-and-digest.md
-      # And again (#2997), on k3s and authelia; volume-snapshot's share went onto its existing
-      # drill-record page rather than a second one.
       - k3s node-plane crons and incidents: k3s-node-plane-crons-and-incidents.md
       - Authelia sessions and CrowdSec init: authelia-sessions-and-crowdsec-init.md
-      # And the last of them (#2999), which empties both OVER_CEILING dicts.
       - Pi host tuning record: pi-host-tuning-record.md
       - Host baseline record: host-baseline-record.md
       - uptime-kuma and AutoKuma record: uptime-kuma-autokuma-record.md
@@ -268,8 +253,6 @@ nav:
   # not as instructions. Operations holds only pages that describe the lab as it runs.
   # The archive index lists every archived plan and names where its live documentation went,
   # and the pages under it stay off the nav (see not_in_nav above). So this heading is the
-  # index alone. Two pages used to sit beside it: the #2245 runner spike, which moved into
-  # the archive once ADR-0018 recorded the repository-visibility decision its verdict waited
-  # on, and the 2026-08-02 B2 transaction-cap incident record, which #2821 moved there too.
+  # index alone.
   - History:
       - Archive index: archive/README.md

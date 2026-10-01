@@ -2,12 +2,12 @@
 
 These scripts aren't a package (no `__init__.py`), so a test can't `import probe`
 normally — nothing on disk resolves that name until something loads it by path. Every
-test file used to carry its own `importlib.util.spec_from_file_location` copy of that
-dance; this collapses it to one load per script, done here at collection time (pytest
-imports conftest.py before it collects any test module in this directory), and
-registers each into `sys.modules` so a plain `import probe` / `import postflight` /
-`import grafana_panel_report` in a test file resolves to this same object — standard
-`importlib` usage, not a special pytest hook.
+test file would otherwise carry its own `importlib.util.spec_from_file_location` copy
+of that dance; this collapses it to one load per script, done here at collection time
+(pytest imports conftest.py before it collects any test module in this directory),
+and registers each into `sys.modules` so a plain `import probe` / `import postflight`
+/ `import grafana_panel_report` in a test file resolves to this same object —
+standard `importlib` usage, not a special pytest hook.
 """
 
 import importlib.util
@@ -54,8 +54,8 @@ grafana_panel_report = _load_by_path(
 # The validators need no load here. `scripts/` is on pythonpath, `validate/` is a namespace
 # package under it, and `from validate.k8s_manifests import ...` is spelled the same way by
 # every caller — so normal import machinery caches one object under one sys.modules key.
-# They were loaded by path while the flat name `validate_k8s_manifests` was reachable from
-# two pythonpath entries, which is the second copy this replaced.
+# They are not loaded by path because a flat name `validate_k8s_manifests` reachable from
+# two pythonpath entries would create a second copy.
 
 
 # Fake resolver: maps container name -> a recognizable IP. A wrong container name
@@ -95,8 +95,8 @@ def fake_k8s_endpoint():
 # `docs/tests/test_gen_reference_scripts.py` and `lib/tests/test_script_coverage.py` assert
 # rules against that live result rather than only against synthetic fixtures — CLAUDE.md's
 # "a check that finds its own subject by pattern ships with a named member it must find".
-# Each used to pay for its own walk: 53s of the suite's CPU between them, for eleven copies
-# of one answer. The tree does not change under a test run.
+# Without the shared build each test would pay for its own walk, for eleven copies of one
+# answer. The tree does not change under a test run.
 #
 # Session scope, so the two modules share one build when xdist puts them on the same worker
 # (`--dist loadscope` keeps a module together but does not co-locate modules). Rows are
@@ -112,7 +112,7 @@ def live_script_rows():
 #
 # `lib.script_classify.classify()` re-reads every cron template, prek hook and workflow to
 # decide how each script is run. Two live-tree tests in `docs/tests/test_gen_reference_scripts.py`
-# assert against that result and each paid for its own derivation (issue #2401). Verdicts are a
+# assert against that result and each paid for its own derivation. Verdicts are a
 # plain mapping and read-only for both.
 @pytest.fixture(scope="session")
 def live_verdicts():

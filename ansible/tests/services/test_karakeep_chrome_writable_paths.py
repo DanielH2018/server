@@ -5,8 +5,7 @@ exactly two paths outside its image tree: `/tmp` (profile, crash dumps, and the 
 `--disable-dev-shm-usage` moves out of /dev/shm) and `/var/cache/fontconfig`. Neither failure
 is loud. A missing /tmp mount is the one that breaks rendering; a missing fontconfig cache only
 logs `Fontconfig error: No writable cache directories` and makes chromium rescan the font tree
-on every process start, which is why it survived PR #1164 and had to be found in the pod's log
-(#1174). Both are invisible to every other guard here: `test_container_security_context.py`
+on every process start, which is why only the pod's log shows it. Both are invisible to every other guard here: `test_container_security_context.py`
 reads the securityContext without asking what the container then needs writable, and
 `test_volume_names_descriptive.py` checks a mount resolves to a volume without caring which
 mounts exist.

@@ -106,7 +106,7 @@ def builder_include_is_too_late(tasks: str) -> bool:
     """Does this role include k8s/manifests before k8s/image-builder?
 
     Pure over the task file's text so the red proof below can hand it a reversed copy. `False`
-    for a role carrying only one of the two, the shape the retired n8n-images role had.
+    for a role carrying only one of the two.
     """
     builder = tasks.find("name: k8s/image-builder")
     manifests = tasks.find("name: k8s/manifests")
@@ -157,8 +157,7 @@ def test_every_builder_include_precedes_the_manifests_include():
 
     `k8s_built_image_tags` is a play fact, and a role that includes k8s/manifests first renders
     its Deployment before k8s/image-builder has published — the play dies on an undefined
-    variable, or renders `:latest` if something else defined it. Seven of the nine images are
-    built by the role that deploys them, so seven task files carry this ordering.
+    variable, or renders `:latest` if something else defined it.
     """
     checked, late = [], []
     for role in sorted(KNOWN_BUILT_IMAGES):

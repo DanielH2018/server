@@ -7,10 +7,10 @@
 #
 #   npm error 404 Not Found - GET https://registry.npmjs.org/renovate/-/renovate-44.75.0.tgz
 #
-# Three master CI runs failed exactly that way on 2026-09-09/10, each 1.5-2 minutes after a
-# publish, and the next run six minutes later passed on the same version (issue #1269). That
-# is a transport failure, so the install loops with a backoff. A validation failure is the
-# verdict this script exists to deliver, so it runs once and its exit code is final.
+# Such a failure appears 1.5-2 minutes after a publish, and a run six minutes later passes on
+# the same version. That is a transport failure, so the install loops with a backoff. A
+# validation failure is the verdict this script exists to deliver, so it runs once and its exit
+# code is final.
 #
 # WHY `renovate@latest` AND NOT A PIN. The validator must match the hosted Mend app that
 # actually consumes the config, which tracks latest; the reasoning is on the `renovate-config`
@@ -21,7 +21,7 @@
 set -euo pipefail
 
 # `--help` answers from any environment, ahead of every step below — the repo-wide convention
-# `scripts/lib/tests/test_entry_points_answer_help.py` checks (#2854). The awk prints this
+# `scripts/lib/tests/test_entry_points_answer_help.py` checks. The awk prints this
 # file's leading comment block, which is the usage, with the `#` markers stripped.
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
   awk 'NR>1 && /^#/ {sub(/^# ?/, ""); print; next} NR>1 {exit}' "$0"

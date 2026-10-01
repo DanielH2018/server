@@ -48,8 +48,8 @@ def test_k8s_workloads_names_the_offenders():
 
 
 def test_k8s_workloads_crash_loop_is_down_despite_available_replicas():
-    # The 2026-08-13 homepage incident: a CrashLoopBackOff pod passes readiness for a brief
-    # window each backoff cycle, so replica availability read healthy through 31 restarts.
+    # A CrashLoopBackOff pod passes readiness for a brief window each backoff cycle, so replica
+    # availability reads healthy through its restarts.
     # The restart counter is the signal that doesn't flap.
     restarts = [({"pod": "homepage-58d867556f-7qbz9"}, 6.0)]
     ok, msg = checks.cluster.k8s_workloads_verdict(18, [], 5, restarts)
@@ -106,9 +106,9 @@ def test_cluster_targets_covers_everything_its_sibling_does_not(monkeypatch, cfg
     """`origin!="daniel-server"` is the complement of check_targets_down's pin, so every `up`
     series belongs to exactly one of the two checks.
 
-    THE GAP THIS PINS (2026-08-15): the previous `origin=""` matched only series where the label
-    is ABSENT (cluster-native). daniel-box's node-exporter carries `origin="daniel-box"`, so it
-    matched NEITHER check and could have died watched by nothing.
+    THE GAP THIS PINS: an `origin=""` selector matches only series where the label is ABSENT
+    (cluster-native). daniel-box's node-exporter carries `origin="daniel-box"`, so it would match
+    NEITHER check and could die watched by nothing.
     """
     seen = {}
 
@@ -130,10 +130,9 @@ def test_cluster_targets_empty_is_down(cfg):
 
 
 def test_targets_empty_vector_is_down_not_all_clear():
-    # THE hole B5 opens. Before the repoint an empty `up` could only mean the queried Prometheus
-    # was down, and the PROM_DEPENDENT gate suppressed this check first. Against the cluster copy
-    # the gate passes (that Prometheus is fine) while `up{origin="daniel-server"}` is empty, and
-    # the old code returned "all 0 targets up".
+    # THE hole this pins: against the cluster Prometheus the PROM_DEPENDENT gate passes (that
+    # Prometheus is fine) while `up{origin="daniel-server"}` is empty, and an unguarded check
+    # returns "all 0 targets up".
     ok, msg = checks.cluster.targets_verdict([], 5)
     assert ok is False
     assert "UNKNOWN" in msg

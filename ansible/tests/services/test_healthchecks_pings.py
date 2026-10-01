@@ -139,7 +139,7 @@ def test_the_ping_census_still_finds_every_sender() -> None:
 
 @pytest.mark.parametrize("path", _sending_files(), ids=lambda p: p.name)
 def test_a_retried_ping_stays_off_stderr(path: Path) -> None:
-    """A ping that retries must not mail its retry chatter from a healthy run (#2511).
+    """A ping that retries must not mail its retry chatter from a healthy run.
 
     `--retry` writes `Warning: ... Will retry` to stderr for every attempt a later one
     recovers. cron mails whatever a job writes, so under `-S` a run that succeeded on the

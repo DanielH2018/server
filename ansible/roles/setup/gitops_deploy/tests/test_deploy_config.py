@@ -1,10 +1,9 @@
 """Parsing the deployer's config cannot fail; only running with a bad one can.
 
-`load_config` used to be ~40 `int(C.get(...))` calls evaluated at module level, so a config
-file with `K8S_DEPLOY_TIMEOUT_S=5m` in it raised `ValueError: invalid literal for int() with base
-10: '5m'` during IMPORT — before the process had a webhook, a log line or a heartbeat, and with
-no key name anywhere in the traceback. The parse now records the error and `Config.validate()`
-raises it from inside `main()`, where `entrypoint()` turns it into one line and a Discord post.
+Parsing must not raise at import: a `K8S_DEPLOY_TIMEOUT_S=5m` line would otherwise raise
+`ValueError: invalid literal for int() with base 10: '5m'` before the process had a webhook, a
+log line or a heartbeat, and with no key name anywhere in the traceback. The parse records the
+error and `Config.validate()` raises it from inside `main()`, where `entrypoint()` turns it into one line and a Discord post.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_deploy_config.py
 """
@@ -172,8 +171,8 @@ def test_a_good_config_validates_silently():
 
 # ── the file reader ───────────────────────────────────────────────────────────────────────
 def test_an_absent_config_file_is_an_empty_mapping(tmp_path):
-    """A missing file used to crash the import. It now leaves `repo` empty, and main() refuses
-    to tick on that — the same page, raised from a function a test can call."""
+    """A missing file must not crash the import. It leaves `repo` empty, and main() refuses
+    to tick on that — raising the same page from a function a test can call."""
     assert deploy_io.read_config_file(str(tmp_path / "absent.env")) == {}
 
 

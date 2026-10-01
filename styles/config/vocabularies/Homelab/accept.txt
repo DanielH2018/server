@@ -7,9 +7,9 @@
 #
 # AN ENTRY HERE ALSO PINS ITS CASING, ACROSS THE WHOLE CORPUS. Vale builds `Vale.Terms` from
 # this file, so adding `[Uu]fw` does not merely permit `ufw` — it makes every existing `UFW`
-# an error ("Use '[Uu]fw' instead of 'UFW'"), in files the author never opened. That broke
-# master on 2026-08-27: adding `[Uu]fw` for one new sentence failed docs/security-tools.md:213,
-# untouched and green for months.
+# an error ("Use '[Uu]fw' instead of 'UFW'"), in files the author never opened. Adding
+# `[Uu]fw` for one new sentence fails docs/security-tools.md:213, which the author never
+# touched.
 #
 # Two consequences worth knowing before you add a term:
 #   - An ALL-CAPS acronym usually needs no entry at all. Vale.Spelling already skips those,
@@ -482,7 +482,7 @@ Tdie
 [Dd]atasources?
 gitleaks
 
-# Role-doc prose moved to docs/ pages (#2985): cronjob-gate, headlamp, game-stats, n8n
+# Terms from the cronjob-gate, headlamp, game-stats and n8n pages
 adaliszk
 [Dd]ockerfiles?
 [Dd]eploy's
@@ -491,7 +491,7 @@ mtail
 [Pp]repends
 supervisord
 
-# Role-doc prose moved to docs/ pages (#2989): renovate_notify
+# Terms from the renovate_notify page
 renovate_notify
 [Ss]andboxed
 [Uu]nwritable
@@ -500,7 +500,7 @@ stdin
 [Cc]allout
 [Uu]ngrouped
 
-# traefik role doc split across two docs/ pages (#2989)
+# Terms from the traefik pages
 TLSOption
 SNICheck
 startupProbe
@@ -509,7 +509,7 @@ selfcheck
 Yaegi
 [Dd]atafiles?
 
-# valheim role doc split to docs/valheim-modding.md (#2989)
+# Terms from docs/valheim-modding.md
 Thunderstore
 initContainers?
 eval'd
@@ -522,7 +522,7 @@ Jotunn
 Serverside_Simulations
 [Cc]rossplay
 
-# autofix-bridge role doc split to docs/autofix-bridge-actuators.md (#2989)
+# Terms from docs/autofix-bridge-actuators.md
 [Kk]eyframes?
 [Cc]odecs?
 ffprobes?
@@ -530,8 +530,8 @@ ffprobes?
 [Tt]unables?
 host_vars
 
-# Role-doc prose moved to docs/ pages (#2991): crowdsec, qbittorrent, jellyfin, claude_code,
-# hypervisor. Identifiers stay code spans; these are the words Vale reads as prose.
+# Terms from the crowdsec, qbittorrent, jellyfin, claude_code and hypervisor pages.
+# Identifiers stay code spans; these are the words Vale reads as prose.
 Metabase
 [Rr]esync
 [Tt]ailer
@@ -542,7 +542,7 @@ Webhook's
 [Uu]nreferenced
 [Rr]eparented
 
-# Role-doc prose moved to docs/ pages (#2995): homepage, volume-revert, renovate_agent.
+# Terms from the homepage, volume-revert and renovate_agent pages.
 # Identifiers stay code spans; these are the words Vale reads as prose.
 gethomepage
 gethomepage's
@@ -552,7 +552,7 @@ Emby's
 [Uu]nlanded
 [Ss]lugified
 
-# Role-doc prose moved to docs/ pages (#2997): k3s, authelia, volume-snapshot.
+# Terms from the k3s, authelia and volume-snapshot pages.
 # Identifiers stay code spans; these are the words Vale reads as prose.
 [Rr]edis
 [Cc]rontab
@@ -573,8 +573,8 @@ fd
 [Ss]napshotted
 access_control
 
-# Role-doc prose moved to docs/ pages (#2999): optimize_pi, initial_setup, gitops_deploy and
-# uptime-kuma. The Pi's OS-tuning vocabulary is the bulk of it.
+# Terms from the optimize_pi, initial_setup, gitops_deploy and uptime-kuma pages. The Pi's
+# OS-tuning vocabulary is the bulk of it.
 [Zz]ram
 [Ss]wapfile
 [Ss]wapoff

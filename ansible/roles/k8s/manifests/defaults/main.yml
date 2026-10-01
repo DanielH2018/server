@@ -8,13 +8,13 @@
 # nobody runs. `probe.py releases` is that reader.
 manifests_release_dir: /var/lib/homelab/k8s-releases.d
 
-# The host-local HMAC key both records' `secret_digest` is keyed with (#2574). root, 0600,
+# The host-local HMAC key both records' `secret_digest` is keyed with. root, 0600,
 # created on first use by files/secret_hmac.py and never copied, printed or committed. Outside
 # k8s-releases.d, whose records are 0644. Deleting it re-keys every future digest, so each
 # service with secret manifests reads stale until its next deploy writes a fresh release record.
 manifests_secret_digest_key: /var/lib/homelab/k8s-secret-digest.key
 
-# Render-only mode (#2574). Under `k8s_dry_run`, render_record.yml digests the throwaway
+# Render-only mode. Under `k8s_dry_run`, render_record.yml digests the throwaway
 # render the same way release_stamp.yml digests an applied one and writes it here, so
 # `probe.py releases --stale-only` can compare what is applied against what the tree would
 # render. Off by default: a hand-run `--dry-run` is normally a branch, and a render record
@@ -48,26 +48,21 @@ manifests_prune_kinds: []
 # `manifests_rollout_timeout` of its own — the ONE place that number is written, so a role that
 # needs more overrides it rather than the shared value drifting per call site.
 #
-# 600s, raised from 300s on 2026-09-24 (#2377). 300s bounded a rollout that had to pull its
-# image cold over a domestic line, and three roles bought their way out of it one incident at a
-# time: prowlarr 780s (#2369, an 8m54s pull of the 292 MB flaresolverr image), sonarr and radarr
-# 660s (#2370), then bazarr, whose drain gave up at 300.27s while the pod it was waiting for
-# entered `running` 34 seconds later. Every other role carried the same exposure, decided by
-# image size and registry weather rather than by anything in the repo.
+# 600s covers a rollout that has to pull its image cold over a domestic line: prowlarr needs
+# 780s for an 8m54s pull of the 292 MB flaresolverr image, and sonarr and radarr need 660s.
+# The pull time is set by image size and registry weather rather than by anything in the repo,
+# so a flat default has to cover the slow end.
 #
 # WHY 600 AND NOT MORE. `rollout status` exits non-zero the moment Kubernetes marks a Deployment
 # ProgressDeadlineExceeded, which it does after `progressDeadlineSeconds` — default 600 — without
 # progress. A shared budget above 600 is therefore unreachable until every role's template
 # renders a matching deadline, which is a change across ~23 roles rather than this one line.
-# 600s is the most this default can be worth on its own, and it covers the bazarr case with
-# 266s to spare. A role that genuinely needs more raises BOTH numbers, the way prowlarr,
+# 600s is the most this default can be worth on its own. A role that genuinely needs more raises BOTH numbers, the way prowlarr,
 # sonarr, radarr and valheim do.
 #
-# WHY NOT DERIVE IT FROM THE IMAGE SIZE. #2377 weighed reading the compressed size off the
-# registry manifest and scaling the budget by it. It is not taken here: the size the registry
-# reports is the pull's numerator only, the denominator is the link, and a budget that reads a
-# remote manifest makes every k8s role's rollout depend on a registry round-trip that can itself
-# fail. The cost of the flat value is a slower failure on a genuinely stuck rollout; the health
+# WHY NOT DERIVE IT FROM THE IMAGE SIZE. The size the registry reports is the pull's
+# numerator only, the denominator is the link, and a budget that reads a remote manifest makes
+# every k8s role's rollout depend on a registry round-trip that can itself fail. The cost of the flat value is a slower failure on a genuinely stuck rollout; the health
 # gate reports that either way.
 #
 # Read by `ansible/tests/_helpers.py:MANIFESTS_ROLLOUT_DEFAULT_S`, which is what the two budget
@@ -76,8 +71,7 @@ manifests_rollout_timeout_default: 600s
 
 # Which of this role's three change signals queues a `rollout restart` for a rollout entry, and
 # so which of them makes the release record expect a fresh `restartedAt` from that workload.
-# Every entry gets all three unless it names its own `restart_on:`, which is the behaviour every
-# role had before the key existed.
+# Every entry gets all three unless it names its own `restart_on:`.
 #
 # A role with `manifests_rollout: ''` restarts its own workloads, and `manifests_render is
 # changed` is a per-ROLE signal, not a per-workload one: observability renders six workloads from
@@ -85,29 +79,26 @@ manifests_rollout_timeout_default: 600s
 # Such a role narrows each `manifests_self_rollouts` entry — `restart_on: [secret]` for a
 # workload whose only un-hashable input is a Secret, `restart_on: []` for one whose ConfigMap is
 # hashed into its own pod template (`ansible/templates/checksum-annotation.yml.j2`), where the
-# apply itself does the rolling and `manifests_rolled_by_apply` reports it. Issue #2858.
+# apply itself does the rolling and `manifests_rolled_by_apply` reports it.
 manifests_restart_triggers_default: [config, secret, image]
 
 # Manifest basenames this role renders from a SHARED template under `ansible/templates/` when
-# the caller's own role ships no `templates/<basename>.j2` (#2872). A role's own template
+# the caller's own role ships no `templates/<basename>.j2`. A role's own template
 # always wins; this is the fallback, not an override.
 #
-# `service.yaml` was the first entry. 22 roles' Service templates were byte-identical three-line
-# wrappers around the `service()` macro, differing only in the name and port the macro reads
-# off `container_item` anyway. The two variants they did carry — a named port, an exportarr
-# sidecar's second port — became `service_port_name` and `service_extra_ports` on the
-# containers_list entry, so the fallback covers all 22.
+# `service.yaml` is one call to the `service()` macro, which reads the name and port off
+# `container_item`. A named port or an exportarr sidecar's second port come from
+# `service_port_name` and `service_extra_ports` on the containers_list entry.
 #
-# `ingressroute.yaml` is the second (#3043). 16 roles' IngressRoute templates were the same
-# shape: one call to the `ingressroute()` macro with the name, hostname, port and
-# `use_authelia` the entry already carries. A role whose route needs a parameter the entry
+# `ingressroute.yaml` is one call to the `ingressroute()` macro with the name, hostname, port
+# and `use_authelia` the entry already carries. A role whose route needs a parameter the entry
 # does not carry — extra middlewares, `public=false`, a bypass prefix, a render condition —
-# keeps its own template. Deleting those 16 also took the string the deploy's traefik ordering
-# edge was derived from, so `ansible/filter_plugins/toposort.py` derives that edge from the
-# entry's `hostname` instead.
+# keeps its own template. A route rendered from the shared template leaves no string in the
+# role, so `ansible/filter_plugins/toposort.py` derives the deploy's traefik ordering edge
+# from the entry's `hostname`.
 #
-# The render task below resolves the source per file, so the fallback costs nothing for the
-# ~40 roles that ship their own Service, and the prune keep-set is unchanged: the caller still
+# The render task below resolves the source per file, so the fallback costs nothing for a
+# role that ships its own template, and the prune keep-set is unchanged: the caller still
 # names `service.yaml` in `manifests_files`, which is what the prune and the digest both read.
 #
 # `scripts/lib/k8s_roles.py:SHARED_MANIFEST_DEFAULTS` mirrors this map so the offline render

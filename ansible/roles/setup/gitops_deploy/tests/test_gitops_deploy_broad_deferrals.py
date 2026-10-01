@@ -2,10 +2,9 @@
 """What a broad tick SAYS about the half of its range it did not deploy.
 
 The sibling suite (`test_gitops_deploy_broad_k8s.py`) covers what a broad range deploys. This
-one covers the pages it sends about everything else, and the three ways that went wrong: a
-rotation's page dropped by a failed apply (#2383), a k8s role called unapplied that the tick's
-own deploy plane had just applied (#2453), and the budget-deferred bump whose only signal is
-the post those two changes must not take away (#2449).
+one covers the pages it sends about everything else: a rotation's page after a failed apply,
+a k8s role the tick's own deploy plane applied, and the budget-deferred bump whose only
+signal is the post the other two rules must not take away.
 
 Each rule is a pair, for the reason the sibling suite states: a channel that fired on every
 range and one that fired on none read the same from the accepting side alone.
@@ -36,7 +35,7 @@ from _broad_k8s_range import (
 def test_a_failed_broad_apply_still_pages_a_secret_riding_the_same_range(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2383: every arm that leaves the range merged sends the page itself.
+    """Every arm that leaves the range merged sends the page itself.
 
     `alert_once` advances its marker on DETECTION and the range has already fast-forwarded, so
     `local == origin` and every later tick noops. A page skipped here is never sent, and the
@@ -63,7 +62,7 @@ def test_a_failed_broad_apply_pages_no_secret_the_range_never_carried(
 def test_a_contended_tick_pages_no_secret_until_the_retry_merges(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2459: the contention arm resets the ff-merge, so its page would be false.
+    """The contention arm resets the ff-merge, so its page would be false.
 
     The post says the range was fast-forwarded and sends the operator at `ansible-playbook
     ansible/deploy.yml --tags <svc>`. After a reset the tree is back on `local`, so that
@@ -104,11 +103,11 @@ def _hand_edited_radarr(settings, tick, *, declared: bool):
 def test_a_k8s_role_the_narrowed_plane_applied_is_not_called_unapplied(
     gitops_deploy, tick, settings, state_dir
 ):
-    """#2453: the plane ran `deploy.yml --tags radarr,sonarr`, so "not applied" is false.
+    """The plane ran `deploy.yml --tags radarr,sonarr`, so "not applied" is false.
 
     `narrow_broad` maps radarr's own changed path to its tag, so the narrowed list names it
-    whenever the range also carries a deploy-plane path. The post used to print the very
-    command the tick had just run as the remedy.
+    whenever the range also carries a deploy-plane path. Otherwise the post would print the
+    very command the tick had just run as the remedy.
     """
     config = _hand_edited_radarr(settings, tick, declared=True)
     tick.narrow = (0, "radarr,sonarr")
@@ -165,7 +164,7 @@ def test_a_k8s_role_the_deploy_plane_missed_is_still_called_unapplied(
 def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The subtraction above must not reach the one signal a budget-deferred bump has (#2449).
+    """The subtraction above must not reach the one signal a budget-deferred bump has.
 
     A bump the remaining budget cannot fit is folded into `cs.k8s`, and it is there precisely
     BECAUSE no plan applied it — so it can never be plane-covered. Losing it from the post
@@ -176,7 +175,7 @@ def test_a_budget_deferred_bump_is_still_named_by_the_deferral_post(
     assert any("sonarr" in post for post in tick.posts)
 
 
-# ── the k8s_deferred marker: the durable half of a budget deferral (#2449) ────────────────
+# ── the k8s_deferred marker: the durable half of a budget deferral ────────────────
 
 
 def _out_of_budget(settings, tick):
@@ -224,7 +223,7 @@ def test_a_bump_the_tick_deployed_is_not_recorded(
 def test_the_service_deploy_a_later_tick_runs_clears_the_marker(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The way out the deployer owns. Without it the page never stops (#2449).
+    """The way out the deployer owns. Without it the page never stops.
 
     An operator's own `./scripts/deploy.sh` is invisible here, which is what
     `gitops_state.py clear-k8s-deferred` exists for; a deploy the TICK runs is not.
@@ -254,11 +253,10 @@ def test_a_deploy_plane_that_applies_the_service_clears_the_marker(
 def test_a_hand_edited_k8s_role_is_not_recorded(
     gitops_deploy, tick, settings, state_dir
 ):
-    """The class #2471 decided the marker does NOT cover.
+    """The class the marker does NOT cover.
 
     A hand-edited role is merged by the person landing it, whose `land.sh` is watching — and
-    recording every such change (forty of the fifty-four k8s roles are denylisted) would hold
-    GitOps Deploy — Status red as normal operation.
+    recording every such change would hold GitOps Deploy — Status red as normal operation.
     """
     config = mixed(settings, tick, APPLYABLE_ROLE, HAND_EDITED_K8S)
     assert gitops_deploy.main(tick.tools, config) == 0

@@ -1,7 +1,7 @@
 """traefik_latency_verdict: the two guards that stopped it being the estate's flappiest monitor.
 
-51 DOWN episodes in the 30 days to 2026-09-11, and a live DOWN that day naming headlamp at
-"16% of 0.24 rps". Two independent faults produced them, so each has its own pair here: one
+Two independent faults made it flap (a live DOWN named headlamp at "16% of 0.24 rps"), so
+each has its own pair here: one
 input the verdict must accept and one it must reject. A pair, because a guard that suppresses
 everything and one that suppresses nothing are indistinguishable from the passing side alone.
 
@@ -41,8 +41,8 @@ def verdict(service, rps, slow_requests, stream_prefixes=STREAMS):
 
 
 def test_a_stream_service_past_the_bucket_is_clean():
-    # The live 2026-09-11 DOWN, reproduced: headlamp at 0.24 rps with 16% past 5.0s. Measured
-    # the same day, 94.2% of headlamp's requests finished under 0.1s and the whole service
+    # A live DOWN, reproduced: headlamp at 0.24 rps with 16% past 5.0s. Measured
+    # then, 94.2% of headlamp's requests finished under 0.1s and the whole service
     # averaged 1.7s, which puts the mean of that 16% near 53s — Kubernetes watch streams, timed
     # until the connection closes. Not slowness, so not a page.
     ok, msg = verdict("homelab-headlamp-324fda85bcf3c4ab5337@kubernetescrd", 0.24, 11.5)
@@ -107,8 +107,8 @@ def test_a_service_below_the_rps_floor_is_clean():
 
 def test_a_missing_bucket_series_is_a_config_fault_not_a_fast_service():
     # An `le=` that selected nothing must not read as "0 requests under the boundary", which
-    # would page every service at once. Unchanged by this PR, pinned because the stream guard
-    # now runs ahead of this branch and could have swallowed it.
+    # would page every service at once. Pinned because the stream guard runs ahead
+    # of this branch and could swallow it.
     ok, msg = traefik_latency_verdict(
         {"homelab-sonarr-111@kubernetescrd": 1.0},
         {},

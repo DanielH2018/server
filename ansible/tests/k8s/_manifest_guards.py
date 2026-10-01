@@ -2,7 +2,7 @@
 
 These guards render ONE template with a hand-built context to assert on its output, which is
 the shape `_k8s_render.rendered_docs` (every template, the deploy's own context) does not
-serve. Split from `test_k8s_manifests.py` on 2026-09-02.
+serve.
 """
 
 from pathlib import Path
@@ -55,9 +55,9 @@ def _route_template(role: str) -> Path | None:
     """The template a role's main IngressRoute renders from, or None if it has no route.
 
     Its own `templates/ingressroute.yaml.j2`, else the shared default. A guard that asked for
-    the role's own path alone stopped covering the 16 roles whose route moved to
-    `ansible/templates/ingressroute-default.yaml.j2` (#3043), and these guards skip a role
-    they find no template for -- so the coverage would have gone quietly.
+    the role's own path alone would stop covering the roles whose route comes from
+    `ansible/templates/ingressroute-default.yaml.j2`, and these guards skip a role
+    they find no template for -- so the coverage would go quietly.
     `manifest_template` is the one resolver the deploy, the docs generators and these guards
     share.
     """

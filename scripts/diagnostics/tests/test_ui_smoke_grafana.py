@@ -6,15 +6,13 @@ module's `McpClient` and wrapper path by importing them, exactly as `test_ui_smo
 already does.
 
 The tiers in `test_ui_smoke.py` stop at Grafana's login page, which proves ingress -> Authelia
--> backend and nothing about a dashboard. That gap is not incidental: 19 dead Angular panels
-sat behind a 1/1 pod for 55 minutes, and a login-page check cannot see them. This tier logs in
-and counts rendered panels.
+-> backend and nothing about a dashboard. That gap is not incidental: dead Angular panels can
+sit behind a 1/1 pod, and a login-page check cannot see them. This tier logs in and counts
+rendered panels.
 
-**No credential is typed anywhere.** Grafana logs in through Authelia's OIDC provider
-(issue #1374), so this tier signs out and navigates to `/login/generic_oauth`, and the Authelia
-session `ui_mcp.sh` already minted completes the round trip on its own. It used to POST the
-SOPS `grafana_admin_password` into the page and scrub it out of every reply the MCP server
-echoed back; that whole apparatus is gone with the second login it existed to perform.
+**No credential is typed anywhere.** Grafana logs in through Authelia's OIDC provider, so this
+tier signs out and navigates to `/login/generic_oauth`, and the Authelia session `ui_mcp.sh`
+already minted completes the round trip on its own.
 
 The sign-out is not tidiness. Grafana's session cookie persists in the browser profile for
 days, so reusing it would skip the Authelia hop on every run after the first and leave a tier
@@ -57,7 +55,7 @@ def domain() -> str:
 # `min_headers` is a count observed live — a deliberate dashboard change updates the number.
 # (uid, minimum rendered panel headers)
 GRAFANA_DASHBOARDS = [
-    # The first four were observed live on 2026-08-30.
+    # The first four were observed live.
     ("longhorn-storage", 13),
     ("claude-code-otel", 25),
     ("ddmlqvk12uozka", 18),  # traefik-custom
@@ -82,9 +80,9 @@ GRAFANA_DASHBOARDS = [
     ("exportarr-arr-stack", 15),
 ]
 
-# Measured 2026-08-30: a dashboard that mounts draws its panels within ~2.2s, and 15 of 19
-# did so on the first sample. Samples beyond that never changed a verdict, so the budget is
-# for a slow cycle, not for a settle that keeps moving.
+# A dashboard that mounts draws its panels within ~2.2s, and 15 of 19 do so on the first
+# sample. Samples beyond that never changed a verdict, so the budget is for a slow cycle,
+# not for a settle that keeps moving.
 _PANEL_SAMPLES = 6
 _PANEL_SAMPLE_INTERVAL = 1.5
 # The un-mounted signature is a client-side race, not a slow load — it never resolves by
@@ -271,8 +269,8 @@ def test_grafana_dashboard_renders_its_panels(grafana, uid, min_headers):
     """The claim the one_factor tier cannot make: this dashboard drew its panels.
 
     Readiness, the pod, the startup log and the `validate-grafana-dashboards` hook all read
-    green through the 2026-08-22 incident, because Grafana serves a dashboard whose panel
-    type it no longer implements and the frontend simply draws nothing.
+    green when Grafana serves a dashboard whose panel type it no longer implements and the
+    frontend simply draws nothing.
     """
     verdict = grafana.open_dashboard(uid, min_headers)
     assert verdict is not None, f"{uid}: no sample was taken at all"

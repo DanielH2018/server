@@ -1,8 +1,8 @@
 """The grace window on `probe.py releases --stale-only` -- a fresh merge is pending, not stale.
 
 Split from `test_probe_releases_stale.py`, which covers WHICH paths invalidate a stamp; this
-file covers WHEN a change starts to count. `--grace-minutes` exists because the monitor
-pushed DOWN for a merge whose own landing was mid-deploy (code-server, 2026-09-21).
+file covers WHEN a change starts to count. `--grace-minutes` exists because the monitor would
+push DOWN for a merge whose own landing is mid-deploy.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_grace.py
 """
@@ -138,7 +138,7 @@ def test_pending_services_are_named_on_an_up_and_do_not_move_the_exit_code():
 
 
 def test_names_out_writes_the_counted_set_sorted(tmp_path):
-    """release-staleness-check re-alerts when this set changes (#2378)."""
+    """release-staleness-check re-alerts when this set changes."""
     out = tmp_path / "names"
     pr.write_counted_names(
         out, {"sonarr": "changed since applied: roles/k8s/sonarr/"}, ["authelia"]

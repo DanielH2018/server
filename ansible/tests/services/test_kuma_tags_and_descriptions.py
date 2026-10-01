@@ -1,8 +1,8 @@
-"""The description and tag conventions the notification templates read (#2065, #2066).
+"""The description and tag conventions the notification templates read.
 
 Split from test_kuma_static_monitors.py, which sits at the 500-line module cap. Tag references
 are the same NameNotFound hazard as the notification reference: a monitor naming a tag the
-Secret does not declare fails to parse and, under ON_DELETE=delete, is deleted (#2076).
+Secret does not declare fails to parse and, under ON_DELETE=delete, is deleted.
 """
 
 from _helpers import ANSIBLE
@@ -31,13 +31,11 @@ def test_every_tag_a_monitor_names_is_a_declared_tag_entity():
     """A monitor naming a tag the Secret does not declare is not a monitor with a typo.
 
     AutoKuma's `resolve_names` raises NameNotFound, the monitor fails to parse, and under
-    `ON_DELETE=delete` a monitor that fails to parse is one that was removed — the mechanism
-    that deleted all 107 monitors on 2026-09-18 when the notification failed to parse (#2076).
+    `ON_DELETE=delete` a monitor that fails to parse is one that was removed.
 
     The name a monitor gives in `tag_names` is the tag ENTITY's AutoKuma id — its filename
-    minus `.json` — not the `name` Kuma displays. PR #2089 referenced `severity` while the
-    entity was `tag-severity.json`; the 23 tagged monitors failed to resolve and were deleted
-    on 2026-09-19 00:31, the second time in two days (#2076).
+    minus `.json` — not the `name` Kuma displays. A monitor naming `severity` when the entity
+    is `tag-severity.json` fails to resolve and is deleted.
     """
     entities = _entities()
     declared = {

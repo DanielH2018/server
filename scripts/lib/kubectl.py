@@ -1,26 +1,24 @@
 """One way to run kubectl from a script, and every call names the cluster it must reach.
 
-WHY. ``lib.git`` and ``lib.gh`` are the single invokers for those tools; kubectl had none, and
-by 2026-09-18 four argv conventions were hand-built across nine modules — ``k3s kubectl``,
-bare ``kubectl``, tool discovery plus an explicit ``--kubeconfig``, and ``sudo k3s kubectl``
-for an exec (#2062). Only one of them checked WHICH cluster it reached: the health gate's
-refusal, added after a staging deploy read green about production (#1663). Every other caller
-ran against whatever the local kubectl happened to serve, with no way to be refused.
+WHY. ``lib.git`` and ``lib.gh`` are the single invokers for those tools, and this module is
+kubectl's. Hand-built argv conventions drift apart — ``k3s kubectl``, bare ``kubectl``, tool
+discovery plus an explicit ``--kubeconfig``, ``sudo k3s kubectl`` for an exec — and a caller
+that does not check WHICH cluster it reached runs against whatever the local kubectl happens
+to serve, with no way to be refused. A staging deploy can then read green about production.
 
 Here the intended cluster is a required positional argument of every invocation, and the
 identity check runs before the first call in a process and is cached after it. "Ran against
 an unnamed cluster" is unrepresentable rather than a per-caller guard.
 
-Two of the old conventions were deliberate and both survive as behaviour rather than as argv
-shapes. ``infra_map/live.py`` runs under cron, whose PATH omits ``/usr/local/bin`` (where
-kubectl lives, as a symlink to k3s) and whose environment carries no ``KUBECONFIG`` — so k3s's
-kubectl falls back to the root-owned ``/etc/rancher/k3s/k3s.yaml`` and prints an empty
-result that reads exactly like a cluster with nothing on it. ``find_tool`` and
-``find_kubeconfig`` moved here from that module and apply to every caller: the binary is
-resolved beyond the inherited PATH, and the kubeconfig is discovered, checked for
-readability, and passed explicitly. The health gate's ``k3s kubectl`` was the same binary
-reading the same kubeconfig (measured 2026-09-18: ``kubectl`` and ``k3s kubectl`` both
-authenticate as ``homelab-readonly``), so it needed no shape of its own.
+Two conventions are deliberate and survive as behaviour rather than as argv shapes.
+``infra_map/live.py`` runs under cron, whose PATH omits ``/usr/local/bin`` (where kubectl lives,
+as a symlink to k3s) and whose environment carries no ``KUBECONFIG`` — so k3s's kubectl falls
+back to the root-owned ``/etc/rancher/k3s/k3s.yaml`` and prints an empty result that reads
+exactly like a cluster with nothing on it. ``find_tool`` and ``find_kubeconfig`` apply to every
+caller: the binary is resolved beyond the inherited PATH, and the kubeconfig is discovered,
+checked for readability, and passed explicitly. The health gate's ``k3s kubectl`` is the same
+binary reading the same kubeconfig (``kubectl`` and ``k3s kubectl`` both authenticate as
+``homelab-readonly``), so it needs no shape of its own.
 
 ``privileged=True`` is the exec convention: ``sudo`` with the k3s kubeconfig, because the
 discovered one is the read-only ServiceAccount, for which ``exec`` is Forbidden. The

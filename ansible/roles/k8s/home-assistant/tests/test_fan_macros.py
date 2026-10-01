@@ -118,15 +118,15 @@ def test_sleep_floor_band_boundaries():
 
 
 def test_sleep_missing_outdoor_falls_back_to_winter_band():
-    # Outdoor unavailable (default sentinel) -> winter band (floor L2 = the old quiet sleep behavior).
+    # Outdoor unavailable (default sentinel) -> winter band (floor L2).
     assert _target(69.0, 0, False, True) == 2  # cold room -> L2 floor
     assert _target(83.0, 0, False, True) == 5  # hot room -> L5 ceiling
 
 
 # Migration safety net: the extracted macro must equal the ORIGINAL inline bedroom_apply_fan formula
 # for every NON-sleep input. This pins behavior-preservation of the curve + night cap. The sleep
-# branch intentionally diverges from the old flat L2 cap (seasonal floor/ceiling — covered by the
-# dedicated tests above), so it is excluded here.
+# branch intentionally diverges from the inline formula's flat L2 cap (seasonal floor/ceiling —
+# covered by the dedicated tests above), so it is excluded here.
 def _inline_target(t, cur_level, is_night):
     # The pre-extraction non-sleep formula, transcribed from scripts/fan.yaml's bedroom_apply_fan.
     ideal = (t - 71) / 1.3 if t >= 0 else 0

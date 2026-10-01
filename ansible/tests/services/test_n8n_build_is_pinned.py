@@ -1,10 +1,9 @@
-"""Guard: the npm package the n8n image installs is pinned, and Renovate can read the pin (#2213).
+"""Guard: the npm package the n8n image installs is pinned, and Renovate can read the pin.
 
-`roles/k8s/n8n/templates/Dockerfile.j2` ran `npm install -g fuzzball` with no version
-until 2026-09-21, so every rebuild took whatever npm served that day and nothing recorded which
-version a pod carried — the class #2149 closed for code-server. Two halves here: the Dockerfile
-carries an exact version, and the renovate.json regex manager over that file extracts it, so a
-bump arrives as a PR rather than as a silent change on the next rebuild.
+An unpinned `npm install -g` in `roles/k8s/n8n/templates/Dockerfile.j2` takes whatever npm
+serves on each rebuild, and nothing records which version a pod carries. Two halves here: the
+Dockerfile carries an exact version, and the renovate.json regex manager over that file extracts
+it, so a bump arrives as a PR rather than as a silent change on the next rebuild.
 
 Run: uv run pytest ansible/tests/services/test_n8n_build_is_pinned.py
 """

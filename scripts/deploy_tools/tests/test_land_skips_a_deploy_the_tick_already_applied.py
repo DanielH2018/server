@@ -1,12 +1,12 @@
-"""Step 5 skips the deploy of a tag the tick's own apply already deployed here (issue #2094).
+"""Step 5 skips the deploy of a tag the tick's own apply already deployed here.
 
-PR #2092's tick applied the whole deploy plane at the merge commit; step 5 then queued 1203s
-for the tree lock, failed its snapshot, and graded live work `deploy-failed`. The step exists
-for what the tick deferred, and that tick deferred nothing.
+When the tick's own apply already covered the merge commit, step 5's second deploy would queue for
+the tree lock and could fail its snapshot, grading live work `deploy-failed`. The step exists for
+what the tick deferred, and that tick deferred nothing.
 
-The skip is per HOST: the tick's broad apply names no `-e target=`, so its marker speaks only
-to the host it was written on, and a Pi-declared tag still gets its deploy (issue #929 is the
-bug otherwise). Step 6 is untouched -- the gate still runs over every tag.
+The skip is per HOST: the tick's broad apply names no `-e target=`, so its marker speaks only to
+the host it was written on, and a Pi-declared tag still gets its deploy. Step 6 is untouched --
+the gate still runs over every tag.
 
 Run: uv run pytest scripts/deploy_tools/tests/test_land_skips_a_deploy_the_tick_already_applied.py
 """

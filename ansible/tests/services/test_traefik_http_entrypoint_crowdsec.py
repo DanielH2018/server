@@ -1,18 +1,16 @@
 """The http entrypoint keeps the CrowdSec chain the https entrypoint carries.
 
-#1343 read Traefik's startup error lines
+Traefik's startup error lines
 
     {"level":"error","entryPointName":"http","routerName":"http-to-443@internal",
      "error":"middleware \\"homelab-crowdsec@kubernetescrd\\" does not exist"}
 
-as proof that an internal router cannot resolve a `@kubernetescrd` middleware, and proposed
-dropping crowdsec from the http entrypoint's chain. The Loki history refutes that: outside the
-#1322 outage every occurrence over 7 days landed 0-1s after a "Traefik version" startup line,
-while during #1322 — when the middleware really was unresolvable — the same line repeated on
-every configuration event for 11 minutes. The reference resolves once the kubernetesCRD watch
-delivers, so the chain is live enforcement, and dropping it would reject a banned IP one
-request later than it is rejected now. This guard stops the next reader of that issue from
-making the change it recommends.
+do not show that an internal router cannot resolve a `@kubernetescrd` middleware. The line
+lands 0-1s after a "Traefik version" startup line, and a middleware that is really
+unresolvable repeats it on every configuration event instead. The reference resolves once the
+kubernetesCRD watch delivers, so the chain is live enforcement, and dropping it from the http
+entrypoint would reject a banned IP one request later than it is rejected today. This guard
+keeps the chain in place.
 
 Checked on the RENDERED static config, not the template's text — the indirection trap in
 `textual-guard-checks-break-on-indirection`, and the same reason as the sibling
@@ -43,8 +41,8 @@ from validate.k8s_manifests import (
 
 _ROLE = "traefik"
 # daniel-box runs the bouncer plugin. A cluster with traefik_k8s_manage_crowdsec false renders
-# no chain at all on either entrypoint — covered by its own test below. daniel-stage was that
-# cluster until #2941 retired it, so the case is now an override rather than a host.
+# no chain at all on either entrypoint — covered by its own test below. That case is an
+# override rather than a host.
 _HOST = "daniel-box"
 _WITHOUT_CROWDSEC = {"traefik_k8s_manage_crowdsec": False}
 
@@ -87,8 +85,7 @@ def _chains(host: str, overrides: dict | None = None) -> dict[str, list[str]]:
     return {
         # `or []`, not a default: dropping the last entry leaves a bare `middlewares:` key,
         # which parses to None. `.get(..., [])` returns that None and the comparison below
-        # raises a TypeError instead of reporting the gap — measured against exactly that
-        # mutation while proving this guard can go red.
+        # raises a TypeError instead of reporting the gap.
         name: (spec.get("http") or {}).get("middlewares") or []
         for name, spec in config["entryPoints"].items()
     }

@@ -7,28 +7,25 @@ as its own configuration. A grep for the field name cannot tell a template that 
 one that sets it inside a macro, and it counts the `automountServiceAccountToken: true` on a
 ServiceAccount OBJECT as if it were the pod's — so these guards read the parsed pod spec.
 
-Since 2026-09-19 every Deployment and DaemonSet takes these fields from `pod_shell` in
+Every Deployment and DaemonSet takes these fields from `pod_shell` in
 `ansible/templates/workload-shell.yml.j2`, and `test_workload_shell_uses_the_macros.py`
-refuses a hand-written copy (#2056). This census is the other half: a macro cannot force its
+refuses a hand-written copy. This census is the other half: a macro cannot force its
 own call, and a template that skips it renders without the fields, which only the parsed pod
 spec can see. The macro encodes the automount rule below structurally (no service_account →
 `false`; one named → no line), so an offence here on a Deployment or DaemonSet is a call
 that overrides it.
 
     priorityClassName        every long-running pod template names one of the four homelab
-                             tiers (#1851). Jobs and CronJobs are out of scope on purpose:
+                             tiers. Jobs and CronJobs are out of scope on purpose:
                              each is a probe or a GC pass that completes in seconds, and a
                              priority buys nothing for a pod that is gone before pressure
                              can build.
     automountServiceAccountToken
                              a pod that names no serviceAccountName runs as the namespace's
                              `default` SA and never uses its token, so it must not mount one
-                             (#1852). A pod that names an SA is left alone — the SA object
+                             A pod that names an SA is left alone — the SA object
                              may set the field, and the pod's own value then means nothing.
-    enableServiceLinks       every pod template, of every kind, sets it false (#1858). The
-                             guard used to read `deployment.yaml.j2` only, so 16 Deployments
-                             in other filenames and every DaemonSet, Job and CronJob were
-                             unchecked.
+    enableServiceLinks       every pod template, of every kind, sets it false.
 
 Rendering goes through `_k8s_render.rendered_docs()` — the same corpus
 `test_container_security_context.py` and `test_readiness_coverage.py` census — so coverage
@@ -64,15 +61,14 @@ _SYSTEM_TIER = {
     ("dri-device-plugin", "daemonset.yaml.j2"): "system-node-critical",
 }
 
-# Non-vacuity. The census renders 70 long-running pod templates and 86 with Jobs and CronJobs
-# (2026-09-17). A floor far below the live count cannot tell "the collector broke" from "half
+# Non-vacuity. The census renders 70 long-running pod templates and 86 with Jobs and CronJobs.
+# A floor far below the live count cannot tell "the collector broke" from "half
 # the fleet dropped out of the render", so these sit close enough to notice a contraction.
 _MIN_LONG_RUNNING = 60
 _MIN_ALL_KINDS = 78
 
-# Roles the census must contain, so a missing member is named rather than counted. The three
-# the issues named as defective are here on purpose: a guard that stopped seeing them would
-# read green for the exact regression it was written against.
+# Roles the census must contain, so a missing member is named rather than counted: a guard
+# that stopped seeing them would read green for the exact regression it was written against.
 _MUST_CONTAIN = frozenset(
     {
         "observability",
@@ -241,8 +237,7 @@ def test_every_long_running_pod_template_names_a_homelab_tier():
     """A pod with no priorityClassName sits at 0 — which is not "below tier 4" but outside the
     model altogether, in the pile with unclassified kube-system plumbing.
     `roles/setup/k3s/templates/priorityclass.yaml.j2` explains why homelab-best-effort exists
-    as a real class rather than as the absence of one. The whole observability plane read that
-    way until 2026-09-17 (#1851)."""
+    as a real class rather than as the absence of one."""
     tiers = _homelab_tiers()
     offenders, seen_roles, count = [], set(), 0
     for role, tpl, label, pod in _pod_templates(_LONG_RUNNING):
@@ -282,8 +277,7 @@ def test_system_tier_allowlist_names_only_templates_that_use_it():
 def test_every_sa_less_pod_template_refuses_the_default_token():
     """A pod that names no ServiceAccount runs as `default`, whose token grants nothing this
     cluster's RBAC hands out — and a token that grants nothing is still a bearer credential
-    sitting on a tmpfs in every container. valheim and valheim-stats mounted one until
-    2026-09-17 (#1852) while their terraria siblings did not."""
+    sitting on a tmpfs in every container."""
     offenders, seen_roles, count = [], set(), 0
     for role, tpl, label, pod in _pod_templates(_POD_KINDS):
         seen_roles.add(role)
@@ -300,7 +294,7 @@ def test_every_pod_template_disables_service_link_env_vars():
 
     It injects <NAME>_SERVICE_HOST, <NAME>_PORT_<n>_TCP and so on for every Service in the
     namespace. Any app that reads its own config from <NAME>_* env vars then picks them up as
-    configuration. Authelia did, and exited before serving anything (daniel-box, 2026-08-02):
+    configuration. Authelia did, and exited before serving anything:
 
         error occurred performing deprecation mapping for keys 'server.host', 'server.port',
         and 'server.path' to new key server.address: the new key already exists with value
@@ -308,9 +302,7 @@ def test_every_pod_template_disables_service_link_env_vars():
 
     Triggering it needs only that a Service name match an app's env-var prefix, which is the
     normal case in this namespace — so the guard covers every pod template of every kind,
-    not just `deployment.yaml.j2`. It lived in `test_k8s_manifests.py` reading that one
-    filename until 2026-09-17 (#1858), when three templates in other filenames turned out to
-    omit the field.
+    not just `deployment.yaml.j2`.
     """
     offenders, seen_roles, count = [], set(), 0
     for role, tpl, label, pod in _pod_templates(_POD_KINDS):

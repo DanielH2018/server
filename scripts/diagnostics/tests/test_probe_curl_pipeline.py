@@ -16,7 +16,6 @@ from diagnostics.probe_lib import cli_parser, core, curl_pipeline
 
 
 def test_plan_metric_uses_cluster_prometheus_route(fake_resolve, fake_k8s_endpoint):
-    # The Docker prometheus (resolve_ip target) retired 2026-08-14 with the drain.
     stages = curl_pipeline.plan(["metric", "up == 0"], fake_resolve, fake_k8s_endpoint)
     assert stages == [
         core.curl_argv(
@@ -98,10 +97,9 @@ def test_cert_stages_is_a_two_stage_pipeline():
 def test_no_cluster_route_carries_the_retired_k8s_suffix(
     fake_resolve, fake_k8s_endpoint
 ):
-    """The `-k8s` suffix retired 2026-08-15 (870723e8), but probe.py kept building it for
-    another five hours: every cluster subcommand 404'd against Traefik's no-Host-match while
-    the fixtures below asserted the stale name, so CI ratified the break. Assert on the
-    hostnames plan() actually asks for, so a reintroduced suffix fails here first."""
+    """Assert on the hostnames plan() actually asks for, so a reintroduced `-k8s` suffix fails
+    here first: every cluster subcommand would 404 against Traefik's no-Host-match while
+    fixtures asserted the stale name."""
     asked = []
 
     def record(hostname):
@@ -121,7 +119,7 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(
     assert not [h for h in asked if h.endswith("-k8s")]
 
 
-# --- Two Loki stores (#2210) ------------------------------------------------------------------
+# --- Two Loki stores ------------------------------------------------------------------
 #
 # `{service_name="claude-code"}` lives only in observability's Loki; `loki-homelab` returned a
 # well-formed empty result for it that read as "the OTEL stream is gone". The default store

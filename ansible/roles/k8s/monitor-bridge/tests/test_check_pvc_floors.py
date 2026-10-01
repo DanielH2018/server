@@ -1,7 +1,8 @@
-"""PVC free-bytes floors: a claim whose peak is a step, not a slope (#1875).
+"""PVC free-bytes floors: a claim whose peak is a step, not a slope.
 
-valheim-server sat at 79% for days and reached 100% inside one 15-minute updater cycle, under
-PVC_MAX_PCT the whole way, so the percentage arm reported the outage rather than the risk.
+A claim like valheim-server's sits at 79% for days and reaches 100% inside one 15-minute
+updater cycle, under PVC_MAX_PCT the whole way, so the percentage arm reports the outage rather
+than the risk.
 Every behaviour gets an accept/reject pair. The last test is the non-vacuity half: it reads
 the transient the valheim role declares from the TREE and pins PVC_MIN_FREE to it by name, so
 the two numbers cannot drift apart and a renamed claim fails here rather than going unwatched.
@@ -21,7 +22,7 @@ ROLES = Path(__file__).resolve().parents[3]
 ENV_SECRET = Path(__file__).resolve().parents[1] / "templates" / "env-secret.yaml.j2"
 
 GIB = 1024**3
-# The 2026-09-17 shape at 10Gi: 7.7 G used of 9.8 G, 2.1 G free, against a 2.2 G copy the
+# The shape at 10Gi: 7.7 G used of 9.8 G, 2.1 G free, against a 2.2 G copy the
 # update was about to stage. 79% full, so the 85% arm stayed green until the ENOSPC.
 VALHEIM_FLOOR = 3 * GIB
 _PRE_UPDATE_PCT = 79.0
@@ -64,7 +65,7 @@ def test_a_claim_under_the_percentage_but_below_its_floor_is_flagged_at_once():
 
 
 def test_a_claim_with_its_transient_free_is_clean_and_the_floor_is_named_on_the_green_line():
-    # The 20Gi shape after #1874: 7.7 G used, 12.3 G free, 39% full.
+    # The 20Gi shape: 7.7 G used, 12.3 G free, 39% full.
     breach, _, summary = pvc_fullness_verdict(
         [("valheim-server", "homelab", 38.5)],
         43,

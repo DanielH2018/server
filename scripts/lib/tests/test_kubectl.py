@@ -1,8 +1,7 @@
 """The shared kubectl runner: one argv shape, and every call names the cluster it must reach.
 
-The wrong-cluster refusal used to guard one caller, `probe.py health` (#1663). Now it sits in
-the invoker, so the tests here are the ones that prove it fires for everyone — plus the census
-at the bottom, which is what keeps a new caller from building its own argv again (#2062).
+The wrong-cluster refusal sits in the invoker, so the tests here prove it fires for every
+caller — plus the census at the bottom, which keeps a new caller from building its own argv.
 
 Run: uv run pytest scripts/lib/tests/test_kubectl.py
 """
@@ -116,7 +115,7 @@ def test_asking_for_the_cluster_this_kubectl_serves_is_clean():
 
 
 def test_asking_for_staging_against_a_prod_kubectl_is_flagged():
-    """The failure #1663 is about: this returned a healthy prod verdict instead."""
+    """The failure guarded: this returned a healthy prod verdict instead."""
     refusal = kubectl_lib.cluster_refusal("stage", "prod")
     assert refusal and "serves the prod cluster, not stage" in refusal
 
@@ -296,7 +295,7 @@ def _non_test_scripts() -> list[Path]:
 
 
 def test_no_script_outside_the_invoker_builds_a_kubectl_argv():
-    """The acceptance check from #2062, as a guard rather than a one-off grep.
+    """The acceptance check, as a guard rather than a one-off grep.
 
     A module that spells `"kubectl"` as a string literal is building its own
     argv, which is the thing this module exists to make unnecessary — and any such call
@@ -322,7 +321,7 @@ def test_every_known_caller_imports_the_invoker():
 
     The match is indented-tolerant: `export_grafana_dashboards.py` imports inside `gapi`
     rather than at module scope, because this module resolves a kubeconfig on import and that
-    made `--help` die on every host but the cluster's (#2854). A lazy import is still an
+    made `--help` die on every host but the cluster's. A lazy import is still an
     import, and an anchored `^from lib` read it as a caller that had left.
     """
     importers = {

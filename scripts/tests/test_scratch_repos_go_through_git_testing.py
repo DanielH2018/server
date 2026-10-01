@@ -1,10 +1,9 @@
 """A test builds its scratch git repository through `lib.git_testing`, never by hand.
 
 `lib.git_testing` exists because twenty-five test modules each re-derived the same `GIT_*`
-scrub and disagreed on what went in it (#2857). A module that forgets one line still passes
-on a workstation and writes the primary repository under `prek`'s pytest hook, where
-`git commit` exports `GIT_DIR` and `GIT_INDEX_FILE` and git resolves both before `cwd`.
-`t@t.com` authored 170 real commits that way on 2026-08-17.
+scrub and disagreed on what went in it. A module that forgets one line still passes on a
+workstation and writes the primary repository under `prek`'s pytest hook, where `git commit`
+exports `GIT_DIR` and `GIT_INDEX_FILE` and git resolves both before `cwd`.
 
 This refuses the next one. It is the test-side counterpart of
 `scripts/tests/test_git_and_gh_go_through_lib.py`, which holds production modules under
@@ -61,8 +60,8 @@ EXEMPT = {
     "scripts/tests/test_scratch_repos_go_through_git_testing.py",
 }
 
-# Modules the census must reach: each held a hand-rolled fixture before the migration, so an
-# empty or partial scan means the walk stopped matching rather than that the tree is clean.
+# Modules the census must reach, so an empty or partial scan means the walk stopped matching
+# rather than that the tree is clean.
 KNOWN_MEMBERS = frozenset(
     {
         "ansible/tests/_ci_scoping.py",

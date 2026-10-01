@@ -1,15 +1,8 @@
 ---
-# Slice-6 B5, pulled forward from slice 7 (2026-08-09): the router's forwards — 51820/udp
-# included — moved to daniel-box, so this move restored remote access.
+# The PVC is created by the manifests role below, from pvc.yaml.j2.
 #
-# The k8s/volume-claim include this role used to open was dropped at the v15 upgrade
-# (2026-08-23). It copied the Docker copy's bind mount from daniel-server, a host that has
-# had no Docker since 2026-08-14, and it short-circuits on the claim's own seeded annotation
-# anyway — so on the live PVC it had already been a no-op for every deploy since the cutover.
-# The PVC itself is created by the manifests role below, from pvc.yaml.j2.
-#
-# There is no automated way to repopulate this volume from empty. v15's only v14 import path
-# is the setup wizard in the browser; see the image pin's comment in defaults/main.yml.
+# There is no automated way to repopulate this volume from empty. The setup wizard in the
+# browser is the only import path; see the image pin's comment in defaults/main.yml.
 
 - name: Deploy wg-easy to the cluster
   ansible.builtin.include_role:
@@ -23,19 +16,11 @@
       - service.yaml
       - ingressroute.yaml
     # No manifests_secret_files: v15 owns its admin credentials in its own SQLite DB, so the
-    # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. The template is
-    # deleted, but `kubectl apply` never prunes an object it stops rendering — the live
-    # Secret survives, orphaned, until someone deletes it by hand. It is unreferenced (the
-    # Deployment's envFrom went with it) but it still holds a real bcrypt hash.
+    # wg-easy-env Secret that carried v14's PASSWORD_HASH has no consumer. `kubectl apply`
+    # never prunes an object it stops rendering, so the live Secret survives, orphaned, until
+    # someone deletes it by hand. It is unreferenced but still holds a real bcrypt hash.
     #
-    # The repo side is DONE: `wg_easy_password_hash` was dropped from ansible/vars/secrets.yml
-    # and ansible/secret_rotation.yml together on 2026-08-24 (review M-7) — together because
-    # secret_rotation.py's registry_drift reports a registry entry with no secrets.yml key as
-    # stale and a secrets.yml key with no registry entry as missing, and the daily Kuma monitor
-    # goes red on either. Until then the audit reported the key "ok, due 2026-11-20", scheduling
-    # a rotation for a credential nothing reads.
-    #
-    # STILL OPERATOR WORK, and it needs BOTH of these or it fails:
+    # PENDING OPERATOR WORK, and it needs BOTH of these or it fails:
     #
     #     sudo k3s kubectl delete secret wg-easy-env -n homelab
     #
@@ -47,5 +32,5 @@
     # Secret exists. Root's kubeconfig at /etc/rancher/k3s/k3s.yaml carries the admin cert.
     #
     # Nothing in this repo can do it: `sudo` is denied to the agent and Ansible's k8s write
-    # path here runs under the same read-only SA. The live Secret keeps the retired v14 bcrypt
-    # hash until a person runs the command above.
+    # path here runs under the same read-only SA. The live Secret keeps the v14 bcrypt hash
+    # until a person runs the command above.

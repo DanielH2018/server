@@ -40,21 +40,20 @@ def _rollout_gate_offender(role: Path) -> bool:
     """Whether a role with `manifests_rollout: ''` has no gate at all.
 
     `manifests_rollout: ''` skips the PRIMARY rollout's wait and stability soak. The general
-    rule (task-3-rulings-2.md S5, generalising R2 rather than special-casing it): such a role
-    is an offender UNLESS every workload it renders — Deployment, DaemonSet and batch alike —
-    is gated by some mechanism this file can see, and it renders at least one workload total.
+    rule: such a role is an offender UNLESS every workload it renders — Deployment, DaemonSet
+    and batch alike — is gated by some mechanism this file can see, and it renders at least one
+    workload total.
 
-    That single rule covers three shapes that used to need three different checks:
+    That single rule covers three shapes:
 
     - A batch-only role (no Deployment/DaemonSet at all) whose rendered Jobs/CronJobs are all
-      credited by `_batch_gated_names` — this is R2's original case.
+      credited by `_batch_gated_names`.
     - A role that skips the PRIMARY rollout but gates its Deployment through
       `manifests_extra_rollouts` instead. Extras roll and soak independently of the primary —
       `roles/k8s/manifests/tasks/main.yml`'s extra-rollout queue task carries no
       `manifests_rollout | length > 0` condition — so `_ungated_deployments(role) == []` is
       already proof this Deployment IS gated, and an unconditional "renders a Deployment ⇒
-      offender" (R2's own rule, before this generalisation) falsely accused this shape: the
-      reviewer measured `_rollout_gate_offender: True` while `_ungated_deployments: []`.
+      offender" rule would falsely accuse this shape.
     - A role rendering an ungated Deployment `_deployment_templates` can't see by itself (a
       quoted or trailing-comment `kind:` line, or a second Deployment in a `---`-split
       template) — `_ungated_deployments` already resolves each rendered Deployment's name
@@ -62,15 +61,10 @@ def _rollout_gate_offender(role: Path) -> bool:
       Deployment is, without a separate "renders any Deployment at all" check.
 
     The condition on ALL of that is `manifests_rollout: ''`, written literally in the role's
-    tasks. A role that does not write it returns False at the top and is never judged here —
-    including a role that renders no workload at all, which is the part this docstring used to
-    overstate. It claimed a role rendering nothing is "still an offender"; that holds only when
-    the role ALSO sets `manifests_rollout: ''`. The retired `n8n-images` role (folded into n8n
-    by #2813) was the counterexample: it rendered no Deployment and no batch template, and it
-    was not an offender, because it never included `k8s/manifests` and so never passed a
-    `manifests_rollout` for `_sets_empty_rollout` to find.
+    tasks. A role that does not write it returns False at the top and is never judged here,
+    including a role that renders no workload at all.
 
-    So the true statement is narrower, in two parts:
+    That gives two cases:
 
     - A role that never calls `k8s/manifests` is outside this guard entirely. Its workloads, if
       any, reach the cluster some other way, and whatever gates them is not
@@ -121,11 +115,11 @@ def _primary_rollout_name(role: Path) -> str:
     likewise a literal (checked repo-wide), so a regex match is safe here. A role that never
     calls k8s/manifests resolves to '', which matches no real Deployment name.
 
-    Tolerates a trailing comment after the value, the same widening R3/`_sets_empty_rollout`
-    made — without it, `manifests_rollout: ''  # nothing to roll` disagreed between the two
-    matchers reading the same variable: `_sets_empty_rollout` said "empty" while this one, still
-    anchored at end-of-line right after the closing quote, fell through to `manifests_service`
-    and returned the real service name instead (task-3-rulings-2.md S4).
+    Tolerates a trailing comment after the value, as `_sets_empty_rollout` does. Without it,
+    `manifests_rollout: ''  # nothing to roll` would disagree between the two matchers reading
+    the same variable: `_sets_empty_rollout` would say "empty" while this one, anchored at
+    end-of-line right after the closing quote, would fall through to `manifests_service` and
+    return the real service name.
     """
     tasks = role / "tasks/main.yml"
     if not tasks.is_file():
@@ -172,7 +166,7 @@ def _deployment_name(template: Path) -> str | None:
     """The rendered Deployment's `metadata.name`, or None if it isn't a static literal.
 
     Every Deployment template puts `name:` two lines under `kind: Deployment` (`metadata:` in
-    between) — checked against all 56 Deployment templates in the repo. A non-literal value (a
+    between). A non-literal value (a
     Jinja expression, e.g. pihole's `{{ inst.name }}`) can't be resolved without rendering, so
     this returns None rather than a guess; the caller treats None as ungated, the fail-closed
     direction.
@@ -195,7 +189,7 @@ def _ungated_deployments(role: Path) -> list[str]:
     Matches by identity, not count: a rendered Deployment is gated only if its own resolved
     name equals the primary rollout name or appears in manifests_extra_rollouts. A typo'd or
     drifted extra name, or a Deployment whose name can't be resolved statically, both count as
-    ungated — count alone let a mismatched name through as long as the totals lined up.
+    ungated. A count alone would let a mismatched name through as long as the totals lined up.
     """
     gated = _gated_names(role)
     return [
@@ -215,9 +209,9 @@ _MANIFEST_KIND_TO_ROLLOUT_KIND = {"Deployment": "deploy", "DaemonSet": "daemonse
 def _deployments_missing_readiness_probe(role: Path) -> list[str]:
     """Rendered Deployment template names with no readinessProbe.
 
-    Was `any()` across the role's templates, so a probe on the primary Deployment satisfied
-    the whole role and a probe-less *extra* passed unchecked — exactly the gap
-    `manifests_extra_rollouts` opened. Checks every rendered Deployment individually instead.
+    Checks every rendered Deployment individually. An `any()` across the role's templates would
+    let a probe on the primary Deployment satisfy the whole role and a probe-less *extra* pass
+    unchecked.
     """
     return [
         name

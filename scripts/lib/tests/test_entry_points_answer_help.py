@@ -4,20 +4,19 @@ WHY THIS IS A SUBPROCESS TEST AND NOT A STATIC ONE. What it checks is the answer
 presence of an argparse call. Five scripts had a `--help` path and still failed: two hung
 waiting on stdin or a network, one died resolving a kubeconfig at import, and `deploy.sh` ran
 its staleness gate first and answered with exit 4 and a `git rebase` remedy. A static check for
-`add_argument` passes on all five. Issue #2854 filed the class.
+`add_argument` passes on all five.
 
 WHAT COUNTS AS AN ENTRY POINT. `lib.script_classify.classify` reads the tree for how each
 script is reached, and everything it does not call a library is one. A Python module with no
-`if __name__ == "__main__"` guard cannot be run at all, and the classifier now calls every one
+`if __name__ == "__main__"` guard cannot be run at all, and the classifier calls every one
 of those a library -- through the importing package's own directory, through a relative import,
-or by naming the tests that are its only importers (#3020). So this test filters on the verdict
-alone; it used to re-check the main guard itself because thirteen guardless modules read
-`adhoc`.
+or by naming the tests that are its only importers. So this test filters on the verdict
+alone.
 
 RUNTIME. Each script runs under this interpreter with `scripts/` on `PYTHONPATH`, not under
-`uv run` -- one `uv run` per entry point cost a minute and a half where direct invocation
-costs ten seconds, over a census this size. The environment is otherwise the caller's, which is the point: a `--help` that needs
-a kubeconfig, a cluster or a lock is the failure this catches.
+`uv run` -- one `uv run` per entry point cost a minute and a half where direct invocation costs
+ten seconds, over a census this size. The environment is otherwise the caller's, which is the point:
+a `--help` that needs a kubeconfig, a cluster or a lock is the failure this catches.
 
 Run: uv run pytest scripts/lib/tests/test_entry_points_answer_help.py
 """
@@ -48,7 +47,7 @@ MUST_FIND = frozenset(
 
 # A `--help` that has to reach the cluster, the network or a lock is the defect, so the
 # per-script budget is generous only by the standard of a script that answers from its own
-# docstring. Two scripts hung indefinitely before #2854.
+# docstring.
 HELP_TIMEOUT_S = 60
 
 

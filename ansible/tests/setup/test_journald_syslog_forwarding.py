@@ -2,9 +2,8 @@
 
 journald owns /dev/log, so rsyslog only ever sees what journald forwards. `MaxLevelSyslog`
 therefore decides whether the host keeps an SSH authentication trail at all: `Accepted
-publickey ... SHA256:` and every `pam_unix(...:session)` line is priority info. It read
-`notice` from 2026-08-01 to 2026-08-29, and in that window daniel-box recorded zero of them
-while sshd's own `LogLevel VERBOSE` was set correctly throughout.
+publickey ... SHA256:` and every `pam_unix(...:session)` line is priority info. At `notice`
+the host records none of them, even with sshd's own `LogLevel VERBOSE` set correctly.
 
 Every failure this file catches is silent. Nothing goes red, no service restarts, no alert
 fires -- a log stream simply stops, or starts, and the next person to notice is whoever needs
@@ -138,9 +137,9 @@ def filter_block_when(path: Path):
 def test_the_filter_is_gated_on_has_rsyslog():
     """optimize_pi masks rsyslog on daniel-pi, and a masked unit fails the restart handler.
 
-    The printed remediation for PR #1942 (`initial_setup.yml -e target=daniel-pi`) applied
-    every task and then failed at `Restart rsyslog`, so the recap read failed=1 for a run
-    whose changes were all live (#1946). The gate is a declared host flag, not a live check of
+    Without the gate, `initial_setup.yml -e target=daniel-pi` applies every task and then fails
+    at `Restart rsyslog`, so the recap reads failed=1 for a run whose changes are all live. The
+    gate is a declared host flag, not a live check of
     the unit, so the play never renders config for a logger the host has retired.
     """
     assert filter_block_when(SYSTEM_TUNING) == "has_rsyslog", (

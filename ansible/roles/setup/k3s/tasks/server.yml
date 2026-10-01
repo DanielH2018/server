@@ -1,6 +1,5 @@
 ---
 # Install and validate the k3s server (control plane).
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Refuse to run on a host that already runs Docker containers
   tags: [k3s_server]
@@ -123,11 +122,10 @@
 - name: Install or reconfigure the k3s server
   tags: [k3s_server]
   # Guarded on the unit's arguments and the installed version, not on /usr/local/bin/k3s
-  # existing. The old
-  # `creates:` guard meant a change to k3s_server_args never reached an already-installed
-  # host: the play reported ok while the unit kept its original ExecStart. That is how the
-  # node IP stayed pinned to a NIC that had been removed. The installer rewrites the unit,
-  # daemon-reloads and restarts k3s itself, so no handler is needed.
+  # existing. A `creates:` guard means a change to k3s_server_args never reaches an
+  # already-installed host: the play reports ok while the unit keeps its original ExecStart,
+  # and the node IP stays pinned to a NIC that has been removed. The installer rewrites the
+  # unit, daemon-reloads and restarts k3s itself, so no handler is needed.
   #
   # Quotes are stripped from the unit before matching because the installer single-quotes
   # each argument. This detects arguments that are missing, which covers adding or changing
@@ -183,11 +181,11 @@
 # genuinely IS enabled. `reencrypt` is the half that rewrites them.
 - name: Read the secrets-encryption status
   tags: [k3s_server]
-  # RETRIES ARE LOAD-BEARING, and the arming run proved it (2026-08-20). `k3s secrets-encrypt`
+  # RETRIES ARE LOAD-BEARING. `k3s secrets-encrypt`
   # talks to the SUPERVISOR, which starts later than the apiserver — so the preceding
   # `kubectl wait --for=condition=Ready` returns while this endpoint is still refusing, and the
-  # first attempt came back `secret-encrypt error ID 21789` about a second after the installer
-  # restarted k3s. The assert below then failed the play with the flag armed and every existing
+  # first attempt right after the installer restarts k3s fails with `secret-encrypt error ID
+  # 21789`. The assert below then fails the play with the flag armed and every existing
   # Secret still plaintext: exactly the half-applied state the assert exists to prevent, caused
   # by reading the status too early rather than by anything being wrong.
   #
@@ -199,7 +197,7 @@
   # `stdout`, so under `--check` this task burns all 12 retries against a skip and fails the
   # play, and the assert that follows would error on the missing `stdout` if it did not.
   # `status` reads the supervisor and writes nothing, so running it for real keeps the dry
-  # run's promise. #2305.
+  # run's promise.
   ansible.builtin.command:
     cmd: k3s secrets-encrypt status
   register: k3s_secrets_encrypt_status
@@ -283,7 +281,7 @@
     # Skipped under `--check`, not opted out of it. The rotate-keys above is the thing this
     # waits on and a dry run only simulates it, so running the wait for real would spend 30
     # retries at 10s on a rotation nobody asked for. Unlike the status read above, nothing
-    # downstream reads this register. #2305.
+    # downstream reads this register.
     - not ansible_check_mode
     - k3s_secrets_encryption | bool
     - "'reencrypt_finished' not in k3s_secrets_encrypt_status.stdout"
@@ -316,14 +314,14 @@
   become: true
   changed_when: false
   # A read of the node object k3s already holds, so it runs under --check too: skipped, it
-  # leaves no stdout and the assert below fails on an address it never read (#2316).
+  # leaves no stdout and the assert below fails on an address it never read.
   check_mode: false
 
 - name: Fail if the node registered an address the host does not own
   tags: [k3s_server]
-  # The failure this catches took the cluster down silently: pods kept dialling an
-  # apiserver endpoint on an address that no longer existed on any interface, while
-  # `kubectl` from the host went on working over 127.0.0.1 and hid it.
+  # The failure this catches is silent: pods keep dialling an apiserver endpoint on an
+  # address that no longer exists on any interface, while `kubectl` from the host goes on
+  # working over 127.0.0.1 and hides it.
   ansible.builtin.assert:
     that: k3s_node_ip.stdout == server_ip
     fail_msg: >-
@@ -355,13 +353,13 @@
   become: true
   changed_when: false
   # A read of the pods k3s already runs, so it runs under --check too: skipped, it leaves no
-  # stdout and the assert below errors on the attribute (#2323).
+  # stdout and the assert below errors on the attribute.
   check_mode: false
 
 - name: Fail if the bundled Traefik, servicelb or local-path provisioner is running
   tags: [k3s_server]
-  # All three disables are load-bearing: a bundled Traefik would fight the real ingress in
-  # slice 1, klipper-lb would race MetalLB for LoadBalancer Services, and local-path ships
+  # All three disables are load-bearing: a bundled Traefik would fight the real ingress,
+  # klipper-lb would race MetalLB for LoadBalancer Services, and local-path ships
   # a second default StorageClass next to longhorn (see defaults/main.yml).
   ansible.builtin.assert:
     that:

@@ -1,11 +1,10 @@
 {% from 'origin-pull.yml.j2' import origin_pull_tlsoption with context %}
 {#
-  The middlewares and TLS options carried over from the Docker instance's config.yml.j2.
+  The edge's middlewares and TLS options.
 
-  Deliberately NOT carried over for slice 1:
+  Deliberately NOT here:
     csp-karakeep        lives in the karakeep role instead, beside the Service it applies to
-    rate-limit-livesync superseded by rate-limit-public-livesync, below (the bridge-era twins retired 2026-08-12 with the return-leg)
-  crowdsec arrived at slice-6 B1 (bottom of this file), pointed at the in-cluster LAPI.
+  The crowdsec Middleware is at the bottom of this file, pointed at the in-cluster LAPI.
   No TLSStore either: every IngressRoute states its own tls.domains via the ingressroute()
   macro, so a store's defaultGeneratedCert would be a second source of truth for the SAN set.
 #}
@@ -43,8 +42,8 @@ spec:
     Host(`x.{{ domain }}`)        Cloudflare-proxied. The connection is FROM a Cloudflare edge,
                                   so the remote address is the edge and Traefik's default
                                   keying shares one bucket between every client behind it —
-                                  a guessing loop against one route throttled every other
-                                  client on that edge, and the attacker rotated edges (#1955).
+                                  a guessing loop against one route would throttle every other
+                                  client on that edge, and the attacker could rotate edges.
                                   `ipStrategy.depth: 1` keys on the rightmost X-Forwarded-For
                                   entry, which Cloudflare APPENDS (a client-supplied XFF is
                                   left in front of it), and the entrypoint keeps XFF only from

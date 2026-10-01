@@ -6,9 +6,8 @@ against the slots. This walks the AST of every module that calls `alert_once` fo
 passed as its channel argument and checks each one against `ALERT_SLOTS`, so a typo fails here
 instead of on the next tick that happens to reach that branch.
 
-Before #3047 the argument checked here was a separate `DeployerState` marker name
-(`"tasks_alerted"`) passed beside the channel (`"tasks"`); the two carried the same word and
-could disagree. One keyed marker made the channel the slot, so there is one literal to check.
+The channel is the slot, so there is one literal to check and no separate marker name beside
+it that could disagree with it.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_alert_once_markers.py
 """

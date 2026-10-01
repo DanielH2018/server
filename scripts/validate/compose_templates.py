@@ -129,11 +129,9 @@ CAP_DROP_EXEMPT: dict = {
 # drops the line, the way ical-proxy's indent drifted) can't omit it unnoticed.
 NO_NEW_PRIV_EXEMPT: dict = {}
 
-# The mutable-tag update-policy guard (WATCHTOWER_AUTOUPDATE, find_undeclared_update_policy,
-# find_autoupdate_optout_conflicts) was removed on 2026-08-15: watchtower retired 2026-08-09,
-# so nothing auto-updates any more. `docker_deploy.yml` deploys with `pull: policy`, which
-# never re-pulls a mutable tag already present locally, so a `latest` tag now ages in place
-# rather than drifting — the risk the guard existed to catch has no actor. An image refresh is
+# No guard covers the mutable-tag update policy, because nothing auto-updates a container.
+# `docker_deploy.yml` deploys with `pull: policy`, which never re-pulls a mutable tag already
+# present locally, so a `latest` tag ages in place rather than drifting. An image refresh is
 # the deliberate `deploy.yml --tags <svc> -e common_pull=always`.
 
 
@@ -147,12 +145,11 @@ IMAGE_DIGEST_EXEMPT: dict = {}
 def find_undigested_images(docs, exempt=frozenset()) -> list[tuple[str, str]]:
     """Return (service, image) for every compose image pinned by tag with no ``@sha256:`` digest.
 
-    A tag is a moving name. The removed watchtower guard's note above is still right that
-    ``pull: policy`` leaves an already-present ``latest`` ageing in place rather than drifting
-    under a redeploy — but that is the narrower half. The half that bit: a tag alone gives
-    Renovate NO update axis, so five of the Pi's six images sat on a bare ``latest`` that no
-    manager could ever raise a PR against, and nothing in the repo recorded which bytes were
-    running. ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
+    A tag is a moving name. ``pull: policy`` leaves an already-present ``latest`` ageing in
+    place rather than drifting under a redeploy, but that is the narrower half. The half that
+    bites: a tag alone gives Renovate NO update axis, so a bare ``latest`` is one no manager
+    can ever raise a PR against, and nothing in the repo records which bytes are running.
+    ``tag@sha256:`` fixes both — it is reproducible on a cold pull, and it is the shape
     the k8s plane already uses (see ansible/tests/k8s/test_base_images_digest_pinned.py, whose globs
     reach roles/k8s and roles/setup but never roles/containers; this is that gate's Pi half).
     """

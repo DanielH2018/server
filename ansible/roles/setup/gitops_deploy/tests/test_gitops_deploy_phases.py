@@ -224,7 +224,7 @@ def test_plan_tick_keeps_a_containers_path_off_the_same_named_k8s_role(
 def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
     gitops_deploy, tick, capsys, settings
 ):
-    """Parking on a comment cost three sessions their landings on 2026-09-02 (PR #746)."""
+    """Parking on a comment would cost sessions their landings."""
     tick.paths = ["ansible/bootstrap.yml"]
     tick.files = {
         f"{LOCAL}:ansible/bootstrap.yml": "# old comment\n- hosts: all\n",
@@ -241,7 +241,7 @@ def test_plan_tick_drops_a_comment_only_change_to_a_bring_up_playbook(
 def test_plan_tick_attributes_each_k8s_role_to_the_newest_commit_touching_it(
     gitops_deploy, tick, settings
 ):
-    """#3111, the 2026-10-01 range: a role change (#3080) below a tests-only tip (#3081). The
+    """A role change below a tests-only tip. The
     tip reaches no role, so sonarr's line must name the commit its own landing deployed."""
     role_change, tests_only = "1" * 40, "2" * 40
     template = "ansible/roles/k8s/sonarr/templates/deployment.yaml.j2"
@@ -259,7 +259,7 @@ def test_handle_dirty_logs_the_paths_on_every_tick(
     gitops_deploy, tick, state_dir, capsys, settings
 ):
     """Unthrottled, unlike the Discord page: an empty journal reads exactly like a tick with
-    nothing to do, which is most of what the 2026-08-30 40-minute park cost."""
+    nothing to do, which is most of what a long park costs."""
     target = _target(gitops_deploy, dirty=True, action="dirty", status=" M some/file\n")
     assert (
         deploy_handlers.handle_dirty(tick.tools, gitops_deploy.STATE, settings, target)
@@ -343,7 +343,7 @@ def test_a_successful_broad_apply_records_what_it_applied(
     """The evidence `land.sh` needs to tell an applied plane from one it fast-forwarded past.
 
     `behind_since` empty says only local == origin, which any session's `git merge --ff-only`
-    produces too — PR #1529 landed `settled` over a plane four days stale on disk (#1537).
+    produces too, so it can read `settled` over a plane that is stale on disk.
     """
     plan = _plan(
         gitops_deploy,

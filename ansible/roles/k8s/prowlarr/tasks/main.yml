@@ -1,6 +1,5 @@
 ---
-# Slice 4, B4a — the indexer proxy, plus the headless browser it drives.
-#
+# The indexer proxy, plus the headless browser it drives.
 
 - name: Create the prowlarr config volume claim
   tags: [deploy]
@@ -13,19 +12,18 @@
     volume_claim_size: "{{ prowlarr_k8s_size }}"
 
 # flaresolverr's volume is NOT seeded. It is a browser profile cache that regenerates on first
-# use, which is also why its class is longhorn-nobackup — copying it would spend a migration
-# window on bytes the app rebuilds for free.
+# use, so there is nothing to copy.
 - name: Deploy prowlarr and flaresolverr to the cluster
   ansible.builtin.include_role:
     name: k8s/manifests
   vars:
     manifests_service: prowlarr
-    # A cold image pull on either node outlasts the shared default (#2369). The number lives in
+    # A cold image pull on either node outlasts the shared default. The number lives in
     # defaults/main.yml because both templates' progressDeadlineSeconds read it too, and this
     # budget also covers the flaresolverr entry below: the drain gives every extra rollout the
     # role's timeout.
     manifests_rollout_timeout: "{{ prowlarr_k8s_rollout_timeout }}"
-    # flaresolverr now rolls under maxUnavailable: 0 instead of Recreate, so a rollout that
+    # flaresolverr rolls under maxUnavailable: 0 rather than Recreate, so a rollout that
     # never goes Ready leaves the OLD pod serving indefinitely — the failure is invisible
     # unless something actually runs `rollout status` on it. manifests_rollout above only
     # watches the Deployment named `prowlarr`; without this entry flaresolverr is never
@@ -38,7 +36,7 @@
       # also cannot be reached in the gap: they take seconds to pull and start, and the policies
       # are applied in the same call. Each policy names its own subject:
       # networkpolicy-flaresolverr.yaml fences flaresolverr, networkpolicy-prowlarr.yaml
-      # (slice 2) fences prowlarr itself.
+      # fences prowlarr itself.
       - networkpolicy-flaresolverr.yaml
       - networkpolicy-prowlarr.yaml
       - deployment-flaresolverr.yaml
@@ -46,16 +44,15 @@
       - deployment.yaml
       - service.yaml
       - ingressroute.yaml
-      # The query-only door for monitor-bridge on daniel-server (slice 4, B4c).
+      # The query-only door for monitor-bridge on daniel-server.
       - ingressroute-monitoring.yaml
     manifests_secret_files:
       # The exportarr sidecar's API key. Listed as a SECRET file so it is rendered 0600 under
       # no_log, like every other decrypted SOPS value.
       - secret-exportarr.yaml
 
-# flaresolverr's config PVC was retired when the Deployment moved to an emptyDir. Dropping
-# pvc-flaresolverr.yaml from manifests_files stops it being staged but does not remove the
-# live object, so it is deleted here. --ignore-not-found makes this idempotent, which is what
+# flaresolverr runs on an emptyDir, so its config PVC is deleted here: a manifest absent from
+# manifests_files is not staged but its live object remains. --ignore-not-found makes this idempotent, which is what
 # lets it stay in the role rather than being a one-shot play someone has to remember to run.
 - name: Retire the flaresolverr config PVC
   when: not k8s_no_mutate
@@ -71,7 +68,7 @@
   # instead of just showing nothing for the only task on this branch that destroys a volume.
   changed_when: "'deleted' in prowlarr_k8s_pvc_retire.stdout | default('')"
 
-# ── prove the flaresolverr isolation survived the move ──────────────────────────────────────
+# ── prove the flaresolverr isolation ──────────────────────────────────────
 # Its own directory: `kubectl apply -f <dir>` reads every file in the directory it is given, and
 # a Job's pod template is immutable, so a Job left beside the Deployments would be re-applied as
 # either a no-op or an error.
@@ -120,14 +117,13 @@
 - name: Wait for the flaresolverr isolation probe
   when: not k8s_no_mutate
   tags: [deploy]
-  # 300s, up from 120s: the probe's control now retries for up to 150s to ride out prowlarr's
+  # 300s: the probe's control retries for up to 150s to ride out prowlarr's
   # own restart, and the Job's activeDeadlineSeconds is 240s. This wait must outlive that
   # deadline, so a genuine failure surfaces as the probe's own message in the next task rather
   # than as an opaque wait timeout with no explanation.
   #
-  # Known wart, pre-existing and unchanged in kind: `--for=condition=complete` cannot also watch
-  # for `failed`, so a Job that fails fast still burns this whole timeout before the play stops.
-  # Raising the timeout makes that slower (was ~2min, now ~5min) on the failure path only.
+  # Known wart: `--for=condition=complete` cannot also watch for `failed`, so a Job that fails
+  # fast still burns this whole timeout (~5min) before the play stops. Only the failure path pays.
   ansible.builtin.command:
     cmd: >-
       k3s kubectl -n {{ k8s_namespace }} wait --for=condition=complete
@@ -150,7 +146,7 @@
   tags: [deploy]
   # The whole probe chain above is `command` tasks, so `--check` creates no Job and reads no
   # logs. This debug is the only task left running, onto a skip result with no
-  # `stdout_lines` (#2351).
+  # `stdout_lines`.
   when: not k8s_no_mutate
   ansible.builtin.debug:
     msg: "{{ prowlarr_k8s_netpol_log.stdout_lines }}"

@@ -1,9 +1,8 @@
 """Block on a process exiting, for tests that spawn something detached.
 
 A test that backgrounds a process — `deploy.sh --detach`, `spawn_logged`, a grandchild a
-timeout must kill — then needs to know when it has gone. Polling `os.kill(pid, 0)` in a
-`time.sleep(0.05)` loop with a two-second cap was the shape until #2159, and a loaded
-worker missed the cap. A pidfd is the kernel's own signal for the same event: it becomes
+timeout must kill — then needs to know when it has gone. A fixed-cap polling loop misses the
+cap on a loaded worker. A pidfd is the kernel's own signal for the same event: it becomes
 readable the moment the process terminates, before anything reaps it, and it works for a
 pid this process did not spawn. `select` on it is a wait with a deadline and no polling.
 """

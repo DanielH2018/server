@@ -7,18 +7,18 @@ radarr_k8s_image: lscr.io/linuxserver/radarr:6.4.4.10685-ls318
 # database + root-folder paths before the gate observes a fault, then fail the rollback
 # redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
 # bump as a routine patch bump.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of leaving the library database and root-folder paths unreadable by the old image.
+# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
+# deploy fails, so a bad swap reverts to the snapshot instead of leaving the library database
+# and root-folder paths unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. WEIGHED: radarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
-# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and the revert it
+# enables is what this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [radarr-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
-# what this role creates can see the coupling (2026-08-22 review M2).
+# what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
 # The rollout budget, declared once. Read by BOTH the `manifests_rollout_timeout` passed to
@@ -28,18 +28,14 @@ k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix
 # that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
-# was unreachable until #2370 rendered the deadline from it.
+# is unreachable unless the deadline is rendered from this variable too.
 radarr_k8s_rollout_timeout: 660s
 
-# 30 M at B4a. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
-# root-folder paths this slice is careful about.
+# 30 M. longhorn, not longhorn-nobackup: radarr.db holds the library and the absolute
+# root-folder paths.
 radarr_k8s_claim: radarr-config
-# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
-# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
-# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
-# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
-# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn` — backed up. Excluding this volume would leave it with a single frozen restore
+# point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
 radarr_k8s_storage_class: longhorn
 radarr_k8s_size: 2Gi
 
@@ -50,7 +46,6 @@ radarr_k8s_media_claim: media-data
 # TheCaptain989's striptracks mod.
 radarr_k8s_docker_mods: linuxserver/mods:radarr-striptracks
 
-# Mirrors resources('1.0', '1024M', '0.10', '128M').
 radarr_k8s_cpu_limit: "1"
 radarr_k8s_mem_limit: 1024Mi
 radarr_k8s_cpu_request: "100m"

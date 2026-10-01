@@ -4,8 +4,7 @@
 shares: `spec_shell` (`revisionHistoryLimit`, `strategy`) at a Deployment's `spec:` depth and
 `pod_shell` (`enableServiceLinks`, `priorityClassName`, `serviceAccountName`,
 `automountServiceAccountToken`, the pod-level `securityContext`) at `spec.template.spec:`
-depth. Until 2026-09-19 all 69 templates hand-copied them and three field-level guards
-policed the copies (#2056). A copy is where a field drifts, and a template copied from a
+depth. A copy is where a field drifts, and a template copied from a
 sibling that predates a field inherits the omission with nothing to notice.
 
 A macro cannot force its own call, so this guard is textual and has two halves per document:
@@ -22,7 +21,7 @@ A macro cannot force its own call, so this guard is textual and has two halves p
 The walk covers `ansible/templates/` as well as the roles. A shared macro that emits a whole
 Deployment body — `arr-deployment.yml.j2`, radarr's and sonarr's — carries the two calls on its
 callers' behalf, so the file to scan is the macro and not either caller. That is the same move
-pihole's two-Deployment macro already forced (#2884), one directory further out.
+pihole's two-Deployment macro already forced, one directory further out.
 
 Jobs and CronJobs are out of scope: their pod spec sits at another depth for a CronJob and
 carries no priority tier for either (`test_pod_template_hygiene.py` says why), so a literal in
@@ -58,13 +57,13 @@ _MUST_CONTAIN = frozenset(
         "traefik/deployment.yaml.j2",
         # pihole renders both its Deployments from one macro body, and this census reads
         # `kind:` out of the template text rather than a render — so the file to scan is the
-        # macro, not either caller (#2884).
+        # macro, not either caller.
         "pihole/pihole-deployment.yaml.j2",
         "observability/prometheus.yaml.j2",
         "node-exporter/daemonset.yaml.j2",
         "dri-device-plugin/daemonset.yaml.j2",
         # radarr's and sonarr's whole Deployment body, shared out of ansible/templates/ — the
-        # roles' own templates are a single macro call and name no kind (#2871).
+        # roles' own templates are a single macro call and name no kind.
         "templates/arr-deployment.yml.j2",
     }
 )

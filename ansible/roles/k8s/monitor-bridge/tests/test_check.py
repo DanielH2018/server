@@ -2,7 +2,7 @@
 
 `CHECKS` has to agree with the deployed manifests — a check needing an env var the manifest does
 not set fails at runtime, and a monitor with no check never beats. CHECKS_ONLY/CHECKS_SKIP are
-how the twin deployments split that registry between them.
+how a deployment narrows that registry.
 """
 
 from dataclasses import replace
@@ -49,9 +49,7 @@ def _read_sibling(relpath):
 def test_checks_and_env_secret_push_tokens_agree():
     # Every KUMA_PUSH_* check.py reads must have an env entry in the env-secret and
     # vice-versa. A check added to CHECKS without its env silently never pushes (empty
-    # token) with no Kuma no-heartbeat to self-correct. Single-deployment since the
-    # Docker uninstall (2026-08-14) — the remnant compose this used to partition
-    # against is archived.
+    # token) with no Kuma no-heartbeat to self-correct.
 
     # Matched as a bare quoted literal, NOT as a `tok("...")` call: the four reachability-gate
     # tokens reach _env() through _gate() rather than through the registry's helper, and a
@@ -60,9 +58,8 @@ def test_checks_and_env_secret_push_tokens_agree():
     # KUMA_PUSH_* under files/ is a token the bridge reads.
     #
     # Scanned across EVERY runtime module rather than one file. The tokens live in two of them
-    # since the 17b split — the registry's in registry.py, the four gates' in check.py's
-    # run_once — and a single-file scan would have gone quiet for the larger half the moment the
-    # list moved. The tree is the census rather than the ship list because
+    # — the registry's in registry.py, the four gates' in check.py's run_once — and a
+    # single-file scan would go quiet for the larger half. The tree is the census rather than the ship list because
     # ansible/tests/services/test_monitor_bridge_modules.py already pins the two to be equal.
     files = Path(__file__).resolve().parent.parent / "files"
     in_code = set()
@@ -105,11 +102,9 @@ def test_every_push_token_env_is_wired_to_a_monitor():
     )
 
 
-# The remnant's real config: only the host-state-file checks, every gate off. Three
-# since the 2026-08-14 host flips (pi_peers + renovate_alive became direct pushers).
-# A representative CHECKS_ONLY subset. No deployment carries a filter since the Docker
-# uninstall (2026-08-14) retired the remnant — these tests keep the MECHANISM honest for
-# whenever a split is next expressed.
+# A representative CHECKS_ONLY subset: only the host-state-file checks, every gate off. No
+# deployment carries a filter — these tests keep the MECHANISM honest for whenever a split is
+# next expressed.
 SUBSET_ONLY = frozenset({"gitops_alive", "gitops_status"})
 
 
@@ -192,9 +187,8 @@ def test_run_once_with_only_filter_touches_no_gate(monkeypatch, cfg):
 
 # ── check_pvc_fullness ──────────────────────────────────────────────────────
 #
-# These live here rather than beside check_longhorn_volumes in test_check_longhorn.py only because
-# this file was the one in scope when the check landed. conftest.py's autouse _down_streaks reset
-# is directory-wide, so the fixtures behave identically either way.
+# conftest.py's autouse _down_streaks reset is directory-wide, so these fixtures behave the same
+# here as beside check_longhorn_volumes in test_check_longhorn.py.
 
 
 def _pvc_series(pvc, pct, namespace="homelab"):
@@ -215,7 +209,7 @@ def _arm_pvc(cfg, monkeypatch, vector, claims=43.0):
 
 
 def test_pvc_under_threshold_is_clean(monkeypatch, cfg):
-    # The live shape on 2026-09-01: fullest claim 38.6%, nothing near the limit.
+    # The live shape: fullest claim 38.6%, nothing near the limit.
     cfg = _arm_pvc(
         cfg,
         monkeypatch,

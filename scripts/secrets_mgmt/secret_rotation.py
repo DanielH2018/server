@@ -104,8 +104,8 @@ TIER_DAYS = {
 # 08:00 audit paging the "Secret Rotation" Kuma monitor DOWN the whole time for a rotation
 # that was always going to happen anyway. Anything due within one cron interval (+1 day
 # margin) rotates the run BEFORE its due date instead, so a working cron never lets an
-# auto token go overdue — an auto-tier OVERDUE in the audit now genuinely means the
-# weekly cron is broken, not that it hasn't come around yet.
+# auto token go overdue — an auto-tier OVERDUE in the audit genuinely means the weekly
+# cron is broken, not that it hasn't come around yet.
 ROTATE_LEAD_DAYS = 8
 
 
@@ -153,10 +153,10 @@ def cmd_sync(args, tools: RotationTools) -> int:
 def audit_summary(res: dict, missing: list, stale: list) -> str:
     """The one-line status pushed to the "Secret Rotation" Kuma monitor.
 
-    NAMES the overdue secrets (most-overdue first, capped) — a bare count read identically whether a
-    genuine cron break stranded a rotatable token or one of the consumer-less known-manual auto
+    NAMES the overdue secrets (most-overdue first, capped) — a bare count reads identically whether
+    a genuine cron break stranded a rotatable token or one of the consumer-less known-manual auto
     tokens (secret_rotation/pi_sd_health/pi_recovery push tokens, which the weekly cron deliberately
-    skips) merely came due, so the operator had to SSH in to tell the two apart (2026-07-15 M1).
+    skips) merely came due, and the operator would have to SSH in to tell the two apart.
     """
     n_over = len(res["overdue"])
     parts = ["%d %s" % (c, t) for t, c in sorted(res["by_tier"].items())]
@@ -297,7 +297,7 @@ def cmd_rotate(args, tools: RotationTools) -> int:
     # Decide what is due from the same dates `audit` reads: the registry, advanced to the
     # date git shows each ciphertext last changed. A token rotated by hand and committed
     # without its `last_rotated` moved would otherwise read as due here and be rotated
-    # again (#2020). The advance lands on a COPY: `save_registry` below writes `reg`, and
+    # again. The advance lands on a COPY: `save_registry` below writes `reg`, and
     # the only dates that may move on disk are those of the secrets this run rotates —
     # git stays the source of truth for the rest, exactly as it does for `audit`.
     selection = copy.deepcopy(reg)

@@ -131,9 +131,8 @@ def test_fingerprint_empty_is_blank():
     assert nl.fingerprint([]) == ""
 
 
-# A `stuck` PR used to fingerprint on #number:bucket alone -> notify() fires once when it first
-# goes stuck, then the fingerprint never changes again while the PR just sits there, so it never
-# re-pages (PR #67, stuck since 2026-08-03, paged day 1 and went silent). The age dimension makes
+# A fingerprint on #number:bucket alone makes notify() fire once when a PR first goes stuck, then
+# never change while the PR just sits there, so it never re-pages. The age dimension makes
 # the fingerprint change — and so re-notify — each time the PR's stuck-age crosses a threshold.
 # `manual` PRs deliberately carry no age dimension (nothing to escalate: they're waiting on a
 # merge, not getting worse).
@@ -315,7 +314,7 @@ def test_find_dashboard_ignores_non_renovate_author():
     assert nl.find_dashboard([_issue("Dependency Dashboard", login="someuser")]) is None
 
 
-# A package whose lookup starts failing (karakeep's gcr.io image, 2026-08) gets no PR and
+# A package whose lookup starts failing (karakeep's gcr.io image, say) gets no PR and
 # doesn't touch dashboard staleness — the dashboard still updates on schedule. This section
 # is the only signal, so it must be parsed into the notify path or it silently stops
 # receiving updates forever.
@@ -366,8 +365,7 @@ def test_find_dashboard_problems_dashboard_without_section_is_empty():
     assert nl.find_dashboard_problems(issues) == set()
 
 
-# Verbatim from the Dependency Dashboard (issue #3) as quoted in finding #887, observed
-# 2026-09-02 19:35 UTC. Renovate renders lookup failures as this callout, NOT under
+# Verbatim from the Dependency Dashboard (issue #3). Renovate renders lookup failures as this callout, NOT under
 # "## Repository Problems" — the sample is kept literal so the parser is tested against
 # Renovate's own output rather than an approximation of it.
 _LOOKUP_WARNING_BODY = """This issue lists Renovate updates and detected dependencies.
@@ -502,9 +500,7 @@ def test_render_problems_lists_each_problem():
 # Renovate holds one branch per branchName, so a branch conflicting against a DELETED path blocks
 # the dependency it tracks from ever producing a mergeable PR — while the dashboard keeps detecting
 # the update at the live path and the PR reports only as "conflicting", which reads as ordinary
-# rebase noise. Two occurrences: #67/#42/#69 (compose templates archived by the k3s migration) and
-# #41 (roles/containers/karakeep, same cutover), the second found on 2026-08-20 with the live pin
-# 24 days behind.
+# rebase noise.
 
 _GONE = ("ansible/roles/containers/karakeep/templates/docker-compose.yml.j2",)
 

@@ -1,6 +1,6 @@
 """Tests for scripts/validate/unit_templates.py — the render-then-`systemd-analyze verify` guard
 for `*.service.j2` / `*.timer.j2` templates that neither `shell_templates.py` nor
-`k8s_manifests.py` covers (GitHub issue #948).
+`k8s_manifests.py` covers.
 """
 
 import shutil
@@ -217,8 +217,8 @@ def test_main_fails_closed_when_systemd_analyze_missing(monkeypatch):
     assert v.main() == 1
 
 
-# ── issue #948 sibling gap: 50-gitops-deploy.rules.j2 (polkit JS) is content-checked by
-# test_gitops_manual_trigger.py, but nothing checked its JavaScript syntax.
+# ── sibling gap: 50-gitops-deploy.rules.j2 (polkit JS) is content-checked by
+# test_gitops_manual_trigger.py, but nothing else checks its JavaScript syntax.
 
 
 requires_node = pytest.mark.skipif(

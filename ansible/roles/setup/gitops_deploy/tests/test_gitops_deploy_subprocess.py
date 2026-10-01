@@ -140,10 +140,10 @@ def test_run_timeout_kills_the_whole_process_group(tmp_path) -> None:
 
 
 # ── a timed-out run must still name the task it was running ──────────────────────────────────
-# `subprocess.TimeoutExpired.__str__` prints the argv and the deadline and nothing else, so the
-# 2026-09-01 17:47:19 broad apply on daniel-box logged exactly `Command [...] timed out after
-# 1800 seconds` — neither the running task nor a PLAY RECAP (#2914). The broad arm is
-# forward-only, so that line was all the operator had. RED proof: against a `run()` that
+# `subprocess.TimeoutExpired.__str__` prints the argv and the deadline and nothing else, so a
+# wedged broad apply would log exactly `Command [...] timed out after 1800 seconds` — neither
+# the running task nor a PLAY RECAP. The broad arm is forward-only, so that line would be all
+# the operator had. RED proof: against a `run()` that
 # re-raises the stdlib exception unchanged, the message below carries no TASK header at all,
 # even though the playbook printed one before it wedged.
 _WEDGED_TASK_SHAPE = """#!/bin/sh

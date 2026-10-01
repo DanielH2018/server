@@ -1,10 +1,6 @@
 {#
-  The Traefik dashboard's door. It existed at the Docker edge as a file-provider router
-  named `dashboard` in roles/containers/traefik/templates/config.yml.j2, and went away with
-  that host in e9a9569c ("E7 slice 3: the Docker edge stands down") — the migration ported
-  every app route but not Traefik's own, so `traefik.local.<domain>` has 404'd since.
-  `api.dashboard: true` stayed set the whole time (static-config.yaml.j2:10), so the
-  dashboard was running with nothing routed to it.
+  The Traefik dashboard's door. `api.dashboard: true` is set in static-config.yaml.j2, and
+  this route is what sends `traefik.local.<domain>` to it.
 
   NOT the shared ingressroute() macro, and it cannot be: that macro emits
   `services[].name` + `port`, which resolves to a k8s Service. The dashboard is served by

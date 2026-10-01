@@ -1,11 +1,10 @@
 #!/usr/bin/env python3
 """Run the stop conditions of `docs/k3s-etcd-restore.md` in order, exit code naming the first failure.
 
-A `--cluster-reset` restore rolls the whole cluster back to the snapshot's moment, and two
-facts decide whether the snapshot it rolls back to is a backup at all. The runbook carried
-both as prose and a hand-run `sha256sum`; here each is a verdict over the stamps the crons
-write, the runner stops at the first failure, and the exit code is the gate number (#2216,
-the shape `k3s_upgrade_gates.py` set in #2162). Run it BEFORE `systemctl stop k3s`.
+A `--cluster-reset` restore rolls the whole cluster back to the snapshot's moment, and two facts
+decide whether the snapshot it rolls back to is a backup at all. Each is a verdict over the stamps the
+crons write, the runner stops at the first failure, and the exit code is the gate number (the shape
+`k3s_upgrade_gates.py` sets). Run it BEFORE `systemctl stop k3s`.
 
 The gates, in the order the runbook gives them:
 
@@ -26,19 +25,19 @@ The gates, in the order the runbook gives them:
      `--cluster-reset-restore-path` takes and whose `status.readyToUse` says whether it can be
      restored at all. A name carrying `/` is refused before the cluster is asked: k3s reads
      that flag as a NAME, so a path there resolves to nothing and the restore fails after k3s
-     is already stopped (#2243).
+     is already stopped.
 
-Gates 1 and 2 read only daniel-box: both stop conditions are about what survives the host, not
-about what runs on it, so they fail on any other host rather than reading an absent directory
-as a pass. `ETCD_DRILL_STATE_DIR` and `HOMELAB_STATE_DIR` point them elsewhere. Gate 3 is the
-one cluster read, through `lib.kubectl` naming `prod`, so a staging kubectl is refused here too
-(#1663) — run it before `systemctl stop k3s`, while the API server still answers.
+Gates 1 and 2 read only daniel-box: both stop conditions are about what survives the host, not about
+what runs on it, so they fail on any other host rather than reading an absent directory as a pass.
+`ETCD_DRILL_STATE_DIR` and `HOMELAB_STATE_DIR` point them elsewhere. Gate 3 is the one cluster read,
+through `lib.kubectl` naming `prod`, so a staging kubectl is refused here too — run it before
+`systemctl stop k3s`, while the API server still answers.
 
 A SINGLE GATE CAN BE RUN ON ITS OWN, and that is how gate 3 stops being exercised only on the
 day of a real restore. Gate 3's live dependencies — the readonly SA's access to
 `etcdsnapshotfiles`, and k3s still recording that CR at all — would otherwise first be read
 during an outage, so the weekly `--list-only` etcd restore drill runs `--gate 3` against the
-snapshot name it just listed and treats any refusal as a drill failure (#2420). That drill
+snapshot name it just listed and treats any refusal as a drill failure. That drill
 cannot run the whole runner: gate 1 reads the stamp the same drill writes, which is circular,
 and gate 2's stamp is the operator's to take.
 

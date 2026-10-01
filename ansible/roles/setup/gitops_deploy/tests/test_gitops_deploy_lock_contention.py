@@ -55,7 +55,7 @@ def _deferred(tick, state_dir, posts: int = 0) -> None:
 
     `posts` is what the tick had ALREADY sent before it reached the deploy — the manual_plane
     page of a mixed range is the only one. The contention arm itself never pages: the
-    `contention_since` marker it writes is what monitor-bridge pages on (issue #1847).
+    `contention_since` marker it writes is what monitor-bridge pages on.
     """
     assert tick.head == LOCAL, (
         "the ff-merge was not undone, so the next tick sees no range"
@@ -177,9 +177,8 @@ def test_a_contended_mixed_range_records_no_pending_role(
     assert not (state_dir / "manual_plane").exists(), (
         "a role was left recorded as merged-and-unapplied for a merge that was undone"
     )
-    # The one keyed marker, by the name it actually has: this read was `state_dir /
-    # "broad_alerted"` before #3047, which was never a basename the deployer wrote — the file
-    # was `broad_alerted_sha` — so the assertion passed whatever the dedupe held.
+    # The one keyed marker, by the name it actually has: a read of a basename the deployer
+    # never wrote would pass whatever the dedupe held.
     assert gitops_deploy.STATE.alerted_sha("broad") is None, (
         "the page dedupe survived, so the record this range gets next tick would be silent"
     )
@@ -207,12 +206,12 @@ _TWO_PLANE_PATHS = [
 def test_a_contended_second_plan_takes_back_the_first_plans_broad_applied(
     gitops_deploy, tick, settings, state_dir
 ):
-    """CLEAN half for #2382: the reset undoes the merge, so no marker may claim that SHA.
+    """CLEAN half: the reset undoes the merge, so no marker may claim that SHA.
 
     Nothing here is pending — `gitops_deploy` is a role this deployer applies — which is why
-    the snapshot cannot hang off the `Recorded` a tick with no pending role used to take from
-    a shared constant. `land.sh` reads `broad_applied` to tell a plane the tick APPLIED from
-    one it merely fast-forwarded past (#1537), and after the reset this tree carries neither.
+    the snapshot cannot hang off the `Recorded` of a tick with no pending role. `land.sh` reads
+    `broad_applied` to tell a plane the tick APPLIED from one it merely fast-forwarded past,
+    and after the reset this tree carries neither.
     """
     tick.playbook_outcomes = [None, deploy_locks.ServiceLockBusy(BUSY)]
     code = deploy_handlers.handle_broad(
@@ -254,7 +253,7 @@ def test_a_contended_tick_leaves_an_earlier_ticks_broad_applied_alone(
 def test_a_failed_mixed_apply_still_records_its_pending_role(
     gitops_deploy, tick, settings, state_dir
 ):
-    """FLAGGED half, and the property #1773 bought: a FAILED apply keeps the record.
+    """FLAGGED half: a FAILED apply keeps the record.
 
     The tree stays fast-forwarded there, so the role really is merged and unapplied. Undoing
     the record on that path would reopen the hole the marker exists to close — the role sits on

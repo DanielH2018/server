@@ -122,7 +122,7 @@ def test_pr_refs_ignores_a_bare_issue_mention():
 
 
 def test_pr_refs_withholds_a_same_repo_qualified_reference():
-    """#2119: `Closes DanielH2018/server#2078` closes #2078 on merge, and `next` offered it."""
+    """`Closes DanielH2018/server#2078` closes #2078 on merge, so `next` must not offer it."""
     assert pr_refs(
         ["Closes DanielH2018/server#2078", "fixes danielh2018/SERVER#7"]
     ) == {
@@ -141,7 +141,7 @@ def test_pr_refs_ignores_a_reference_into_another_repository():
 
 
 def test_pr_refs_withholds_a_same_repo_issue_url():
-    """#2189: GitHub closes on the full URL too, and `next` offered an issue written that way."""
+    """GitHub closes on the full URL too, and `next` offered an issue written that way."""
     assert pr_refs(
         [
             "Closes https://github.com/DanielH2018/server/issues/7",
@@ -177,7 +177,7 @@ def test_next_via_main_lists_an_ordinary_open_issue(capsys):
 
 
 def test_next_text_render_marks_a_stale_claim_and_names_reap(capsys):
-    """`next`'s whole text render was uncovered — every other test passes `--json` (#1275).
+    """`next`'s whole text render was uncovered — every other test passes `--json`.
 
     One test for the three things it prints: the row, the marker naming who holds a stale
     claim, and the note pointing at `reap`. `next` offering a stale-claimed issue is the
@@ -228,11 +228,10 @@ def test_next_withholds_a_live_claim_when_the_git_read_fails(capsys):
 
 
 def test_next_withholds_an_issue_an_open_pr_already_closes(capsys):
-    """#1283: the open-PR filter was proven only through `pickable` with a hand-fed set.
+    """The open-PR filter was proven only through `pickable` with a hand-fed set.
 
     No test drove `main(["next"])` with `Fakes(prs=[...])`, so `open_pr_refs` could return an
-    empty set and the whole suite stayed green. The `prs` field was added to the shared fake
-    for exactly this and then went unused.
+    empty set and the whole suite stayed green.
     """
     spoken_for = make_issue(1132, title="a PR already says it closes this")
     free = make_issue(1140, title="nobody has this")
@@ -259,7 +258,7 @@ def test_next_offers_an_issue_no_open_pr_mentions(capsys):
 
 
 def test_next_limit_bounds_the_list(capsys):
-    """#1283: `--limit` had no test at all, so the slice could be deleted outright."""
+    """`--limit` had no test at all, so the slice could be deleted outright."""
     tools, _ = build_tools(
         Fakes(issues=[make_issue(1132), make_issue(1140)], worktree_facts=facts())
     )
@@ -270,11 +269,11 @@ def test_next_limit_bounds_the_list(capsys):
 def test_next_with_no_limit_returns_every_pickable_issue(capsys):
     """The accepting half, and the operator-requested change it guards.
 
-    `--limit` defaulted to 10. An orchestrator read `next --json`, got 10 rows and took them
-    for the whole free set while 12 more sat invisible. A view blind to real state that does
-    not announce it is the same failure class as the four paths in #1277, so the default is
-    now unbounded and `--limit N` is the opt-in bound. Eleven issues, so a reintroduced
-    default of 10 fails here rather than passing by coincidence.
+    A default `--limit` of 10 truncates silently. An orchestrator read `next --json`, got 10
+    rows and took them for the whole free set while 12 more sat invisible. A view blind to
+    real state that does not announce it is a silent failure, so the default is unbounded
+    and `--limit N` is the opt-in bound. Eleven issues, so a reintroduced default of 10
+    fails here rather than passing by coincidence.
     """
     issues = [make_issue(1100 + n) for n in range(11)]
     tools, _ = build_tools(Fakes(issues=issues, worktree_facts=facts()))

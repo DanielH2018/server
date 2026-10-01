@@ -3,16 +3,13 @@
 GOMEMLIMIT bounds the Go runtime's TOTAL memory (heap, stacks, GC metadata), not the live
 heap. A limit below what GOGC would grow the heap to takes over the heap goal, and a limit
 near the live set itself makes the runtime collect continuously, bounded only by the GC CPU
-limiter at 50% of GOMAXPROCS. That is how the first Alloy on daniel-pi ran for 7 days:
-GOMEMLIMIT=48MiB against a heap that needed more, 2 GC cycles a second for 1.6 log lines a
-second, 0.28 of a core steady (#932), the largest load on the host and the contention
-behind #930.
+limiter at 50% of GOMAXPROCS. A GOMEMLIMIT of 48MiB against a heap that needs more therefore
+runs about 2 GC cycles a second for 1.6 log lines a second and holds 0.28 of a core steady.
 
 The floor here is the heap goal GOGC sets on the measured live heap, plus the runtime's
-non-heap classes. It is NOT `go_memstats_sys_bytes`, which the 2026-09-03 sizing used: that
-metric never shrinks, counts pages already handed back to the kernel, and read 96.3 MB on
-2026-09-17 — above the limit and the cap alike — while collection ran at 0.7 cycles a
-minute (#1944). Lowering the limit back under the floor "to save RAM" is a one-line edit
+non-heap classes. It is NOT `go_memstats_sys_bytes`: that metric never shrinks and counts
+pages already handed back to the kernel, so it reads above the limit and the cap alike while
+collection runs under one cycle a minute. Lowering the limit under the floor "to save RAM" is a one-line edit
 that renders, lints and deploys green, and reads as thrift. The ceiling is the compose
 memory cap: a limit at or above it is no ceiling at all, and the container is OOM-killed
 before the runtime collects.
@@ -24,13 +21,13 @@ from _helpers import REPO
 
 _COMPOSE = REPO / "ansible/roles/containers/alloy/templates/docker-compose.yml.j2"
 
-# The post-GC floor of `go_memstats_heap_alloc_bytes{job="alloy-pi"}`: 38.3-38.5 MB on every
-# day from 2026-09-06 to 2026-09-17, after a three-day climb from 29 MB. Re-measure with
+# The post-GC floor of `go_memstats_heap_alloc_bytes{job="alloy-pi"}`: 38.3-38.5 MB steady,
+# after a three-day climb from 29 MB. Re-measure with
 # `min_over_time(go_memstats_heap_alloc_bytes{job="alloy-pi"}[1d])` on a process older than
 # three days, never on a fresh one (22 MB in its first hour).
 MEASURED_LIVE_HEAP_MIB = 37
 # `go_memstats_sys_bytes` − `go_memstats_heap_sys_bytes`: stacks, GC metadata, mspan/mcache
-# and the profiling buckets. 8.3 MB on 2026-09-18.
+# and the profiling buckets. 8.3 MB.
 NON_HEAP_RUNTIME_MIB = 8
 
 _UNITS_MIB = {"MiB": 1, "M": 1, "GiB": 1024, "G": 1024}
@@ -44,8 +41,7 @@ def _mib(quantity: str) -> int:
 
 # With GOGC=off the limit is the only trigger, so the slack between the live set and the
 # limit is the whole cycle. Less than GOGC=50's half-heap of slack would give a shorter cycle
-# than the 2026-09-03 shape the marker at the GOGC line replaced, which is the direction of
-# the treadmill above. The forced two-minute cycle GOGC=off removes is why it is off at all.
+# than GOGC=50 does. The forced two-minute cycle GOGC=off removes is why it is off at all.
 MIN_SLACK_PERCENT_WHEN_OFF = 50
 
 
@@ -108,12 +104,12 @@ def test_a_limit_with_too_little_slack_for_gogc_off_is_flagged() -> None:
 
 
 def test_the_2026_09_03_triple_is_clean() -> None:
-    """The GOGC=50 pairing that ran 2026-09-03 to 2026-09-18, before #1967 raised the goal."""
+    """The GOGC=50 pairing: a 72MiB limit clears the 63 MiB floor."""
     assert gomemlimit_problem("72MiB", "96M", 50) is None
 
 
 def test_the_2026_09_02_value_is_flagged() -> None:
-    """The limit Alloy first shipped with, sized from RSS rather than the heap goal."""
+    """A 48MiB limit, sized from RSS rather than the heap goal, is under the floor."""
     assert gomemlimit_problem("48MiB", "96M", 50) == (
         "GOMEMLIMIT=48MiB is under the 63 MiB floor (live heap 37 MiB at GOGC=50 is a "
         "55 MiB goal, plus 8 non-heap); the limit sets the heap goal, not GOGC"

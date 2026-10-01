@@ -1,8 +1,8 @@
 """The no-pods assert in `k8s/manifests/tasks/drain.yml` must tell a label typo from a deliberate zero.
 
-A workload scaled to zero has no pods on purpose. Before 2026-09-02 the assert read only the
-restart snapshot, so an empty snapshot was indistinguishable from a mislabelled workload and it
-failed the whole play — which is what `terraria` at `replicas: 0` did on its first deploy.
+A workload scaled to zero has no pods on purpose. An assert that read only the
+restart snapshot could not tell an empty snapshot from a mislabelled workload, and would fail
+the whole play for a workload at `replicas: 0` such as `terraria`.
 
 The exemption must stay narrow. It is allowed to pass a workload the CLUSTER agrees wants zero
 pods, and nothing else: a mislabelled workload that is actually running still reports a non-zero

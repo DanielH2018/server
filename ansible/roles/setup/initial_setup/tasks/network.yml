@@ -1,6 +1,5 @@
 ---
 # IPv4 forwarding, kernel security sysctls, and the UFW ruleset.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Enable IPv4 forwarding
   tags: [sysctl]
@@ -16,9 +15,9 @@
 # `net/ipv4/conf/{all,default}/log_martians=0` uncommented, so it is the one thing on the host
 # that sets the key to 0 — /etc/sysctl.conf persists 1 and no /etc/sysctl.d or /usr/lib/sysctl.d
 # file mentions the key at all. The hardening loop below writes 1, then `Enable UFW firewall`
-# further down this same file re-applies 0 about twenty tasks later, so daniel-server read 0
-# seconds after a run that reported `changed` and the loop reported `changed` again every run
-# (#2977, measured 2026-09-29). Rewriting UFW's copy to 1 here, BEFORE the loop, makes the two
+# further down this same file re-applies 0 about twenty tasks later, so the key reads 0
+# seconds after a run that reported `changed` and the loop reports `changed` again every run.
+# Rewriting UFW's copy to 1 here, BEFORE the loop, makes the two
 # files agree: the loop sets the live value and any later reload re-asserts the same 1.
 # Host-agnostic on purpose — the file is the distro default, identical on daniel-box.
 - name: Check for UFW's own sysctl file
@@ -90,14 +89,10 @@
 # SSH session because the explicit `limit ssh` rule that follows takes precedence
 # over the default policy.
 #
-# The routed DEFAULT policy is still not managed here, but the reason written here
-# until 2026-08-27 had expired on both halves. It said Docker owns FORWARD via
-# DOCKER-USER and the WireGuard containers depend on host forwarding — Docker was
-# uninstalled from daniel-server on 2026-08-14, and wg-easy runs on daniel-pi. The
-# surviving reason is narrower: daniel-pi genuinely still runs Docker and wg-easy,
-# so a routed default set for every host would fight the one host where the old
-# rationale is still true. Specific `route` rules below are unaffected by the
-# default and are the right shape for a targeted fence.
+# The routed DEFAULT policy is not managed here. daniel-pi runs Docker and wg-easy, so a
+# routed default set for every host would fight the one host where Docker owns FORWARD via
+# DOCKER-USER. Specific `route` rules below are unaffected by the default and are the right
+# shape for a targeted fence.
 - name: Set UFW default policy - deny incoming
   tags: [firewall]
   community.general.ufw:
@@ -168,18 +163,11 @@
 # The staging guest's egress fence is NOT here. It is a libvirt nwfilter, defined and
 # attached by roles/setup/hypervisor.
 #
-# Recorded because the wrong answer is the plausible one, and it was mine. #508 fenced the
-# guest with a ufw `route deny` on this host. It deployed cleanly, `ufw status` listed it,
-# and it was INERT — the acceptance probe still reached the production MetalLB VIP, the k3s
-# API and daniel-pi's unauthenticated wg-easy admin UI from inside the guest. The proof it
-# could never have worked is one line of /etc/default/ufw: DEFAULT_FORWARD_POLICY="DROP" was
-# already set, so if ufw's forward chain governed this traffic the guest would have been
-# fenced before #508 was written. libvirt's own FORWARD accept is reached first, and no rule
-# ufw can place changes that.
-#
-# The lesson is not about ufw. A firewall rule that is present and inert reads identical to
-# a working one from the host, so "the rule is in `ufw status`" was never evidence. The
-# probe at the far side is, which is why it exists and why it caught this.
+# A ufw `route deny` on this host is INERT for that traffic. /etc/default/ufw already sets
+# DEFAULT_FORWARD_POLICY="DROP", so if ufw's forward chain governed the guest it would already
+# be fenced. libvirt's own FORWARD accept is reached first, and no rule ufw can place changes
+# that. A firewall rule that is present and inert reads identical to a working one from the
+# host, so "the rule is in `ufw status`" is not evidence. The probe at the far side is.
 #
 # The task below deletes the inert rule rather than leaving it as belt-and-braces. A rule
 # that reads as protection and provides none is worse than no rule at all — the next
@@ -198,11 +186,10 @@
 
 - name: Remove the stale WireGuard 51820/udp allow on the Pi
   tags: [firewall]
-  # History: written when the Pi's wg-easy listened on 51820; the Pi moved to 51822
-  # (both hosts share one public IP, so the listen ports must differ) and this rule
-  # was never updated. No replacement is added: wg-easy publishes its UDP port via
-  # Docker, whose nat/FORWARD rules bypass UFW INPUT entirely — proven by the Pi's
-  # glances web UI being LAN-reachable with no UFW allow for 61208.
+  # The Pi's wg-easy listens on 51822, not 51820 (both hosts share one public IP, so the
+  # listen ports must differ), so this rule is stale. No replacement is added: wg-easy
+  # publishes its UDP port via Docker, whose nat/FORWARD rules bypass UFW INPUT entirely —
+  # proven by the Pi's glances web UI being LAN-reachable with no UFW allow for 61208.
   # The Pi's manually-added 51822 allow is left in place (harmless, documents intent).
   # Kept as a delete-task (not just removed) so existing hosts converge.
   community.general.ufw:

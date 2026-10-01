@@ -1,8 +1,7 @@
 """The inventory readers every generator and validator shares.
 
-``load_yaml`` replaced three per-script copies on 2026-09-01. Each of those coerced a
-non-mapping file to ``{}``; the shared one must keep doing so, or a host_vars file whose
-top level is a list reaches a ``.get`` several calls later.
+``load_yaml`` coerces a non-mapping file to ``{}`` and must keep doing so, or a host_vars
+file whose top level is a list reaches a ``.get`` several calls later.
 """
 
 from pathlib import Path
@@ -69,7 +68,7 @@ def test_the_same_tag_is_absent_at_the_commit_before_it(tmp_path):
 def test_an_unreadable_ref_is_none_rather_than_an_empty_set(tmp_path):
     """REJECTING half: `set()` says no service is declared anywhere, which refuses every tag.
 
-    None is what sends the caller back to the tree it can read (issue #1331).
+    None is what sends the caller back to the tree it can read.
     """
     _tags_repo(tmp_path, _WITHOUT)
     assert service_tags_at_or_none("deadbeefdeadbeefdeadbeef", tmp_path) is None
@@ -88,7 +87,7 @@ def test_host_vars_that_do_not_parse_at_the_ref_are_none_too(tmp_path):
 
 
 def test_service_records_at_a_ref_keep_the_declaring_host(tmp_path):
-    """CLEAN half of issue #1839: the host survives the read, so a Pi entry added at the
+    """CLEAN half: the host survives the read, so a Pi entry added at the
     commit routes to daniel-pi through the same rule the working-tree read uses."""
     shas = _tags_repo(
         tmp_path,
@@ -164,7 +163,7 @@ def test_render_guard_re_exports_the_same_anchor_objects():
 
 
 def test_every_public_name_is_listed_in_all():
-    """`__all__` drifted behind three helpers this module gained (issue #1776).
+    """`__all__` drifted behind three helpers this module gained.
 
     Derived from the module rather than compared to a copied list: a hand-written expected
     list is the same drift one indirection away. Sorted, because the list is maintained in

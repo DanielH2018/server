@@ -7,11 +7,10 @@ on disk, `GET /Plugins` does not list it, and Jellyfin starts normally. Nothing 
 deploy goes red — the rollout succeeds, the health gate passes, and the only symptom is that
 watch status stops reaching AniList.
 
-That is a live hazard rather than a hypothetical one. On 2026-08-25 the plugin's current
-release was 4.4.0.0 with `targetAbi` 10.11.11.0, while this role pinned Jellyfin at 10.11.10 —
-so the obvious "just take the latest" bump installs a plugin that never loads. The role pins
-4.1.0.0 (`targetAbi` 10.11.6.0) for exactly that reason, and the pin is only safe while
-someone remembers why. This test is that memory.
+The hazard is live: a release can target a newer ABI than the pinned image (4.4.0.0 targets
+10.11.11.0 while the role pins Jellyfin at 10.11.10), so the obvious "just take the latest"
+bump installs a plugin that never loads. The role pins 4.1.0.0 (`targetAbi` 10.11.6.0) for that
+reason. This test checks the constraint the pin exists to satisfy.
 
 Both halves are readable offline. The release asset's filename leads with the `targetAbi` it
 was built for (`10.11.6.-.ani-sync_4.1.0.0.zip`), and the image tag leads with the server
@@ -102,11 +101,10 @@ def test_the_init_container_reads_the_version_from_the_variable():
 
 
 def test_the_plugin_lands_where_jellyfin_actually_scans():
-    """Installing to /config/plugins succeeds and does nothing. Found the hard way.
+    """Installing to /config/plugins succeeds and does nothing.
 
-    The 2026-08-25 first deploy installed cleanly — the init container logged
-    "installed ani-sync 4.1.0.0", the files were on disk, the rollout was green and
-    `probe.py health jellyfin` passed — and `GET /Plugins` never listed Ani-Sync. Jellyfin
+    An install there leaves the files on disk, a green rollout and a passing
+    `probe.py health jellyfin`, yet `GET /Plugins` never lists Ani-Sync. Jellyfin
     scans `/config/data/plugins`, and every plugin it loads names a path under there:
 
         Loaded assembly SSO-Auth ... from /config/data/plugins/SSO Authentication_4.0.0.4/SSO-Auth.dll

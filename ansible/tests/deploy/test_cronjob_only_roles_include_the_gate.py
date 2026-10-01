@@ -21,7 +21,7 @@ from diagnostics.probe_lib import health
 
 _DEFAULT_NS = "homelab"
 
-# The exact CronJob-only population today (test_probe_health_resolver.py, under
+# The exact CronJob-only population (test_probe_health_resolver.py, under
 # scripts/diagnostics/tests/, pins the matching set from the health-gate side). Equality rather
 # than a lower bound: a THIRD role gaining a CronJob without a gate include must fail this test
 # with a clear reason, not pass it silently because the assertion below only checked >= 2.

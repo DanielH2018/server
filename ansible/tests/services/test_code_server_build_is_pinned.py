@@ -1,12 +1,12 @@
-"""Guard: every input to the code-server image build is pinned (#2149).
+"""Guard: every input to the code-server image build is pinned.
 
-The image is built in-cluster from `templates/Dockerfile.j2`, and until 2026-09-21 it resolved
-six inputs from the network at build time: the base tag without a digest, NodeSource's
+The image is built in-cluster from `templates/Dockerfile.j2`. Six inputs would otherwise resolve
+from the network at build time: the base tag without a digest, NodeSource's
 `setup_22.x` script piped to bash, bare `pip install` names, an unversioned `npm install -g`,
 and the CURRENT version of each VS Code extension from Open VSX and the marketplace — which
-for a platform-specific extension was whichever build the API listed first (alpine-arm64 for
+for a platform-specific extension is whichever build the API lists first (alpine-arm64 for
 ruff and ty, win32-x64 for Claude Code). Each guard here names one of those inputs, so the
-failure says which one floated again rather than that a count moved.
+failure says which one floated rather than that a count moved.
 
 Run: uv run pytest ansible/tests/services/test_code_server_build_is_pinned.py
 """
@@ -43,8 +43,8 @@ TARGET_PLATFORM = "linux-x64"
 _SHA256 = re.compile(r"^[0-9a-f]{64}$")
 _RELEASE = re.compile(r"^\d+\.\d+\.\d+$")
 
-# The network-resolving forms the old step used. Any one of them back in the Dockerfile means a
-# version is decided at build time again.
+# The network-resolving forms. Any one of them in the Dockerfile means a version is decided at
+# build time.
 FLOATING_FORMS = (
     "deb.nodesource.com",
     "| bash",

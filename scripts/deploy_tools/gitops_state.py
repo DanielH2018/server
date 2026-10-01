@@ -1,28 +1,23 @@
 #!/usr/bin/env python3
 """Operate on the GitOps deployer's own state markers, from the deploy host's shell.
 
-Three subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the
-marker the deployer writes while consecutive ticks defer on one busy service lock (issue
-#1847); the tick clears it itself on its next run that is not deferred, so this is for a
+Three subcommands. `clear-contention` removes `/var/lib/gitops-deploy/contention_since`, the marker the deployer writes while
+consecutive ticks defer on one busy service lock; the tick clears it itself on its next run that is not deferred, so this is for a
 marker an operator wants gone now, after ending the holder. `clear-manual-plane <role>` drops a role's line from
-`/var/lib/gitops-deploy/manual_plane`, the marker the deployer writes when a range carries a
-setup role no playbook it runs can apply — `k3s` (applied by `k3s-bringup.yml`) or `common`
-(applied by no playbook at all). The tick fast-forwards past such a range rather than parking
-it, so the marker is what says the apply is still owed: monitor-bridge pages once the oldest
-pending role is six hours old, and `land.sh` prints the same clear command.
+`/var/lib/gitops-deploy/manual_plane`, the marker the deployer writes when a range carries a setup role no playbook it runs can
+apply — `k3s` (applied by `k3s-bringup.yml`) or `common` (applied by no playbook at all). The tick fast-forwards past such a range
+rather than parking it, so the marker is what says the apply is still owed: monitor-bridge pages once the oldest pending role is six
+hours old, and `land.sh` prints the same clear command.
 
-**The apply comes first, this second.** Clearing a role nobody applied silences the only
-durable signal that it is unapplied, which is the state the marker exists to make visible.
-So every `clear-manual-plane` run writes one journal line, `logger -t gitops-state`, naming
-the role, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear
-with no apply behind it leaves its trace (#2022: `k3s` was cleared by hand on 2026-09-18
-with the apply still owed, and the marker's own truncation recorded nothing).
-`clear-contention` writes no such line on purpose: it silences no page, and the tick
-rewrites that marker itself on its next undeferred run.
+**The apply comes first, this second.** Clearing a role nobody applied silences the only durable signal that it is unapplied, which
+is the state the marker exists to make visible. So every `clear-manual-plane` run writes one journal line, `logger -t gitops-state`,
+naming the role, the line it dropped and who ran it: `journalctl -t gitops-state` is where a clear with no apply behind it leaves
+its trace, since the marker's own truncation records nothing. `clear-contention` writes no such line on purpose: it silences no
+page, and the tick rewrites that marker itself on its next undeferred run.
 
 `clear-k8s-deferred <service>` is the same shape one plane over. `/var/lib/gitops-deploy/
 k8s_deferred` holds one line per promoted image bump a BROAD tick fast-forwarded and then
-deferred for lack of budget (#2449): the range is merged, so no later tick's `local..origin`
+deferred for lack of budget: the range is merged, so no later tick's `local..origin`
 carries the bump and the defer-and-alert post names it exactly once. monitor-bridge pages once
 the oldest line is six hours old. The deployer clears a line itself on any tick that deploys
 the service; this command is for the `./scripts/deploy.sh` an operator ran, which the deployer
@@ -31,7 +26,7 @@ cannot see. The apply comes first here too, and the clear writes the same journa
 
 `clear-k8s-unapplied <service>` rewrites `k8s_unapplied`, which carries the same line format
 for the k8s changes this deployer never applies — a hand-edited role, or one of the forty
-denylisted ones (#2570). NOTHING PAGES ON THAT MARKER, and every tick discharges a line whose
+denylisted ones. NOTHING PAGES ON THAT MARKER, and every tick discharges a line whose
 service has since been deployed, so this command is needed for two cases only: a change that
 was reverted rather than applied, and a shared role one of whose callers nothing can prove
 applied — no tag runs it, or a caller writes no release record
@@ -251,7 +246,7 @@ def clear_manual_plane(
         `journal_clear`, the real `logger` line.
       applied: the tags the operator actually ran, from `--applied`. Empty means a whole-role
         apply, which clears the line however the row has grown; a narrowed apply drops only
-        its own tags and leaves the line standing for anything a later range added (#2349).
+        its own tags and leaves the line standing for anything a later range added.
         A narrowed apply against an empty or missing row keeps the line: that row means the
         whole role, which a narrowed apply does not cover.
     """
@@ -302,7 +297,7 @@ def clear_manual_plane(
         # The row is empty or missing, so the WHOLE role is pending: a later range's
         # derivation refused after this command was printed. No narrowed apply covers that.
         # The whole-role apply this sends the operator to is the one `maximal_apply_warning`
-        # exists for (#2345): every other surface printing that command carries the warning,
+        # exists for: every other surface printing that command carries the warning,
         # and this one printed it bare.
         warning = maximal_apply_warning(key, frozenset({key}))
         print(
@@ -352,7 +347,7 @@ def clear_k8s_deferred(
       journal: what records the clear, called with the service, the line it dropped and an
         empty remaining set. None means the default for `marker`.
       marker: which of the two same-shaped k8s markers to rewrite — `k8s_deferred`, the one
-        monitor-bridge pages on, or `k8s_unapplied`, the one nothing pages on (#2570). The
+        monitor-bridge pages on, or `k8s_unapplied`, the one nothing pages on. The
         two carry identical line formats and identical clear semantics, so they share this
         function rather than a copy of it.
     """

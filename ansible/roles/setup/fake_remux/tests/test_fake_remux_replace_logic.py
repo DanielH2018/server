@@ -514,8 +514,8 @@ def test_adopt_in_flight_only_touches_detected_entries():
 
 
 def test_files_for_ledger_covers_grabbed_not_just_importing():
-    # regression (M2): a 'grabbed' series must be queried so advance()'s auto-import success path can
-    # see the new fileId; scoping to 'importing' only left that path dead in production.
+    # a 'grabbed' series must be queried so advance()'s auto-import success path can
+    # see the new fileId; scoping to 'importing' only would leave that path dead.
     led = {
         "13": _rec(13, "grabbed", seriesId=96),
         "14": _rec(14, "detected", seriesId=97),

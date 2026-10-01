@@ -1,11 +1,10 @@
 """`probe.py` redacts the cast `refresh_token` out of HA log text before printing it.
 
 HA writes the Google Cast system user's `refresh_token` in plaintext whenever a cast fails in
-`_handle_signal_show_view` (issue #3015). The record reaches HA's own `system_log` and
-`/api/error_log`, which `probe.py ha get error_log` prints verbatim — measured 2026-09-30, when it
-landed in an agent transcript. The Alloy stage in `roles/k8s/loki-homelab` keeps new records out of
-Loki; this seam keeps the token out of THIS tool's stdout, including for the records Loki already
-holds until its 744h retention expires.
+`_handle_signal_show_view`. The record reaches HA's own `system_log` and `/api/error_log`, which
+`probe.py ha get error_log` prints verbatim. The Alloy stage in `roles/k8s/loki-homelab` keeps new
+records out of Loki; this seam keeps the token out of THIS tool's stdout, including for the records
+Loki already holds until its 744h retention expires.
 
 Every rule is a `..._is_redacted` / `..._is_printed` pair, so a rule that silently stopped matching
 and one that started eating the whole record both fail their own test. What must survive is the

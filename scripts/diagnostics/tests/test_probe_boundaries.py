@@ -7,7 +7,7 @@ that reference never sees the patch — the test passes while patching nothing.
 
 The failure is silent in the direction that matters: a test believing it stubbed
 out SOPS would really shell out to `sops`, and one believing it stubbed `fetch`
-would really reach the network. Splitting gen_infra_map (#372) hit exactly this,
+would really reach the network. Splitting gen_infra_map hit exactly this,
 which is why it is a check rather than a comment.
 
 Run: uv run pytest scripts/diagnostics/tests/test_probe_boundaries.py

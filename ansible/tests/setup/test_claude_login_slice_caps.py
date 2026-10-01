@@ -1,12 +1,10 @@
 #!/usr/bin/env python3
 """Login-session caps must reach a session started outside claude-rc.service's cgroup.
 
-Issue #1213: claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS
-bound only that unit's own cgroup. A session started with `claude agents` (or a bare
-`claude`) from an interactive SSH shell lands in
-user.slice/user-<uid>.slice/session-<n>.scope instead, which none of those three touch. On
-2026-09-05 that untouched plane held 965 processes and 20.4G anon in one session scope while
-claude-rc.service held 50.9 MB.
+claude-rc.service's MemoryHigh, MemorySwapMax and PYTEST_XDIST_AUTO_NUM_WORKERS bound only
+that unit's own cgroup. A session started with `claude agents` (or a bare `claude`) from an
+interactive SSH shell lands in user.slice/user-<uid>.slice/session-<n>.scope instead, which
+none of those three touch.
 
 This module tests the two artifacts that close that gap:
 
@@ -19,7 +17,7 @@ Both must render from the SAME variables the unit already uses
 (claude_code_rc_memory_high, claude_code_rc_memory_swap_max, claude_code_rc_pytest_workers)
 rather than a second hardcoded number — a value that renders once and is then copy-pasted
 would drift the moment either place is tuned without the other, which is exactly the
-"depends on how the session started" failure this issue is about. Each check below is
+"depends on how the session started" failure. Each check below is
 tested as a pair: one render it must accept, one override it must follow, per this repo's
 "a new check ships with a proof it can go RED" rule.
 
@@ -45,7 +43,7 @@ CONTEXT: dict[str, object] = {
     "claude_code_rc_memory_high": "8G",
     "claude_code_rc_memory_swap_max": "2G",
     "claude_code_rc_pytest_workers": 4,
-    # The slice that parents this one and carries the fleet bound (#1264); the drop-in's
+    # The slice that parents this one and carries the fleet bound; the drop-in's
     # header names it. test_claude_fleet_slice_cap.py owns that half.
     "claude_code_fleet_slice": "user.slice",
 }

@@ -13,11 +13,11 @@ and the tile renders "Charge" over the status string; drop a field and the overr
 block that no longer exists, or on nothing at all. Neither errors: the CSS still parses, the
 YAML is still valid, the pod stays 1/1, and only reading the tile shows it.
 
-Both files are read RENDERED, out of homepage's config Secret (`_homepage_config`). The previous
-form parsed `services.yaml.j2` with a line scanner that tracked the most recent `href:` and
-matched `fields: [...]` with a regex, because a Jinja template is not loadable YAML — so a
-`fields:` list written as a YAML block sequence rather than inline would have dropped out of the
-census silently. Rendered, `fields:` is a Python list and the tile is a dict.
+Both files are read RENDERED, out of homepage's config Secret (`_homepage_config`). A Jinja
+template is not loadable YAML, so reading `services.yaml.j2` would need a line scanner that
+tracked the most recent `href:` and matched `fields: [...]` with a regex — and a `fields:` list
+written as a YAML block sequence rather than inline would drop out of the census silently.
+Rendered, `fields:` is a Python list and the tile is a dict.
 
 EXPECTED_LABELS below is the third copy on purpose. It pins which upstream field each override
 is renaming, so a `fields:` reorder fails here rather than being silently absorbed by a test

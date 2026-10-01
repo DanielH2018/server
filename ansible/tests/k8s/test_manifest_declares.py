@@ -12,7 +12,7 @@ handle fails here instead of silently widening the orphan check's blind spot.
 
 The rest of the file is the accept/reject pairs for the reader's own rules: what it must
 declare, and what it must NOT — the container, volume and key names whose false "still
-declared" is the whole reason it replaced a grep.
+declared" is why it is not a grep.
 """
 
 import sys

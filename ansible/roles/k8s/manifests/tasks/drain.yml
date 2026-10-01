@@ -2,29 +2,25 @@
 # Drain the pending-rollout accumulator: wait for every rollout queued since the last drain,
 # CONCURRENTLY, then snapshot restart counts for the deferred stabilisation gate.
 #
-# WHY THIS EXISTS. roles/k8s/manifests used to run `kubectl rollout status` inline, immediately
-# after its own apply. Measured 2026-08-15 over a full deploy (pid 1636455 in ansible.log,
-# profile_tasks): 1386s across 31 such waits, against 435s of actual work in the whole 59-minute
-# run. The waits were serial because Ansible is serial, not because anything about the cluster is
-# — `kubectl apply` is asynchronous and k3s reconciles every workload concurrently.
+# WHY THIS EXISTS. roles/k8s/manifests queues each rollout instead of running `kubectl rollout
+# status` inline after its own apply. Inline waits would be serial because Ansible is serial,
+# not because anything about the cluster is — `kubectl apply` is asynchronous and k3s
+# reconciles every workload concurrently.
 #
-# WHAT IT CHANGES. The inline wait was also, incidentally, the only thing holding the cluster to
-# one rolling workload at a time. Draining in batches (ansible/tasks/k8s_batch.yml) makes
-# k8s_rollout_batch_width the explicit bound on that instead of an accident of the task order.
+# Draining in batches (ansible/tasks/k8s_batch.yml) makes k8s_rollout_batch_width the explicit
+# bound on how many workloads roll at once.
 #
 # WHY A SHELL LOOP RATHER THAN async/async_status. Each rollout needs its OWN timeout — sonarr and
 # radarr carry manifests_rollout_timeout: 660s because their unpinned striptracks DOCKER_MODS
-# reinstalls on every start (~5 min; the 300s default was timing out and failing deploys on
-# 2026-08-09). Backgrounding N `rollout status` calls in one task expresses that directly and
+# reinstalls on every start (~5 min). Backgrounding N `rollout status` calls in one task expresses that directly and
 # reports every failure in one place, where async would need a fire loop, an async_status poll
 # loop, and its own per-item timeout plumbing to say the same thing.
 #
 # EVERY TASK HERE IS `tags: [always]`, NOT `[deploy]`, AND THAT IS LOAD-BEARING. k8s_batch.yml
 # unions the service tag onto roles/k8s/manifests through `apply:`, so that role's `[deploy]` tasks
-# match `--tags <svc>`. This role gets no such union. Tagged `[deploy]` its tasks were filtered out
-# of every tag-filtered run — which is every gitops-deploy run — so nothing was ever waited on and
-# the stabilisation gate never fired, while the play still reported failed=0. Measured on a real
-# `--tags littlelink` deploy 2026-08-15: ok=94, failed=0, drain executed zero times.
+# match `--tags <svc>`. This role gets no such union. Tagged `[deploy]` its tasks would be filtered out
+# of every tag-filtered run — which is every gitops-deploy run — so nothing would be waited on and
+# the stabilisation gate would never fire, while the play still reported failed=0.
 #
 # `always` is safe rather than over-eager because the tasks are guarded on an empty queue:
 # `--skip-tags deploy` skips the `[deploy]`-tagged queueing task in roles/k8s/manifests, leaving
@@ -46,8 +42,7 @@
   ansible.builtin.shell:
     executable: /bin/bash
     # `wait -n` is not used: we want every failure reported, not the first. Each background job
-    # writes its own name on failure so the output names the workload, which the serial version
-    # got for free from the task label.
+    # writes its own name on failure so the output names the workload.
     cmd: |
       set -uo pipefail
       declare -a pids=() names=()
@@ -109,7 +104,7 @@
   vars:
     _k8s_drain_watch: "{{ k8s_pending_rollouts | default([]) | selectattr('changed') | list }}"
 
-# Same assertion the inline gate made, kept at the point the selector is read: a label that matches
+# Asserted at the point the selector is read: a label that matches
 # nothing reports zero restarts and would sail through the comparison at the end of the play.
 #
 # Exempting a zero-replica workload does not weaken it. The typo this catches is a workload that
@@ -141,7 +136,7 @@
   tags: [always]
   # noqa var-naming[no-role-prefix] — k8s_stabilise_watch is play-scoped: the end-of-play
   # post_tasks/k8s_stabilise_gate.yml reads it, long after this role has returned.
-  # Same guard as the assert above, which this one was missing: the snapshot task is skipped
+  # Same guard as the assert above: the snapshot task is skipped
   # under --check, so its results carry no `stdout` and building the fact off item.stdout
   # fails while resolving its own args. There is nothing to gate on in check mode anyway —
   # no rollout happened — and the end-of-play gate defaults this to an empty list.

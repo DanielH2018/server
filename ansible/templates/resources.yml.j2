@@ -1,8 +1,7 @@
 {# Standard container resource caps — the `deploy.resources` block.
 
-   Every service template inlined the same eight-line deploy/resources/limits/
-   reservations block, varying only in four numbers. This macro replaces that
-   boilerplate; it emits byte-identical output to the old inline block.
+   This macro emits the eight-line deploy/resources/limits/reservations block, varying
+   only in four numbers.
 
    `limits` are HARD caps for blast-radius containment (the container is CPU-throttled
    at the cpu limit and OOM-killed at the memory limit). `reservations` are soft floors

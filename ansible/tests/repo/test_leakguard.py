@@ -235,8 +235,8 @@ def test_an_unmarked_test_in_the_same_run_is_flagged(tmp_path: Path) -> None:
 def test_a_ui_marked_test_may_connect_in_process(tmp_path: Path) -> None:
     """Accept case for the socket half of the `ui` exemption.
 
-    The marker lifted the PATH shims alone until 2026-09-06, so a `ui` test that curls a LAN
-    route from pytest itself — rather than from the browser subprocess — hit
+    The marker lifts the socket probe as well as the PATH shims. Without that, a `ui` test
+    that curls a LAN route from pytest itself — rather than from the browser subprocess — hits
     `LEAKGUARD: blocked a network connect`, a message naming the guard but not the exemption.
     """
     proc = _run_child(tmp_path, _UI_MARKED_AND_PLAIN_CONNECT)
@@ -289,10 +289,10 @@ def test_every_deselected_marker_in_addopts_is_one_the_guard_exempts(
 ) -> None:
     """A tier `addopts` deselects is a tier only a person typing `-m` by hand ever runs.
 
-    That is how leakguard made the whole `-m ui` suite error in fixture setup for four days
-    with every guard green (issue #1300): CI never reached it. Any marker deselected by
-    default is in the same position, so each one must also be exempt from the guard — a new
-    `-m 'not ui and not slow'` fails here rather than four days later.
+    CI never reaches a deselected tier, so a guard that breaks it stays green: the whole
+    `-m ui` suite can error in fixture setup unnoticed. Any marker deselected by default is in
+    the same position, so each one must also be exempt from the guard — a new
+    `-m 'not ui and not slow'` fails here rather than days later.
 
     Set EQUALITY, not containment: it doubles as the non-vacuity assertion, so a parse that
     finds no markers fails instead of passing over an empty set.
@@ -321,8 +321,8 @@ def test_every_deselected_marker_in_addopts_is_one_the_guard_exempts(
 def test_the_live_marker_is_one_the_ui_suite_actually_carries(module: str) -> None:
     """Non-vacuity: a renamed marker would exempt nothing and read exactly like a pass.
 
-    Both live-browser modules, not just one: the Grafana tier was split out of the other in
-    2026-09-06, and it is the half whose fixtures decrypt SOPS for a second credential.
+    Both live-browser modules, not just one: the Grafana tier is the half whose fixtures
+    decrypt SOPS for a second credential.
     """
     suite = REPO / "scripts" / "diagnostics" / "tests" / module
     assert f"pytestmark = pytest.mark.{leakguard._LIVE_MARKER}" in suite.read_text(), (
@@ -347,9 +347,8 @@ def test_every_allowlisted_nodeid_names_a_test_that_exists() -> None:
     """Non-vacuity: an allowlist that quietly empties would make the guard pass everything.
 
     A renamed or deleted live-API test must fail HERE, naming the entry, rather than leaving a
-    stale nodeid that matches nothing. Nine guards in this repo have broken by globbing for
-    their own subject and finding none of it; the fix is always to assert against something
-    concrete.
+    stale nodeid that matches nothing. A guard that globs for its own subject can find none of
+    it; the fix is always to assert against something concrete.
     """
     assert len(leakguard._LIVE_API_TESTS) >= 5, (
         "the live-API allowlist has shrunk below the five tests measured on 2026-09-04 — if "

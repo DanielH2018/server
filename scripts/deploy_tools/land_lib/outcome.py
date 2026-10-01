@@ -50,8 +50,7 @@ class Cause(StrEnum):
     DEPLOY_EXIT_* NAME THE deploy.sh CODES NO PHASE HANDLES ITSELF. They are enumerated
     rather than formatted from the return code, because `f"deploy-exit-{rc}"` made the set
     unbounded and the board groups by this field. `DEPLOY_EXIT_OTHER` is the bucket for a
-    code outside deploy.sh's own contract, which should not happen and previously would have
-    become its own label.
+    code outside deploy.sh's own contract, which should not happen.
     """
 
     TICK_HELD = "tick-held"
@@ -99,8 +98,8 @@ def cause_for_deploy_exit(rc: int) -> Cause:
 class Outcome(Exception):
     """How a landing ends: the exit code, the verdict, and what to print.
 
-    An exit-75 outcome must name a verdict: before 2026-09-02 four of them reached the
-    Landings board as one `aborted` bucket and were taken for lock contention.
+    An exit-75 outcome must name a verdict, or the Landings board buckets it as
+    `aborted` and it reads as lock contention.
     """
 
     def __init__(
@@ -130,7 +129,7 @@ def say(text: str) -> None:
 
 
 # What a `behind` read means when this landing stopped watching a tick that was still
-# applying (issue #1607). The ordinary `behind` prose says "the next tick crosses it", which
+# applying. The ordinary `behind` prose says "the next tick crosses it", which
 # is FALSE of a deployer parked on a failed apply -- no later tick crosses a hold -- and that
 # is exactly the state the abandoned watch cannot rule out, because `hold_sha` is written
 # after the apply returns. One string, printed by both verdict sites, so the two cannot drift.
@@ -147,7 +146,7 @@ def unrecorded_apply_note(behind_since: str | None) -> str:
 
     Two states reach that branch, and only one of them is stranded. With `behind_since`
     empty the tick is level with origin and `next_action()` answers `noop` for every later
-    tick, so nothing will ever apply this range (issue #1537). With it set the tick
+    tick, so nothing will ever apply this range. With it set the tick
     fast-forwarded only as far as a green ancestor of the tip — it crossed this PR's merge
     commit, which is why the landing is not BEHIND — and it has a range left to cross, so a
     later tick can still record the apply. One string, printed by both verdict sites, so the
@@ -173,9 +172,7 @@ def remaining_hosts_note(remaining: str) -> str:
 
     Both `needs-manual-apply` sites end at their plane arm before reaching the branch that
     owns the remaining-hosts verdict, so a PR carrying both halves printed only the plane's
-    command. PR #2568 landed that way on 2026-09-25: the k3s line was printed, the
-    `initial_setup` library was not, and daniel-server and daniel-pi kept the old
-    `kuma-push-lib.sh` (issue #2569, the #1009 failure through a second door).
+    command.
 
     It claims nothing about the tick, unlike the wording the remaining-hosts verdict itself
     prints: the plane arm ends the landing before the tick's own state is read, so whether

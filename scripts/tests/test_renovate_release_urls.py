@@ -22,9 +22,9 @@ from _renovate import (
 _RELEASE_URL_RE = re.compile(r"releases/download/v([\d.]+)/")
 
 # The floor the derived corpus may not drop below. Every file here holds a release-download
-# pin today; the derivation reads managerFilePatterns, so deleting a manager would quietly take
-# its file out of the corpus and turn a now-untracked pin green. Assert the floor separately
-# and that failure mode fails CI instead.
+# pin; the derivation reads managerFilePatterns, so deleting a manager would quietly take its
+# file out of the corpus and turn an untracked pin green. Assert the floor separately and that
+# failure mode fails CI instead.
 _RELEASE_URL_CORPUS_FLOOR = frozenset(
     {
         ".github/workflows/ci.yml",
@@ -147,17 +147,15 @@ def test_every_release_download_version_occurrence_is_tracked(
 ) -> None:
     """A pinned release URL must have EVERY occurrence of its version tracked, not just the tag.
 
-    2026-08-31 review: the Vale binary was pinned with no manager at all, and the first proposed
-    manager matched only the tag — which would have rewritten
-    `.../download/v3.19.0/vale_3.18.0_Linux_64-bit.tar.gz`, a 404 that surfaced two lines later
-    as `tar xzf`'s "not in gzip format" (the curl carried no `-f`; it does now), and the bump
-    rides in a shared automerge group where it stalls every other non-major update bundled
-    with it.
+    A manager that matched only the tag would rewrite
+    `.../download/v3.19.0/vale_3.18.0_Linux_64-bit.tar.gz`, a 404 that surfaces two lines later
+    as `tar xzf`'s "not in gzip format" (the curl carries `-f`), and the bump rides in a shared
+    automerge group where it stalls every other non-major update bundled with it.
 
     The corpus was a hardcoded two-entry tuple until the 2026-09-01 review, which found the
-    jellyfin-ani-sync pin untracked in a file the tuple never named. It is now derived: every
-    tracked file that holds a release-download URL AND that some customManager scans. A file no
-    manager scans has nothing to be PARTIALLY covered, so it is a different defect — the
+    jellyfin-ani-sync pin untracked in a file the tuple never named. The corpus is derived:
+    every tracked file that holds a release-download URL AND that some customManager scans. A
+    file no manager scans has nothing to be PARTIALLY covered, so it is a different defect — the
     scanned-or-exempt test below is the one that catches it.
 
     What this does NOT gate: a bump that rewrites every version occurrence can still leave a
@@ -248,7 +246,7 @@ def test_a_corpus_that_lost_its_manager_is_flagged(tracked: list[str]) -> None:
 
 
 def test_every_release_url_file_is_scanned_or_exempt(tracked: list[str]) -> None:
-    """A release-download pin in a file NO manager scans is the ani-sync defect (2026-09-01).
+    """A release-download pin in a file NO manager scans is the ani-sync defect.
 
     That pin ages with no PR and no signal, and the occurrence test above cannot see it: with
     no manager scanning the file there is no partial coverage to detect. Exempt are Markdown

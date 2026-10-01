@@ -8,27 +8,21 @@ the stale tree is internally self-consistent. Tests pass, prek passes, `--dry-ru
 validates: they all measure the old tree against itself. Nothing in the deploy path
 compares HEAD to origin/master.
 
-Measured 2026-08-19. A worktree 48 commits behind master ran `--tags observability`. That
-reverted the role for ~9 minutes: Prometheus lost the endpoint-based scrape discovery
-that reaches both longhorn-manager pods (falling back to a single Service target), and
-telemetry-health.sh went back to its branch-point version. It surfaced only because a
-live scrape-target count moved for no reason the diff explained.
+WHY ONLY "BEHIND". Being *ahead* of master is normal and expected — every slice deploy runs
+from a worktree carrying unmerged commits, which is the whole point of the workflow. Only the
+behind direction can revert live config, so only it refuses. A tree can be both behind and
+ahead, so being ahead must never mask being behind.
 
-WHY ONLY "BEHIND". Being *ahead* of master is normal and expected — every slice deploy
-runs from a worktree carrying unmerged commits, which is the whole point of the workflow.
-Only the behind direction can revert live config, so only it refuses. The 2026-08-19 tree
-was both (48 behind, 15 ahead), so being ahead must never mask being behind.
-
-WHICH BEHIND-NESS REFUSES. A tree behind on a role this deploy does not render cannot
-revert that role's live config: the refusal is about what the tags render, not about the
-commit count. `--tags` therefore narrows the question to the paths in HEAD..<ref> that reach
-one of those tags, a broad plane, the SOPS secrets file, or a shared k8s role every k8s
-deploy runs — `refusing_paths` carries each rule and why it is not about the tags. With no
-tags, with a tag that names a BLOCK of tasks rather than a service (`config`, `deploy`,
-`cron`, `always`), or with host_vars unreadable, the deploy is unscoped and any tail refuses,
-which is the rule this guard has always had. The narrowing matters because the GitOps
-deployer fast-forwards to the newest GREEN commit in its range rather than to the tip, so the
-primary checkout is legitimately behind a pending tip while every landing deploys from it.
+WHICH BEHIND-NESS REFUSES. A tree behind on a role this deploy does not render cannot revert
+that role's live config: the refusal is about what the tags render, not about the commit
+count. `--tags` therefore narrows the question to the paths in HEAD..<ref> that reach one of
+those tags, a broad plane, the SOPS secrets file, or a shared k8s role every k8s deploy runs
+— `refusing_paths` carries each rule and why it is not about the tags. With no tags, with a
+tag that names a BLOCK of tasks rather than a service (`config`, `deploy`, `cron`, `always`),
+or with host_vars unreadable, the deploy is unscoped and any tail refuses. The narrowing
+matters because the GitOps deployer fast-forwards to the newest GREEN commit in its range
+rather than to the tip, so the primary checkout is legitimately behind a pending tip while
+every landing deploys from it.
 
 WHICH COMMIT IS ASKED ABOUT. HEAD, unless `--sha` names another one. `deploy.sh --at <sha>`
 renders a snapshot of `<sha>` rather than of its own working tree, so `<sha>` is what can be
@@ -37,8 +31,8 @@ merge commit from a primary checkout the tick has not fast-forwarded yet, and as
 HEAD there refuses a deploy of a commit that is not behind at all.
 
 NOT THE AUTOMATED PIPELINE. gitops_deploy.py invokes ansible-playbook directly
-(roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls
-before deploying. This guard covers the interactive and agent path, where the failure was.
+(roles/setup/gitops_deploy/files/gitops_deploy.py:572), not this wrapper, and it pulls before
+deploying. This guard covers the interactive and agent path.
 
 Imported by scripts/deploy_tools/deploy_run.py, the front half of scripts/deploy.sh, which
 maps a non-zero return here to its own refusal.
@@ -184,7 +178,7 @@ def refusing_paths(
       `services_from_changed_paths` maps it to `ChangeSet.secrets` and NO service. Deploying
       any service from a tree behind a rotation commit renders the old credential and pushes
       it live — the reversion this guard exists to refuse, arriving through a field the
-      narrowing does not consult (issue #1785).
+      narrowing does not consult.
     - An `ansible/roles/k8s/<role>` with no `containers_list` entry is a SHARED role,
       included by literal name from other roles rather than selected by a tag — which is the
       derivation this rule uses, rather than a list that would go stale as roles are added.
@@ -378,7 +372,7 @@ def main(argv: list[str] | None = None) -> int:
         # parked: the primary checkout is what has to converge, and rebasing a worktree onto an
         # origin the fleet is not running deploys nothing. The SessionStart banner already says
         # this to a session as it OPENS; a session running for an hour that hits exit 4
-        # mid-landing never saw it (issue #1429). Additive and best-effort — the refusal above
+        # mid-landing never saw it. Additive and best-effort — the refusal above
         # prints either way, so a host with no state directory changes nothing.
         #
         # DECIDED: the `k8s_deferred` marker is NOT printed here, unlike on the SessionStart

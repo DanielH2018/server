@@ -53,8 +53,8 @@ def format_monitor_status(data, declared_total=None):
 
     Kuma keeps no history of its own — that's why `alerts` reconstructs the past from Loki instead
     of asking Kuma for it — but it does hold live state, and Prometheus already scrapes that state
-    (postflight.py's check_kuma_monitors uses the same metric). No new Kuma API credential needed
-    for "what's down right now" when this was already covering it.
+    (postflight.py's check_kuma_monitors uses the same metric). No Kuma API credential is needed for
+    "what's down right now".
 
     exit_code is 0 only when every monitor reports UP (1); PENDING and MAINTENANCE count as not-up
     too, same as DOWN, since neither means "confirmed healthy".
@@ -63,7 +63,7 @@ def format_monitor_status(data, declared_total=None):
     monitor only once a heartbeat has landed since the process started (see
     `format_kuma_drift`), so for up to 25h after a pod replacement the `interval: 90000`
     monitors have no series at all and "89/89 up" reads as full coverage while 16 tiles are
-    unreported (#1779). The coverage line names the shortfall so the ratio cannot be read that
+    unreported. The coverage line names the shortfall so the ratio cannot be read that
     way; it does not change the exit code, because absence is `kuma-drift`'s verdict — that
     command knows which absences are pending, gated or real drift, and this one does not.
     """
@@ -95,9 +95,6 @@ def format_monitor_status(data, declared_total=None):
 # reads as green. `test_kuma_static_monitors.py` has the same blind spot from the other end:
 # it validates the declaration file against itself and never asks what is live.
 #
-# The instance that motivated this: `WG Pi Peer Backup` lost its heartbeat to a NetworkPolicy
-# on 2026-08-20, and `monitors` reported 81/81 up for a day with the tile simply gone.
-#
 # Declared names are read straight out of the template rather than rendered through Jinja: every
 # `"name"` in it is a literal, and parsing beats standing up a Jinja environment with a stub for
 # every push token just to recover strings that were never templated.
@@ -120,7 +117,7 @@ _ENTITY_TYPE_RE = re.compile(r'"type":\s*"([a-z]+)"')
 # A literal, or the whole `{{ ... }}` an interval is templated from. Most push tiles carry
 # `{{ kuma_bridge_push_interval }}`, two carry an arithmetic expression, and the monthly etcd
 # drill carries a group_var — a digits-only match read every one of those as None, which the
-# `pending` branch of format_kuma_drift cannot absorb (#2019).
+# `pending` branch of format_kuma_drift cannot absorb.
 _ENTITY_INTERVAL_RE = re.compile(r'"interval":\s*(\d+|\{\{[^{}]*\}\})')
 _INTERVAL_EXPR_RE = re.compile(r"^\{\{\s*(.+?)\s*\}\}$")
 _JINJA_IF_RE = re.compile(r"{%-?\s*if\b")
@@ -178,16 +175,14 @@ def parse_declared_monitors(text, variables=None):
     to the template's real one (`monitor_vars`), read lazily on the first templated interval
     so a literal-only fixture never touches the inventory. The default is deliberate: both
     `kuma-drift` and `postflight` call this, and an opt-in would leave whichever caller forgot
-    it reading every templated interval as None — the shape gate_states had until #1632.
+    it reading every templated interval as None.
 
-    `gate` exists because `gated` alone was a licence to ignore. Until 2026-08-22 a gated
-    monitor's absence was excused unconditionally, on the reasoning that it "renders away when
-    the secret is unset" — which is an assumption about the secret, not a reading of it.
-    Measured that day: `etcd_snapshot_push_token` was set (32 chars, in the rotation registry
-    since 2026-07-04), the Off-box etcd Snapshot monitor was NOT live, and this check reported
-    it as correctly skipped. A gated monitor that vanishes is invisible twice over — absent
-    from the exporter, and excused by the drift check written to catch exactly that. Naming
-    the variable lets the caller resolve it and tell the two cases apart.
+    `gate` exists because `gated` alone was a licence to ignore. A gated monitor's absence
+    must not be excused unconditionally on the reasoning that it "renders away when the secret
+    is unset" — that is an assumption about the secret, not a reading of it. A gated monitor
+    that vanishes is invisible twice over — absent from the exporter, and excused by the drift
+    check written to catch exactly that. Naming the variable lets the caller resolve it and
+    tell the two cases apart.
     """
     declared, gates = {}, []
     for line in text.splitlines():
@@ -262,7 +257,7 @@ def judge_gate_read(var, extracted, declared):
     failure: `homelab_eval_push_token` is deliberately absent (static-monitors.yaml.j2
     explains why), so its monitor correctly renders away. The value read exits non-zero for
     that and for a broken host alike, which left two permanently-unverified §9.1 lines and
-    trained the reader to skim the arm that catches a real failure to read a secret (#1644).
+    trained the reader to skim the arm that catches a real failure to read a secret.
     An undeclared key is therefore False — an unset gate, excused.
 
     `declared` is consulted only when `extracted` is None, and never decides on its own.
@@ -331,8 +326,8 @@ def format_kuma_drift(declared, live, kuma_age_seconds, gate_states=None):
     started, so a restart empties the series for EVERY monitor — http and port tiles included,
     not just push ones — and each returns on its next beat. A monitor whose interval has not
     elapsed since the restart is therefore PENDING, not missing; reporting it as drift would
-    make this check cry wolf after every deploy. Measured on the 2026-08-21 rollout: 24 of 82
-    monitors were exported 88 seconds in, and the absent ones spanned every type.
+    make this check cry wolf after every deploy. After a restart, 24 of 82 monitors were
+    exported 88 seconds in, and the absent ones spanned every type.
 
     KUMA_EXPORT_SLACK covers the two lags between a beat and this query seeing it: Kuma's own
     scrape endpoint and Prometheus's scrape interval. Without it a 60s http monitor reads as
@@ -499,12 +494,12 @@ def declared_monitor_count(path=STATIC_MONITORS_PATH):
 
     Gated declarations are left out on purpose. A monitor behind `{% if <secret> %}` whose
     secret is genuinely unset is never live, so counting it would print the coverage line on
-    every run in steady state — measured 2026-09-17 as a permanent "2 of 105" — and a line that
-    always prints is the one nobody reads when it says 16. Resolving the gates would need a
-    SOPS read, which `kuma-drift` does and this allow-listed command must not. The cost is that
-    a gated monitor whose secret IS set is not counted either, so its absence after a
-    replacement goes unreported here; `kuma-drift` still reports it. None rather than a raise:
-    `monitors` answers "what is down" and must still answer it from a checkout with no template.
+    every run in steady state (a permanent "2 of 105") — and a line that always prints is the
+    one nobody reads when it says 16. Resolving the gates would need a SOPS read, which
+    `kuma-drift` does and this allow-listed command must not. The cost is that a gated monitor
+    whose secret IS set is not counted either, so its absence after a replacement goes
+    unreported here; `kuma-drift` still reports it. None rather than a raise: `monitors` answers
+    "what is down" and must still answer it from a checkout with no template.
     """
     try:
         with open(path) as f:

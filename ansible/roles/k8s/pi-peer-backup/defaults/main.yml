@@ -1,6 +1,6 @@
 ---
 # Built in-cluster (k8s/image-builder): alpine + rsync/openssh/curl around the pull
-# script. Pullable on either node since the 2026-08-14 registry re-plumb.
+# script. Pullable on either node.
 pi_peer_backup_k8s_image: "{{ k8s_registry_pull_host }}/pi-peer-backup:{{ k8s_built_image_tags.get('pi-peer-backup', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -11,12 +11,11 @@ pi_peer_backup_k8s_claim: pi-peer-backup-data
 # 23:00 local. The Longhorn jobs that touch this PVC fire in UTC — the 03:30 daily tick, the
 # 04:10 restore drill and the 04:30 weekly shard (weekly-backup-d6, Saturday) — and this
 # CronJob follows `tz`, so the UTC slot it lands on moves with DST: 04:00 under CDT, 05:00
-# under CST. Both are clear of all three. It ran at 23:30 local until 2026-09-21, the slot the
-# daniel-server host cron held, which was clear of the daily tick but under CDT is exactly
-# 04:30 UTC: on 2026-09-19 the pod's CSI attach landed 1.5 s before weekly-backup-d6 looked at
-# the volume, the recurring job refused it ("invalid state for recurring job: attaching") and
-# the shard finished green with the volume skipped. test_pi_peer_backup_schedule_clears_the_
-# longhorn_slots.py holds the slot clear under both offsets.
+# under CST. Both are clear of all three. A slot at 04:30 UTC collides with weekly-backup-d6:
+# the pod's CSI attach lands just before the recurring job looks at the volume, the job
+# refuses it ("invalid state for recurring job: attaching") and the shard finishes green with
+# the volume skipped. test_pi_peer_backup_schedule_clears_the_longhorn_slots.py holds the slot
+# clear under both offsets.
 pi_peer_backup_k8s_schedule: "0 23 * * *"
 
 # The one directory the pull key may read. Named once because two places must agree on it:

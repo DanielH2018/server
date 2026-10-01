@@ -1,7 +1,6 @@
 ---
 # Host crons: secret-rotation audit + rotation, the weekly restart, image
 # pruning, ansible.log truncation, and the infrastructure-map refresh.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Deploy the shared Kuma-push helper
   # DECIDED: `always`, not `crons` — this is a dependency of tasks in OTHER roles under other
@@ -50,10 +49,9 @@
   # Gated on has_gitops, not a hostname: this reads ansible/secret_rotation.yml and the key
   # list of ansible/vars/secrets.yml straight off the working tree (no SOPS decrypt, no live
   # source), so it's only trustworthy on a host whose tree self-refreshes — gitops-deploy.service
-  # pulls origin every 30 min. daniel-server carries neither has_gitops nor an auto-pulling
-  # tree; its checkout can silently sit weeks behind origin (verified 39 commits behind on
-  # 2026-08-17) while this cron keeps reading its stale copy and reporting a green monitor on
-  # a secret the registry never saw. Follow has_gitops if it moves to a different host later.
+  # pulls origin on every timer tick. daniel-server carries neither has_gitops nor an
+  # auto-pulling tree; its checkout can silently sit weeks behind origin while this cron keeps
+  # reading its stale copy and reporting a green monitor on a secret the registry never saw. Follow has_gitops if it moves to a different host later.
   when: has_gitops
   ansible.builtin.template:
     src: secret-rotation-audit.sh.j2
@@ -69,7 +67,7 @@
   # 08:00 — after the Sunday 07:30 reboot + 07:15 CrowdSec-hub jobs settle; clear of the
   # 06:xx redeploy window. Pushes the "Secret Rotation" Kuma monitor (uptime-kuma role).
   #
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
   # state follows has_gitops so a host that loses the flag loses the timer and the old cron.
   ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/kuma_check_timer.yml"
@@ -105,7 +103,7 @@
   # Sunday 09:00 — after the 07:30 reboot, the 06:xx redeploys, and the 08:00 daily audit
   # have all settled; quiet window minimises any clash with a concurrent operator session.
   #
-  # `2>&1 | logger -t secret-rotate` FOR THE REASON EVERY CRON BELOW CARRIES ONE (#2466). cron
+  # `2>&1 | logger -t secret-rotate` FOR THE REASON EVERY CRON BELOW CARRIES ONE. cron
   # mails whatever a job writes into /var/mail/ubuntu, and nothing opens that spool — so a
   # per-run success line is not a record, it is one more message a real failure has to be found
   # among. The journal is a record: Promtail ships it to Loki, `journalctl -t secret-rotate`
@@ -125,9 +123,8 @@
   become: true
 
 # Reverse of the has_gitops gate above. A skipped cron task leaves an already-installed entry
-# running, so gating alone would have left daniel-server's two crons in place reading its stale
-# tree while daniel-box gained its own — two hosts pushing one Kuma monitor, which is worse than
-# the staleness this move fixes. These run everywhere the gate is false, so the crons follow
+# running, so gating alone would leave a non-gitops host's crons in place reading its stale
+# tree — two hosts pushing one Kuma monitor. These run everywhere the gate is false, so the crons follow
 # has_gitops in both directions.
 - name: Remove the secret-rotation crons from any non-gitops host
   tags: [crons, secret-rotation]
@@ -185,19 +182,19 @@
   tags: [crons, weekly-restart]
   # Pings the Healthchecks "Reboot" monitor, then reboots. The ping lives INSIDE the
   # Ansible-managed job (not a manual crontab append, which a later [crons] deploy would
-  # strip — that silent regression is exactly why this check went stale). `;` not `&&`:
+  # strip). `;` not `&&`:
   # the reboot must happen even if the ping fails. UUID = the check's dashed code.
   #
   # Two pings until the self-hosted Healthchecks retires (#2806): the old UUID, and
   # healthchecks.io's per-host `weekly-reboot-<host>` slug. One slug per host because a shared
   # check stays green while any host pings it, so one host missing its reboot was invisible.
   # The key is sourced from ping.env at run time. `[ -r ] &&` guards the `.`, because a failed
-  # `.` exits /bin/sh and would skip the shutdown. The new ping discards its output (#2511).
+  # `.` exits /bin/sh and would skip the shutdown. The new ping discards its output.
   # The schedule and the `-r +N` delay come from group_vars/all.yml, not from literals here:
   # roles/k8s/uptime-kuma derives its Kuma maintenance window from the same four values, and a
   # reboot moved without that window pages Discord for every monitor it takes down.
-  # Both stages go to the journal (#2487): on a healthy run curl prints the ping's `OK` and
-  # shutdown prints "Shutdown scheduled for ...", which cron mailed to root every week.
+  # Both stages go to the journal: on a healthy run curl prints the ping's `OK` and
+  # shutdown prints "Shutdown scheduled for ...", which cron would mail to root every week.
   ansible.builtin.cron:
     name: "Weekly system restart"
     minute: "{{ weekly_reboot_minute }}"
@@ -264,12 +261,11 @@
   # ago is pruned as soon as it's unused — the window protects fresh builds/pulls.)
   # Pings the Healthchecks "Docker Image Prune" monitor ON SUCCESS (`&&`): a failed
   # prune leaves the check un-pinged so it alerts. Ping kept in the Ansible-managed job
-  # so a [crons] redeploy can't silently strip it (the late-May regression). Dashed UUID.
-  # has_docker-gated: daniel-box and daniel-server have had no docker binary since the
-  # 2026-08-14 k3s migration completed; the ping lives inside this same job, so gating it
+  # so a [crons] redeploy can't silently strip it. Dashed UUID.
+  # has_docker-gated: daniel-box and daniel-server have no docker binary; the ping lives inside this same job, so gating it
   # here (rather than skipping only the `docker` call) also retires the monitor cleanly
   # instead of leaving a dead-man that never pings on those two hosts.
-  # The chain is braced and sent to the journal (#2487): prune prints "Total reclaimed space"
+  # The chain is braced and sent to the journal: prune prints "Total reclaimed space"
   # and curl the ping's `OK` on every healthy run. A failure is the un-pinged dead-man above.
   # Both pings sit inside one `&&` group until the self-hosted Healthchecks retires (#2806):
   # the old UUID, and healthchecks.io's `<host>-docker-prune` slug, sourced as the reboot's is.
@@ -283,11 +279,9 @@
   become: true
   tags: [prune, crons]
 
-# Reverse of the has_docker gate above. The cron was installed unconditionally before this
-# change, so it already exists on both cluster nodes, where it has been failing since the
-# 2026-08-14 Docker removal and leaving the Healthchecks dead-man un-pinged. Skipping the task
-# would leave it there; this retires the entry so the monitor stops being fed by a host that
-# cannot run it.
+# Reverse of the has_docker gate above. Skipping the task would leave an already-installed
+# entry on a host without Docker, failing and leaving the Healthchecks dead-man un-pinged;
+# this retires the entry so the monitor stops being fed by a host that cannot run it.
 - name: Remove the Docker image cleanup cron from any host without Docker
   when: not has_docker
   ansible.builtin.cron:
@@ -330,15 +324,14 @@
   # nothing this one weekly run does not. The repair still runs on a week with nothing to
   # remove: prune_all ends in it unconditionally.
   #
-  # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT (#1435). A
+  # A CRON RUNS IT BECAUSE THE SESSIONS THAT SEE THE SYMPTOM CANNOT FIX IT. A
   # worktree-isolated session's git commands are refused against the primary checkout, so the
   # warning `git fetch` prints reaches only the agents structurally unable to act on it.
   #
   # daniel-box only: the primary checkout and every worktree under it live there.
   #
-  # The cron `name:` is unchanged from when this ran `--gc` alone. `cron_file` entries are
-  # tracked by that comment, so renaming one adds a second entry beside the first rather than
-  # replacing it.
+  # Keep the cron `name:`: `cron_file` entries are tracked by that comment, so renaming one
+  # adds a second entry beside the first rather than replacing it.
   when: inventory_hostname == ops_cron_host
   ansible.builtin.cron:
     name: "Weekly git object-store repair"
@@ -349,8 +342,8 @@
     # bare `uv` is not found and the job fails silently on stderr nothing reads.
     #
     # `2>&1 | logger -t worktree-sweep` for the journal reason on the secret-rotation cron
-    # above (#2466): a week that removes anything prints a line per removal, and mailing those
-    # is the spool problem this sweep's own siblings were fixed for. Braced, because `|` binds
+    # above: a week that removes anything prints a line per removal, and mailing those
+    # is the spool problem. Braced, because `|` binds
     # tighter than the `&&` before it.
     job: "{ cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/dev/prune_worktrees.py --prune --brief; } 2>&1 | logger -t worktree-sweep"
     user: "{{ sys_user }}"
@@ -381,11 +374,10 @@
     # The script defends itself against both as well (find_tool / find_kubeconfig); these
     # are the second layer, kept because they are also the documentation.
     #
-    # STDOUT ONLY is discarded, and not via `MAILTO=""` (#2418). This job lands in the sys user's
+    # STDOUT ONLY is discarded, and not via `MAILTO=""`. This job lands in the sys user's
     # crontab rather than a file of its own, so a MAILTO there would also silence the weekly
-    # secret rotation and the TLS cert-expiry watch beside it. Every run of this one printed
-    # `Wrote …homelab-infra-map.html`, and at */15 that is 4,602 of the 5,678 messages sitting
-    # unread in /var/mail/ubuntu since 2026-08-03 — enough to bury a real one. stderr is left
+    # secret rotation beside it. Every run of this one prints `Wrote …homelab-infra-map.html`,
+    # and at */15 that buries any real message in /var/mail/ubuntu. stderr is left
     # alone so a failing run still mails, which is the whole value of the mbox.
     job: "cd /home/{{ sys_user }}/server && PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /home/{{ sys_user }}/.local/bin/uv run --quiet python scripts/infra_map/gen_infra_map.py -o /home/{{ sys_user }}/.claude/artifacts/homelab-infra-map.html >/dev/null"
     user: "{{ sys_user }}"
@@ -393,18 +385,16 @@
 
 - name: Retire the TLS cert-expiry watch
   tags: [crons, cert-expiry]
-  # The watcher is gone (#3095). It dialled every public hostname at the MetalLB VIP with that
-  # name as the TLS SNI and warned on Discord at 14 days. Traefik serves ONE certificate -- a
-  # wildcard whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- so each of those
-  # dials read the same leaf that monitor-bridge's `check_cert` already reads out of
-  # `traefik_tls_certs_not_after`, every 5 minutes, into a critical-tagged Kuma monitor.
-  # `probe.py cert <host>` keeps the per-host served-chain view for an operator.
+  # Reaps the retired TLS cert-expiry watcher. Traefik serves ONE certificate -- a wildcard
+  # whose SANs cover `*.<domain>`, `*.local.<domain>` and the apex -- and monitor-bridge's
+  # `check_cert` reads that leaf out of `traefik_tls_certs_not_after` every 5 minutes into a
+  # critical-tagged Kuma monitor. `probe.py cert <host>` keeps the per-host served-chain view
+  # for an operator.
   #
-  # This is the way out, not merely the absence of the way in: deleting the installing tasks
-  # alone would leave the crontab entry and the credentials file on daniel-box forever. It runs
-  # on every host rather than behind the `ops_cron_host` gate the installing tasks carried,
-  # because asking cron to remove an absent entry is free and a host that was once the ops cron
-  # host still has the entry.
+  # Deleting the installing tasks alone would leave the crontab entry and the credentials file
+  # on daniel-box forever, so this task removes them. It runs on every host rather than behind
+  # the `ops_cron_host` gate, because asking cron to remove an absent entry is free and a host
+  # that was once the ops cron host still has the entry.
   become: true
   block:
     - name: Remove the TLS cert-expiry watch cron
@@ -418,8 +408,8 @@
         path: /etc/homelab/cert-expiry-webhook.env
         state: absent
 
-# Render provenance for manifest-prune-check.sh's stale-script arm (2026-08-23b review H1).
-# secret-rotate.sh is the reason this one matters most of the nine that were uncovered: it is a
+# Render provenance for manifest-prune-check.sh's stale-script arm.
+# secret-rotate.sh matters most of the render stamps: it is a
 # weekly STATE-CHANGING cron that commits and pushes, so a stale render runs old rotation logic
 # against live secrets with every repo-side check reading green.
 #
@@ -436,8 +426,7 @@
       - ansible/roles/setup/initial_setup/templates/secret-rotation-audit.sh.j2
 
 # kuma-push-lib.sh is sourced by EVERY health cron on every host, with a `|| exit 1` guard — so a
-# stale copy silently changes how every heartbeat pushes. It was watched by nothing until
-# 2026-08-24 (review M-5). `tags: [always]`, matching the copy task it records: this fragment must
+# stale copy silently changes how every heartbeat pushes. `tags: [always]`, matching the copy task it records: this fragment must
 # not be left describing a version a tag-scoped run never deployed.
 - name: Record the deployed shared push library
   tags: [always]
@@ -506,7 +495,7 @@
   # reboot has settled and before the 08:00 secret-rotation audit. Root, because the
   # deployed-code arm compares live artifacts under /usr/local that are not all world-readable.
   #
-  # A systemd timer since 2026-09-19 (roles/setup/common/tasks/kuma_check_timer.yml): a red
+  # A systemd timer (roles/setup/common/tasks/kuma_check_timer.yml): a red
   # verdict reruns every 30 min until it clears rather than sitting on the tile for a day. The
   # state follows setup_drift_check_hosts so a host dropped from the list loses the timer and
   # the old cron.
@@ -532,7 +521,7 @@
       - ansible/roles/setup/initial_setup/templates/setup-drift-kuma-push.env.j2
 
 # ── Loki read-route witness, one per cluster node ─────────────────────────────────────────────
-# The route's only caller is a host process and nothing watched it (issue #1712). See
+# The route's only caller is a host process and nothing else watches it. See
 # templates/loki-read-route-health.sh.j2 for why a pod cannot be the witness and why one host is
 # not enough.
 - name: Create the Loki read-route witness credentials directory
@@ -605,7 +594,7 @@
   # The route carries no production traffic, so an hourly answer is proportionate — what this
   # catches is a route that has been unreachable since the last deploy, not a transient.
   #
-  # A systemd timer rather than a cron since 2026-09-19, so a red verdict reruns every 15 min
+  # A systemd timer rather than a cron, so a red verdict reruns every 15 min
   # until it clears instead of sitting on the tile until the next slot. The task file carries
   # the contract; the script exits 1 after a down push. `kuma_check_state` wires both
   # directions: a host outside loki_route_witness_hosts loses the timer and the old cron.
@@ -718,9 +707,9 @@
     # and gen_infra_map runs inside build_docs.py. Without them the topology SVG silently
     # renders declared-only while everything else looks healthy.
     #
-    # `2>&1 | logger -t docs-refresh` for the journal reason on the secret-rotation cron above
-    # (#2466). This one mailed the most of the six: 61 messages of `build_docs: <script> ok ->
-    # <page>`, one line per generator per run, twice a day. The redirect belongs here rather
+    # `2>&1 | logger -t docs-refresh` for the journal reason on the secret-rotation cron above:
+    # a successful run prints `build_docs: <script> ok -> <page>`, one line per generator,
+    # twice a day. The redirect belongs here rather
     # than at `scripts/docs/build_docs.py`'s print, which an operator and CI both read
     # interactively.
     job: "PATH=/usr/local/bin:/usr/bin:/bin KUBECONFIG=/home/{{ sys_user }}/.kube/config /usr/local/bin/docs-refresh.sh 2>&1 | logger -t docs-refresh"

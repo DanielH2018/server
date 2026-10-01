@@ -1,6 +1,4 @@
 ---
-# Same tag the Docker copy runs. Both stay on it through coexistence so a behavioural difference
-# between the two is never attributable to the image.
 sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls325
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).
@@ -9,18 +7,18 @@ sonarr_k8s_image: lscr.io/linuxserver/sonarr:4.0.20.3014-ls325
 # database + root-folder paths before the gate observes a fault, then fail the rollback
 # redeploy against data it can no longer read. The linuxserver -lsNN scheme hides a breaking
 # bump as a routine patch bump.
-# Promoted in slice 7b (2026-08-21): k8s/manifests now takes a pre-apply Longhorn snapshot of
-# the claim below and reverts it if the deploy fails, so a bad swap reverts to the snapshot
-# instead of leaving the library database and root-folder paths unreadable by the old image.
+# k8s/manifests takes a pre-apply Longhorn snapshot of the claim below and reverts it if the
+# deploy fails, so a bad swap reverts to the snapshot instead of leaving the library database
+# and root-folder paths unreadable by the old image.
 k8s_autodeploy: true  # noqa var-naming[no-role-prefix]
 k8s_autodeploy_reason: "migrating state — Recreate + RWO volume-claim PVC, now protected by the pre-apply Longhorn snapshot and revert; -lsNN versioning still hides a breaking bump. WEIGHED: sonarr also mounts media-data (shared RWX, not reverted); a revert rewinds import/rename history while the files stay where they were left, so it desyncs into duplicate-import attempts or a missed-file state, recoverable by a library rescan"  # noqa var-naming[no-role-prefix]
-# Slice 7a task 3 — the pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
-# Declared regardless of k8s_autodeploy — protects a manual deploy too, and slice 7b's revert
-# is what this role's auto-deploy now depends on.
+# The pre-apply Longhorn snapshot k8s/manifests takes via k8s/volume-snapshot.
+# Declared regardless of k8s_autodeploy — protects a manual deploy too, and the revert it
+# enables is what this role's auto-deploy depends on.
 k8s_autodeploy_snapshot_pvcs: [sonarr-config]  # noqa var-naming[no-role-prefix]
 # Claims this role MOUNTS but does not revert — the WEIGHED clause in the reason above, stated
 # where a test can read it. media-data is rendered by k8s/media-volume, so no guard that reads
-# what this role creates can see the coupling (2026-08-22 review M2).
+# what this role creates can see the coupling.
 k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix]
 
 # The rollout budget, declared once. Read by THREE places, so none of them can drift: the
@@ -30,25 +28,20 @@ k8s_autodeploy_unreverted_claims: [media-data]  # noqa var-naming[no-role-prefix
 # times out against the startupProbe that allows it.
 # The deadline has to move with the budget: at the 600s Kubernetes default, `rollout status`
 # fails on ProgressDeadlineExceeded whatever `--timeout` says, so the last 60s of this budget
-# was unreachable until #2370 rendered the deadline here too.
+# is unreachable unless the deadline is rendered from this variable too.
 sonarr_k8s_rollout_timeout: 660s
 
 # ── the config database ─────────────────────────────────────────────────────────────────────
-# 85 M / 221 files at B3. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
-# absolute root-folder paths that this whole slice is careful about — it is exactly the state
-# worth snapshotting.
+# 85 M / 221 files. `longhorn`, not longhorn-nobackup: sonarr.db holds the library and the
+# absolute root-folder paths — it is exactly the state worth snapshotting.
 sonarr_k8s_claim: sonarr-config
-# `longhorn` — backed up. Briefly `longhorn-nobackup` on 2026-08-08, after B2's TRANSACTION cap
-# fired twice in a week (08-02, 08-08) as slice 4 took Longhorn's daily run from 4 to 15 backups and
-# incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
-# this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
-# actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
+# `longhorn` — backed up. Excluding this volume would leave it with a single frozen restore
+# point. B2 Reachable is the readout for whether its incrementals strain B2's TRANSACTION cap.
 sonarr_k8s_storage_class: longhorn
 sonarr_k8s_size: 2Gi
 
-# The B2 volume, mounted at /data — byte-for-byte the Docker path contract (D4). Getting this
-# wrong does not fail at startup; it fails as a library that looks intact until an import.
+# The B2 volume, mounted at /data — sonarr stores absolute in-container paths, so the mount
+# must match them byte for byte (D4). Getting this wrong does not fail at startup; it fails as a library that looks intact until an import.
 sonarr_k8s_media_claim: media-data
 
 # TheCaptain989's striptracks mod (there is no separate `sonarr-striptracks` — the
@@ -67,7 +60,7 @@ sonarr_k8s_mem_request: 128Mi
 # declares Level and Rotate; radarr and prowlarr bind the identical shape under their own names.
 #
 # WHY: upstream's defaults are LogLevel=debug, Rotate=50, SizeLimit=1MB — so every *arr sits at
-# a 50 MB steady state of debug chatter it rewrites continuously. Measured 2026-08-16: sonarr
+# a 50 MB steady state of debug chatter it rewrites continuously. Measured: sonarr
 # and prowlarr each held 51 MiB in /config/logs, radarr 25 MiB. The size is capped, so this is
 # not primarily a space fix; it is a CHURN fix. Longhorn backs up allocated device blocks, and
 # a directory that rewrites 50 MB in a rolling window leaves freed-but-undiscarded blocks that

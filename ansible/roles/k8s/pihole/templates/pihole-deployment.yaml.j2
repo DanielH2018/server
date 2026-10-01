@@ -5,9 +5,9 @@
   The Deployment body both Pi-hole instances render, parameterised by instance name and claim.
 
   A macro rather than a loop in one template, and two callers rather than one, because
-  `kubectl apply -f <dir>/` applies every file in the directory in a single request: while both
-  Deployments rendered into one file, an image-pin bump changed both pod templates in that one
-  apply and the controller Recreate-cycled both instances in the same second (#2884). Separate
+  `kubectl apply -f <dir>/` applies every file in the directory in a single request: with both
+  Deployments in one file, an image-pin bump changes both pod templates in that one apply and
+  the controller Recreate-cycles both instances in the same second. Separate
   files are what lets tasks/roll_one.yml apply the second instance only after the first is
   serving again. Rendering this body twice by hand instead would let the two instances drift
   apart silently — the thing the second instance exists to be a copy of.

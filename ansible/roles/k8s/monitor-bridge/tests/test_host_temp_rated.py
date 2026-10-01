@@ -1,8 +1,8 @@
 """The rated arm of check_host_temp: a published Tjmax for a sensor whose driver declares none.
 
-Split from `test_host_temp.py`, which is at its module-length cap. The arm exists because
-daniel-box's k10temp publishes neither `temp1_max` nor `temp1_crit` for Tctl — the CPU's only
-temperature reading — so before `HWMON_TEMP_RATED_MAX_C` it took a flat 85C chosen for the
+The arm exists because daniel-box's k10temp publishes neither `temp1_max` nor `temp1_crit`
+for Tctl — the CPU's only temperature reading — so without `HWMON_TEMP_RATED_MAX_C` it takes a
+flat 85C chosen for the
 estate rather than for a Ryzen 7 8845HS (#1152, and the `DECIDED:` markers in verdicts.host).
 
 The last two tests are the ones that carry the arm. Every test above them hands `rated` in
@@ -67,8 +67,8 @@ def test_a_rated_sensor_is_clean_below_the_ratio():
 def test_a_rated_sensor_is_flagged_above_the_ratio():
     """The rejecting half: recalibration must narrow the alert, never remove it.
 
-    93.75C is the highest reading Prometheus holds for this sensor in the 30 days to
-    2026-09-05. It breached the old 85C fallback and it must still breach the rated 90C — the
+    93.75C is the highest reading Prometheus held for this sensor over 30 days. It breaches
+    the flat 85C fallback and it must still breach the rated 90C — the
     part runs genuinely close to its rating, and a limit derived from that rating has to fire.
     """
     limits = checks.host_thermal.hwmon_temp_limits(
@@ -170,11 +170,11 @@ def test_a_malformed_rating_is_reported_rather_than_guessed_at():
 
 
 def test_the_shipped_hysteresis_rides_out_this_sensors_boost_excursions():
-    """#1186: the same sensor's other half — the streak length, pinned to what was measured.
+    """The same sensor's other half — the streak length, pinned to what was measured.
 
     The rated arm above settles WHERE the limit is; this settles HOW LONG a breach must last to
     page. Both are daniel-box's k10temp/Tctl, which spends 12.0% of a week above that 90C limit
-    as ordinary boost. Measured over the 7d to 2026-09-06 at the 5 min loop cadence, its 115
+    as ordinary boost. Measured over 7d at the 5 min loop cadence, its 115
     excursions ran to 8 cycles with one outlier of 18 and nothing in between; 3 cycles paged 26
     times that week, 12 pages once. The env-secret value is the one the pod reads, so a code-only
     change ships nothing — both are pinned here.

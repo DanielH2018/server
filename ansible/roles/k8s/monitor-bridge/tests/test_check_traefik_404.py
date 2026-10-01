@@ -1,7 +1,7 @@
-"""check_traefik_404_flood: the arm that would have caught #1322's total-404 edge.
+"""check_traefik_404_flood: the arm that catches a total-404 edge.
 
-Its two neighbours (check_traefik_5xx, check_traefik_latency) logged `0 service(s) above
-floor` for 3.5 hours while every HTTPS route 404'd, because a router-less edge emits no
+Its two neighbours (check_traefik_5xx, check_traefik_latency) log `0 service(s) above
+floor` while every HTTPS route 404s, because a router-less edge emits no
 `traefik_service_*` series at all and their per-service loops read the empty vector as
 healthy. Each pair below is one input this check must accept and one it must reject, so a
 rule that silently stopped matching fails its own test rather than reading green.
@@ -28,7 +28,7 @@ def _prom(monkeypatch, total, notfound):
 
 
 def test_ordinary_404_trickle_is_clean(monkeypatch, cfg):
-    # The live shape, measured 2026-09-06: 0.033 of 0.833 rps is 4.0% 404s — favicons, probes
+    # The live shape: 0.033 of 0.833 rps is 4.0% 404s — favicons, probes
     # and stale bookmarks. This is the common case and must stay green, or the arm is ignored.
     _prom(monkeypatch, 0.8333333333333334, 0.03333333333333333)
     ok, msg = checks.cluster.check_traefik_404_flood(cfg)
@@ -37,7 +37,7 @@ def test_ordinary_404_trickle_is_clean(monkeypatch, cfg):
 
 
 def test_total_404_edge_is_flagged(monkeypatch, cfg):
-    # The #1322 window exactly: `sum by (code)(rate(traefik_entrypoint_requests_total[10m]
+    # A total-404 edge: `sum by (code)(rate(traefik_entrypoint_requests_total[10m]
     # offset 3h))` returned code=404 = 0.61 and nothing else.
     _prom(monkeypatch, 0.61, 0.61)
     ok, msg = checks.cluster.check_traefik_404_flood(cfg)

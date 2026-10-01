@@ -1,4 +1,4 @@
-"""Read every batch on one host in one call, and stop one — spec 2026-09-06 §4-5."""
+"""Read every batch on one host in one call, and stop one."""
 
 import json
 import re
@@ -31,10 +31,10 @@ NO_REPORT = "no-report"
 # A clean finish whose final text names a blocker line instead of a PR.
 NEEDS_INPUT = "needs-input"
 # A clean finish whose final text names neither a PR nor a blocker: a progress report that
-# ended the turn, left after the Stop hook's continuations ran out (issue #2816).
+# ended the turn, left after the Stop hook's continuations ran out.
 NO_PR = "no-pr"
 # A batch on the landing host that opened its PR and ended its turn before `land.sh` printed a
-# verdict. The PR exists; the landing it owes did not finish (issue #2890).
+# verdict. The PR exists; the landing it owes did not finish.
 NO_VERDICT = "no-verdict"
 
 
@@ -176,10 +176,10 @@ def parse_status(batches: Sequence[Batch], stdout: str) -> list[BatchStatus]:
             state = "running"
         elif props.get("Result") == "success" and final and not is_error:
             # A non-empty final text is not a finish: a turn that ends on "Next I will open
-            # the PR" exits the process just as cleanly as one that opened it (#2816).
+            # the PR" exits the process just as cleanly as one that opened it.
             if m and b.host == LANDS and not landed:
                 # The brief tells a landing-host batch to wait for `land.sh`'s VERDICT line.
-                # Without that, a PR URL only means `gh pr create` returned (issue #2890).
+                # Without that, a PR URL only means `gh pr create` returned.
                 state = NO_VERDICT
             elif m:
                 state = "done"

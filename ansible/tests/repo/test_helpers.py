@@ -1,9 +1,8 @@
 """The shared task-file readers behave the way the guards built on them assume.
 
-`walk_tasks` and `leaf_tasks` differ only over `block:`, and that difference is exactly what
-made the pre-consolidation `_flatten` copies incompatible. A guard that got the wrong one still
-passed — it just stopped seeing part of the tree — so the distinction needs its own coverage
-rather than relying on the callers to notice.
+`walk_tasks` and `leaf_tasks` differ only over `block:`. A guard that uses the wrong one
+still passes — it just stops seeing part of the tree — so the distinction needs its own
+coverage rather than relying on the callers to notice.
 """
 
 import pytest
@@ -202,6 +201,6 @@ def test_imported_tasks_keeps_a_non_import_entry_in_place(tmp_path):
 
 
 def test_imported_tasks_reaches_the_k3s_role():
-    # Non-vacuity against the real tree: the role the two folded readers are about.
+    # Non-vacuity against the real tree: a role whose main.yml is imports only.
     assert len(imported_task_files(SETUP_ROLES / "k3s")) >= 5
     assert imported_tasks(SETUP_ROLES / "k3s")

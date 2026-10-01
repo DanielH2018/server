@@ -4,27 +4,24 @@ A `permissions.allow` entry here is a standing grant carried by the repository, 
 reaches every operator who opens the repo rather than only the person who wrote it. Two
 properties are worth holding still, and neither is visible from reading the file:
 
-Every allowed `kubectl` verb must be read-only. Until 2026-08-29 this file allowed
-sixteen write verbs -- apply, create, patch, set, exec, cp, port-forward, scale, the four
-rollout forms, label, annotate, cordon, uncordon. They were inert on the day they were
-written, because the cluster credential is a read-only ServiceAccount and RBAC refuses
-every one of them, and inert again in a normal session, because `autoMode.classifyAllShell`
-suspends `Bash()` allow rules and hands the whole line to the classifier. Neither
-protection is a property of this file. Manual mode runs no classifier, and a widened
-credential is exactly the change that would make the grant live -- so the grant would
-start mattering at the moment it was most dangerous, with nothing here having changed.
-Ansible is the write path to this cluster; see docs/claude-shell-permissions.md.
+Every allowed `kubectl` verb must be read-only. Write verbs here would be inert, because
+the cluster credential is a read-only ServiceAccount and RBAC refuses every one of them,
+and because `autoMode.classifyAllShell` suspends `Bash()` allow rules and hands the whole
+line to the classifier. Neither protection is a property of this file. Manual mode runs no
+classifier, and a widened credential is exactly the change that would make the grant live
+-- so the grant would start mattering at the moment it was most dangerous, with nothing
+here having changed. Ansible is the write path to this cluster; see
+docs/claude-shell-permissions.md.
 
-A `Bash()` rule here cannot narrow a verb by flag. Measured 2026-08-08 against the OTEL
-`tool_decision` stream: `Bash(kubectl apply --prune*)` fired neither as an `ask` nor as a
-`deny`. So a rule that reads like a flag-level guard is a guarantee that is not there.
-(The chezmoi-managed user-level rules are the exception, and only because
-`allow-compound-bash.sh` glob-matches them itself -- that hook is not in play for this
-file's plain verb prefixes.)
+A `Bash()` rule here cannot narrow a verb by flag. `Bash(kubectl apply --prune*)` fired
+neither as an `ask` nor as a `deny` in the OTEL `tool_decision` stream. So a rule that
+reads like a flag-level guard is a guarantee that is not there. (The chezmoi-managed
+user-level rules are the exception, and only because `allow-compound-bash.sh` glob-matches
+them itself -- that hook is not in play for this file's plain verb prefixes.)
 
 Each test below is a pair: one input the rule must reject and one it must accept. A shape
 guard that fires on everything and one that fires on nothing look identical from the
-passing side, and this repo has paid for that twice.
+passing side.
 """
 
 import json
@@ -146,8 +143,8 @@ def test_every_hook_entry_declares_a_timeout():
 
     These hooks run on the interactive path -- a PreToolUse hook sits between the model
     and every Bash call it makes -- so the cost of one hanging is paid on every keystroke
-    after it. Four entries here omitted it until 2026-08-29 and nothing reported them,
-    because the default is silent and generous rather than absent.
+    after it. Nothing reports an entry that omits it, because the default is silent and
+    generous rather than absent.
     """
     missing = sorted(
         f"{event}:{entry.get('command', '?')}"
@@ -165,3 +162,51 @@ def test_the_timeout_check_reads_the_entries_it_claims_to():
     entries = hook_entries()
     assert len(entries) >= 5, "the hook walk found almost nothing — the shape changed"
     assert any(e.get("command", "").endswith("session-health.sh") for _, e in entries)
+
+
+# The project-scope plugin disables this file may carry. `superpowers` is off here by choice
+# (commit 6d84aa665). `claude-permission-audit` is the reader docs/claude-tooling.md names for
+# the OTEL `tool_decision` stream, and its `false` here outlived the double-logging it was
+# written for: this repo's own permission logger went away in fe63a79da and the entry stayed
+# until #3142. Disabling it removes `/audit-permissions` from every session opened in this repo,
+# and nothing in a session says so.
+PLUGINS_ALLOWED_TO_BE_DISABLED = frozenset({"superpowers@claude-plugins-official"})
+
+PERMISSION_AUDIT_PLUGIN = "claude-permission-audit@daniel-tools"
+
+
+def disabled_plugins(data: dict) -> set[str]:
+    """Every plugin the given settings object switches off for sessions in this repo."""
+    return {
+        name
+        for name, enabled in data.get("enabledPlugins", {}).items()
+        if enabled is False
+    }
+
+
+def test_no_plugin_is_disabled_here_without_a_reason_on_the_list():
+    unexplained = sorted(
+        disabled_plugins(json.loads(SETTINGS.read_text()))
+        - PLUGINS_ALLOWED_TO_BE_DISABLED
+    )
+    assert not unexplained, (
+        f"{SETTINGS} disables {unexplained} for every session in this repo. For "
+        f"{PERMISSION_AUDIT_PLUGIN} that removes the `/audit-permissions` reader "
+        "docs/claude-tooling.md names. Keep a disable only with its reason written in that "
+        "page's *Permission auditing* section, then name the plugin in "
+        "PLUGINS_ALLOWED_TO_BE_DISABLED."
+    )
+
+
+def test_the_disable_check_would_catch_the_permission_audit_plugin():
+    """The RED half. The check reads `false` only, so `true` and absence both pass."""
+    assert disabled_plugins({"enabledPlugins": {PERMISSION_AUDIT_PLUGIN: False}}) == {
+        PERMISSION_AUDIT_PLUGIN
+    }
+    assert PERMISSION_AUDIT_PLUGIN not in PLUGINS_ALLOWED_TO_BE_DISABLED
+
+
+def test_the_disable_check_accepts_an_enabled_plugin():
+    assert (
+        disabled_plugins({"enabledPlugins": {PERMISSION_AUDIT_PLUGIN: True}}) == set()
+    )

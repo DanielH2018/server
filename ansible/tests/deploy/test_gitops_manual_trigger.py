@@ -102,12 +102,11 @@ _UNIT_TEMPLATE = _ROLE / "templates/gitops-deploy.service.j2"
 
 
 def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
-    # 2026-08-23b review M1/M13. `flock -E N` in ExecStart, `SuccessExitStatus=N` in the unit,
-    # and the wrapper's handler for N are one contract expressed in three places. When -E 75 and
-    # SuccessExitStatus=75 landed, the wrapper was not updated: a contention tick took its
-    # failure branch and told the operator that gitops-deploy-alert.service had already posted
-    # to Discord. It cannot have — OnFailure never fires on a unit SuccessExitStatus makes
-    # succeed. Pinning the three together is what stops the next edit re-opening that.
+    # `flock -E N` in ExecStart, `SuccessExitStatus=N` in the unit, and the wrapper's handler
+    # for N are one contract expressed in three places. If the wrapper's handler lags the other
+    # two, a contention tick takes the failure branch and tells the operator that
+    # gitops-deploy-alert.service already posted to Discord. It cannot have — OnFailure never
+    # fires on a unit SuccessExitStatus makes succeed. This pins the three together.
     unit = _UNIT_TEMPLATE.read_text()
 
     flock_code = re.search(r"^ExecStart=.*?flock\s+.*?-E\s+(\d+)", unit, re.MULTILINE)
@@ -146,9 +145,8 @@ def test_lock_contention_exit_code_is_one_contract_across_all_three_readers():
 
     # The marker string, not the exit code, is what couples the unit to the wrapper. A oneshot
     # unit with no RemainAfterExit has its ExecMainStatus reset to 0 by systemd once it goes
-    # inactive (measured 2026-08-23, systemd 255.4), so `systemctl show` cannot tell a
-    # contention tick from a successful deploy afterwards. Reading the exit code back was the
-    # obvious fix for M1 and it would have been inert.
+    # inactive, so `systemctl show` cannot tell a contention tick from a successful deploy
+    # afterwards. Reading the exit code back would be inert.
     marker = re.search(
         r'^CONTENTION_MARKER="([^"]+)"', _WRAPPER.read_text(), re.MULTILINE
     )
@@ -168,9 +166,9 @@ def test_wrapper_stops_watching_a_joined_run_when_it_ends():
 
     The wait loop then needs a way to notice that run ending: it breaks on
     `ExecMainStartTimestampMonotonic != started_before`, and for a joined run `started_before` IS
-    that run's stamp, so the loop could only exit at its deadline. land.sh sat through the full 540s
-    watch cap on 2026-09-01 for a broad tick another session's merge had started, and read the
-    timeout as a failure. Joining must reset the stamp so the state check alone ends the wait.
+    that run's stamp, so the loop could only exit at its deadline, and land.sh would sit through the
+    full 540s watch cap on a broad tick another session's merge started and read the timeout as a
+    failure. Joining must reset the stamp so the state check alone ends the wait.
     """
     wrapper = _WRAPPER.read_text()
     join = re.search(
@@ -185,10 +183,7 @@ def test_wrapper_stops_watching_a_joined_run_when_it_ends():
     )
 
 
-# ── issue #948: two directives no test pinned. Four other units' OnFailure= were already
-# regex-pinned (see the module docstrings citing this file), and SuccessExitStatus/TimeoutStartSec
-# are asserted elsewhere in this file — but this unit's own OnFailure= and TimeoutStartSec= were
-# asserted by nothing. systemd ignores a typo'd key with a journal warning and loads the unit
+# ── this unit's own OnFailure= and TimeoutStartSec=. systemd ignores a typo'd key with a journal warning and loads the unit
 # anyway, so a silent drift here would reach a host with `daemon_reload: true` reporting success.
 
 
@@ -203,8 +198,7 @@ def test_unit_pages_on_failure():
 def test_unit_timeout_covers_the_measured_k8s_worst_case():
     # 180s max flock wait + STAGING_GATE_TIMEOUT_S (600) + STAGING_EXPECT_TIMEOUT_S (120) +
     # K8S_DEPLOY_TIMEOUT_S (1440) + K8S_ROLLBACK_TIMEOUT_S (1620) = 3960s, which is why the unit's
-    # own arithmetic comment sizes TimeoutStartSec to 70min. It was 60min until #2397 derived
-    # the forward cap from the worst promoted role. The docstring at the top of this file defers to this pin for the value.
+    # own arithmetic comment sizes TimeoutStartSec to 70min. The docstring at the top of this file defers to this pin for the value.
     unit = _UNIT_TEMPLATE.read_text()
     assert re.search(r"^TimeoutStartSec=70min$", unit, re.MULTILINE), (
         f"{_UNIT_TEMPLATE}'s TimeoutStartSec no longer reads 70min. If this is a deliberate "
@@ -213,7 +207,7 @@ def test_unit_timeout_covers_the_measured_k8s_worst_case():
     )
 
 
-# -- the verdict line (issue #2853) --------------------------------------------------------
+# -- the verdict line --------------------------------------------------------
 
 _TICK_VERDICT_CALL = re.compile(r"^\s*tick_verdict (\d+) ([a-z-]+) ", re.MULTILINE)
 
@@ -227,11 +221,7 @@ def _wrapper_verdicts() -> dict[int, str]:
 
 
 def test_the_wrappers_verdict_tokens_are_the_ones_the_exit_code_table_declares():
-    """The wrapper is bash and cannot import the table, so the two are held together here.
-
-    Before #2853 the tick printed free text plus the state markers and left the reader to
-    decide what had happened, which is the prose `gitops-tick/SKILL.md` carried.
-    """
+    """The wrapper is bash and cannot import the table, so the two are held together here."""
     from lib.exit_codes import contract
 
     declared = {

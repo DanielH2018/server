@@ -1,13 +1,13 @@
-"""release-staleness-check pushes probe.py's `--kuma` line: one line, grouped by reason (#2013).
+"""release-staleness-check pushes probe.py's `--kuma` line: one line, grouped by reason.
 
-A refused narrowing marks the whole fleet stale, and the per-service reasons then ran to
-~7,500 chars — past Discord's 1024-char embed field, so Kuma's DOWN notification was rejected
-with HTTP 400 and reached nobody. The grouping is `bridge.msgfmt`'s and is tested beside it;
+A refused narrowing marks the whole fleet stale, and the per-service reasons then run to
+~7,500 chars — past Discord's 1024-char embed field, so Kuma's DOWN notification is rejected
+with HTTP 400 and reaches nobody. The grouping is `bridge.msgfmt`'s and is tested beside it;
 this proves the cron asks for that shape and pushes what it gets, unedited. The real template
 is rendered and run under bash with the push library, `git` and `uv` stubbed; the assertion is
 on the pushes handed to `kuma_push`.
 
-It also holds the re-alert (#2378): Kuma notifies only on a transition, so when the counted
+It also holds the re-alert: Kuma notifies only on a transition, so when the counted
 stale set changes while the tile is DOWN, the cron pushes a not-a-recovery `up` and then the
 `down`, and records the new set for the next run to compare against.
 """

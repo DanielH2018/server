@@ -8,16 +8,13 @@ stubbed the Kuma push would really push.
 
 The consumers are derived, not listed: every k8s role whose `files/` imports a runtime module
 defined under ANOTHER role's `files/`, plus that other role. That pair is monitor-bridge and
-autofix-bridge today, and it was the scope of the fix this shipped with; a hardcoded pair
-would let a third role join the rule silently unchecked — the guard-scope shape the same
-review found in four other places (2026-08-25 review M-2). The deployer derives the same set
-in `deploy_changes.shared_module_consumers`.
+autofix-bridge; a hardcoded pair would let a third role join the rule silently unchecked. The
+deployer derives the same set in `deploy_changes.shared_module_consumers`.
 
 A module is identified by its dotted path under `files/`, so the census sees a module at any
 depth and a test's own alias for it (`from bridge import config as cfg`) resolves to the
-module it names. The one-level `glob("*.py")` and the `"bridge.common" in text` substring
-this used until 2026-09-02 would both have gone quiet the moment the shared module moved into
-a package.
+module it names. A one-level `glob("*.py")` or a `"bridge.common" in text` substring would
+both go quiet the moment the shared module moved into a package.
 
 Run: uv run pytest ansible/tests/services/test_bridge_patch_boundary.py
 """
@@ -74,8 +71,8 @@ def _suite_files():
 
     The glob is every `*.py`, not `test_*.py` + `conftest.py`. A shared helper module —
     monitor-bridge's `_check_gate_helpers.py`, which wires `run_once` for four suites — patches
-    the transport exactly as a test does, and under the narrower glob those patches were
-    invisible to this rule. A from-import of one of those names would then have passed.
+    the transport exactly as a test does, and under the narrower glob those patches are
+    invisible to this rule, so a from-import of one of those names would pass.
     """
     files = []
     for root in _consumer_roots():
@@ -100,9 +97,9 @@ def _patched_names_by_module(test_files=None, module_names=None):
 
     AST walk, not a regex — a line-oriented regex over `monkeypatch.setattr(bridge.common, "X"`
     misses the wrapped form ruff format produces and misses plain `bridge.common.X = ...`
-    assignment entirely. `ansible/tests/services/test_monitor_bridge_modules.py`'s census hit
-    exactly that hole when first measured; this mirrors its AST shape rather than repeating
-    the mistake. The test's local name for a module is resolved through its own imports.
+    assignment entirely. This mirrors the AST shape of
+    `ansible/tests/services/test_monitor_bridge_modules.py`'s census. The test's local name for
+    a module is resolved through its own imports.
     """
     test_files = _suite_files() if test_files is None else test_files
     if module_names is None:
@@ -165,11 +162,10 @@ def _unqualified_binds(patched, modules):
 def test_there_are_patched_names_to_check():
     # Without this the assertion below passes vacuously if the AST walk ever stops matching.
     #
-    # It named `bridge.config` alongside `bridge.common` until 2026-09-04, when monitor-bridge's
-    # configuration became a frozen `Config` built in `main()` and passed down. Nothing patches
-    # that module any more — which is the point of the seam, not a lapsed census — so the pair
-    # that keeps this honest is now `bridge.common` and `bridge.net`, the two the suite still
-    # stubs. Repoint it again rather than deleting it when the next module gets its seam.
+    # The pair is `bridge.common` and `bridge.net`, the two modules the suite stubs.
+    # `bridge.config` is not in it: monitor-bridge's configuration is a frozen `Config` built
+    # in `main()` and passed down, so nothing patches that module. Repoint the pair rather
+    # than deleting it when another module gets its seam.
     # A subset comparison rather than two `in` tests: `"bridge.net" in patched` reads as a
     # hostname-shaped substring check to CodeQL, which
     # ansible/tests/repo/test_no_host_shaped_membership_literal.py enforces repo-wide.
@@ -230,8 +226,8 @@ def test_every_patched_name_exists_on_its_module():
 def test_checker_fires_on_a_synthesized_bad_sample(tmp_path):
     """Prove the checker can actually fail, not just pass vacuously.
 
-    A prior /homelab-review run found five guards structurally unable to fail — the check
-    existed but no input could ever make it report a problem. Synthesize the exact shape the
+    A guard is structurally unable to fail when no input can make its check report a problem.
+    Synthesize the exact shape the
     rule forbids (a from-import of a patched name) and confirm `_unqualified_binds` catches it.
     """
     bad = tmp_path / "bad_consumer.py"
@@ -323,9 +319,7 @@ def test_checker_sees_a_packaged_module_in_every_spelling(tmp_path):
 # Every one of these is also patched by `test_check_cli.py`, which is why a census taken over
 # the whole suite cannot anchor this: the map stays populated on the sibling's strength while
 # the helper contributes nothing. Extraction from the helper alone is what proves it.
-# `bridge.common.log` left this map on 2026-09-28: its only patch site was
-# `run_once_with_gates`, which existed for the Cluster Prometheus gate and went with it
-# (#2825). One module still anchors the extraction, which is what the test needs.
+# One module anchors the extraction, which is what the test needs.
 HELPER_PATCHES = {
     "bridge.net": frozenset({"prom_vector", "push"}),
 }
@@ -382,8 +376,8 @@ def test_helper_patch_extraction_can_go_red(tmp_path):
 
 def test_the_census_survives_an_undecodable_module(tmp_path):
     # A stray non-UTF-8 byte under a consumer's tests/ must still leave a verdict, not raise a
-    # UnicodeDecodeError that pytest reports as a collection error. `_consumer_roots` has read
-    # with errors="ignore" since it was written; this reader did not until 2026-09-05.
+    # UnicodeDecodeError that pytest reports as a collection error. `_consumer_roots` reads
+    # with errors="ignore", and so does this reader.
     junk = tmp_path / "_wire_latin1.py"
     junk.write_bytes(
         b"import bridge.net\n# \xff\xfe caf\xe9\ndef wire(m):\n"

@@ -1,11 +1,10 @@
 """crowdsec's edge ban gate waits for the bouncer's pull and always lifts its ban.
 
-#2752: the gate banned daniel-pi, then probed the edge on a fixed 80s timer. The Traefik bouncer
-made no stream pull for 600s (the plugin's metrics-ticker stall), so every probe saw 302 and
-the gate failed with nothing naming why. The failure also skipped the lift, which left the Pi
-banned at the edge for the rest of the decision's life. The gate now waits on the bouncer's
-LAPI `last_pull` moving past its post-ban value before it probes, and lifts the ban in the
-block's `always`. These tests read the tasks as written in roles/k8s/crowdsec/tasks/verify.yml
+The gate bans daniel-pi, waits on the bouncer's LAPI `last_pull` moving past its post-ban
+value, then probes the edge, and lifts the ban in the block's `always`. A fixed timer is wrong
+because the Traefik bouncer can make no stream pull for 600s (the plugin's metrics-ticker
+stall), so every probe sees 302 and the gate fails with nothing naming why. A skipped lift
+leaves the Pi banned at the edge for the rest of the decision's life. These tests read the tasks as written in roles/k8s/crowdsec/tasks/verify.yml
 and evaluate the wait's `until` through Ansible's own templar, because a wrong filter chain
 there reads as a stall on every deploy.
 """
@@ -46,8 +45,8 @@ def _bouncers(
     """`cscli bouncers list -o json` as LAPI returns it on daniel-box.
 
     The base `k8straefik` row is stale: LAPI records each Traefik pod's pulls on an
-    auto-created `k8straefik@<pod IP>` row. The gate's first live run compared only the base
-    row and waited out a pull that had happened (#2752).
+    auto-created `k8straefik@<pod IP>` row, so a gate comparing only the base row waits out a
+    pull that has already happened.
     """
     rows = [
         {"name": "k8straefik", "last_pull": "2026-08-09T14:11:31.542634271Z"},

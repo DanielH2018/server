@@ -13,19 +13,16 @@ takes when a deploy skips the build. Both leave a pod
 asking the node for a name it already holds, and under `IfNotPresent` the node answers from
 its cache: the pod rolls, reads Ready, and runs the OLD bytes. Only the drift gate in
 post_tasks/k8s_image_drift_gate.yml notices, and it notices after the rollout, as a failed
-deploy. `Always` is what closes that, so the requirement survives the content tag — with a
-narrower reason than the one it was written for.
+deploy. `Always` is what closes that, so the requirement survives the content tag.
 
 WHY EXPLICIT rather than trusting the `:latest` default. The API server defaults this field
-only when it is absent at CREATE time. terraria's Deployment was created on 2026-08-31 with an
-upstream `@sha256:` pin, which defaults to `IfNotPresent`; the switch to the built `:latest`
-changed only `image`, and a client-side apply leaves a defaulted field it never managed in
-place. The first Renovate digest bump of that image (PR #681, 2026-09-02) rebuilt it, rolled
-the pod onto the cached copy, and failed the drift gate twice — once more with
-`image_builder_force=true`, which rebuilds but cannot make the node re-pull. Of the seven
-image-builder consumers only homelab-mcp and n8n wrote the line; the other four ran `Always`
-because their Deployments happened to be CREATED with a `:latest` image, which is one
-`kubectl apply` of a digest-pinned draft away from terraria's state. This pins the class.
+only when it is absent at CREATE time. A Deployment created with an upstream `@sha256:` pin
+defaults to `IfNotPresent`; switching it to the built `:latest` changes only `image`, and a
+client-side apply leaves a defaulted field it never managed in place. A rebuild then rolls the
+pod onto the cached copy and fails the drift gate, and `image_builder_force=true` rebuilds but
+cannot make the node re-pull. A Deployment created with a `:latest` image happens to default to
+`Always`, which is one `kubectl apply` of a digest-pinned draft away from that state. This pins
+the class.
 
 Run: uv run pytest ansible/tests/k8s/test_built_images_pull_always.py
 """

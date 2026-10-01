@@ -1,8 +1,7 @@
 """Guard: `lib.script_classify.__all__` names only what the rest of `scripts/` uses.
 
-A split leaves stale exports behind. PR #1142 moved the `is_candidate` call down into the
-census helpers; the name stayed in `__all__` and in the module docstring until issue #1204
-noticed. An exported name nobody imports reads as public API and outlives the reason it was
+A split leaves stale exports behind: a name can stay in `__all__` and in the module
+docstring after its last caller moves. An exported name nobody imports reads as public API and outlives the reason it was
 public, so the census is checked rather than remembered.
 
 Run: uv run pytest scripts/lib/tests/test_script_classify_surface.py

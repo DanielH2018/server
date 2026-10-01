@@ -3,16 +3,15 @@
 postflight runs on daniel-box and nowhere else. `get_via_service` tries the workload's
 ClusterIP first, which answers only a caller on the pod's own node, then falls back to the
 Traefik route — so whenever an *arr pod sits on daniel-server the route is the ONLY path the
-§9.3 API-key check has. Two things have to line up for that path to reach the backend, and
-until 2026-09-10 neither did (#1642):
+§9.3 API-key check has. Two things have to line up for that path to reach the backend:
 
-  1. The route's ClientIP set has to include daniel-box (`k8s_node_client_ip`). It admitted
-     daniel-server alone, so the request fell through to the app's own Authelia'd route.
-  2. The route's PathPrefix has to cover the path postflight requests. It asked for
-     `/api/<ver>/system/status`, which is on no monitoring route's prefix.
+  1. The route's ClientIP set has to include daniel-box (`k8s_node_client_ip`). Without it the
+     request falls through to the app's own Authelia'd route.
+  2. The route's PathPrefix has to cover the path postflight requests, such as
+     `/api/<ver>/system/status`.
 
-Both were 302s, which postflight reports as SKIP — a check that never runs rather than a false
-alarm. The two sides live in different trees (`ansible/roles/k8s/<app>/templates/` and
+A miss on either is a 302, which postflight reports as SKIP — a check that never runs rather
+than a false alarm. The two sides live in different trees (`ansible/roles/k8s/<app>/templates/` and
 `scripts/diagnostics/postflight.py`), so nothing but this guard notices one moving alone.
 
 Run: uv run pytest ansible/tests/k8s/test_arr_monitoring_routes_admit_postflight.py
@@ -104,7 +103,7 @@ def test_every_arr_route_admits_the_path_postflight_asks_for_is_clean():
 
 
 def test_a_path_the_route_does_not_admit_is_flagged():
-    """The rejecting half: this is the exact map postflight held before #1642."""
+    """The rejecting half: a map of paths no monitoring route's prefix covers."""
     before = {
         "sonarr": "/api/v3/system/status",
         "radarr": "/api/v3/system/status",
@@ -119,8 +118,7 @@ def test_every_arr_route_admits_the_nodes_own_host_traffic_is_clean():
     """The cni0 gateways, not the nodes' LAN addresses.
 
     Host traffic to the ingress VIP SNATs to the gateway, so a `k8s_node_client_ip`
-    (10.0.0.215) grant matches nothing — read off Traefik's access log on 2026-09-10, after a
-    first attempt at #1642 shipped that address and left the SKIP in place.
+    (10.0.0.215) grant matches nothing.
     """
     gateways = ALL_VARS["k3s_cni0_gateways"]
     assert not _cidr_mismatches(gateways), (
@@ -138,9 +136,9 @@ def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
     A host request to the ingress VIP arrives as the sending node's cni0 gateway only when the
     traefik pod is on that same node; from the other node it crosses the VXLAN overlay and
     arrives as the sending node's flannel.1 address. Traefik is pinned to daniel-box and
-    postflight runs on daniel-box, so 10.42.0.1 is what arrives today — but nothing ties that
+    postflight runs on daniel-box, so 10.42.0.1 is what arrives — but nothing ties that
     nodeSelector to these routes, and moving the pod would make postflight arrive as 10.42.0.0
-    and match no clause, returning §9.3 to the SKIP of #1642/#1675 (#1697).
+    and match no clause, returning §9.3 to the SKIP.
     """
     overlay = ALL_VARS["k3s_flannel_node_ips"]
     assert not _cidr_mismatches(overlay), (
@@ -150,12 +148,12 @@ def test_every_arr_route_admits_the_overlay_addresses_too_is_clean():
 
 
 def test_no_arr_route_grants_the_dead_bridge_address():
-    """`k8s_bridge_client_ip` reaches none of these routes, so none of them may grant it (#1683).
+    """`k8s_bridge_client_ip` reaches none of these routes, so none of them may grant it.
 
-    The macro prepends it to every monitoring route by default — a leftover from when
-    monitor-bridge was a Docker container on daniel-server. A request from a daniel-server shell
-    to `prowlarr.local.<domain>/api/v1/indexer` arrived at Traefik as `ClientHost: 10.42.1.0`
-    (its flannel.1 address) and got a 302, so 10.0.0.161 never reaches the route. The three *arr
+    The macro prepends it to every monitoring route by default. A request from a daniel-server
+    shell to `prowlarr.local.<domain>/api/v1/indexer` arrives at Traefik as
+    `ClientHost: 10.42.1.0` (its flannel.1 address) and gets a 302, so 10.0.0.161 never
+    reaches the route. The three *arr
     routes pass `include_bridge_ip=false`; this asserts the parameter is still doing that, which
     a rendered-match check is the only thing that can see.
     """
@@ -175,7 +173,7 @@ def test_a_cidr_no_route_admits_is_flagged():
 def test_the_app_route_itself_is_not_widened(app):
     """The widening is per monitoring route. The app's own route keeps its Authelia gate.
 
-    #1642's remediation is `extra_client_cidrs` on the narrow route, not a bypass on the wide
+    The remedy is `extra_client_cidrs` on the narrow route, not a bypass on the wide
     one — a rule added to the app's route would hand daniel-box every write endpoint the *arr
     API has behind no credential but the shared X-Api-Key.
     """
@@ -194,7 +192,7 @@ def test_the_app_route_itself_is_not_widened(app):
 # ── monitoring_route(include_bridge_ip=...) ─────────────────────────────────────────────────
 #
 # The parameter that lets a call site drop the macro's default `k8s_bridge_client_ip` grant
-# (#1683). With it false and no `extra_client_cidrs`, the match would render `&& ()` — a rule
+# With it false and no `extra_client_cidrs`, the match would render `&& ()` — a rule
 # Traefik rejects, and one that reads as "no client restriction" to anyone skimming the
 # template. The macro fails at render instead; these are the accept/reject pair for that.
 

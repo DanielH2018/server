@@ -4,9 +4,9 @@
 Homepage's widget proxies log the FULL request URL on every non-2xx response — `logger.error(
 "HTTP Error %d calling %s", status, url.toString())` in each `proxy.js`. A widget whose URL
 carries its credential as a query parameter therefore publishes that credential on the target's
-next outage, to the pod log, to Loki, and to any transcript that reads either. That is exactly
-how `jellyfin_api_key` leaked during the 2026-09-09 Jellyfin crash loop (#1499): the jellyfin
-widget's v1 mappings are `emby/Sessions?api_key={key}`, and the tile 404'd every refresh (#1457).
+next outage, to the pod log, to Loki, and to any transcript that reads either. Jellyfin's v1
+widget mappings are `emby/Sessions?api_key={key}`, which would leak `jellyfin_api_key` on every
+failed refresh.
 
 The rule this pins: a widget's credential goes in `key:`, which the proxy turns into a header,
 never into the `url:`. A re-added jellyfin widget must set `version: 2` for the same reason —

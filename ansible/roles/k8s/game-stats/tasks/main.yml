@@ -5,10 +5,9 @@
 # The scrape jobs live in observability's prometheus.yaml.j2 (job_name: terraria-stats and
 # valheim-stats).
 #
-# One role since #2813, where it had been three: one per game plus game-stats-lib for the
-# stats_lib.py both import. Every cluster object keeps the name it had as its own role — the
-# Deployments, their `app:` labels, the Services, the ConfigMaps and both claims — so the scrape
-# jobs and netpol-baseline's Loki policy read them unchanged.
+# Every cluster object is named for its game, not for this role — the Deployments, their
+# `app:` labels, the Services, the ConfigMaps and both claims — so the scrape jobs and
+# netpol-baseline's Loki policy read them by those names.
 #
 # ONE k8s/manifests include for both games, not one each. The include prunes every staged file
 # its caller does not name, so a second include under the same `manifests_service` would delete

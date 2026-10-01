@@ -1,13 +1,9 @@
 ---
-# Originally slice 0 of the k3s migration — see docs/archive/k3s-migration/slice-0-cluster-foundation.md.
-# This role installs the k3s SERVER (control plane) on daniel-box. daniel-server joined as an
-# agent in slice 7 (2026-08-14) via tasks/agent.yml, once its Docker workload had drained: k3s
-# ships its own containerd and flannel/kube-proxy iptables rules, and landing those alongside
-# Docker's DOCKER-USER chain and the wg-easy hairpin NAT was the risk the ordering avoided.
+# This role installs the k3s SERVER (control plane) on daniel-box. daniel-server joins as an
+# agent via tasks/agent.yml.
 #
-# Split into per-topic task files on 2026-08-15 (main.yml had reached 1058 lines).
-# These are import_tasks, not include_tasks: imports are static, so every task keeps
-# its own tags and --tags selection is unchanged.
+# The per-topic task files are import_tasks, not include_tasks: imports are static, so every
+# task keeps its own tags and --tags selection sees them.
 
 - name: Install the k3s server
   ansible.builtin.import_tasks: server.yml

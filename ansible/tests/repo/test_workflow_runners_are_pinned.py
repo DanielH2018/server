@@ -1,6 +1,6 @@
 """Every GitHub Actions job runs on a versioned runner image.
 
-`runs-on: ubuntu-latest` floated in every workflow until #2152. The `language: system` prek
+`runs-on: ubuntu-latest` floats. The `language: system` prek
 hooks run whatever shellcheck, Go and systemd-analyze the image preinstalls, and GitHub rolls
 the alias to a new release with no commit in this repo — so a hook could start failing, or
 start passing for a different reason, between two runs of the same SHA. A versioned label

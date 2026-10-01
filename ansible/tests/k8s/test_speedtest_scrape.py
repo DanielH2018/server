@@ -1,10 +1,10 @@
-"""Issue #996: the WAN speed test had a Kuma tile but no Prometheus series, so a
-degradation had no history. monitor-bridge's `speedtest` check reads the app's REST API
-directly and pushes a verdict to Kuma — a tile, not a series — and nothing scraped the
-app itself, so "is 78.8 Mbps a one-off or a week-long slide" was unanswerable.
+"""The WAN speed test needs a Prometheus series, not only a Kuma tile, so a degradation has
+history. monitor-bridge's `speedtest` check reads the app's REST API directly and pushes a
+verdict to Kuma — a tile, not a series — so only a scrape of the app itself answers "is
+78.8 Mbps a one-off or a week-long slide".
 
 speedtest-tracker natively exposes `/prometheus` with no config needed on its side, so the
-fix is a scrape job in observability's prometheus.yaml.j2, mirroring the terraria-stats and
+job is a scrape job in observability's prometheus.yaml.j2, mirroring the terraria-stats and
 valheim-stats jobs it sits beside. This guards that job's shape: present, at the right
 path, at the right target — the ways it could regress into a silently-empty or 404ing
 target without any renderer or test noticing.

@@ -79,10 +79,9 @@ def test_head_sha_ignores_an_inherited_git_dir(tmp_path, monkeypatch):
     """`cwd=` alone does not scope a git call — GIT_DIR beats it.
 
     This only reproduces inside a git hook, which exports GIT_DIR and GIT_WORK_TREE
-    pointing at the repo running the hook. The standalone test above passed while
-    head_sha() was reporting the real SHA for every path it was handed; the
-    pre-commit run is what caught it. Set explicitly here so it cannot regress
-    somewhere the hook does not run.
+    pointing at the repo running the hook. A standalone test passes while head_sha()
+    reports the real SHA for every path it is handed, so GIT_DIR is set explicitly here and
+    cannot regress somewhere the hook does not run.
     """
     monkeypatch.setenv("GIT_DIR", str(Path(__file__).resolve().parents[3] / ".git"))
     monkeypatch.setenv("GIT_WORK_TREE", str(Path(__file__).resolve().parents[3]))

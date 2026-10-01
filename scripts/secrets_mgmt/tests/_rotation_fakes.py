@@ -62,10 +62,10 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         if args[0] == "log":
             return log + "\n"
         # A named AssertionError carrying the argv, the shape every sibling fake raises
-        # (`_findings_fakes.py`, `_land_fakes.py`, `_deploy_fakes.py`). The blob lookup used
-        # to raise a bare `KeyError` naming the sha alone, so an unscripted VERB — a
-        # `git rev-parse` a future caller adds — read as "that sha is not in this history"
-        # rather than "this call was never scripted", and the argv never reached the report.
+        # (`_findings_fakes.py`, `_land_fakes.py`, `_deploy_fakes.py`). A bare `KeyError`
+        # naming the sha alone would make an unscripted VERB — a `git rev-parse` a future
+        # caller adds — read as "that sha is not in this history" rather than "this call was
+        # never scripted", and the argv would never reach the report.
         if args[0] != "show" or args[1].split(":", 1)[0] not in blobs:
             raise AssertionError(f"unscripted git call: {args}")
         return yaml.safe_dump(blobs[args[1].split(":", 1)[0]])
@@ -101,7 +101,7 @@ def build_tools(f: Fakes) -> tuple[RotationTools, list]:
         calls.append(("kuma_push", (url, ok, msg), {}))
 
     # `tier_days` is left at its default: every test wants the real table, and the default
-    # now IS a literal in `rotation_tools` rather than something resolved from elsewhere.
+    # is a literal in `rotation_tools`.
     return RotationTools(
         git=git,
         today=lambda: f.today,

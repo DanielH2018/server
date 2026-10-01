@@ -5,9 +5,8 @@ pod stays Ready, so `kube_deployment_status_replicas_unavailable` is 0; nothing 
 crash-loop arm is quiet; the series counts are unchanged, so the floors hold. Only
 `kube_deployment_status_replicas_updated` moves.
 
-This is the complement of the 2026-09-10 Authelia stall (#1783), not a second reading of it —
-kube-state-metrics has authelia at updated=1, available=0, unavailable=1 for that window, which
-the unavailable-replica arm sees.
+This is the complement of the unavailable-replica arm, not a second reading of it: a rollout
+showing updated=1, available=0, unavailable=1 is already seen by that arm.
 
 Every test here comes as an accept/reject pair, because the arm has two failure shapes that both
 read green: never firing (the query stops matching, e.g. kube-state-metrics renames a series) and

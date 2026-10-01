@@ -1,6 +1,6 @@
 """CI's pytest matrix must run every test file exactly once, in exactly one shard.
 
-`scripts/dev/pytest_shard.py` decides which test modules each matrix leg runs (#1270). Two
+`scripts/dev/pytest_shard.py` decides which test modules each matrix leg runs. Two
 failures here are silent from the passing side: a file assigned to no shard is never run, and
 CI still reports a green leg for every shard; a file assigned to two shards costs time and hides nothing,
 but says the split is not a partition and the first failure is a coin flip away.
@@ -10,16 +10,12 @@ as `--of`, so the split follows the matrix by construction — this guard pins t
 hardcoded `--of 4` beside a five-entry matrix would drop a fifth of the suite with no error to
 read anywhere.
 
-WHAT THIS MODULE NO LONGER CHECKS. It once carried two coverage arms over the recorded weights
-table — an unweighted-fraction count and an unweighted-file-beside-a-recorded-pole neighbour
-test. Both are gone (#2830). They asked whether a file was MISSING from the table, and the
-docs-refresh cron has filled those gaps automatically since #2274, so between them they forced
-39 hand-run `--record-missing` commits in the 30 days to 2026-09-28 and caught nothing the cron
-would not have. What survives them is `pytest_shard.py --check-durations`, run as a step of CI's
-own `pytest` job: it measures each module while running it, so it sees the heavy unweighted file
-in a quiet directory that no static arm could (#2238) and the stale recorded number that none of
-them ever asked about (#2514). This module keeps the partition properties, which are about
-correctness rather than balance.
+This module does not check whether a file is missing from the recorded weights table: the
+docs-refresh cron fills those gaps. Balance is checked by `pytest_shard.py --check-durations`,
+run as a step of CI's own `pytest` job. It measures each module while running it, so it sees a
+heavy unweighted file in a quiet directory and a stale recorded number, which a static check
+cannot. This module keeps the partition properties, which are about correctness rather than
+balance.
 
 Run: uv run pytest ansible/tests/repo/test_pytest_shards_partition_the_suite.py
 """
@@ -168,7 +164,7 @@ def test_the_workflow_measures_every_shard_and_checks_what_it_measured():
     which fails loudly -- or, worse, leaves the gate out of the job entirely with every leg
     still passing. It is a `run:` step rather than a pytest test because a test that went red on
     an unweighted file would fail the two crons that commit with hooks on, and neither can run
-    the repair (#2238, #1899).
+    the repair.
     """
     runs = [str(s.get("run", "")) for s in _pytest_job()["steps"]]
     suite = [r for r in runs if "-m pytest" in r]
@@ -190,7 +186,7 @@ def test_the_workflow_derives_the_shard_count_from_the_matrix():
     silently drops or double-runs part of the suite, and every leg still reports green."""
     steps = _pytest_job()["steps"]
     # By `--of`, not by the script name: the job invokes the same helper twice, once to select
-    # this shard's files and once for the measured coverage gate (`--check-durations`, #2238).
+    # this shard's files and once for the measured coverage gate (`--check-durations`).
     selects = [s for s in steps if "--of" in str(s.get("run", ""))]
     assert len(selects) == 1, (
         "expected exactly one step to pass --of to pytest_shard.py"

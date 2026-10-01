@@ -193,8 +193,8 @@ def test_ws_read_frame_decodes_extended_length():
 
 
 _TRACE_BLOCKED = {
-    # Real HA trace/get shape (confirmed against live daniel-server 2026-06-22):
-    # `trigger` is a plain string description, NOT a dict.
+    # Real HA trace/get shape (confirmed against live daniel-server): `trigger`
+    # is a plain string description, NOT a dict.
     "trigger": "state of binary_sensor.aqara_fp300_presence",
     "trace": {
         "trigger/0": [{"path": "trigger/0", "result": {}}],
@@ -334,11 +334,10 @@ def test_verify_entities_snapshot_path_exists():
 def test_verify_automations_path_exists():
     """The gate's source file must actually be readable.
 
-    This assertion is the whole point: AUTOMATIONS_YAML pointed at the pre-k3s
-    `roles/containers/home-assistant/` path from the slice-5 cutover until 2026-08-16, so
-    `probe.py ha verify-automations` raised FileNotFoundError every time it ran. The parse
-    test above passed throughout, because it never opens the file. Reading it here means a
-    future move of the role breaks a test instead of the post-deploy gate.
+    This assertion is the whole point: a stale AUTOMATIONS_YAML path would make `probe.py
+    ha verify-automations` raise FileNotFoundError every time it ran. The parse test above
+    passed throughout, because it never opens the file. Reading it here means a future
+    move of the role breaks a test instead of the post-deploy gate.
     """
     from diagnostics.probe_lib.ha import (
         AUTOMATIONS_DIR,

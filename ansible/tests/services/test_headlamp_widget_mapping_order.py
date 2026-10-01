@@ -14,10 +14,10 @@ three-figure count under DOWN would notice, and only if they knew the cluster wa
 
 Both halves come out of the RENDERED tile (`_homepage_config`), which is where the pod reads
 them: the query arrives urlencoded inside the widget's `url`, and the mappings are a list beside
-it. The previous form read the query from `defaults/main.yml` and regex-scanned
-`services.yaml.j2` for `- field:`/`label:` line pairs, so it compared the default against the
-template rather than the two values the pod is served — and a host_vars override of the query,
-or a mapping list reformatted, was invisible to it.
+it. Reading the query from `defaults/main.yml` and regex-scanning `services.yaml.j2` for
+`- field:`/`label:` line pairs would compare the default against the template rather than the
+two values the pod is served, so a host_vars override of the query, or a reformatted mapping
+list, would be invisible.
 
 This is the executable form of the `# DECIDED:` marker in services.yaml.j2, which accepts
 positional pairing so the tile matches every other widget on the dashboard.
@@ -78,7 +78,7 @@ def test_query_names_are_distinct():
     """`or` is set union over series signatures, so identical labels collapse the result.
 
     Bare `vector()` samples all carry the empty signature; without a distinguishing label the
-    union returns ONE series and the tile renders a single number. Measured 2026-08-23:
+    union returns ONE series and the tile renders a single number. Measured:
     dropping label_replace returned a `result` of length 1, not 4. Duplicate names would
     silently reintroduce exactly that collapse for the duplicated pair.
     """

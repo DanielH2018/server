@@ -14,8 +14,7 @@
    `image` is a PARAMETER, not a literal. `test_no_literal_image_lines_in_k8s_templates` fails a
    hardcoded image in a k8s template, and `test_every_k8s_role_image_is_renovate_tracked` needs
    the pin to sit in a role's own `defaults/main.yml` as an `_image:` key — a shared var in
-   group_vars is one directory short of the manager's file pattern and ages silently, which is
-   exactly how `crowdsec_k8s_image` escaped tracking.
+   group_vars is one directory short of the manager's file pattern and ages silently.
 
    Invoke at the container-list indent, e.g.:
 

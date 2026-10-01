@@ -4,7 +4,7 @@ The absence arms are the substance. A missing series means the nut scrape is dow
 battery is fine, so the check defers to the scrape-target monitor rather than paging twice —
 except when the scrape IS answering and the series is still absent, which is a real fault.
 
-Home Assistant was each arm's `max(A) or max(B)` fallback until #3105. These tests drive each arm
+These tests drive each arm
 by its configured query string and stay indifferent to what that string is. What they do pin is
 that the mains-loss arm exists, outranks the runway arms, and holds its own streak.
 """
@@ -114,8 +114,8 @@ def test_check_ups_healthy_is_up(monkeypatch, cfg):
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch, cfg):
     # Unqueryable up-gate (source_up None via the fake) -> all arms absent defers to Scrape
-    # Targets. on_battery=None with the rest: the on-battery arm is in the same census since
-    # #1630, so "all arms absent" means all FOUR.
+    # Targets. on_battery=None with the rest: the on-battery arm is in the same census, so
+    # "all arms absent" means all FOUR.
     _ups_scalars(cfg, monkeypatch, None, None, replace=None, on_battery=None)
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "no UPS data" in msg
@@ -136,14 +136,13 @@ def test_check_ups_all_absent_but_nut_scraping_pages(monkeypatch, cfg):
 
 
 def test_check_ups_all_absent_nut_scrape_down_still_defers(monkeypatch, cfg):
-    """A dead upsd and a dead exporter are the SAME shape now that one source answers every arm.
+    """A dead upsd and a dead exporter are the SAME shape: one source answers every arm.
 
     nut-exporter fails the whole /ups_metrics scrape when upsd is unreachable (its probes are
     tcpSocket for exactly that reason), so both outages read as all four arms absent with
     `up{job="nut"} == 0`. check_ups must DEFER — Scrape Targets and the nut pod's liveness probe
     own those between them, and paging here would double-page one of them with a misdirecting
-    "renamed?" message (the 2026-07-14 review M1 bug). The dedicated numeric-arms defer that used
-    to catch the upsd half existed only because the HA fallback split the absence in two (#3105).
+    "renamed?" message.
     """
     _ups_scalars(
         cfg, monkeypatch, None, None, replace=None, source_up=0.0, on_battery=None
@@ -163,14 +162,12 @@ def test_check_ups_replace_battery_pages(monkeypatch, cfg):
 
 
 def test_check_ups_numeric_arms_absent_while_replace_reports_pages(monkeypatch, cfg):
-    """The input the deleted NUT-numeric defer used to catch, and the one whose verdict flipped.
+    """charge and runtime absent while the replace arm reports: a selective shape.
 
-    charge and runtime absent while the replace arm reports was a upsd outage while the HA
-    fallback existed — HA dropped its numeric sensors and its replace-battery template floored
-    to 0 — so check_ups deferred. One source cannot produce that shape for an outage: nut-exporter
-    fails the whole /ups_metrics scrape, taking all four arms with it. What is left is a selective
-    rename or a `--nut.vars_enable` entry dropped from the exporter's arguments, and both must
-    page rather than leave the runway arms silently unmonitored.
+    One source cannot produce that shape for an outage: nut-exporter fails the whole
+    /ups_metrics scrape, taking all four arms with it. That leaves a selective rename or a
+    `--nut.vars_enable` entry dropped from the exporter's arguments, and both must page rather
+    than leave the runway arms silently unmonitored.
     """
     _ups_scalars(cfg, monkeypatch, None, None, replace=0.0)
     ok1, msg1 = checks.host_thermal.check_ups(cfg)
@@ -219,10 +216,11 @@ def test_check_ups_disabled_when_no_queries(monkeypatch, cfg):
     assert ok and "disabled" in msg
 
 
-# ── mains loss: the arm the direct NUT series made possible (issue #1548) ──
+# ── mains loss: the arm the direct NUT series made possible ──
 #
-# The reason the UPS alert path moved off Home Assistant. HA re-exports the same UPS, so with HA
-# primary the alert path went down with the workload the UPS most obviously protects. These are
+# The alert path reads the direct NUT series rather than Home Assistant: HA re-exports the same
+# UPS, so with HA primary the alert path would go down with the workload the UPS most obviously
+# protects. These are
 # accept/reject pairs like the thermal arms': one input the arm must flag, one it must not.
 
 
@@ -244,7 +242,7 @@ def test_the_on_battery_arm_says_nothing_when_the_series_is_absent():
 
 
 def test_check_ups_pages_on_sustained_mains_loss(monkeypatch, cfg):
-    """The Verify-by for #1548: the check goes red off network_ups_tools_ups_status{flag="OB"},
+    """The check goes red off network_ups_tools_ups_status{flag="OB"},
     with the runway arms reading perfectly healthy throughout — which is what they do for most
     of a real outage."""
     _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=1.0)
@@ -279,7 +277,7 @@ def test_restored_mains_clears_the_on_battery_streak(monkeypatch, cfg):
 
 
 def test_the_on_battery_series_going_missing_alone_pages(monkeypatch, cfg):
-    """The absence half of the arm: a rename of the OB series alone must not go quiet (#1630).
+    """The absence half of the arm: a rename of the OB series alone must not go quiet.
 
     The three runway arms report normally, so nothing else in the check has anything to say and
     the monitor would read green while mains-loss monitoring was off — the inert-check shape.

@@ -83,7 +83,7 @@ BORN_FENCED_ROLES = {
 LABEL = ("netpol-baseline", "enforced")
 
 # Slice 3: the observability namespace. Named per WORKLOAD, not per role — all six render
-# from the single observability role, which is why Task 1 made the guard workload-granular.
+# from the single observability role.
 SLICE_3_WORKLOADS = {
     ("observability", "grafana"),
     ("observability", "prometheus"),
@@ -120,7 +120,7 @@ SLICE_4_ROLES = {role for role, _name in SLICE_4_WORKLOADS}
 # fencing (test_every_pod_producing_doc_in_a_fenced_role_is_labelled below enforces that), so
 # these roles are labelled WHOLE — labelling scrutiny-collector alone would fail that test on
 # scrutiny-web and scrutiny-influxdb. Sub-workloads whose role name differs from the workload
-# name are exactly where the slice-4 review caught an omission, so they are all named here.
+# name are where an omission hides, so they are all named here.
 SLICE_45A_WORKLOADS = {
     ("karakeep", "karakeep"),
     ("karakeep", "karakeep-meilisearch"),
@@ -199,8 +199,7 @@ BESPOKE_POLICY_WORKLOADS = {
 # policy" — these are fenced by nothing, on purpose.
 #
 # Entries are used only as a subtrahend, so one that matches no rendered doc is a silent no-op —
-# it neither widens nor narrows the gate, it just rots. ("sonarr", "sonarr-isolation-probe") sat
-# here until 2026-08-23 naming a job deleted on 2026-08-17.
+# it neither widens nor narrows the gate, it just rots.
 UNFENCED_BY_DESIGN_WORKLOADS = {
     ("prowlarr", "flaresolverr-netpol-probe"),
     ("n8n", "n8n-netpol-probe"),
@@ -423,13 +422,13 @@ def test_no_workload_is_both_labelled_and_exempt() -> None:
 
 
 #
-# Slice 5 flipped both baselines to namespace scope, i.e. from opt-in to opt-out. Under opt-out the
+# Both baselines are namespace-scoped, i.e. opt-out. Under opt-out the
 # exempt set IS the boundary, so who carries the label stops being bookkeeping and becomes the
 # fence itself. Only `homelab` got a cluster-side reconcile; the observability baseline ran opt-out
 # with nothing checking who had opted out.
 #
 # Everything in this file is a TEMPLATE-side guard, and template-side guards are precisely what
-# stayed green through the ~16h slice-4.5 drift, because the drift was in the cluster. So this
+# stay green when the drift is in the cluster. So this
 # asserts the existence of the runtime gate rather than duplicating its logic.
 
 _ROLE = K8S_ROLES / "netpol-baseline"

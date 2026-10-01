@@ -1,7 +1,7 @@
-"""The two arms check_host_temp gained for issue #1471: undervoltage, and CPU thermal throttling.
+"""The two arms check_host_temp carries beyond the limit arms: undervoltage, and CPU thermal
+throttling.
 
-Both signals were plotted on Infrastructure/hardware-thermal.json (PR #1463) and alerted on by
-nothing. Every rule below is a PAIR — one input it must accept, one it must reject — because a
+Every rule below is a PAIR — one input it must accept, one it must reject — because a
 thermal arm's failure mode is silence, not a wrong number, and a rule that fires on nothing
 passes its accepting half exactly as a working rule does.
 
@@ -13,8 +13,7 @@ every other test here.
 
 Nothing here patches a first-party module. Both arms take their fetched vector and their
 source-gate answer as arguments, so a test hands them inputs directly; `check_host_temp` owns
-the two fetches. The cap in `ansible/tests/repo/test_module_length_ratchet.py` is what forced
-that shape, and the shape is better for it — the arms hold decisions and streak state only.
+the two fetches. That shape keeps the arms to decisions and streak state only.
 """
 
 import dataclasses
@@ -259,7 +258,7 @@ def test_check_host_temp_calls_both_arms_and_undervoltage_first():
 
 # ── the composer: ordering and propagation, with nothing patched ──────────────────────────────
 #
-# The gap issue #1547 named. The arms above have accept/reject pairs of their own, and the
+# The arms above have accept/reject pairs of their own, and the
 # structural test proves their call sites exist and are ordered — but neither can see a missing
 # `return`, because deleting one leaves the name in `co_names` and leaves the clean-path
 # integration tests in test_host_temp.py green (they drive only the path where every arm defers).
@@ -270,7 +269,7 @@ _CLEAN = "max 45.0C on daniel-box/k10temp; 19 sensor(s)"
 
 def test_an_asserted_undervoltage_alarm_reaches_the_monitor():
     """Delete `if undervoltage is not None and not undervoltage[0]: return undervoltage` and
-    this goes red. That is the deletion the old structural test could not see."""
+    this goes red. That is the deletion the structural test cannot see."""
     ok, msg = thermal_monitor_verdict(
         (False, "undervoltage alarm asserted on daniel-pi/in0"),
         None,

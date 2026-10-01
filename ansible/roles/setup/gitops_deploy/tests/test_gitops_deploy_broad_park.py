@@ -1,15 +1,13 @@
 """What a broad tick parks on, what it fast-forwards past instead, and what it says either way.
 
-Split out of test_gitops_deploy_main_branches.py, which is at its module-length cap. Every
-test here is one half of a pair: one input the branch must fire on and one it must stay silent
+Every test here is one half of a pair: one input the branch must fire on and one it must stay silent
 on — a guard that fired on every branch and one that fired on none read the same from the
 passing side alone.
 
-Two planes used to park identically: a bring-up playbook (`_BROAD_MANUAL_PREFIXES`) and a
-setup role `initial_setup.yml` does not include. Only the first still does. The second
-fast-forwards and records the role in the `manual_plane` marker, because parking held every
-other session's landing behind a role a hand was always going to apply — ten episodes over
-the seven days to 2026-09-11, the longest about forty minutes.
+Two planes differ in how the tick treats them. A bring-up playbook (`_BROAD_MANUAL_PREFIXES`)
+parks. A setup role `initial_setup.yml` does not include fast-forwards and is recorded in the
+`manual_plane` marker, because parking would hold every other session's landing behind a role
+a hand is always going to apply.
 
 Run: uv run pytest ansible/roles/setup/gitops_deploy/tests/test_gitops_deploy_broad_park.py
 """
@@ -45,8 +43,8 @@ def test_a_bring_up_playbook_parks_and_names_its_reason_on_every_tick(
 ):
     """The bring-up playbooks run by hand by construction, so the tick must not ff-merge.
 
-    The Discord page is throttled once per SHA. Before #1467 the journal was throttled with
-    it, so nine commits sat unmerged for twenty minutes with no per-tick line naming a reason.
+    The Discord page is throttled once per SHA. The journal is not throttled with it, so every
+    tick prints a line naming the reason.
     """
     tick.paths = [BRINGUP]
     assert gitops_deploy.main(tick.tools) == 0
@@ -76,11 +74,11 @@ def test_a_setup_path_belonging_to_no_role_still_parks(gitops_deploy, tick, caps
     assert gitops_deploy.STATE.manual_plane is None
 
 
-# ── the plane that now fast-forwards ───────────────────────────────────────────────────
+# ── the plane that fast-forwards ───────────────────────────────────────────────────
 def test_an_unapplyable_setup_role_fast_forwards_and_records_the_marker(
     gitops_deploy, tick, capsys
 ):
-    """The 2026-09-09 park, unparked: the range merges and the role is recorded instead."""
+    """The range merges and the role is recorded instead of parking."""
     tick.paths = [K3S_SETUP]
     assert gitops_deploy.main(tick.tools) == 0
     out = capsys.readouterr().out
@@ -118,10 +116,9 @@ def test_a_pending_role_is_named_on_every_later_tick(gitops_deploy, tick, capsys
     assert "ansible/k3s-bringup.yml --tags k3s" in out
 
 
-# ── #2307: the recorded role's own narrow tag, on every surface that quotes the deferral ───
-# The range that provoked this is `templates/readonly-rbac.yaml.j2`, which needed
-# `--tags kubeconfig` and was answered with `--tags k3s` — a command that restarts the control
-# plane.
+# ── the recorded role's own narrow tag, on every surface that quotes the deferral ───
+# A range that changes `templates/readonly-rbac.yaml.j2` needs `--tags kubeconfig`, not
+# `--tags k3s`, which restarts the control plane.
 RBAC = "ansible/roles/setup/k3s/templates/readonly-rbac.yaml.j2"
 
 
@@ -192,16 +189,16 @@ def test_a_role_pending_with_no_row_stays_at_the_role_tag(
 ):
     """A pending line nobody narrowed must not be narrowed by the NEXT range's answer.
 
-    The pre-upgrade deployer writes `manual_plane` with no sidecar row — and so does the tick
-    that merges #2307 itself. Whatever made that line pending is unknown here, so a second
+    A `manual_plane` line can exist with no sidecar row, as a deployer that predates the
+    sidecar writes it. Whatever made that line pending is unknown here, so a second
     range answering `kubeconfig` would print `--tags kubeconfig` and leave the first range's
     change unapplied behind a clear command. Unknown absorbs anything: the role tag.
 
-    The precondition is what separates this from the refusal path (#2363). The role tag
+    The precondition is what separates this from the refusal path. The role tag
     prints whether the derivation ANSWERED `kubeconfig` and was absorbed, or never answered at
     all: a raise, a non-zero exit and an empty answer all yield the same tag. So the test first
-    asks `narrow_tags_for` itself, on this tick's range, and needs `kubeconfig` back. A
-    derivation that refused every answer left this test green without it.
+    asks `narrow_tags_for` itself, on this tick's range, and needs `kubeconfig` back.
+    Without it, a derivation that refused every answer would leave this test green.
     """
     gitops_deploy.STATE.record_manual_plane(
         LOCAL, "ansible/k3s-bringup.yml", "k3s", 1000.0
@@ -264,8 +261,8 @@ def test_a_mixed_range_applies_the_deploy_plane_and_still_records_the_role(
 ):
     """A range carrying both halves: the applyable one is applied, the other is recorded.
 
-    Parking used to hold BOTH, so an inventory change sharing a push with a `roles/setup/k3s/`
-    change waited on the hand that would never come for it.
+    Parking the range would hold BOTH, so an inventory change sharing a push with a
+    `roles/setup/k3s/` change would wait on a hand that never comes for it.
     """
     tick.paths = [GROUP_VARS, K3S_SETUP]
     tick.narrow = (0, "sonarr")
@@ -292,10 +289,10 @@ def test_a_setup_role_the_deployer_can_apply_logs_no_park(gitops_deploy, tick, c
 def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
     """The range is MERGED before the apply, so the role is owed a hand either way.
 
-    Recorded after the apply, the failure path's early return skipped it: the tick held the
-    SHA, the k3s change sat fast-forwarded on disk with no marker, and once the operator
-    fixed forward and origin advanced past the hold, `local..origin` no longer carried that
-    commit — the broad arm would never see the role again.
+    Recording after the apply would let the failure path's early return skip it: the tick
+    holds the SHA, the k3s change sits fast-forwarded on disk with no marker, and once the
+    operator fixes forward and origin advances past the hold, `local..origin` no longer
+    carries that commit — the broad arm never sees the role again.
     """
     tick.paths = [GROUP_VARS, K3S_SETUP]
     tick.narrow = (0, "sonarr")
@@ -306,16 +303,16 @@ def test_a_failed_apply_still_records_the_role(gitops_deploy, tick):
     assert gitops_deploy.STATE.hold_sha == ORIGIN, "the failed apply is still held"
 
 
-# ── #2320: a rolled-back tick takes back exactly what it wrote, and no more ─────────────
+# ── a rolled-back tick takes back exactly what it wrote, and no more ─────────────
 
 
 def test_a_rolled_back_tick_leaves_an_earlier_ranges_tag_standing(gitops_deploy, tick):
     """The row this tick WIDENED goes back to what it was; the earlier range's tag survives.
 
-    `record` wrote the sidecar row for every role it was handed, including one an earlier
-    range had already made pending, while `unrecord` only took back the roles whose LINE it
-    appended. A rolled-back second range therefore left `coredns` in a row no merged tree
-    carried — and the whole-line reverse would have been worse, dropping the first range's
+    `record` writes the sidecar row for every role it is handed, including one an earlier
+    range already made pending, while `unrecord` takes back the roles whose LINE it
+    appended. `unrecord` therefore has to restore the row as it was: leaving `coredns` would
+    keep a tag no merged tree carries, and a whole-line reverse would drop the first range's
     line while its change is still merged.
     """
     config = gitops_deploy.tick_config()
@@ -376,7 +373,7 @@ def test_a_contended_tick_on_an_already_pending_role_keeps_the_earlier_row(
 def test_a_rolled_back_tick_restores_a_row_its_own_refusal_collapsed(
     gitops_deploy, tick
 ):
-    """The case that makes restore, not subtract, the reverse (#2320).
+    """The case that makes restore, not subtract, the reverse.
 
     The second range's derivation refuses, so the union collapses the row to the empty set
     — "the whole role". Nothing subtracted from an empty set recovers `kubeconfig`.
@@ -395,8 +392,8 @@ def test_a_rolled_back_tick_restores_a_row_its_own_refusal_collapsed(
 def test_a_rolled_back_tick_on_an_already_pending_role_pages_once(gitops_deploy, tick):
     """No line appended means nothing to take back from the dedupe page either.
 
-    The role stays pending through the rollback, so clearing the `broad` alert slot there re-paged
-    the same SHA on every contended tick. The rejecting half is
+    The role stays pending through the rollback, so clearing the `broad` alert slot there would
+    re-page the same SHA on every contended tick. The rejecting half is
     `test_a_rolled_back_tick_takes_its_own_line_and_row_with_it`, where the page does go.
     """
     config = gitops_deploy.tick_config()

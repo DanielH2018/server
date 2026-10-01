@@ -17,7 +17,7 @@ from validate.validate_lib import shell_lint as sl
 
 
 # The inputs `to_bool`'s tables name, the inputs `convert_bool.boolean` accepts and `to_bool`
-# does not (the #2074 rows), and the fallback and unhashable shapes outside both.
+# does not, and the fallback and unhashable shapes outside both.
 _BOOL_INPUTS = [
     True,
     False,
@@ -70,8 +70,8 @@ _BOOL_INPUTS = [
         # `to_bool` returns False for anything outside its tables rather than raising — the
         # branch that matters, since plain Jinja would call a non-empty string True.
         ("maybe", False),
-        # The rejecting half of #2074: `convert_bool.boolean` accepts these, the `bool` FILTER
-        # does not, and the shim mirrored the wrong one until then.
+        # The rejecting half: `convert_bool.boolean` accepts these, the `bool` FILTER does
+        # not, and the shim must mirror the filter.
         ("t", False),
         ("y", False),
         (2, False),
@@ -198,9 +198,8 @@ def test_discover_templates_excludes_vendored_collections():
 
 
 def test_bash_syntax_check_catches_unmatched_quote(tmp_path):
-    # The 2026-07-01 kopia bug class (ansible/roles/containers/archive/kopia/files/maintenance-check.sh):
-    # an apostrophe broke bash's own quote parsing inside a single-quoted block. Reproduce the
-    # shape here — a stray unmatched single quote — and confirm bash -n rejects it.
+    # The kopia bug class: an apostrophe breaks bash's own quote parsing inside a single-quoted block.
+    # Reproduce the shape here — a stray unmatched single quote — and confirm bash -n rejects it.
     broken = tmp_path / "broken.sh"
     broken.write_text("#!/bin/bash\necho 'it's broken'\n")
     err = sl.bash_syntax_check(broken)

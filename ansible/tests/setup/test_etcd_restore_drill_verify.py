@@ -1,12 +1,12 @@
-"""The etcd restore drill's verification thresholds, issue #1017.
+"""The etcd restore drill's verification thresholds.
 
 `scripts/backup/etcd_restore_drill.sh` restores a snapshot into a throwaway data-dir, brings up a
 scratch API server on it, and then asserts the object graph came back: >=3 namespaces, >=1
-Deployment, >=1 PVC. Nothing fed it a degraded snapshot and confirmed it refuses — the two
-existing tests cover adjacent things (this cron's wiring, and the monitor that reads its result
-stamp), neither drives the thresholds themselves. CLAUDE.md's rule bites hardest here: a restore
-drill is the check you find out about only when you need it, and three thresholds that fire on
-nothing would report a healthy drill against an empty snapshot.
+These tests feed it a degraded snapshot and confirm it refuses. The cron's wiring and the
+monitor that reads its result stamp are covered elsewhere; neither drives the thresholds
+themselves. CLAUDE.md's rule bites hardest here: a restore drill is the check you find out
+about only when you need it, and three thresholds that fire on nothing would report a healthy
+drill against an empty snapshot.
 
 The verification stage is pulled into its own function, `verify_restored_objects()`, specifically
 so it can be driven here without a real restore. Sourcing the script for that would otherwise run
@@ -77,7 +77,7 @@ def test_the_isolation_listeners_are_colocated_and_distinct():
     """Three flags, four listeners: the API server's internal port is https-listen-port + 1 and
     the API-server client LB is lb-server-port - 1. The supervisor must share the API server's
     port — split, k3s binds only the internal port and the kubeconfig points at nothing
-    ("connection refused"). 7443/7444/7445 and 7443/7445/7448 each failed one of these."""
+    ("connection refused")."""
     p = _ports()
     assert p["api"] == p["supervisor"], (
         "split ports leave the kubeconfig's port unbound"
@@ -96,8 +96,8 @@ def test_the_isolation_listeners_are_colocated_and_distinct():
 
 def test_the_restore_stage_hands_k3s_the_token_through_the_environment():
     """<data-dir>/server/token existing is only a pre-check: k3s takes the value from --token or
-    K3S_TOKEN and otherwise mints a random one and overwrites the file, which restored the
-    snapshot and then failed on "encrypted with different token" (guest run 2026-09-11)."""
+    K3S_TOKEN and otherwise mints a random one and overwrites the file, so the restore
+    succeeds and then fails on "encrypted with different token"."""
     script = _SCRIPT.read_text()
     export_at = script.index("export K3S_TOKEN")
     reset_at = script.index("--cluster-reset \\")
@@ -116,7 +116,7 @@ def test_a_healthy_restore_passes():
 
 
 def test_zero_namespaces_is_refused():
-    # REJECT: an empty snapshot restoring with no namespaces at all — the case the finding named.
+    # REJECT: an empty snapshot restoring with no namespaces at all.
     result = _run_verify(ns=0, deploys=12, pvcs=8)
     assert result.returncode == 1
     assert "VERIFY_OK" not in result.stdout

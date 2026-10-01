@@ -4,13 +4,9 @@ observability is the one k8s role that rolls its own workloads. It sets `manifes
 so the shared `k8s/manifests` role neither waits nor queues anything, and the role restarts and
 waits on six workloads of its own in a different namespace.
 
-Until 2026-08-22 it soaked them by importing `k8s/manifests`'s `assert_stable.yml`, which
-carried a second 60s `pause` on top of the play-level one in
-`post_tasks/k8s_stabilise_gate.yml`. Measured on a full deploy (pid 2004861) that pause was
-60.02s of the role's 69.0s — the second-most expensive task in a 20-minute run, spent
-duplicating a window the play already pays once. The role now snapshots restart counts itself
-and appends to `k8s_stabilise_watch`, so the play gate soaks these six alongside everything
-else.
+The role snapshots restart counts itself and appends to `k8s_stabilise_watch`, so the
+play-level gate in `post_tasks/k8s_stabilise_gate.yml` soaks these six alongside everything
+else, with no second soak of its own.
 
 Three things can silently break that, and none of them fails a deploy:
 
@@ -31,6 +27,7 @@ Three things can silently break that, and none of them fails a deploy:
 from _helpers import REPO as _REPO
 from _helpers import load_tasks, load_defaults
 from _helpers import command_of as _cmd
+from _helpers import render_expr
 
 
 _ROLE = _REPO / "ansible/roles/k8s/observability"
@@ -75,7 +72,7 @@ def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
     )
 
     # Deliberately not a count. The role spells the workloads out once today (the wait loop;
-    # the restart loop was pointed at observability_stabilise_workloads in #2858), and pointing
+    # the restart loop reads observability_stabilise_workloads), and pointing
     # the last one at the variable too is a correct consolidation — a test that pinned the
     # number would fail for that improvement. What must hold is that every literal copy still
     # standing agrees with the declared list.
@@ -135,8 +132,7 @@ def test_the_role_feeds_the_play_level_gate() -> None:
 
 
 def test_assert_stable_is_gone() -> None:
-    # It duplicated post_tasks/k8s_stabilise_gate.yml, pause and all. Re-adding it is how the
-    # 60s comes back.
+    # It would duplicate post_tasks/k8s_stabilise_gate.yml, pause and all.
     assert not (_MANIFESTS / "tasks" / "assert_stable.yml").exists(), (
         "roles/k8s/manifests/tasks/assert_stable.yml is back. It carries its own 60s pause on "
         "top of the play-level window; use post_tasks/k8s_stabilise_gate.yml instead."
@@ -150,3 +146,54 @@ def test_assert_stable_is_gone() -> None:
     assert not importers, (
         f"{[str(p) for p in importers]} import assert_stable, which no longer exists."
     )
+
+
+def _snapshot_when() -> list[str]:
+    """The `when:` of the restart-count snapshot — the task that feeds the gate."""
+    snapshot = next(task for task in load_tasks(_TASKS) if "restartCount" in _cmd(task))
+    when = snapshot["when"]
+    assert isinstance(when, list), when
+    return [str(condition) for condition in when]
+
+
+def _snapshot_runs(**over) -> bool:
+    """Evaluate the snapshot's `when:` the way Ansible does, against fake registers."""
+    ctx = dict(
+        k8s_no_mutate=False,
+        manifests_render={"changed": True},
+        manifests_secret_render={"changed": False},
+        manifests_apply={
+            "changed": True,
+            "stdout": "deployment.apps/grafana configured",
+        },
+    )
+    ctx.update(over)
+    return all(
+        bool(render_expr("{{ " + condition + " }}", **ctx))
+        for condition in _snapshot_when()
+    )
+
+
+def test_an_inert_manifest_edit_hands_nothing_to_the_stabilisation_gate() -> None:
+    """A YAML-comment or whitespace edit moves rendered bytes and no live object.
+
+    The apply prints every object `unchanged`, so no `checksum/config` annotation moved and
+    nothing restarted — snapshotting anyway appended all six workloads to `k8s_stabilise_watch`
+    and bought the play gate's pause plus twelve kubectl reads for a deploy in which no pod
+    moved (#3133, the same shape as #3125 in `k8s/manifests`). Evaluated rather than
+    string-matched: `manifests_render is changed` is a substring of the conjunction that fixes
+    this, so a textual assert would stay green either way.
+    """
+    inert = {"changed": False, "stdout": "deployment.apps/grafana unchanged"}
+
+    assert _snapshot_runs(manifests_apply=inert) is False
+    # RED-proof on the other side: the same render with an apply that moved a live object.
+    assert _snapshot_runs() is True
+    # A Secret edit still buys the soak — it restarts prometheus and grafana out of band, and
+    # verify_secret_keys can patch a key after an apply that printed `unchanged`.
+    assert (
+        _snapshot_runs(manifests_apply=inert, manifests_secret_render={"changed": True})
+        is True
+    )
+    # A dry run reads nothing live, so it hands the gate nothing whatever changed.
+    assert _snapshot_runs(k8s_no_mutate=True) is False

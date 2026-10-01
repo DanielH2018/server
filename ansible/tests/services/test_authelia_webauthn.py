@@ -6,7 +6,7 @@ Two invariants, and neither is visible from a green deploy:
   second factor. Turning it on changes what `one_factor` means for every rule in
   `access_control` — a route this portal guards at one factor becomes reachable with a
   credential the operator enrolled as a *second* one — rather than adding a choice at the
-  second-factor step, which is all #1502 asked for.
+  second-factor step.
 - **Every key under `webauthn` is one Authelia 4.39.21 declares.** Authelia refuses to start
   on a key it does not recognise, and the pinned version's schema is narrower than the latest
   docs: `metadata`, `filtering.prohibit_backup_eligibility` and the experimental passkey

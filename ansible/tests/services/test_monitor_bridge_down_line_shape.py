@@ -3,10 +3,9 @@
 
 The join is a FORMAT, and each side is edited by someone who cannot see the other. `check.py`
 logs `bridge.common.log("DOWN", name, "-", msg)`; `probe.py alerts` reconstructs episodes by
-regex over those lines. When bec8990a dropped the bracketed stamp `log()` used to print — the
-container's Chicago wall clock wearing an ISO face, beside the runtime's own true stamp — the
-reader still required it, and every monitor-bridge episode stopped being reconstructed. That
-failure prints "no DOWN alerts", so it reads as a healthy fleet rather than as an error (#1782).
+regex over those lines. A reader that requires a stamp `log()` does not print stops
+reconstructing every monitor-bridge episode. That failure prints "no DOWN alerts", so it reads
+as a healthy fleet rather than as an error.
 
 The sibling guard for the other stream is ansible/tests/setup/test_pi_health_log_line_shape.py.
 Nothing here matches on source text: it runs the real `log()` and feeds its output to the real

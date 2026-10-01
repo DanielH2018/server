@@ -3,7 +3,6 @@
 `nut_monitor_password` is the `upsmon` primary login. It can raise FSD, which powers off every
 armed node. The in-cluster nut role's own upsmon and the hosts' secondaries (`nut_host`) need
 it. Anything that only reads the UPS takes the read-only `nut_ha_password` login instead.
-PeaNUT, a dashboard, rendered the primary login into its Secret until 2026-09-28.
 
 Run: uv run pytest ansible/tests/services/test_nut_fsd_login_confined.py
 """

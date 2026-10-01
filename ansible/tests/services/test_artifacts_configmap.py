@@ -1,17 +1,16 @@
 """Guards on the artifacts ConfigMap, which carries an embedded Python program.
 
 validate/k8s_manifests.py asserts every manifest parses as YAML. That is not enough for this
-one, and the gap put a crash-looping pod in the cluster: an indented Jinja comment between two
-keys pushed the second key inside the first's `|` block scalar, so the rendered ConfigMap held
-ONE key whose value was the script with `known_services.json: |` appended to it. That parses as
-valid YAML — there is nothing malformed about it — and the pod died on
-`SyntaxError: invalid syntax` instead.
+one: an indented Jinja comment between two keys pushes the second key inside the first's `|`
+block scalar, so the rendered ConfigMap holds ONE key whose value is the script with
+`known_services.json: |` appended to it. That parses as valid YAML — there is nothing malformed
+about it — and the pod dies on `SyntaxError: invalid syntax` instead.
 
 So these assert on content: that every key survives the render, and that each embedded module
 is still a parseable Python program. A YAML-only check cannot see either failure.
 
 The keys come from `artifacts_modules` in the role's defaults rather than one `lookup('file')`
-per module written out by hand, which is what caused both crash-loops. That list is compared
+per module written out by hand, which can drift from the files. That list is compared
 against the files on disk here, in both directions.
 
 Run: uv run pytest ansible/tests/services/test_artifacts_configmap.py

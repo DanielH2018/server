@@ -1,10 +1,9 @@
 """The unattended crons that commit must publish through a PR, and must say why they failed.
 
-Both properties were learned on 2026-08-25. docs-refresh.sh and secret-rotate.sh each ended
-in a direct write to the default branch, which a repository ruleset rejects outright
-("Required status check ... is expected"), so neither had ever published. And both sent the
-failure to /dev/null, so the alert said it failed and nothing said why -- the cause stayed
-invisible until the rejected command was run by hand.
+A repository ruleset rejects a direct write to the default branch ("Required status check ...
+is expected"), so docs-refresh.sh and secret-rotate.sh must publish through a PR. A failure
+sent to /dev/null leaves an alert that says it failed and nothing that says why, so the cause
+stays invisible until the rejected command is run by hand.
 
 secret-rotate is the more consequential of the two: it changes a live credential and
 redeploys its consumer BEFORE publishing, so an unpublished rotation leaves the running value
@@ -54,7 +53,7 @@ def read(path: Path) -> str:
 def code_lines(path: Path) -> list[str]:
     """Shell lines only.
 
-    Both headers document the old direct write at length, and a comment quoting `git push` must not
+    Both headers document the direct write at length, and a comment quoting `git push` must not
     be mistaken for one.
     """
     return [
@@ -100,7 +99,7 @@ def test_nothing_is_written_to_the_default_branch(path, commit_marker):
 
 @pytest.mark.parametrize(("path", "commit_marker"), SCRIPTS)
 def test_failure_paths_keep_their_error_text(path, commit_marker):
-    """A failure whose reason goes to /dev/null cost a day of diagnosis.
+    """A failure whose reason goes to /dev/null leaves nothing to diagnose from.
 
     The commit's output goes to the log file the alert reads; the publisher's one-line message
     is captured, stderr included, and alerted verbatim.
@@ -130,7 +129,7 @@ def test_the_regressed_suffix_strip_matches_what_the_publisher_prints():
     producer's wording, but nothing pinned the two sides to each other -- change the message
     there and this template silently keeps stripping the stale suffix, so the REGRESSED alert
     reads "PR opened for X with auto-merge; one or more eval cases REGRESSED", wrong and not
-    obviously wrong (issue #1086).
+    obviously wrong.
     """
     # Anchored on PUBLISH_PUBLISHED specifically: "PR opened for {branch}" is also the prefix of
     # the auto-merge-failed message earlier in the same function, and an unanchored search
@@ -158,7 +157,7 @@ def test_secret_rotate_refuses_to_stack_an_unlanded_rotation():
     The gate is the REMOTE BRANCH, not an open PR. `gh pr create` runs after `git push`, so a
     create failure leaves the branch on origin with no PR at all — and the publish block's
     `git reset --hard HEAD~1` then erases every local trace. An open-PR check passes cleanly
-    in exactly the state that most needs to refuse (2026-08-25 review H-1).
+    in exactly the state that most needs to refuse.
     """
     text = read(SECRET_ROTATE)
     assert "git ls-remote --heads origin" in text, (
@@ -232,10 +231,8 @@ def test_the_audit_watches_for_an_unlanded_rotation_branch():
 # All four scripts run under `set -uo pipefail`, so reading an unset variable aborts the script
 # at that line. That is normally the right behaviour, but it is invisible to every check the
 # repo has: the templates render, ansible-lint passes, and the abort only happens on the branch
-# that reads the variable -- which for docs-refresh was the branch that reports a DEGRADED run,
-# so a healthy run never touched it. The port to publish_pr.py deleted `BRANCH=` and left the
-# `$BRANCH` read at docs-refresh.sh.j2:237 behind, and it stayed there through review, CI and a
-# deploy (issue #1060).
+# that reads the variable -- for example the branch that reports a DEGRADED run, which a
+# healthy run never touches.
 #
 # A read is satisfied when the same template assigns it, when kuma-push-lib.sh does (every one
 # of these sources it), or when it is in _CRON_ENV below. Forms that survive `set -u` --
@@ -350,7 +347,7 @@ def test_the_read_census_still_finds_the_variables_it_is_built_on(path, expected
 
 
 def test_a_read_with_no_assignment_is_flagged():
-    """The rejecting half. This is docs-refresh.sh.j2:237 before the fix, minimised."""
+    """The rejecting half: a read of a variable whose assignment was deleted, minimised."""
     template = 'PUSH_MSG="PR opened for $BRANCH"\n'
     assert unsatisfied_reads(template) == {"BRANCH"}
 
@@ -393,10 +390,9 @@ def test_the_cron_env_allowlist_is_still_exported():
 # which hides a real outage. kuma-push-lib.sh:26-30 states the threat model; the fix is to feed
 # the token-bearing URL to curl on stdin as a config file (`-K -`) instead of as an argument.
 #
-# WHY THE CORPUS IS DERIVED, NOT LISTED. The predecessor of these tests iterated
-# `(SECRET_ROTATE, ROTATION_AUDIT)` -- exactly the two files its own PR fixed -- so it read green
-# while six other templates leaked. That is the estate's most durable failure mode (a guard
-# written alongside its fix inherits the fix's scope) at run 5. Two consequences:
+# WHY THE CORPUS IS DERIVED, NOT LISTED. A guard that iterates only the files its own fix
+# touched inherits the fix's scope and reads green while other templates leak. Two
+# consequences:
 #
 #   * the corpus is every non-archive `*.j2` under ansible/ that mentions a push URL, in ANY
 #     extension. Keying it on `*.sh.j2` would have missed renovate-notify.service.j2, which is a
@@ -480,9 +476,9 @@ def push_corpus() -> list[Path]:
 def _logical_lines(text: str) -> list[str]:
     r"""Shell lines with backslash continuations joined, comments dropped.
 
-    The join is the whole point. In fake-remux-health.sh.j2 the `curl` sat on one physical line
-    and the token-bearing URL five lines below it, so a line-local predicate matched neither --
-    the naive widening of this guard would have landed green and inert (2026-08-27 review H-2).
+    The join is the whole point. In fake-remux-health.sh.j2 the `curl` sits on one physical line
+    and the token-bearing URL five lines below it, so a line-local predicate matches neither --
+    the naive widening of this guard would land green and inert.
     """
     joined = re.sub(r"\\\n\s*", " ", text)
     return [
@@ -569,9 +565,7 @@ def test_the_library_exemptions_still_name_live_files():
 
 
 def test_the_push_corpus_never_shrinks():
-    """The point of the whole rewrite.
-
-    A guard whose corpus quietly narrows is worse than no guard, because it reads green while the
+    """A guard whose corpus quietly narrows is worse than no guard, because it reads green while the
     class it covers spreads.
     """
     found = {str(path.relative_to(REPO)) for path in push_corpus()}
@@ -591,9 +585,7 @@ def test_the_push_corpus_never_shrinks():
 def test_the_audit_watches_the_gh_token_both_crons_depend_on():
     """Both publishing crons authenticate with one `gh` OAuth token that is not in
     secrets.yml and not in the rotation registry, so nothing watched it. Revoked, they both
-    keep running, both fail at `gh pr create`, and both stop publishing silently
-    (2026-08-25 review M-6).
-    """
+    keep running, both fail at `gh pr create`, and both stop publishing silently."""
     text = ROTATION_AUDIT.read_text()
     assert "gh auth status" in text, (
         "nothing checks the credential secret-rotate and docs-refresh publish with"
@@ -612,8 +604,8 @@ def test_the_audit_grace_is_shorter_than_the_gap_to_the_first_audit():
     """The grace period must not swallow the first audit after a failed publish.
 
     rotate is Sunday 09:00 and the audit is daily 08:00 (crons.yml), so that first audit is
-    23h later. A 24h grace let it push UP -- green on the operator's Monday morning, with the
-    sticky DOWN not appearing until Tuesday. That is M-1 narrowed to a day, not closed.
+    23h later. A 24h grace would let it push UP -- green on the operator's Monday morning, with
+    the sticky DOWN not appearing until Tuesday.
     """
     crons = (TEMPLATES.parent / "tasks/crons.yml").read_text()
     assert (
@@ -649,7 +641,7 @@ def test_the_audit_branch_arm_is_additive_not_a_short_circuit():
 
 def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
     """A revoked `gh` token is what makes `gh pr create` fail and strand the branch, so the
-    two faults are causally linked and the compound case is the one H-1 exists for. Gating the
+    two faults are causally linked and the compound case is the one that matters. Gating the
     branch arm on the token arm reports the cause and hides the consequence -- a live rotated
     credential, unpublished on origin.
 
@@ -663,8 +655,8 @@ def test_the_two_audit_arms_accumulate_rather_than_suppress_each_other():
     branch_arm = text.split("# Runs even when the arm above fired", 1)
     assert len(branch_arm) == 2, "the stray-branch arm lost its ordering comment"
     # "; then", not "then": the prose above the arm contains "au-then-ticates", and splitting
-    # on the bare word truncated ahead of the condition -- the guard passed on the mutation it
-    # exists to catch.
+    # on the bare word truncates ahead of the condition, so the guard would pass on the mutation
+    # it exists to catch.
     condition = branch_arm[1].split("; then", 1)[0]
     assert "EXTRA_DOWN" not in condition, (
         "the stray-branch arm is gated on the gh-token arm, so a revoked token silences the "

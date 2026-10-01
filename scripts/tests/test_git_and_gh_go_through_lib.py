@@ -3,10 +3,10 @@
 `lib.git.git` strips every `GIT_*` variable so `cwd` alone decides which repository a call
 reads; `lib.gh.gh` disables the prompt and the update notifier so a cron cannot hang on
 either. A raw `subprocess.run(["git", ...])` beside them has neither property, and the
-repo re-grew fourteen of them after the helpers existed (issue #2136). This refuses the
+repo re-grew fourteen of them after the helpers existed. This refuses the
 next one.
 
-Scope is the two directories the issue migrated. `ansible/roles/*/files/*.py` stays raw on
+Scope is `scripts/deploy_tools` and `scripts/dev`. `ansible/roles/*/files/*.py` stays raw on
 purpose: those deploy to hosts without `scripts/lib`.
 
 Run: uv run pytest scripts/tests/test_git_and_gh_go_through_lib.py
@@ -18,8 +18,8 @@ from pathlib import Path
 _SCRIPTS = Path(__file__).resolve().parents[1]
 _DIRS = (_SCRIPTS / "deploy_tools", _SCRIPTS / "dev")
 _ROUTED = frozenset({"git", "gh", "kubectl"})
-# Modules the census must contain: each carried a raw call before the migration, so an
-# empty or partial scan means the walk stopped matching, not that the tree is clean.
+# Modules the census must contain, so an empty or partial scan means the walk stopped
+# matching, not that the tree is clean.
 KNOWN_MEMBERS = frozenset(
     {
         "dev/prune_worktrees.py",

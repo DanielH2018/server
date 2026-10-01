@@ -3,19 +3,14 @@
 The repo has no `__init__.py` files, so every `*.py` sitting directly in a `pythonpath` root
 is a BARE-importable top-level module. Two roots holding the same name means `import <name>`
 resolves to whichever root `sys.path` reaches first, and nothing in the tree says which that
-is. PR #1149 landed `ansible/roles/k8s/monitor-bridge/files/registry.py` next to the existing
-`scripts/lib/registry.py` (issue #1200): monitor-bridge's `cli.py` and its eight test modules
-import it bare, while every consumer of the `scripts/` one spells it `lib.registry`, so the
-clash resolved correctly by accident of ordering rather than by construction. The `scripts/`
-module is now `lib/cli_registry.py`, and this test is what stops the next pair landing.
+is. A clash resolves correctly by accident of ordering rather than by construction, and this
+test stops a pair landing.
 
 The census is the `pythonpath` roots PLUS every role's `files/` directory. A role test reaches
 its own `files/` through a `sys.path.insert` at collection time, not through `pythonpath`, and
-every such insert lands in the one pytest session a full run shares. Issue #2608 was that gap:
-`homelab-mcp` and `ical-proxy` both shipped `files/app.py`, and whichever test module collected
-last owned the bare `import app` for the whole session. `uv run pytest ansible scripts` failed
-the six homelab-mcp `cert_expiry` tests reading attributes off ical-proxy's Flask app, while
-either role run alone passed. ical-proxy's module is now `ical_proxy.py`.
+every such insert lands in the one pytest session a full run shares. Two roles that both ship
+`files/app.py` collide: whichever test module collected last owns the bare `import app` for the
+whole session, so a full run fails where either role run alone passes.
 
 Scope is deliberately TOP-LEVEL ONLY. A module in a subdirectory of a root is reached as
 `package.module`, so it cannot shadow anything; that is why this is a sibling of
@@ -45,7 +40,7 @@ from _helpers import REPO
 # pytest imports a conftest under its own key, so several never shadow one another.
 # `gitops_markers.py` is ONE module at five roots by construction: the deployer's `files/`
 # copy is the source and `scripts/dev/gen_gitops_markers.py` writes the other four verbatim,
-# because the trees that read the deployer's markers cannot import its `files/` (issue #2063).
+# because the trees that read the deployer's markers cannot import its `files/`.
 # `ansible/tests/deploy/test_gitops_markers_copies.py` fails the moment a copy differs, so
 # which root `sys.path` reaches first cannot change what an import gets.
 EXEMPT = frozenset({"conftest.py", "gitops_markers.py"})

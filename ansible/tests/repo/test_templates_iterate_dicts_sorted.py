@@ -7,7 +7,7 @@ The manifests role restarts every workload a render change could belong to
 (`roles/k8s/manifests/CLAUDE.md`, "The restart is skipped for a workload the apply itself
 rolled"), and image-builder's byte-identical gate rebuilds the image. `| dictsort` renders
 the same dict the same way whatever order it was written in; `release_stamp.yml`'s
-`dictsort | to_json | hash('sha256')` is the in-tree pattern (#2157).
+`dictsort | to_json | hash('sha256')` is the in-tree pattern.
 
 Every tracked `.j2` is scanned, not only `roles/k8s/**/templates/`: a `templates/config/` file
 is embedded in a ConfigMap through `lookup('template')`, so its key order is manifest bytes
@@ -15,7 +15,7 @@ too, and a setup or Pi template carries the same hazard into a file diff.
 
 `dictsort` compares keys case-insensitively by default, and two keys equal under that
 comparison keep insertion order — the nondeterminism this guard exists to close. A dict
-whose keys differ only by case needs `dictsort(true)`; none in the tree does today.
+whose keys differ only by case needs `dictsort(true)`; none in the tree does.
 
 Run: uv run pytest ansible/tests/repo/test_templates_iterate_dicts_sorted.py
 """

@@ -1,11 +1,10 @@
 """radarr and sonarr render their Deployment from one shared macro, not from two copies.
 
 `ansible/templates/arr-deployment.yml.j2` carries the body both roles share — one library
-manager, one exportarr sidecar, a config PVC at /config and the media tree at /data. Until
-#2871 the two templates were 94 lines each and differed on 22 of them, every one of those 22
-either a name derived from the app or a value the role holds in `defaults/main.yml`. Two copies
-of a 94-line body is where a field drifts: the pod that gets the next probe tuning is whichever
-one the author had open.
+manager, one exportarr sidecar, a config PVC at /config and the media tree at /data. Every
+difference between the two roles is either a name derived from the app or a value the role
+holds in `defaults/main.yml`. Two copies of that body is where a field drifts: the pod that
+gets the next probe tuning is whichever one the author had open.
 
 The guard is textual, and has two halves per caller, because a macro cannot force its own call:
 

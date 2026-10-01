@@ -1,13 +1,11 @@
 ---
 # Removes everything the retired staging cluster left on this host: the `daniel-stage` guest
-# and its disk, and the staging gate's checkout, lock, dispatcher and runner (#2941, decided
-# 2026-09-29). Runs on every apply of this role and is a no-op once the host has converged.
+# and its disk, and the staging gate's checkout, lock, dispatcher and runner. Runs on every apply of this role and is a no-op once the host has converged.
 #
 # It lives here rather than in teardown.yml because teardown.yml runs only when
 # has_hypervisor goes false, and that flag stays TRUE on daniel-server for the monthly etcd
-# restore drill. Deleting guest.yml alone would leave the guest running as an orphan Ansible
-# no longer manages — the docker_install failure tasks/main.yml documents. See the
-# hypervisor_retired_staging_vm_* block in defaults/main.yml.
+# restore drill. Without this reap the guest would keep running as an orphan Ansible no longer
+# manages. See the hypervisor_retired_staging_vm_* block in defaults/main.yml.
 
 - name: Check whether the retired staging guest is still defined
   tags: [hypervisor]
@@ -17,7 +15,7 @@
   changed_when: false
   failed_when: false
   # A read of libvirt's own state, so it runs under --check too: skipped, it leaves no rc or
-  # stdout and every decision below errors on the attribute instead of skipping (#2323).
+  # stdout and every decision below errors on the attribute instead of skipping.
   check_mode: false
   become: true
 
@@ -76,10 +74,9 @@
   # `command`, not ansible.builtin.git: that module clones, checks out and pulls, and has no
   # mode that REPORTS working-tree status. There is nothing to switch to here.
   #
-  # `--ignore-submodules=all` for the same reason the gate itself carried it (#2777): the gate
-  # fast-forwarded this tree, `git merge --ff-only` never moves a submodule's working tree, so
-  # every commit that bumped the `Email-to-RSS` gitlink left a ` M Email-to-RSS` line here that
-  # no one wrote. Without the flag the refusal below reads that as someone's uncommitted work
+  # `--ignore-submodules=all`: `git merge --ff-only` never moves a submodule's working tree, so
+  # every commit that bumped the `Email-to-RSS` gitlink leaves a ` M Email-to-RSS` line here
+  # that no one wrote. Without the flag the refusal below reads that as someone's uncommitted work
   # and blocks the reap on a tree that holds none.
   when: hypervisor_reap_gate_repo.stat.exists
   ansible.builtin.command:
@@ -89,7 +86,7 @@
   changed_when: false
   failed_when: false
   # A read, and the refusal below judges a one-way door on its output — a dry run that cannot
-  # evaluate it proves nothing about whether the reap would stop (#2353).
+  # evaluate it proves nothing about whether the reap would stop.
   check_mode: false
   become: true
   become_user: "{{ sys_user }}"
@@ -113,7 +110,7 @@
 
 - name: Remove what the retired staging gate left on this host
   tags: [hypervisor]
-  # The dispatcher goes with the rest rather than first: its key's public half moved to
+  # The dispatcher goes with the rest rather than first: its key's public half lives in
   # files/staging-gate-retired/, so install.yml has already withdrawn the authorization by the
   # time this runs. The window where a key is authorized but its forced command is missing
   # therefore never exists.

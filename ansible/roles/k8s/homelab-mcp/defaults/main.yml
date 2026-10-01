@@ -1,7 +1,6 @@
 ---
 # Built in-cluster by k8s/image-builder (same rolling tier as n8n/code-server:
-# imagePullPolicy Always + build-on-deploy replaces the Docker role's Sunday
-# rebuild cron for base refreshes).
+# imagePullPolicy Always + build-on-deploy refreshes the base image).
 homelab_mcp_k8s_image: "{{ k8s_registry_pull_host }}/homelab-mcp:{{ k8s_built_image_tags.get('homelab-mcp', 'latest') }}"
 
 # Auto-deploy stance — read by gitops_deploy (see the k8s auto-deploy coverage design).

@@ -1,7 +1,6 @@
 ---
 # Longhorn install, StorageClasses, and the recurring-job group reconciliation
 # that moves a bound volume between the daily / weekly / no-backup tiers.
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 
 - name: Install Longhorn prerequisites
   tags: [longhorn]
@@ -18,8 +17,8 @@
   tags: [longhorn]
   # The Longhorn KB's multipath fix (troubleshooting-volume-with-multipath): multipathd
   # claims freshly attached /dev/longhorn devices and every mount fails "already in use".
-  # Latent behind the node CR's standing Multipathd:False warning until the 2026-08-14
-  # drain gate's mass reattach cycle stalled ten workloads on it at once.
+  # Latent behind the node CR's standing Multipathd:False warning until a mass reattach
+  # cycle stalls many workloads on it at once.
   ansible.builtin.blockinfile:
     path: /etc/multipath.conf
     create: true
@@ -57,7 +56,7 @@
 
 - name: Give longhorn-manager a memory request so it leaves BestEffort
   tags: [longhorn]
-  # #1243: upstream ships longhorn-manager with resources: {}, which is BestEffort QoS and
+  # Upstream ships longhorn-manager with resources: {}, which is BestEffort QoS and
   # oom_score_adj 1000 — the kernel's first pick under memory pressure. A request alone (no
   # limit) moves it to Burstable without adding a new OOM-by-limit kill path. See the
   # k3s_longhorn_manager_memory_request comment in defaults/main.yml for the measured RSS this
@@ -108,7 +107,7 @@
   tags: [longhorn]
   # Same fix as longhorn-manager above, for the four csi-* Deployments — csi-attacher,
   # csi-provisioner, csi-resizer, csi-snapshotter — which upstream also ships at resources: {}.
-  # Measured during the #1243 incident: those four restarted 13/14/-/7 times while the
+  # Measured under memory pressure: those four restarted 13/14/-/7 times while the
   # Burstable instance-manager restarted zero. Unlike longhorn-manager, none of the four is IN
   # deploy/longhorn.yaml — longhorn-driver-deployer creates them at runtime once it starts,
   # the same asynchronous-appearance race `k3s_join_longhorn_sched` rides out above with
@@ -137,7 +136,7 @@
   # Skipped under `--check`, not opted out of it. This task PATCHES four Deployments, so
   # `check_mode: false` would have a dry run write to the cluster — the one thing `--check`
   # promises it will not do. Left unguarded it fails instead: check mode skips `command`, the
-  # skip result carries no `rc`, and the `until` above then burns all 12 retries. #2305.
+  # skip result carries no `rc`, and the `until` above then burns all 12 retries.
   when: not ansible_check_mode
 
 - name: Set the default Longhorn replica count
@@ -192,8 +191,8 @@
 - name: Set the Longhorn backup-store poll interval
   tags: [longhorn, longhorn_backup]
   # Rate-limits the only recurring B2 caller in the cluster. See the variable's comment in
-  # defaults/main.yml — at upstream's 300s this exhausted Backblaze's Class C transaction
-  # allowance and took every backup tier down for 13h.
+  # defaults/main.yml — at upstream's 300s this exhausts Backblaze's Class C transaction
+  # allowance and takes every backup tier down.
   #
   # Lives on the BackupTarget CR, not in settings: v1.8.0 moved backup-target config out of
   # the global settings and onto backuptargets.longhorn.io as part of supporting more than
@@ -310,9 +309,8 @@
   # once live and desired agree, which is what makes this pair idempotent rather than a
   # delete/recreate every run.
   #
-  # Compares the WHOLE parameter map rather than just numberOfReplicas (which is what this
-  # guard originally watched, since dropping upstream's "3" was the only change the role
-  # made). A version bump can also ADD a parameter — v1.8.0 introduces backupTargetName — and
+  # Compares the WHOLE parameter map rather than just numberOfReplicas. A version bump
+  # can also ADD a parameter — v1.8.0 introduces backupTargetName — and
   # a numberOfReplicas-only test never fires for that, leaving `apply` to fail on an immutable
   # field instead. See docs/longhorn-upgrade.md.
   ansible.builtin.command:
@@ -329,7 +327,7 @@
 - name: Apply the Longhorn StorageClass
   tags: [longhorn]
   # OPEN: this reports `changed` on every run of a settled cluster, and the cause is NOT
-  # established. Measured on daniel-stage 2026-08-27 across two back-to-back full runs — this
+  # established. Measured on daniel-stage across two back-to-back full runs — this
   # task, "Install Longhorn", "Install MetalLB" and the ConfigMap patch below all report
   # changed both times. But applying THIS file twice by hand, outside the play, prints
   # "unchanged" both times, and `kubectl diff -f` against it is empty. So something inside the
@@ -338,8 +336,8 @@
   # suspect and is UNVERIFIED. Do not "fix" the changed_when — it faithfully reports what
   # kubectl printed, and muting it would hide a real reconcile loop rather than close it.
   #
-  # The PriorityClass churn that used to sit alongside these WAS root-caused and fixed; see
-  # templates/priorityclass.yaml.j2. It is a different mechanism, so do not assume this is it.
+  # The PriorityClass churn root-caused in templates/priorityclass.yaml.j2 is a different
+  # mechanism, so do not assume this is it.
   ansible.builtin.command:
     cmd: k3s kubectl apply -f /etc/rancher/k3s/longhorn-storageclass.yaml
   register: k3s_longhorn_sc_apply
@@ -396,7 +394,7 @@
   register: k3s_longhorn_backed_up
   # A read of state that exists independently of this play, and the label tasks below
   # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping (#2351).
+  # attribute instead of skipping.
   check_mode: false
 
 # Naturally idempotent: a volume that has already moved no longer carries the `default` label, so
@@ -413,11 +411,10 @@
   become: true
   changed_when: true
 
-# The move above is one-way, and the defaults file used to claim otherwise ("removing a name from
-# this list is what restores scheduled protection"). It did not: the query feeding it selects on
-# `default=enabled`, so a volume that has already left never comes back from it and nothing returns
-# it. That made the list a trapdoor rather than a declaration. These two tasks are the other
-# direction, so the list means what it says.
+# The move above is one-way on its own: the query feeding it selects on `default=enabled`, so a
+# volume that has already left never comes back from it and nothing returns it. Without a reverse
+# the list would be a trapdoor rather than a declaration. These two tasks are the other
+# direction, so removing a name from the list restores scheduled protection.
 #
 # The reverse CANNOT be "anything labelled no-backup and absent from the list" — most of the
 # no-backup volumes (prometheus-data, loki-data, registry-data, tempo-data, karakeep-meili, …) were
@@ -441,7 +438,7 @@
   register: k3s_longhorn_backup_class_pvcs
   # A read of state that exists independently of this play, and the label tasks below
   # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping (#2351).
+  # attribute instead of skipping.
   check_mode: false
 
 - name: Find excluded Longhorn volumes that should be backed up again
@@ -463,7 +460,7 @@
   register: k3s_longhorn_excluded
   # A read of state that exists independently of this play, and the label tasks below
   # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping (#2351).
+  # attribute instead of skipping.
   check_mode: false
 
 # Idempotent for the same reason as its mirror: a volume that has moved back no longer carries the
@@ -484,7 +481,7 @@
   changed_when: true
 
 # ── weekly tier (mirrors the no-backup pair above, same idempotence argument) ────────────
-# Sharded across weekdays since 2026-08-16: a volume's group is weekly-backup-d<N> where N is
+# Sharded across weekdays: a volume's group is weekly-backup-d<N> where N is
 # its index mod 7 in k3s_longhorn_weekly_volumes (0=Sunday). NB a weekly→no-backup move routes
 # THROUGH default (the shard reconcile returns it to default, the no-backup pair above claims
 # it on the NEXT run) — converges on the second deploy.
@@ -522,7 +519,7 @@
   register: k3s_longhorn_weekly_labelled
   # A read of state that exists independently of this play, and the label tasks below
   # loop its `stdout_lines`. Without this `--check` skips it and they error on the
-  # attribute instead of skipping (#2351).
+  # attribute instead of skipping.
   check_mode: false
 
 - name: Migrate legacy weekly-backup labels to their weekday shard

@@ -5,12 +5,12 @@ test_staging_egress_fence.py holds the filter's shape and attachment, which is t
 what a check that never leaves the repo can see: a libvirt nwfilter that is defined and
 unattached reads identical to a working one from the host. The leg that closes that gap dials
 every fenced range plus an internet control target from INSIDE the drill guest, before the guest
-is handed the cluster token or the R2 write credentials (#2943).
+is handed the cluster token or the R2 write credentials.
 
 Each test here is one verdict of that leg, driven through _fence_probe's stub dials — so every
 verdict has an input that must produce it, and the leg cannot quietly stop distinguishing them.
-The fence's own accept/reject pair is the first two: a fence that holds, and the 2026-08-27
-measurement that made the fence necessary.
+The fence's own accept/reject pair is the first two: a fence that holds, and the leak
+that made the fence necessary.
 
 Run: uv run pytest ansible/tests/staging/test_staging_egress_fence_fires.py
 """
@@ -31,7 +31,7 @@ from _fence_probe import (
 def test_a_fence_that_holds_reports_hold_and_records_its_evidence(tmp_path):
     """The input it must ACCEPT: the control answers, every production target is refused.
 
-    This is #2943's Verify-by in miniature — the evidence names each fenced range refused and
+    This is the leg's verify-by in miniature — the evidence names each fenced range refused and
     the internet control target reachable.
     """
     verdict, lines = run_fence(
@@ -53,7 +53,7 @@ def test_a_fence_that_holds_reports_hold_and_records_its_evidence(tmp_path):
 
 
 def test_a_production_target_answering_from_the_guest_aborts_the_run(tmp_path):
-    """REJECT: the 2026-08-27 measurement, which is what the fence was added for.
+    """REJECT: the leak the fence exists to stop.
 
     wg-easy's admin UI is unauthenticated and LAN-only, so reaching it from the guest is the
     leak. It has to abort rather than note it — the next thing the orchestrator does is hand
@@ -134,7 +134,7 @@ def test_a_pod_cidr_with_no_neighbour_to_dial_is_unproven_rather_than_absent(tmp
     The pod target is the one address the leg discovers at runtime, so on a bridge whose
     neighbour table holds nothing usable there is no address to dial. Dropping the row would
     leave no evidence line and no label, and the run would report a clean `hold` with the pod
-    CIDR never measured — this issue's own failure, one level down.
+    CIDR never measured — the failure this leg exists to catch, one level down.
     """
     verdict, lines = run_fence(
         tmp_path,
@@ -148,7 +148,7 @@ def test_a_pod_cidr_with_no_neighbour_to_dial_is_unproven_rather_than_absent(tmp
 
 
 def test_an_unproven_range_alarms_on_a_tile_of_its_own(tmp_path):
-    """#3021: the verdict the drill does not fail on still has to reach the alert chain.
+    """The verdict the drill does not fail on still has to reach the alert chain.
 
     An unproven target leaves the restore drill passing, so the drill's own tile pushes `up` and
     the label rides along in a green message that alerts nobody. The fence tile is what makes the

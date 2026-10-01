@@ -6,7 +6,7 @@ quota. `k3s_server_args` carries no `--etcd-arg=quota-backend-bytes`, so it does
 and the check silently measures against a quota the cluster does not have — a threshold too low
 pages on a healthy DB, one too high stays green past the point etcd goes read-only. Neither
 failure is visible in a render check or in the check's own tests, because both halves are
-internally consistent on their own (#2403).
+internally consistent on their own.
 
 Run: uv run pytest ansible/tests/setup/test_etcd_quota_and_its_monitor_agree.py
 """

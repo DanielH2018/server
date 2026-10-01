@@ -48,9 +48,8 @@ def test_restore_drill_is_flagged_on_an_unparseable_stamp():
 
 
 def test_restore_drill_is_flagged_when_the_stamp_is_unreadable():
-    """Distinct from a MISSING stamp — see check_restore_drill's docstring for the 2026-08-19
-    incident this distinction exists to prevent from repeating: a stamp that exists but can't be
-    opened must not read as "the drill never ran"."""
+    """Distinct from a MISSING stamp (see check_restore_drill's docstring): a stamp that
+    exists but can't be opened must not read as "the drill never ran"."""
     problem = logic.check_restore_drill(
         None,
         "/var/lib/longhorn-restore-drill/last-success",

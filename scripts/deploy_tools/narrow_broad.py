@@ -3,9 +3,9 @@
 
 THE PROBLEM. `deploy_changes._BROAD_DEPLOY_PREFIXES` routes any change under
 `ansible/inventory/` or `ansible/templates/` to an unscoped `ansible/deploy.yml`, which is
-~20 minutes under the tree lock across every role. Measured from 2026-09-04: 14 such runs
-were 12,966s of the 27,512s the lock was busy, and two of them failed on gates belonging to
-services the change never touched, wrote `hold_sha`, and turned two other landings into
+~20 minutes under the tree lock across every role. Full-play runs for a change that reaches
+one service dominate the time the lock is busy, and one that fails on a gate belonging to a
+service the change never touched writes `hold_sha` and turns other landings into
 `deploy-failed (tick-held)`. Most of those ranges were one service's `containers_list` entry
 or one variable two roles read.
 
@@ -24,7 +24,7 @@ full run. A missed consumer is a service left silently stale until something unr
 redeploys it; a full run is only slow.
 
 `lib.narrow_git` holds the primitives this shares with `narrow_setup`: `CannotNarrow`,
-`show_at` and the YAML mapping parse, one copy each since #2419.
+`show_at` and the YAML mapping parse, one copy each.
 
 `narrow` agrees with `deploy_tags.py changed` wherever both answer: the non-broad half of a
 range goes through the same `services_from_changed_paths` mapper, less the roles the range
@@ -32,9 +32,9 @@ DELETED (`narrow_paths.role_is_gone`). Where `changed` prints a
 tag list PLUS a note about a shared role a human must still apply, `narrow` refuses instead —
 the tick has no human to read the note.
 
-`Release Staleness Drift` is the second consumer (`probe_lib/releases.py`, #1993). It asks
-the per-path question `broad_path_tags` answers, over `CENSUS_PREFIXES`, for the range from
-a service's release record to `origin/master` — so a merged inventory or macro change that
+`Release Staleness Drift` is the second consumer (`probe_lib/releases.py`). It asks the
+per-path question `broad_path_tags` answers, over `CENSUS_PREFIXES`, for the range from a
+service's release record to `origin/master` — so a merged inventory or macro change that
 reached a service's render is named stale until that service is re-stamped. It does NOT go
 through `narrow`: the fleet-coverage ceiling at the end of `narrow` is lock-time policy (a
 list covering most of the fleet saves none of the twenty minutes), and for a census "most of
@@ -69,7 +69,7 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
 # Both halves of the deploy plane come from the deployer's side rather than being restated
-# here (#3048): `_BROAD_PLAY_PREFIXES` is derived there as `_BROAD_DEPLOY_PREFIXES` minus the
+# here: `_BROAD_PLAY_PREFIXES` is derived there as `_BROAD_DEPLOY_PREFIXES` minus the
 # census two, so a prefix added to one cannot go missing from the other. At module import
 # rather than inside a function, unlike `deploy_logic` below, because `deploy_changes` is
 # stdlib-only and imports nothing from this tree — one module's parse, and no cycle to open.
@@ -77,7 +77,7 @@ from deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES, role_of
 
 # Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
 # itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared
-# Docker deploy path is in neither half — Pi work, never a broad path (#2805).
+# Docker deploy path is in neither half — Pi work, never a broad path.
 PLAY_PREFIXES = _BROAD_PLAY_PREFIXES
 # The trees a variable or a macro can be consumed from and still map to a deploy tag.
 # `ansible/roles/setup/` is absent on purpose: the setup plane has its own arm in
@@ -87,20 +87,19 @@ SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
 # The two broad-deploy trees a per-path rule exists for. `broad_path_tags` refuses a
 # `PLAY_PREFIXES` path outright, and a census counting one would mark every service stale for
-# a change to how a deploy RUNS — the shape #1672 paid for.
+# a change to how a deploy RUNS.
 CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
 # Python under the play's own tree cannot import a Jinja macro, so a macro NAME found there is
 # a string, not a consumer: `filter_plugins/toposort.py` carries `ingressroute.yml.j2` as the
-# marker it greps role templates for. Treating that hit as consumption refused every change to
-# that macro — 23 of 24 sampled deploy-plane ranges over the 600 commits to 2026-09-18 — and
-# since #1993 the same refusal marks every service on a record stale and pages (#2001). A
-# variable is different: a filter plugin can read one, so the variable scan keeps refusing.
+# marker it greps role templates for. Treating that hit as consumption would refuse every
+# change to that macro (23 of 24 sampled deploy-plane ranges), and the same refusal would mark
+# every service on a record stale and page. A variable is different: a filter plugin can read
+# one, so the variable scan keeps refusing.
 _FILTER_PLUGINS = "ansible/filter_plugins/"
 # The one directory under the role trees that is not a service: `common`, the shared Docker
-# deploy path. Every grep here reads the TREE at `ctx.ref`, where `roles/containers/archive/`
-# no longer exists (#2385), so no `archive` entry is needed. `land_tags._NOT_SERVICES` still
-# carries one because it reads DIFF paths, and a range spanning the deleting merge carries 270
-# of them.
+# deploy path. Every grep here reads the TREE at `ctx.ref`, so no `archive` entry is needed.
+# `land_tags._NOT_SERVICES` still carries one because it reads DIFF paths, and a range
+# spanning the deleting merge carries 270 of them.
 _NOT_SERVICES = frozenset({"common"})
 
 
@@ -389,7 +388,7 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
     record stale, which is the set that full run would have re-stamped. The two agree by
     construction, so a refusal never leaves a service the tick applied reading stale.
     """
-    if narrow_paths.is_prose(path):  # a doc no playbook applies (#2448)
+    if narrow_paths.is_prose(path):  # a doc no playbook applies
         return set()
     if any(path.startswith(p) for p in PLAY_PREFIXES):
         raise CannotNarrow(f"{path} is read by every deploy")
@@ -403,10 +402,8 @@ def broad_path_tags(path: str, old_ref: str, ctx: Context) -> set[str]:
                 # A DELETED macro nothing imports reaches no render, and that is provable
                 # rather than a guess: an importer left behind would fail to render, and CI
                 # renders every template — so every importer it had at `old_ref` changed or
-                # was deleted in the same range and narrows on its own. Commit `8d825a872`
-                # deleted the unimported `ansible/templates/traefik.yml.j2` and the blanket
-                # refusal bought the whole ~20-minute `deploy.yml` play for it (#2440). An
-                # importer that survived, or a scan that cannot run, still refuses.
+                # was deleted in the same range and narrows on its own. An importer that
+                # survived, or a scan that cannot run, still refuses.
                 if roles:
                     raise CannotNarrow(
                         f"it is deleted but {','.join(sorted(roles))} imports it"
@@ -436,14 +433,14 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
 
     A setup-plane path contributes nothing here: `deploy_narrow.plan` gives the setup half
     its own `initial_setup.yml` plan ahead of this one, so the two planes are applied side by
-    side. It refused until 2026-09-18 (#2046), when the planner was an if/else that dropped
-    the deploy half of a mixed range — refusing here only made the drop a full run nobody
-    ran. A bring-up playbook still refuses: the tick parks on those before any plan exists,
-    and a hand `deploy_tags.py narrow` over such a range must not read as applyable.
-    `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed` reports them
-    as work a human deploys by hand, and the full run this replaces DOES apply them. A
-    rotated secret reaches a service only when that service renders again, so narrowing a
-    range that carries one would leave every service outside the tag list on the old value.
+    side. Refusing here would only turn the dropped deploy half of a mixed range into a full
+    run nobody ran. A bring-up playbook still refuses: the tick parks on those before any
+    plan exists, and a hand `deploy_tags.py narrow` over such a range must not read as
+    applyable. `cs.tasks`/`cs.meta`/`cs.secrets` refuse for the opposite reason: `changed`
+    reports them as work a human deploys by hand, and the full run this replaces DOES apply
+    them. A rotated secret reaches a service only when that service renders again, so
+    narrowing a range that carries one would leave every service outside the tag list on the
+    old value.
     """
     from deploy_logic import services_from_changed_paths
 
@@ -460,7 +457,7 @@ def _changed_half(paths: list[str], ctx: Context) -> set[str]:
         )
     roles = cs.k8s | cs.services
     # A range that RETIRES a role still lists every path it owned as changed, and a retired
-    # role has no entry and no caller — the shape `_role_tags` refuses (#2879).
+    # role has no entry and no caller — the shape `_role_tags` refuses.
     for role in sorted(roles):
         if narrow_paths.role_is_gone(role, ctx.ref, ctx.cwd, ROLE_TREES):
             ctx.explain(f"narrow: the role {role} is deleted -> (nothing)")

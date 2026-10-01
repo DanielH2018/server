@@ -1,9 +1,9 @@
 """check_arr_queue's FETCH streak: a rolling *arr is not a queue fault.
 
-Three of this monitor's DOWN episodes over the 30 days to 2026-09-11 were
-`arr_queue check error: radarr.homelab.svc.cluster.local:7878: <urlopen error [Errno 111]`,
-each co-timed with a `k8s_workloads ... radarr(1)` episode — k3s replacing the pod, reported
-twice. `ARR_FETCH_CONSECUTIVE` holds `up` through that.
+While k3s replaces a *arr pod, the API refuses connections for a cycle or two and the monitor
+reports `arr_queue check error: radarr.homelab.svc.cluster.local:7878: <urlopen error
+[Errno 111]`, co-timed with a `k8s_workloads ... radarr(1)` episode. `ARR_FETCH_CONSECUTIVE`
+holds `up` through that.
 
 The pairs here have to separate the two halves of the check, because a streak over the whole
 thing would pass an accept/reject pair on the fetch while delaying a poisoned release in the
@@ -29,8 +29,7 @@ def _unreachable(*_a, **_k):
 
 def test_arr_queue_holds_a_single_unreachable_cycle(cfg):
     # The rollout case: radarr is being replaced, so its API refuses connections for a cycle or
-    # two. Three DOWN episodes in the 30 days to 2026-09-11 were exactly this, each co-timed
-    # with a k8s_workloads radarr(1) episode.
+    # two.
     cfg = replace(cfg, RADARR_API_KEY="x")
     ok, msg = checks.service.check_arr_queue(cfg, fetch=_unreachable)
     assert ok, msg
@@ -51,7 +50,7 @@ def test_the_third_straight_unreachable_cycle_pages(cfg):
 
 def test_a_queue_warning_still_pages_on_the_first_cycle(cfg):
     # The streak covers the FETCH alone. A reachable *arr with a flagged item is not a
-    # transient, and delaying it is the 2026-07-01 incident this check exists for.
+    # transient, and delaying it hides the failure this check exists for.
     cfg = replace(cfg, RADARR_API_KEY="x")
     q = _queue(
         {

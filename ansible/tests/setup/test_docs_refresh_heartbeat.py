@@ -1,16 +1,16 @@
 """Guards for the docs-refresh failure report (initial_setup role, tag `crons`).
 
-The script published nothing on 2026-08-27 and every signal it had read healthy: it ran,
-`build_docs.py` succeeded, and `build-info.json` stamped `generators: ok` from the very run whose
-commit a prek hook rejected. Its `NO DEADMAN` block is still right that a *stopped* cron shows up
-on the page — a deadman detects silence, and neither of this script's two failures was silence.
-What these guard is the failure report added to close that, and the couplings it depends on:
+A run can publish nothing while every signal reads healthy: the script ran, `build_docs.py`
+succeeded, and `build-info.json` stamped `generators: ok` from a run whose commit a prek hook
+rejected. The `NO DEADMAN` block is right that a *stopped* cron shows up on the page — a
+deadman detects silence, and neither of these failures is silence. What these guard is the
+failure report and the couplings it depends on:
 
 - **The Kuma deadline must straddle the cron period.** Below it the monitor fires DOWN on a run
   that merely took a minute; at more than twice it, a whole missed run goes unreported. 46800
   sits between a 12h period and 24h.
 - **Exactly one `trap ... EXIT`.** A second trap on the same signal REPLACES the first, so the
-  temp-file cleanup that used to own EXIT would have silently disabled the push.
+  temp-file cleanup and the push cannot both hang off EXIT through separate traps.
 - **The status defaults to down.** Eleven exit paths, one of which is a bare crash.
 """
 
@@ -110,7 +110,7 @@ def test_the_script_skips_its_push_until_the_token_exists():
 def test_exactly_one_exit_trap():
     """A second `trap ... EXIT` replaces the first rather than adding to it.
 
-    The temp-file cleanup owned EXIT before the push was added. Two traps here means one of the
+    The temp-file cleanup and the push both need EXIT. Two traps here means one of the
     two jobs is silently not happening, and which one depends on source order.
     """
     traps = re.findall(r"^\s*trap\s+.*\bEXIT\b", SCRIPT, re.M)
@@ -161,8 +161,8 @@ def test_the_token_is_registered_for_rotation():
 def _ups_after_a_generator_failure(script: str) -> list[tuple[int, list[str]]]:
     """Every `PUSH_STATUS=up` reachable after `GENERATORS_OK=0`, with its enclosing conditions.
 
-    Structural rather than a match on one branch, because the original guard covered only the
-    branch PR #497 happened to touch and the defect was in a different one (2026-08-27b H-2).
+    Structural rather than a match on one branch, because a guard on one branch misses a
+    defect in another.
     A `PUSH_STATUS=up` set before the generator run cannot launder a generator failure, so the
     scan starts at the assignment that records one.
 
@@ -188,7 +188,7 @@ def _ups_after_a_generator_failure(script: str) -> list[tuple[int, list[str]]]:
 
 
 def test_every_up_after_a_generator_failure_is_gated_on_generators_ok():
-    """The accepting half, and the one that generalises past the branch H-2 was found in."""
+    """The accepting half, and the one that generalises past any single branch."""
     ups = _ups_after_a_generator_failure(SCRIPT)
     assert ups, (
         "no PUSH_STATUS=up found after GENERATORS_OK=0 — the scan is looking at nothing"

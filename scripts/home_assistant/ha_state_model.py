@@ -32,12 +32,8 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 from lib import yaml_fast
 
 from home_assistant.validate_ha_config import ROLE_DIR, HAConfigLoader, assemble_config
-# One insert, not two. This carried a second one adding `scripts/diagnostics` itself, because
-# every module there imported its siblings BARE (`import probe_core`) and that resolves only
-# when the directory is sys.path[0] — true for a directly-invoked probe.py, false when we
-# import it as a namespace-package member, so `refresh` died with
-# `ModuleNotFoundError: No module named 'probe_core'`. Those modules are now the `probe_lib`
-# package and import each other by package name, so `scripts/` alone resolves them.
+# One insert is enough: the `probe_lib` modules import each other by package name, so
+# `scripts/` alone resolves them.
 
 _TEMPLATE_MARKERS = ("{{", "{%")
 
@@ -419,13 +415,10 @@ def cmd_refresh(get_states=None, get_services=None) -> int:
     for tests; both default to live HA (needs the host age key + a running HA, reached through the
     cluster ingress VIP).
 
-    Talks to HA the same way probe.py's own `ha` subcommands do — base URL + --resolve pin. It
-    used to call probe.resolve_ip(probe.HA_CONTAINER), a Docker-era container lookup that stopped
-    existing when HA moved to k3s, so `refresh` died with AttributeError from that cutover until
-    2026-08-16. It broke the same way a second time when probe.py was split up: the helpers now
-    live in core (ha_base/ha_resolve) and ha (ha_token/ha_get/ha_get_url), and a bare
-    `probe.` prefix raised AttributeError again. It is the ONLY live path in this script, which is
-    why a stale external_entities.yml silently outlived two removed sensors.
+    Talks to HA the same way probe.py's own `ha` subcommands do — base URL + --resolve pin.
+    The helpers live in core (ha_base/ha_resolve) and ha (ha_token/ha_get/ha_get_url), so a bare
+    `probe.` prefix raises AttributeError. This is the ONLY live path in this script, so a
+    failure here leaves a stale external_entities.yml in place.
     """
     if get_states is None or get_services is None:
         import json

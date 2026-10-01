@@ -1,5 +1,5 @@
 ---
-# Navidrome — issue #803. One Deployment, one Longhorn claim, one Authelia-gated route.
+# Navidrome: one Deployment, one Longhorn claim, one Authelia-gated route.
 
 # The claim is created BEFORE the workload, so the pod has a PVC to mount. Created here rather
 # than rendered as a pvc.yaml: exactly one path must own a claim name, and volume-claim is the

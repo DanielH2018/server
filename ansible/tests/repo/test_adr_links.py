@@ -1,10 +1,9 @@
 """ADRs and `# DECIDED:` markers must reference each other, in both directions.
 
-WHY THIS IS A TEST. The repo already had a decision record before ADRs existed: 37
-`# DECIDED:` markers at the lines they govern, which `.claude/skills/homelab-review/
-SKILL.md` step 3 greps before a reviewer flags anything in a role. An ADR set that
-referenced those only by convention would be a second registry drifting from the first --
-which is the failure ADRs exist to prevent.
+WHY THIS IS A TEST. `# DECIDED:` markers sit at the lines they govern, and
+`.claude/skills/homelab-review/SKILL.md` step 3 greps them before a reviewer flags anything
+in a role. An ADR set that referenced those only by convention would be a second registry
+drifting from the first -- which is the failure ADRs exist to prevent.
 
 WHAT IS NOT CHECKED. A marker without an ADR is fine and common: an ADR exists only when
 the reasoning outgrows the line. This asserts that the links which DO exist resolve, not
@@ -122,7 +121,7 @@ def _markers() -> tuple[tuple[Path, int, str], ...]:
     return tuple(found)
 
 
-# Frontmatter schema — task 1 fixes these key names, and everything below parses them.
+# Frontmatter schema: everything below parses these key names.
 
 
 @pytest.mark.parametrize("adr", _adr_files(), ids=lambda p: p.name)
@@ -136,8 +135,7 @@ def test_frontmatter_carries_every_required_key(adr):
 def test_the_id_is_a_quoted_string(adr):
     """Unquoted `id: 0013` is OCTAL in YAML 1.1, and yaml.safe_load returns 11.
 
-    It is silent for 0001-0007, where octal and decimal agree, and wrong from 0008 on. The
-    first ADR numbered past that caught it. Requiring the quoted form makes the trap
+    It is silent for 0001-0007, where octal and decimal agree, and wrong from 0008 on. Requiring the quoted form makes the trap
     impossible rather than merely detected.
     """
     raw = adr.read_text().split("---", 2)[1]
@@ -183,8 +181,8 @@ def test_a_superseded_status_names_an_adr_that_exists(adr):
     """VALID_STATUS checks the SHAPE of a successor reference; this checks the target.
 
     A record superseded by an ADR nobody wrote points the reader at nothing, and the shape
-    check above passes it. No record is superseded as of 2026-09-02, so the corpus half of
-    this is unexercised; the unit pair below is what proves the check can go red.
+    check above passes it. While no record is superseded, the corpus half of this is
+    unexercised; the unit pair below is what proves the check can go red.
     """
     target = superseded_target(str(_frontmatter(adr)["status"]))
     if target is None:
@@ -212,8 +210,7 @@ def _text_anchor(anchor: str) -> tuple[str, str] | None:
     """`path#some marker text` split into the two, or None for a `path:line` anchor.
 
     The text form exists because a line number is wrong the moment anything above it moves,
-    and nothing but this file notices — three anchors in the ADR set had to be re-pointed by
-    hand while the change that moved them was being written. `#` rather than `:` separates
+    and nothing but this file notices. `#` rather than `:` separates
     them, because marker text routinely contains a colon.
     """
     rel, sep, text = anchor.partition("#")
@@ -358,10 +355,9 @@ def test_the_template_is_not_treated_as_a_record():
 def test_the_marker_scan_finds_the_known_corpus():
     """A regex that silently stops matching would make every link check vacuous.
 
-    37 markers across 28 code files on 2026-08-24, once this file is excluded from its own
-    scan. A raw grep reports 41 across 29 — the difference is the five times this file
-    quotes the marker syntax. Pinned as a floor, not an exact count, so adding a marker
-    does not fail the suite while removing the whole convention does.
+    This file is excluded from its own scan, so the count leaves out the times it quotes
+    the marker syntax. Pinned as a floor, not an exact count, so adding a marker does not
+    fail the suite while removing the whole convention does.
     """
     markers = _markers()
     assert len(markers) >= 34, (

@@ -1,12 +1,8 @@
 """Every `checksum/<name>` a role's CLAUDE.md names must exist in that role's templates.
 
-Twice now a doc has promised an annotation the manifests do not have: the repo-root CLAUDE.md
-pointed at a `checksum/config` that exists nowhere, citing monitor-bridge (whose annotation is
-`checksum/check-script`), and autofix-bridge's CLAUDE.md claimed `checksum/config` where the
-manifest has `checksum/autofix-script`. Both send someone debugging a pod that will not restart
+A doc can promise an annotation the manifests do not have, such as `checksum/config` where the
+manifest has `checksum/check-script`. That sends someone debugging a pod that will not restart
 to look for a mechanism that was never there.
-
-Two instances make it a class, so it becomes a check rather than a third ledger entry.
 """
 
 import re
@@ -71,8 +67,7 @@ def test_claude_md_checksum_names_exist_in_the_role(role: Path):
 
 def test_root_claude_md_checksum_names_exist_somewhere():
     """The repo-root CLAUDE.md is not scoped to one role, so its names are checked against the
-    whole k8s tree. This is the exact claim that was wrong: `checksum/config` existed in no
-    template at all while the root doc told you to add one."""
+    whole k8s tree."""
     documented = set(
         CHECKSUM_RE.findall((REPO / "CLAUDE.md").read_text(errors="replace"))
     )

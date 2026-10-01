@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
-"""The Alert History board's LogQL reads the DOWN line monitor-bridge WRITES today (#1793).
+"""The Alert History board's LogQL reads the DOWN line monitor-bridge WRITES.
 
 The board reconstructs per-check DOWN counts from `{container="monitor-bridge"}` with a parser
-stage, and that stage encoded the bracketed stamp `bridge.common.log` printed until bec8990a
-(2026-09-04). Grafana's `pattern` parser matched nothing from that date on, so both per-check
-panels showed one unlabelled series — the same reader-side break #1782 fixed in
-`probe.py alerts`. `test_monitor_bridge_down_line_shape.py` guards that reader; this guards the
-board, by pulling the regexp out of the committed JSON and feeding it the real emitter's output.
+stage. A stage that expects a bracketed stamp matches nothing against the unstamped line
+`bridge.common.log` prints, so both per-check panels would show one unlabelled series. The same
+reader-side break applies to `probe.py alerts`. `test_monitor_bridge_down_line_shape.py` guards
+that reader; this guards the board, by pulling the regexp out of the committed JSON and feeding
+it the real emitter's output.
 
 Python `re` stands in for Loki's RE2: the expression uses only a `(?P<name>)` group, a class,
 `?`, `+` and `\\S`, which the two engines read alike.
@@ -59,7 +59,7 @@ def test_both_per_check_panels_parse_with_a_regexp_stage():
 
 @pytest.mark.parametrize("title", sorted(PARSING_PANELS))
 def test_the_down_line_the_bridge_logs_today_yields_the_check_name(capsys, title):
-    """ACCEPT: the unstamped line the bridge prints since 2026-09-04 labels by check."""
+    """ACCEPT: the unstamped line the bridge prints labels by check."""
     line = _logged(
         capsys, "DOWN", "traefik_latency", "-", "1 slow service(s) (3 cycles)"
     )
@@ -90,7 +90,7 @@ def test_an_ok_line_that_mentions_down_is_not_a_check(capsys, title):
 def test_every_monitor_bridge_expression_filters_on_a_line_anchored_down():
     """The line filter, not the parser, is what keeps an OK line out of the count: LogQL passes
     a line a regexp stage does not match straight through, unlabelled, and `sum by (name)`
-    counts it under `{}` — 21 such lines over 2d, measured 2026-09-17."""
+    counts it under `{}`."""
     doc = json.loads(BOARD.read_text())
     exprs = [
         t["expr"]

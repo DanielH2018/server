@@ -1,5 +1,4 @@
 ---
-# Split out of main.yml on 2026-08-15; task content and tags are unchanged.
 # Pi memory safety — MUST run before the heavy apt below.
 # The Zero 2 W has 512 MB RAM; apt-show-versions' cache build and
 # `upgrade: dist` OOM-kill mid-dpkg without disk-backed swap, corrupting the
@@ -114,9 +113,9 @@
   become: true
 
 - name: Install Raspberry Pi-specific packages
-  # openvswitch-switch-dpdk was removed from this list 2026-06-11: it was never
-  # configured (no bridges, no netplan stanzas) and mlockall-pinned ~14 MB on the
-  # 512 MB board — optimize_pi's debloat task now purges it, and listing it here
+  # openvswitch-switch-dpdk is deliberately absent from this list: it is never
+  # configured (no bridges, no netplan stanzas) and mlockall-pins ~14 MB on the
+  # 512 MB board. optimize_pi's debloat task purges it, and listing it here
   # would reinstall it on every full run.
   tags: [packages]
   ansible.builtin.apt:
@@ -128,8 +127,7 @@
   when: has_raspi_kernel
 
 # apt-show-versions hooks EVERY apt invocation with a full cache rebuild — 10-30 min
-# of swap-thrash on the 512 MB Pi (caused the 2026-06-08 dpkg corruption pre-swapfile,
-# and the 2026-06-10 "hung play" → stacked-run → watchdog-reboot incident). The Pi
+# of swap-thrash on the 512 MB Pi. The Pi
 # gets nothing from it (apticron-style reporting), so it's roomy-hosts-only.
 # The Pi removal runs BEFORE any other package work so a missing base package
 # can't trigger one final hook grind on the way in.
@@ -179,7 +177,7 @@
   changed_when: false
   register: initial_setup_user_home
   # Read-only, so it runs under --check too. Skipped, its stdout is empty and every consumer
-  # renders a path under `/.local` -- the get_url below failed a --check that way (#2148).
+  # renders a path under `/.local`.
   check_mode: false
 
 - name: Create the connecting user's installers directory
@@ -196,11 +194,10 @@
 - name: Download the pinned uv installer
   tags: [tooling]
   # The versioned URL, not astral.sh/uv/install.sh: that one installs the newest release at
-  # run time, so two hosts provisioned a month apart got different uv (#2148 -- daniel-box
-  # 0.12.1 and daniel-server 0.12.5 on 2026-09-21). The checksum re-fetches a copy on the
+  # run time, so two hosts provisioned a month apart get different uv. The checksum re-fetches a copy on the
   # host that hashes differently and fails a fetch that does. The version, the URL and the
   # sha256 are `defaults/main.yml`'s, beside each other, so `scripts/validate/asset_pins.py`
-  # can render the URL and check the hash without a raw curl (#2301).
+  # can render the URL and check the hash without a raw curl.
   ansible.builtin.get_url:
     url: "{{ initial_setup_uv_installer_url }}"
     dest: "{{ initial_setup_user_home.stdout }}/.local/share/installers/uv-install.sh"
@@ -238,9 +235,9 @@
 - name: Read the uv tools this host already has
   tags: [tooling]
   # `uv tool list` prints one `<name> v<version>` line per tool, which is what the install
-  # below compares its pins against. `creates:` on the tool directory used to guard the
-  # install, and any version satisfied it -- so a pin here would never have reached a host
-  # that already had the tool (#2148).
+  # below compares its pins against. A `creates:` guard on the tool directory would be
+  # satisfied by any version, so a pin here would never reach a host that already has the
+  # tool.
   ansible.builtin.command: "{{ initial_setup_user_home.stdout }}/.local/bin/uv tool list"
   register: initial_setup_uv_tools
   changed_when: false
@@ -258,8 +255,7 @@
   # Every tool is pinned, and each pin has a twin elsewhere in the tree that
   # ansible/tests/repo/test_host_tool_pins_match_their_twins.py holds it equal to:
   #   ansible-core  == pyproject.toml's dev-group pin -- the ansible that runs deploys is the
-  #                    one the tests and `uv run ansible-playbook` resolve. On 2026-09-21 the
-  #                    two hosts ran 2.21.0 and 2.21.2 against a 2.21.4 lock (#2148).
+  #                    one the tests and `uv run ansible-playbook` resolve.
   #   ansible-lint  == prek.toml's ansible/ansible-lint rev (the hook's own version).
   #   prek          == ci.yml's `pip install prek==` pin.
   # Renovate rewrites each pin here in the same PR as its twin (renovate.json groups them).
@@ -304,8 +300,8 @@
   tags: [tooling]
   # The prek `vale` hook is `language = "system"`, so it runs whatever binary is on PATH and
   # fails with exit 127 where there is none. .github/workflows/ci.yml installs the same version
-  # on the runner, so CI passed while a commit touching any top-level docs page died on a
-  # workstation (#1703) — and the way round it is a hand-fetched tarball or `--no-verify`.
+  # on the runner, so CI passes while a commit touching any top-level docs page dies on a
+  # workstation, and the way round it is a hand-fetched tarball or `--no-verify`.
   #
   # ONE copy of the version, set here rather than in group_vars: Renovate's Vale manager reads
   # this file and ci.yml together, and a version in group_vars/all.yml would land in the k8s
@@ -321,8 +317,7 @@
   # would never install. Reading the version is what makes the bump take effect.
   #
   # The ABSOLUTE path, not a bare `vale`: a bare one resolves against the remote PATH, which on
-  # a host carrying a hand-installed ~/.local/bin/vale (what PR #1702 left on daniel-server)
-  # reports that copy's version. The task would then skip, /usr/local/bin/vale would never be
+  # a host carrying a hand-installed ~/.local/bin/vale reports that copy's version. The task would then skip, /usr/local/bin/vale would never be
   # written, and the role would report success having installed nothing. Remove a hand-installed
   # copy once this has run — it shadows /usr/local/bin on an interactive PATH.
   ansible.builtin.command: /usr/local/bin/vale --version
@@ -335,8 +330,8 @@
 - name: Install the pinned Vale binary
   tags: [tooling]
   # Only on `dev_tooling_hosts`: this exists for the prek hook, and a host nobody commits from
-  # never runs one. That gate used to be `has_repo_checkout`, which admitted daniel-pi — it
-  # holds a checkout but is driven remotely over ssh (issue #1726).
+  # never runs one. `has_repo_checkout` is the wrong gate: it admits daniel-pi, which
+  # holds a checkout but is driven remotely over ssh.
   #
   # No checksum pin, unlike sops_setup's binary. That one is the root of the secret-decryption
   # trust chain; this is a prose linter for Markdown, and ci.yml fetches it unverified from the

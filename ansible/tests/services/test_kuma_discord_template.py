@@ -9,8 +9,8 @@ UP with `lastDownTime`, and the null Test context — and each result is parsed.
 
 The engine here is python-liquid, not liquidjs. The template stays in the subset both accept:
 `assign x = a == b` is the one divergence found (liquidjs takes it, python-liquid refuses it),
-which is why the template sets `down` through an `if`. The pinned liquidjs rendered the same
-three contexts to the same payloads on 2026-09-18.
+which is why the template sets `down` through an `if`. The pinned liquidjs renders the same
+three contexts to the same payloads.
 """
 
 import json

@@ -21,7 +21,7 @@ k8s_autodeploy_reason: "read-only NUT network client with a readinessProbe — n
 # The variables coaxed into Prometheus series. Upstream's default list omits battery.runtime,
 # which is the one an operator reads during an outage — how long have I got — so the list is
 # stated in full here rather than defaulted. Every name was confirmed present on this UPS
-# (`upsc apc-ups@127.0.0.1` on daniel-server, 2026-09-10); a name the UPS does not report is
+# (`upsc apc-ups@127.0.0.1` on daniel-server); a name the UPS does not report is
 # absent from the exporter's output rather than an error.
 #
 # ups.status is the one that is not a number. The exporter renders it as

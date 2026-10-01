@@ -1,8 +1,7 @@
 """`probe.py health --docker <svc>`, and the direct-address lookups the arr probes need.
 
-Split out of probe_lib/health.py, which had grown to 938 lines. Two groups that both answer
-"reach this service directly": daniel-pi's Docker containers (the only Docker host left) and a
-k8s Service's ClusterIP, which replaced the bridge-IP lookup for the cluster's own workloads.
+Two groups that both answer "reach this service directly": daniel-pi's Docker containers (the
+only Docker host) and a k8s Service's ClusterIP for the cluster's own workloads.
 
 WHAT "NOT FOUND" IS ALLOWED TO MEAN governs `format_health`'s two absence messages, and the
 canonical statement of that rule is health.py's module docstring. A container daniel-pi's

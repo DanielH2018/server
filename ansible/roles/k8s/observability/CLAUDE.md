@@ -67,6 +67,9 @@ body, so a second key in `prometheus.yaml.j2` lands outside the hash and the pod
 The three ways this goes QUIET are guarded by
 `ansible/tests/services/test_observability_config_rolls_one_workload.py`.
 
+The snapshot that hands these six to the play gate fires on the render AND the apply both
+changing, so a comment-only edit buys no soak (#3133).
+
 ## Grafana logs in through Authelia (OIDC), and the admin form stays on
 
 Grafana is an OIDC client of the Authelia portal — client `grafana` in

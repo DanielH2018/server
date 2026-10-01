@@ -10,12 +10,12 @@ dashboard would see.
 
 The census walks the RENDERED tile list for in-namespace widget URLs, resolves each Service to the
 pod label it selects (they diverge: the `scrutiny` Service selects `app: scrutiny-web`), and checks
-the rendered NetworkPolicies for a rule admitting homepage on that port. Both halves now come from
-the same render: the previous form regex-scanned `services.yaml.j2` for the literal
-`{{ k8s_namespace }}`, so a tile written with the namespace spelled any other way — a different
-variable, or the value itself — dropped out of the census silently while the file still read right.
+the rendered NetworkPolicies for a rule admitting homepage on that port. Both halves come from
+the same render: regex-scanning `services.yaml.j2` for the literal `{{ k8s_namespace }}` would
+let a tile written with the namespace spelled any other way — a different variable, or the
+value itself — drop out of the census silently while the file still read right.
 
-TWO EXCLUSIONS, both deliberate, neither previously written down (#1401). This guard covers a
+TWO EXCLUSIONS, both deliberate. This guard covers a
 subset of the widgets whose reachability depends on a NetworkPolicy, not all of them:
 
 1. `CLUSTER_URL` matches `http://<svc>.<ns>.svc.cluster.local:<port>` and the census keeps only

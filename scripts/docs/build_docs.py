@@ -8,7 +8,7 @@ where it is testable -- not in a cron job line, where it is not.
 ONE PROCESS. Each generator is imported and its `main` called here, rather than spawned as
 `uv run python <script>`. Twelve interpreter starts plus twelve `uv` environment
 resolutions cost more than the generators do, and process isolation was never what made
-the failure policy below work -- `run_one` catching each generator's exception is (#2406).
+the failure policy below work -- `run_one` catching each generator's exception is.
 Each keeps its own `--out` argparse `main`, because docs and skills run several of them by
 hand.
 
@@ -270,9 +270,9 @@ def _write_build_stamp(site: Path, generators: str = "ok") -> None:
     `generators` is what makes the stamp honest. There is NO DEADMAN here by design -- this
     file IS the liveness signal -- but two of docs-refresh.sh's three paths (dirty tree, open
     PR) rebuild the site with --skip-generators and still refreshed the timestamp, so the only
-    freshness signal read fresh while the pages behind it were not regenerated at all. A
-    stuck-open PR made that self-perpetuating (2026-08-25 review M-4). `skipped` and `failed`
-    are what a reader needs to distinguish "current" from "merely rebuilt".
+    freshness signal read fresh while the pages behind it were not regenerated at all.
+    `skipped` and `failed` are what a reader needs to distinguish "current" from "merely
+    rebuilt".
     """
     stamp = dt.datetime.now(dt.timezone.utc).strftime("%Y-%m-%d %H:%M UTC")
     (site / "build-info.json").write_text(
@@ -296,9 +296,9 @@ def build_site(site_dir: str, generators: str = "ok") -> bool:
     mount, and a bind mount follows the directory INODE, not the path. Renaming a fresh
     directory over it leaves the pod mounted on the old inode -- which the cleanup then
     deletes, so nginx serves an empty tree and answers 403 until someone restarts the pod.
-    Measured on 2026-08-24, by doing exactly that. rsync updates in place, so the inode
-    the pod holds is the one that gets the new files; it also writes each file to a temp
-    name and renames it within the destination, so a reader never sees a partial file.
+    rsync updates in place, so the inode the pod holds is the one that gets the new files;
+    it also writes each file to a temp name and renames it within the destination, so a
+    reader never sees a partial file.
 
     --chmod is set because this host's umask is 007, which would otherwise leave the tree
     0770/0660 and unreadable by any uid but the owner's. The pod runs as that uid today,

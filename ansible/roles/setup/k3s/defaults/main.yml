@@ -7,8 +7,8 @@
 # reconfigure would silently upgrade the control plane as a side effect of editing a flag.
 k3s_version: v1.36.4+k3s1
 # The installer script at that same tag, and its hash. get.k3s.io serves master's copy, which
-# on 2026-09-21 differed from the tag's only in rpm/SUSE/CoreOS branches -- but it moves with
-# no signal, and the script runs as root on both nodes. Renovate's k3s manager bumps
+# can differ from the tag's and moves with no signal, and the script runs as root on both
+# nodes. Renovate's k3s manager bumps
 # k3s_version; the sha256 is a MANUAL finish on that PR (same class as sops_setup's binary):
 #   curl -fsSL "https://raw.githubusercontent.com/k3s-io/k3s/<tag>/install.sh" | sha256sum
 k3s_install_script_url: "https://raw.githubusercontent.com/k3s-io/k3s/{{ k3s_version }}/install.sh"
@@ -18,7 +18,7 @@ k3s_longhorn_version: v1.12.1
 
 # Where k3s's own stdout/stderr goes on both node types (tasks/unit-logging.yml). journald
 # stores nothing below notice on these hosts and every k3s line is info, so without this the
-# reason for a crash loop is lost — #1918. Read this file, not `journalctl -u k3s`.
+# reason for a crash loop is lost. Read this file, not `journalctl -u k3s`.
 k3s_log_file: /var/log/k3s.log
 
 # Flags for the k3s server install:
@@ -35,19 +35,16 @@ k3s_log_file: /var/log/k3s.log
 #                        placement a k8s-version-dependent coin flip, and local-path data is
 #                        node-local + unbackuped). Un-defaulting it with kubectl patch does
 #                        not stick — k3s reapplies its bundled manifests on every restart —
-#                        so the addon is disabled outright; nothing ever provisioned with it
-#                        (checked 2026-08-09: zero local-path PVCs).
+#                        so the addon is disabled outright.
 #   --node-ip,           pin the node's identity to the host's canonical address instead of
-#   --advertise-address  letting k3s autodetect it. daniel-box was multi-homed at install
-#                        time — a USB adapter on 10.0.0.153 alongside eno1 on 10.0.0.215,
-#                        both with equal-metric default routes — and k3s picked the USB one.
-#                        When that adapter vanished on 2026-08-01 the node IP stopped
-#                        existing: kubelet logged "failed to validate nodeIP: node IP
-#                        '10.0.0.153' not found in the host's network interfaces", and the
-#                        kubernetes Service endpoint still pointed at 10.0.0.153:6443, so
-#                        every pod got "no route to host" dialling 10.43.0.1 and Longhorn
-#                        could not provision a single volume. A control-plane node must not
-#                        bind its identity to a removable NIC.
+#   --advertise-address  letting k3s autodetect it. A multi-homed host with equal-metric
+#                        default routes lets k3s pick a removable NIC (daniel-box's USB
+#                        adapter). When that NIC vanishes the node IP stops existing: kubelet
+#                        fails "validate nodeIP: node IP ... not found in the host's network
+#                        interfaces", and the kubernetes Service endpoint still points at the
+#                        dead address, so every pod gets "no route to host" dialling
+#                        10.43.0.1 and Longhorn cannot provision a single volume. A
+#                        control-plane node must not bind its identity to a removable NIC.
 #
 #                        CHANGING THIS ON A LIVE CLUSTER IS NOT A RESTART. etcd stores the
 #                        member's peer URL, and k3s validates its own membership against it
@@ -101,29 +98,28 @@ k3s_server_args: >-
 # sysctls carry above.
 k3s_secrets_encryption: true
 
-# ── the API server trusts Authelia as an OIDC provider (#1390) ──────────────────────────
+# ── the API server trusts Authelia as an OIDC provider ─────────────────────────────────
 # One flag pointing at a FILE, and the file is the point. They exist so Headlamp can log a
 # person in instead of browsing the cluster as its own ServiceAccount: Headlamp forwards the
 # browser's `id_token` and the API SERVER is what accepts or rejects it, so the trust has to
 # be configured here rather than in the workload's role.
 #
-# WHY A FILE RATHER THAN THE SIX `--oidc-*` FLAGS IT REPLACED. Authelia derives `iss` from
-# the host the authorization request arrived on, and `--oidc-issuer-url` takes exactly one
-# value — so the flag path could trust `auth.local.<domain>` or `auth.<domain>`, never both,
-# and Headlamp's login worked on exactly one of its two hostnames. A public-route login
-# reached Authelia, came back with `iss: https://auth.<domain>`, and the API server refused
-# it. `AuthenticationConfiguration.jwt` is a list of issuers, which is the only mechanism
+# WHY A FILE RATHER THAN `--oidc-*` FLAGS. Authelia derives `iss` from the host the
+# authorization request arrived on, and `--oidc-issuer-url` takes exactly one value. The flag
+# path could therefore trust `auth.local.<domain>` or `auth.<domain>`, never both, and
+# Headlamp's login would work on only one of its two hostnames: a public-route login comes
+# back from Authelia with `iss: https://auth.<domain>` and the API server refuses it.
+# `AuthenticationConfiguration.jwt` is a list of issuers, which is the only mechanism
 # kube-apiserver offers for more than one.
 #
-# THE TWO ARE MUTUALLY EXCLUSIVE, so this was not additive: "This flag is mutually exclusive
+# THE TWO ARE MUTUALLY EXCLUSIVE: "This flag is mutually exclusive
 # with the --oidc-* flags if the file configures the JWT Token authenticator"
 # (kube-apiserver flag reference). Passing both makes the API server refuse to start, which
 # on this Type=notify unit is the indefinite hang described above, not an error.
 #
 # ADDING THESE RESTARTS THE CONTROL PLANE. The install task above re-runs get.k3s.io when
 # k3s_server_args gains an argument, and the installer rewrites the unit and restarts k3s.
-# That is a routine event on this host — the unit restarted 19 times between 2026-08-02 and
-# 2026-09-10, the last taking 10s from restart to notify-ready — but it is not a no-op, and
+# That is a routine event on this host, but it is not a no-op, and
 # `k3s-bringup.yml` is in `_BROAD_MANUAL_PREFIXES` (deploy_changes.py) precisely so nothing
 # automated ever applies it.
 #
@@ -134,7 +130,7 @@ k3s_secrets_encryption: true
 # and every in-cluster controller.
 #
 # A MALFORMED FILE IS A DIFFERENT MATTER, and this is the one way the config file is riskier
-# than the flags it replaced. The API server VALIDATES this file at startup and refuses to
+# than the flags would be. The API server VALIDATES this file at startup and refuses to
 # start when it fails validation, so a schema error wedges the node: the k3s unit is
 # Type=notify with TimeoutStartSec=0, so `systemctl restart k3s` hangs indefinitely rather
 # than failing — the same hang the --node-ip comment above describes. The validation is
@@ -143,21 +139,13 @@ k3s_secrets_encryption: true
 # it for that reason. Read `/var/log/k3s.log` (not `journalctl -u k3s`, which keeps none of
 # k3s's own lines — see k3s_log_file) before walking away.
 #
-# ARMING THIS NEEDED NO EXTRA STEP, and that is worth stating because the install task's own
-# comment reads as though it did. That guard detects an argument that was ADDED and never one
-# that was REMOVED, so a pure deletion does not un-configure an installed host. But this change
-# ADDED `--kube-apiserver-arg=authentication-config`, which makes the guard's
-# `new_args - installed_args` non-empty, and the installer then rewrites ExecStart wholesale
-# from INSTALL_K3S_EXEC. The six `--oidc-*` removals therefore rode along on the same
-# `k3s-bringup.yml --tags k3s` run, and the mutually-exclusive combination never existed on the
-# host. Do NOT hand-edit the unit to "help" this along.
-#
-# ROLLBACK IS STILL BY HAND, for the reason above: deleting the one flag below adds nothing, so
-# the guard reads false and the unit keeps it. Re-run /usr/local/bin/k3s-install.sh with the new
-# INSTALL_K3S_EXEC.
+# ROLLBACK IS BY HAND. The install task's guard detects an argument that was ADDED and never one
+# that was REMOVED, so deleting the one flag below adds nothing, the guard reads false and the
+# unit keeps it. Re-run /usr/local/bin/k3s-install.sh with the new INSTALL_K3S_EXEC. Do NOT
+# hand-edit the unit to "help" this along.
 
 # BOTH Authelia issuers, trusted at once, which is the whole reason this is a file. The `iss`
-# each name mints is measured, not assumed — 2026-09-10, `/.well-known/openid-configuration`
+# each name mints is measured, not assumed: `/.well-known/openid-configuration`
 # returns exactly these two strings on the two hostnames, and both answer 200 from daniel-box
 # (the API server fetches JWKS from each URL itself, so host reachability is a requirement and
 # not an incidental).
@@ -168,17 +156,16 @@ k3s_secrets_encryption: true
 # Traefik — workloads this same apiserver has to schedule. Every boot therefore races, and
 # `oidc.go` retries every 10s until one succeeds, which is why the race normally costs nothing.
 #
-# THE RETRY LOOP CANNOT RECOVER FROM A 421, and that is the failure to recognise (#2749).
+# THE RETRY LOOP CANNOT RECOVER FROM A 421, and that is the failure to recognise.
 # Traefik's SNICheck pins a connection's TLS-options name at handshake time, so a connection
 # opened while Traefik is still reconciling routes is answered 421 for as long as it lives.
-# Go's HTTP client reuses it, so the apiserver redials never. Measured 2026-09-27 after the
-# weekly reboot: 3924 `oidc.go:433 oidc authenticator: initializing plugin` errors in
-# `/var/log/k3s.log`, unbroken from 07:40:23Z, walking DNS `Try again` -> `no route to host`
-# -> `404 page not found` -> `421 Misdirected Request` as the edge came up around the two
-# pinned connections. One connection per issuer below: `auth.local.<domain>` over the VIP,
-# `auth.<domain>` out through Cloudflare and back to daniel-box's own global IPv6. The
-# authenticator never initialised, so Headlamp login was dead for 5.5 hours while client-cert
-# and ServiceAccount auth carried on untouched — which is why nothing paged.
+# Go's HTTP client reuses it, so the apiserver redials never. After a reboot the symptom is
+# `oidc.go:433 oidc authenticator: initializing plugin` errors in `/var/log/k3s.log`, unbroken,
+# walking DNS `Try again` -> `no route to host` -> `404 page not found` -> `421 Misdirected
+# Request` as the edge comes up around the two pinned connections. One connection per issuer
+# below: `auth.local.<domain>` over the VIP, `auth.<domain>` out through Cloudflare and back to
+# daniel-box's own global IPv6. The authenticator never initialises, so Headlamp login stays
+# dead while client-cert and ServiceAccount auth carry on untouched — which is why nothing pages.
 #
 # RECOVERY IS A SOCKET CLOSE, not a k3s restart: the apiserver redials on its next 10s tick.
 # CLOSE BOTH — there is one connection per issuer, and a filter written for the VIP misses the
@@ -207,10 +194,10 @@ k3s_oidc_client_id: headlamp
 # provider docs call the `claims_policies.id_token` list "claims automatically copied to the
 # ID Token in addition to the standard ID Token claims". Headlamp forwards the ID token, so
 # the Authelia client MUST name a claims policy carrying both, or this API server sees a
-# token with no username claim and rejects it. That is the same trap #1374 hit with Grafana.
+# token with no username claim and rejects it.
 k3s_oidc_username_claim: preferred_username
 k3s_oidc_groups_claim: groups
-# There is NO `k3s_oidc_username_prefix` here any more, and its absence is deliberate. The
+# There is NO `k3s_oidc_username_prefix` here, and its absence is deliberate. The
 # flag path took `-` as a sentinel meaning "no prefix", because kube-apiserver otherwise
 # prefixed the username with the issuer URL plus `#` for any claim other than `email`. The
 # structured config does no implicit prefixing and honours no sentinel: `prefix` is required
@@ -256,13 +243,13 @@ k3s_audit_log_maxbackup: 5     # rotated files kept
 k3s_audit_log_maxsize: 100     # MiB before rotating
 
 # ── why two unsafe sysctls are allow-listed ─────────────────────────────────────────────
-# net.ipv4.ip_forward (slice-6 B5, wg-easy pulled forward): the wg-easy SERVER routes
+# net.ipv4.ip_forward (wg-easy): the wg-easy SERVER routes
 # between wg0 and eth0 inside its pod netns, and /proc/sys is ro in a pod even with
 # NET_ADMIN (measured — see below), so forwarding can only arrive via the pod spec's
 # securityContext.sysctls, which kubelet refuses unless allow-listed. Namespaced, so this
 # enables forwarding for pods that ASK, not for the node.
 #
-# net.ipv4.conf.all.src_valid_mark (slice 4, D11):
+# net.ipv4.conf.all.src_valid_mark (qbittorrent):
 # qbittorrent runs inside a WireGuard/Mullvad netns, and wg-quick refuses to bring the tunnel
 # up without net.ipv4.conf.all.src_valid_mark=1. Measured on this node: /proc/sys is mounted
 # `ro` in a pod even with NET_ADMIN, so the container cannot set it itself; and wg-quick's
@@ -276,9 +263,9 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 # a pod's only v6 addresses are ::1 and a link-local, with no route off-link, so there is no
 # leak path for them to close.
 #
-# The alternative was a privileged init container, rejected because slice 4 concentrates
-# privilege in exactly one component (roles/k8s/dri-device-plugin) and qbittorrent — which
-# handles arbitrary torrent payloads — is the worst place to add a second.
+# A privileged init container is the rejected alternative: privilege is concentrated in exactly
+# one component (roles/k8s/dri-device-plugin) and qbittorrent — which handles arbitrary torrent
+# payloads — is the worst place to add a second.
 #
 # REMOVING THIS NEEDS A MANUAL INSTALLER RE-RUN. The install task above detects an argument
 # that was ADDED but not one that was removed; see its comment.
@@ -297,23 +284,21 @@ k3s_audit_log_maxsize: 100     # MiB before rotating
 # runs this role.
 k3s_metallb_pool: 10.0.0.241-10.0.0.250
 
-# One replica until daniel-server joined the cluster (slice 7); raised to 2 — one per
-# node — on 2026-08-14 once the re-armed backup plane was proven (operator waived the
-# full-nightly gate after a manual daily-tier backup completed clean). This is the step
-# where replication, and therefore failover, starts existing. More replicas than nodes
-# would leave every volume permanently "degraded" — upstream's StorageClass ships 3.
+# Two replicas, one per node, which is what makes replication, and therefore failover, exist.
+# More replicas than nodes would leave every volume permanently "degraded" — upstream's
+# StorageClass ships 3.
 #
 # This reaches volumes through the `default-replica-count` setting alone, which only applies
 # to StorageClasses that do not pin a count themselves. That is why the role replaces
 # upstream's class with files/longhorn-storageclass.yaml, which deliberately omits
-# numberOfReplicas — so raising this at slice 7 stays a settings patch.
+# numberOfReplicas — so changing this stays a settings patch.
 k3s_longhorn_replica_count: 2
 
 # How hard Longhorn checks a snapshot disk file against its recorded checksum. Upstream's
 # default is `fast-check`, which re-hashes only when the file is unhashed or its mtime moved —
 # and upstream states plainly that "filesystem-unaware corruption cannot be detected" in that
 # mode (longhorn-manager v1.12.1, types/setting.go). Bit rot does not move mtime, so the exact
-# failure this setting exists to catch went uncovered until 2026-09-10 (#1364).
+# failure this setting exists to catch goes uncovered in that mode.
 #
 # `enabled` hashes every snapshot disk file on the snapshot-data-integrity-cronjob schedule
 # (`0 0 */7 * *` here — the 1st, 8th, 15th, 22nd and 29th). That is CPU and disk-read work on a
@@ -336,45 +321,41 @@ k3s_longhorn_snapshot_data_integrity: enabled
 # minute, then re-apply without the override to restore it:
 #   uv run ansible-playbook ansible/k3s-bringup.yml --tags longhorn \
 #     -e k3s_longhorn_snapshot_data_integrity_cronjob='55 12 * * *'
-# That is how the 2026-09-11 cost measurement ran (#1364). Never use a repeating `*/N` for it: a
-# full-hash schedule stranded by a dead session is the memory-pressure outcome #1243 warns about.
+# Never use a repeating `*/N` for it: a full-hash schedule stranded by a dead session risks the
+# memory pressure that OOM-kills the storage control plane.
 # Same DataEngineSpecific JSON-map shape as the mode above.
 k3s_longhorn_snapshot_data_integrity_cronjob: "0 0 */7 * *"
 
-# Whether joined agent nodes participate in Longhorn replica scheduling. false through
-# the join window (agent_verify patches allowScheduling:false and asserts zero replicas
-# landed); flipped true at the §F replica raise (2026-08-14) so daniel-server holds the
-# second replica of every volume.
+# Whether joined agent nodes participate in Longhorn replica scheduling, so daniel-server holds
+# the second replica of every volume. The join window keeps it off: agent_verify patches
+# allowScheduling:false and asserts zero replicas landed.
 k3s_agent_longhorn_scheduling: true
 
 # How often Longhorn lists the B2 backup store, in seconds. Upstream default is 300, which
-# cost us an outage: `backup ls` is an S3 LIST, LIST is a Backblaze Class C transaction, and
-# the free allowance is 2,500 Class C/day. At 300s that is 288 polls a day, each issuing
-# several LISTs (volumes, then backups per volume) — enough to exhaust the cap on its own.
-# On 2026-08-02 it did, and B2 then refused every request account-wide: Kopia could not read
-# its own repository blob and every backup tier went down for 13h+, with the bucket at
-# 6.05/10 GB. Storage was never the constraint.
+# exhausts the allowance on its own: `backup ls` is an S3 LIST, LIST is a Backblaze Class C
+# transaction, and the free allowance is 2,500 Class C/day. At 300s that is 288 polls a day,
+# each issuing several LISTs (volumes, then backups per volume). Once the cap trips, B2 refuses
+# every request account-wide and every backup tier goes down, whatever the bucket holds.
 #
-# 3600 cut that 12x and fixed the Class C math — but each poll ALSO GETs the .cfg of every
+# 3600 cuts that 12x and fixes the Class C math — but each poll ALSO GETs the .cfg of every
 # volume and every retained backup, and those are Class B (same 2,500/day cap, counted
-# separately). That read count grows with retention: by 2026-08-15 (~a week into the 14-day
-# daily tier) ~100-150 cfg GETs/poll x 24 polls hit the Class B cap by ~11:00 UTC with zero
-# restore traffic — surfacing as the restore drill failing with a masked "cannot find
-# volume.cfg in backupstore" (a cap 403, not data loss). 0 disables polling entirely:
+# separately). That read count grows with retention: ~100-150 cfg GETs/poll x 24 polls against a
+# 14-day daily tier reach the Class B cap by midday with zero restore traffic — surfacing as
+# the restore drill failing with a masked "cannot find volume.cfg in backupstore" (a cap 403,
+# not data loss). 0 disables polling entirely:
 # Longhorn still syncs a volume's backup list right after each backup completes, so the
 # only loss is UI staleness between nightlies (manual sync: Backup -> Sync). That also
 # removes the poll's LISTs from Class C.
 #
 # The failure mode 0 guards against is a ratchet: once the cap trips, every BackupVolume
-# controller retries its denied LISTs (~60/min observed 2026-08-15), so the failed state
+# controller retries its denied LISTs (~60/min observed), so the failed state
 # itself burns transactions and eats into the next day's allowance.
 k3s_longhorn_backupstore_poll_interval: 0
 
 # Back up detached volumes too. pi-peer-backup-data is mounted only for the minutes its
 # nightly pull CronJob runs, so at the 03:30 daily-backup tick it is detached — and with
-# this off, Longhorn silently skips it (first observed 2026-08-15: 13/14 default-group
-# volumes backed up, the WireGuard peer copy with zero backups and no off-site copy since
-# the Kopia scope retired). "true" attaches such a volume in maintenance mode for the
+# this off, Longhorn silently skips it, leaving the WireGuard peer copy with no off-site
+# backup. "true" attaches such a volume in maintenance mode for the
 # backup and detaches it after; the attach is brief and it is the only detached
 # default-group volume, so the global scope costs nothing.
 k3s_longhorn_backup_detached_volumes: "true"
@@ -384,7 +365,7 @@ k3s_longhorn_backup_detached_volumes: "true"
 # whole block tree), backing up issues one Class B HeadObject per changed block, and restoring
 # issues one Class B GET per block. Block size is the only lever that moves all three at once.
 #
-# Upstream's default is 2. At that size the store held 3,472 blocks on 2026-08-19, so a
+# Upstream's default is 2. At that size the store held 3,472 blocks, so a
 # full-cluster restore would need ~3,472 Class B against a 2,500/day free-tier cap — 139%, which
 # means a total-loss recovery CANNOT complete in a day. At 16 that is ~434 blocks, about a sixth
 # of one day's allowance, and disaster recovery stops being rationed by transactions.
@@ -395,19 +376,18 @@ k3s_longhorn_backup_detached_volumes: "true"
 #
 # Longhorn accepts 2 or 16 and nothing between. Governed by the SETTING rather than the
 # StorageClass on purpose: a StorageClass parameter beats the setting and its parameters are
-# immutable, which is the trap `numberOfReplicas` sprang on 2026-08-01 (see
+# immutable, which is the trap `numberOfReplicas` springs (see
 # files/longhorn-storageclass.yaml and ansible/tests/longhorn/test_longhorn_storageclass.py).
 k3s_longhorn_backup_block_size: 16
 
-# Memory REQUEST only (no limit) for longhorn-manager and the csi-* sidecar Deployments (#1243).
+# Memory REQUEST only (no limit) for longhorn-manager and the csi-* sidecar Deployments.
 # Upstream's deploy/longhorn.yaml ships every one of them with an empty `resources: {}`, which
 # gives BestEffort QoS and oom_score_adj 1000 — the worst possible score, so the kernel eats the
-# storage control plane first under any memory pressure. Measured live during the incident:
-# longhorn-manager held 137 MB anon-rss and a csi-* sidecar 97 MB when both were OOM-killed,
-# against instance-manager (already Burstable, 0 restarts through the same incident) surviving
-# untouched. A REQUEST alone moves the pod to Burstable and drops oom_score_adj without adding a
-# new kill path — a LIMIT set too low would trade "killed by badness" for "killed by cgroup cap",
-# which is the risk the diagnosis explicitly rejected. Headroom is roughly double the measured
+# storage control plane first under any memory pressure. Measured at the OOM kill:
+# longhorn-manager held 137 MB anon-rss and a csi-* sidecar 97 MB, while instance-manager
+# (already Burstable) survived untouched. A REQUEST alone moves the pod to Burstable and drops
+# oom_score_adj without adding a new kill path — a LIMIT set too low would trade "killed by
+# badness" for "killed by cgroup cap". Headroom is roughly double the measured
 # RSS on both: enough to absorb ordinary growth without inflating node allocatable so far that
 # real pressure elsewhere goes unschedulable.
 k3s_longhorn_manager_memory_request: 256Mi
@@ -417,31 +397,28 @@ k3s_longhorn_csi_sidecar_memory_request: 192Mi
 # watches Longhorn's own objects, and none of them can tell you whether the bytes in B2 restore.
 #
 # ROTATES over every volume declared for backup — one per night, least-recently-attempted first,
-# which is a full cycle in as many days as there are candidates (25 on 2026-08-20). Empty means
+# which is a full cycle in as many days as there are candidates. Empty means
 # rotate; setting this to a PVC name pins the drill to that one volume, which is a debugging
 # lever and not the normal mode. To drill one volume ONCE, do not set this: pass the PVC to the
 # script (`sudo /usr/local/bin/longhorn-restore-drill.sh <pvc>`, or RESTORE_DRILL_PIN=<pvc>),
 # which overrides this value for that run only.
 #
-# It was pinned to one volume until 2026-08-20, on a cost model that no longer holds. That model
-# read "a Class B GET per block, so drilling everything is unaffordable" — true at 2 MiB blocks,
-# where the store was ~1,700 blocks. The 16 MiB block change (k3s_longhorn_backup_block_size,
-# 2026-08-19) cut that eightfold: the whole B2 candidate set is now ~250 blocks, so one night's
-# drill costs 4-85 Class B against the 2,500/day cap, and a 25-day cycle costs less than a single
-# day's measured baseline of 253-363. Rotation is affordable because block size made it so.
+# Rotation is affordable because of the block size (k3s_longhorn_backup_block_size): the whole B2
+# candidate set is ~250 blocks, so one night's drill costs 4-85 Class B (a GET per block) against
+# the 2,500/day cap, and a 25-day cycle costs less than a single day's measured baseline of
+# 253-363.
 #
-# R2 volumes are IN the rotation, which the old pin deliberately excluded. The reasoning then was
-# that drilling an R2 volume proves Cloudflare and says nothing about B2, the store under a
-# transaction cap — still true, and irrelevant once the rotation covers both: each target is
-# proven on the nights its own volumes come up. R2 restores are free (10M Class B/month, zero
-# egress), so adding those four costs nothing on the axis that was ever scarce.
+# R2 volumes are IN the rotation. Drilling an R2 volume proves Cloudflare and says nothing about
+# B2, the store under a transaction cap, but each target is proven on the nights its own volumes
+# come up. R2 restores are free (10M Class B/month, zero egress), so those four volumes cost
+# nothing on the axis that is scarce.
 k3s_longhorn_restore_drill_pvc: ""
 # Fallback only, for a volume whose kubernetesStatus carries no namespace. The rotation reads the
-# namespace off each volume, because candidates are no longer all in one place.
+# namespace off each volume, because candidates are not all in one place.
 k3s_longhorn_restore_drill_namespace: homelab
 # Skip a candidate whose actualSize exceeds this. Bounds one night's egress and wall-clock so a
 # slow restore cannot read as a failed one. A backed-up volume excluded here is undrilled, and the
-# drill publishes it to `excluded_oversize` so the backup heartbeat pages naming it (#2667). Raise
+# drill publishes it to `excluded_oversize` so the backup heartbeat pages naming it. Raise
 # this and the timeout below together.
 # DECIDED: 4 GiB, raised from 2 GiB on 2026-08-24. The old value's rationale said it "excludes
 # NOTHING today — the largest candidate is valheim-config at ~1.3 GB", and both halves had gone
@@ -454,34 +431,34 @@ k3s_longhorn_restore_drill_max_actual_bytes: 4294967296
 # A restored volume that mounts but is EMPTY is the failure mode this floor catches: an empty
 # filesystem passes every check that only asks whether the mount succeeded. Deliberately low —
 # this asserts "real data came back", not any particular size, so it does not need revisiting
-# when the service grows or shrinks. It was 1024 until 2026-09-21, and tdarr-configs — five
-# JSON files, 1007 bytes in total, the whole of Tdarr's /app/configs — failed the drill on it
-# (2026-09-07) and read as unproven for the rest of the rotation. The drill's `files > 0`
+# when the service grows or shrinks. tdarr-configs holds five JSON files, 1007 bytes in total,
+# the whole of Tdarr's /app/configs, and must pass. The drill's `files > 0`
 # check is what rejects an empty mount; this floor only has to reject files that hold nothing.
 k3s_longhorn_restore_drill_min_bytes: 1
 # PVCs whose restore legitimately comes back with no files, so the two content assertions above
 # are waived for them and nothing else is. Everything the drill can still prove for such a volume
 # it does prove: the restore completes, the probe pod mounts it and reports. n8n-files is here
 # because n8n writes to /files only when a workflow does and none has — its actualSize has stayed
-# within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume) for the 30 days to 2026-09-22, and
-# the 2026-08-30 drill restored it to files=0.
+# within 51.05-51.77 MB (bare ext4 metadata on a 1 GiB volume), and the drill restores it to
+# files=0.
 # A volume that starts holding data DOES leave the waiver behind, but the drill no longer depends
 # on anyone noticing: the ceiling below withdraws it. Remove the name anyway once that happens —
 # the list is a claim about the volume, and the waiver is dead weight once the content assertions
 # can pass.
 k3s_longhorn_restore_drill_empty_ok_pvcs:
   - n8n-files
-# The waiver above applies only while the SOURCE volume's actualSize stays under this. Until
-# 2026-09-24 it applied by name alone, whatever the volume held (#2393), so an empty restore of a
-# volume that had filled up still stamped success and check 8 still read it as restore-proven.
-# 60 MiB: the recorded bare-ext4 band for the one declared volume is 51.05-51.77 MB across the 30
-# days to 2026-09-22, so this clears the observed noise by ~11 MB while withdrawing the waiver
+# The waiver above applies only while the SOURCE volume's actualSize stays under this. Without
+# the ceiling the waiver applies by name alone, whatever the volume held, so an empty restore of
+# a volume that had filled up would still stamp success and check 8 would read it as
+# restore-proven.
+# 60 MiB: the recorded bare-ext4 band for the one declared volume is 51.05-51.77 MB, so this
+# clears the observed noise by ~11 MB while withdrawing the waiver
 # from anything that could plausibly be real data. Raising it widens the band of real content a
 # `files=0` restore would still be waived for, which is the whole thing this bounds.
 k3s_longhorn_restore_drill_empty_ok_max_actual_bytes: 62914560
 k3s_longhorn_restore_drill_image: busybox:stable@sha256:73aaf090f3d85aa34ee199857f03fa3a95c8ede2ffd4cc2cdb5b94e566b11662
-# The 2026-08-16 drill restored 51 MB in ~21s. Doubled from 900s when the rotation admitted
-# volumes 25x that size: a slow restore is not itself a failure, but a hung one must not leave a
+# A drill restores 51 MB in ~21s and the rotation admits volumes 25x that size: a slow restore
+# is not itself a failure, but a hung one must not leave a
 # Volume CR attached forever, and a timeout fires as a restore failure that nothing distinguishes
 # from a real one. Keep this above what k3s_longhorn_restore_drill_max_actual_bytes can take.
 # DECIDED: 2700s, raised from 1800s with the cap on 2026-08-24 — and this is NOT free to raise
@@ -505,7 +482,7 @@ k3s_longhorn_restore_drill_max_age_days: 3
 # (candidate count + this) days, so it tracks the fleet automatically instead of going stale each
 # time a volume joins the backup set. A volume that fails every time it comes up stays invisible
 # to check 7 — the global stamp goes green on the other 24 — and this is what catches it.
-# It also absorbs the drill's retry (#2270): a failed attempt is re-drilled the next night, and
+# It also absorbs the drill's retry: a failed attempt is re-drilled the next night, and
 # that night is one the rotation does not advance on, so a cycle runs (candidate count + volumes
 # currently failing) nights. At 5 the window stays correct until 5 volumes fail at once — a
 # state check 8 is already paging about on its own terms.
@@ -518,7 +495,7 @@ k3s_longhorn_restore_drill_coverage_slack_days: 5
 # whatever this is, while an UNPRICED deletion — a permanent event, not a state — ages out after
 # this window.
 #
-# Check 10 (#2443) makes the window load-bearing twice over. It alarms when the window holds NO
+# Check 10 makes the window load-bearing twice over. It alarms when the window holds NO
 # line from a cron, which is only a fault because 26h exceeds one 24h cron period — below one
 # period the check disables that arm rather than page on normal silence. The same 26h is the
 # grace for a freshly installed cron, so there is no second tunable to keep in step.
@@ -529,7 +506,7 @@ k3s_longhorn_cron_evidence_window_hours: 26
 # volume keeps running the old engine image until someone walks the UI. Across the v1.7.2 ->
 # v1.12.1 ladder (docs/longhorn-upgrade.md) that lag would compound over five hops, and a
 # manager more than one engine version ahead is outside what upstream tests. 3 upgrades the
-# healthy volumes a few at a time rather than all 42 at once; Longhorn skips any volume that
+# healthy volumes a few at a time rather than all at once; Longhorn skips any volume that
 # is degraded, so this cannot stampede a rebuild.
 k3s_longhorn_concurrent_engine_upgrade: 3
 
@@ -558,100 +535,72 @@ k3s_readonly_crd_api_groups:
   # /etc/rancher/k3s/etcd-s3.env), and an Addon records a manifest's path and checksum.
   - k3s.cattle.io
 
-# Longhorn writes under this prefix inside the existing Kopia B2 bucket, so the two tools
-# never share a namespace and a lifecycle rule written for one cannot expire the other's
-# data. Kopia's own snapshots live at the bucket root.
+# Longhorn writes under this prefix inside the B2 bucket, so its objects keep their own
+# namespace and a lifecycle rule written for anything else in the bucket cannot expire them.
 k3s_longhorn_backup_prefix: longhorn
 # Whether the backup target is armed. false enforces a BLANK target URL - the containment
-# lever for a B2 transaction-cap spiral (see the task comment). Disarmed 2026-08-12 after
-# the fourth cap event; re-armed 2026-08-13 after the tiering rework (daily set 25->10
-# volumes, docs/longhorn-backup-tiering.md) shrank the nightly to fit the unchanged caps
-# - and the 03:30 nightly ran green in 4.5 min. Disarmed again the same morning: the
-# STORAGE cap tripped (hidden kopia versions + fresh nightly bytes), wedged retention
-# deletes retry-stormed (~31 errors/min from 6 stuck CRs) and drained the day's class
-# B/C transaction caps. Re-armed 2026-08-14 00:06 UTC: the approved purge removed all
-# 941 non-longhorn object versions (4.66 GB), so only longhorn/ bytes count against the
-# unchanged storage cap and the caps had just reset when the target came back.
-# Disarmed 2026-08-15 ~11:20 UTC: the first restore drill hit a Class-B cap already at
-# 100% (the denied metadata GET surfaced as "cannot find volume.cfg in backupstore", NOT
-# as a 403 — a masked failure mode to remember) and the BackupVolume controllers then
-# retry-stormed LISTs at ~60/min into the exhausted Class-C cap. Re-armed 2026-08-16
-# 00:05 UTC on fresh caps, with the structural fix (backupstore-poll-interval 0) already
-# landed and the four rate-limit-sensitive volumes moved to the R2 target.
+# lever for a B2 transaction-cap spiral (see the task comment).
 #
-# DISARMED AGAIN 2026-08-16 ~20:45 UTC — seventh cap event, and the re-arm above is what set it
-# up: fresh caps at 00:05, the daily run completed normally 03:33-03:37 (14 volumes), and the
-# legitimate per-block HEAD/LIST spend then exhausted the cap during the morning. Everything
-# after that is the same death spiral, now measured precisely rather than estimated:
+# The spiral is driven purely by failure. BackupVolumeController.reconcile runs `longhorn backup
+# ls --volume <vol>` — ONE LIST PER BackupVolume CR. Once the cap trips, B2 answers
+# `AccessDenied Transaction cap exceeded`, a FAILED reconcile is requeued and a successful one
+# is not, so the loop runs whatever pollInterval says. Rate: 64-192 req/min, i.e. 92k-276k/day
+# against a 2,500/day cap. That is 40-110x the entire daily allowance, which is why it cannot
+# recover on its own and why the daily reset alone is not a fix. A denied metadata GET surfaces
+# as "cannot find volume.cfg in backupstore", NOT as a 403 — a masked failure mode.
 #
-#   BackupVolumeController.reconcile runs `longhorn backup ls --volume <vol>` — ONE LIST PER
-#   BackupVolume CR, and there are 36. B2 answers `AccessDenied Transaction cap exceeded`. A
-#   FAILED reconcile is requeued; a successful one is not. So the loop is driven purely by
-#   failure, and pollInterval is already 0s on both targets — the poll interval was never the
-#   thing driving it. Rate: 64-192 req/min, i.e. 92k-276k/day against a 2,500/day cap.
-#
-# That is 40-110x the entire daily allowance, which is why it cannot recover on its own and why
-# the reset alone is not a fix.
-#
-# RE-ARMED 2026-08-17 after measuring, rather than estimating, where the Class C went. Three
-# things were established from the backupstore source and from one direct listing of the bucket
+# Where the Class C goes, from the backupstore source and one direct listing of the bucket
 # (10 Class C — the measurement was never the expensive part):
 #
 #   1. THE PRUNE IS THE COST, and it is priced in DIRECTORIES, not bytes or changed blocks.
 #      DeleteDeltaBlockBackup -> getBlockNamesForVolume walks `blocks/<lv1>/<lv2>/` with one
 #      delimited ListObjects per directory (backupstore deltablock.go:1496-1510, s3.go:108), so a
-#      volume's prune costs 1 + lv1dirs + lv2dirs LISTs — about 1.28 per stored block. The
-#      remembered "~2,738 LISTs for a prune round" was real but was one VOLUME, not one round.
-#   2. IT RUNS ONCE PER DELETED BACKUP, not once per run. 93 backups stood against retain 4, so
-#      arming would have queued ~71 tree walks costing ~22,989 Class C — nine days of cap, and
-#      the true cause of the seventh event. Those 26 excess backups and the 1,650 blocks nothing
-#      referenced were deleted directly against the B2 API instead: deletes are Class A and
-#      unmetered, so the end state Longhorn wanted cost nothing to reach.
+#      volume's prune costs 1 + lv1dirs + lv2dirs LISTs — about 1.28 per stored block. One
+#      volume's prune measured ~2,738 LISTs.
+#   2. IT RUNS ONCE PER DELETED BACKUP, not once per run. 93 backups against retain 4 queue ~71
+#      tree walks costing ~22,989 Class C — nine days of cap. Delete an over-retention backlog
+#      directly against the B2 API instead: deletes are Class A and unmetered, so the end state
+#      Longhorn wants costs nothing to reach.
 #   3. RE-ARMING ITSELF IS CHEAP. The target sync pulls one BackupVolume CR per remote prefix
 #      (~25 Class C) and one Backup CR per remote backup (~93 Class B), once. At pollInterval 0
 #      nothing re-lists afterwards: btc.go's isBackupTargetSyncRequired gates on
 #      SyncRequestedAt > LastSyncedAt and no BackupStoreTimer exists to advance it.
 #
-# The storm is still real and still failure-driven — a failed sync returns before LastSyncedAt is
-# set, so the gate never closes and every watch event re-lists. But it only starts once the cap is
-# already gone. Keeping spend under the cap is therefore the whole defence, and post-drain the
-# worst weekday shard projects at ~1,524 Class C against 2,500. `probe.py b2-budget` recomputes
-# that projection from the live bucket; run it after adding a volume, because the cost grows with
-# stored blocks and nothing else will announce the drift.
+# The storm is failure-driven — a failed sync returns before LastSyncedAt is set, so the gate
+# never closes and every watch event re-lists — but it only starts once the cap is already
+# gone. Keeping spend under the cap is therefore the whole defence, and the worst weekday shard
+# projects at ~1,524 Class C against 2,500. `probe.py b2-budget` recomputes that projection from
+# the live bucket; run it after adding a volume, because the cost grows with stored blocks and
+# nothing else will announce the drift.
 #
-# STILL DO NOT RE-ARM ON A TIMER, and do not re-arm without draining the over-retention backlog
-# first — that ordering, not the clock, is what made the previous four re-arms fail.
+# DO NOT RE-ARM ON A TIMER, and do not re-arm without draining the over-retention backlog
+# first — that ordering, not the clock, is what makes a re-arm hold.
 k3s_longhorn_backup_armed: true
 
-# Daily volume backup to that target. 03:30 was chosen to clear the Kopia run and the daily
-# secret-rotation cron; Kopia was retired with the k3s migration and issues no B2 traffic at all
-# now, so only the rotation cron still constrains this. (The `longhorn_b2_*` SOPS key names outlived
-# the tool — they are Longhorn's credentials. Do not read them as evidence Kopia still runs, and
-# do not attribute any B2 spend to it.) 14 retained backups per volume is two weeks of recovery
-# — Longhorn backups are incremental at the block level, so the marginal cost of depth here is
-# small compared to the first full. Since the 2026-08-16 sharding this group is, in steady
-# state, only the four R2-routed volumes plus any newly provisioned PVC awaiting reconcile —
-# every B2-destined volume lives in a weekday shard below.
+# Daily volume backup to that target. 03:30 clears the daily secret-rotation cron. (The
+# `longhorn_b2_*` SOPS key names are Longhorn's credentials.) 14 retained backups per volume is
+# two weeks of recovery — Longhorn backups are incremental at the block level, so the marginal
+# cost of depth here is small compared to the first full. In steady state this group is only
+# the four R2-routed volumes plus any newly provisioned PVC awaiting reconcile — every
+# B2-destined volume lives in a weekday shard below.
 k3s_longhorn_backup_cron: "30 3 * * *"
 k3s_longhorn_backup_retain: 14
 
-# Weekly tier (fifth cap event's fix, 2026-08-12; sharded across weekdays after the sixth,
-# 2026-08-16): B2 transaction spend scales with volume COUNT per run — each backup pays fixed
-# lock/list/config overhead plus per-block existence checks (HeadObject, Class B; the August
-# console census read 34k Heads / 37k Lists) — and even the Sunday-only weekly batch, stacked
-# with the daily tier, retention pruning on both, and the 07:30 Sunday-reboot resync, blew
-# both 2,500/day caps on 2026-08-16. Every B2-destined volume now backs up WEEKLY, sharded
-# across the seven weekdays (list index mod 7 = cron day-of-week, 0=Sunday) so no single
-# cap-day carries more than 3 volumes' worth of transactions. Week-old worst-case restore for
-# the B2 set was accepted by the operator on 2026-08-16; the four R2-routed volumes keep the
-# daily cadence, R2's caps being monthly and vast.
+# Weekly tier: B2 transaction spend scales with volume COUNT per run — each backup pays fixed
+# lock/list/config overhead plus per-block existence checks (HeadObject, Class B; the console
+# census read 34k Heads / 37k Lists) — and even a Sunday-only weekly batch, stacked with the
+# daily tier, retention pruning on both, and the 07:30 Sunday-reboot resync, blows both
+# 2,500/day caps. Every B2-destined volume therefore backs up WEEKLY, sharded across the seven
+# weekdays (list index mod 7 = cron day-of-week, 0=Sunday) so no single cap-day carries more
+# than 3 volumes' worth of transactions. The operator accepted a week-old worst-case restore
+# for the B2 set; the four R2-routed volumes keep the daily cadence, R2's caps being monthly
+# and vast.
 #
-# retain 2 ≈ a fortnight of weeklies, lowered from 4 on 2026-08-17. Retention is what costs:
-# a prune walks the volume's whole block tree (see k3s_longhorn_backup_armed), so the price is
-# set by how many blocks the retained backups pin. Holding two rather than four pins fewer, and
-# every future prune is cheaper for it. The trade the operator accepted is recovery REACH: a
-# corruption noticed on day 15 no longer has a clean copy behind it. Raising this back is a
-# storage-and-transaction decision, not a free one.
+# retain 2 ≈ a fortnight of weeklies. Retention is what costs: a prune walks the volume's whole
+# block tree (see k3s_longhorn_backup_armed), so the price is set by how many blocks the
+# retained backups pin. A lower count pins fewer, and every prune is cheaper for it. The trade
+# the operator accepted is recovery REACH: a corruption noticed on day 15 has no clean copy
+# behind it. Raising this is a storage-and-transaction decision, not a free one.
 #
 # Note retention is enforced PER RECURRING JOB, over that job's own backups only, and only while
 # the job still selects the volume — so this number does not govern the daily-era backups left
@@ -663,21 +612,21 @@ k3s_longhorn_weekly_backup_retain: 2
 # recreated from the `longhorn` StorageClass reverts to daily until the next deploy — drift
 # in the over-backed-up direction, caught by the reconcile rerun.
 # ── Cloudflare R2: the second backup target ──────────────────────────────────────────────
-# Longhorn has supported more than one BackupTarget since v1.8.0; this cluster reached
-# v1.12.1 on 2026-08-15. A volume is routed by its OWN spec.backupTargetName, and
+# Longhorn has supported more than one BackupTarget since v1.8.0. A volume is routed by its
+# OWN spec.backupTargetName, and
 # RecurringJob carries no target field — so daily-backup and weekly-backup keep working
 # unchanged and simply follow each volume to wherever it points. Nothing below changes how
 # any volume is scheduled, only where its backups land.
 #
 # R2 is here for the axis B2 ran out of, not for capacity: 10M Class B operations/month and
-# ZERO egress, against B2's 2,500/day Class B allowance whose exhaustion on 2026-08-15 took
-# the entire backup plane down and made a restore drill read as data loss. R2's free storage
+# ZERO egress, against B2's 2,500/day Class B allowance, whose exhaustion takes the entire
+# backup plane down and makes a restore drill read as data loss. R2's free storage
 # is 10 GB against ~8.2 GB of live volume data, so it could not hold everything anyway.
 k3s_longhorn_r2_armed: true
 
 # R2's region component is literally "auto" and the account-specific part is the endpoint
-# host. Deliberately NOT derived the way k3s_longhorn_b2_region is derived from the Kopia
-# endpoint: R2 shares no configuration with Kopia, so a derivation would invent a coupling
+# host. Deliberately NOT derived the way k3s_longhorn_b2_region is derived from the B2
+# endpoint: R2 shares no configuration with B2, so a derivation would invent a coupling
 # that does not exist and would break the moment either side moved.
 k3s_longhorn_r2_region: auto
 k3s_longhorn_r2_backup_prefix: longhorn
@@ -710,9 +659,9 @@ k3s_longhorn_r2_volumes:
 # moves volumes to a different weekday (harmless beyond a one-off cadence wobble), but append
 # new volumes at the END so existing assignments stay put.
 k3s_longhorn_weekly_volumes:
-  # SWAPPED IN PLACE for code-server-config (2026-08-16), not appended: a volume's weekday is
-  # its index mod 7, so removing index 0 would have shifted all twenty volumes below it by a
-  # day and could have stacked two heavy volumes on one cap-day.
+  # Index 0 is a replacement swapped in place for the removed volume, not an append: a
+  # volume's weekday is its index mod 7, so deleting index 0 would shift all twenty volumes
+  # below it by a day and could stack two heavy volumes on one cap-day.
   - homelab/code-server-workspace # Sun
   - homelab/jellyfin-config # Mon
   - homelab/valheim-config # Tue
@@ -734,10 +683,8 @@ k3s_longhorn_weekly_volumes:
   - homelab/wg-easy-config # Thu
   - homelab/n8n-files # Fri
   - homelab/pi-peer-backup-data # Sat
-  # APPENDED, not slotted into the day-21 column: navidrome-data was omitted from every
-  # tier list at creation (#864) and defaulted to daily/B2/retain-14 (issue #946). Appending
-  # is the only safe move for an existing volume — inserting earlier would shift every
-  # entry below it to a new weekday.
+  # APPENDED, not slotted into the day-21 column: appending is the only safe move for an
+  # existing volume — inserting earlier would shift every entry below it to a new weekday.
   - homelab/navidrome-data # Sun (index 21 mod 7 = 0)
 
 # Backup-plane heartbeat (templates/longhorn-backup-health.sh.j2). Pushes to a static Kuma
@@ -753,15 +700,15 @@ k3s_longhorn_backup_max_age_hours: 30
 # How far back the Error-state check looks. An Error Backup object is immortal once the job that
 # created it is gone: Longhorn's `retain: N` prunes only Completed backups owned by a live job,
 # and the reaper skips every state that is not Completed. Unbounded, one bad night pins the
-# backup monitor red permanently — 11 failures from 2026-08-16 04:30 were still being reported
-# on every 10-minute tick with no way to clear them. 24h is one full daily cycle, so a real
+# backup monitor red permanently, reported on every 10-minute tick with no way to clear it. 24h
+# is one full daily cycle, so a real
 # failure pages through its own retry window and then clears itself.
 k3s_longhorn_backup_error_max_age_hours: 24
 
 # The weekly tier's equivalent bound, for the volumes in k3s_longhorn_weekly_volumes. Same
 # reasoning scaled to a weekly 04:30 job: 8 days plus 6h, so one late or skipped run pages while
-# a normal ~7-day-old backup does not. Without a second bound these volumes were walked by
-# nothing — the daily 30h could never apply to them, so they were simply left out of the coverage
+# a normal ~7-day-old backup does not. Without a second bound these volumes would be walked by
+# nothing — the daily 30h could never apply to them, so they would simply be left out of the coverage
 # loop and could stop backing up indefinitely with the tile green. The bound is per-volume, so
 # the weekday sharding (each volume still backed up every 7 days) leaves it unchanged.
 k3s_longhorn_weekly_backup_max_age_hours: 198
@@ -792,14 +739,14 @@ k3s_b2_budget_cron_minute: "20"
 # How old a stranded snapshot must be before the reaper (templates/longhorn-reap-orphan-snapshots.sh.j2)
 # will offer it. A tier move leaves a window where the new job has not run yet, so a snapshot from
 # two days ago may still be a volume's most useful local restore point even though the job that
-# made it no longer owns the volume. Three days clears that window; the 2026-08-16 strays that
-# motivated the script were four to seven days old.
+# made it no longer owns the volume. Three days clears that window; the strays that motivated
+# the script were four to seven days old.
 k3s_longhorn_snapshot_reap_min_age_days: 3
 
 # Deadline on each individual `kubectl delete` in the reaper. `kubectl delete` waits for the
-# finalizer with NO deadline by default, and on 2026-08-16 that reaped 21 of 24 snapshots and
-# then hung on the 22nd for 23 minutes — the process holding no socket to the API server at all,
-# so the target CR never even gained a deletionTimestamp. Unbounded, the failure mode is a run
+# finalizer with NO deadline by default, so a wedged delete hangs indefinitely — the process
+# holds no socket to the API server at all, and the target CR never gains a
+# deletionTimestamp. Unbounded, the failure mode is a run
 # that neither finishes nor reports, and since the purge only runs after the delete loop, a hang
 # also means nothing that WAS deleted gets reclaimed until someone notices and kills it.
 #
@@ -807,53 +754,41 @@ k3s_longhorn_snapshot_reap_min_age_days: 3
 # under a second, so this is a wedge detector, not a work budget.
 k3s_longhorn_snapshot_reap_delete_timeout: 120s
 
-# Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
-# time (docs/archive/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
-# were not). B2 exposes no cap-headroom API, so nothing can measure the remaining allowance
-# directly; what CAN be watched is the input that grew. Longhorn's daily run went 4 -> 7 -> 15
-# backups over three days as slice 4 moved config PVCs into the cluster, and the free tier's
-# 2500-transaction Class B/C ceiling stopped absorbing it.
+# Daily-backup-volume budget. B2 exposes no cap-headroom API, so nothing can measure the
+# remaining allowance directly; what CAN be watched is the input that grows, the count of
+# Longhorn's daily backups against the free tier's 2500-transaction Class B/C ceiling.
 #
 # A PROXY, and the health script says so in its message: it counts Longhorn's own daily backups,
-# and cannot see kopia's or the b2-usage rclone's share of the same account-wide cap. So the
+# and cannot see the b2-usage rclone's share of the same account-wide cap. So the
 # budget is deliberately well under what Longhorn alone could consume — the headroom left over is
-# for the other two consumers.
+# for the other consumer.
 #
-# 8, set against the sharded steady state (2026-08-16): 3 B2 shard backups per night, plus a
-# shard growing to 4 when the weekly list passes 21 names, plus a newly provisioned PVC or two
-# that land in the daily default group (and, unless routed to R2, on B2) until the next deploy
-# reconciles them. It was 17 against the pre-shard 15-volume nightly set.
+# Raising it is NOT silencing the warning — this arm counts backups, not what they cost, so a
+# threshold below the normal count fires every morning on a condition deliberately created, and
+# a monitor that pages daily for an expected reason is one nobody reads. What detects the thing
+# actually feared — the cap firing — is **B2 Reachable**, which probes b2_authorize_account and
+# reports B2's own `transaction_cap_exceeded`. This arm stays a growth tripwire, set above the
+# normal count.
 #
-# It was 10 for a few hours, against the reduced set of 7. Raising it back is NOT silencing the
-# warning — this arm counts backups, not what they cost, so at 15/day it would fire every morning
-# on a condition deliberately created, and a monitor that pages daily for an expected reason is one
-# nobody reads. What detects the thing actually feared — the cap firing again — is **B2 Reachable**,
-# which probes b2_authorize_account and reports B2's own `transaction_cap_exceeded`. That is the
-# instrument for the re-add; this one stays a growth tripwire and is set above the new normal.
+# A tripwire on GROWTH, not a derived ceiling: the threshold sits just above the normal count
+# rather than coming from a per-backup cost model.
 #
-# A tripwire on GROWTH, not a derived ceiling. It was written when Longhorn's per-backup
-# transaction cost had never been measured, so no threshold could come from first principles;
-# what was evidenced was the trend (4 -> 7 -> 15 in three days) and where it ended.
-#
-# 16, set 2026-08-20. The decision about the cap this note asks for is the block-size migration:
-# every backed-up volume moved to 16 MiB blocks, so block count per volume fell about 8.6x
-# (sonarr 200 -> 23, prowlarr 216 -> 25) and with it the prune cost each backup carries. The
-# per-backup cost is no longer unmeasured either — `probe.py b2-budget` prices a stored block at
-# ~2 Class C, matching the two shards it can price today (d4: 50 blocks / 101 C, d6: 35 / 70 C).
-# The worst projected shard is now ~220 Class C against the 2100 budget, where d2 alone was 1359.
+# 16: every backed-up volume uses 16 MiB blocks, so block count per volume fell about 8.6x
+# (sonarr 200 -> 23, prowlarr 216 -> 25) and with it the prune cost each backup carries.
+# `probe.py b2-budget` prices a stored block at ~2 Class C, matching the two shards it could
+# price (d4: 50 blocks / 101 C, d6: 35 / 70 C). The worst projected shard is ~220 Class C
+# against the 2100 budget, where d2 alone was 1359 at 2 MiB blocks.
 #
 # Deliberately 16 rather than the ~24 the arithmetic allows. All 21 volumes backing up on one day
-# would cost roughly 790 Class C, so cost has stopped being the binding constraint and the count
-# is — which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
-# migration-sized night actually produced (12 on 2026-08-20) rather than at the ceiling.
+# would cost roughly 790 Class C, so cost is not the binding constraint and the count is —
+# which is exactly when a growth tripwire has to stay tight. 16 sits just above what a
+# migration-sized night produced (12) rather than at the ceiling.
 #
-# PROMOTING TO 24. Elapsed time is not the gate; these three are, and the first cannot be checked
-# before 2026-08-27:
+# PROMOTING TO 24. Elapsed time is not the gate; these three are:
 #
 #   1. Every shard has been priced. `probe.py b2-budget` can only cost a shard whose volumes
-#      already hold backups, and on 2026-08-20 that was 3 of 7 — the other 18 volumes were
-#      rebuilt hours earlier and had none yet. Once each weekday has run once, the ~220
-#      worst-shard figure above stops being a projection. Promote on the measured number.
+#      already hold backups, so while a weekday's volumes have none yet (after a rebuild, say)
+#      the ~220 worst-shard figure above is a projection. Promote on the measured number.
 #   2. That measured worst shard is not materially above ~220 Class C. If it is, the ~2 C/block
 #      model is wrong and the arithmetic behind 24 goes with it.
 #   3. The arm has not fired at 16 on a day with no deliberate burst. A tripwire already firing
@@ -878,13 +813,13 @@ k3s_disk_health_cron_minute: "*/10"
 
 # Boot grace for the */10 health crons (boot_grace_active in kuma-push-lib.sh). A cron firing
 # seconds after boot evaluates a half-started cluster and sends a healthchecks.io `/fail`, which
-# alerts immediately — the check's own grace cannot absorb it. The 2026-08-30 restart is the
-# worked example: daniel-box booted at 07:39:48, the */10 crons ran at 07:40:00, and the last pod
+# alerts immediately — the check's own grace cannot absorb it. A boot is the worked example:
+# daniel-box booted at 07:39:48, the */10 crons ran at 07:40:00, and the last pod
 # reached Ready at 07:45:06, so both `longhorn-backup-health` and `uptime-kuma-alive` paged.
 #
 # DERIVED, not chosen. Two bounds, and the value is the only round number between them:
-#   LOWER  — must exceed the worst observed boot-to-Ready, 5m18s on 2026-08-30 (07:39:48 boot,
-#            07:45:06 last pod Ready). Anything shorter lets the cron run against a cluster that
+#   LOWER  — must exceed the worst observed boot-to-Ready, 5m18s (07:39:48 boot, 07:45:06
+#            last pod Ready). Anything shorter lets the cron run against a cluster that
 #            is still coming up, which is the bug.
 #   UPPER  — must stay STRICTLY BELOW the 600s cron interval, so at most one slot is ever skipped
 #            whatever minute the host boots on. That single-miss bound is what lets the dead-men
@@ -911,7 +846,7 @@ k3s_live_drift_cron_minute: "45"
 k3s_manifest_prune_cron_hour: "5"
 k3s_manifest_prune_cron_minute: "15"
 
-# Release-staleness drift check (templates/release-staleness-check.sh.j2, issue #947). This is
+# Release-staleness drift check (templates/release-staleness-check.sh.j2). This is
 # the durable signal for a k8s role change gitops_deploy.py's `cs.k8s` branch ff-merges and
 # defers-and-alerts: the Discord page fires once per SHA and clears the moment the tree
 # ff-merges, so nothing else watches the gap between "merged" and "applied" — see the
@@ -922,10 +857,9 @@ k3s_manifest_prune_cron_minute: "15"
 # a deferred change can land at any point in the day, and a daily window would leave it unwatched
 # for up to 24h. 30 minutes catches it within three gitops ticks.
 k3s_release_staleness_cron_minute: "*/30"
-# A merge younger than this is named in the push message but not counted stale. The check
-# graded drift from the moment a commit reached origin/master, so it paged for a merge whose
-# own landing was mid-deploy: code-server's image bump merged 12:48 on 2026-09-21, its build
-# ran from 12:50, and the 13:00 run pushed DOWN. Two cron periods, per the schedule rule for
+# A merge younger than this is named in the push message but not counted stale. Grading drift
+# from the moment a commit reaches origin/master pages for a merge whose own landing is
+# mid-deploy. Two cron periods, per the schedule rule for
 # grace periods: a merge landing right after a run gets a full deploy window (a code-server
 # image build alone is 20-30 min, after the CI wait) before the run after next grades it.
 k3s_release_staleness_grace_minutes: 60
@@ -940,25 +874,23 @@ k3s_release_staleness_grace_minutes: 60
 #
 # DELIBERATELY A CRON, NOT A SERVER FLAG. `--etcd-s3` and friends can be set on the k3s server,
 # but changing k3s_server_args re-runs the install script and restarts the control plane — on a
-# cluster with MetalLB ETP-Local VIP pinning and two logged LAN-wide blackouts, with Pi-hole
+# cluster with MetalLB ETP-Local VIP pinning, with Pi-hole
 # serving LAN DNS from it. `k3s etcd-snapshot save --s3 ...` takes the identical flag surface as
 # a one-shot against the running server (verified against `k3s etcd-snapshot save --help`,
 # v1.36.2+k3s1), so the whole feature lands with no restart and no server-arg change.
 #
 # Destination is the R2 bucket the Longhorn secondary target already uses, under its OWN folder.
-# Not B2: snapshot uploads are Class-B transaction volume and B2's cap has fired six times. Not
-# the `longhorn` prefix: the orphaned-backup reaper and the pre-shard prune both walk that space.
-# (Both currently reconcile Longhorn Backup CRs rather than raw objects, so they could not see an
-# etcd snapshot anyway — the separate folder means that stays true if either ever grows a
-# bucket-level sweep.)
+# Not B2: snapshot uploads are Class-B transaction volume and B2's cap is the scarce axis. Not
+# the `longhorn` prefix: the orphaned-backup reaper walks that space. (It reconciles Longhorn
+# Backup CRs rather than raw objects, so it could not see an etcd snapshot anyway — the
+# separate folder means that stays true if it ever grows a bucket-level sweep.)
 k3s_etcd_s3_armed: true
 k3s_etcd_s3_folder: etcd-snapshots
 # 14 daily snapshots. Larger than k3s's local default of 5 because this is the copy that exists
-# after the box is gone. MEASURED 2026-08-16 on the first two real runs: 7.85 MB and 7.87 MB
-# compressed, against the 104 MB the uncompressed local snapshots beside them take — --snapshot-compress
-# is doing the work. Two weeks therefore costs ~110 MB, not the ~0.4 GB estimated before there was
-# anything to measure, and it is nothing against R2's 10 GB free tier next to ~8.2 GB of Longhorn
-# data. Retention could go considerably higher on cost grounds; 14 days is the recovery window,
+# after the box is gone. MEASURED: a snapshot is 7.85-7.87 MB compressed, against the 104 MB
+# the uncompressed local snapshots beside it take — --snapshot-compress is doing the work. Two
+# weeks therefore costs ~110 MB, which is nothing against R2's 10 GB free tier next to ~8.2 GB
+# of Longhorn data. Retention could go considerably higher on cost grounds; 14 days is the recovery window,
 # not the budget.
 k3s_etcd_s3_retention: 14
 # 02:45 — before the 03:30 nightly Longhorn backup rather than after, so the two never contend
@@ -966,11 +898,11 @@ k3s_etcd_s3_retention: 14
 k3s_etcd_s3_cron_hour: "2"
 k3s_etcd_s3_cron_minute: "45"
 
-# The restore side of the same tier. The snapshot above is taken, uploaded and alarmed; until
-# 2026-08-28 nothing proved it comes BACK on a schedule, so the off-box copy was verified once by
-# hand (2026-08-22) and drifted from there. The Longhorn plane already learned this — its drill is
-# scheduled and its stamp is read fail-closed — and etcd is the tier that carries the Backup CRs
-# needed to FIND the Longhorn backups, so it is the worse one to leave unproven.
+# The restore side of the same tier. The snapshot above is taken, uploaded and alarmed; without
+# a schedule nothing proves it comes BACK, and an off-box copy verified once by hand drifts. The
+# Longhorn plane applies the same rule — its drill is scheduled and its stamp is read
+# fail-closed — and etcd is the tier that carries the Backup CRs needed to FIND the Longhorn
+# backups, so it is the worse one to leave unproven.
 #
 # DECIDED: `--list-only`, weekly, and NOT the full restore. --list-only proves the off-box leg
 # end to end: credentials, bucket, folder, download, decompression. The FULL drill does not pass
@@ -997,44 +929,32 @@ k3s_etcd_restore_drill_cron: "20 10 * * 1"
 # lever because storageClassName is immutable: a volume that must leave the backup set after it is
 # bound cannot be moved by editing the class.
 #
-# EMPTY as of 2026-08-08. It held the eight slice-4 config volumes for a few hours after the B2
-# transaction cap fired, and they are back in the backup group now. The exclusion was the right
-# call under a live cap and the wrong one to leave standing: it bought quiet by leaving
-# sonarr/radarr/prowlarr/bazarr/qbittorrent/jellyfin-config and tdarr-server/tdarr-configs with a
-# single frozen 2026-08-08 restore point that is never pruned and never refreshed.
-#
-# Re-added as a measurement, because the cost could not be looked up. Longhorn's first backup of a
-# volume is a full and later ones ship only changed blocks, so the 08-08 spike was plausibly a
-# one-time migration cost — but nothing exposed measures it. `Backup.status.size` is the backup's
-# LOGICAL volume size, not blocks uploaded (traefik-acme reports 35 -> 48 MB across daily backups of
-# a 25 MB volume), and B2 publishes no cap-headroom endpoint, which is gap G2's whole premise. So
-# the 03:30 run is the experiment and **B2 Reachable** is the readout. If the cap fires again, the
-# eight names go back in here and the answer is a staggered weekly group, not a permanent exclusion.
-# The 2026-08-12 kopiaignore audit (docs/longhorn-backup-tiering.md) mapped kopia's
-# whole-tree exclusions onto whole volumes; each entry cites the kopia rule it preserves.
+# Exclude only what regenerates. An excluded volume keeps a single frozen restore point that is
+# never pruned and never refreshed, so excluding a volume to buy quiet under a live B2 cap
+# leaves it with stale recovery. Under a cap the answer is a staggered weekly group, not a
+# permanent exclusion. `Backup.status.size` is the backup's LOGICAL volume size, not blocks
+# uploaded (traefik-acme reports 35 -> 48 MB across daily backups of a 25 MB volume), and B2
+# publishes no cap-headroom endpoint, so **B2 Reachable** is the readout for a cap that fires.
+# Each entry below names the reason it is excluded.
 k3s_longhorn_nobackup_volumes:
   # autokuma's state rebuilds from the static-monitors Secret — fully regenerable, so it
-  # meets the same standard as the nobackup StorageClass (added at the fifth cap event).
+  # meets the same standard as the nobackup StorageClass.
   - homelab/autokuma-data
-  # kopia: `scrutiny/influxdb2/` excluded — the volume holds ONLY the SMART TSDB
-  # (verified single mount), regenerating from the daily collector runs.
+  # The volume holds ONLY the SMART TSDB (verified single mount), regenerating from the
+  # daily collector runs.
   - homelab/scrutiny-influxdb-data
-  # kopia: `uptime-kuma/data*/` excluded — monitors + notifications now regenerate from
-  # the git-rendered static-monitors Secret (stronger than the label era the rule was
-  # written in). Same DR caveat as kopia's: the first-run admin is recreated by hand and
-  # status HISTORY is not kept anywhere.
+  # Monitors + notifications regenerate from the git-rendered static-monitors Secret. DR
+  # caveat: the first-run admin is recreated by hand and status HISTORY is not kept anywhere.
   - homelab/uptime-kuma-data
-  # kopia scope: the Docker crowdsec-db named volume was deliberately unbacked
-  # (.claude/rules/docker.md) — decisions expire and re-derive from logs; Metabase
-  # dashboards are provisioned.
+  # Decisions expire and re-derive from logs; Metabase dashboards are provisioned.
   - homelab/crowdsec-db
-  # 2026-08-16: measured composition, not an estimate. `du` inside the pod put 5.8 G in
+  # Measured composition, not an estimate. `du` inside the pod puts 5.8 G in
   # .local/share/code-server/extensions — a directory the server does NOT read, since it runs
   # with `--extensions-dir /config/extensions` (637 M, complete) — plus 223 M of caches and
   # 17 M of code-server state, against 2.4 M of workspace. Backing up the whole volume made
   # one service 52% of the 13.72 GiB backup set and 3,668 of 7,023 blocks; at one Class-B GET
   # per block on restore, that volume alone was 147% of B2's 2,500/day cap and could not be
-  # restored inside a day. The keepers moved to the code-server-workspace claim, which IS
+  # restored inside a day. The keepers live in the code-server-workspace claim, which IS
   # backed up. Not a class change, because storageClassName is immutable once bound.
   - homelab/code-server-config
 
@@ -1042,24 +962,18 @@ k3s_longhorn_nobackup_volumes:
 # every query; the rest are fallbacks. See templates/resolv.conf.j2 for why the order alone
 # is the whole mechanism.
 #
-# REVERSES SLICE-6 D8/A1 (2026-09-01). That change pinned the node to public resolvers only,
-# on the grounds that "the node must NEVER resolve through the in-cluster Pi-hole VIP — a cold
-# cluster start needs DNS before that VIP exists." The premise was right and the conclusion
-# was too strong: a fallback entry covers the cold start, and glibc re-tries the first server
-# on every query, so the node prefers Pi-hole without ever depending on it. Measured on
-# daniel-box's 2026-08-30 boot, the window the pin existed to protect is nearly empty — k3s
-# was active 20s in (ActiveEnterTimestamp=07:40:08), and there were ZERO image pulls and zero
-# name-resolution failures in the following 10 minutes, because a warm containerd store
-# resolves no registry names at boot. A REBUILT node with an empty image store is the real
-# case, and that runs k3s-bringup.yml by hand anyway.
-# SUPERSEDED BY THE HOST FORWARDER (2026-09-01). This list was the node's own preference
-# order until CoreDNS took that job; the ordering argument above still explains why glibc is
-# the right tool for a two-entry list, and it is still exactly what daniel-pi runs. Here the
-# preference moved into k3s_host_dns_upstreams below, and this file now names one thing.
+# The preference order lives in k3s_host_dns_upstreams below, where the host forwarder applies
+# it; this file names only the forwarder.
+#
+# A cold start does not need Pi-hole: the forwarder's public fallback upstreams cover it. The
+# window before the VIP exists is nearly empty — k3s is active ~20s into boot, and a warm
+# containerd store resolves no registry names at boot (zero image pulls and zero
+# name-resolution failures in the first 10 minutes). A REBUILT node with an empty image store
+# is the real case, and that runs k3s-bringup.yml by hand anyway.
 #
 # DELIBERATELY NO FALLBACK ENTRY. Adding `1.1.1.1` behind the forwarder would make a dead
-# CoreDNS silently degrade to unfiltered DNS — the same shape as PR #693's drop-in, which
-# read as working while resolving through Cloudflare half the time. A dead forwarder here
+# CoreDNS silently degrade to unfiltered DNS — a drop-in that reads as working while resolving
+# through Cloudflare half the time. A dead forwarder here
 # takes the node's DNS with it, which is loud. `Restart=always` on the unit covers a crash,
 # and tasks/node.yml proves CoreDNS answers BEFORE it points this file at it.
 k3s_node_dns_upstreams:
@@ -1067,14 +981,14 @@ k3s_node_dns_upstreams:
 
 # Seconds to wait for each nameserver, and how many rounds over the WHOLE list to make before
 # returning an error — `attempts` is rounds, not per-server retries (resolv.conf(5)). One
-# round at 2s is what daniel-server has shipped since 2026-08-10: a dead Pi-hole costs one
-# 2s timeout per lookup and then answers, rather than failing.
+# round at 2s means a dead Pi-hole costs one 2s timeout per lookup and then answers, rather
+# than failing.
 k3s_node_dns_timeout: 2
 k3s_node_dns_attempts: 1
 k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_dns_attempts }}"
 
 # ---------------------------------------------------------------------------
-# The host forwarder (Option C, 2026-09-01)
+# The host forwarder
 #
 # glibc picks a nameserver per query and cannot ask "is Pi-hole up?" — it only learns an
 # entry is dead by spending a timeout on it, per process, with no memory. A local CoreDNS
@@ -1085,8 +999,8 @@ k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_d
 # guess is wrong: 1.14.7 exports no `coredns_forward_requests_total`. The per-upstream series
 # is `coredns_proxy_request_duration_seconds_count{proxy_name="forward",to="10.0.0.243:53"}`,
 # and it says what
-# fraction of this node's queries actually reached Pi-hole, which is the question every
-# earlier arrangement in this file could only be answered by hand with a marked lookup.
+# fraction of this node's queries actually reached Pi-hole, which is the question otherwise
+# answerable only by hand with a marked lookup.
 k3s_host_coredns_enabled: true
 k3s_host_coredns_version: "1.14.7"
 
@@ -1099,10 +1013,9 @@ k3s_host_coredns_version: "1.14.7"
 # MANUAL FINISH: the hash below is not derivable from the tag, so `automerge: false`.
 k3s_host_coredns_sha256: "9a09356438c6d9591cb80011a2a7a52f87fc3a113f6690e41f243f98b98faac9"
 
-# WHERE THE PREFERENCE NOW LIVES. This is the ordered forward list, and `policy sequential`
+# WHERE THE PREFERENCE LIVES. This is the ordered forward list, and `policy sequential`
 # below is what makes it an order rather than a load-balance — CoreDNS's forward plugin
-# defaults to `random`, which would reproduce exactly the coin-flip that systemd-resolved
-# gave us. Two public entries, not one, because a forwarder with a single fallback has the
+# defaults to `random`, which would make the list a coin-flip. Two public entries, not one, because a forwarder with a single fallback has the
 # same single point of failure the fallback exists to remove.
 k3s_host_dns_upstreams:
   - "{{ dns_k8s_vip }}"
@@ -1168,8 +1081,8 @@ k3s_node_dns_dhcp_links:
 # What CoreDNS forwards to, in order. This is deliberately NOT the node's resolv.conf that
 # k3s's bundled Corefile uses: that inherits whichever resolvers CoreDNS's node happens to
 # carry, and forward's default `random` policy then treats them as peers rather than as a
-# primary and a fallback — so Pi-hole answered roughly half of all cluster queries and the
-# other half silently lost ad-blocking and the local.daniel-hunter.com records.
+# primary and a fallback — so Pi-hole would answer roughly half of all cluster queries and the
+# other half would silently lose ad-blocking and the local.daniel-hunter.com records.
 #
 # First entry is the pihole-dns Service's CLUSTER IP, not the LAN VIP. kube-proxy routes it
 # to either Pi-hole pod regardless of the LoadBalancer's externalTrafficPolicy: Local, which
@@ -1197,20 +1110,19 @@ k3s_cluster_dns_ip: 10.43.0.10
 # CoreDNS's `reload` plugin re-reads the Corefile within ~30s; 8 tries at 5s covers it.
 k3s_coredns_probe_retries: 8
 
-# ── Phase F: agent join (slice-7 D1/§F) ─────────────────────────────────────────────────
-# daniel-server joins as an AGENT, not a second server (D1: a two-member etcd halves
+# ── Agent join ─────────────────────────────────────────────────────────────
+# daniel-server joins as an AGENT, not a second server (a two-member etcd halves
 # availability rather than doubling it). Run via:
 #   uv run ansible-playbook ansible/k3s-bringup.yml --tags join-firewall   # on daniel-box first
 #   uv run ansible-playbook ansible/k3s-bringup.yml -e join_agent=daniel-server
 k3s_server_join_url: "https://{{ hostvars['daniel-box'].server_ip }}:6443"
 
-# Agent install flags. node.longhorn.io/create-default-disk=false turned out to be
-# INERT (2026-08-13 join): Longhorn honors it only when the cluster-level
-# `create-default-disk-labeled-nodes` setting is true, which this cluster never set — a
-# default disk appeared anyway. The label stays (removing it would churn the unit and
-# re-run the installer for nothing); the enforced lever is agent_verify.yml patching the
-# Longhorn node CR to allowScheduling:false. Storage participation (the replica raise,
-# §F) flips that back deliberately.
+# Agent install flags. node.longhorn.io/create-default-disk=false is INERT: Longhorn honors
+# it only when the cluster-level `create-default-disk-labeled-nodes` setting is true, which
+# this cluster never sets — a default disk appears anyway. The label stays (removing it would
+# churn the unit and re-run the installer for nothing); the enforced lever is agent_verify.yml
+# patching the Longhorn node CR to allowScheduling:false. Storage participation
+# (k3s_agent_longhorn_scheduling) flips that back deliberately.
 k3s_agent_args: >-
   agent --node-ip {{ server_ip }}
   --node-label node.longhorn.io/create-default-disk=false
@@ -1222,14 +1134,13 @@ k3s_agent_args: >-
 #
 # GROUPED BY TAG FAMILY, and the grouping is the correctness property, not organisation. Each
 # group is stamped by a task carrying that family's tags, so `--tags manifest-prune` restamps
-# only manifest-prune-check.sh. The single flat list this replaced was stamped by one untagged
-# loop over all eight, before any template: task ran — so a tag-scoped run declared all eight
-# current while rendering one, and the seven it never touched read as fresh forever
-# (2026-08-23b review M6). Keep each group's membership identical to the tags on the
+# only manifest-prune-check.sh. A single flat list stamped by one untagged loop over all eight
+# would declare all eight current while a tag-scoped run rendered one, and the seven it never
+# touched would read as fresh forever. Keep each group's membership identical to the tags on the
 # `template:` task that renders it; ansible/tests/deploy/test_setup_render_manifest.py asserts that.
 #
-# Paths are relative to the REPO ROOT, not to templates/, because the manifest is now shared with
-# four other setup-plane roles — the check joins nothing onto a hardcoded directory any more.
+# Paths are relative to the REPO ROOT, not to templates/, because the manifest is shared with
+# four other setup-plane roles — the check joins nothing onto a hardcoded directory.
 k3s_render_stamp_groups:
   # This group is read TWICE: stamp_render.yml stamps it, and release_bin.yml deploys it as a
   # versioned release (health-crons.yml). One list on purpose — a release and its stamp
@@ -1240,17 +1151,15 @@ k3s_render_stamp_groups:
     templates:
       # Longhorn backup-plane heartbeat. Runs as the sys_user, not root: it reads the cluster
       # through that user's read-only kubeconfig, which is the whole point — the cron cannot
-      # mutate anything. No no_log: this renders no secret. The Kuma push token moved to
-      # kuma-push.env on 2026-08-23 and the script sources it at runtime. The
-      # `no_log: true # renders the Kuma push token` that used to sit beside it outlived the
-      # thing it described and told the next reader the opposite of what that extraction
-      # achieved (2026-08-23b L4). That it renders no secret is also what makes this group
-      # eligible for a versioned release at all — see release_bin.yml's header.
+      # mutate anything. No no_log: this renders no secret. The Kuma push token lives in
+      # kuma-push.env, which the script sources at runtime. That it renders no secret is also
+      # what makes this group eligible for a versioned release at all — see release_bin.yml's
+      # header.
       - ansible/roles/setup/k3s/templates/longhorn-backup-health.sh.j2
       # Orphaned-backup reaper. Installed but DELIBERATELY NOT SCHEDULED. It deletes backups,
-      # and the set that is safe to delete depends on live state — as of 2026-08-16 the answer
-      # is "none of them", because the weekly tier has produced nothing and the strays are the
-      # only recovery those volumes have. The script enforces that floor itself, but an
+      # and the set that is safe to delete depends on live state — a volume whose weekly tier
+      # has produced no backup has only its strays as recovery. The script enforces that floor
+      # itself, but an
       # operator should read its dry run before any cron does.
       #   dry run: /usr/local/bin/longhorn-reap-orphan-backups.sh
       #   delete:  sudo /usr/local/bin/longhorn-reap-orphan-backups.sh --apply
@@ -1316,11 +1225,11 @@ k3s_release_file_groups:
 #   9100/tcp  both directions   node-exporter scrape (see the two rules below)
 # The two lists below are mirrors apart from 6443, which is server-only because agents dial the
 # API and the server never dials theirs. ansible/tests/setup/test_k3s_join_port_symmetry.py enforces
-# that; until 2026-08-23b the invariant was prose with no reader.
+# that.
 #
 # NOT a complete inventory of what this cluster needs open. A port missing from BOTH lists is
 # symmetric by construction, so the test is blind to it — MetalLB's memberlist 7946 sat in that
-# blind spot from the day the agent joined until 2026-08-23b, blocked on both nodes with the
+# blind spot, blocked on both nodes with the
 # speakers never converging. Completeness is not a property any check here can establish; the
 # only evidence is a live probe from the node that needs the port.
 k3s_join_server_ports:  # allowed FROM each agent, ON the server
@@ -1330,15 +1239,14 @@ k3s_join_server_ports:  # allowed FROM each agent, ON the server
   # The mirror of the agent-side 9100 rule below, and it must stay symmetric. Prometheus is a
   # single-replica Deployment with NO nodeSelector and no affinity, so it lands wherever the
   # scheduler puts it after a reboot; whichever node it is NOT on has to admit the scrape. The
-  # agent-side rule (added 2026-08-14) assumed "prometheus runs on the server", and on 2026-08-23
-  # the 07:38 reboot moved it to daniel-server — daniel-box's node target then sat down 5.4h,
+  # agent-side rule alone would assume "prometheus runs on the server", but a reboot can move it
+  # to daniel-server — daniel-box's node target then sits down,
   # dropping its host memory and /boot coverage entirely (check_disk/check_mem read green off the
   # surviving node; see monitor-bridge check.py). Fix the firewall, not the placement: pinning
   # prometheus back to daniel-box would re-break this the first time the pin is lifted.
   - { port: "9100", proto: tcp }
-  # MetalLB memberlist gossip. Blocked on both nodes since the agent joined, so the speakers
-  # have never converged — verified live on 2026-08-23 with `ss` and the speaker logs
-  # (2026-08-23b review M2). INERT TODAY: L2Advertisement homelab-l2 pins every pool to
+  # MetalLB memberlist gossip. Without this rule both nodes block it and the speakers never
+  # converge. INERT: L2Advertisement homelab-l2 pins every pool to
   # daniel-box, so one speaker owns every VIP and has nobody to gossip with. It stops being
   # inert the moment that pin is lifted, at which point two speakers each believe they own the
   # address. Symmetric on both lists, which is why the symmetry test could never have caught
@@ -1350,12 +1258,11 @@ k3s_join_agent_ports:  # allowed FROM the server, ON the agent
   - { port: "10250", proto: tcp }
   # node-exporter DS is hostNetwork, so prometheus (on the server node) scrapes the
   # agent's 9100 on its LAN address, masqueraded from the server's LAN IP — a path the
-  # vxlan/kubelet allows above never covered. Found 2026-08-14: the daniel-server node
-  # target sat down from the DS's first day; pod-IP scrapes (promtail) ride 8472 and
-  # masked the gap.
+  # vxlan/kubelet allows above never covered. Without it the daniel-server node target sits
+  # down; pod-IP scrapes (promtail) ride 8472 and mask the gap.
   - { port: "9100", proto: tcp }
   # The mirror of the server-side MetalLB memberlist rule above — see it for why this is
-  # currently inert and why it must land before the L2Advertisement node pin is lifted.
+  # inert and why it must land before the L2Advertisement node pin is lifted.
   - { port: "7946", proto: tcp }
   - { port: "7946", proto: udp }
 

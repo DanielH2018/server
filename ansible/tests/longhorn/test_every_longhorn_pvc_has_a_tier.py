@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """Guards that every `storageClassName: longhorn` PVC is routed to a backup tier.
 
-`homelab/navidrome-data` (added 2026-09-02, #864) landed in none of the three routing
-lists in `ansible/roles/setup/k3s/defaults/main.yml`, so `longhorn.yml:436-439` labelled
-it into recurring group `default` — daily backups to B2, retain 14 — against the
-weekly-only policy in `docs/longhorn-backup-tiering.md:27-31` (issue #946). Nothing
-asserted that every bound `longhorn`-class PVC appears in one of the three lists;
+A `longhorn`-class PVC in none of the three routing lists in
+`ansible/roles/setup/k3s/defaults/main.yml` is labelled by `longhorn.yml:436-439` into
+recurring group `default` — daily backups to B2, retain 14 — against the weekly-only policy in
+`docs/longhorn-backup-tiering.md:27-31`. This guard asserts that every bound `longhorn`-class
+PVC appears in one of the three lists;
 `test_longhorn_storageclass.py::test_every_routed_volume_is_a_real_pvc` only checks the
 list -> PVC direction, so a PVC a role declares and no list names is invisible to it.
 
@@ -57,7 +57,7 @@ _ROUTING_LISTS = (
 # stable members — these have not moved tiers since the lists existed.
 _KNOWN_LONGHORN_PVCS = frozenset(
     {
-        "homelab/navidrome-data",  # volume-claim role, weekly tier (this PR)
+        "homelab/navidrome-data",  # volume-claim role, weekly tier
         "homelab/sonarr-config",  # volume-claim role, weekly tier
         "homelab/traefik-acme",  # own template, R2 tier
         "homelab/crowdsec-db",  # own template, nobackup tier

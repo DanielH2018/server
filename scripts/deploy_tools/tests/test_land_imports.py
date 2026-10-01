@@ -37,10 +37,10 @@ ALLOWED = {
     "tick": {"landing", "outcome"},
     "deploy": {"landing", "outcome", "ci", "tick"},
     # `tick.rearm_tick`: the second kick request, after the gate, for a first one that joined
-    # a run in flight (issue #1843). The kick's states live in tick.py, in one place.
+    # a run in flight. The kick's states live in tick.py, in one place.
     "health_verdict": {"landing", "outcome", "tick"},
     # The fork, the logfile and the verdict wait. It imports no phase: `land.py` hands it a
-    # callable and it never knows what a landing is (issue #2853).
+    # callable and it never knows what a landing is.
     "detach": set(),
     "pipeline": {
         "landing",
@@ -72,7 +72,7 @@ def _present() -> set[str]:
 
 
 def test_the_module_set_is_exactly_what_is_on_disk():
-    """`==`, not `<=`: a thirteenth module used to be added and never checked at all."""
+    """`==`, not `<=`: a module added without being checked must fail."""
     assert MODULES == _present(), (
         f"missing from MODULES: {sorted(_present() - MODULES)}; "
         f"listed but absent: {sorted(MODULES - _present())}"

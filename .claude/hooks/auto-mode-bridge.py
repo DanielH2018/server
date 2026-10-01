@@ -5,21 +5,16 @@
 
 `PermissionDenied` — fires only in auto mode, only when the classifier denied the call.
 `./scripts/deploy_tools/gitops_tick.sh` is allow-listed and still denied about 1 run in 7 on
-identical command text (measured 2026-08-22, recorded in the `gitops-tick` skill). The denial is the
-classifier's own variance, not a rule, so the fix is to let the model try once more rather than
-to widen anything: `retry: true` tells it the call may be reissued, and the classifier judges the
-reissue exactly as it judged the first. Two retries per session cap it, so a command the
-classifier means to refuse still stops.
+identical command text. The denial is the classifier's own variance, not a rule, so the fix is to
+let the model try once more rather than to widen anything: `retry: true` tells it the call may be
+reissued, and the classifier judges the reissue exactly as it judged the first. Two retries per
+session cap it, so a command the classifier means to refuse still stops.
 
-`PostToolUseFailure` — names the deploy wrapper's non-zero exit as a refusal rather than a
-playbook failure, and points at the wrapper's own output for what it was. It carried a copy of
-the exit-code table until 2026-09-30: `deploy.sh` exited with a bare number, so the meaning was
-written out here, in the root CLAUDE.md, in the `deploy` skill, in `docs/deploying.md` and in
-`docs/claude-tooling.md`, and 77 and 78 reached only some of the five. `deploy_run.py:report`
-now prints the name, the meaning and the remedy from `scripts/lib/exit_codes.py` on every
-non-zero exit, so this hook has nothing left to decode (issue #2853). What it still adds is
-the framing: a `DEPLOY_SH_NO_VERDICT` code is a resume point, and 20 is the one where changes
-ARE live.
+`PostToolUseFailure` — names the deploy wrapper's non-zero exit as a refusal rather than a playbook
+failure, and points at the wrapper's own output for what it was. `deploy_run.py:report` prints the
+name, the meaning and the remedy from `scripts/lib/exit_codes.py` on every non-zero exit, so this
+hook has nothing to decode. What it still adds is the framing: a `DEPLOY_SH_NO_VERDICT` code is a
+resume point, and 20 is the one where changes ARE live.
 
 `classifierContext` is deliberately not used here. It is a PostToolUse field, and every fact
 worth sending the classifier from this repo is either a failure (which lands on
@@ -54,10 +49,10 @@ _NO_VERDICT_PREFIXES = (
 MAX_RETRIES_PER_SESSION = 2
 
 # The split, and the only part of deploy.sh's contract this hook still holds: 20 means the
-# playbook RAN, every other code here means it refused first. Integers rather than the prose
-# table that used to be here -- the prose is `scripts/lib/exit_codes.py`'s and the wrapper
-# prints it. The hook cannot import that module (stdlib-only, on the per-command hot path
-# under `uv run --no-sync`), so `tests/test_auto_mode_bridge.py` holds these against it.
+# playbook RAN, every other code here means it refused first. Integers rather than a prose
+# table -- the prose is `scripts/lib/exit_codes.py`'s and the wrapper prints it. The hook
+# cannot import that module (stdlib-only, on the per-command hot path under `uv run
+# --no-sync`), so `tests/test_auto_mode_bridge.py` holds these against it.
 _REFUSALS = frozenset({2, 3, 4, 75, 76, 77, 78, 79})
 _PLAYBOOK_FAILED = 20
 

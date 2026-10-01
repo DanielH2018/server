@@ -5,19 +5,17 @@ implementations, defined here so the phase modules never import subprocess.
 
 WHICH CHECKOUT EACH HELPER COMES FROM. await_ci, land_tags and deploy_detach_notify are
 imported from beside land.py, so they are always the same release as it -- a PR adding a flag
-to one and its call site used to fail on its own landing, because the primary checkout still
-held the previous release (PR #850, issue #851). gitops_tick.sh is run from beside land.py
-for the same reason. deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY
-checkout as cwd, because their question IS the primary checkout: `blockers` reads
-`HEAD..origin/master` and `changed` reads `<since>...HEAD`, and deploy.sh renders from its
-working directory. Moving either to this file's checkout would silently re-aim them at the
-worktree's HEAD.
-WHAT IS NOT HERE. Five path-list decisions used to sit on `Tools` beside the process
-boundaries -- `plane_note`, `self_applied`, `remaining_setup_hosts`, `derive`, `quiet_paths`.
-They are pure functions of a file list, so the fakes replaced them with constant lambdas and
-no pipeline test ever ran real tag derivation. They are `Classifier` now, a separate frozen
-dataclass the Landing holds beside `Tools`, so a test can take the real ones and the fake
-boundaries.
+to one and its call site must pass its own landing, though the primary checkout still holds
+the previous release. gitops_tick.sh is run from beside land.py for the same reason.
+deploy_tags.py and deploy.sh are run as subprocesses with the PRIMARY checkout as cwd,
+because their question IS the primary checkout: `blockers` reads `HEAD..origin/master` and
+`changed` reads `<since>...HEAD`, and deploy.sh renders from its working directory. Moving
+either to this file's checkout would silently re-aim them at the worktree's HEAD. WHAT IS NOT
+HERE. Five path-list decisions -- `plane_note`, `self_applied`, `remaining_setup_hosts`,
+`derive`, `quiet_paths` -- are NOT on `Tools`. They are pure functions of a file list, so a
+fake that replaced them with constant lambdas would let no pipeline test run real tag
+derivation. They live on `Classifier`, a separate frozen dataclass the Landing holds beside
+`Tools`, so a test can take the real ones and the fake boundaries.
 """
 
 import contextlib
@@ -86,14 +84,14 @@ _ACQUIRED = re.compile(
 )
 # `[^;]*` rather than `\d+` for the in-flight seconds: that number is NOT booked, so requiring
 # it to parse would throw away the one that is. gitops_tick.sh derives it from /proc/uptime and
-# renders `already s in flight` if that read ever comes back empty, which under `\d+` stopped
-# the line matching at all and silently restored `lock=0` -- the exact failure this parser
+# renders `already s in flight` if that read ever comes back empty, which under `\d+` would
+# stop the line matching at all and silently restore `lock=0` -- the exact failure this parser
 # exists to end. Bounded at the `;` so it cannot run into the seconds that ARE booked.
 _JOINED = re.compile(
     r"gitops_tick: joined a tick already [^;]*in flight; waited (\d+)s for it\s*$"
 )
 # deploy.sh holds the tree lock only for its snapshot and then queues on one lock per service
-# (ADR-0017), so most of what a landing waits for now arrives on THIS line rather than the one
+# (ADR-0017), so most of what a landing waits for arrives on THIS line rather than the one
 # above. It names no holder: a service lock is taken on a descriptor the way the tree lock is,
 # but nothing samples `fuser` for it — the holder is by construction another deploy of the same
 # service, which the line's own tag already says. A run can print several of these and
@@ -172,7 +170,7 @@ def run_tick(
     primary checkout to converge eventually, not before it deploys, and the tick's own 10-min
     timer converges it regardless.
 
-    The SCRIPT comes from beside land.py (issue #851) but the working directory is inherited
+    The SCRIPT comes from beside land.py but the working directory is inherited
     either way. Pinning it to `HERE` would have aimed the tick at this checkout's
     scripts/deploy_tools, which is the re-aiming this module's docstring warns about.
     """
@@ -362,13 +360,11 @@ def lock_holder() -> str:
     """The tree lock's holder as `pid <pid> (etimes, command): <etimes> <command>`, or ''.
 
     fuser prints the PIDs on stdout and the path on stderr; the lowest PID is the flock
-    parent, its children inherit the descriptor. bash's `note_lock_contention` kept the pid
-    in a separate local and only folded it into the printed `say` line, leaving this
-    string (which also feeds the `holder="..."` annotation field) pid-less; this single
-    return value is the only thing callers have, so the pid is folded in here instead.
-    200 characters rather than 120: an `ansible-playbook` command line is long enough that
-    the tags -- the part that says which landing holds the lock -- fell off the end
-    (issue #1031).
+    parent, its children inherit the descriptor. The pid is folded into this string, which
+    also feeds the `holder="..."` annotation field, because this single return value is the
+    only thing callers have. 200 characters rather than 120: an `ansible-playbook` command
+    line is long enough that the tags -- the part that says which landing holds the lock --
+    would fall off the end.
     """
     with contextlib.suppress(
         OSError, subprocess.SubprocessError, ValueError, StopIteration
@@ -392,18 +388,17 @@ def lock_holder() -> str:
 def declared_tags_at(ref: str, primary: Path) -> set[str] | None:
     """The service tags `containers_list` declares at `ref`, or None when unreadable.
 
-    Read at the MERGE COMMIT rather than from a checkout, because a PR that adds a role and
-    its `containers_list` entry together is the case a checkout answers wrongly: the entry is
-    absent from every tree until the tick fast-forwards, so the new role reads as one somebody
-    forgot to register (issue #1544). None restores exactly the previous answer — `land_tags`
-    then reads the tree it lives in — so a ref this checkout cannot resolve costs nothing more
-    than it used to.
+    Read at the MERGE COMMIT rather than from a checkout, because a PR that adds a role and its
+    `containers_list` entry together is the case a checkout answers wrongly: the entry is absent
+    from every tree until the tick fast-forwards, so the new role reads as one somebody forgot
+    to register. None makes `land_tags` read the tree it lives in, so a ref this checkout cannot
+    resolve costs nothing extra.
 
     AN EMPTY READ IS DAMAGE, NEVER EVIDENCE. `set()` says no service exists anywhere, which
     would make every changed role read as unregistered and every landing print
     `needs-manual-apply` with a full-`deploy.yml` remedy — fleet-wide, silently, and green in
-    the suite. `deploy_phases.reconcile_denylist` carries the same guard and the longer argument
-    (issue #1331). It is `None` here, so the fallback to this checkout takes over.
+    the suite. `deploy_phases.reconcile_denylist` carries the same guard and the longer
+    argument. It is `None` here, so the fallback to this checkout takes over.
     """
     try:
         return land_tags.service_tags_at(ref, primary) or None
@@ -506,7 +501,7 @@ class Tools:
     )
     declared_at: Callable[[str, Path], set[str] | None] = declared_tags_at
     # `deploy_tags.py hosts` reads the checkout; this reads `containers_list` at the merge
-    # commit a fast-path landing deploys (issue #1839). None sends the caller to the subprocess.
+    # commit a fast-path landing deploys. None sends the caller to the subprocess.
     landing_hosts_at: Callable[[Any, str, Path, Any], dict[str, list[str]] | None] = (
         land_tags.landing_hosts_at
     )
@@ -517,12 +512,12 @@ class Tools:
         [list[str], str, Path, str | None], dict[str, frozenset[str]]
     ] = land_tags.confirmed_narrow_tags
     # The PR's own narrowing with no row to hold it against, for a landing that never awaits
-    # the tick (#3126). Git over the PR's range too; `classify.narrow_plane` is its caller.
+    # the tick. Git over the PR's range too; `classify.narrow_plane` is its caller.
     own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
         land_tags.own_narrow_tags
     )
     # Also runs git over the PR's range -- the key diff of a shared role's `defaults/main.yml`
-    # and a grep of every template for those keys (#2462). `classify.classify` is its caller.
+    # and a grep of every template for those keys. `classify.classify` is its caller.
     paths_a_hand_must_apply: Callable[
         [list[str], str, Path, set[str] | None], list[str]
     ] = shared_role_reach.paths_a_hand_must_apply
@@ -552,11 +547,11 @@ class Classifier:
         land_tags.shared_caller_tags
     )
     # Which of those roles was narrowed to one smoke caller, so the operator line says so
-    # rather than claiming every caller was deployed (#3124).
+    # rather than claiming every caller was deployed.
     smoke_narrowed_roles: Callable[[list[str], set[str] | None], frozenset[str]] = (
         land_shared.narrowed_roles
     )
-    # Which derived tags the PR's own paths prove are a k3s change (#2730). Beside
+    # Which derived tags the PR's own paths prove are a k3s change. Beside
     # `shared_caller_tags` because `deploy_by_host` routes the union of the two the same way.
     k8s_only_tags: Callable[[list[str], set[str] | None], list[str]] = (
         land_platform.k8s_only_tags

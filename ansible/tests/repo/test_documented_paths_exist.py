@@ -4,17 +4,12 @@ Prose asserts facts that nothing re-derives, so a rename leaves the docs pointin
 that used to be right. `test_documented_macros_exist.py` covers that for shared macro names;
 this covers it for the paths themselves, which that guard's `*.yml.j2` pattern cannot see.
 
-The evidence is standing. The 2026-08-14 k3s migration moved eleven roles out of
-`roles/containers/`, and later passes moved most of `scripts/` into subdirectories. A session
-opened on 2026-08-27 was told five of its memory files still named paths that had moved,
-`scripts/gen_infra_map.py` (now under `scripts/infra_map/`) among them. Memory files get that
-check at session start; the repo's own docs get none, and a doc is what an agent reads before
-it edits. A stale citation still reads as an instruction: the reader opens it, finds nothing,
-and either guesses or gives up.
+A doc is what an agent reads before it edits. A stale citation still reads as an
+instruction: the reader opens it, finds nothing, and either guesses or gives up.
 
-**Only citations carrying a line number count.** That restriction is the whole design, and it
-was arrived at by measuring. A bare-path version of this guard flagged 18 places, and every
-one of them was a path that was never a claim about this tree at a moment in time: a role's
+**Only citations carrying a line number count.** That restriction is the whole design. A bare-path
+version of this guard would flag paths that are not a claim about this tree at a moment in
+time: a role's
 own `docs/platform.md` read from a doc that lives elsewhere, `.github/workflows/image.yml`
 inside the *upstream* texbrain fork, `ansible/roles/k8s/anilist-tags` in a design doc for a
 role nobody has built yet, a retired Kopia procedure, and `.claude/worktrees/` -- which exists
@@ -31,8 +26,7 @@ Two more citation shapes are checked here, each with its own extractor and paire
 bare `ansible/tests/...py` path -- that directory exists nowhere but this tree, so a bare
 citation of it is still a claim about this tree now (`_CITED_TEST`). And a `file.py::test_name`
 node id, in docs AND in runtime modules, which names the check that holds an invariant closed
-(`_CITED_NODE`). They lived in this file and in `test_cited_tests_exist.py` until 2026-09-02;
-one corpus walk and one tracked-file set serve all three.
+(`_CITED_NODE`). One corpus walk and one tracked-file set serve all three.
 """
 
 import re
@@ -45,7 +39,7 @@ from _helpers import REPO, discover_docs
 
 # A floor, not the real count -- catches the walk silently shrinking (a renamed root, a
 # tightened exclude) without hardcoding a number that drifts every time a doc is added.
-# Set just under the ~166 the walk finds today: far enough below to absorb ordinary
+# Set just under the ~166 the walk finds: far enough below to absorb ordinary
 # deletions, close enough that a broken walk cannot pass.
 _MIN_DOCS = 100
 
@@ -131,8 +125,8 @@ def cited_paths(line: str) -> list[str]:
 # A bare `ansible/tests/<file>.py` citation is the ONE exception to the line-number rule. Every
 # such path is a claim about this tree: nothing else has a directory by that name, and a
 # `pytest <path>` line or an `ENFORCED by <path>` note is an instruction someone runs. The
-# 2026-09-01 move of the guards into subdirectories rewrote 305 of these, and the line-number
-# rule would have watched none of them go stale. A trailing `::node_id` is allowed and dropped.
+# move of the guards into subdirectories rewrites these citations, and the line-number rule
+# would watch none of them go stale. A trailing `::node_id` is allowed and dropped.
 _CITED_TEST = re.compile(
     r"`(ansible/tests/[\w./-]+\.py)(?::\d+(?:-\d+)?|::[\w\[\]:.-]+)?`"
 )
@@ -206,7 +200,7 @@ def test_resolution_accepts_a_context_relative_citation():
 
 
 def test_resolution_rejects_a_path_that_moved():
-    """The proof this guard can go red, using the rename that prompted it.
+    """The proof this guard can go red, using a renamed file.
 
     `scripts/gen_infra_map.py` moved to `scripts/infra_map/gen_infra_map.py`. Matching on
     basename would accept the old path and make the whole guard decorative, so this pins the
@@ -237,7 +231,7 @@ def test_the_guard_finds_citations_to_check():
     hits = sum(
         len(cited_paths(line)) for doc in DOCS for line in doc.read_text().splitlines()
     )
-    # 30 today. A floor just under it catches the pattern breaking; setting it at the exact
+    # About 30. A floor just under it catches the pattern breaking; setting it at the exact
     # count would instead fail every time a doc drops a citation, which is not a defect.
     assert hits >= 25, (
         f"only {hits} line-numbered citations found across {len(DOCS)} docs -- the pattern "
@@ -313,7 +307,7 @@ def test_every_test_path_cited_in_the_live_docs_exists():
 
 
 def test_the_test_citation_walk_finds_citations_to_check():
-    """The move that motivated this check touched 118 live citations; a shrunken walk is a bug."""
+    """A shrunken citation walk is a bug."""
     found = sum(
         len(cited_test_paths(line))
         for doc in DOCS
@@ -329,9 +323,7 @@ def test_the_test_citation_walk_finds_citations_to_check():
 # which check holds an invariant closed. That claim rots the way a `file:line` citation does,
 # and neither pattern above sees it: a node id carries no line number, and most are cited
 # from context (`test_check_streaks.py::...` inside the same directory) rather than from the
-# repo root. The evidence is the 2026-09-01 test split (PR #744): nine citations across three
-# runtime modules, two docs and an ADR named files that no longer existed, and only the one
-# carrying a line number was caught. This corpus is wider than DOCS because the citation
+# repo root. This corpus is wider than DOCS because the citation
 # lives in two places: docs cite from prose with backticks, runtime modules from a docstring
 # or a comment with none.
 #
@@ -458,7 +450,7 @@ def test_node_resolution_accepts_a_context_relative_citation():
 def test_node_resolution_rejects_a_renamed_test_and_a_renamed_file():
     """The proof this guard can go red.
 
-    The file the 2026-09-01 split retired, and a test name nothing defines. Matching on the file
+    A file that no longer exists, and a test name nothing defines. Matching on the file
     alone would accept the second.
     """
     source = REPO / "ansible/roles/setup/gitops_deploy/files/deploy_k8s.py"
@@ -495,7 +487,7 @@ def test_the_node_walk_finds_citations_to_check():
         for path in NODE_CORPUS
         for line in path.read_text(errors="replace").splitlines()
     )
-    # 10 today. A floor just under it catches the pattern breaking without failing every
+    # About 10. A floor just under it catches the pattern breaking without failing every
     # time a doc drops a citation.
     assert hits >= 8, (
         f"only {hits} test citations found across {len(NODE_CORPUS)} files -- the pattern "
@@ -525,13 +517,11 @@ def test_every_cited_test_exists():
 
 
 def test_the_walk_ignores_other_worktrees_on_disk():
-    """The regression: `.claude/worktrees/<name>/` is a full checkout per live session.
+    """`.claude/worktrees/<name>/` is a full checkout per live session, and the walk skips it.
 
-    An rglob walked into those and judged this commit against other sessions' older docs, so
-    the guard failed on paths that had moved perfectly legitimately. It broke the docs-refresh
-    cron — its commit runs the prek hooks, this guard rejected it, and the script took its
-    "commit failed; unstaged, nothing published" path while master CI stayed green, because a
-    CI runner has no worktrees on disk. Found 2026-08-27.
+    An rglob into those judges this commit against other sessions' older docs, so the guard
+    fails on paths that moved legitimately. A CI runner has no worktrees on disk, so master CI
+    stays green while the docs-refresh cron's commit, which runs the prek hooks, is rejected.
     """
     # Anchored to REPO, not matched as a substring: this suite often RUNS from inside
     # `.claude/worktrees/<name>/`, so every legitimate doc path contains that text. The
