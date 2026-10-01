@@ -159,8 +159,20 @@
   become: true
   changed_when: false
   when:
-    - manifests_render is changed or manifests_secret_render is changed
     - not k8s_no_mutate
+    # The config arm is the render AND the apply's own verdict, the same conjunction the restart
+    # task above uses (#3115) and the shared role's queued `changed` flag uses (#3125).
+    # `manifests_render is changed` alone compares rendered file bytes, so a YAML-comment or
+    # whitespace edit to one manifest snapshotted all six workloads, appended all six to
+    # k8s_stabilise_watch, and bought the play gate's `k8s_rollout_stabilise_seconds` pause plus
+    # two kubectl reads per workload for a deploy in which no pod moved — each workload's
+    # `checksum/config` annotation is unchanged on such an edit too, so nothing rolled. The
+    # apply's `changed_when` is keyed on `created`/`configured` in its stdout, which an image-pin
+    # bump trips, so this arm still catches the rolls this role has no separate image arm for
+    # (#3133). The secret arm stays on the render alone: verify_secret_keys patches a stale key
+    # out of a Secret after an apply that printed `unchanged`, and that restart needs soaking.
+    - (manifests_render is changed and manifests_apply is changed)
+      or manifests_secret_render is changed
 
 - name: Fail if a telemetry pod selector matched no pods
   tags: [deploy]
@@ -175,8 +187,8 @@
       Either the workload sets a different pod label than `app: {{ item.item.name }}`,
       or it has no pods at all.
     quiet: true
-  # The producer above is gated on `manifests_render is changed or manifests_secret_render is
-  # changed`. A SKIPPED task still sets the variable it registers to — to a result carrying
+  # The producer above is gated on the render AND the apply both changing, or the secret render
+  # changing. A SKIPPED task still sets the variable it registers to — to a result carrying
   # `skipped: true` and NO `stdout` key — so on any deploy that changes something other than
   # the manifests (a dashboards-only change is the common one) every entry here is a skip
   # result and `item.stdout` raises "object of type 'dict' has no attribute 'stdout'". Filter
