@@ -210,7 +210,7 @@ def test_k8s_remediation_never_prescribes_a_tag_that_deploys_nothing():
 
 
 def test_a_shared_module_edit_names_every_consumer_role():
-    """`_ACTIVE_K8S` maps a path to the role whose directory holds it, which is right for a
+    """`role_of` maps a path to the role whose directory holds it, which is right for a
     manifest and wrong for a shared library. bridge/common.py lives under monitor-bridge and
     autofix-bridge imports it, so after the #407 split an edit there emitted
     `--tags monitor-bridge` alone and autofix-bridge's ConfigMap kept the old copy with

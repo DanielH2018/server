@@ -63,34 +63,32 @@ from lib.repo_paths import GITOPS_DEPLOY_FILES, REPO
 
 # The deployer's own `files/` — `deploy_logic` is imported from there, the same reach across
 # the role boundary `deploy_tags.py` makes and for the same reason: one mapper, not two. Its
-# own insert rather than deploy_tags', so this module resolves however it is reached. The
-# IMPORTS stay inside the functions, because only the path entry is free.
+# own insert rather than deploy_tags', so this module resolves however it is reached.
+# `deploy_logic`'s IMPORT stays inside the function that needs it, because only the path entry
+# is free at module import; `deploy_changes` below is the exception — see the note on it.
 _sys.path.insert(0, str(GITOPS_DEPLOY_FILES))
 
-# Paths whose content every play reads, so no `--tags` value scopes a change to them: the
-# play itself and the three task directories it imports, the toposort that orders the whole
-# run, and the config every ansible-playbook run reads. The Pi's shared Docker deploy path is
-# not here: `deploy_changes` classifies it as Pi work, never as a broad path (#2805).
-PLAY_PREFIXES = (
-    "ansible/deploy.yml",
-    "ansible/tasks/",
-    "ansible/pre_tasks/",
-    "ansible/post_tasks/",
-    "ansible/filter_plugins/",
-    "ansible.cfg",
-)
+# Both halves of the deploy plane come from the deployer's side rather than being restated
+# here (#3048): `_BROAD_PLAY_PREFIXES` is derived there as `_BROAD_DEPLOY_PREFIXES` minus the
+# census two, so a prefix added to one cannot go missing from the other. At module import
+# rather than inside a function, unlike `deploy_logic` below, because `deploy_changes` is
+# stdlib-only and imports nothing from this tree — one module's parse, and no cycle to open.
+from deploy_changes import _BROAD_CENSUS_PREFIXES, _BROAD_PLAY_PREFIXES, role_of
+
+# Paths whose content every play reads, so no `--tags` value scopes a change to them: the play
+# itself, the task directories it imports, the toposort, and ansible.cfg. The Pi's shared
+# Docker deploy path is in neither half — Pi work, never a broad path (#2805).
+PLAY_PREFIXES = _BROAD_PLAY_PREFIXES
 # The trees a variable or a macro can be consumed from and still map to a deploy tag.
 # `ansible/roles/setup/` is absent on purpose: the setup plane has its own arm in
 # `handle_broad`, and `ansible/deploy.yml` renders nothing for it.
 ROLE_TREES = ("ansible/roles/k8s", "ansible/roles/containers")
 SHARED_TEMPLATES = "ansible/templates/"
 INVENTORY = "ansible/inventory/"
-# The two broad-deploy trees a per-path rule exists for. `PLAY_PREFIXES` are deliberately
-# absent: `broad_path_tags` refuses them outright, and a census that counted them would mark
-# every service stale for a change to how a deploy RUNS — the shape #1672 paid for.
-CENSUS_PREFIXES = (INVENTORY, SHARED_TEMPLATES)
-
-_ROLE_PATH = re.compile(r"^ansible/roles/(?:k8s|containers)/([^/]+)/")
+# The two broad-deploy trees a per-path rule exists for. `broad_path_tags` refuses a
+# `PLAY_PREFIXES` path outright, and a census counting one would mark every service stale for
+# a change to how a deploy RUNS — the shape #1672 paid for.
+CENSUS_PREFIXES = _BROAD_CENSUS_PREFIXES
 # Python under the play's own tree cannot import a Jinja macro, so a macro NAME found there is
 # a string, not a consumer: `filter_plugins/toposort.py` carries `ingressroute.yml.j2` as the
 # marker it greps role templates for. Treating that hit as consumption refused every change to
@@ -234,9 +232,10 @@ def _sort_hits(
         if path.startswith(SHARED_TEMPLATES):
             templates.add(path[len(SHARED_TEMPLATES) :])
             continue
-        m = _ROLE_PATH.match(path)
-        if m and m.group(1) not in _NOT_SERVICES and path.split("/")[4:5] != ["tests"]:
-            roles.add(m.group(1))
+        at = role_of(path)
+        named = at and at.plane != "setup" and at.role not in _NOT_SERVICES
+        if named and at.subdir != "tests":
+            roles.add(at.role)
     return Importers(roles, templates)
 
 

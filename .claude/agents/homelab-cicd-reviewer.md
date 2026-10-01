@@ -23,7 +23,7 @@ flagging** (silence ≠ unhandled — most "gaps" already have a guard).
   `files/deploy_logic.py` (unit-tested in `tests/test_deploy_*.py`); broad changes (shared
   templates / inventory / common / deploy.yml) defer to a manual full deploy.
   **Important post-migration nuance:** this pipeline **never auto-applies a k8s role change**. A
-  change under `ansible/roles/k8s/<role>/` matches `_ACTIVE_K8S` and always *defers and alerts*
+  change under `ansible/roles/k8s/<role>/` maps to a k8s role and always *defers and alerts*
   — deliberate, not a gap. Since the host carrying `has_gitops` (daniel-box) runs essentially all
   services as `platform: k8s`, the auto-deploy path in practice now covers very little. Judge the
   pipeline on whether the defer-and-alert signal is reliable, not on auto-deploy coverage.

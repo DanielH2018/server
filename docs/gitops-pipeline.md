@@ -825,7 +825,7 @@ stay).
   "never auto-deployed," which is why the paragraph below is written against that older state.)
   Eligibility is decided by `deploy_logic.split_k8s_auto_deploy` and is deliberately **diff-shape
   first, identity second**: gating on the service name alone would not be safe, because
-  `_ACTIVE_K8S` matches the WHOLE role dir — a name-only allowlist would auto-deploy ConfigMap,
+  `role_of` matches the WHOLE role dir — a name-only allowlist would auto-deploy ConfigMap,
   `tasks/` and template pushes too, none of which carry Renovate's soak. A service qualifies only
   when the feature is enabled, it is not in `gitops_deploy_k8s_autodeploy_denylist`, the pilot
   scope (if set) names it, the only path the push touched under its role is
@@ -1049,13 +1049,12 @@ stay).
     names whichever shape rode along, from each handler's own ff-merge.
 
   The original rationale, still accurate for every non-eligible k8s change:
-  This deployer's path→service mapping (`_ACTIVE_CONFIG`/`_ACTIVE_TASKS`/`_ACTIVE_META`) is
-  Docker-platform only — it feeds `deploy(cs.services)`, which is a Docker-role concept. On
+  This deployer's path→service mapping is Docker-platform only — it feeds `deploy(cs.services)`, which is a Docker-role concept. On
   daniel-box, where every `containers_list` entry is `platform: k8s`, a change under
-  `ansible/roles/k8s/**` used to match none of those regexes at all: `services_from_changed_paths`
+  `ansible/roles/k8s/**` used to match no branch at all: `services_from_changed_paths`
   returned an empty `ChangeSet`, and `main()`'s `if not cs.services:` branch took that as a
   docs-only push — silently `--ff-only` merging a Traefik/Authelia/etc. manifest change with no
-  redeploy and no alert (verified 2026-08-13). `deploy_logic._ACTIVE_K8S` now matches the whole
+  redeploy and no alert (verified 2026-08-13). `deploy_logic.role_of` now matches the whole
   role dir into `ChangeSet.k8s`, and `alert_deferred` (the same call site tasks/meta already use,
   reached on both the no-services branch and after a successful deploy) alerts on it once per SHA
   (the `k8s` alert slot) — still `--ff-only` merges, still doesn't deploy. **Compose/GitOps
@@ -1072,7 +1071,7 @@ stay).
 - **A service's structural dirs (`tasks/`, `defaults/`, `vars/`, `handlers/`) and `meta/deps.yml`**
   are ff-merged but NOT auto-deployed, so the deployer defers-and-alerts (once per SHA,
   the `tasks` / `meta` alert slots) to redeploy the affected services by hand. `tasks/` and
-  the `defaults`/`vars`/`handlers` catch-all (`deploy_logic._ACTIVE_ROLE`) share the `tasks` channel;
+  the `defaults`/`vars`/`handlers` role-root catch-all share the `tasks` channel;
   `*.md` (CLAUDE.md/README) stays a silent ff-merge. This fires whether or not the tick deployed something else: a
   *combined* push (`svcA`'s template + `svcB`'s `meta/deps.yml`) deploys `svcA` but still flags `svcB`'s
   unapplied graph change (`deploy_logic.deferred_service_alerts`, keyed on the not-deployed
@@ -1426,8 +1425,8 @@ rendered `config.env` line, different edit site:
 
 So denying a role from auto-deploy leaves it auto-deployable on the host, and the alert names
 the command that cannot fix it. It fails on a safety-tightening edit, which is the worst
-direction. Before moving any value that lands in a host config file, check which `_ACTIVE_*`
-regex its new path matches and what `broad_remediation()` says for that plane.
+direction. Before moving any value that lands in a host config file, check which plane
+`role_of` puts its new path on and what `broad_remediation()` says for that plane.
 
 A second instance appeared during slice 2 (PR #292), a different mechanism with the same
 failure. The stale-denylist alert added in slice 1c split on the direction of the set

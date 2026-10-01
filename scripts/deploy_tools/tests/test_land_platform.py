@@ -82,9 +82,13 @@ def test_an_undeclared_tag_never_reaches_the_restriction():
 
 def test_the_tree_prefix_is_the_one_land_tags_matches_on():
     """Non-vacuity: this module tests a path against a literal prefix while `tag_for` maps the
-    same path with a regex. A tree renamed under one and not the other would leave this
-    returning tags that prove nothing, with every test above still green."""
-    assert land_tags._K8S.pattern.startswith(f"^{land_platform.K8S_TREE}")
+    same path through `deploy_changes.role_of`. A tree renamed under one and not the other
+    would leave this returning tags that prove nothing, with every test above still green."""
+    assert land_tags.role_of(f"{land_platform.K8S_TREE}wg-easy/x.j2") == (
+        "k8s",
+        "wg-easy",
+        "",
+    )
     assert land_tags.role_for(_K8S_TEMPLATE) == "wg-easy"
     assert land_tags.role_for(_DOCKER_TEMPLATE) == "wg-easy"
 

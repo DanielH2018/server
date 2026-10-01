@@ -24,7 +24,6 @@ Run: uv run pytest scripts/deploy_tools/tests/test_land_tags.py
 
 import argparse
 import json
-import re
 import subprocess
 import sys
 from enum import StrEnum
@@ -56,6 +55,7 @@ from deploy_logic import (
     services_from_changed_paths,
     setup_role_playbook,
     manual_plane_clear_for,
+    role_of,
     setup_role_tag,
 )
 
@@ -68,9 +68,6 @@ from land_changes import changes_for
 from land_reach import remaining_setup_hosts_note
 from lib.k8s_roles import role_callers
 from shared_role_callers import caller_tags
-
-_K8S = re.compile(r"^ansible/roles/k8s/([^/]+)/")
-_DOCKER = re.compile(r"^ansible/roles/containers/([^/]+)/")
 
 # The one directory under the role trees that is not a service: `common`, the shared Docker
 # deploy path. `--tags common` matches no containers_list entry, and Ansible exits 0 on a tag
@@ -136,20 +133,24 @@ def role_for(path: str) -> str | None:
     `containers_list` entry, and eight of them do not.
 
     A `.md` under a role belongs to no role HERE, which is the answer the deployer's own
-    mapper already gives: `_ACTIVE_K8S` and `_ACTIVE_ROLE` in `deploy_changes.py` both carry
-    `and not p.endswith(".md")`, because a document is not something a playbook applies. This
-    mapper did not, so a PR whose only change under `roles/k8s/manifests/` was that role's
-    CLAUDE.md came out of `shared_roles` as a tag-less role owed to a hand, and land.sh ended
-    `needs-manual-apply` asking for a full `ansible/deploy.yml` run for prose (issue #1701).
+    mapper already gives: `services_from_changed_paths` drops one ahead of every plane branch,
+    because a document is not something a playbook applies. This mapper did not, so a PR whose
+    only change under `roles/k8s/manifests/` was that role's CLAUDE.md came out of
+    `shared_roles` as a tag-less role owed to a hand, and land.sh ended `needs-manual-apply`
+    asking for a full `ansible/deploy.yml` run for prose (issue #1701).
     `test_land_tags_shared_mapper_agreement.py` pins the two answers together.
+
+    The path shape itself is the deployer's `deploy_changes.role_of`, reached through the
+    index, so one function answers which role a path sits in (#3048). The `.md` rule and
+    `_NOT_SERVICES` stay HERE: `role_of` is the plain mapper, and this is the caller that reads
+    DIFF paths rather than a tree at a ref.
     """
     if path.endswith(".md"):
         return None
-    for pattern in (_K8S, _DOCKER):
-        m = pattern.match(path)
-        if m and m.group(1) not in _NOT_SERVICES:
-            return m.group(1)
-    return None
+    at = role_of(path)
+    if at is None or at.plane == "setup" or at.role in _NOT_SERVICES:
+        return None
+    return at.role
 
 
 def tag_for(path: str, declared: set[str] | None = None) -> str | None:

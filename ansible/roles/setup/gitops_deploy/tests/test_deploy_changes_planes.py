@@ -325,8 +325,8 @@ def test_task_import_parsing_reads_the_dict_form_too():
 def test_every_task_file_deploy_yml_imports_is_visible_to_the_classifier():
     """A file deploy.yml imports must not classify as an EMPTY ChangeSet.
 
-    `ansible/deploy.yml` was broad, but its sibling task dirs matched nothing: every _ACTIVE_*
-    regex is anchored to `ansible/roles/`. main() has no catch-all — `if not cs.services:`
+    `ansible/deploy.yml` was broad, but its sibling task dirs matched nothing: `role_of` is
+    anchored to `ansible/roles/`. main() has no catch-all — `if not cs.services:`
     ff-merges unconditionally and the alert helpers no-op on empty fields — so an
     empty-because-unclassified ChangeSet was indistinguishable from an empty-because-docs one:
     silent ff-merge, no alert, no deploy, on files that change what EVERY deploy does.
