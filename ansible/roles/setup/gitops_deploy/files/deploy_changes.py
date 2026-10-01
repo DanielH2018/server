@@ -491,6 +491,12 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # The WHOLE role dir, not split by subdirectory the way containers/ is below,
             # because the alert only needs to name the role.
             cs.k8s.add(at.role)
+        elif at.plane != "containers":
+            # A setup-plane path, which `_BROAD_SETUP_PREFIXES` above consumes before this
+            # loop reaches here. Named rather than left to fall through: the branches below
+            # are about a CONTAINER role, and `role_of` — unlike the `containers/`-anchored
+            # regexes it replaced — can hand them a `roles/setup/` path.
+            continue
         elif at.subdir in ("templates", "files"):
             # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
             # config template / files/ asset (prometheus.yml.j2, authelia configuration.yml.j2).

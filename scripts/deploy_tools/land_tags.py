@@ -196,9 +196,11 @@ def is_role_test_path(path: str) -> bool:
 
     Read HERE rather than folded into `role_for`, which stays the plain "which role directory is
     this path in" mapper `test_land_tags_shared_mapper_agreement.py` pins against the deployer's
-    own `services_from_changed_paths`.
+    own `services_from_changed_paths`. The segment itself comes off `role_of`, which already
+    carries it, rather than off a fourth `split("/")` of the same path (#3048).
     """
-    return path.split("/")[4:5] == ["tests"]
+    at = role_of(path)
+    return at is not None and at.subdir == "tests"
 
 
 def shared_roles(files, declared: set[str] | None = None) -> list[str]:
