@@ -95,6 +95,8 @@ def _step_tick(ln: Landing) -> None:
             "kicks it after the deploy to converge the primary checkout"
         )
         ln.ledger.t_tick = ln.ledger.t_ci
+        # No row for this range exists yet, so the PR's own derivation narrows the note.
+        classify.narrow_plane(ln, awaited=False)
         return
     tick.run_tick(ln)
     ln.ledger.t_tick = ln.tools.clock()

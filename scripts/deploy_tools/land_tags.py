@@ -252,33 +252,37 @@ def confirmed_narrow_tags(
     absent or an earlier range's, and a stale `coredns` row printed for an RBAC PR leaves the
     RBAC change unapplied behind a cleared marker. Every other case drops the role, so
     `_setup_commands` prints the whole-role tag. `docs/gitops-pipeline.md` has the long form.
+    `pr_range` is `<old>..<new>` for this PR, or '' when unknown; `sidecar` is the
+    `manual_plane_tags` marker text, or None when it cannot be read.
+    """
+    rows = parse_manual_plane_tags(sidecar)
+    own = own_narrow_tags(files, pr_range, repo, set(rows))
+    return {t: rows[t] for t, tags in own.items() if rows[t] and tags <= rows[t]}
 
-    Args:
-        files: the PR's changed paths.
-        pr_range: `<old>..<new>` bounding this PR's own change, or '' when unknown.
-        repo: the checkout holding both ends of the range.
-        sidecar: the `manual_plane_tags` marker text, or None when it cannot be read.
+
+def own_narrow_tags(files, pr_range: str, repo, only=None) -> dict[str, frozenset[str]]:
+    """`narrow_setup.role_tags` over this PR's own range, per setup role it touches (#3126).
+
+    A landing that never awaits the tick prints this directly: no row exists for its range
+    yet, and the narrowed clear drops only these tags, so a wider row recorded later keeps
+    the rest. A role whose derivation refuses or raises is left out and keeps its role tag.
+    `only`, when given, limits the roles to those tags.
     """
     if ".." not in pr_range:
         return {}
     old, new = pr_range.split("..", 1)
-    rows = parse_manual_plane_tags(sidecar)
     out: dict[str, frozenset[str]] = {}
     for role in services_from_changed_paths(list(files)).setup_roles:
         tag, playbook = setup_role_tag(role), setup_role_playbook(role)
-        row = rows.get(tag)
-        if not row or playbook is None:
+        if playbook is None or (only is not None and tag not in only):
             continue
         # DECIDED: `except Exception`, because any failure here must print the role tag. The
         # derivation shells out to git and decodes the output. An escape would kill a landing
         # that has already merged, over a note the whole-role tag answers correctly.
         try:
-            own = narrow_setup.role_tags(role, tag, old, new, str(repo), playbook)
+            out[tag] = narrow_setup.role_tags(role, tag, old, new, str(repo), playbook)
         except Exception as exc:
             print(f"narrow-setup: {role} keeps its role tag ({exc})", file=sys.stderr)
-            continue
-        if own <= row:
-            out[tag] = row
     return out
 
 
