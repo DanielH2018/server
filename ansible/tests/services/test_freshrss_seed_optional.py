@@ -27,6 +27,7 @@ from jinja2 import StrictUndefined
 
 
 from _helpers import load_tasks
+from _k8s_render import render_role_template
 from lib.ansible_jinja_env import make_ansible_env
 from lib import yaml_fast
 
@@ -92,6 +93,26 @@ def manifest_files(host: str, overrides: dict | None = None) -> list[str]:
     return []
 
 
+def seed_claim_vars(host: str, overrides: dict | None = None) -> dict:
+    """The variables k8s/volume-claim renders its PVC with, as the include hands them over.
+
+    Read from the include task's own `vars:` and rendered against this host, laid over
+    volume-claim's defaults the way Ansible ranks them. Hand-mapping freshrss's variables onto
+    volume-claim's here would let a swapped mapping in `tasks/main.yml` pass unseen.
+    """
+    ctx = _context(host, overrides)
+    env = make_ansible_env(undefined_cls=StrictUndefined)
+    for task in load_tasks(_TASKS):
+        if _include(task).get("name") != "k8s/volume-claim":
+            continue
+        handed = {
+            key: env.from_string(value).render(ctx) if isinstance(value, str) else value
+            for key, value in (task.get("vars") or {}).items()
+        }
+        return {**role_defaults("volume-claim", ctx), **ctx, **handed}
+    raise AssertionError(f"{_TASKS} no longer includes k8s/volume-claim")
+
+
 def creators(host: str, overrides: dict | None = None) -> list[str]:
     """Every path that would create the claim on this host."""
     out = []
@@ -139,15 +160,12 @@ def test_the_two_creators_agree_on_the_claim(overrides: dict | None) -> None:
     differ in storage class or size. Nothing else compares them — they live in different
     roles, and only one renders per host."""
     ctx = _context(_HOST, overrides)
-    seed_pvc = yaml_fast.safe_load(
-        (K8S_ROLES / "volume-claim" / "templates" / "pvc.yaml.j2")
-        .read_text()
-        .replace("{{ volume_claim_name }}", ctx["freshrss_k8s_claim"])
-        .replace("{{ volume_claim_storage_class }}", ctx["freshrss_k8s_storage_class"])
-        .replace("{{ volume_claim_size }}", ctx["freshrss_k8s_size"])
-        .replace("{{ k8s_namespace }}", ctx["k8s_namespace"])
-    )
     env = make_ansible_env(undefined_cls=StrictUndefined)
+    seed_pvc = yaml_fast.safe_load(
+        env.from_string(
+            (K8S_ROLES / "volume-claim" / "templates" / "pvc.yaml.j2").read_text()
+        ).render(seed_claim_vars(_HOST, overrides))
+    )
     role_pvc = yaml_fast.safe_load(
         env.from_string(
             (K8S_ROLES / _ROLE / "templates" / "pvc.yaml.j2").read_text()
@@ -169,10 +187,20 @@ def test_the_deployment_references_the_claim_the_flag_creates() -> None:
         ).render(ctx)
     )
     assert pvc["metadata"]["name"] == ctx["freshrss_k8s_claim"]
-    deployment = (K8S_ROLES / _ROLE / "templates" / "deployment.yaml.j2").read_text()
-    assert "freshrss_k8s_claim" in deployment, (
-        "the Deployment no longer names the claim through freshrss_k8s_claim, so the PVC "
-        "template and the mount can drift apart"
+    deployment = yaml_fast.safe_load(
+        render_role_template(_ROLE, "deployment.yaml.j2", _UNSEEDED)
+    )
+    mounted = {
+        claim
+        for volume in deployment["spec"]["template"]["spec"].get("volumes") or []
+        if (claim := (volume.get("persistentVolumeClaim") or {}).get("claimName"))
+    }
+    assert mounted, (
+        "the rendered Deployment mounts no claim, so the check below is vacuous"
+    )
+    assert pvc["metadata"]["name"] in mounted, (
+        f"the Deployment mounts {sorted(mounted)}, not the {pvc['metadata']['name']!r} the "
+        f"PVC renders — the pod sits Pending on a claim nothing creates"
     )
 
 
