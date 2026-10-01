@@ -298,8 +298,8 @@ def test_shared_k8s_roles_matches_the_known_set():
 
 def test_consumes_manifests_agrees_with_the_real_tree():
     """sonarr applies manifests; volume-snapshot, whose tasks drive kubectl directly, does not."""
-    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
-    assert pr._consumes_manifests(REPO / "ansible/roles/k8s/volume-snapshot") is False
+    assert pr.consumes_manifests(REPO / "ansible/roles/k8s/sonarr") is True
+    assert pr.consumes_manifests(REPO / "ansible/roles/k8s/volume-snapshot") is False
 
 
 def test_manifest_affecting_shared_roles_keeps_the_byte_suppliers():

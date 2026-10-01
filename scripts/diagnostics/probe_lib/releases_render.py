@@ -11,7 +11,9 @@ THE LADDER. `digest_verdict` returns one of three answers for a service, and the
 outrank the path check:
 
   * `CURRENT` -- the digests agree, so the bytes the apply wrote are the bytes the ref renders.
-    Every path hit is a false positive and is dropped.
+    A path hit under the service's own role, `manifests` or the deploy plane is a false
+    positive and is dropped. A hit under any other shared role is kept, because that role acts
+    outside the digest (`undigested_hits`, #3090).
   * `DRIFTED` -- the record is trustworthy and the digests disagree, so the applied bytes are
     not what the ref renders. The service is stale for that reason, WHETHER OR NOT a path
     moved. This is what #3046 inverted: until then a digest could only clear a path hit, so a
@@ -59,6 +61,13 @@ RENDER_DIR = Path("/var/lib/homelab/k8s-renders.d")
 
 # The prefix `compute_stale` gives a reason built from path or deploy-plane hits.
 PATH_HIT_PREFIX = "changed since applied: "
+
+# The shared roles whose whole effect is bytes `manifests_digest` covers, so a matching digest
+# proves their change applied. Mirrors `deploy_defer.DIGEST_PROVABLE_ROLES`, whose DECIDED
+# marker says what each other shared role does outside the digest; a test pins the two equal.
+DIGEST_PROVABLE_ROLES = frozenset({"manifests"})
+
+_K8S_ROLES = "ansible/roles/k8s/"
 
 # The three answers `digest_verdict` returns.
 CURRENT = "current"
@@ -173,10 +182,40 @@ def verdicts_for(records, renders, ref_sha):
     }
 
 
-def apply_verdicts(stale, pending, verdicts):
+def path_reason(hits):
+    """The `PATH_HIT_PREFIX` reason for `hits`, naming the first three."""
+    more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
+    return f"{PATH_HIT_PREFIX}{', '.join(hits[:3])}{more}"
+
+
+def undigested_hits(service, hits):
+    """The `hits` a matching digest cannot clear for `service`.
+
+    That is a hit under a shared k8s role outside `DIGEST_PROVABLE_ROLES`. `volume-claim`
+    stages its PVC in a directory `release_digest.yml` never stats, `image-builder`'s build Job
+    is outside the digest, and `arr-notification` writes an app's database over its API. Each
+    changes what is live while every caller's digest stays CURRENT, so clearing its hit on a
+    digest match would hide a change nothing has applied. A hit under the service's own role,
+    or a deploy-plane hit outside `ansible/roles/k8s/`, is one the digest answers for.
+    """
+    kept = []
+    for hit in hits:
+        if hit.startswith(_K8S_ROLES):
+            role = hit[len(_K8S_ROLES) :].split("/", 1)[0]
+            if role != service and role not in DIGEST_PROVABLE_ROLES:
+                kept.append(hit)
+    return kept
+
+
+def apply_verdicts(stale, pending, verdicts, hits=None):
     """Let the digest answer override the path verdict in `stale` and `pending`, in place.
 
     Returns the sorted names a CURRENT verdict cleared from `stale`.
+
+    `hits` is `compute_stale`'s `hits_out`: every path hit per service, where the reason names
+    three. A CURRENT verdict clears a service only when none of its hits is one
+    `undigested_hits` keeps. A stale service with such a hit stays stale, its reason narrowed
+    to the kept hits, and a pending one stays pending.
 
     A CURRENT service is dropped from `pending` too, so it does not read as a merge still
     waiting on its deploy. A DRIFTED one is left alone where the grace window or the
@@ -185,10 +224,14 @@ def apply_verdicts(stale, pending, verdicts):
     cleared = []
     for service, (verdict, reason) in sorted(verdicts.items()):
         if verdict == CURRENT:
+            kept = undigested_hits(service, (hits or {}).get(service, ()))
             if service in stale and stale[service].startswith(PATH_HIT_PREFIX):
-                del stale[service]
-                cleared.append(service)
-            if pending and service in pending:
+                if kept:
+                    stale[service] = path_reason(kept)
+                else:
+                    del stale[service]
+                    cleared.append(service)
+            if pending and service in pending and not kept:
                 del pending[service]
         elif verdict == DRIFTED:
             if pending and service in pending:
@@ -206,11 +249,15 @@ def apply_digest_verdicts(
     repo_root=REPO_ROOT,
     ref="origin/master",
     render_dir=None,
+    hits=None,
 ):
     """`apply_verdicts` for the render records in `render_dir` and `ref` resolved in `repo_root`."""
     renders = load_renders(render_dir or RENDER_DIR)
     if not renders:
         return []
     return apply_verdicts(
-        stale, pending, verdicts_for(records, renders, resolve_ref(ref, repo_root))
+        stale,
+        pending,
+        verdicts_for(records, renders, resolve_ref(ref, repo_root)),
+        hits=hits,
     )
