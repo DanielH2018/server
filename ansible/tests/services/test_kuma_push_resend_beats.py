@@ -7,21 +7,12 @@ multi-day outage. Its own module because
 `test_kuma_static_monitors.py` sits at the 500-line test cap.
 """
 
-import re
-
-from _helpers import ANSIBLE
-from _kuma_entities import ROLE_DEFAULTS, _entities
-
-BRIDGE_ENV_SECRET = ANSIBLE / "roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
+from _kuma_entities import ROLE_DEFAULTS, _entities, bridge_env
 
 
 def test_bridge_fed_push_monitors_resend_within_a_working_day():
     beats = ROLE_DEFAULTS["kuma_push_resend_down_beats"]
-    push_period = int(
-        re.search(r'^\s*INTERVAL: "(\d+)"', BRIDGE_ENV_SECRET.read_text(), re.M).group(
-            1
-        )
-    )
+    push_period = int(bridge_env()["INTERVAL"])
     window = ROLE_DEFAULTS["kuma_bridge_push_interval"]
     beats_per_hour = 3600 / push_period + 3600 / window
     spacing_h = beats / beats_per_hour
@@ -41,11 +32,7 @@ def test_no_push_monitor_can_resend_faster_than_four_hours():
     # window that bound must still leave four hours between resends, or the count that is six
     # hours on the bridge tiles is a much shorter one on a fast cron's.
     beats = ROLE_DEFAULTS["kuma_push_resend_down_beats"]
-    push_period = int(
-        re.search(r'^\s*INTERVAL: "(\d+)"', BRIDGE_ENV_SECRET.read_text(), re.M).group(
-            1
-        )
-    )
+    push_period = int(bridge_env()["INTERVAL"])
     windows = {
         entity["name"]: int(entity["interval"])
         for entity in _entities().values()

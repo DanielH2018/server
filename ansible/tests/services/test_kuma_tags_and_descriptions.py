@@ -6,7 +6,7 @@ Secret does not declare fails to parse and, under ON_DELETE=delete, is deleted.
 """
 
 from _helpers import ANSIBLE
-from _kuma_entities import _entities
+from _kuma_entities import _entities, domain
 from test_kuma_static_monitors import EMAIL_TIER, NOT_MONITORS
 
 
@@ -68,7 +68,7 @@ def test_every_runbook_tag_points_at_a_page_the_docs_site_serves():
     docs = ANSIBLE.parent / "docs"
     for name, entity in _entities().items():
         for url in _tag_values(entity, "tag-runbook"):
-            prefix = "https://docs.local.example.com/"
+            prefix = f"https://docs.local.{domain()}/"
             assert url.startswith(prefix), (
                 f"{name}: runbook is not on the docs site: {url}"
             )
