@@ -26,6 +26,11 @@ CouchDB backend for the Obsidian Self-hosted LiveSync plugin. See repo-root `CLA
 - `templates/config/local.ini.j2` sets `require_valid_user` and smoosh auto-compaction ratios
   (curbing `.couch` bloat from Obsidian LiveSync's MVCC revisions). Admin creds come from
   `ansible/vars/secrets.yml`.
+- **Smoosh and `_compact` reclaim only MVCC revision bloat, not live chunk growth.** Compare
+  `sizes.file` with `sizes.active` in the database info document (`GET /<db>`): compaction helps
+  only when `sizes.file` is well above `sizes.active`. When the two are close, the growth is
+  LiveSync's live content-addressed chunks, which the plugin's own history still references. The
+  lever for those is client-side, the plugin's chunk garbage collection or "Rebuild everything".
 
 ## Editing
 - CouchDB cfg: `templates/config/local.ini.j2` (rendered into the k8s ConfigMap by `roles/k8s/livesync`)
