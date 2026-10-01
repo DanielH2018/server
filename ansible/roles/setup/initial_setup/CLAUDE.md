@@ -55,8 +55,8 @@ Every task carries a block tag placed right under `name:`, so `--tags fail2ban` 
 grep -rho 'tags: \[.*\]' ansible/roles/setup/initial_setup/tasks/ | sort -u
 ```
 
-The record page says what the non-obvious ones cover. `crons` spans every cron, and each
-cron also has a subject tag, so none is reached only by `crons`.
+The record page says what the non-obvious ones cover. No task is reachable only through
+`crons`: each also has a subject tag.
 **Fact-dependency rule:** a task whose `register:` feeds other blocks carries ALL its
 consumers' tags (the home-dir resolver is `[tooling, git-hooks]`) — keep that invariant when
 adding tasks, or a tag-scoped run dies on an undefined variable.

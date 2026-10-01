@@ -17,9 +17,10 @@ the name:
 - `apt-upgrade` — the Docker-engine hold, then the full dist-upgrade. The `docker_install`
   role's `CLAUDE.md` has why the hold sits here.
 - `tooling` — uv and the CLI tools; `packages` is the apt baseline.
-- `crons` — every cron and kuma-check timer this role installs. Each one also answers to a
-  subject tag, so `--tags crons` is never the only way to reach it: `secret-rotation` (the
-  audit, the weekly rotation and their stamp), `weekly-restart`, `prune`, `ansible-log`,
+- `crons` — every cron and kuma-check timer in `crons.yml` and `accounting.yml`. The
+  rkhunter and AIDE crons answer to `rkhunter` and `aide` instead. Each `crons` task also
+  answers to a subject tag, so `--tags crons` is never the only way to reach it:
+  `secret-rotation` (the audit, the weekly rotation and their stamp), `weekly-restart`, `prune`, `ansible-log`,
   `worktree-sweep`, `cert-expiry` (the retired TLS watch's removal), `infra-map`, `firmware`,
   `setup_drift`, `loki_route_witness`, `docs`, `evals` and `apt-hygiene` (autoremove and
   dpkg-purge). The Healthchecks ping key answers to both `prune` and `weekly-restart`, because
