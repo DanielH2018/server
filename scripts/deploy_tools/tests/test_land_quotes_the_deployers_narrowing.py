@@ -201,3 +201,52 @@ def test_a_plane_note_that_raises_after_the_tick_keeps_the_role_tag(land_run):
     )
     assert "VERDICT" in out
     assert "ansible/k3s-bringup.yml --tags k3s`" in out
+
+
+# ── a landing that deploys its own merge commit narrows from its own range (#3126) ──────
+
+
+def test_own_narrowing_is_this_prs_derivation_with_no_row(pr):
+    tree, rng = pr
+    assert land_tags.own_narrow_tags([RBAC], rng, tree.root) == {
+        "k3s": frozenset({"kubeconfig"})
+    }
+
+
+def test_own_narrowing_with_no_range_is_flagged(pr):
+    tree, _ = pr
+    assert land_tags.own_narrow_tags([RBAC], "", tree.root) == {}
+
+
+_MIXED_PR = {
+    "files": [{"path": RBAC}, {"path": "ansible/roles/k8s/obs/x.j2"}],
+    "changedFiles": 2,
+}
+
+
+def _fast_landing(land_run, own):
+    """PR #3091's shape: a service tag AND a k3s template, so the tick is never awaited."""
+    f = Fakes(
+        gh_views={"files,changedFiles": _MIXED_PR},
+        derived=(["obs"], "pr"),
+        own_narrowing=own,
+    )
+    classifier = dataclasses.replace(
+        build_classifier(f), plane_note=land_tags.plane_note
+    )
+    return land_run([], f, classifier=classifier)
+
+
+def test_the_fast_path_prints_this_prs_narrow_tag(land_run):
+    _rc, out, _err, calls, _ = _fast_landing(
+        land_run, {"k3s": frozenset({"kubeconfig"})}
+    )
+    assert "own_narrowing" in [c[0] for c in calls]
+    assert "ansible/k3s-bringup.yml --tags kubeconfig" in out
+    assert "clear-manual-plane k3s --applied kubeconfig" in out
+    assert "--tags k3s`" not in out
+
+
+def test_the_fast_path_keeps_the_role_tag_when_its_derivation_refuses(land_run):
+    _rc, out, _err, _calls, _ = _fast_landing(land_run, {})
+    assert "ansible/k3s-bringup.yml --tags k3s`" in out

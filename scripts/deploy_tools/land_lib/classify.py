@@ -216,15 +216,21 @@ def classify(ln: Landing) -> None:
         )
 
 
-def narrow_plane(ln: Landing) -> None:
-    """Re-render `plane` with the deployer's narrow tags, once the tick has run (#2307).
+def narrow_plane(ln: Landing, awaited: bool = True) -> None:
+    """Re-render `plane` with the narrow tags this PR's setup-role change needs (#2307).
 
     `plane` is classified in step 1, before the tick has recorded this PR's range, so it
     names the whole-role tag. The deployer then records the narrowest tags in its
-    `manual_plane_tags` sidecar. This reads that sidecar AFTER the awaited tick.
+    `manual_plane_tags` sidecar. After an `awaited` tick this reads that sidecar, and
     `land_tags.confirmed_narrow_tags` quotes a row only where it contains this PR's own
     derivation, so a stale row from an earlier range cannot be printed (#2324 review,
     finding 1).
+
+    A landing that deploys its own merge commit never awaits the tick (`awaited=False`), so
+    no row exists for its range. It prints the PR's own derivation instead (#3126): PR #3091
+    touched observability and one k3s template, took that path, and printed `--tags k3s`,
+    which arms the control-plane tasks, where `release-staleness` and its sibling cron tags
+    were what the change needed.
 
     Every failure keeps the note as step 1 wrote it, with the whole-role tag: an unreadable
     or absent sidecar, no PR range, a derivation that refuses or raises. The re-render is
@@ -234,13 +240,16 @@ def narrow_plane(ln: Landing) -> None:
     """
     if not ln.plane or not ln.pr_range:
         return
-    sidecar = ln.state("manual_plane_tags")
-    if not sidecar:
+    sidecar = None if not awaited else ln.state("manual_plane_tags")
+    if awaited and not sidecar:
         return
     try:
-        narrow = ln.tools.confirm_narrowing(
-            ln.pr_paths, ln.pr_range, ln.opts.primary, sidecar
-        )
+        if awaited:
+            narrow = ln.tools.confirm_narrowing(
+                ln.pr_paths, ln.pr_range, ln.opts.primary, sidecar
+            )
+        else:
+            narrow = ln.tools.own_narrowing(ln.pr_paths, ln.pr_range, ln.opts.primary)
         if narrow:
             ln.plane = ln.classifier.plane_note(
                 ln.plane_paths, ln.declared, quiet=ln.quiet, narrow_tags=narrow
