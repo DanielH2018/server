@@ -155,7 +155,7 @@ data:
 {% endif %}
       # Same shape for Valheim (2026-08-13), added with that server's reactivation. Its
       # exporter additionally carries per-player DEATHS, which the Terraria console cannot
-      # emit — see roles/k8s/valheim-stats/CLAUDE.md.
+      # emit — see roles/k8s/game-stats/CLAUDE.md.
       - job_name: valheim-stats
         static_configs:
           - targets: ['valheim-stats.{{ k8s_namespace }}.svc:9420']

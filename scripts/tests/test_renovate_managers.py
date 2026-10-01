@@ -175,6 +175,37 @@ def test_control_plane_version_pins_are_tracked() -> None:
     )
 
 
+def test_coredns_extract_skips_the_upstream_stray_tags() -> None:
+    """The coredns manager's extractVersionTemplate must read `v1.14.7` and skip `v011`.
+
+    coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases. The
+    first version of this manager extracted `^v(?<version>.*)$`, which admitted `v011`; Renovate
+    ranked `011` above `1.14.7` as a major and raised PR #3061, whose download URL 404s and whose
+    paired sha256 still belonged to 1.14.7 (#3087). The pin sits in the `k3s-bringup.yml` plane
+    the GitOps deployer never applies, so nothing would have surfaced the break until someone ran
+    that playbook by hand.
+
+    Asserted on the pattern rather than on a version bound, because a bound of `^1\\.` would also
+    hide a real 2.0.0 — the silent-staleness failure mode this manager exists to close.
+    """
+    coredns = [m for m in _MANAGERS if m.get("depNameTemplate") == "coredns/coredns"]
+    assert len(coredns) == 1, (
+        "expected exactly one coredns/coredns custom manager in renovate.json, found "
+        f"{len(coredns)} — this test no longer guards what it names"
+    )
+    extract = re.compile(_to_python_regex(coredns[0]["extractVersionTemplate"]))
+
+    assert extract.fullmatch("v1.14.7").group("version") == "1.14.7", (
+        "the coredns extractVersionTemplate no longer reads a real release tag — the manager is "
+        "inert and the host resolver ages with no signal"
+    )
+    stray = [t for t in ("v002", "v005", "v011") if extract.fullmatch(t)]
+    assert not stray, (
+        f"the coredns extractVersionTemplate admits upstream's stray tags {stray} — Renovate "
+        "ranks those above 1.14.7 as a major and proposes a version with no release tarball (#3087)"
+    )
+
+
 # Images BUILT by this repo and pushed to the node-local registry, not pulled from an upstream
 # registry — so there is no upstream ref for Renovate to compare against and no version for it to
 # offer. Exempt by variable name rather than by pattern, so adding one is a deliberate act with a

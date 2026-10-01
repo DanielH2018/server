@@ -261,7 +261,7 @@
     },
     {
       "customType": "regex",
-      "description": "CoreDNS host-forwarder binary pin in roles/setup/k3s/defaults/main.yml. This is the resolver every DNS lookup on daniel-box passes through, installed from a GitHub release tarball rather than a package, so nothing else in this repo would notice it aging (silence != up-to-date, same failure mode as the SOPS pin above). extractVersionTemplate strips the tag's `v`, because the var holds a bare `1.14.7` while upstream tags are `v1.14.7` — without it the datasource's version space never matches what the matchString captures and the manager is inert. NO automerge (packageRule below): the paired k3s_host_coredns_sha256 is not derivable from the tag, so the PR is a SIGNAL and the operator finishes the hash from the release's coredns_<ver>_linux_amd64.tgz.sha256. Same manual-finish class as SOPS.",
+      "description": "CoreDNS host-forwarder binary pin in roles/setup/k3s/defaults/main.yml. This is the resolver every DNS lookup on daniel-box passes through, installed from a GitHub release tarball rather than a package, so nothing else in this repo would notice it aging (silence != up-to-date, same failure mode as the SOPS pin above). extractVersionTemplate strips the tag's `v`, because the var holds a bare `1.14.7` while upstream tags are `v1.14.7` — without it the datasource's version space never matches what the matchString captures and the manager is inert. The three-component anchor is the other half (#3087): coredns/coredns carries stray tags `v002` ... `v011` beside its real `v1.x.y` releases, and the earlier `^v(?<version>.*)$` admitted `v011`, which Renovate ranked ABOVE 1.14.7 as a major and proposed as PR #3061. No such release exists, so that bump renders a 404 download URL while the paired sha256 still belongs to the old version, and it lands in the `k3s-bringup.yml` plane the deployer never applies, so nothing surfaces it until a person runs that playbook by hand. Anchoring on `\\d+\\.\\d+\\.\\d+` drops the stray tags WITHOUT capping the major, which an `allowedVersions: \"/^1\\./\"` bound would not — a real 2.0.0 stays offerable. NO automerge (packageRule below): the paired k3s_host_coredns_sha256 is not derivable from the tag, so the PR is a SIGNAL and the operator finishes the hash from the release's coredns_<ver>_linux_amd64.tgz.sha256. Same manual-finish class as SOPS.",
       "managerFilePatterns": [
         "/(^|/)ansible/roles/setup/k3s/defaults/main\\.yml$/"
       ],
@@ -270,7 +270,7 @@
       ],
       "depNameTemplate": "coredns/coredns",
       "datasourceTemplate": "github-releases",
-      "extractVersionTemplate": "^v(?<version>.*)$"
+      "extractVersionTemplate": "^v(?<version>\\d+\\.\\d+\\.\\d+)$"
     },
     {
       "customType": "regex",
