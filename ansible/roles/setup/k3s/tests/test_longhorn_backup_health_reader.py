@@ -16,6 +16,8 @@ Run: uv run pytest ansible/roles/setup/k3s/tests/test_longhorn_backup_health_rea
 import subprocess
 
 import pytest
+
+from lib.proc_testing import write_exec
 from _longhorn_reader_stubs import (
     NOW,
     _green_path_stub_kubectl,
@@ -37,9 +39,10 @@ def test_reader_pins_the_transport(tmp_path):
     host_lib.kubectl_runner prepends /usr/local/bin ahead of the caller's PATH, so a same-named
     stub elsewhere on PATH would be shadowed by a real kubectl on a host that has one.
     """
-    stub = tmp_path / "stub-kubectl"
-    stub.write_text("#!/usr/bin/env bash\necho 'STUB_KUBECTL_MARKER' >&2\nexit 1\n")
-    stub.chmod(0o755)
+    stub = write_exec(
+        tmp_path / "stub-kubectl",
+        "#!/usr/bin/env bash\necho 'STUB_KUBECTL_MARKER' >&2\nexit 1\n",
+    )
 
     env = _reader_env(tmp_path, LONGHORN_BACKUP_KUBECTL=str(stub))
 
@@ -63,8 +66,8 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
     stdout line one journal message. Get any of those wrong against the real journalctl and the
     read still exits 0 with output the parse silently finds nothing in, so this is the seam.
     """
-    stub = tmp_path / "stub-journalctl"
-    stub.write_text(
+    stub = write_exec(
+        tmp_path / "stub-journalctl",
         "#!/usr/bin/env bash\n"
         'printf "%s\\n" "$*" | grep -q -- "--since -26h" || exit 64\n'
         'printf "%s\\n" "$*" | grep -q -- "--output=cat" || exit 64\n'
@@ -72,9 +75,8 @@ def test_reader_pins_the_journal_transport(tmp_path, logger_calls):
         '  *"-t longhorn-trim"*) echo "trimmed 38 volume(s), 3 skipped, 3 failed" ;;\n'
         '  *"-t b2-deletions"*) : ;;\n'
         "  *) exit 64 ;;\n"
-        "esac\n"
+        "esac\n",
     )
-    stub.chmod(0o755)
 
     env = _reader_env(
         tmp_path,

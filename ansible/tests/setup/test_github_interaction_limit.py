@@ -14,6 +14,7 @@ import subprocess
 import jinja2
 import pytest
 from lib.ansible_jinja_env import make_ansible_env
+from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE
 
 TEMPLATE = (
@@ -63,7 +64,7 @@ def _run(
     body = body.replace(REAL_LIB, str(lib))
 
     binstub = tmp_path / "bin"
-    binstub.mkdir()
+    binstub.mkdir(parents=True, exist_ok=True)
     assert CRON_PATH_LINE in body, (
         "the cron PATH reset changed shape — this harness prepends its stub dir to that exact "
         "line, and without it the curl stub is never reached"
@@ -72,38 +73,38 @@ def _run(
         CRON_PATH_LINE, f"export PATH={binstub}:/usr/local/bin:/usr/bin:/bin"
     )
 
-    script = tmp_path / "github-interaction-limit.sh"
-    script.write_text(body)
-    script.chmod(0o755)
+    script = write_exec(tmp_path / "github-interaction-limit.sh", body)
 
     # curl stub: records its argv (so a test can assert the method and body), prints curl_body,
     # exits curl_rc. `-sf` on the real one turns an HTTP error into a non-zero rc, so a 403
     # from a token without the scope and a transport failure both arrive here the same way.
     argv_out = tmp_path / "curl.argv"
-    curl = binstub / "curl"
-    curl.write_text(
-        "#!/usr/bin/env bash\n"
-        f"printf '%s\\n' \"$@\" > {argv_out}\n"
-        f"printf '%s' {json.dumps(curl_body or '')}\n"
-        f"exit {curl_rc}\n"
+    fake_bin(
+        binstub,
+        curl=(
+            "#!/usr/bin/env bash\n"
+            f"printf '%s\\n' \"$@\" > {argv_out}\n"
+            f"printf '%s' {json.dumps(curl_body or '')}\n"
+            f"exit {curl_rc}\n"
+        ),
     )
-    curl.chmod(0o755)
 
     # sudo stub: the token lookup is `sudo -n -u <user> -H gh auth token`. On the box these
     # tests run on the real sudo is passwordless and the real gh is logged in, so without the
     # stub a unit test would reach a live credential — and a live PUT against the real repo.
-    sudo = binstub / "sudo"
-    sudo.write_text(
-        "#!/usr/bin/env bash\nprintf 'stub-token\\n'\nexit 0\n"
-        if logged_in
-        else "#!/usr/bin/env bash\nexit 1\n"
+    fake_bin(
+        binstub,
+        sudo=(
+            "#!/usr/bin/env bash\nprintf 'stub-token\\n'\nexit 0\n"
+            if logged_in
+            else "#!/usr/bin/env bash\nexit 1\n"
+        ),
     )
-    sudo.chmod(0o755)
 
     out = tmp_path / "push.out"
     env = {
         **os.environ,
-        "PATH": f"{binstub}:{os.environ['PATH']}",
+        "PATH": path_with(binstub),
         "KUMA_PUSH_OUT": str(out),
     }
     proc = subprocess.run(

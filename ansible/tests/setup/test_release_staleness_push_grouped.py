@@ -17,6 +17,7 @@ import subprocess
 import jinja2
 
 from lib.ansible_jinja_env import make_ansible_env
+from lib.proc_testing import write_exec
 from _helpers import ANSIBLE
 
 # `reachout_verdict` from the real library, stubbed to its WAN-reachable answer — which is what
@@ -79,24 +80,23 @@ def _run(tmp_path, probe_output, probe_rc, names=None, prev=None):
     names_src = tmp_path / "names"
     if names is not None:
         names_src.write_text("".join(f"{n}\n" for n in names))
-    uv = tmp_path / "uv"
-    uv.write_text(
+    uv = write_exec(
+        tmp_path / "uv",
         "#!/usr/bin/env bash\n"
         "while [[ $# -gt 0 ]]; do\n"
         f'  if [[ $1 == --names-out && -f "{names_src}" ]]; then cp "{names_src}" "$2"; fi\n'
         "  shift\n"
         "done\n"
-        f"cat <<'EOF'\n{probe_output}\nEOF\nexit {probe_rc}\n"
+        f"cat <<'EOF'\n{probe_output}\nEOF\nexit {probe_rc}\n",
     )
-    uv.chmod(0o755)
 
-    script = tmp_path / "release-staleness-check.sh"
-    script.write_text(
+    script = write_exec(
+        tmp_path / "release-staleness-check.sh",
         body.replace("/usr/local/lib/kuma-push-lib.sh", str(lib))
         .replace("/etc/rancher/k3s/kuma-push.env", str(env))
         .replace("/home/u/.local/bin/uv", str(uv))
         .replace("/home/u/server", str(tmp_path))
-        .replace(STATE_DIR, str(state))
+        .replace(STATE_DIR, str(state)),
     )
     subprocess.run(["bash", str(script)], check=True, capture_output=True)
     return [tuple(p.split("\n", 1)) for p in pushed.read_text().split(SEP) if p]

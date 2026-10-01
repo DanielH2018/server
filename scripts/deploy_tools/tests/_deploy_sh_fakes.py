@@ -128,7 +128,7 @@ def deploy_sh_env(tmp_path: Path, bin_dir: Path, **overrides: str) -> dict[str, 
     locks = tmp_path / "locks"
     locks.mkdir(exist_ok=True)
     return git_free_env(
-        PATH=f"{bin_dir}:{os.environ['PATH']}",
+        PATH=path_with(bin_dir),
         HOMELAB_DEPLOY_SNAPSHOT_ROOT=str(tmp_path / "snapshots"),
         HOMELAB_DEPLOY_LOCK_DIR=str(locks),
         HOMELAB_DEPLOY_TREE_LOCK=str(locks / "server-git-tree.lock"),

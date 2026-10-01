@@ -32,6 +32,7 @@ from pathlib import Path
 import pytest
 from _helpers import REPO as _REPO_ROOT
 from lib.git_testing import init_repo, scrubbed_env
+from lib.proc_testing import fake_bin, path_with
 
 
 # The stub stands in for `k3s kubectl`. It answers each call this role makes, and it learns the
@@ -94,18 +95,11 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
     """Run k8s/volume-snapshot for real on the attached-volume path, against a stubbed cluster."""
     with tempfile.TemporaryDirectory() as tmp:
         tmp_path = Path(tmp)
-        bin_dir = tmp_path / "bin"
-        bin_dir.mkdir()
         state_dir = tmp_path / "state"
         state_dir.mkdir()
 
-        k3s_stub = bin_dir / "k3s"
-        k3s_stub.write_text(_K3S_STUB)
-        k3s_stub.chmod(0o755)
-
+        bin_dir = fake_bin(tmp_path / "bin", k3s=_K3S_STUB, fake_become=_FAKE_BECOME)
         fake_become = bin_dir / "fake_become"
-        fake_become.write_text(_FAKE_BECOME)
-        fake_become.chmod(0o755)
 
         # The role resolves its deploy tag with `git rev-parse --short=8 HEAD` and `chdir:
         # {{ playbook_dir }}/..`, so the playbook goes one level down and its parent gets a real
@@ -118,7 +112,7 @@ def _run_attached_path() -> subprocess.CompletedProcess[str]:
         playbook.write_text(_PLAY.format(become_exe=fake_become))
 
         env = scrubbed_env()
-        env["PATH"] = f"{bin_dir}:{env.get('PATH', '')}"
+        env["PATH"] = path_with(bin_dir, env=env)
         env["STUB_STATE"] = str(state_dir)
         env["ANSIBLE_LOG_PATH"] = str(tmp_path / "ansible.log")
         env["ANSIBLE_NOCOLOR"] = "1"

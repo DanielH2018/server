@@ -9,11 +9,11 @@ are on what the Pi would execute, not on the wrapper's text.
 """
 
 import os
-import stat
 import subprocess
 
 import pytest
 from lib import yaml_fast
+from lib.proc_testing import fake_bin, path_with
 from _helpers import ROLES, stub_logger_on_path
 
 ROLE = ROLES / "k8s/pi-peer-backup"
@@ -35,16 +35,14 @@ def logger_calls(tmp_path_factory, monkeypatch):
 
 @pytest.fixture
 def fake_sudo(tmp_path_factory, logger_calls):
-    bindir = tmp_path_factory.mktemp("bin")
-    stub = bindir / "sudo"
-    stub.write_text('#!/bin/sh\nprintf "%s\\n" "$@"\n')
-    stub.chmod(stub.stat().st_mode | stat.S_IXUSR)
-    return bindir
+    return fake_bin(
+        tmp_path_factory.mktemp("bin"), sudo='#!/bin/sh\nprintf "%s\\n" "$@"\n'
+    )
 
 
 def _run(fake_sudo, original_command: str | None, src: str = SRC):
     env: dict[str, str] = dict(os.environ)
-    env["PATH"] = f"{fake_sudo}:{env['PATH']}"
+    env["PATH"] = path_with(fake_sudo, env=env)
     env.pop("SSH_ORIGINAL_COMMAND", None)
     if original_command is not None:
         env["SSH_ORIGINAL_COMMAND"] = original_command

@@ -51,10 +51,9 @@ EXEMPT = {
     "scripts/tests/test_tests_share_the_subprocess_helpers.py",
     # The helpers themselves. `test_proc_testing.py`'s subject is the exec bit and the prefix.
     "scripts/lib/tests/test_proc_testing.py",
-    # `git_free_env` builds the whole environment a `deploy.sh` child runs under, and its
-    # `stub_bin` predates the shared writer by carrying a per-stub `$STUB_LOG` contract that
-    # every module in that suite reads. Migrating it would move the contract, not share it.
-    "scripts/deploy_tools/tests/_deploy_sh_fakes.py",
+    # The exec bit IS the subject: `hook_files` must read a hook committed WITHOUT it (#361),
+    # so the fixture writes one file with the bit and one without.
+    "scripts/dev/tests/test_gen_hook_settings.py",
 }
 
 # The rules' own census must reach these. Each held one of the two forms before #3056, so an

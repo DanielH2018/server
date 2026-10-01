@@ -31,6 +31,8 @@ from pathlib import Path
 
 import pytest
 
+from lib.proc_testing import path_with, write_exec
+
 HOOKS = Path(__file__).resolve().parent.parent
 HOOK = HOOKS / "uv-python.sh"
 
@@ -85,10 +87,8 @@ def rewrite_without_stdio_blocking(command, tool_name="Bash"):
 
 def rewrite_with_stub_stdio_blocking(command, tmp_path, tool_name="Bash"):
     """Like `rewrite`, with a stub `stdio-blocking` executable placed on PATH."""
-    stub = tmp_path / "stdio-blocking"
-    stub.write_text("#!/bin/sh\nexit 0\n", encoding="utf-8")
-    stub.chmod(0o755)
-    env = dict(os.environ, PATH=f"{tmp_path}:{_MINIMAL_PATH}")
+    write_exec(tmp_path / "stdio-blocking", "#!/bin/sh\nexit 0\n")
+    env = dict(os.environ, PATH=path_with(tmp_path, env={"PATH": _MINIMAL_PATH}))
     return rewrite(command, tool_name=tool_name, env=env)
 
 

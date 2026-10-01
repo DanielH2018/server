@@ -18,6 +18,7 @@ import subprocess
 import jinja2
 import pytest
 from lib.ansible_jinja_env import make_ansible_env
+from lib.proc_testing import fake_bin, path_with, write_exec
 from _helpers import ANSIBLE
 
 TEMPLATE = ANSIBLE / "roles/setup/gitops_deploy/templates/github-ruleset-drift.sh.j2"
@@ -126,7 +127,7 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
     # and still "pass" the DOWN assertions, which is precisely the inert-check shape these tests
     # exist to rule out.
     binstub = tmp_path / "bin"
-    binstub.mkdir()
+    binstub.mkdir(parents=True, exist_ok=True)
     assert CRON_PATH_LINE in body, (
         "the cron PATH reset changed shape — this harness prepends its stub dir to that exact "
         "line, and without it the curl stub is never reached"
@@ -135,48 +136,46 @@ def _run(tmp_path, curl_body=None, curl_rc=0, branch_body=None):
         CRON_PATH_LINE, f"export PATH={binstub}:/usr/local/bin:/usr/bin:/bin"
     )
 
-    script = tmp_path / "github-ruleset-drift.sh"
-    script.write_text(body)
-    script.chmod(0o755)
+    script = write_exec(tmp_path / "github-ruleset-drift.sh", body)
 
     # curl stub: exits curl_rc, prints the body for whichever ruleset the URL names. `-sf` means
     # the real one exits non-zero on an HTTP error, so a transport failure and a 404 both arrive
     # here as a non-zero rc. The URL is the last argument the script passes.
-    curl = binstub / "curl"
-    curl.write_text(
-        "#!/usr/bin/env bash\n"
-        f'case "${{@: -1}}" in\n'
-        f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
-        f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
-        "esac\n"
-        f"exit {curl_rc}\n"
+    fake_bin(
+        binstub,
+        curl=(
+            "#!/usr/bin/env bash\n"
+            f'case "${{@: -1}}" in\n'
+            f"  */rulesets/{BRANCH_RULESET_ID}) printf '%s' {json.dumps(branch_body)} ;;\n"
+            f"  *) printf '%s' {json.dumps(curl_body or '')} ;;\n"
+            "esac\n"
+            f"exit {curl_rc}\n"
+        ),
     )
-    curl.chmod(0o755)
 
     # sudo stub: the script's token lookup is `sudo -n -u <user> -H gh auth token`, and on the
     # box these tests run on the real sudo is passwordless and the real gh is logged in — so
     # without this stub a unit test reached out to a live credential. The stub fails the way
     # a host with no gh login does, which is the anonymous path every case here exercises.
-    sudo = binstub / "sudo"
-    sudo.write_text("#!/usr/bin/env bash\nexit 1\n")
-    sudo.chmod(0o755)
+    fake_bin(binstub, sudo="#!/usr/bin/env bash\nexit 1\n")
 
     # logger stub: the script's journal line. Recorded rather than sent, so a case can assert the
     # verdict reached the journal without reading the host's own. The real logger is what a
     # `journalctl -t github-ruleset-drift` on the deployer reads, which is how #1781's verify-by
     # confirms this producer ran; until that line existed a clean run left nothing there.
-    logger = binstub / "logger"
-    logger.write_text(
-        "#!/usr/bin/env bash\n"
-        "shift 2  # -t <tag>\n"
-        'printf \'%s\\n\' "$*" >> "$LOGGER_OUT"\n'
+    fake_bin(
+        binstub,
+        logger=(
+            "#!/usr/bin/env bash\n"
+            "shift 2  # -t <tag>\n"
+            'printf \'%s\\n\' "$*" >> "$LOGGER_OUT"\n'
+        ),
     )
-    logger.chmod(0o755)
 
     out = tmp_path / "push.out"
     env = {
         **os.environ,
-        "PATH": f"{binstub}:{os.environ['PATH']}",
+        "PATH": path_with(binstub),
         "KUMA_PUSH_OUT": str(out),
         "LOGGER_OUT": str(tmp_path / "journal.out"),
     }
