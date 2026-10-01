@@ -12,10 +12,14 @@ Every entity also carries the fields AutoKuma v2.0.0 parses (`type` mandatory), 
 the filenames — must stay unique.
 """
 
-import re
-
-from _helpers import ANSIBLE
-from _kuma_entities import ROLE_DEFAULTS, TEMPLATE, _entities
+from _kuma_entities import (
+    ROLE_DEFAULTS,
+    _entities,
+    bridge_env,
+    bridge_push_tokens,
+    entities_with,
+    push_tokens_by_monitor,
+)
 
 # Entity types the Secret declares that are not monitors: the two notifications and the two
 # tags the notification templates read. Every guard below that iterates monitors skips these.
@@ -176,6 +180,12 @@ EMAIL_TIER = {
     "Kuma Notification Delivery",
     # The transport reason above at its strongest: no Discord webhook can deliver at all.
     "WAN Reachable",
+    # One tile per host, and both mail for the reason the template's own comment gives: a
+    # secondary upsmon that is not running is only discovered at a power cut, which is exactly
+    # when Discord is unreachable. They were declared on the tier before this list could see
+    # them — their `| default('')` token gate rendered them away under the old stubbed render.
+    "UPS Secondary (daniel-box)",
+    "UPS Secondary (daniel-server)",
     # The single existential risk on a one-server control plane: at its backend quota etcd
     # rejects every write and the cluster stops accepting changes. The fix is an operator
     # compacting and defragmenting, or raising the quota, so it cannot wait for someone to
@@ -184,43 +194,8 @@ EMAIL_TIER = {
 }
 
 
-BRIDGE_ENV_SECRET = ANSIBLE / "roles/k8s/monitor-bridge/templates/env-secret.yaml.j2"
-
-# The bridge loop's own cadence, from the same env-secret the pushes are declared in. A push
-# monitor's window has to be a multiple of the cadence that feeds it, so reading both from the
-# bridge is what keeps kuma_bridge_push_interval derived rather than picked.
-BRIDGE_LOOP_INTERVAL_S = 300
-
-
-def _bridge_push_tokens() -> set[str]:
-    """The push-token variable names monitor-bridge itself pushes, read from its env-secret.
-
-    Derived, not listed: four monitors carry a `monitor_bridge_*` token name while being fed by
-    something else entirely (CrowdSec Home Allowlist is fed by a cron on daniel-box, and the two
-    Pi monitors and Arr Auto-Block are not bridge checks). A hand-kept list here would put
-    those on the bridge's heartbeat window and relax a tile whose feeder runs on another clock.
-
-    A token awaiting its secret renders as `{{ var | default('') }}`, so the filter is optional in
-    the pattern. Without that such a tile reads as a non-bridge monitor wired to the bridge's
-    window, which is the opposite of what it is.
-    """
-    return set(
-        re.findall(
-            r"\{\{ ([a-z0-9_]+_push_token)(?: \| default\(''\))? \}\}",
-            BRIDGE_ENV_SECRET.read_text(),
-        )
-    )
-
-
-def _monitor_tokens() -> dict[str, str]:
-    """monitor name -> the push-token variable the template renders into it."""
-    text = TEMPLATE.read_text()
-    found = {}
-    for name, token in re.findall(
-        r'"name": "([^"]+)".*?"push_token": "\{\{ ([a-z0-9_]+) \}\}"', text
-    ):
-        found[name] = token
-    return found
+# A heartbeat window no tile holds, for the render that reveals which tiles the variable moves.
+_WINDOW_PROBE_S = 7777
 
 
 def test_bridge_push_monitors_share_one_interval():
@@ -228,13 +203,17 @@ def test_bridge_push_monitors_share_one_interval():
     # so widening the window is one edit rather than one per tile. A new bridge
     # check that hardcodes an interval reads as covered while sitting on the old, tighter window —
     # which is the flap this variable exists to stop.
-    bridge_tokens = _bridge_push_tokens()
-    assert bridge_tokens, "no push tokens found in the bridge env-secret"
-    tokens = _monitor_tokens()
+    #
+    # Both sides are rendered values: the tile's own `push_token` against the token the bridge's
+    # env-secret pushes to. Under `NamedStub` a secret renders as its own variable name, so the
+    # join is on what the two pods would agree on rather than on a name scanned out of both
+    # templates.
+    bridge_tokens = bridge_push_tokens()
+    tokens = push_tokens_by_monitor()
     want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
     off = {
         name: e["interval"]
-        for name, e in ((n, e) for n, e in _entities().items())
+        for name, e in _entities().items()
         if e["type"] == "push"
         and tokens.get(e["name"]) in bridge_tokens
         and e["interval"] != want
@@ -245,22 +224,28 @@ def test_bridge_push_monitors_share_one_interval():
 def test_non_bridge_push_monitors_keep_their_own_interval():
     # The REJECT half. A guard that only asserted "every bridge tile uses the variable" would pass
     # just as happily with the non-bridge tiles swept onto it too, which is the mistake it is here
-    # to prevent — their feeders are crons on other cadences, not the 300s loop.
+    # to prevent — their feeders are crons on other cadences, not the bridge loop.
     #
-    # Asserted against the TEMPLATE, not the rendered interval: eight non-bridge monitors already
-    # sit at 1200 for their own reasons, so comparing rendered numbers would call a coincidence a
-    # violation. What matters is whether a monitor is WIRED to the variable — that is what makes a
-    # future change to kuma_bridge_push_interval move it.
-    bridge_tokens = _bridge_push_tokens()
-    swept = {
-        name
-        for name, token in re.findall(
-            r'"name": "([^"]+)", "interval": \{\{ kuma_bridge_push_interval \}\}.*?'
-            r'"push_token": "\{\{ ([a-z0-9_]+) \}\}"',
-            TEMPLATE.read_text(),
-        )
-        if token not in bridge_tokens
+    # Which tiles are WIRED to the variable is answered by MOVING it: the set that renders a
+    # different interval at `_WINDOW_PROBE_S` is exactly the set a future widening would move.
+    # Comparing rendered numbers at one value could not answer it — eight non-bridge monitors
+    # already sit at 1200 for their own reasons, and a coincidence would read as a violation.
+    bridge_tokens = bridge_push_tokens()
+    moved = {
+        e["name"]
+        for name, e in entities_with(
+            {"kuma_bridge_push_interval": _WINDOW_PROBE_S}
+        ).items()
+        if e["type"] == "push" and e["interval"] == _WINDOW_PROBE_S
     }
+    # Non-vacuity: a template that stopped reading the variable moves nothing, and an empty set
+    # satisfies every subset claim below.
+    assert len(moved) >= 20, (
+        f"only {len(moved)} tiles move with kuma_bridge_push_interval — the variable has stopped "
+        "reaching the heartbeat windows it is meant to set"
+    )
+    tokens = push_tokens_by_monitor()
+    swept = {name for name in moved if tokens.get(name) not in bridge_tokens}
     assert not swept, (
         "non-bridge monitors wired to the bridge's heartbeat window: %s" % sorted(swept)
     )
@@ -268,14 +253,15 @@ def test_non_bridge_push_monitors_keep_their_own_interval():
 
 def test_bridge_push_interval_is_a_multiple_of_the_loop():
     # The window must be a whole number of bridge cycles, and must tolerate more than one missed
-    # push — at exactly 2x it is back to the 600s window that flaps.
+    # push — at exactly 2x it is back to the 600s window that flaps. The loop's cadence is read
+    # from the Secret the bridge pod receives, so a changed INTERVAL re-checks the window here.
+    loop = int(bridge_env()["INTERVAL"])
     want = ROLE_DEFAULTS["kuma_bridge_push_interval"]
-    assert want % BRIDGE_LOOP_INTERVAL_S == 0, (
-        "%s is not a whole number of %ss bridge cycles" % (want, BRIDGE_LOOP_INTERVAL_S)
+    assert want % loop == 0, "%s is not a whole number of %ss bridge cycles" % (
+        want,
+        loop,
     )
-    assert want >= 3 * BRIDGE_LOOP_INTERVAL_S, (
-        "%s tolerates fewer than two missed pushes" % want
-    )
+    assert want >= 3 * loop, "%s tolerates fewer than two missed pushes" % want
 
 
 def test_email_tier_membership_is_exactly_declared():
