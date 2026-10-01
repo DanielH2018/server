@@ -11,6 +11,8 @@ Run: uv run pytest scripts/dev/tests/test_gen_hook_settings.py
 """
 
 import json
+import os
+import re
 import shutil
 import sys
 from pathlib import Path
@@ -145,6 +147,80 @@ def test_library_block_is_accepted_with_a_reason():
 def test_a_malformed_block_is_flagged(label, text, message):
     with pytest.raises(g.HookDeclarationError, match=message):
         g.parse_hook_file("bad.sh", text)
+
+
+# --- the grammar fixture shared with dotfiles' bin/gen-hooks-lib.js (#2818) ------------------
+
+
+def _dotfiles_root() -> Path | None:
+    """The dotfiles checkout holding `tests/fixtures/gen-hooks-grammar.json`, or None.
+
+    In CI `~/.local/share/claude-guard` is a symlink into the pinned dotfiles checkout
+    (`ci.yml`, the step that deploys the dotfiles packages), so resolving it names that
+    checkout. On a host the package is a deployed copy, and the source is chezmoi's checkout.
+    `DOTFILES_DIR` names another checkout first, such as a dotfiles worktree under review.
+    """
+    deployed = Path.home() / ".local" / "share" / "claude-guard"
+    candidates = (
+        [Path(os.environ["DOTFILES_DIR"])] if os.environ.get("DOTFILES_DIR") else []
+    )
+    if deployed.is_symlink():
+        candidates.append(deployed.resolve().parents[3])
+    candidates.append(Path.home() / ".local" / "share" / "chezmoi")
+    for root in candidates:
+        if (root / "tests" / "fixtures" / "gen-hooks-grammar.json").is_file():
+            return root
+    return None
+
+
+def _grammar_cases() -> list[dict]:
+    root = _dotfiles_root()
+    if root is None:
+        return []
+    fixture = root / "tests" / "fixtures" / "gen-hooks-grammar.json"
+    return json.loads(fixture.read_text())["cases"]
+
+
+GRAMMAR_CASES = _grammar_cases()
+
+
+def test_the_grammar_fixture_is_found_in_ci_and_holds_one_case_of_each_verdict():
+    """A fixture that is not found would read as zero passing cases. In CI the dotfiles pin
+    is always fetched, so a miss there is a failure; on a host without a dotfiles checkout
+    the shared cases cannot run and this says so instead of passing."""
+    if not GRAMMAR_CASES:
+        if os.environ.get("CI"):
+            pytest.fail(
+                "CI fetched dotfiles but tests/fixtures/gen-hooks-grammar.json is absent"
+            )
+        pytest.skip(
+            "no dotfiles checkout with the gen-hooks grammar fixture on this host"
+        )
+    names = {case["name"] for case in GRAMMAR_CASES}
+    assert {"one register block", "a library block", "an unknown key"} <= names
+
+
+def _normalized(reg: g.Registration) -> dict:
+    """A registration in the fixture's spelling: the fields both parsers share."""
+    out: dict = {"event": reg.event, "timeout": reg.timeout, "order": reg.order}
+    if reg.matcher:
+        out["matcher"] = reg.matcher
+    if reg.async_:
+        out["async"] = True
+    if reg.status_message:
+        out["statusMessage"] = reg.status_message
+    return out
+
+
+@pytest.mark.parametrize("case", GRAMMAR_CASES, ids=lambda case: case["name"])
+def test_the_parser_agrees_with_the_shared_grammar_fixture(case):
+    if "error" in case:
+        with pytest.raises(g.HookDeclarationError, match=re.escape(case["error"])):
+            g.parse_hook_file("fixture.sh", case["text"])
+        return
+    parsed = g.parse_hook_file("fixture.sh", case["text"])
+    assert [_normalized(r) for r in parsed.registrations] == case["registrations"]
+    assert parsed.library_reason == case["library"]
 
 
 def test_a_file_with_no_block_parses_to_nothing():

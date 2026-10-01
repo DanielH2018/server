@@ -726,7 +726,6 @@
  "scripts/dev/tests/test_findings_verify.py": 0.0,
  "scripts/dev/tests/test_foreign_owned.py": 0.0,
  "scripts/dev/tests/test_gen_hook_settings.py": 0.06,
- "scripts/dev/tests/test_memory_survey.py": 0.01,
  "scripts/dev/tests/test_new_k8s_service.py": 0.02,
  "scripts/dev/tests/test_prune_worktrees.py": 0.03,
  "scripts/dev/tests/test_pytest_shard_durations.py": 0.27,
