@@ -1088,7 +1088,7 @@ k3s_node_dns_options: "timeout:{{ k3s_node_dns_timeout }} attempts:{{ k3s_node_d
 # fraction of this node's queries actually reached Pi-hole, which is the question every
 # earlier arrangement in this file could only be answered by hand with a marked lookup.
 k3s_host_coredns_enabled: true
-k3s_host_coredns_version: "1.14.7"
+k3s_host_coredns_version: "011"
 
 # amd64 only — daniel-box is the sole consumer, and node.yml is a server-node play. The
 # checksum is PINNED IN-REPO rather than fetched from the release's .sha256 sidecar: a
