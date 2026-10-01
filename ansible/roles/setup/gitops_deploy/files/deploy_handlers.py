@@ -24,7 +24,7 @@ import deploy_defer
 import deploy_io
 import deploy_locks
 import deploy_narrow
-from deploy_changes import setup_tags_for
+from deploy_changes import setup_tags_for, setup_role_tag
 from deploy_config import CHICAGO, Config, log
 from deploy_git import (
     dirty_alert_slot,
@@ -168,6 +168,15 @@ def handle_broad(
     # `roles/setup/k3s/` range into `_deploy_plane` — whose refusal branch runs a full
     # `ansible/deploy.yml` for a change that reaches no container at all.
     applies = bool(setup_tags) or cs.broad_deploy
+    # Role tag -> role directory, for the setup roles this tick applies ITSELF — the
+    # complement of `pending`, which goes to `manual_plane` for a human.
+    # `narrowed_setup_tags` keys on the tag because `setup_tags_for` has already mapped each
+    # path to one, and `setup_role_tag` is not the identity: `chezmoi_setup` is tagged
+    # `chezmoi`, so a map built from the directory name would ask the derivation about a role
+    # that does not exist and refuse every time.
+    appliable = {
+        setup_role_tag(role): role for role in cs.setup_roles if role not in pending
+    }
     plans = (
         deploy_narrow.plan(
             tools.narrow_deploy_plane,
@@ -175,6 +184,8 @@ def handle_broad(
             target,
             setup_tags,
             cs.broad_deploy,
+            tools.narrow_setup_role,
+            appliable,
             tools.digest_diff,
         )
         if applies

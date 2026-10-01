@@ -43,6 +43,10 @@ LOCAL_ONLY = frozenset(
         ".remember",
         ".mkdocs-strict-check",
         "site",
+        # The fan-out harness's per-worktree output: the agent's brief, its report and its
+        # stderr. Written by `scripts/dev/fanout_place.py` into each `.claude/worktrees/*`
+        # checkout, so without this entry every fan-out agent's first commit fails this hook.
+        ".fanout",
     }
 )
 

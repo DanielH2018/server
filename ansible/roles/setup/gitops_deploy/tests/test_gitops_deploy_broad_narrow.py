@@ -89,8 +89,14 @@ def test_a_failed_narrowed_apply_holds_the_tags_it_tried(
     assert (state_dir / "hold_plane").read_text() == "ansible/deploy.yml sonarr"
 
 
-def test_the_setup_plane_never_consults_the_narrowing(gitops_deploy, tick):
-    """`setup_tags_for` already derived that plane's tags; this arm must not re-derive them."""
+def test_the_setup_plane_never_consults_the_deploy_plane_narrowing(gitops_deploy, tick):
+    """The two narrowings are separate derivations over separate playbooks.
+
+    `setup_tags_for` maps a setup path to its role tag and `narrow_setup_role` narrows that
+    (#3120, `test_gitops_deploy_setup_narrow.py`). Asking `deploy_tags.py narrow` about a
+    setup range would route it through `_deploy_plane`, whose refusal branch runs a full
+    `ansible/deploy.yml` for a change that reaches no container.
+    """
     tick.paths = ["ansible/roles/setup/gitops_deploy/tasks/main.yml"]
     tick.narrow = (0, "sonarr")
     assert gitops_deploy.main(tick.tools) == 0
@@ -174,7 +180,9 @@ def _denylisted_plan(settings, out: str, capsys):
         status="",
         action="deploy",
     )
-    plan = deploy_narrow.plan(lambda *_: (0, out), config, target, set(), True)
+    plan = deploy_narrow.plan(
+        lambda *_: (0, out), config, target, set(), True, lambda *_: (1, ""), {}
+    )
     return plan, capsys.readouterr().out
 
 

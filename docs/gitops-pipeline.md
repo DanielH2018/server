@@ -567,8 +567,11 @@ stay).
   `files/` is missing from either list; it is the sibling of `test_monitor_bridge_modules.py`.
 - **Broad changes split three ways** (`deploy_logic._BROAD_*_PREFIXES`). A setup-plane change
   under `roles/setup/<name>/` (or `requirements.yml`) fast-forwards and applies as
-  `initial_setup.yml --tags <name>`, with the tag derived by `setup_tags_for` rather than left as
-  the `<role>` placeholder `broad_remediation` prints. A deploy-plane change (shared
+  `initial_setup.yml`, with the tag derived by `setup_tags_for` rather than left as
+  the `<role>` placeholder `broad_remediation` prints. Since #3120 that role tag is then
+  narrowed again, per role, to the block tags the diff actually reaches
+  (`deploy_narrow.narrowed_setup_tags`); a role whose derivation refuses keeps its role tag,
+  beside the narrowed tags of a role that did narrow. A deploy-plane change (shared
   `ansible/templates/*`, `inventory/`, `common/`, `deploy.yml`) fast-forwards and applies as
   `deploy.yml`, scoped by `deploy_narrow.plan` to the services the range actually reaches.
   **A range carrying both planes applies both, setup first** — `plan` returns one plan per

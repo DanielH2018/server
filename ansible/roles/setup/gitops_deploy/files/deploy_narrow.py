@@ -33,6 +33,12 @@ NARROW_TIMEOUT_S = 120.0
 
 NARROW_SCRIPT = "scripts/deploy_tools/deploy_tags.py"
 
+# The playbook the setup arm runs, and the one `narrow_setup.py` derives a tag's reachability
+# against. A literal here rather than `deploy_changes.setup_role_playbook`, which is the
+# authority: `test_gitops_deploy_imports` holds this module to `deploy_config` alone, and
+# `ansible/tests/deploy/test_setup_role_playbooks_agree.py` is what keeps the string honest.
+SETUP_PLAYBOOK = "ansible/initial_setup.yml"
+
 # How long the setup-role narrowing gets, and the script that does it. Cheaper than the
 # deploy-plane derivation — one `git ls-tree` plus a `git show` per file of ONE role — so a run
 # still going at thirty seconds has wedged.
@@ -224,12 +230,97 @@ def _role_json(repo: str, argv: list[str]) -> dict:
     return out
 
 
+def narrowed_setup_tags(
+    narrow_setup: Callable[..., tuple[int, str]],
+    config,
+    target,
+    setup_tags: set[str],
+    setup_roles: dict[str, str],
+) -> list[str]:
+    """`setup_tags`, with each role tag replaced by the block tags its own diff reaches (#3120).
+
+    Args:
+        narrow_setup: `narrow_setup_role`, or a test's stand-in for it.
+        config: the tick's `Config`, for the checkout path.
+        target: the tick's `TickTarget`, for the two commits bounding the range.
+        setup_tags: `setup_tags_for(paths)` — the whole-role tags this tick would apply.
+        setup_roles: role tag -> role directory, for the roles `SETUP_PLAYBOOK` applies.
+
+    Returns:
+        The sorted union of what each role needs. `--tags initial_setup` selects about 440
+        tasks; since #3116 every one of them carries a tag narrower than `crons`, so the tags
+        a changed file maps to can be derived — and a run that applies only those is a
+        smaller blast radius for a bad template and a shorter setup-plane tick.
+
+    PER ROLE, and never all-or-nothing. One role narrowing while another refuses applies the
+    first role's block tags beside the second's whole-role tag, which is the only shape that
+    narrows a mixed range at all.
+
+    A tag no role in `setup_roles` claims passes through untouched. `collections` is
+    `ansible/requirements.yml`'s, mapped to no role directory, so there is nothing to derive
+    it from — and dropping it would leave the collections uninstalled with nothing said.
+    """
+    out: set[str] = set()
+    for tag in sorted(setup_tags):
+        role = setup_roles.get(tag)
+        if role is None:
+            out.add(tag)
+            continue
+        out |= _one_setup_role(narrow_setup, config, target, role, tag)
+    return sorted(out)
+
+
+def _one_setup_role(narrow_setup, config, target, role: str, role_tag: str) -> set[str]:
+    """One role's narrow tags, or `{role_tag}` with the refusal logged.
+
+    DECIDED: the whole-role tag on any doubt, the way `_deploy_plane` takes the full play.
+    `narrow_setup.role_tags` already refuses on every ambiguity it can name — an untagged task
+    file, a tag a second role declares, a derivation landing back on the role tag — and this
+    adds the ones it cannot: a non-zero exit, empty output, and anything the subprocess layer
+    raises. `except Exception` is deliberate and the same width `_deploy_plane` uses: the call
+    decodes a child's output, so UnicodeDecodeError is as reachable as SubprocessError, and
+    `plan` runs BEFORE the ff-merge, where an escape parks every session's landing. A tag list
+    that is too wide is only slow; one that is too narrow leaves the change unapplied behind a
+    run that exited 0.
+    """
+    try:
+        rc, out = narrow_setup(
+            config.repo,
+            role,
+            role_tag,
+            SETUP_PLAYBOOK,
+            target.local,
+            target.origin,
+            NARROW_SETUP_TIMEOUT_S,
+        )
+    except Exception as exc:
+        return _whole_role(role, role_tag, f"{type(exc).__name__}: {exc}")
+    if rc != 0:
+        return _whole_role(role, role_tag, f"exit {rc}")
+    tags = {tag for tag in out.split(",") if tag}
+    if not tags:
+        # Exit 0 with nothing to apply is not a refusal the derivation can make — every
+        # branch of `role_tags` either returns a non-empty set or raises. Treated as doubt
+        # rather than as "apply nothing": an empty `--tags` value runs the WHOLE playbook.
+        return _whole_role(role, role_tag, "it exited 0 and printed no tags")
+    log(f"narrow-setup: {role} needs {','.join(sorted(tags))}, not {role_tag}")
+    return tags
+
+
+def _whole_role(role: str, role_tag: str, reason: str) -> set[str]:
+    """The fallback, logged every tick it is taken, as `_full_run` is for the deploy plane."""
+    log(f"narrow-setup: cannot narrow {role} ({reason}) — applying --tags {role_tag}")
+    return {role_tag}
+
+
 def plan(
     narrow: Callable[[str, str, str, float], tuple[int, str]],
     config,
     target,
     setup_tags: set[str],
     deploy_plane: bool,
+    narrow_setup: Callable[..., tuple[int, str]],
+    setup_roles: dict[str, str],
     digest_diff: Callable[[str], dict[str, list[str]]] | None = None,
 ) -> list[BroadPlan]:
     """What this broad tick applies, in order: the setup plane's tags, then the deploy plane's.
@@ -240,6 +331,8 @@ def plan(
         target: the tick's `TickTarget`, for the two commits bounding the range.
         setup_tags: `setup_tags_for(paths)`, non-empty for a setup-plane change.
         deploy_plane: `cs.broad_deploy` — the range moved a deploy-plane path.
+        narrow_setup: `narrow_setup_role`, or a test's stand-in, for the setup arm.
+        setup_roles: role tag -> role directory, for the roles `SETUP_PLAYBOOK` applies.
         digest_diff: `deploy_release.digest_diff`, read for the shadow log alone. None skips
             the log.
 
@@ -248,11 +341,17 @@ def plan(
     `initial_setup.yml` and dropped the deploy plane without a journal line (#2046) — two
     Pi retirements that day left `Release Staleness Drift` DOWN over 56 records the full
     `deploy.yml` a removed `containers_list` entry refused into (until #2044) was meant to
-    re-stamp. The setup arm is unchanged: its tags were already derived, by `setup_tags_for`.
+    re-stamp.
+
+    Both arms narrow since #3120. `setup_tags_for` derives WHICH role tag each path needs, and
+    `narrowed_setup_tags` then narrows each of those to the role's own block tags.
     """
     plans = []
     if setup_tags:
-        plans.append(BroadPlan("ansible/initial_setup.yml", sorted(setup_tags), True))
+        tags = narrowed_setup_tags(
+            narrow_setup, config, target, setup_tags, setup_roles
+        )
+        plans.append(BroadPlan(SETUP_PLAYBOOK, tags, True))
     if deploy_plane:
         deploy = _deploy_plane(narrow, config, target)
         if digest_diff is not None:

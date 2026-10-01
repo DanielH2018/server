@@ -49,7 +49,12 @@ the name:
   rather than `creates:`-gated, so a bump replaces the tool.
 - **This play becomes root, so `~` is `/root` — SSH paths are absolute only** (#2413, ratcheted
   by `ansible/tests/setup/test_ssh_dir_paths_are_absolute.py`). The home-dir resolver task
-  exists for the same reason, and its `register:` is why it carries every consumer's tag.
+  exists for the same reason, and its `register:` is why it carries every consumer's tag —
+  `[tooling, git-hooks]`, the shape the role doc's fact-dependency rule names. That rule is a
+  check rather than prose since the GitOps deployer began deriving and applying narrow setup
+  tags (#3120). ENFORCED:
+  `ansible/tests/setup/test_register_producers_carry_consumer_tags.py::test_every_register_producer_carries_its_consumers_tags`,
+  over every setup role rather than this one.
 - **`become` vs HOME:** the `Resolve the deploy user's home directory` task exists because
   `ansible_facts.env.HOME` is root's under the play's `become: true`, while uv and the per-user
   tooling must install for the unprivileged deploy user. Keep a new per-user task on the
