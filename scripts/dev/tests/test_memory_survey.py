@@ -75,6 +75,28 @@ def test_index_itself_is_never_reported_as_an_orphan(tmp_path):
     assert s["store"]["files"] == 1
 
 
+def test_an_absolute_link_to_an_existing_repo_doc_is_clean(tmp_path):
+    doc = tmp_path / "repo" / "docs" / "owner.md"
+    doc.parent.mkdir(parents=True)
+    doc.write_text("the claim", encoding="utf-8")
+    d = _mem(tmp_path, f"- [Owned]({doc})\n", {})
+    assert _survey(d)["dead_links"] == []
+
+
+def test_an_absolute_link_to_a_missing_repo_doc_is_flagged(tmp_path):
+    gone = tmp_path / "repo" / "docs" / "moved.md"
+    d = _mem(tmp_path, f"- [Moved]({gone})\n", {})
+    assert _survey(d)["dead_links"] == [str(gone)]
+
+
+def test_an_absolute_link_into_the_store_counts_as_a_sibling(tmp_path):
+    d = _mem(tmp_path, "", {"a.md": "x"})
+    (d / "MEMORY.md").write_text(f"- [A]({d / 'a.md'})\n", encoding="utf-8")
+    s = _survey(d)
+    assert s["dead_links"] == []
+    assert s["orphans"] == []
+
+
 def test_a_link_written_with_a_directory_prefix_still_resolves(tmp_path):
     d = _mem(tmp_path, "- [A](./a.md)\n", {"a.md": "x"})
     s = _survey(d)

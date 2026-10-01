@@ -93,15 +93,32 @@ def _est_tokens(n_bytes: int) -> int:
 
 
 def index_links(index_path: Path) -> list[str]:
-    """Return every `.md` filename the index links to, in document order, deduplicated."""
+    """Return every `.md` target the index links to, in document order, deduplicated.
+
+    A relative target names a sibling memory file and is returned as its bare filename, so
+    `./foo.md` and `foo.md` compare equal. An absolute target is returned as the full path,
+    unless it points into the index's own directory. The index's header prescribes absolute
+    links for a memory retired to the repo doc that owns its claim, and reducing those to a
+    basename made every one read as a missing memory file (#3106).
+    """
     if not index_path.exists():
         return []
+    store = index_path.parent.resolve()
     seen: dict[str, None] = {}
     for target in _LINK.findall(_read(index_path)):
-        # An index link is always a sibling filename; strip any directory prefix so a
-        # link written as `./foo.md` and one written as `foo.md` compare equal.
-        seen.setdefault(Path(target).name, None)
+        path = Path(target)
+        if path.is_absolute() and path.parent.resolve() != store:
+            seen.setdefault(str(path), None)
+        else:
+            seen.setdefault(path.name, None)
     return list(seen)
+
+
+def _link_resolves(link: str, on_disk: set[str]) -> bool:
+    """Whether an `index_links` entry names something that exists."""
+    if Path(link).is_absolute():
+        return Path(link).is_file()
+    return link in on_disk
 
 
 def _body_words(path: Path) -> list[str]:
@@ -448,7 +465,7 @@ def survey(
             "bytes": store_bytes,
             "est_tokens": _est_tokens(store_bytes),
         },
-        "dead_links": sorted(n for n in linked if n not in on_disk),
+        "dead_links": sorted(n for n in linked if not _link_resolves(n, on_disk)),
         "orphans": sorted(n for n in on_disk if n not in linked),
         "unreferenced": sorted(
             e["file"] for e in entries if e["last_referenced"] is None
