@@ -15,8 +15,9 @@ import pytest
 from _compose_render import host_context, rendered_text
 
 # The render's own domain, not a hardcoded one: the push URL is the only fragment below that
-# carries a variable, and pinning a literal domain here would check a value the inventory may
-# not hold.
+# carries a variable. The value is `BASE_CONTEXT`'s stub, because the plaintext inventory
+# defines no `domain` — reading it from the same context the render used is what keeps the
+# fragment and the config moving together.
 _DOMAIN = host_context()["domain"]
 
 REQUIRED_FRAGMENTS = (

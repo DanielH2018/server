@@ -87,8 +87,12 @@ def test_a_compose_file_missing_a_flag_is_flagged():
 
 def test_a_compose_file_that_stopped_publishing_is_flagged():
     # Binding to loopback is the obvious "fix" and it silently blinds the
-    # `alloy-pi` scrape job and monitor-bridge's detached arm.
-    unpublished = compose().replace(":12345:12345/tcp", "127.0.0.1:12345:12345")
+    # `alloy-pi` scrape job and monitor-bridge's detached arm. The whole published token goes,
+    # host IP included: the rendered file names the Pi's LAN address, so replacing the port
+    # halves alone would leave a mapping no operator would ever write.
+    unpublished = re.sub(
+        r'"[\d.]+:12345:12345/tcp"', '"127.0.0.1:12345:12345"', compose()
+    )
     assert compose_gaps(unpublished) == ["published port"]
 
 

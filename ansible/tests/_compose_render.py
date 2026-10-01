@@ -41,8 +41,9 @@ def host_context(vars_: dict | None = None) -> dict:
     against another service's entry.
 
     Exposed so a guard can assert on a value the render expanded. The Pi's Alloy config names
-    `loki-homelab.local.{{ domain }}`, and a guard that hardcoded a domain would pin this
-    homelab's rather than the one the inventory holds.
+    `loki-homelab.local.{{ domain }}`; the plaintext inventory carries no `domain`, so the
+    render uses `lib/render_guard.py:BASE_CONTEXT`'s stub and a guard that hardcoded a domain
+    would hold only while that stub does.
     """
     vars_ = host_vars() if vars_ is None else vars_
     ctx = {**BASE_CONTEXT, **load_yaml(ALL_VARS), **vars_}
