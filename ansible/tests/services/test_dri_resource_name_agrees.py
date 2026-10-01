@@ -16,9 +16,10 @@ Rename it in a consumer only, and monitor-bridge keeps watching the old name —
 extended-resource arm reads as "advertised by no node", the fail-closed page recorded in that
 role's CLAUDE.md as a false alarm.
 
-Every name is read from the rendered manifests, not from a role's defaults or a template's text:
-a pod spec that stopped using its `*_dri_resource` variable, or a plugin whose `--device` config
-changed while a comment still said `devic.es/dri`, would both pass a source scan.
+The plugin's and the consumers' names are read from the rendered manifests, not from a role's
+defaults or a template's text. A pod spec that stopped using its `*_dri_resource` variable, or a
+plugin whose `--device` config changed while a comment still said `devic.es/dri`, would both pass
+a source scan. monitor-bridge's name stays a source read, because config.py is not a template.
 
 Run: uv run pytest ansible/tests/services/test_dri_resource_name_agrees.py
 """
@@ -92,8 +93,13 @@ def _consumer_names() -> dict[str, set[str]]:
 
 
 def _consumer_name() -> str:
-    (name,) = set().union(*_consumer_names().values())
-    return name
+    names = _consumer_names()
+    requested = set().union(*names.values())
+    assert len(requested) == 1, (
+        f"the GPU consumers disagree on the extended-resource name: {names}, so there is no "
+        f"single name to compare against"
+    )
+    return requested.pop()
 
 
 def test_every_consumer_requests_the_same_resource_name():
@@ -106,16 +112,11 @@ def test_every_consumer_requests_the_same_resource_name():
 
 
 def _bridge_watched() -> str:
-    """K8S_EXTENDED_RESOURCES as the pod sees it: the env-secret's value, else config.py's default.
+    """K8S_EXTENDED_RESOURCES's default, read from monitor-bridge's config.py source.
 
-    config.py is Python source shipped as a file, not a template, so its `_env` default has no
-    rendered form; the rendered env-secret is checked first because it would override it.
+    config.py is Python shipped as a file, not a template, so the default has no rendered form.
+    The env-secret does not set the variable, so this default is the value the pod runs with.
     """
-    for role, _tpl, doc in rendered_docs():
-        if role == "monitor-bridge" and doc.get("kind") == "Secret":
-            value = (doc.get("stringData") or {}).get("K8S_EXTENDED_RESOURCES")
-            if value is not None:
-                return str(value)
     watched = re.search(
         r'_env\(\s*"K8S_EXTENDED_RESOURCES"\s*,\s*"([^"]+)"', _BRIDGE_CHECK.read_text()
     )
