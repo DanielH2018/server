@@ -19,6 +19,7 @@ from verdicts.cluster import log_error_verdict
 from verdicts.logs import (
     kuma_notify_failures,
     loki_ingestion_fresh,
+    otelcol_export_failures,
     shipper_dropped,
     swallowed_verdicts,
 )
@@ -100,7 +101,7 @@ def check_shipper_dropped(
     # rebooting anything, and the grace covers a fault only a reboot produces. An unreadable
     # /proc/uptime reads as no grace, so the check evaluates normally.
     uptime = uptime_s()
-    return shipper_dropped(
+    ok, msg = shipper_dropped(
         client_count,
         server_reasons,
         cfg.SHIPPER_DROPPED_WINDOW,
@@ -108,6 +109,50 @@ def check_shipper_dropped(
         backlog_grace_active=uptime is not None
         and uptime < cfg.SHIPPER_BACKLOG_GRACE_S,
     )
+    return with_export_failures(cfg, ok, msg, prom_scalar=prom_scalar)
+
+
+def with_export_failures(
+    cfg: Config,
+    ok: bool,
+    msg: str,
+    prom_scalar: Callable[..., float | None] | None = None,
+) -> tuple[bool, str]:
+    """Fold the collector's export-failure arm into the shipper verdict, a failure winning.
+
+    Folded here rather than given its own monitor, the reason `with_log_errors` and the
+    extended-resource arm were: a new Kuma monitor needs a new push token in SOPS, and this arm
+    asks the question the two arms above it already ask — did telemetry get lost between a
+    producer and its backend. The two above it read the LOG pipe, client side and server side;
+    this one reads the third producer on the same estate, the OTel collector, which exports
+    Claude Code's logs, metrics and traces to Loki, Prometheus and Tempo.
+
+    Arrived 2026-10-01 from `observability/templates/telemetry-health.sh.j2`, which ran the same
+    query from a host cron with its own Prometheus client (#3094). Its own window and threshold,
+    because an export failure is not log-line churn at any rate — see
+    `OTELCOL_SEND_FAILED_WINDOW`/`_MAX` in `bridge/config_io.py`.
+
+    An empty `OTELCOL_SEND_FAILED_METRICS` disables the arm, the convention every check here
+    follows for an unset selector. Prom-dependent like its caller, so no gate membership
+    changes: `shipper_dropped` is already in `PROM_DEPENDENT` and an unreachable Prometheus
+    suppresses the whole check.
+    """
+    if not cfg.OTELCOL_SEND_FAILED_METRICS:
+        return ok, msg
+    prom_scalar = prom_scalar or bridge.net.prom_scalar
+    failed = prom_scalar(
+        cfg,
+        'sum(increase({__name__=~"%s"}[%s]))'
+        % (cfg.OTELCOL_SEND_FAILED_METRICS, cfg.OTELCOL_SEND_FAILED_WINDOW),
+    )
+    export_ok, export_msg = otelcol_export_failures(
+        failed,
+        cfg.OTELCOL_SEND_FAILED_WINDOW,
+        cfg.OTELCOL_SEND_FAILED_MAX,
+    )
+    if export_ok:
+        return ok, "%s, %s" % (msg, export_msg)
+    return False, "%s | %s" % (export_msg, msg)
 
 
 def check_loki_reachable(cfg: Config) -> tuple[bool, str]:

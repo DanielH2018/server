@@ -100,6 +100,35 @@ def shipper_dropped(
     )
 
 
+def otelcol_export_failures(
+    failed_count: float | None,
+    window: str,
+    threshold: float,
+) -> tuple[bool, str]:
+    """Pure: did the OTel collector give up on exporting telemetry past `threshold`?
+
+    (ok, msg). `failed_count` = sum(increase(<send-failed counters>[window])) across every
+    signal the collector exports, None when the family has no series — which is the normal
+    state, since the collector mints a send-failed counter only once an export has failed.
+
+    `increase()` over a window rather than the raw counter, because the counters are cumulative:
+    a single failure during a collector restart would otherwise hold this red forever.
+
+    The threshold is 0 by default rather than a churn allowance: unlike a dropped log line,
+    there is no rate of failed exports that is ordinary. Reported truncated to whole items,
+    the way the host cron this replaced reported it, because a fractional `increase()`
+    extrapolation is an artefact of the window rather than a count of anything.
+    """
+    n = failed_count or 0.0
+    if n <= threshold:
+        return True, "no collector export failures in %s" % window
+    return False, (
+        "collector dropped %d telemetry item(s) in %s (> %.0f) — exports failing, so the data "
+        "reaches neither Loki nor Tempo and no other counter records the loss"
+        % (int(n), window, threshold)
+    )
+
+
 # The host crons' push outcomes, as rsyslog ships them: "<iso-ts> <host> <tag>[pid]: <rest>".
 # Same prefix shape scripts/diagnostics/probe_lib/alerts.py parses (`_SYSLOG_LINE_RE`), and
 # the Pi's health.log is written in it deliberately so the one reader covers both.
