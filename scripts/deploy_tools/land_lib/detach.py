@@ -51,7 +51,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
-from lib.detach_fork import fork_detached, leave_unit_cgroup
+from lib.detach_fork import close_inherited, fork_detached, leave_unit_cgroup
 from lib.exit_codes import LAND_GAVE_UP
 
 # Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
@@ -130,9 +130,7 @@ def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> No
         os.dup2(null, 0)
         os.dup2(out, 1)
         os.dup2(out, 2)
-        # An inherited pipe of the caller's -- the harness's own output capture -- would keep
-        # the caller's call open for as long as the landing runs.
-        os.closerange(3, os.sysconf("SC_OPEN_MAX"))
+        close_inherited()
         # Before `landing` starts anything: a child started while the move is pending stays
         # in the unit's cgroup.
         moved = leave_unit_cgroup(scope_prefix)

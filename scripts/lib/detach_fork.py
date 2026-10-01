@@ -26,7 +26,7 @@ import os
 import re
 import subprocess
 import time
-from collections.abc import Callable
+from collections.abc import Callable, Iterable
 from pathlib import Path
 
 # How long the move may take to show in /proc/self/cgroup. `StartTransientUnit` returns a job
@@ -69,6 +69,20 @@ def fork_detached(body: Callable[[], None]) -> int:
         body()
     finally:
         os._exit(1)
+
+
+def close_inherited(keep: Iterable[int] = ()) -> None:
+    """Close every descriptor from 3 up except `keep`.
+
+    A detached run calls this once it has rebound stdio. An inherited pipe of the caller's --
+    the harness's own output capture -- would otherwise keep the caller's call open for as long
+    as the run lasts.
+    """
+    low = 3
+    for fd in sorted({fd for fd in keep if fd >= low}):
+        os.closerange(low, fd)
+        low = fd + 1
+    os.closerange(low, os.sysconf("SC_OPEN_MAX"))
 
 
 def unit_of(cgroup_text: str) -> str | None:
