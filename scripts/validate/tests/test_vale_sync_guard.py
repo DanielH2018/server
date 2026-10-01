@@ -104,8 +104,13 @@ def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/val
     exactly what this module tests for: unbounded, it parks the CI run instead of failing
     here (#3073). `communicate` raising `TimeoutExpired` leaves its child alive and the
     siblings never waited on, and `filterwarnings = ["error"]` turns the `ResourceWarning`
-    that follows into a failure on whichever test runs last — so the `finally` reaps the
-    whole batch whatever the first wait did.
+    that follows into a failure on whichever test runs last — so the `finally` reaps both
+    halves of every proc whatever the first wait did.
+
+    Both halves, because `kill`/`wait` does not close `stderr`; only `communicate` does. A
+    sibling that exited on its own is skipped by the `poll` check and still owns an open pipe,
+    which raises its own `ResourceWarning` at GC. `stdout` is `DEVNULL`, so one unconditional
+    `stderr.close()` covers it — a close on an already-communicated proc is a no-op.
     """
     env = env_for(repo)
     procs = [
@@ -129,6 +134,7 @@ def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/val
             if proc.poll() is None:
                 proc.kill()
                 proc.wait(timeout=DEFAULT_TIMEOUT)
+            proc.stderr.close()
     return results
 
 
