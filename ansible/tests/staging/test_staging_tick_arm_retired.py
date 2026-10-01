@@ -24,6 +24,7 @@ CONFIG_TEMPLATE = ROLE / "templates" / "config.env.j2"
 UNIT = ROLE / "templates" / "gitops-deploy.service.j2"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 MARKERS = ROLE / "files" / "gitops_markers.py"
+INSTALL = ROLE / "tasks" / "install.yml"
 
 # The keys the tick read the gate through. Named rather than matched by a `STAGING_` prefix:
 # a prefix check passes on an empty file, and these are the four a revival would re-add.
@@ -34,6 +35,14 @@ RETIRED_KEYS = (
     "STAGING_EXPECT_TIMEOUT_S",
 )
 RETIRED_MARKERS = ("staging_alerted", "staging_ticks", "staging_override")
+# The state file the retired `staging_alerted` marker left on daniel-box (#3079), and the two
+# ledgers in the same directory that must survive the sweep. Named by basename rather than
+# matched by a `staging` prefix: a prefix check would read the kept ledgers as reapable too.
+REAPED_STATE = "/var/lib/gitops-deploy/staging_alerted_sha"
+KEPT_STATE = (
+    "/var/lib/gitops-deploy/staging-backfill.jsonl",
+    "/var/lib/gitops-deploy/staging-ticks.jsonl",
+)
 # What the monthly etcd drill depends on. Named rather than globbed: a glob over the role's
 # templates returns an empty set the moment the directory is renamed, and an `all()` over
 # nothing passes.
@@ -80,6 +89,22 @@ def test_the_marker_table_holds_no_staging_marker():
     text = MARKERS.read_text()
     present = [name for name in RETIRED_MARKERS if f'"{name}":' in text]
     assert not present, f"the marker table still names {present}"
+
+
+def test_the_install_path_reaps_the_retired_alert_marker_and_keeps_the_ledgers():
+    """The deployer converges itself: `teardown.yml` only runs where has_gitops is false.
+
+    The rejecting half is `KEPT_STATE`. A sweep written as a `staging*` glob would reap the two
+    ledgers as well, and those are the raw evidence behind the Part 1 measurement
+    (docs/archive/staging-phase-c.md).
+    """
+    install = INSTALL.read_text()
+    assert REAPED_STATE in install, (
+        f"install.yml no longer removes {REAPED_STATE}, so the retired gate's dedupe marker "
+        "stays on daniel-box with no reader (#3079)."
+    )
+    present = [path for path in KEPT_STATE if path in install]
+    assert not present, f"install.yml now reaps kept staging evidence: {present}"
 
 
 def test_the_unit_budget_no_longer_counts_a_staging_pair():

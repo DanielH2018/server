@@ -210,6 +210,23 @@
   changed_when: true
   become: true
 
+# The staging gate's own per-SHA alert marker, left behind when #2859 removed the tick's
+# staging consultation and #2941 retired the cluster. No reader names it: it was never an
+# `ALERT_SLOTS` member, so the #3047 marker collapse could not fold it in either, and it sat on
+# daniel-box as 40 unread bytes (#3079). `teardown.yml` removes the whole state directory, but
+# only on a host that is NOT the deployer — so the deployer converges here, the way
+# `hypervisor/tasks/reap_staging.yml` reaps the guest from its install path.
+#
+# The two staging ledgers in the same directory are deliberately KEPT: `staging-backfill.jsonl`
+# for the reason in the DECIDED: marker above, and `staging-ticks.jsonl` for the same one — both
+# are the raw evidence behind a measurement an operator still reads with `jq`, and neither has a
+# writer left. This marker is a dedupe throttle with nothing to measure.
+- name: Remove the retired staging gate's alert marker
+  ansible.builtin.file:
+    path: /var/lib/gitops-deploy/staging_alerted_sha
+    state: absent
+  become: true
+
 # Render provenance for manifest-prune-check.sh's stale-script arm. Until 2026-08-23b that arm
 # hardcoded the k3s role's template directory, so these units were watched by nothing at all —
 # and the exit-75 fix sat merged-but-undeployed on this host for exactly that reason (review H1).
