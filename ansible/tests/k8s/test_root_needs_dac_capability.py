@@ -5,26 +5,38 @@ running as the pod's own uid, not stronger. Root's ability to ignore file permis
 the DAC_OVERRIDE capability, so dropping ALL takes it away — and root then cannot read or write
 files owned by another uid, which is the only reason anyone reaches for root in the first place.
 
-Both live sites record the lesson in a comment beside the fix, which is why this guard has real
-accept cases rather than synthetic ones:
+Six containers in four templates combine `runAsUser: 0` with `drop: [ALL]`, read from
+`_k8s_render.rendered_docs()` on 2026-10-01. Every one records the lesson in a comment beside
+the fix, which is why this guard has real accept cases rather than synthetic ones:
 
-  * `loki-homelab/templates/alloy-daemonset.yaml.j2` adds DAC_READ_SEARCH — syslog/auth.log
-    are owned by the `syslog` user at 640, so root without it cannot read them.
-  * `code-server/templates/deployment.yaml.j2` adds CHOWN + DAC_OVERRIDE + FOWNER — a fresh
-    claim's root is root:root while the files being copied belong to the pod uid.
+  * `loki-homelab/templates/alloy-daemonset.yaml.j2`, container `alloy`, adds DAC_READ_SEARCH —
+    syslog/auth.log are owned by the `syslog` user at 640, so root without it cannot read them.
+  * `code-server/templates/deployment.yaml.j2`, init container `seed-workspace-claim`, adds
+    CHOWN + DAC_OVERRIDE + FOWNER — a fresh claim's root is root:root while the files being
+    copied belong to the pod uid.
+  * The other four are the CrowdSec seeding init containers, one pair in each of
+    `authelia/templates/deployment.yaml.j2` and `traefik/templates/deployment.yaml.j2`.
+    `crowdsec-hub-install` adds CHOWN + DAC_READ_SEARCH: it reads the image's root-only staged
+    hub tree and hands the copy to the pod uid. `crowdsec-data-install` adds DAC_READ_SEARCH
+    alone, to read the 0600 data sources into a root-owned emptyDir it can already write.
 
-There was a third `runAsUser: 0` site until 2026-09-01: `volume-claim/templates/seed-pod.yaml.j2`,
+Authelia's third seeding container, `crowdsec-config-install`, runs as the pod's uid 1000 and so
+is not a root site.
+
+There was a seventh `runAsUser: 0` site until 2026-09-01: `volume-claim/templates/seed-pod.yaml.j2`,
 which dropped nothing, so root kept its default capability set. It was clean, and it went with
-the rest of the seeding when that role stopped seeding. Its point stands for the two that
+the rest of the seeding when that role stopped seeding. Its point stands for the six that
 remain — the hazard is the COMBINATION, never root by itself.
 
 WHAT THE REAL-TREE ASSERTION IS WORTH HERE. Zero violations today, so the real-tree half passing
 is not by itself evidence the rule works — a rule matching nothing would pass identically. The
 synthetic reject cases below are that evidence. What the real tree does buy is genuine accept
-coverage: two production securityContexts exercise the clean paths. Both are pinned in place by
-test_hardened_macro_is_not_a_dac_bypass.py, which asserts they keep their literal `runAsUser: 0`
-blocks — this guard reads raw template text and cannot see one built through a Jinja macro, so
-without that pin the accept coverage could reach zero without a test turning red.
+coverage: six production securityContexts exercise the clean paths, both the DAC_OVERRIDE form
+and the read-only DAC_READ_SEARCH form. All six are pinned in place by
+test_hardened_macro_is_not_a_dac_bypass.py, which asserts each template keeps its literal
+`runAsUser: 0` blocks. This guard reads raw template text and cannot see a block built through
+a Jinja macro, so without that pin the accept coverage could reach zero without a test turning
+red.
 """
 
 import re

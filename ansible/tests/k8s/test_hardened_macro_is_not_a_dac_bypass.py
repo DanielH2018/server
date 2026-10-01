@@ -8,7 +8,8 @@ guard does not render Jinja, so a root securityContext expressed as
 nothing and pass, which its own docstring records is indistinguishable from a guard that works.
 
 ansible/templates/security-context.yml.j2 therefore documents that it is not for `runAsUser: 0`,
-and the fleet's two root sites (code-server, loki-homelab) stay written out in full. This file
+and the fleet's six root sites (code-server, loki-homelab, and the four CrowdSec seeding init
+containers in authelia and traefik) stay written out in full. This file
 is what stops that convention from being a comment nobody reads — it is the executable half.
 
 THE REJECT CASE IS THE EVIDENCE. There are zero violations in the tree today, so the real-tree
@@ -73,19 +74,27 @@ def test_the_guard_ignores_a_non_root_call() -> None:
     assert root_via_macro("{{ hardened_security_context(run_as_user=65534) }}") == []
 
 
-def test_the_two_root_sites_are_still_written_out_in_full() -> None:
+# Each template holding a root site, with how many literal `runAsUser: 0` blocks it carries.
+# authelia and traefik each hold the crowdsec-hub-install and crowdsec-data-install pair.
+_ROOT_SITES = {
+    "authelia/templates/deployment.yaml.j2": 2,
+    "code-server/templates/deployment.yaml.j2": 1,
+    "loki-homelab/templates/alloy-daemonset.yaml.j2": 1,
+    "traefik/templates/deployment.yaml.j2": 2,
+}
+
+
+def test_every_root_site_is_still_written_out_in_full() -> None:
     """The fleet's `runAsUser: 0` sites must keep the literal text the DAC guard reads.
 
     Without this, converting them to the macro would leave BOTH guards matching nothing — this
     one because no macro call passes 0, and the DAC one because no literal block remains.
     """
-    for rel in (
-        "code-server/templates/deployment.yaml.j2",
-        "loki-homelab/templates/alloy-daemonset.yaml.j2",
-    ):
+    for rel, expected in _ROOT_SITES.items():
         text = (K8S_ROLES / rel).read_text()
-        assert re.search(r"^\s*runAsUser:\s*0\s*$", text, re.MULTILINE), (
-            f"{rel} no longer contains a literal `runAsUser: 0` block. It is one of the two "
-            "real accept cases test_root_needs_dac_capability.py exercises; if the container "
-            "genuinely stopped running as root, drop it from this list."
+        found = len(re.findall(r"^\s*runAsUser:\s*0\s*$", text, re.MULTILINE))
+        assert found == expected, (
+            f"{rel} holds {found} literal `runAsUser: 0` block(s), not {expected}. Each is a "
+            "real accept case test_root_needs_dac_capability.py exercises; if a container "
+            "genuinely stopped running as root, lower its count in _ROOT_SITES."
         )

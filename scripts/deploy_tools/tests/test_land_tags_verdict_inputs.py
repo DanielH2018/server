@@ -30,13 +30,14 @@ from deploy_tools.land_lib import tools
 # the census below recognised a retirement by that new home — but #2385 deleted the archive
 # tree, and a deleted role is indistinguishable from the reader dropping an entry, so an
 # explicit list is the only honest signal. An entry earns its place for one PR: once the
-# retiring commit is HEAD, the tag is gone from both sides and the line can go.
+# retiring commit is HEAD, the tag is gone from both sides and the line can go. A RENAME loses
+# the old tag the same way a retirement does, so it is named here too, for the same one PR.
 #
-# A RENAME loses the old tag the same way a retirement does, so it is named here too, for the
-# same one PR: `claude-otel` became `observability` on 2026-10-01 (#2911).
-RETIRED_TAGS: frozenset[str] = frozenset(
-    {"claude-otel", "n8n-images", "terraria-stats", "valheim-stats"}
-)
+# Empty is the resting state, and it stays hand-written for two reasons (#3067). Deriving it as
+# `at_head - in_tree` would make the census assert `lost <= lost`, which no dropped entry can
+# fail. And a test that every entry is still declared at HEAD would fail the retiring PR on its
+# own push, because there HEAD is already the retiring commit.
+RETIRED_TAGS: frozenset[str] = frozenset()
 
 
 # ── service_tags_at: which tags exist AT A REF, not in the working tree (issue #1544) ──
