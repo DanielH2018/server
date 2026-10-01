@@ -215,3 +215,46 @@ def test_the_denylist_decision_is_recorded_where_the_narrowing_reads_it(gitops_s
     text = (gitops_src.parent / "deploy_narrow.py").read_text()
     assert "K8S_AUTODEPLOY_DENYLIST" in text
     assert "# DECIDED: the broad plane ignores `K8S_AUTODEPLOY_DENYLIST`" in text
+
+
+# ── the render-digest shadow (#3045): logged beside the answer, never applied ──────────────
+def test_a_refused_range_logs_the_digest_shadow_and_still_runs_the_whole_play(
+    gitops_deploy, tick, capsys
+):
+    """The shadow names what a digest diff would apply; the argv is the full play regardless."""
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (3, "")
+    tick.tools = dataclasses.replace(
+        tick.tools,
+        digest_diff=lambda _ref: {
+            "drifted": ["radarr"],
+            "current": ["sonarr"],
+            "unknown: render is of another commit": ["authelia", "traefik"],
+        },
+    )
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1:] == ["ansible/deploy.yml"]
+    assert (
+        "narrow shadow: render digest at 22222222 would apply radarr (current 1; "
+        "unknown: render is of another commit 2); the narrowing chose the full play"
+    ) in capsys.readouterr().out
+
+
+def test_a_digest_diff_that_raises_leaves_the_narrowed_apply_alone(
+    gitops_deploy, tick, capsys
+):
+    """The shadow runs before the ff-merge, so a crash in it must not reach the tick."""
+
+    def broken(_ref):
+        raise OSError("permission denied")
+
+    tick.paths = [GROUP_VARS]
+    tick.narrow = (0, "radarr,sonarr")
+    tick.tools = dataclasses.replace(tick.tools, digest_diff=broken)
+    assert gitops_deploy.main(tick.tools) == 0
+    assert _playbook_argv(tick)[-1:] == ["radarr,sonarr"]
+    assert tick.merges == [ORIGIN]
+    assert (
+        "narrow shadow: no digest diff (OSError: permission denied)"
+        in capsys.readouterr().out
+    )

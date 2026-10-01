@@ -75,7 +75,11 @@ render_records`, which the GitOps tick runs itself; it is not in `containers_lis
   hundred merges a day, and the producer runs hourly. The reader refuses a record whose
   `commit` is not origin/master, so between a merge and the next run it falls back to the
   path logic. That is the cadence the operator chose (2026-09-25); a render every 30 minutes
-  would keep a play running 18% of the time.
+  would keep a play running 18% of the time. The GitOps deployer reads the records two more
+  ways. Its `k8s_unapplied` discharge accepts a render of any commit holding the change, so
+  the cadence costs it at most an hour (#3057). Its deploy-plane shadow log needs a render of
+  the exact commit being applied, which a tick usually precedes (#3045).
+  `docs/gitops-pipeline.md` has both.
 - **A deferral is silent until the monitor expires.** A master whose CI stays pending or red
   for longer than `render_records_push_interval_s` turns the tile red with no message, because
   the producer pushes nothing while it defers.

@@ -312,6 +312,8 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         discord_post=scripted.discord_post,
         narrow_deploy_plane=scripted.narrow_deploy_plane,
         narrow_setup_role=scripted.narrow_setup_role,
+        # The host's render records, read for a log line alone, so no tick test reads them.
+        digest_diff=lambda _ref: {},
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )

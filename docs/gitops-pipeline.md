@@ -151,6 +151,28 @@ Three outcomes, and the journal names which one it took on every tick:
 `narrow` is read-only and can be run by hand against any range. The rules it applies, and
 what each one refuses, are in `scripts/deploy_tools/narrow_broad.py`.
 
+**Every deploy-plane tick also logs a render-digest shadow line** (#3045), one
+`narrow shadow:` line beside the outcome above. It names the services whose applied digests
+differ from a render record of the commit being applied, counts the ones that match, and
+counts the ones with no usable record, grouped by the reason. It applies nothing. The
+shadow is the first step toward replacing the refusal's full run with a digest diff, and a
+week of these lines is the measurement that decides whether the diff can.
+
+Which services have a render record, and how often:
+
+- `setup/render_records` writes one per service `scripts/deploy_tools/render_targets.py`
+  lists. That is every daniel-box `containers_list` k8s entry whose role includes
+  `k8s/manifests`.
+- It runs hourly at `:17`, rendering the newest commit on origin/master with green CI. A tick
+  that has just fetched a merge is applying a commit no render has seen yet, so the line
+  reads `unknown: render is of another commit` for most services on most broad ticks.
+- A service with no usable record keeps the answer `narrow` gave. When the diff decides, the
+  full run stays the fallback for a range where too many services are unknown.
+
+`deploy_release.digest_diff` is the reader, a stdlib restatement of
+`probe_lib/releases_render.py:digest_verdict`. `tests/test_deploy_release_digest.py` runs the
+two over the same records.
+
 A failed narrowed apply adds the plane it named to `hold_plane` as the entry
 `ansible/deploy.yml <tags>`, and only an apply covering those tags drops that entry -- an
 untagged full run does, and a narrowed run covering a different service does not.
@@ -607,12 +629,12 @@ stay).
       DISCHARGES a line whose service has since been deployed — asked of the service's release
       record and one `git merge-base --is-ancestor`, which is what makes an operator's own
       `deploy.sh` drop the line without anybody running a command. A shared role has no
-      record of its own, so its line drops once every tag that applies it and writes a record
-      carries the change (`scripts/deploy_tools/shared_role_callers.py`, #2643). `deploy.sh` is otherwise
+      record of its own, so its line drops once every tag that runs it carries the change
+      (`scripts/deploy_tools/shared_role_callers.py:caller_tags`, #2643). `deploy.sh` is otherwise
       invisible to the deployer, and without that discharge the marker would hold one
       permanent line per routine landing. `gitops_state.py clear-k8s-unapplied <svc>` is the
       hand clear, for a change that was REVERTED rather than applied, or for a shared role
-      `recorded_callers` reaches no recording caller for.
+      with a caller nothing can prove applied.
       A demotion is recorded at the ff-merge (`deploy_defer.record_demoted`), not in the
       `gate_broad_k8s` that decided it: the gate runs before that merge, and a contention arm
       after it resets the tree, so a marker written there would describe a range that is no
@@ -1148,19 +1170,23 @@ what it recorded.
   (`deploy_defer.discharge_k8s_unapplied`), from the service's release record and one `git
   merge-base --is-ancestor`. That is what drops the line for an operator's own `deploy.sh`,
   which the deployer cannot see; without it the marker would hold a permanent line per routine
-  landing. A record that is absent or carries no date KEEPS the line. A shared role (`manifests`,
-  `image-builder`, `volume-claim`) has no record of its own, so its line drops when every
-  tag that applies it and writes a record carries the change, as
-  `scripts/deploy_tools/shared_role_callers.py` derives them (#2643).
+  landing. A record that is absent or carries no date KEEPS the line. A shared role
+  (`manifests`, `image-builder`, `volume-claim`) has no record of its own, so its line drops
+  when every tag that runs it carries the change, as
+  `scripts/deploy_tools/shared_role_callers.py:caller_tags` derives them (#2643).
+- A caller carries the change when its release record descends from the line's commit. For
+  `manifests` alone, a caller also carries it when a render at a commit descending from the
+  line's matches its applied digests (`deploy_release.render_proof`, #3057). The render need
+  not be of origin/master's tip, only of a commit holding the change, so the hourly producer
+  answers within about an hour of a merge. Every other shared role acts outside the digest,
+  and `deploy_defer.DIGEST_PROVABLE_ROLES` carries the `# DECIDED:` that says how each one does.
 - Any tick that deploys the service clears its `k8s_deferred` line
   (`deploy_defer.clear_applied_k8s_deferred`, called from both k8s deploy paths and from the
   plane-covered set). An operator's own `deploy.sh` is invisible to the deployer, so it clears
   with `gitops_state.py clear-k8s-deferred <svc>`.
 - `gitops_state.py clear-k8s-unapplied <svc>` is the hand clear for `k8s_unapplied`, needed
-  for a change that was reverted rather than applied, or for a shared role whose
-  `recorded_callers` answer is empty. A role that only LOOKS like the second case —
-  an entry that declares a second tag, as the retired `n8n-images` did — discharges itself
-  since #2666, because the derivation reads the entry's other tag.
+  for a change that was reverted rather than applied, or for a shared role with a caller
+  nothing can prove applied: no tag runs the role, or a caller writes no release record.
 
 
 ### The `has_gitops` gate, the GitHub crons and the marker module: history
