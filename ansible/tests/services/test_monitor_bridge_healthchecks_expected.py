@@ -10,9 +10,11 @@ grace must equal the period-and-grace table in docs/healthchecks-io-deadman.md.
 Run: uv run pytest ansible/tests/services/test_monitor_bridge_healthchecks_expected.py
 """
 
+import json
 import re
 
 from _helpers import REPO
+from _k8s_render import rendered_docs
 from fragment_readers import role_defaults
 from fragment_renderers import deadman_crons
 from gen_doc_fragments import deadman_inputs
@@ -110,11 +112,19 @@ def test_every_expectation_matches_the_docs_schedule_type_and_grace():
 
 
 def test_only_pi_peer_backup_runs_in_the_containers_timezone():
-    # A k8s CronJob with `timeZone: {{ tz }}`; every other slug is a UTC host cron.
-    cronjob = (
-        REPO / "ansible/roles/k8s/pi-peer-backup/templates/cronjob.yaml.j2"
-    ).read_text()
-    assert "timeZone: {{ tz }}" in cronjob
-    tzs = {s: w.get("tz") for s, w in _expected().items() if w["kind"] == "cron"}
-    assert tzs.pop("pi-peer-backup") == "{{ tz }}"
+    # pi-peer-backup is a k8s CronJob scheduled in `tz`; every other slug is a UTC host cron.
+    # Both sides are read as rendered: the expectation as the bridge's env Secret carries it,
+    # the zone from the CronJob's spec.
+    expected = cron_zone = None
+    for role, _tpl, doc in rendered_docs():
+        if role == "monitor-bridge" and doc.get("kind") == "Secret":
+            raw = (doc.get("stringData") or {}).get("HEALTHCHECKS_EXPECTED")
+            expected = json.loads(raw) if raw else expected
+        elif role == "pi-peer-backup" and doc.get("kind") == "CronJob":
+            cron_zone = doc["spec"]["timeZone"]
+    assert expected and cron_zone, (
+        "the render carried no HEALTHCHECKS_EXPECTED or CronJob"
+    )
+    tzs = {r["slug"]: r.get("tz") for r in expected if r["kind"] == "cron"}
+    assert tzs.pop("pi-peer-backup") == cron_zone
     assert set(tzs.values()) == {"UTC"}
