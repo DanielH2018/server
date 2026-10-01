@@ -82,11 +82,6 @@ OVER_CEILING: dict[str, str] = {}
 # Roles whose cron/timer changes no state: it reads, then pushes a heartbeat or a notification.
 # Each reason is the thing to re-check before keeping the role here.
 EXEMPT: dict[str, str] = {
-    "claude_code": (
-        "`claude-cgroup-metrics.timer` reads cgroup counters; `claude-rc-restart.timer` is a "
-        "weekly `systemctl try-restart` to adopt an auto-update, which starts nothing that was "
-        "down and creates nothing"
-    ),
     "renovate_notify": (
         "reads the open Renovate PRs from GitHub and posts to Discord; it merges, closes and "
         "edits nothing — `renovate_agent` is the role that acts, and it carries the contract"

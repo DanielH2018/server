@@ -600,6 +600,9 @@ has_docker: false
 has_github_cli: true
 has_chezmoi: true
 has_claude_code: true
+# The only memory store sessions write; claude-memory-sync.timer copies it, one-way and
+# overwriting, to daniel-server (issue #3123, the operator's decision of 2026-10-01).
+claude_code_memory_sync_enabled: true
 # `has_igpu` is deliberately unset. It means "pass /dev/dri through" (README §7) and is the
 # Docker-side switch; for the k8s workloads render_gid below supersedes it, because in the
 # cluster a container reaches the render node through the device plugin plus group

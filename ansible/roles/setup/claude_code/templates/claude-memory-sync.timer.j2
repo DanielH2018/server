@@ -1,0 +1,9 @@
+[Unit]
+Description=Copy the Claude memory store to {{ claude_code_memory_sync_target }} every {{ claude_code_memory_sync_interval }}
+
+[Timer]
+OnBootSec=5min
+OnUnitActiveSec={{ claude_code_memory_sync_interval }}
+
+[Install]
+WantedBy=timers.target

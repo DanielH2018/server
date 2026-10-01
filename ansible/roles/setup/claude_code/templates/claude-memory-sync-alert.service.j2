@@ -1,0 +1,11 @@
+[Unit]
+Description=Alert when the Claude memory store copy fails
+
+[Service]
+Type=oneshot
+# The same one-key EnvironmentFile as claude-rc-alert.service, for the same reason: systemd
+# serves unit text over the system bus, so the webhook must not appear in it.
+EnvironmentFile=/etc/claude-rc/alert-webhook.env
+ExecStart=/usr/bin/curl -fsS -m 10 -H "Content-Type: application/json" \
+  -d '{"content":"claude-memory-sync failed on {{ inventory_hostname }}: sessions on {{ claude_code_memory_sync_target }} keep reading a stale memory store. Check `journalctl -u claude-memory-sync`."}' \
+  "${ALERT_WEBHOOK}"
