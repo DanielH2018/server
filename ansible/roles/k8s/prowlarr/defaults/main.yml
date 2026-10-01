@@ -139,5 +139,6 @@ prowlarr_k8s_log_rotate: "10"
 # The exportarr metrics sidecar (templates/exportarr.yml.j2). Pinned in this role's own defaults
 # rather than once in group_vars, because Renovate's k8s-images manager matches
 # `roles/k8s/*/defaults` and `_image:` keys only. sonarr and radarr carry the same pin, and
-# ansible/tests/test_exportarr_pins_in_lockstep.py fails if the three drift apart.
+# ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep
+# fails if the three drift apart.
 prowlarr_exportarr_image: ghcr.io/onedr0p/exportarr:v2.3.0

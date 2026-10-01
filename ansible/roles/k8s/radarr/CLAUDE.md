@@ -17,7 +17,8 @@ when both paths share one mount.
 
 - **The `-lsNN` linuxserver tag scheme** means a breaking bump can hide as a routine patch
   bump. The `exportarr` metrics sidecar (`radarr_exportarr_image`) is pinned in lockstep with
-  sonarr and prowlarr — `test_exportarr_pins_in_lockstep.py` enforces it.
+  sonarr and prowlarr — `ansible/tests/services/test_exportarr_sidecars.py::test_the_image_pins_stay_in_lockstep`
+  enforces it.
 - **Port:** 7878
 - **Persists:** `radarr-config` PVC (`longhorn`, ~30Mi) — `radarr.db` holds the library and
   absolute root-folder paths. Also mounts `media-data` (`radarr_k8s_media_claim`), shared RWX.
