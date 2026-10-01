@@ -6,10 +6,11 @@ among. #2418 silenced the infra-map cron's, #2444 drained the spool, and #2466 i
 still mailed: four crons, plus `secret-rotation-audit` and `live-drift`, which the kuma-check
 timer migration had already moved to the journal by passing `kuma_check_cron_name`.
 
-Each of the four routes BOTH streams through `logger -t <tag>`. Both, not stdout alone: the
-cert-expiry line this exists to silence comes from `logging.basicConfig`, which writes to
-stderr. None of the four loses an alert, because none of them alerted by mail — the reasoning
-per cron is at its own task.
+Each routes BOTH streams through `logger -t <tag>`, not stdout alone: a Python job's log line
+comes from `logging.basicConfig`, which writes to stderr, so a stdout-only redirect would
+change nothing. None of them loses an alert, because none alerted by mail — the reasoning per
+cron is at its own task. The fourth of #2466's four was `TLS cert-expiry watch`, retired with
+its watcher in #3095.
 
 Those five are instances. The class check (#2487) reads every `ansible.builtin.cron` task that
 installs a job, on both planes. Each job must route both streams of every stage, or appear in
@@ -37,7 +38,6 @@ from _helpers import ROLES, load_tasks, walk_tasks
 # A rename fails `test_every_named_cron_still_exists` below rather than going quiet.
 JOURNAL_ROUTED = {
     "Weekly secret rotation (auto tier)": "secret-rotate",
-    "TLS cert-expiry watch": "cert-expiry",
     "Refresh generated docs": "docs-refresh",
     "Longhorn filesystem trim": "longhorn-trim-cron",
     # Not one of the four — added with the branch sweep (#2430), which made a previously
@@ -47,8 +47,8 @@ JOURNAL_ROUTED = {
 
 
 # `2>&1 | logger -t <tag>`, allowing the shell's own spacing. Matched as written because the
-# redirect is the whole fix: `| logger` without `2>&1` leaves stderr mailing, which is exactly
-# the cert-expiry case.
+# redirect is the whole fix: `| logger` without `2>&1` leaves stderr mailing, which is what a
+# Python job whose only output is a `logging` line would do.
 def _routing(tag: str) -> re.Pattern[str]:
     return re.compile(r"2>&1\s*\|\s*logger\s+-t\s+" + re.escape(tag) + r"\b")
 
@@ -81,21 +81,20 @@ def test_the_cron_sends_both_streams_to_the_journal(name, tag):
 
 def test_a_stdout_only_redirect_does_not_satisfy_the_check():
     """The RED half: `| logger` without `2>&1` is the bug, not the fix."""
-    assert not _routing("cert-expiry").search(
-        "uv run python scripts/watchers/cert_expiry.py | logger -t cert-expiry"
+    assert not _routing("worktree-sweep").search(
+        "uv run python scripts/dev/prune_worktrees.py | logger -t worktree-sweep"
     )
 
 
-def test_the_braced_chain_pipes_the_whole_cert_expiry_job():
+def test_the_braced_chain_pipes_the_whole_worktree_sweep_job():
     """`|` binds tighter than `&&`, so an unbraced chain would pipe only its last stage.
 
-    The cert-expiry job is the only one of the four that is a chain rather than one command,
-    and it is the one where getting this wrong reads as fixed while the `cd` and the
-    credentials-file stage keep mailing.
+    The worktree-sweep job is a chain rather than one command, and it is where getting this
+    wrong reads as fixed while the `cd` stage keeps mailing.
     """
-    job = _cron_jobs()["TLS cert-expiry watch"]
+    job = _cron_jobs()["Weekly git object-store repair"]
     assert job.startswith("{ cd "), job
-    assert "; } 2>&1 | logger -t cert-expiry" in job, job
+    assert "; } 2>&1 | logger -t worktree-sweep" in job, job
 
 
 # ── every cron (#2487) ───────────────────────────────────────────────────────────────
@@ -151,7 +150,7 @@ MAILS_ONLY_ON_FAILURE = {
 KNOWN_CRONS = frozenset(
     {
         "Sync peer Claude artifacts",  # roles/k8s
-        "TLS cert-expiry watch",  # setup/initial_setup/tasks/crons.yml
+        "Refresh generated docs",  # setup/initial_setup/tasks/crons.yml
         "Longhorn filesystem trim",  # setup/k3s/tasks/health-crons.yml
         "UPS secondary watchdog",  # setup/nut_host
         "Weekly AIDE file integrity check",  # setup/initial_setup/tasks/integrity.yml
@@ -248,7 +247,7 @@ def test_every_allowlist_entry_is_an_installed_cron_that_still_mails():
     "job",
     [
         # The braced chain: one pipe covers every stage.
-        "{ cd /srv && uv run python watch.py; } 2>&1 | logger -t cert-expiry",
+        "{ cd /srv && uv run python watch.py; } 2>&1 | logger -t watch",
         # Each stage routed on its own, without braces (fwupd).
         "fwupdmgr refresh >/dev/null 2>&1 ; fwupdmgr update 2>&1 | /usr/bin/logger -t fwupd",
         # The fallback stage is logger itself (fake-remux).

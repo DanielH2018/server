@@ -10,7 +10,7 @@ full, and the journald-cap forensics.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "initial_setup"`
-- **Crons (14):**
+- **Crons (13):**
   - `Weekly apt autoremove` — `0 2 * * 0`
   - `Weekly dpkg purge orphaned configs` — `15 2 * * 0`
   - `Weekly secret rotation (auto tier)` — `0 9 * * 0`
@@ -20,7 +20,6 @@ full, and the journald-cap forensics.
   - `Clear ansible log file` — `0 6 * * 0`
   - `Weekly git object-store repair` — `20 4 * * 0`
   - `Refresh homelab infrastructure map` — `*/15 * * * *`
-  - `TLS cert-expiry watch` — `10 5 * * *`
   - `Refresh generated docs` — `17 6,18 * * *`
   - `Homelab eval sweep` — `0 2 * * 0`
   - `Weekly rkhunter malware scan` — `0 2 * * 3`

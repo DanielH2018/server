@@ -25,7 +25,7 @@ def _importers_of_leafy(tmp_path, body: str) -> set[str]:
 
 
 def test_a_bare_import_through_the_files_own_path_insert_is_credited(tmp_path):
-    """The `cert_expiry.py` shape: it inserts `scripts/docs`, then imports `route_facts`."""
+    """The bare-import shape: a file inserts `scripts/docs`, then imports `route_facts`."""
     body = (
         'sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "docs"))\n'
         "from leafy import VALUE"
@@ -51,7 +51,7 @@ def test_an_alias_of_a_package_under_scripts_is_credited(tmp_path):
 
 def test_the_real_tree_credits_the_insert_edge_and_not_the_basename_ones():
     imported = import_graph(SCRIPTS, lambda path: not path.name.startswith("test_"))
-    assert "cert_expiry.py" in imported["route_facts"]
+    assert "networking.py" in imported["route_facts"]
     assert "gitops_state.py" not in imported["gitops_markers"]
     assert "secret_rotation.py" not in imported.get("secrets", set()), (
         "`import secrets as pysecrets` is the stdlib, not scripts/docs/reference/secrets.py"

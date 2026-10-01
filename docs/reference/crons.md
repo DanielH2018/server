@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/crons.py
-generated_at: 2026-10-01 00:11 UTC
-generated_sha: 7f5047711
+generated_at: 2026-10-01 13:34 UTC
+generated_sha: 0d5866953
 ---
 
 !!! warning "Generated file — do not edit"
@@ -12,7 +12,7 @@ generated_sha: 7f5047711
 
 # Scheduled jobs
 
-41 cron entrie(s) installed across the roles.
+40 cron entrie(s) installed across the roles.
 
 !!! warning "The state column is a heuristic"
     It is judged from the command text, and nothing in a cron task declares its own blast radius. A job that runs a wrapper script reads as "read the script" rather than being guessed at. Treat it as a pointer, not an authority.
@@ -41,7 +41,6 @@ generated_sha: 7f5047711
 | Refresh homelab infrastructure map | `*/15 * * * *` | daniel-box | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | Release staleness drift check | `*/30 * * * *` | every host in the play | `ubuntu` | read the script | `ansible/roles/setup/k3s/tasks/health-crons.yml` |
 | Sync peer Claude artifacts | `*/5 * * * *` | conditional (not k8s_dry_run \| bool) | `ubuntu` | read the script | `ansible/roles/k8s/artifacts/tasks/main.yml` |
-| TLS cert-expiry watch | `10 5 * * *` | daniel-box | `ubuntu` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/crons.yml` |
 | UPS secondary watchdog | `*/10 * * * *` | conditional (nut_host_watchdog_armed \| bool) | `root` | read the script | `ansible/roles/setup/nut_host/tasks/main.yml` |
 | Weekly AIDE file integrity check | `0 3 * * 1` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/integrity.yml` |
 | Weekly apt autoremove | `0 2 * * 0` | every host in the play | `root` | no (read-only by its command) | `ansible/roles/setup/initial_setup/tasks/accounting.yml` |
