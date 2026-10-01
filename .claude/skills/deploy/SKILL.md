@@ -228,6 +228,11 @@ until the notifier has run. The gate enumerates the workloads to check from the 
 the commit that was deployed, never from the working tree, which under `--at` is a different
 commit and even without it can carry uncommitted edits.
 
+The `--detach` playbook run is a grandchild in its own session, outside the caller's process
+tree, so a Bash call killed at its time limit does not kill it. Started from a systemd user
+unit, it also moves into its own `deploy-<pid>.scope`, so stopping that unit does not kill it.
+The deploy log names the scope (`lib/detach_fork.py`).
+
 **Exit 4 is decided before exit 2.** `deploy.sh` asks whether the tree is stale before it
 validates `--tags`, so a stale tree carrying a tag it does not recognise reports 4, not 2
 (issue #1566). A tag check against a stale tree answers about the wrong tree: the first

@@ -227,7 +227,10 @@ unit is still active is kept, naming the unit: a running agent's tree is clean a
 until it commits, which is exactly what a merged tree looks like, and a `clean` run too early
 on 2026-09-17 removed two working batches' trees out from under their units (#1872).
 `stop <run-id>` stops the units first, for a fan-out abandoned
-before landing — run `clean` once the survivors' PRs merge.
+before landing — run `clean` once the survivors' PRs merge. A landing or detached deploy the
+agent already started is not stopped with its unit: it runs in its own `land<pr>-<pid>.scope`
+or `deploy-<pid>.scope` (#3160), so a stopped batch never leaves an apply half done.
+`systemctl --user list-units 'land*' 'deploy-*'` lists them.
 
 The local leg — the batch placed on the host you run from — runs its `systemd-run --user` and
 `systemctl --user` under a pinned `XDG_RUNTIME_DIR` / `DBUS_SESSION_BUS_ADDRESS`

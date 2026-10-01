@@ -13,19 +13,23 @@ also holds can have it set again. A file opened here, by this process, cannot: t
 whole fix has always been "redirect to a file", and why doing it inside the script is safer
 than asking a caller to remember.
 
-WHY NOT `deploy_detach.py`. It cannot be reused: its `run` takes the tree lock, reaps snapshots,
-makes one, takes per-service locks and hands the child a `locked.Run`, and its `child` posts a
-health verdict through `deploy_detach_notify.py`. The genuinely shared part is four `dup2` calls.
-Factoring those out would mean editing the deploy hot path for nothing, so the fork is written
-here.
+WHAT IS SHARED WITH `deploy_detach.py`. The fork itself: `lib/detach_fork.py` owns the double
+fork and the move out of a fan-out unit's cgroup, and both detach modes call it. The rest stays
+here. `deploy_detach.run` takes the tree lock, makes a snapshot and hands its child lock
+descriptors to keep, and its child posts a health verdict; a landing does none of that.
 
 THE LANDING IS A GRANDCHILD, SO A KILL OF THE CALLER CANNOT REACH IT (issue #3158). A harness that
 times out a Bash call kills the call's whole descendant tree, found by walking parent pids, not
 just its process group. A child in its own session (`setsid`) is still a descendant, and on
 2026-10-01 the landing of PR #3137 died that way 7m34s into a fleet deploy with no verdict line.
-So `fork` forks twice: the intermediate child calls `setsid`, forks the landing and exits at once.
-The landing reparents to init or the nearest subreaper, outside the caller's tree, and it holds
-no inherited descriptor beyond its log and /dev/null.
+So `fork` forks twice through `detach_fork.fork_detached`: the landing reparents to init or the
+nearest subreaper, outside the caller's tree, and it holds no inherited descriptor beyond its log
+and /dev/null.
+
+THE LANDING LEAVES A FAN-OUT UNIT'S CGROUP (issue #3160). A fan-out agent runs in
+`fanout-<n>.service`, and stopping that unit kills its whole cgroup, grandchildren included. The
+landing moves itself into `land<pr>-<pid>.scope` before it starts anything, so stopping the batch
+leaves its landing running to its verdict. The log's first line names the scope to stop instead.
 
 THE LANDING'S EXIT CODE IS THE AUTHORITY, NEVER THE GREP. A grandchild cannot be reaped by the
 waiter, so the landing records its own exit code in `<log stem>.rc` after flushing its last line.
@@ -47,6 +51,7 @@ from datetime import UTC, datetime
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parents[2]))  # scripts/
+from lib.detach_fork import fork_detached, leave_unit_cgroup
 from lib.exit_codes import LAND_GAVE_UP
 
 # Where a detached landing writes. `$CLAUDE_JOB_DIR/tmp` is what the skill told sessions to
@@ -94,50 +99,30 @@ def rc_path(log: Path) -> Path:
     return log.with_suffix(".rc")
 
 
-def fork(log: Path, landing: Callable[[], int]) -> int:
+def fork(log: Path, landing: Callable[[], int], scope_prefix: str = "land") -> int:
     """Run `landing` in a detached, logged grandchild; its pid, in the parent.
 
-    The intermediate child calls `setsid`, forks the landing and exits, so the landing is in its
-    own session and outside the caller's process tree. The landing gets stdin on /dev/null,
-    stdout/stderr on `log` and no other inherited descriptor. It runs `landing`, writes the exit
-    code to `rc_path(log)`, and leaves through `os._exit` so none of the parent's frames unwind
-    twice.
+    The grandchild is in its own session, outside the caller's process tree, and out of any
+    fan-out unit's cgroup. It gets stdin on /dev/null, stdout/stderr on `log` and no other
+    inherited descriptor. It runs `landing`, writes the exit code to `rc_path(log)`, and leaves
+    through `os._exit` so none of the parent's frames unwind twice.
 
     Args:
       log: the file the landing's stdout and stderr are rebound to. Opened here, by this
         process, which is what guarantees the blocking handle Ansible needs.
       landing: what the grandchild runs; its return value is the recorded exit code.
+      scope_prefix: the name of the transient scope the landing moves into, before its pid.
 
     Returns:
       The landing's pid. Only the parent ever returns from this function.
     """
     sys.stdout.flush()
     sys.stderr.flush()
-    read_end, write_end = os.pipe()
-    pid = os.fork()
-    if pid:
-        os.close(write_end)
-        with os.fdopen(read_end, "rb") as pipe:
-            reported = pipe.read()
-        os.waitpid(pid, 0)
-        if not reported:
-            raise RuntimeError("land --detach: the landing never started (fork failed)")
-        return int(reported)
-    try:
-        os.close(read_end)
-        os.setsid()
-        grandchild = os.fork()
-        if grandchild:
-            os.write(write_end, str(grandchild).encode())
-            os._exit(0)
-        os.close(write_end)
-        _run_landing(log, landing)
-    finally:
-        os._exit(1)
+    return fork_detached(lambda: _run_landing(log, landing, scope_prefix))
 
 
-def _run_landing(log: Path, landing: Callable[[], int]) -> None:
-    """The grandchild's body: rebind stdio, drop inherited fds, run, record the code, exit."""
+def _run_landing(log: Path, landing: Callable[[], int], scope_prefix: str) -> None:
+    """The grandchild's body: rebind stdio, drop inherited fds, leave the unit, run, record."""
     code = 1
     try:
         null = os.open(os.devnull, os.O_RDONLY)
@@ -148,6 +133,11 @@ def _run_landing(log: Path, landing: Callable[[], int]) -> None:
         # An inherited pipe of the caller's -- the harness's own output capture -- would keep
         # the caller's call open for as long as the landing runs.
         os.closerange(3, os.sysconf("SC_OPEN_MAX"))
+        # Before `landing` starts anything: a child started while the move is pending stays
+        # in the unit's cgroup.
+        moved = leave_unit_cgroup(scope_prefix)
+        if moved:
+            print(moved, flush=True)
         code = landing()
     except SystemExit as stop:
         code = stop.code if isinstance(stop.code, int) else 1

@@ -15,16 +15,21 @@ that makes the new mode safe to ship before it has been exercised on a real land
 
 import contextlib
 import io
+import json
 import os
 import re
 import signal
 import subprocess
+import sys
 import time
+import uuid
 from pathlib import Path
 
 import pytest
 
 from deploy_tools.land_lib import detach
+from _deploy_sh_fakes import BUSCTL_REFUSED
+
 from lib.exit_codes import LAND_GAVE_UP
 from lib.git_testing import scrubbed_env
 from lib.proc_testing import fake_bin, path_with
@@ -53,6 +58,9 @@ def _env(tmp_path: Path, gh: str = _GH_STUB) -> dict[str, str]:
         tmp_path / "bin",
         gh=gh,
         git=_GIT_STUB.replace("{calls}", str(tmp_path)),
+        # The landing leaves a fan-out unit's cgroup through busctl; refused here, so a run of
+        # this suite inside one creates no real scope. The unit-stop test puts the real one back.
+        busctl=BUSCTL_REFUSED,
     )
     (tmp_path / "git-calls").touch()
     job_dir = tmp_path / "job"
@@ -195,6 +203,105 @@ def test_killing_the_callers_whole_tree_leaves_the_landing_running_to_its_verdic
         caller.wait()
         if caller.stdout:
             caller.stdout.close()
+
+
+def _user_manager_reachable() -> bool:
+    try:
+        probe = subprocess.run(
+            ["systemctl", "--user", "show", "--property=Version"],
+            capture_output=True,
+            timeout=10,
+            check=False,
+        )
+    except OSError, subprocess.TimeoutExpired:
+        return False
+    return probe.returncode == 0
+
+
+@pytest.mark.skipif(
+    not _user_manager_reachable(),
+    reason="needs a systemd user manager to start and stop a unit; CI runners have none",
+)
+def test_stopping_the_callers_unit_leaves_the_landing_running_to_its_verdict(tmp_path):
+    """Issue #3160: `systemctl --user stop fanout-<n>` killed the cgroup its landing sat in.
+
+    The caller runs in a real transient user unit, the shape `fanout_lib/launch.py` gives a
+    batch, and the unit is stopped while the landing waits on a slow `gh`. A landing that
+    stayed in the unit's cgroup dies with it and never records an exit code.
+    """
+    slow_gh = _GH_STUB.replace('case "$*" in', 'sleep 3\ncase "$*" in', 1)
+    env_file = tmp_path / "caller-env.json"
+    env = _env(tmp_path, gh=slow_gh)
+    # The real busctl, which is the whole subject here.
+    (tmp_path / "bin" / "busctl").unlink()
+    env_file.write_text(json.dumps(env))
+    # The unit gets systemd's environment, not this one: the caller re-enters this one itself.
+    launcher = (
+        "import json, sys, os; "
+        "os.execve('/bin/bash', ['bash', *sys.argv[2:]], json.load(open(sys.argv[1])))"
+    )
+    unit = f"test-land-detach-{uuid.uuid4().hex[:12]}.service"
+    started = subprocess.run(
+        [
+            "systemd-run",
+            "--user",
+            "--quiet",
+            "--unit",
+            unit,
+            "--",
+            sys.executable,
+            "-c",
+            launcher,
+            str(env_file),
+            str(_LAND_SH),
+            "--pr",
+            "939",
+            "--detach",
+            "--await-verdict",
+        ],
+        capture_output=True,
+        text=True,
+        timeout=30,
+        check=False,
+    )
+    assert started.returncode == 0, started.stderr
+    log = None
+    try:
+        deadline = time.monotonic() + 60
+        while time.monotonic() < deadline:
+            logs = _logs(tmp_path)
+            if logs and "detach: moved out of" in logs[0].read_text():
+                log = logs[0]
+                break
+            time.sleep(0.1)
+        assert log is not None, f"the landing never left {unit}: {_logs(tmp_path)}"
+        assert f"detach: moved out of {unit}" in log.read_text()
+        subprocess.run(["systemctl", "--user", "stop", unit], timeout=30, check=True)
+
+        deadline = time.monotonic() + 60
+        while detach.recorded_code(log) is None and time.monotonic() < deadline:
+            time.sleep(0.2)
+        assert detach.recorded_code(log) == 0, log.read_text()
+        assert (detach.verdict_in(log) or "").startswith(
+            "VERDICT: nothing-to-deploy (PR #939"
+        ), log.read_text()
+    finally:
+        subprocess.run(
+            ["systemctl", "--user", "stop", unit], capture_output=True, timeout=30
+        )
+        subprocess.run(
+            ["systemctl", "--user", "reset-failed", unit],
+            capture_output=True,
+            timeout=30,
+        )
+        if log is not None:
+            scope = re.search(r"systemctl --user stop (\S+\.scope)", log.read_text())
+            if scope:
+                subprocess.run(
+                    ["systemctl", "--user", "stop", scope.group(1)],
+                    capture_output=True,
+                    timeout=30,
+                )
 
 
 # -- land_lib/detach.py's own rules ---------------------------------------------------------
