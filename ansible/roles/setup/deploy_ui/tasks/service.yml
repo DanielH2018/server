@@ -1,0 +1,31 @@
+---
+- name: Install the deploy-ui unit
+  tags: [deploy-ui-service]
+  ansible.builtin.template:
+    src: deploy-ui.service.j2
+    dest: /etc/systemd/system/deploy-ui.service
+    mode: "0644"
+  become: true
+  notify:
+    - Reload systemd
+    - Restart deploy-ui
+
+- name: Flush handlers so the unit is live before it is enabled
+  tags: [deploy-ui-service]
+  ansible.builtin.meta: flush_handlers
+
+- name: Enable and start deploy-ui
+  tags: [deploy-ui-service]
+  ansible.builtin.systemd:
+    name: deploy-ui.service
+    enabled: true
+    state: started
+  become: true
+
+- name: Stamp the rendered deploy-ui unit
+  tags: [deploy-ui-service]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_render.yml"
+  vars:
+    stamp_render_name: deploy-ui
+    stamp_render_templates:
+      - ansible/roles/setup/deploy_ui/templates/deploy-ui.service.j2

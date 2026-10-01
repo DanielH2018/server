@@ -26,7 +26,7 @@ ROLE = ANSIBLE / "roles" / "setup" / "renovate_agent"
 UNIT = ROLE / "templates" / "renovate-agent.service.j2"
 TIMER = ROLE / "templates" / "renovate-agent.timer.j2"
 PROMPT = ROLE / "templates" / "prompt.txt.j2"
-TASKS = ROLE / "tasks" / "main.yml"
+TASKS = ROLE / "tasks" / "service.yml"
 DEFAULTS = ROLE / "defaults" / "main.yml"
 
 
@@ -128,7 +128,10 @@ def test_arming_is_wired_in_both_directions() -> None:
 
 def test_the_role_kicks_no_run_on_config_change() -> None:
     """A config edit must not spend a session as a side effect — unlike renovate_notify."""
-    text = TASKS.read_text()
+    text = "".join(p.read_text() for p in sorted((ROLE / "tasks").glob("*.yml")))
+    assert "Install agent Python files" in text, (
+        "the task-file glob read the wrong files"
+    )
     assert "Run renovate-agent once" not in text
 
 

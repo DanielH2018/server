@@ -1,0 +1,40 @@
+---
+- name: Install notifier Python files
+  tags: [renovate-notify-code]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/renovate-notify/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - renovate_notify.py
+    - notify_logic.py
+    - pending_logic.py
+  become: true
+  notify: Run renovate-notify once
+
+- name: Install the shared host_lib helper beside the notifier
+  tags: [renovate-notify-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/renovate-notify
+    host_lib_owner: "{{ sys_user }}"
+    host_lib_notify: [Run renovate-notify once]
+
+# The notifier's own code is registered here: the deployed-code arm reads only the paths
+# registered, so an unregistered script could run any age against a green drift check.
+- name: Record the deployed renovate-notify code
+  tags: [renovate-notify-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: renovate-notify
+    stamp_deployed_pairs:
+      - live: /opt/renovate-notify/renovate_notify.py
+        src: ansible/roles/setup/renovate_notify/files/renovate_notify.py
+      - live: /opt/renovate-notify/notify_logic.py
+        src: ansible/roles/setup/renovate_notify/files/notify_logic.py
+      - live: /opt/renovate-notify/pending_logic.py
+        src: ansible/roles/setup/renovate_notify/files/pending_logic.py
+      - live: /opt/renovate-notify/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

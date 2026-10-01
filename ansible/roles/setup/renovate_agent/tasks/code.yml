@@ -1,0 +1,42 @@
+---
+- name: Install agent Python files
+  tags: [renovate-agent-code]
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "/opt/renovate-agent/{{ item }}"
+    owner: "{{ sys_user }}"
+    group: "{{ sys_user }}"
+    mode: "0755"
+  loop:
+    - renovate_agent.py
+    - agent_toolbox.py
+    - run_worktree.py
+    - agent_logic.py
+    - gitops_markers.py
+  become: true
+
+- name: Install the shared host_lib helper beside the agent
+  tags: [renovate-agent-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/install_host_lib.yml"
+  vars:
+    host_lib_dir: /opt/renovate-agent
+    host_lib_owner: "{{ sys_user }}"
+
+- name: Record the deployed renovate-agent code
+  tags: [renovate-agent-code]
+  ansible.builtin.import_tasks: "{{ role_path }}/../common/tasks/stamp_deployed.yml"
+  vars:
+    stamp_deployed_name: renovate-agent
+    stamp_deployed_pairs:
+      - live: /opt/renovate-agent/renovate_agent.py
+        src: ansible/roles/setup/renovate_agent/files/renovate_agent.py
+      - live: /opt/renovate-agent/agent_toolbox.py
+        src: ansible/roles/setup/renovate_agent/files/agent_toolbox.py
+      - live: /opt/renovate-agent/run_worktree.py
+        src: ansible/roles/setup/renovate_agent/files/run_worktree.py
+      - live: /opt/renovate-agent/agent_logic.py
+        src: ansible/roles/setup/renovate_agent/files/agent_logic.py
+      - live: /opt/renovate-agent/gitops_markers.py
+        src: ansible/roles/setup/renovate_agent/files/gitops_markers.py
+      - live: /opt/renovate-agent/host_lib.py
+        src: ansible/roles/setup/common/files/host_lib.py

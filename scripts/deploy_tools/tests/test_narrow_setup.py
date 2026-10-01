@@ -138,6 +138,38 @@ def test_the_real_k3s_roles_untagged_task_files_are_named_as_such():
     }
 
 
+# The setup task files #3134 and #3135 made narrowable, each with the answer `tags_of` gives.
+# Before them, `crons.yml` refused on its `always` preamble and the other three roles had one
+# untagged `main.yml`, so every change to them applied the whole role.
+NARROWED_SETUP_FILES = {
+    ("deploy_ui", "tasks/code.yml"): {"deploy-ui-code"},
+    ("deploy_ui", "tasks/service.yml"): {"deploy-ui-service"},
+    ("renovate_agent", "tasks/code.yml"): {"renovate-agent-code"},
+    ("renovate_agent", "tasks/service.yml"): {"renovate-agent-service"},
+    ("renovate_notify", "tasks/code.yml"): {"renovate-notify-code"},
+    ("renovate_notify", "tasks/service.yml"): {"renovate-notify-service"},
+}
+
+
+@pytest.mark.parametrize(("role", "rel"), sorted(NARROWED_SETUP_FILES))
+def test_the_real_split_setup_roles_narrow_below_their_role_tag(role, rel):
+    """Each file answers its own subject tag, and no other role in the playbook declares it."""
+    index = narrow_setup.RoleIndex(role, "HEAD", str(REPO))
+    tags = index.tags_of(rel)
+    assert tags == NARROWED_SETUP_FILES[(role, rel)]
+    playbook = (REPO / "ansible/initial_setup.yml").read_text()
+    assert not tags & narrow_setup.foreign_tags(role, playbook, "HEAD", str(REPO))
+
+
+def test_the_real_initial_setup_crons_file_narrows_past_its_always_preamble():
+    """`crons.yml` keeps its two `always` tasks and still answers its subject tags (#3134)."""
+    index = narrow_setup.RoleIndex("initial_setup", "HEAD", str(REPO))
+    assert "always" in index.tags["tasks/crons.yml"]
+    tags = index.tags_of("tasks/crons.yml")
+    assert "crons" in tags
+    assert not tags & {"always", "initial_setup"}
+
+
 def test_a_template_named_only_in_a_defaults_structure_maps_to_that_keys_readers(tree):
     """The shape a host script takes: the name is in `defaults/`, not in any task's `src:`.
 

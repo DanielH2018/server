@@ -1,0 +1,11 @@
+---
+- name: Allow the cluster to reach the deploy UI
+  tags: [firewall]
+  community.general.ufw:
+    rule: allow
+    port: "{{ deploy_ui_port }}"
+    proto: tcp
+    from_ip: "{{ item }}"
+    comment: deploy-ui from the k3s cluster
+  loop: "{{ deploy_ui_allowed_sources | flatten }}"
+  become: true
