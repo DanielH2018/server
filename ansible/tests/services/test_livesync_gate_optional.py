@@ -15,17 +15,14 @@ generated token to go.
 The static config's file provider and the Secret are two halves of one mechanism: the provider
 names `/etc/traefik-file/livesync-gate.yml`, which only the Secret's volume supplies. Gating
 one without the other leaves Traefik reading a path nothing mounts.
+
+The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
+defaults on — are `ansible/tests/k8s/test_staging_opt_out_flags_render.py`'s.
 """
 
 import pytest
 
-
 from lib import yaml_fast
-
-from validate.k8s_manifests import (
-    K8S_ROLES,
-    load_yaml,
-)
 
 from _k8s_render import render_role_template
 
@@ -47,12 +44,6 @@ def _pod_spec(manage: bool) -> dict:
 def _static_config(manage: bool) -> dict:
     doc = yaml_fast.safe_load(_render("static-config.yaml.j2", manage))
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])
-
-
-@pytest.mark.parametrize("template", ["deployment.yaml.j2", "static-config.yaml.j2"])
-@pytest.mark.parametrize("manage", [True, False])
-def test_both_branches_parse_as_yaml(template: str, manage: bool) -> None:
-    assert yaml_fast.safe_load(_render(template, manage)) is not None
 
 
 def test_the_file_provider_is_declared_with_the_gate_on_and_gone_with_it_off() -> None:
@@ -82,20 +73,3 @@ def test_the_provider_and_its_mount_are_gated_together(manage: bool) -> None:
     assert declares_provider == (_MOUNT_PATH in mounted), (
         f"the file provider and its {_MOUNT_PATH} mount disagree with {_FLAG}={manage}"
     )
-
-
-@pytest.mark.parametrize("manage", [True, False])
-def test_every_mount_resolves_to_a_declared_volume(manage: bool) -> None:
-    spec = _pod_spec(manage)
-    declared = {v["name"] for v in spec["volumes"]}
-    for container in spec.get("initContainers", []) + spec["containers"]:
-        for mount in container.get("volumeMounts", []):
-            assert mount["name"] in declared, (
-                f"{container['name']} mounts {mount['name']}, which no volume declares "
-                f"({_FLAG}={manage})"
-            )
-
-
-def test_prod_manages_the_livesync_gate() -> None:
-    """The flag defaults on, so no cluster loses its token gate by omission."""
-    assert load_yaml(K8S_ROLES / _ROLE / "defaults" / "main.yml")[_FLAG] is True

@@ -69,7 +69,7 @@ def _tracked_python() -> list[Path]:
 
     `git ls-files` rather than `REPO.rglob` — a root-anchored rglob walks other sessions'
     `.claude/worktrees/<name>/` checkouts and judges this commit against their older copies
-    (ENFORCED by `ansible/tests/repo/test_no_root_anchored_rglob.py`). This checkout is itself
+    (ENFORCED by `ansible/tests/repo/test_tracked_python_hazards.py`). This checkout is itself
     one of those worktrees, so the hazard is not hypothetical here.
     """
     return [

@@ -43,6 +43,8 @@ LOCAL_ONLY = frozenset(
         ".remember",
         ".mkdocs-strict-check",
         "site",
+        # The issue-fanout harness's per-batch brief and landing logs (`fanout_place.py`).
+        ".fanout",
     }
 )
 

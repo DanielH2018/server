@@ -173,8 +173,6 @@ def test_vale_ini_turns_the_styles_off_for_archive_and_reference():
     for tree in ("archive", "reference"):
         section = f"[docs/{tree}/**]"
         assert section in text, f"{section} missing from .vale.ini"
-        body = text.split(section, 1)[1]
-        first = next(line for line in body.splitlines() if line.strip())
-        assert first.replace(" ", "") == "BasedOnStyles=", (
-            f"{section} must clear BasedOnStyles to disable every rule, found {first!r}"
+        assert _clears_all_styles(text.split(section, 1)[1]), (
+            f"{section} must clear BasedOnStyles to disable every rule"
         )

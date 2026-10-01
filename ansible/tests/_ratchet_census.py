@@ -56,7 +56,7 @@ def tracked_python_files() -> list[str]:
     """Every tracked first-party `.py` path, repo-relative.
 
     `git ls-files` rather than a walk, which from the repo root descends into
-    `.claude/worktrees/<name>/` — see test_no_root_anchored_rglob.py for that incident.
+    `.claude/worktrees/<name>/` — see test_tracked_python_hazards.py for that incident.
     """
     listed = run_git("ls-files", "-z", "--", "*.py").stdout
     return [

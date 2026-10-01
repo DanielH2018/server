@@ -19,10 +19,12 @@ every request through that entrypoint fails while the pod reads healthy.
 
 What this suite does NOT prove: that either pod reaches Ready with CrowdSec off. Nothing
 here starts a container. That evidence comes from the staging bring-up.
+
+The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
+defaults on — are `ansible/tests/k8s/test_staging_opt_out_flags_render.py`'s.
 """
 
 import pytest
-
 
 from lib import yaml_fast
 
@@ -58,21 +60,6 @@ def _pod_spec(role: str, manage: bool, **extra) -> dict:
 def _static_config(manage: bool) -> dict:
     doc = _docs("traefik", "static-config.yaml.j2", manage)[0]
     return yaml_fast.safe_load(doc["data"]["traefik.yml"])
-
-
-@pytest.mark.parametrize(
-    ("role", "template"),
-    [
-        ("traefik", "deployment.yaml.j2"),
-        ("traefik", "static-config.yaml.j2"),
-        ("traefik", "dynamic.yaml.j2"),
-        ("authelia", "deployment.yaml.j2"),
-    ],
-)
-@pytest.mark.parametrize("manage", [True, False])
-def test_both_branches_parse_as_yaml(role: str, template: str, manage: bool) -> None:
-    """A stray conditional shifts indentation, which shows up here and nowhere else."""
-    assert _docs(role, template, manage)
 
 
 @pytest.mark.parametrize("role", sorted(_FLAGS))
@@ -293,20 +280,6 @@ def test_traefik_keeps_its_init_container_key_while_acme_still_needs_it() -> Non
     assert "initContainers" not in spec
 
 
-@pytest.mark.parametrize("role", sorted(_FLAGS))
-@pytest.mark.parametrize("manage", [True, False])
-def test_every_mount_resolves_to_a_declared_volume(role: str, manage: bool) -> None:
-    """The half-gated failure: a mount left behind by a volume that dropped out."""
-    spec = _pod_spec(role, manage)
-    declared = {v["name"] for v in spec["volumes"]}
-    for container in spec.get("initContainers", []) + spec["containers"]:
-        for mount in container.get("volumeMounts", []):
-            assert mount["name"] in declared, (
-                f"{role}/{container['name']} mounts {mount['name']}, which no volume "
-                f"declares ({_FLAGS[role]}={manage})"
-            )
-
-
 @pytest.mark.parametrize(
     ("role", "volume", "writer"),
     [("traefik", "traefik-logs", "traefik"), ("authelia", "authelia-logs", "authelia")],
@@ -324,12 +297,6 @@ def test_the_shared_log_volume_survives_without_crowdsec(
     assert volume in {v["name"] for v in spec["volumes"]}
     container = next(c for c in spec["containers"] if c["name"] == writer)
     assert volume in {m["name"] for m in container["volumeMounts"]}
-
-
-@pytest.mark.parametrize("role", sorted(_FLAGS))
-def test_prod_manages_crowdsec(role: str) -> None:
-    """Both flags default on, so no cluster loses the WAF or its signals by omission."""
-    assert load_yaml(K8S_ROLES / role / "defaults" / "main.yml")[_FLAGS[role]] is True
 
 
 # --- k8s_public_route and the bouncer must move together, per host ---
