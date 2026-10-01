@@ -17,15 +17,21 @@ was built for (`10.11.6.-.ani-sync_4.1.0.0.zip`), and the image tag leads with t
 version (`10.11.10ubu2404-ls35`), so the comparison needs no network call and no manifest
 fetch.
 
+What the install step itself does is read out of the RENDERED Deployment (`_jellyfin_plugins`),
+so an assertion names the value the pod receives rather than a line of `deployment.yaml.j2`.
+
 Run: uv run pytest ansible/tests/services/test_anisync_pin_matches_server.py
 """
 
 import re
 
 from _helpers import ANSIBLE, load_defaults
+from _jellyfin_plugins import PLUGIN_ROOT, constants, script
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
-DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
+
+INSTALLER = "install-ani-sync"
+PLUGIN_NAME = "Ani-Sync"
 
 # Leading dotted version of a string: "10.11.6.-.ani-sync_4.1.0.0.zip" -> "10.11.6",
 # "10.11.10ubu2404-ls35" -> "10.11.10".
@@ -85,18 +91,23 @@ def test_the_init_container_reads_the_version_from_the_variable():
     The marker path, the log lines and the download all have to name one version. Templating
     them from `jellyfin_k8s_anisync_version` is what keeps that true; hardcoding the string
     anywhere in the script reintroduces the drift the first test guards against.
+
+    Proved by rendering the role twice, because a single render cannot tell a literal from a
+    templated expression: the installer the pod runs must name the pin, and must follow it when
+    the pin moves.
     """
-    template = DEPLOYMENT.read_text()
     version = load_defaults(JELLYFIN)["jellyfin_k8s_anisync_version"]
 
-    assert "{{ jellyfin_k8s_anisync_version }}" in template, (
-        "the install-ani-sync init container no longer templates "
-        "jellyfin_k8s_anisync_version — the marker file would stop tracking the pin"
+    assert constants(script(INSTALLER)).get("VERSION") == version, (
+        f"the install-ani-sync init container installs "
+        f"{constants(script(INSTALLER)).get('VERSION')!r} while the role pins {version!r} — the "
+        f"marker file would stop tracking the pin"
     )
-    assert version not in template, (
-        f"the version {version!r} is written literally into {DEPLOYMENT.name}. Take it from "
-        f"jellyfin_k8s_anisync_version instead, so a bump in defaults/main.yml reaches every "
-        f"place that names it."
+    bumped = constants(script(INSTALLER, {"jellyfin_k8s_anisync_version": "9.9.9.9"}))
+    assert bumped.get("VERSION") == "9.9.9.9", (
+        "the version is written literally into deployment.yaml.j2: flipping "
+        "jellyfin_k8s_anisync_version left the installer installing the old build. Take it from "
+        "the variable, so a bump in defaults/main.yml reaches every place that names it."
     )
 
 
@@ -113,15 +124,17 @@ def test_the_plugin_lands_where_jellyfin_actually_scans():
     rather than left to a comment. The directory layout is the second half: Jellyfin's own
     installer writes `<Name>_<Version>`, and `Ani-Sync` is meta.json's name, not ours.
     """
-    template = DEPLOYMENT.read_text()
+    consts = constants(script(INSTALLER))
+    version = load_defaults(JELLYFIN)["jellyfin_k8s_anisync_version"]
 
-    assert 'PLUGINS = Path("/config/data/plugins")' in template, (
-        "the install-ani-sync init container no longer targets /config/data/plugins. "
-        "Jellyfin scans only that directory — installing anywhere else reports success and "
-        "leaves the plugin unloaded, with a green rollout and nothing in GET /Plugins."
+    assert consts.get("PLUGINS") == PLUGIN_ROOT, (
+        f"the install-ani-sync init container targets {consts.get('PLUGINS')!r}, not "
+        f"{PLUGIN_ROOT!r}. Jellyfin scans only that directory — installing anywhere else "
+        f"reports success and leaves the plugin unloaded, with a green rollout and nothing in "
+        f"GET /Plugins."
     )
-    assert 'PLUGIN_DIR = PLUGINS / ("Ani-Sync_" + VERSION)' in template, (
-        "the plugin directory no longer follows Jellyfin's <Name>_<Version> layout. "
-        "'Ani-Sync' is the name meta.json declares; the sibling plugins on this volume use "
-        "the same shape."
+    assert consts.get("PLUGIN_DIR") == f"{PLUGIN_ROOT}/{PLUGIN_NAME}_{version}", (
+        f"the plugin directory is {consts.get('PLUGIN_DIR')!r}, not Jellyfin's "
+        f"<Name>_<Version> layout. '{PLUGIN_NAME}' is the name meta.json declares; the sibling "
+        f"plugins on this volume use the same shape."
     )

@@ -7,8 +7,9 @@ that is safe:
 
 - **KEEP equals the set the installers write.** A name missing from KEEP makes the sweep remove
   a plugin the role installs; a name KEEP carries that no installer writes lets an unmanaged
-  plugin survive. The set is derived from the installers' own `PLUGINS / ("<Name>_" + VERSION)`
-  lines, so a sixth installer fails here rather than on the PVC.
+  plugin survive. Both sides come out of the RENDERED Deployment (`_jellyfin_plugins`) — KEEP and
+  each installer's `PLUGIN_DIR` are read off the scripts the pod runs — so a sixth installer
+  fails here rather than on the PVC.
 - **`configurations/` is never swept.** It holds every plugin's settings, and git holds none of
   them.
 - **It runs before the installers**, so a KEEP gap costs a re-download, not the plugin.
@@ -16,46 +17,49 @@ that is safe:
 Run: uv run pytest ansible/tests/services/test_jellyfin_plugin_allowlist.py
 """
 
-import ast
-import re
 import sys
-import textwrap
 
 import pytest
 
-from _helpers import ANSIBLE
+from _jellyfin_plugins import (
+    INSTALLERS,
+    PLUGIN_ROOT,
+    SWEEP,
+    constants,
+    init_containers,
+    script,
+    without_assignment,
+)
 from lib.proc_testing import run
 
-DEPLOYMENT = ANSIBLE / "roles" / "k8s" / "jellyfin" / "templates" / "deployment.yaml.j2"
 
-CONTAINER = "- name: sweep-unlisted-plugins"
-PLUGINS_LINE = 'PLUGINS = Path("/config/data/plugins")'
-INSTALLER_DIR = re.compile(r'PLUGINS / \("([^"]+)_" \+ VERSION\)')
+def _installed_names() -> set[str]:
+    """The plugin NAME each installer writes, from its rendered `PLUGIN_DIR`.
 
-
-def _script(template: str) -> str:
-    """The sweep's Python, cut from its container's `- |` block."""
-    body = template.split(CONTAINER, 1)[1]
-    block = body.split("- |\n", 1)[1].split("{{ hardened_security_context", 1)[0]
-    return textwrap.dedent(block)
-
-
-def _keep(script: str) -> tuple[str, ...]:
-    for node in ast.walk(ast.parse(script)):
-        if isinstance(node, ast.Assign) and [
-            getattr(t, "id", None) for t in node.targets
-        ] == ["KEEP"]:
-            return ast.literal_eval(node.value)
-    raise AssertionError("the sweep no longer assigns KEEP")
+    `PLUGIN_DIR` folds to `<root>/<Name>_<version>`, and the sweep matches on the name alone, so
+    the version is cut back off here.
+    """
+    names = set()
+    for installer in INSTALLERS:
+        consts = constants(script(installer))
+        plugin_dir = consts.get("PLUGIN_DIR")
+        assert isinstance(plugin_dir, str) and plugin_dir.startswith(
+            f"{PLUGIN_ROOT}/"
+        ), (
+            f"{installer} installs to {plugin_dir!r}, not a directory under {PLUGIN_ROOT}"
+        )
+        names.add(plugin_dir.rsplit("/", 1)[-1].rsplit("_", 1)[0])
+    return names
 
 
-def _installed(template: str) -> set[str]:
-    return set(INSTALLER_DIR.findall(template))
+def _keep(sweep: str) -> tuple[str, ...]:
+    keep = constants(sweep).get("KEEP")
+    assert isinstance(keep, tuple), "the sweep no longer assigns a KEEP tuple"
+    return keep
 
 
-def _assert_keep_matches_installers(template: str) -> None:
-    keep = set(_keep(_script(template)))
-    installed = _installed(template)
+def _assert_keep_matches_installers(sweep: str, installed: set[str]) -> None:
+    keep = set(_keep(sweep))
     assert keep == installed, (
         f"KEEP and the installers disagree. Installed but not kept: {installed - keep}; the "
         f"sweep would remove those on every start. Kept but not installed: {keep - installed}; "
@@ -65,50 +69,56 @@ def _assert_keep_matches_installers(template: str) -> None:
 
 def test_the_installer_census_finds_every_installer():
     """A pattern-found subject must find a named member, or it can pass over an empty set."""
-    installed = _installed(DEPLOYMENT.read_text())
-    assert "Media Cleaner" in installed and len(installed) >= 5, installed
+    installed = _installed_names()
+    assert "Media Cleaner" in installed and len(installed) == len(INSTALLERS), installed
 
 
 def test_keep_names_every_installer_and_nothing_else():
-    _assert_keep_matches_installers(DEPLOYMENT.read_text())
+    _assert_keep_matches_installers(script(SWEEP), _installed_names())
 
 
 @pytest.mark.parametrize(
-    ("what", "old", "new"),
+    ("what", "drifted"),
     [
-        ("an installed plugin dropped from KEEP", '"Media Cleaner")', ")"),
-        (
-            "an uninstalled plugin added to KEEP",
-            '"Media Cleaner")',
-            '"Media Cleaner", "Trakt")',
-        ),
+        ("an installed plugin dropped from KEEP", {"Media Cleaner"}),
+        ("an uninstalled plugin added to KEEP", {"Trakt"}),
     ],
 )
-def test_the_guard_rejects_a_keep_that_drifts(what, old, new):
-    """Red proof: KEEP out of step with the installers must fail, in both directions."""
-    template = DEPLOYMENT.read_text()
-    head, tail = template.split(CONTAINER, 1)
-    assert old in tail.split("{{ hardened_security_context", 1)[0], (
-        f"fixture drift: {what}"
-    )
+def test_the_guard_rejects_a_keep_that_drifts(what, drifted):
+    """Red proof: KEEP out of step with the installers must fail, in both directions.
+
+    The drift is applied to the INSTALLED set rather than to the sweep's source, which makes the
+    perturbation symmetric: dropping a name is a plugin the sweep would remove, adding one is a
+    plugin that survives it.
+    """
+    installed = _installed_names() ^ drifted
     with pytest.raises(AssertionError):
-        _assert_keep_matches_installers(head + CONTAINER + tail.replace(old, new, 1))
+        _assert_keep_matches_installers(script(SWEEP), installed)
 
 
 def test_the_sweep_runs_before_every_installer():
-    template = DEPLOYMENT.read_text()
-    assert template.index(CONTAINER) < template.index("- name: install-"), (
-        "sweep-unlisted-plugins runs after an installer. A KEEP gap then removes a plugin the "
-        "installer just wrote, on every start, instead of costing one re-download."
+    order = list(init_containers())
+    installers = [order.index(name) for name in INSTALLERS]
+    assert order.index(SWEEP) < min(installers), (
+        f"{SWEEP} runs after an installer. A KEEP gap then removes a plugin the installer just "
+        f"wrote, on every start, instead of costing one re-download. Order: {order}"
     )
 
 
-def _run(script: str, tmp_path) -> str:
-    assert PLUGINS_LINE in script, (
+def test_the_keep_reader_rejects_a_sweep_that_assigns_no_keep():
+    """Red proof for the reader itself: an empty KEEP would pass every comparison above."""
+    with pytest.raises(AssertionError):
+        _keep(without_assignment(script(SWEEP), "KEEP"))
+
+
+def _run(sweep: str, tmp_path) -> str:
+    """The sweep, run for real against `tmp_path` instead of the PVC."""
+    assert PLUGIN_ROOT in sweep, (
         "fixture drift: the sweep no longer names its directory"
     )
-    script = script.replace(PLUGINS_LINE, f"PLUGINS = Path({str(tmp_path)!r})")
-    done = run([sys.executable, "-c", script], check=True)
+    done = run(
+        [sys.executable, "-c", sweep.replace(PLUGIN_ROOT, str(tmp_path))], check=True
+    )
     return done.stdout
 
 
@@ -153,7 +163,7 @@ def _assert_report(out: str) -> None:
 
 
 def test_the_sweep_removes_only_unlisted_plugin_directories(plugins):
-    _assert_report(_run(_script(DEPLOYMENT.read_text()), plugins))
+    _assert_report(_run(script(SWEEP), plugins))
     assert sorted(p.name for p in plugins.iterdir()) == [
         "Ani-Sync_4.4.0.0",
         "Media Cleaner_3.7.0.101109",
@@ -168,14 +178,13 @@ def test_the_sweep_removes_only_unlisted_plugin_directories(plugins):
 
 def test_the_report_check_fails_when_configurations_is_not_skipped(plugins):
     """Red proof: a sweep that treats `configurations` as a plugin must fail the report check."""
-    script = _script(DEPLOYMENT.read_text()).replace(
-        'SETTINGS = "configurations"', 'SETTINGS = "settings"'
+    settings = constants(script(SWEEP))["SETTINGS"]
+    swept = script(SWEEP).replace(
+        f'SETTINGS = "{settings}"', 'SETTINGS = "something-else"'
     )
     with pytest.raises(AssertionError):
-        _assert_report(_run(script, plugins))
+        _assert_report(_run(swept, plugins))
 
 
 def test_a_fresh_volume_is_not_an_error(tmp_path):
-    assert "nothing to sweep" in _run(
-        _script(DEPLOYMENT.read_text()), tmp_path / "absent"
-    )
+    assert "nothing to sweep" in _run(script(SWEEP), tmp_path / "absent")

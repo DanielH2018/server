@@ -27,11 +27,21 @@ import pytest
 
 from lib import yaml_fast
 from _helpers import ANSIBLE, REPO, load_defaults
+from _jellyfin_plugins import (
+    PLUGIN_ROOT,
+    compares_against,
+    constants,
+    init_containers,
+    script,
+    without_assignment,
+)
 
 JELLYFIN = ANSIBLE / "roles" / "k8s" / "jellyfin"
 DEFAULTS = JELLYFIN / "defaults" / "main.yml"
-DEPLOYMENT = JELLYFIN / "templates" / "deployment.yaml.j2"
 RENOVATE = REPO / "renovate.json"
+
+INSTALLER = "install-media-cleaner"
+PLUGIN_NAME = "Media Cleaner"
 
 LEADING_VERSION = re.compile(r"^(\d+(?:\.\d+)*)")
 SHA256 = re.compile(r"^[0-9a-f]{64}$")
@@ -167,88 +177,136 @@ def test_the_plugin_target_abi_does_not_exceed_the_server():
     )
 
 
-def _assert_install_step(template: str, version: str) -> None:
-    """Everything the rendered deployment must carry for the install to work.
+def _assert_install_step(installer: str, defaults: dict) -> None:
+    """Everything the installer the pod runs must carry for the install to work.
 
-    Factored out so the same assertions can run against a MUTATED template. A guard that is
-    only ever handed the real file is a guard nobody has seen fail.
+    Factored out so the same assertions can run against a MUTATED script. A guard that is only
+    ever handed the real one is a guard nobody has seen fail.
+
+    Args:
+        installer: the Python the `install-media-cleaner` init container runs.
+        defaults: the jellyfin role's defaults, holding the pins the script must agree with.
     """
-    assert "- name: install-media-cleaner" in template, (
-        "the deployment no longer declares the install-media-cleaner init container"
+    consts = constants(installer)
+    version = defaults["jellyfin_k8s_mediacleaner_version"]
+
+    assert consts.get("WANT_SHA256") == defaults["jellyfin_k8s_mediacleaner_sha256"], (
+        f"the installer checks sha256 {consts.get('WANT_SHA256')!r}, but the role pins "
+        f"{defaults['jellyfin_k8s_mediacleaner_sha256']!r} — an unpinned download of a plugin "
+        f"that deletes media is whatever the release asset has been replaced with"
     )
-    assert "{{ jellyfin_k8s_mediacleaner_sha256 }}" in template, (
-        "the install-media-cleaner init container no longer templates "
-        "jellyfin_k8s_mediacleaner_sha256 — an unpinned download of a plugin that deletes media "
-        "is whatever the release asset has been replaced with"
+    assert compares_against(installer, "WANT_SHA256"), (
+        "the installer downloads the archive but no longer COMPARES its digest against "
+        "WANT_SHA256 — the pin is present and inert"
     )
-    assert "if got != WANT_SHA256:" in template, (
-        "the install-media-cleaner init container downloads the archive but no longer COMPARES "
-        "its digest — the pin is present and inert"
+    assert consts.get("VERSION") == version, (
+        f"the installer installs {consts.get('VERSION')!r} while the role pins {version!r}. "
+        f"The install marker is the directory name, so the two drifting apart latches a build "
+        f"that was never downloaded."
     )
-    assert "{{ jellyfin_k8s_mediacleaner_version }}" in template, (
-        "the install-media-cleaner init container no longer templates "
-        "jellyfin_k8s_mediacleaner_version — the install marker would stop tracking the pin"
+    assert consts.get("PLUGINS") == PLUGIN_ROOT, (
+        f"the installer targets {consts.get('PLUGINS')!r}, not {PLUGIN_ROOT!r}. Jellyfin scans "
+        f"only that directory — installing anywhere else reports success and leaves the plugin "
+        f"unloaded, behind a green rollout."
     )
-    assert version not in template, (
-        f"the version {version!r} is written literally into {DEPLOYMENT.name}. Take it from "
-        f"jellyfin_k8s_mediacleaner_version instead."
+    assert consts.get("PLUGIN_DIR") == f"{PLUGIN_ROOT}/{PLUGIN_NAME}_{version}", (
+        f"the plugin directory is {consts.get('PLUGIN_DIR')!r}, not Jellyfin's "
+        f"<Name>_<Version> layout under {PLUGIN_ROOT}. The name also has to match what the "
+        f"dashboard installer wrote, or the guard misses the copy already on the volume and "
+        f"reinstalls on every pod start."
     )
-    assert 'PLUGINS = Path("/config/data/plugins")' in template, (
-        "the install-media-cleaner init container no longer targets /config/data/plugins. "
-        "Jellyfin scans only that directory — installing anywhere else reports success and "
-        "leaves the plugin unloaded, behind a green rollout."
+    assert consts.get("DLL") == "MediaCleaner.dll", (
+        f"the installer checks for {consts.get('DLL')!r}, not the plugin's own DLL"
     )
-    assert 'PLUGIN_DIR = PLUGINS / ("Media Cleaner_" + VERSION)' in template, (
-        "the plugin directory no longer follows Jellyfin's <Name>_<Version> layout. The name "
-        "also has to match what the dashboard installer wrote, or the guard misses the copy "
-        "already on the volume and reinstalls on every pod start."
+    assert consts.get("DEP_DLL") == "MediaCleaner.Core.dll", (
+        f"the installer checks for dependency {consts.get('DEP_DLL')!r}, not "
+        f"MediaCleaner.Core.dll. The plugin does not load without it, so an archive whose "
+        f"layout changed would install cleanly and load nothing."
     )
-    assert 'DLL = "MediaCleaner.dll"' in template, (
-        "the install-media-cleaner init container no longer checks for the plugin's own DLL"
-    )
-    assert 'DEP_DLL = "MediaCleaner.Core.dll"' in template, (
-        "the install-media-cleaner init container no longer checks for MediaCleaner.Core.dll. "
-        "The plugin does not load without it, so an archive whose layout changed would install "
-        "cleanly and load nothing."
-    )
-    assert "for needed in (DLL, DEP_DLL):" in template, (
-        "the install-media-cleaner init container names both DLLs but no longer LOOPS over "
-        "them — one of the two checks would be dead"
+    assert "for needed in (DLL, DEP_DLL):" in installer, (
+        "the installer names both DLLs but no longer LOOPS over them — one of the two checks "
+        "would be dead"
     )
 
 
-def test_the_rendered_deployment_carries_the_pinned_install_step():
-    _assert_install_step(
-        DEPLOYMENT.read_text(),
-        load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"],
+def test_the_deployment_declares_the_installer():
+    """Non-vacuity: every assertion below reads one init container out of the render."""
+    containers = init_containers()
+    assert INSTALLER in containers, (
+        f"the rendered jellyfin Deployment no longer declares {INSTALLER}, so Media Cleaner is "
+        f"installed by nothing. It has: {sorted(containers)}"
+    )
+
+
+def test_the_rendered_installer_carries_the_pinned_install_step():
+    _assert_install_step(script(INSTALLER), load_defaults(JELLYFIN))
+
+
+def test_the_install_marker_follows_the_pin_rather_than_a_literal():
+    """A version written literally in the template is a second place to forget to bump.
+
+    A single render cannot see the difference — a literal and `{{ ... }}` produce the same text —
+    so the role is rendered again with the pin flipped.
+    """
+    bumped = constants(
+        script(INSTALLER, {"jellyfin_k8s_mediacleaner_version": "9.9.9.9"})
+    )
+    assert bumped.get("VERSION") == "9.9.9.9", (
+        f"the installer still installs {bumped.get('VERSION')!r} after "
+        f"jellyfin_k8s_mediacleaner_version was flipped to 9.9.9.9, so the version is written "
+        f"into the template rather than taken from the pin"
+    )
+    assert bumped.get("PLUGIN_DIR") == f"{PLUGIN_ROOT}/{PLUGIN_NAME}_9.9.9.9", (
+        f"the install marker is {bumped.get('PLUGIN_DIR')!r}, which does not follow the pin — a "
+        f"bump would record a version that was never downloaded"
     )
 
 
 @pytest.mark.parametrize(
-    ("what", "victim"),
+    ("what", "constant"),
     [
-        ("the checksum comparison", "if got != WANT_SHA256:"),
-        ("the checksum itself", "{{ jellyfin_k8s_mediacleaner_sha256 }}"),
-        ("the whole init container", "- name: install-media-cleaner"),
-        ("the plugin DLL check", 'DLL = "MediaCleaner.dll"'),
-        ("the dependency DLL check", 'DEP_DLL = "MediaCleaner.Core.dll"'),
-        ("the loop over both DLLs", "for needed in (DLL, DEP_DLL):"),
+        ("the checksum itself", "WANT_SHA256"),
+        ("the version the marker names", "VERSION"),
+        ("the plugins directory", "PLUGINS"),
+        ("the plugin DLL check", "DLL"),
+        ("the dependency DLL check", "DEP_DLL"),
+    ],
+)
+def test_the_guard_rejects_an_installer_missing_a_pin(what, constant):
+    """The red half, by perturbation: each constant removed is a real way this goes wrong."""
+    with pytest.raises(AssertionError):
+        _assert_install_step(
+            without_assignment(script(INSTALLER), constant), load_defaults(JELLYFIN)
+        )
+
+
+@pytest.mark.parametrize(
+    ("what", "victim", "replacement"),
+    [
+        ("the checksum comparison", "got != WANT_SHA256", "got != got"),
         (
-            "the plugin directory layout",
-            'PLUGIN_DIR = PLUGINS / ("Media Cleaner_" + VERSION)',
+            "the loop over both DLLs",
+            "for needed in (DLL, DEP_DLL):",
+            "for needed in ():",
         ),
     ],
 )
-def test_the_guard_rejects_a_template_missing_the_step(what, victim):
-    """The red half. Each removal above is a real way this install goes quietly wrong."""
-    mutated = DEPLOYMENT.read_text().replace(victim, "")
-    assert victim not in mutated, (
+def test_the_guard_rejects_an_installer_that_stopped_acting_on_a_pin(
+    what, victim, replacement
+):
+    """The red half for the two behaviours no constant carries.
+
+    Both are perturbations of the SCRIPT the pod runs, not of `deployment.yaml.j2`: a pin can be
+    present and never acted on, which no constant assertion can see.
+    """
+    installer = script(INSTALLER)
+    assert victim in installer, (
         f"the mutation for {what} matched nothing — fix the fixture"
     )
 
     with pytest.raises(AssertionError):
         _assert_install_step(
-            mutated, load_defaults(JELLYFIN)["jellyfin_k8s_mediacleaner_version"]
+            installer.replace(victim, replacement), load_defaults(JELLYFIN)
         )
 
 
