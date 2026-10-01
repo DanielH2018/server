@@ -11,11 +11,11 @@ Run: uv run pytest .claude/hooks/tests/test_rules_globs_match_a_tracked_file.py
 
 import importlib.util
 import os
-import subprocess
 import sys
 from pathlib import PurePosixPath
 
 import pytest
+from lib.proc_testing import run
 
 _HERE = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 _REPO = os.path.dirname(os.path.dirname(_HERE))
@@ -51,9 +51,7 @@ KNOWN_RULES = frozenset(
 
 
 def _tracked_files():
-    out = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=_REPO, capture_output=True, text=True, check=True
-    ).stdout
+    out = run(["git", "ls-files", "-z"], cwd=_REPO, check=True).stdout
     return [PurePosixPath(rel) for rel in out.split("\0") if rel]
 
 

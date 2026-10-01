@@ -13,11 +13,11 @@ own `parse_push_line` rather than a regex copied here: the oracle is the consume
 
 import re
 import shlex
-import subprocess
 from pathlib import Path
 
 from _helpers import ROLES
 from verdicts.logs import parse_push_line
+from lib.proc_testing import run
 
 SCRIPT_PATH = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
 TAG = "crowdsec-home-allowlist"
@@ -54,7 +54,7 @@ logger() {{ shift 2; echo "$*" >> {shlex.quote(str(logs))}; }}
 {_push_function()}
 push {status} "home allowlist: v6 prefix rotated"
 """
-    subprocess.run(["bash", "-c", script], check=True, capture_output=True, text=True)
+    run(["bash", "-c", script], check=True)
     return logs.read_text().splitlines()
 
 

@@ -20,6 +20,7 @@ function would override an exported stub.
 
 import os
 import subprocess
+from lib.proc_testing import run as launch
 from pathlib import Path
 
 from jinja2 import Undefined
@@ -63,7 +64,7 @@ def _runner(tmp_path: Path):
 
     def run(outcome: str) -> subprocess.CompletedProcess:
         stub.write_text(outcome)
-        return subprocess.run(
+        return launch(
             ["bash", str(script)],
             env={
                 "PATH": os.environ["PATH"],
@@ -75,8 +76,6 @@ def _runner(tmp_path: Path):
                 "BASH_FUNC_rsync%%": f"() {{ {RSYNC_STUB}; }}",
                 "BASH_FUNC_logger%%": f"() {{ {LOGGER_STUB}; }}",
             },
-            capture_output=True,
-            text=True,
         )
 
     run.journal = journal

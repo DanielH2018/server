@@ -14,11 +14,11 @@ catches once a test exists; asserting it here as well means a role cannot satisf
 with an empty directory pytest never visits.
 """
 
-import subprocess
 import tomllib
 from pathlib import PurePosixPath
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 # Roles the census must find. A `git ls-files` pattern that stops matching returns an empty
 # set, and every assertion below passes over one — naming members turns that into a failure
@@ -29,13 +29,7 @@ _KNOWN_SHIPPERS = frozenset(
 
 
 def _tracked(pattern: str) -> list[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", pattern],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "--", pattern], cwd=REPO, check=True).stdout
     return [rel for rel in listed.split("\0") if rel]
 
 

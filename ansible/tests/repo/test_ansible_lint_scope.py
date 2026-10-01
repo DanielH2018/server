@@ -22,11 +22,11 @@ lints the files it is given, so its regex has to stay and has to be checked.
 
 import fnmatch
 import re
-import subprocess
 import tomllib
 
 from lib import yaml_fast
 from _helpers import REPO as REPO_ROOT
+from lib.proc_testing import run
 
 
 def _ansible_lint_hook() -> dict:
@@ -45,13 +45,7 @@ def _exclude_paths() -> list[str]:
 
 def _tracked_files() -> list[str]:
     """The candidate set is what prek can pass, and prek only ever passes TRACKED files."""
-    out = subprocess.run(
-        ["git", "ls-files"],
-        cwd=REPO_ROOT,
-        capture_output=True,
-        text=True,
-        check=True,
-    )
+    out = run(["git", "ls-files"], cwd=REPO_ROOT, check=True)
     return out.stdout.splitlines()
 
 

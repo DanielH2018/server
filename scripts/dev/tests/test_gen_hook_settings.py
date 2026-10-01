@@ -12,13 +12,13 @@ Run: uv run pytest scripts/dev/tests/test_gen_hook_settings.py
 
 import json
 import shutil
-import subprocess
 import sys
 from pathlib import Path
 
 import pytest
 
 import gen_hook_settings as g
+from lib.proc_testing import run
 
 # Named members of the live census. A `.sh` here is registered; a `.py` is a library (run
 # by its `.sh` shim through `uv run python`, or imported by a sibling, never registered).
@@ -270,11 +270,6 @@ def test_check_goes_red_when_settings_json_drifts_from_the_declarations(tmp_path
 def test_the_entry_point_runs_from_its_own_directory():
     """The `sys.path` bootstrap, exercised the way prek runs it rather than through pytest's
     `pythonpath`, which is exactly what cannot see a missing bootstrap."""
-    proc = subprocess.run(
-        [sys.executable, str(g.REPO / g.SELF), "--check"],
-        capture_output=True,
-        text=True,
-        check=False,
-    )
+    proc = run([sys.executable, str(g.REPO / g.SELF), "--check"], check=False)
     assert proc.returncode == 0, proc.stdout + proc.stderr
     assert "up to date" in proc.stdout

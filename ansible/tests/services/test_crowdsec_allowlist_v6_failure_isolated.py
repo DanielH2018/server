@@ -32,6 +32,7 @@ import subprocess
 from pathlib import Path
 
 from _helpers import ROLES
+from lib.proc_testing import run
 
 SCRIPT_PATH = ROLES / "k8s/crowdsec/templates/crowdsec-update-home-allowlist.sh.j2"
 SCRIPT = SCRIPT_PATH.read_text()
@@ -78,11 +79,8 @@ logger() {{ :; }}
 cscli_lapi() {{ printf 'cscli\t%s\n' "$*" >> {shlex.quote(str(calls_log))}; }}
 fail() {{ push down "$1"; exit 1; }}
 """
-    return subprocess.run(
-        ["bash", "-uo", "pipefail", "-c", f"{fakes}\n{PRELUDE}\n{script}"],
-        cwd=cwd,
-        capture_output=True,
-        text=True,
+    return run(
+        ["bash", "-uo", "pipefail", "-c", f"{fakes}\n{PRELUDE}\n{script}"], cwd=cwd
     )
 
 

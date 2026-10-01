@@ -20,10 +20,10 @@ Run: uv run pytest ansible/tests/setup/test_optimize_pi_declares_log2ram_sizes.p
 
 import re
 import shutil
-import subprocess
 
 import pytest
 from _helpers import SETUP_ROLES, load_tasks, load_yaml, walk_tasks
+from lib.proc_testing import run
 
 ROLE = SETUP_ROLES / "optimize_pi"
 TASKS = ROLE / "tasks" / "main.yml"
@@ -169,10 +169,7 @@ def test_the_guards_awk_program_counts_distinct_values(tmp_path, conf, distinct)
     """The verdict half, run through the program the task ships rather than a retyped copy."""
     conf_file = tmp_path / "log2ram.conf"
     conf_file.write_text(conf)
-    out = subprocess.run(
-        ["awk", "-F=", _awk_program(_journald_guard()), str(conf_file)],
-        capture_output=True,
-        text=True,
-        check=True,
+    out = run(
+        ["awk", "-F=", _awk_program(_journald_guard()), str(conf_file)], check=True
     )
     assert int(out.stdout.strip()) == distinct

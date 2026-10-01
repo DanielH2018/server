@@ -19,10 +19,9 @@ true, each held by an accept/reject pair so a rule that stopped matching fails i
     the push would still read as an alert in the place an operator looks.
 """
 
-import subprocess
-
 import pytest
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 
@@ -53,7 +52,7 @@ def _run(tmp_path, script_body, rcs):
     logger() {{ shift; echo "$*" >> "{logs}"; }}
     {script_body}
     """
-    result = subprocess.run(["bash", "-c", script], capture_output=True, text=True)
+    result = run(["bash", "-c", script])
     assert result.returncode == 0, result.stderr
     return (
         result.stdout,

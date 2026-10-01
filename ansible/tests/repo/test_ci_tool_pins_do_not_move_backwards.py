@@ -32,6 +32,7 @@ import subprocess
 import pytest
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 CI_REL = ".github/workflows/ci.yml"
 CI_WORKFLOW = REPO / CI_REL
@@ -153,9 +154,7 @@ def test_an_undeclared_downgrade_is_not_recognised():
 
 
 def _git(*args: str) -> subprocess.CompletedProcess[str]:
-    return subprocess.run(
-        ["git", *args], cwd=REPO, capture_output=True, text=True, check=False
-    )
+    return run(["git", *args], cwd=REPO, check=False)
 
 
 def master_is_fetched() -> bool:

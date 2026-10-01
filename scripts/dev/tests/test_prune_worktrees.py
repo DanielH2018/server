@@ -38,6 +38,7 @@ from prune_worktrees import (
     remove,
     sweep_branches,
 )
+from lib.proc_testing import run
 
 PRUNER = Path(__file__).resolve().parents[1] / "prune_worktrees.py"
 
@@ -452,14 +453,8 @@ def test_one_prune_removes_a_worktree_and_deletes_the_branch_it_freed(
     git(repo, "worktree", "add", "-q", "-b", "worktree-done", str(tmp_path / "done"))
     git(repo, "update-ref", "refs/remotes/origin/master", "master")
 
-    run = subprocess.run(
-        [sys.executable, str(PRUNER), "--prune"],
-        cwd=repo,
-        env=scrubbed_env(),
-        capture_output=True,
-        text=True,
-    )
+    done = run([sys.executable, str(PRUNER), "--prune"], cwd=repo, env=scrubbed_env())
 
-    assert run.returncode == 0, run.stderr
+    assert done.returncode == 0, done.stderr
     assert not (tmp_path / "done").exists()
     assert "worktree-done" not in _branch_names(repo)

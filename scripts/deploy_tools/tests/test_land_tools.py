@@ -14,6 +14,7 @@ from types import SimpleNamespace
 import pytest
 from _deploy_sh_fakes import git_free_env
 from lib.git_testing import commit, init_repo
+from lib.proc_testing import run
 from deploy_tools.land_lib import tools
 
 
@@ -288,13 +289,11 @@ def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
     repo, first, second, _lock = _snapshot_repo(tmp_path)
     with tools.gate_snapshot(repo, first) as snap:
         assert snap is not None
-        head = subprocess.run(
-            ("git", "rev-parse", "HEAD"),
+        head = run(
+            ["git", "rev-parse", "HEAD"],
             cwd=snap,
             env=git_free_env(),
             check=True,
-            capture_output=True,
-            text=True,
         ).stdout.strip()
         assert head == first and head != second
         assert os.environ[tools.UV_PROJECT_ENVIRONMENT] == str(repo / ".venv")
@@ -302,13 +301,11 @@ def test_the_gate_snapshot_is_a_worktree_of_the_named_commit(tmp_path):
     assert not snap.exists()
     assert tools.UV_PROJECT_ENVIRONMENT not in os.environ
     # And it deregistered itself, or the next `git worktree add` in this repo trips over it.
-    listed = subprocess.run(
-        ("git", "worktree", "list"),
+    listed = run(
+        ["git", "worktree", "list"],
         cwd=repo,
         env=git_free_env(),
         check=True,
-        capture_output=True,
-        text=True,
     ).stdout
     assert str(snap) not in listed
 
@@ -357,13 +354,11 @@ def test_a_sigterm_during_the_gate_still_removes_the_worktree(tmp_path):
             os.kill(os.getpid(), signal.SIGTERM)
     assert not kept.exists()
     assert signal.getsignal(signal.SIGTERM) is before
-    listed = subprocess.run(
-        ("git", "worktree", "list"),
+    listed = run(
+        ["git", "worktree", "list"],
         cwd=repo,
         env=git_free_env(),
         check=True,
-        capture_output=True,
-        text=True,
     ).stdout
     assert str(kept) not in listed
 

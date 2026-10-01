@@ -11,10 +11,10 @@ head start. `longhorn-backup-health` and `uptime-kuma-alive` both paged.
 """
 
 import re
-import subprocess
 
 from lib import yaml_fast
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 LIB = ANSIBLE / "roles/setup/initial_setup/files/kuma-push-lib.sh"
 K3S_DEFAULTS = yaml_fast.safe_load(
@@ -46,7 +46,7 @@ def _run_guard(uptime: str, grace: int) -> int:
     logger() {{ :; }}
     boot_grace_active {grace} test-tag
     """
-    return subprocess.run(["bash", "-c", script], capture_output=True).returncode
+    return run(["bash", "-c", script]).returncode
 
 
 def test_guard_skips_the_run_just_after_boot():

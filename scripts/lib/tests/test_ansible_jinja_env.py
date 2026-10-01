@@ -3,7 +3,6 @@
 Run: uv run pytest scripts/lib/tests/test_ansible_jinja_env.py
 """
 
-import subprocess
 import sys
 
 import pytest
@@ -11,6 +10,7 @@ import pytest
 from lib import ansible_jinja_env as aje
 from lib.k8s_yaml import to_json_stub
 from lib.repo_paths import REPO, SHARED_TPL
+from lib.proc_testing import run
 
 # Every filter and test a template in this tree reaches for, mapped to the implementation it
 # must resolve to. A roster rather than a count, so a filter that silently stops being
@@ -104,17 +104,13 @@ def test_the_light_tier_loads_no_ansible_core():
     ansible-core today. A subprocess rather than `sys.modules` in-process, because pytest has
     already imported ansible-core by the time this test runs.
     """
-    proc = subprocess.run(
+    proc = run(
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, 'scripts');"
-            " import lib.k8s_context, lib.render_guard, lib.k8s_yaml;"
-            " print([m for m in sys.modules if m.startswith('ansible')])",
+            "import sys; sys.path.insert(0, 'scripts'); import lib.k8s_context, lib.render_guard, lib.k8s_yaml; print([m for m in sys.modules if m.startswith('ansible')])",
         ],
         cwd=REPO,
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode == 0, proc.stderr

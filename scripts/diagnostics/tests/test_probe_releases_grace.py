@@ -7,8 +7,6 @@ pushed DOWN for a merge whose own landing was mid-deploy (code-server, 2026-09-2
 Run: uv run pytest scripts/diagnostics/tests/test_probe_releases_grace.py
 """
 
-import subprocess
-
 from diagnostics.probe_lib import releases as pr
 from lib.git_testing import git, git_out, scrubbed_env
 
@@ -18,6 +16,7 @@ from _release_fixtures import (
     _record,
     _set_origin_master,
 )
+from lib.proc_testing import run
 
 
 def _committer_time(repo, sha):
@@ -79,13 +78,8 @@ def _commit_dated(repo, files, message, epoch):
     )
     git(repo, "add", "-A", env=env)
     git(repo, "commit", "-q", "-m", message, env=env)
-    return subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-        check=True,
+    return run(
+        ["git", "rev-parse", "HEAD"], cwd=repo, env=env, check=True
     ).stdout.strip()
 
 

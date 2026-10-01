@@ -14,11 +14,11 @@ environment as the control that the answer can differ.
 
 import os
 import re
-import subprocess
 import sys
 from pathlib import Path
 
 from _helpers import ALL_VARS, REPO, load_yaml
+from lib.proc_testing import run
 
 _UNIT = REPO / "ansible/roles/setup/gitops_deploy/templates/gitops-deploy.service.j2"
 _ENV_LINE = re.compile(r"^Environment=(ANSIBLE_[A-Z_]+)=(\S+)$", re.MULTILINE)
@@ -29,12 +29,10 @@ def _cache_connection(extra_env: dict[str, str]) -> tuple[str, str]:
     """(source, value) of the fact-cache directory Ansible resolves from the repo root."""
     env = {k: v for k, v in os.environ.items() if not k.startswith("ANSIBLE_")}
     env.update(extra_env)
-    out = subprocess.run(
+    out = run(
         [str(Path(sys.executable).parent / "ansible-config"), "dump", "--only-changed"],
         cwd=REPO,
         env=env,
-        text=True,
-        capture_output=True,
         check=True,
     ).stdout
     match = _CONNECTION.search(out)

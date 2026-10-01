@@ -23,9 +23,9 @@ Run: uv run pytest ansible/tests/repo/test_no_root_anchored_rglob.py
 """
 
 import re
-import subprocess
 
 from _helpers import REPO
+from lib.proc_testing import run
 
 # Matches `<name>.rglob(` where <name> is one of the repo-root variable names this repo uses,
 # case-sensitive to the conventions seen in `_helpers.py` and the `ansible/tests/` guards.
@@ -40,13 +40,7 @@ ALREADY_MITIGATED = {"ansible/tests/repo/test_adr_links.py"}
 
 
 def _tracked_python_files() -> list[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z", "--", "*.py"],
-        cwd=REPO,
-        capture_output=True,
-        text=True,
-        check=True,
-    ).stdout
+    listed = run(["git", "ls-files", "-z", "--", "*.py"], cwd=REPO, check=True).stdout
     return [rel for rel in listed.split("\0") if rel]
 
 

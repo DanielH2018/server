@@ -2,6 +2,7 @@
 
 import ha_state_model as hsm
 from diagnostics.probe_lib import ha
+from lib.proc_testing import run
 
 
 def test_call_service_handles_service_and_action_keys():
@@ -355,25 +356,20 @@ def test_cmd_refresh_live_imports_resolve_under_direct_invocation():
     other by bare name; they are the `probe_lib` package now, so one insert does it.
     """
     import os
-    import subprocess
     import sys
     from pathlib import Path
 
     script_dir = Path(hsm.__file__).resolve().parent
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    proc = subprocess.run(
+    proc = run(
         [
             sys.executable,
             "-c",
-            "import sys; sys.path.insert(0, sys.argv[1]); import ha_state_model; "
-            "from diagnostics.probe_lib import core, ha; "
-            "print(core.__name__, ha.__name__)",
+            "import sys; sys.path.insert(0, sys.argv[1]); import ha_state_model; from diagnostics.probe_lib import core, ha; print(core.__name__, ha.__name__)",
             str(script_dir),
         ],
         cwd=str(script_dir.parent.parent),
         env=env,
-        capture_output=True,
-        text=True,
     )
     assert proc.returncode == 0, proc.stderr
     assert "diagnostics.probe_lib.ha" in proc.stdout

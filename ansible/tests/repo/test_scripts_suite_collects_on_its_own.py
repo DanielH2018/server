@@ -12,18 +12,18 @@ The red proof is the fix itself: drop the `grafana_panel_report` load from
 `scripts/conftest.py` and this fails. The green proof is that it passes now.
 """
 
-import subprocess
-
 from _helpers import REPO
+from lib.proc_testing import run
 
 
 def test_scripts_testpath_collects_in_a_fresh_interpreter():
     # -n0 so this does not spawn xdist workers inside the parent run.
-    result = subprocess.run(
+    result = run(
         ["uv", "run", "pytest", "--collect-only", "-n0", "-q", "scripts"],
         cwd=REPO,
-        capture_output=True,
-        text=True,
+        # A nested `uv run` resolves the dev group before the child starts, which a cold
+        # cache makes minutes rather than seconds — longer than `DEFAULT_TIMEOUT` allows.
+        timeout=300,
     )
     assert result.returncode == 0, (
         "`uv run pytest scripts` failed to collect on its own — a test there imports a "

@@ -14,7 +14,7 @@ import pytest
 
 import publish_pr
 from lib.git_testing import scrubbed_env
-from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import fake_bin, path_with, run
 
 SCRIPT = Path(publish_pr.__file__)
 NOW = datetime(2026, 9, 4, 1, 30, tzinfo=UTC)
@@ -411,11 +411,9 @@ def _run_cli(
     # worktree points at a REAL repository and one of these arguments is `reset --hard`.
     env = scrubbed_env()
     env["PATH"] = path_with(bin_dir, env=env)
-    proc = subprocess.run(
+    proc = run(
         [sys.executable, str(SCRIPT), "--repo", str(tmp_path), *args],
         env=env,
-        capture_output=True,
-        text=True,
         check=False,
     )
     calls = log.read_text().splitlines() if log.exists() else []
@@ -474,7 +472,7 @@ def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
     )
     env = scrubbed_env()
     env["PATH"] = path_with(bin_dir, env=env)
-    proc = subprocess.run(
+    proc = run(
         [
             sys.executable,
             str(SCRIPT),
@@ -485,8 +483,6 @@ def test_cli_unlanded_exit_code_reaches_the_shell(tmp_path):
             "t/",
         ],
         env=env,
-        capture_output=True,
-        text=True,
         check=False,
     )
     assert proc.returncode == publish_pr.UNLANDED_NO_PR, proc.stderr

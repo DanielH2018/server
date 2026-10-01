@@ -12,11 +12,11 @@ from pathlib import Path
 
 import os
 import shutil
-import subprocess
 
 import pytest
 
 from lib.proc_testing import fake_bin, path_with
+from lib.proc_testing import run as launch
 from lib.repo_paths import REPO
 
 SCRIPT = REPO / "scripts" / "validate" / "renovate_config.sh"
@@ -65,13 +65,7 @@ def run(
     env["RENOVATE_INSTALL_ATTEMPTS"] = str(attempts)
     env["RENOVATE_INSTALL_BACKOFF"] = "0"
     env["RUNNER_TEMP"] = str(sandbox / "tmp")
-    return subprocess.run(
-        [str(sandbox / "renovate_config.sh")],
-        cwd=sandbox,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
+    return launch([str(sandbox / "renovate_config.sh")], cwd=sandbox, env=env)
 
 
 def calls(sandbox: Path) -> list[str]:

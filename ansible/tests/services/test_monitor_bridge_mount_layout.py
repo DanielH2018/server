@@ -25,6 +25,7 @@ Run: uv run pytest ansible/tests/services/test_monitor_bridge_mount_layout.py
 
 import os
 import subprocess
+from lib.proc_testing import run
 import sys
 from pathlib import Path
 
@@ -74,7 +75,7 @@ def _import_from(app: Path, module: str) -> subprocess.CompletedProcess:
     the mount would not.
     """
     env = {k: v for k, v in os.environ.items() if k != "PYTHONPATH"}
-    return subprocess.run(
+    return run(
         [
             sys.executable,
             "-c",
@@ -83,8 +84,6 @@ def _import_from(app: Path, module: str) -> subprocess.CompletedProcess:
             f"import sys; sys.path[0] = sys.argv[1]; import {module}",
             str(app),
         ],
-        capture_output=True,
-        text=True,
         env=env,
         cwd=app.parent,
     )

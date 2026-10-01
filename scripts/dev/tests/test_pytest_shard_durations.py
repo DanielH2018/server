@@ -18,11 +18,11 @@ would leave them all green over a parser that had stopped matching anything.
 Run: uv run pytest scripts/dev/tests/test_pytest_shard_durations.py
 """
 
-import subprocess
 import sys
 
 import pytest
 import pytest_shard
+from lib.proc_testing import run
 
 # A report in the shape pytest prints: seconds, phase, nodeid. `setup` and `teardown` count
 # alongside `call`, which is what makes an expensive module-scoped fixture visible.
@@ -142,7 +142,7 @@ def test_the_parser_reads_a_report_pytest_just_wrote(tmp_path):
     """
     module = tmp_path / "test_measured_sample.py"
     module.write_text("import time\n\n\ndef test_sleeps():\n    time.sleep(0.05)\n")
-    proc = subprocess.run(
+    proc = run(
         [
             sys.executable,
             "-m",
@@ -153,9 +153,9 @@ def test_the_parser_reads_a_report_pytest_just_wrote(tmp_path):
             "no:cacheprovider",
             str(module),
         ],
-        capture_output=True,
-        text=True,
         cwd=tmp_path,
+        # A nested pytest session pays its own collection and plugin load.
+        timeout=300,
     )
     assert proc.returncode == 0, proc.stdout[-2000:]
     totals = pytest_shard.parse_durations(proc.stdout)

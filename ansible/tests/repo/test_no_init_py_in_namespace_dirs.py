@@ -9,9 +9,8 @@ form every `scripts/` importer uses. An editor or a scaffolding tool adds one si
 Run: uv run pytest ansible/tests/repo/test_no_init_py_in_namespace_dirs.py
 """
 
-import subprocess
-
 from _helpers import REPO
+from lib.proc_testing import run
 
 NAMESPACE_DIRS = ("scripts/", "ansible/tests/", "ansible/roles/")
 
@@ -29,9 +28,7 @@ def tracked_init_files(listed: str) -> list[str]:
 
 
 def test_no_namespace_dir_carries_an_init_file():
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
-    ).stdout
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
     assert "scripts/lib/yaml_fast.py" in listed.split("\0"), (
         "the listing is not the repo"
     )

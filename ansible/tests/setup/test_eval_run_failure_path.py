@@ -24,6 +24,7 @@ import subprocess
 from pathlib import Path
 
 from _helpers import ANSIBLE
+from lib.proc_testing import run
 
 SCRIPT_PATH = ANSIBLE / "roles/setup/initial_setup/templates/eval-run.sh.j2"
 SCRIPT = SCRIPT_PATH.read_text()
@@ -84,12 +85,8 @@ def _bash(
         "COMMIT_FAILED_LOG": str(stamp_dir / "last-commit-failure.log"),
         "UNPUBLISHED_HISTORY": str(stamp_dir / "unpublished-history.json"),
     }
-    return subprocess.run(
-        ["bash", "-uo", "pipefail", "-c", f"{prelude}\n{script}"],
-        cwd=cwd,
-        env=env,
-        capture_output=True,
-        text=True,
+    return run(
+        ["bash", "-uo", "pipefail", "-c", f"{prelude}\n{script}"], cwd=cwd, env=env
     )
 
 

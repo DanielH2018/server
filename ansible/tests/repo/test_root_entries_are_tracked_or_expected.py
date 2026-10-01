@@ -10,9 +10,8 @@ a `site/` from a bare `mkdocs build`, sits there ignored and unexplained.
 Run: uv run pytest ansible/tests/repo/test_root_entries_are_tracked_or_expected.py
 """
 
-import subprocess
-
 from _helpers import REPO
+from lib.proc_testing import run
 
 # Root entries the ignore rule is expected to hide. Each is a tool's own working state.
 EXPECTED_IGNORED = frozenset(
@@ -35,9 +34,7 @@ EXPECTED_IGNORED = frozenset(
 
 
 def _tracked_root_entries() -> set[str]:
-    listed = subprocess.run(
-        ["git", "ls-files", "-z"], cwd=REPO, capture_output=True, text=True, check=True
-    ).stdout
+    listed = run(["git", "ls-files", "-z"], cwd=REPO, check=True).stdout
     return {rel.split("/", 1)[0] for rel in listed.split("\0") if rel}
 
 

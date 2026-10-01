@@ -19,6 +19,7 @@ from pathlib import Path
 from _helpers import REPO
 from lib import yaml_fast
 from lib.git_testing import commit, git, init_repo, scrubbed_env
+from lib.proc_testing import run
 
 CI_WORKFLOW = REPO / ".github" / "workflows" / "ci.yml"
 
@@ -89,11 +90,5 @@ def run_step(
     env["BASE_REF"] = "master"
     env["RUNNER_TEMP"] = str(runner_tmp)
     env["GITHUB_OUTPUT"] = str(output)
-    proc = subprocess.run(
-        ["bash", "-c", script],
-        cwd=repo,
-        env=env,
-        capture_output=True,
-        text=True,
-    )
+    proc = run(["bash", "-c", script], cwd=repo, env=env)
     return proc, output.read_text()

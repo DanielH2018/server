@@ -54,13 +54,13 @@ Three further limits, stated rather than papered over:
 import re
 import shlex
 import shutil
-import subprocess
 from pathlib import Path
 
 import pytest
 from _helpers import K8S_ROLES, jinja_env, load_tasks, load_defaults
 from _role_census import role_dirs
 from _helpers import task_named
+from lib.proc_testing import run
 
 _ROLE = K8S_ROLES / "cronjob-gate"
 _TASKS = _ROLE / "tasks" / "main.yml"
@@ -341,7 +341,7 @@ def test_the_jsonpath_parses_against_the_live_api() -> None:
         "-o",
         jsonpath,
     ]
-    done = subprocess.run(probe, capture_output=True, text=True, check=False)
+    done = run(probe, check=False)
     if "connection refused" in done.stderr or "was refused" in done.stderr:
         pytest.skip("no reachable cluster")
     assert done.returncode == 0, (
