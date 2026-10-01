@@ -11,8 +11,10 @@ Stop after the report; let the operator drive any changes.
 
 ## 1. Prime from memory FIRST (the signal-booster — do this before dispatching)
 This is a **mature** setup: a cold agent will re-flag dozens of settled decisions. Before dispatching,
-read the most recent `review-*-state` memories and the HA-relevant accepted-decision ("don't re-flag")
-memories from the auto-memory index. Extract the don't-re-flag items **plus** the discipline: *verify a
+read the most recent `review-*-state` ledgers the store holds (`ls -1
+~/.claude/projects/-home-ubuntu-server/memory/review-*-state.md`; zero is a valid state — the
+homelab-review fold deletes a ledger two runs back) and the HA-relevant accepted-decision
+("don't re-flag") memories from the auto-memory index, `review-standing-decisions` above all. Extract the don't-re-flag items **plus** the discipline: *verify a
 candidate finding against the home-assistant role's CLAUDE.md **and its `docs/` split** (platform,
 lighting-and-presence, alerts-and-notifications, climate-and-air — most settled decisions live there,
 not in CLAUDE.md), `sanctioned_writers.yml`, and existing

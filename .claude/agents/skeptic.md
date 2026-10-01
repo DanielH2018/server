@@ -43,7 +43,7 @@ Work down this list until you can rule. Cite what you find.
 - The role's `CLAUDE.md` — accepted trade-offs live there.
 - The role's `tasks/` and `templates/`, plus the shared macros in `ansible/templates/`.
 - monitor-bridge's `check.py` and the role's crons — most "nothing is watching this" claims die here.
-- The don't-re-flag memories, above all `homelab-review-standing-donot-reflag`.
+- The don't-re-flag memories, above all `review-standing-decisions`.
 - **Git history.** `git log` / `git blame` the cited lines. A finding already fixed in a later
   commit, or intentionally reverted with a rationale, is not live.
 - **Open branches.** Several sessions work this repo at once, so a fix can be real and not yet on
