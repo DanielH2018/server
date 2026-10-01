@@ -293,6 +293,64 @@ def test_an_unknown_commit_is_flagged_despite_a_match(repo, tmp_path):
     assert stale == {"littlelink": "commit unknown to this checkout"}
 
 
+_OWN = "ansible/roles/k8s/littlelink/templates/service.yaml.j2"
+_PVC = "ansible/roles/k8s/volume-claim/templates/pvc.yaml.j2"
+_RENDERER = "ansible/roles/k8s/manifests/tasks/apply.yml"
+
+
+def _shared_role_stale(tmp_path, changed, pending=None):
+    """littlelink applied at `base`, `changed` moved by `tip`, and a render at `tip` matching."""
+    repo = tmp_path / "repo"
+    _init_repo(repo)
+    base = _commit(repo, {p: "v1\n" for p in (_OWN, _PVC, _RENDERER)}, "v1")
+    _set_origin_master(repo, _commit(repo, {p: "v2\n" for p in changed}, "v2"))
+    records, hits = [_release("littlelink", base)], {}
+    tip = rr.resolve_ref("origin/master", repo)
+    kwargs = {"pending": pending, "grace_seconds": 3600} if pending is not None else {}
+    stale = pr.compute_stale(
+        records,
+        repo_root=repo,
+        shared_roles={"volume-claim", "manifests"},
+        consumers={},
+        hits_out=hits,
+        **kwargs,
+    )
+    rr.apply_digest_verdicts(
+        stale,
+        records,
+        pending=pending,
+        repo_root=repo,
+        render_dir=_write_renders(tmp_path / "renders", _render("littlelink", tip)),
+        hits=hits,
+    )
+    return stale
+
+
+@pytest.mark.parametrize("changed", [[_RENDERER], [_OWN, _RENDERER]])
+def test_a_matching_digest_clears_a_renderer_hit_is_clean(tmp_path, changed):
+    assert _shared_role_stale(tmp_path, changed) == {}
+
+
+@pytest.mark.parametrize("changed", [[_PVC], [_OWN, _PVC]])
+def test_a_matching_digest_keeps_a_volume_claim_hit_is_flagged(tmp_path, changed):
+    """#3090: the PVC is staged outside the digest, so CURRENT proves nothing about it."""
+    assert _shared_role_stale(tmp_path, changed) == {
+        "littlelink": rr.path_reason([_PVC])
+    }
+
+
+def test_a_matching_digest_keeps_a_volume_claim_hit_pending(tmp_path):
+    pending = {}
+    assert _shared_role_stale(tmp_path, [_PVC], pending=pending) == {}
+    assert list(pending) == ["littlelink"]
+
+
+def test_digest_provable_roles_match_the_deployers():
+    import deploy_defer
+
+    assert rr.DIGEST_PROVABLE_ROLES == deploy_defer.DIGEST_PROVABLE_ROLES
+
+
 TIP = "b" * 40
 
 

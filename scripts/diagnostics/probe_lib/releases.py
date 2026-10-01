@@ -72,11 +72,12 @@ from diagnostics.probe_lib.releases_diff import drop_check_mode_only  # noqa: E4
 # Its own module for the reason above; that module's docstring says what it reuses and why.
 from diagnostics.probe_lib.releases_consumers import (  # noqa: E402
     consumers_for,
+    consumes_manifests,
     role_paths_for,
 )
 
 # The digest verdict, which outranks the path verdict computed here (#2586, inverted by #3046).
-from diagnostics.probe_lib.releases_render import apply_digest_verdicts  # noqa: E402
+from diagnostics.probe_lib.releases_render import apply_digest_verdicts, path_reason  # noqa: E402
 from diagnostics.probe_lib.releases_retired import drop_retired  # noqa: E402
 from diagnostics.probe_lib.releases_retired import role_dir_names  # noqa: E402
 
@@ -185,11 +186,16 @@ MANIFEST_RENDERER = "manifests"
 def _supplies_manifest_bytes(role_dir):
     """Whether `role_dir` contributes bytes to some service's APPLIED manifests.
 
-    A shared role does that in exactly two ways: it renders templates that are applied
-    alongside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
-    `image-builder/templates/build-job.yaml.j2`), or it ships `files/` a consumer's manifest
-    embeds with `lookup('file')` (`arr-notification`). A role with only
-    `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
+    A shared role does that by shipping `templates/` or `files/`. It renders templates that
+    are applied beside the consumer's own (`volume-claim/templates/pvc.yaml.j2`,
+    `image-builder/templates/build-job.yaml.j2`), or it ships `files/` its tasks run against
+    the consumer. `arr-notification`'s `files/` hold a seed script that writes the app's
+    database over the app's API, so it changes live state while rendering no manifest at all.
+    A role with only `tasks/` and `defaults/` changes how a deploy RUNS, never what it applies.
+
+    Only `manifests` supplies bytes the render digest covers. The other three act outside
+    `manifests_digest`, which is why `releases_render.apply_verdicts` never lets a matching
+    digest clear their path hits (#3090).
 
     That distinction is the whole point (#1636). A deploy-time role's change is live for the
     next deploy the moment the deployer fast-forwards the primary checkout -- `deploy.sh`
@@ -438,6 +444,7 @@ def compute_stale(
     grace_seconds=0,
     now=None,
     pending=None,
+    hits_out=None,
 ):
     """{service: reason} for every record whose own, shared or deploy-plane paths changed since `ref`.
 
@@ -456,6 +463,9 @@ def compute_stale(
     caller passes a dict (`_drift_started` says why oldest). A range git cannot date stays
     stale. `now` is epoch seconds, for the tests. The default of 0 keeps every caller that
     never asked for a grace on the old contract.
+
+    `hits_out`, when a dict, gets every hit for each stale or pending service. The reason names
+    only three, and `apply_digest_verdicts` needs them all to see a hit no digest covers.
 
     One `git log` per distinct commit, not per service -- a full deploy stamps ~54 records
     sharing one commit, and grouping first keeps this from being 54 subprocess calls for what a
@@ -512,6 +522,8 @@ def compute_stale(
             hits += plane.get(svc, [])
             if not hits:
                 continue
+            if hits_out is not None:
+                hits_out[svc] = hits
             if grace_seconds > 0:
                 started = _drift_started(commit, hits, repo_root, ref, _memo=dated)
                 if started is not None:
@@ -520,24 +532,8 @@ def compute_stale(
                         if pending is not None:
                             pending[svc] = int(age)
                         continue
-            more = f" (+{len(hits) - 3} more)" if len(hits) > 3 else ""
-            stale[svc] = f"changed since applied: {', '.join(hits[:3])}{more}"
+            stale[svc] = path_reason(hits)
     return stale
-
-
-def _consumes_manifests(role_dir):
-    """Whether `role_dir`'s tasks include `k8s/manifests`, the contract that ends in a stamp.
-
-    Not every `containers_list` k8s entry has to: the retired `n8n-images` only called
-    `k8s/image-builder` and applied no manifests of its own, so it could never
-    be stamped and would otherwise read as permanently missing -- the exact "monitor nobody
-    trusts" failure `manifest-prune-check.sh.j2`'s header warns against. Same one-level grep the
-    repo CLAUDE.md names for this question (`grep -rl k8s/manifests ansible/roles/k8s/*/tasks/`).
-    """
-    tasks_dir = role_dir / "tasks"
-    if not tasks_dir.is_dir():
-        return False
-    return any("k8s/manifests" in p.read_text() for p in tasks_dir.glob("*.yml"))
 
 
 def missing_services(records, host_vars=None, k8s_roles_dir=None):
@@ -545,7 +541,7 @@ def missing_services(records, host_vars=None, k8s_roles_dir=None):
 
     Deployed before the release stamp shipped, or never deployed -- either way this must read
     UNKNOWN rather than being silently excluded from a fleet audit, per issue #947's design.
-    Scoped to roles that actually consume `k8s/manifests` (see `_consumes_manifests`); a role
+    Scoped to roles that actually consume `k8s/manifests` (see `consumes_manifests`); a role
     that never applies manifests never gets a record to be missing.
     """
     deploy_tags = _deploy_tags()
@@ -554,7 +550,7 @@ def missing_services(records, host_vars=None, k8s_roles_dir=None):
     known = {
         tag
         for _host, platform, tag in deploy_tags.service_records(host_vars)
-        if platform == "k8s" and _consumes_manifests(k8s_roles_dir / tag)
+        if platform == "k8s" and consumes_manifests(k8s_roles_dir / tag)
     }
     present = {r.get("service") for r in records if "error" not in r}
     return sorted(known - present)
@@ -573,9 +569,11 @@ def run_releases(ns):
         return 0
     if getattr(ns, "stale_only", False):
         grace_seconds = int(getattr(ns, "grace_minutes", 0) or 0) * 60
-        pending = {}
-        stale = compute_stale(records, grace_seconds=grace_seconds, pending=pending)
-        apply_digest_verdicts(stale, records, pending=pending)
+        pending, hits = {}, {}
+        stale = compute_stale(
+            records, grace_seconds=grace_seconds, pending=pending, hits_out=hits
+        )
+        apply_digest_verdicts(stale, records, pending=pending, hits=hits)
         missing = missing_services(records)
         write_counted_names(getattr(ns, "names_out", None), stale, missing)
         render = format_stale_kuma if getattr(ns, "kuma", False) else format_stale_only
@@ -589,9 +587,10 @@ def run_releases(ns):
     # Both verdicts are skipped for the views that print no FLAGS column, and skipped
     # TOGETHER -- `renders_flags_table` says why the digest half cannot run over an empty dict.
     flags_table = renders_flags_table(ns)
-    stale = compute_stale(records) if flags_table else {}
+    hits = {}
+    stale = compute_stale(records, hits_out=hits) if flags_table else {}
     if flags_table:
-        apply_digest_verdicts(stale, records)
+        apply_digest_verdicts(stale, records, hits=hits)
     text, code = format_records(
         records, merged, service=service, stale=stale, release_dir=RELEASE_DIR
     )
