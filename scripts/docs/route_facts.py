@@ -34,6 +34,7 @@ _sys.path.insert(0, str(_Path(__file__).resolve().parents[1]))
 
 from lib import yaml_fast
 
+from lib.k8s_roles import manifest_template
 from lib.repo_paths import ALL_VARS as GROUP_VARS
 
 # `public=false` in a role's own macro call opts the service out of the public Host rule
@@ -49,11 +50,24 @@ PUBLIC = "public"
 
 
 def ingressroute_templates(role_dir: Path) -> list[Path]:
-    """Every ingressroute template in a role, or [] if it declares no route."""
+    """Every ingressroute template a role's route is rendered from, or [] if it has no route.
+
+    The role's own `templates/ingressroute*.j2`, plus the shared default under
+    `ansible/templates/` when the role names `ingressroute.yaml` and ships no template for it
+    (#3043). The shared one has to be included or `reachability` reads the role's remaining
+    templates alone: sonarr keeps only `ingressroute-monitoring.yaml.j2`, which calls
+    `monitoring_route()` and never `ingressroute()`, so the service would report LAN-only.
+    """
     templates = role_dir / "templates"
-    if not templates.is_dir():
-        return []
-    return sorted(p for p in templates.glob("*.j2") if "ingressroute" in p.name)
+    own = (
+        sorted(p for p in templates.glob("*.j2") if "ingressroute" in p.name)
+        if templates.is_dir()
+        else []
+    )
+    shared = manifest_template(role_dir.name, "ingressroute.yaml", role_dir.parent)
+    if shared is not None and shared not in own:
+        own.append(shared)
+    return own
 
 
 def public_route_enabled(group_vars: Path = GROUP_VARS) -> bool:

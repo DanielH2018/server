@@ -20,6 +20,8 @@ from _manifest_guards import (
     _k8s_entries,
     _render,
     _role_defaults,
+    _route_template,
+    _route_templates,
 )
 
 
@@ -164,8 +166,8 @@ def test_every_authed_service_carries_forward_auth_and_rate_limit():
     leave the extra ones unchecked — exactly where an ungated route would hide.
     """
     for entry in _k8s_entries():
-        route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
-        if not route_tpl.exists():
+        route_tpl = _route_template(entry["name"])
+        if route_tpl is None:
             continue
         rendered = _render(
             route_tpl,
@@ -201,13 +203,12 @@ def test_every_https_route_carries_tls():
     The route still applies cleanly, `kubectl get` still shows it, and Traefik logs nothing.
     Requests just fall through to whatever other router matches the host. That is how the three
     `-monitoring` routes were dead from B4c until 2026-08-07 while looking correct, and it cost
-    an investigation that chased priority and ClientIP instead. Globs `ingressroute*` so a
-    route in a second template is covered too — the monitoring routes live in their own file.
+    an investigation that chased priority and ClientIP instead. Reads every route template so a
+    route in a second template is covered too — the monitoring routes live in their own file,
+    and 16 roles' main route is the shared default under `ansible/templates/`.
     """
     for entry in _k8s_entries():
-        for route_tpl in sorted(
-            (K8S / entry["name"] / "templates").glob("ingressroute*.j2")
-        ):
+        for route_tpl in _route_templates(entry["name"]):
             rendered = _render(
                 route_tpl,
                 container_item=entry,
@@ -260,8 +261,8 @@ def test_every_public_host_rule_is_reachable_only_from_the_docker_edge():
     """
     domain = "example.com"
     for entry in _k8s_entries():
-        route_tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
-        if not route_tpl.exists():
+        route_tpl = _route_template(entry["name"])
+        if route_tpl is None:
             continue
         rendered = _render(
             route_tpl,
@@ -314,8 +315,8 @@ def test_routes_reference_a_tlsoption_that_exists_and_is_not_named_default():
         "referenced by name from an IngressRoute"
     )
     for entry in _k8s_entries():
-        tpl = K8S / entry["name"] / "templates" / "ingressroute.yaml.j2"
-        if not tpl.exists():
+        tpl = _route_template(entry["name"])
+        if tpl is None:
             continue
         rendered = _render(tpl, container_item=entry, **_role_defaults(entry["name"]))
         # Every document: a role may ship more than one IngressRoute, and a second one naming
@@ -351,9 +352,7 @@ def test_no_monitoring_route_serves_a_bare_path_prefix():
     """
     offenders = []
     for entry in _k8s_entries():
-        for route_tpl in sorted(
-            (K8S / entry["name"] / "templates").glob("ingressroute*.j2")
-        ):
+        for route_tpl in _route_templates(entry["name"]):
             rendered = _render(
                 route_tpl,
                 container_item=entry,

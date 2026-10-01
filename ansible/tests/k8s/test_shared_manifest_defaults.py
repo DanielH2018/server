@@ -2,9 +2,11 @@
 """`k8s/manifests` renders a shared manifest for a role that ships none of its own (#2872).
 
 WHY THIS EXISTS. 25 roles' `templates/service.yaml.j2` were byte-identical three-line wrappers
-around the `service()` macro. They are gone, and `k8s/manifests` renders
-`ansible/templates/service-default.yaml.j2` as `service.yaml` for each of them instead. Three
-things have to stay true for that to keep working, and each fails silently on its own:
+around the `service()` macro, and 16 roles' `templates/ingressroute.yaml.j2` were the same
+shape around `ingressroute()` (#3043). They are gone, and `k8s/manifests` renders
+`ansible/templates/service-default.yaml.j2` and `ansible/templates/ingressroute-default.yaml.j2`
+for each of them instead. Three things have to stay true for that to keep working, and each
+fails silently on its own:
 
 * The deploy's map (`manifests_shared_defaults`, a role default) and the offline harnesses' map
   (`lib.k8s_roles.SHARED_MANIFEST_DEFAULTS`) name the same files. Drift here does not break a
@@ -16,8 +18,8 @@ things have to stay true for that to keep working, and each fails silently on it
 * The render task actually resolves the shared source. A `src` that lost the fallback fails the
   deploy loudly for those 25 roles, but only on a deploy — nothing else runs that task.
 
-The last test is the issue's own verify-by: no two roles carry a byte-identical
-`templates/service.yaml.j2`.
+The last test is each issue's own verify-by: no two roles carry a byte-identical
+`templates/service.yaml.j2`, or a byte-identical `templates/ingressroute.yaml.j2`.
 
 Run: uv run pytest ansible/tests/k8s/test_shared_manifest_defaults.py
 """
@@ -70,6 +72,42 @@ ROLES_WITH_A_DEFAULT_SERVICE = frozenset(
 )
 
 
+# The roles whose IngressRoute the shared default renders — #3043's half of the census above.
+# Every one of them is routed (its entry carries a `hostname`), which is also what
+# `ansible/filter_plugins/toposort.py` now derives their traefik ordering edge from.
+ROLES_WITH_A_DEFAULT_INGRESSROUTE = frozenset(
+    {
+        "bazarr",
+        "bento-pdf",
+        "code-server",
+        "homepage",
+        "jellyfin",
+        "littlelink",
+        "pihole",
+        "prowlarr",
+        "qbittorrent",
+        "radarr",
+        "sonarr",
+        "tdarr",
+        "texbrain",
+        "uptime-kuma",
+        "wg-easy",
+        "zigbee2mqtt",
+    }
+)
+
+# Each shared default's template, the census of roles taking it, and the basename the caller
+# names in `manifests_files`. The tests below parametrise over this rather than carrying one
+# copy per basename.
+SHARED_DEFAULT_CENSUS = {
+    "service.yaml": ("service-default.yaml.j2", ROLES_WITH_A_DEFAULT_SERVICE),
+    "ingressroute.yaml": (
+        "ingressroute-default.yaml.j2",
+        ROLES_WITH_A_DEFAULT_INGRESSROUTE,
+    ),
+}
+
+
 def _manifests_defaults() -> dict:
     return yaml_fast.safe_load((MANIFESTS / "defaults" / "main.yml").read_text()) or {}
 
@@ -94,22 +132,21 @@ def test_every_shared_default_template_exists():
         )
 
 
-def test_the_census_of_roles_taking_a_default_service_holds():
-    """Non-vacuity: the fallback resolves for exactly the roles #2872 deleted a template from."""
+@pytest.mark.parametrize("basename", sorted(SHARED_DEFAULT_CENSUS))
+def test_the_census_of_roles_taking_a_shared_default_holds(basename):
+    """Non-vacuity: the fallback resolves for exactly the roles the move deleted a template from."""
+    template, census = SHARED_DEFAULT_CENSUS[basename]
     resolved = {
         d.name
         for d in role_dirs()
-        if any(
-            p.name == "service-default.yaml.j2"
-            for p in shared_default_templates(d.name)
-        )
+        if any(p.name == template for p in shared_default_templates(d.name))
     }
-    assert resolved == ROLES_WITH_A_DEFAULT_SERVICE, (
-        "the set of roles getting a shared default Service moved. Added: "
-        f"{sorted(resolved - ROLES_WITH_A_DEFAULT_SERVICE)}; lost: "
-        f"{sorted(ROLES_WITH_A_DEFAULT_SERVICE - resolved)}. A role dropping out of this set "
-        "silently loses its Service from the validator's corpus; update the census here when "
-        "the move is deliberate."
+    assert resolved == census, (
+        f"the set of roles getting a shared default {basename} moved. Added: "
+        f"{sorted(resolved - census)}; lost: "
+        f"{sorted(census - resolved)}. A role dropping out of this set "
+        f"silently loses its {basename} from the validator's corpus; update the census here "
+        "when the move is deliberate."
     )
 
 
@@ -163,11 +200,11 @@ def test_the_render_task_resolves_the_shared_source():
     )
 
 
-def _service_template_digests() -> dict[str, list[str]]:
-    """Every role's own `templates/service.yaml.j2`, grouped by content digest."""
+def _own_template_digests(basename: str) -> dict[str, list[str]]:
+    """Every role's own `templates/<basename>.j2`, grouped by content digest."""
     by_digest = defaultdict(list)
     for role_dir in role_dirs():
-        tpl = role_dir / "templates" / "service.yaml.j2"
+        tpl = role_dir / "templates" / f"{basename}.j2"
         if tpl.is_file():
             by_digest[hashlib.sha256(tpl.read_bytes()).hexdigest()].append(
                 role_dir.name
@@ -175,17 +212,18 @@ def _service_template_digests() -> dict[str, list[str]]:
     return by_digest
 
 
-def test_no_two_roles_ship_a_byte_identical_service_template():
-    """#2872's verify-by. A duplicate pair is a pair the shared default should be rendering."""
-    by_digest = _service_template_digests()
-    assert by_digest, "no role ships a service.yaml.j2 at all — has the tree moved?"
+@pytest.mark.parametrize("basename", sorted(SHARED_DEFAULT_CENSUS))
+def test_no_two_roles_ship_a_byte_identical_template(basename):
+    """Each issue's verify-by. A duplicate pair is a pair the shared default should render."""
+    template, _census = SHARED_DEFAULT_CENSUS[basename]
+    by_digest = _own_template_digests(basename)
+    assert by_digest, f"no role ships a {basename}.j2 at all — has the tree moved?"
     duplicates = {d: roles for d, roles in by_digest.items() if len(roles) > 1}
     assert not duplicates, (
-        "these roles ship byte-identical service.yaml.j2 files: "
+        f"these roles ship byte-identical {basename}.j2 files: "
         f"{sorted(sorted(r) for r in duplicates.values())}. Delete them and let "
-        "ansible/templates/service-default.yaml.j2 render the Service, adding "
-        "service_port_name / service_extra_ports to the containers_list entry if the Service "
-        "needs either."
+        f"ansible/templates/{template} render it, moving whatever they differed on onto the "
+        "containers_list entry."
     )
 
 
@@ -197,11 +235,42 @@ def test_the_duplicate_check_rejects_a_duplicate_pair():
     assert duplicates == {"same": ["alpha", "beta"]}
 
 
-@pytest.mark.parametrize("role", sorted(ROLES_WITH_A_DEFAULT_SERVICE))
-def test_a_role_taking_the_default_ships_no_service_template(role):
+@pytest.mark.parametrize(
+    ("basename", "role"),
+    sorted(
+        (basename, role)
+        for basename, (_tpl, census) in SHARED_DEFAULT_CENSUS.items()
+        for role in census
+    ),
+    ids=lambda s: s,
+)
+def test_a_role_taking_the_default_ships_no_template_of_its_own(basename, role):
     """The role's own template wins, so one left behind would make the fallback dead code."""
-    own = ANSIBLE / "roles" / "k8s" / role / "templates" / "service.yaml.j2"
+    own = ANSIBLE / "roles" / "k8s" / role / "templates" / f"{basename}.j2"
     assert not own.is_file(), (
-        f"{role} ships its own service.yaml.j2 again while still listed as taking the shared "
-        "default. Drop it from ROLES_WITH_A_DEFAULT_SERVICE, or delete the template."
+        f"{role} ships its own {basename}.j2 again while still listed as taking the shared "
+        "default. Drop it from the census in this file, or delete the template."
+    )
+
+
+def test_a_default_route_carries_the_authelia_middleware_for_a_gated_entry():
+    """bazarr's route is what it was before the template left the tree."""
+    rendered = render_role_template("bazarr", "ingressroute-default.yaml.j2")
+    assert "  name: bazarr\n" in rendered
+    assert "Host(`bazarr.local." in rendered, (
+        f"the entry's hostname no longer reaches the Host rule — rendered:\n{rendered}"
+    )
+    assert "- name: authelia\n" in rendered, (
+        "use_authelia on the containers_list entry no longer reaches the rendered route — "
+        f"rendered:\n{rendered}"
+    )
+
+
+def test_a_default_route_omits_the_authelia_middleware_for_an_open_entry():
+    """jellyfin is `use_authelia: false`: the reject half of the pair above."""
+    rendered = render_role_template("jellyfin", "ingressroute-default.yaml.j2")
+    assert "  name: jellyfin\n" in rendered
+    assert "- name: authelia\n" not in rendered, (
+        "the shared default gated an entry that opted out of Authelia — rendered:\n"
+        f"{rendered}"
     )

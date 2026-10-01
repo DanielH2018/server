@@ -18,10 +18,9 @@ uv run python scripts/dev/new_k8s_service.py <name> \
     [--authelia one_factor|two_factor] [--no-route] [--strategy Recreate]
 ```
 
-That writes `tasks/main.yml`, `defaults/main.yml`, `templates/deployment.yaml.j2`,
-`templates/ingressroute.yaml.j2` and a `CLAUDE.md`, appends the `containers_list` entry, and
-runs the role-glance generator over the new doc. Its output renders clean through
-`prek run --all-files` with no hand edits.
+That writes `tasks/main.yml`, `defaults/main.yml`, `templates/deployment.yaml.j2` and a
+`CLAUDE.md`, appends the `containers_list` entry, and runs the role-glance generator over the
+new doc. Its output renders clean through `prek run --all-files` with no hand edits.
 
 **Copying a sibling is what this replaced** (#2855). A sibling's files carry its narration, and
 that narration is dated — littlelink's Deployment cited a Compose template that had not existed
@@ -36,6 +35,13 @@ that — a selector that differs from the name, a LoadBalancer, a pinned cluster
 writing the role its own `templates/service.yaml.j2`, which always wins over the default.
 `ansible/templates/service.yml.j2`'s header lists every disqualifier and the role behind it.
 
+**No `ingressroute.yaml.j2` is written either** (#3043). `k8s/manifests` renders
+`ansible/templates/ingressroute-default.yaml.j2` the same way, reading the name, `hostname`,
+`port` and `use_authelia` off the entry. A route needing anything the entry does not carry —
+an extra middleware, a second hostname, `public=false`, a bypass prefix, a render condition —
+means writing the role its own `templates/ingressroute.yaml.j2`; the macro header in
+`ansible/templates/ingressroute.yml.j2` lists every parameter.
+
 **The scaffolder writes no PVC, Secret or NetworkPolicy.** Each is a decision about the
 service, so add the template by hand and name it in `manifests_files`.
 
@@ -45,7 +51,8 @@ scaffolder names both when it finishes:
 - `BORN_FENCED_ROLES` in `ansible/tests/k8s/test_netpol_baseline_labels.py`, with the sentence
   saying why Traefik is the pod's only caller. A service that dials out drops the
   `netpol-baseline: enforced` pod label and gets its own NetworkPolicy instead.
-- `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`.
+- `ROLES_WITH_A_DEFAULT_SERVICE` in `ansible/tests/k8s/test_shared_manifest_defaults.py`, and
+  `ROLES_WITH_A_DEFAULT_INGRESSROUTE` beside it for a routed role.
 
 Then `uv run python scripts/docs/gen_doc_fragments.py` and commit what it writes.
 
@@ -108,8 +115,8 @@ Where in the list doesn't matter: the k8s play toposorts on
 `build_k8s_dep_map` / `toposort_containers` (`ansible/filter_plugins/toposort.py`), and the
 two edges that used to require hand positioning are derived automatically —
 
-- an entry whose templates render a Traefik CRD (an `ingressroute.yaml.j2` using the shared
-  `ingressroute.yml.j2` macro counts) gets an edge onto `traefik`, and
+- a routed entry — one carrying a `hostname` — gets an edge onto `traefik`, as does a role
+  whose own templates render a Traefik CRD without declaring a host, and
 - an entry with `use_authelia: true` gets one onto `authelia`.
 
 If the new entry needs an ordering constraint no template carries — something like

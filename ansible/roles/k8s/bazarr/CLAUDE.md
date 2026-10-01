@@ -71,6 +71,8 @@ non-zero** — that is the measurement that would change the answer, not a judge
 library.
 
 ## Editing
-- Manifests: `templates/deployment.yaml.j2`, `templates/ingressroute.yaml.j2`,
-  `templates/networkpolicy-bazarr.yaml.j2`. The Service comes from the shared
-  `ansible/templates/service-default.yaml.j2`, which this role ships no template for.
+- Manifests: `templates/deployment.yaml.j2`, `templates/networkpolicy-bazarr.yaml.j2`. The
+  Service and the IngressRoute come from the shared
+  `ansible/templates/service-default.yaml.j2` and
+  `ansible/templates/ingressroute-default.yaml.j2`, which this role ships no template for —
+  the route's hostname, port and Authelia gate are the `containers_list` entry's.
