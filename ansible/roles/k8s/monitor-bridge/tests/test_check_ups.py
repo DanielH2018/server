@@ -162,6 +162,24 @@ def test_check_ups_replace_battery_pages(monkeypatch, cfg):
     assert not ok2 and "replace-battery" in msg2
 
 
+def test_check_ups_numeric_arms_absent_while_replace_reports_pages(monkeypatch, cfg):
+    """The input the deleted NUT-numeric defer used to catch, and the one whose verdict flipped.
+
+    charge and runtime absent while the replace arm reports was a upsd outage while the HA
+    fallback existed — HA dropped its numeric sensors and its replace-battery template floored
+    to 0 — so check_ups deferred. One source cannot produce that shape for an outage: nut-exporter
+    fails the whole /ups_metrics scrape, taking all four arms with it. What is left is a selective
+    rename or a `--nut.vars_enable` entry dropped from the exporter's arguments, and both must
+    page rather than leave the runway arms silently unmonitored.
+    """
+    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    assert ok1 and "streak 1/2" in msg1
+    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    assert not ok2
+    assert "charge" in msg2 and "runtime" in msg2 and "absent" in msg2
+
+
 def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch, cfg):
     # charge+runtime present but the replace arm vanished (series rename) -> flag, don't monitor the
     # survivor silently. Goes through the streak (restart grace) then pages, naming the missing arm.
