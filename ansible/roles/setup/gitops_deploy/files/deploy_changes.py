@@ -15,15 +15,15 @@ import subprocess
 from dataclasses import dataclass, field
 from typing import NamedTuple
 
-# Which role directory a changed path sits in, as ONE question asked once (#3048). Five
-# regexes answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`,
-# `_ACTIVE_ROLE`, `_ACTIVE_K8S` — plus `_SETUP_ROLE` for the setup plane and a sixth copy in
-# `scripts/deploy_tools/narrow_broad.py`, each re-deriving the same three path segments and
-# differing only in which plane and which subdirectory it accepted.
+# Which role directory a changed path sits in, as ONE question asked once (#3048). Six regexes
+# answered it before — `_ACTIVE_CONFIG`, `_ACTIVE_TASKS`, `_ACTIVE_META`, `_ACTIVE_ROLE`,
+# `_ACTIVE_K8S` and `_SETUP_ROLE` — plus a copy in `narrow_broad.py` and a pair in
+# `land_tags.py`, each re-deriving the same three path segments and differing only in which
+# plane and which subdirectory it accepted.
 #
 # The third group takes a TRAILING SLASH, so a file at a role's own root reports no
 # subdirectory rather than its own basename. The catch-all branch in
-# `services_from_changed_paths` is what reads that field.
+# `services_from_changed_paths` reads that field.
 _ROLE_PATH = re.compile(r"^ansible/roles/(containers|k8s|setup)/([^/]+)/(?:([^/]+)/)?")
 
 
@@ -31,12 +31,11 @@ class RolePath(NamedTuple):
     """The role directory a changed path sits in.
 
     Attributes:
-        plane: `containers`, `k8s` or `setup` — the role tree, which decides what can apply
-            the change at all.
+        plane: `containers`, `k8s` or `setup` — the tree, which decides what can apply it.
         role: the role directory's name. NOT necessarily a deploy tag: only a role with a
             `containers_list` entry has one, which is `land_tags.tag_for`'s question.
-        subdir: the directory under the role the path sits in — `templates`, `tasks`, `meta`,
-            `files` — or `""` for a file at the role's own root.
+        subdir: the directory under the role the path sits in (`templates`, `tasks`, `meta`,
+            `files`), or `""` for a file at the role's own root.
     """
 
     plane: str
@@ -52,8 +51,7 @@ def role_of(path: str) -> RolePath | None:
     genuinely differ — this module routes `containers/common/` to the Pi before the role
     branches below are reached, `narrow_broad` reads a tree at a ref where
     `containers/archive/` no longer exists, and `land_tags.role_for` reads DIFF paths and so
-    still excludes `common` and drops a `.md`. Folding any of those in here would change what
-    deploys.
+    still excludes `common` and drops a `.md`. Folding one in would change what deploys.
     """
     m = _ROLE_PATH.match(path)
     return RolePath(m.group(1), m.group(2), m.group(3) or "") if m else None
@@ -110,8 +108,8 @@ _BROAD_CENSUS_PREFIXES = ("ansible/inventory/", "ansible/templates/")
 #
 # DERIVED rather than listed (#3048). `narrow_broad.PLAY_PREFIXES` restated the complement by
 # hand, so a prefix added to `_BROAD_DEPLOY_PREFIXES` could go missing from it — and a
-# deploy-plane path in neither half reads as narrowable by a rule that has none, which is the
-# silent direction. Subtraction makes the two exhaustive by construction.
+# deploy-plane path in neither half reads as narrowable by a rule that has none. Subtraction
+# makes the two exhaustive by construction.
 _BROAD_PLAY_PREFIXES = tuple(
     p for p in _BROAD_DEPLOY_PREFIXES if p not in _BROAD_CENSUS_PREFIXES
 )
@@ -492,23 +490,22 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # because the alert only needs to name the role.
             cs.k8s.add(at.role)
         elif at.plane != "containers":
-            # A setup-plane path, which `_BROAD_SETUP_PREFIXES` above consumes before this
-            # loop reaches here. Named rather than left to fall through: the branches below
-            # are about a CONTAINER role, and `role_of` — unlike the `containers/`-anchored
-            # regexes it replaced — can hand them a `roles/setup/` path.
+            # A setup-plane path, which `_BROAD_SETUP_PREFIXES` consumes before this loop
+            # reaches here. Named rather than left to fall through, because the branches
+            # below are about a CONTAINER role and `role_of` can hand them a setup path —
+            # the `containers/`-anchored regexes it replaced could not.
             continue
         elif at.subdir in ("templates", "files"):
             # A bind-mounted file under a container role: the docker-compose.yml.j2 OR any
-            # config template / files/ asset (prometheus.yml.j2, authelia configuration.yml.j2).
-            # It reaches the container on its next deploy, so it maps to a scoped,
-            # health-gated redeploy rather than a silent ff-merge.
+            # config template / files/ asset. It reaches the container on its next deploy, so
+            # it maps to a scoped, health-gated redeploy rather than a silent ff-merge.
             cs.services.add(at.role)
         elif at.subdir == "meta":
             # meta/deps.yml is NOT auto-deployed (structural, like tasks/), but unlike a doc
             # edit it DOES change what a deploy does: `ansible/filter_plugins/toposort.py`
             # reads it for the cross-service deploy ORDER and the dep CLOSURE a scoped
             # `--tags` deploy expands. So it defer-and-alerts rather than ff-merging as an
-            # invisible graph change. (The toposort LOGIC in filter_plugins/ is already a
+            # invisible graph change. (filter_plugins/ is the toposort LOGIC and is already a
             # broad prefix; this is its DATA.)
             cs.meta.add(at.role)
         else:
@@ -517,8 +514,7 @@ def services_from_changed_paths(paths: list[str]) -> ChangeSet:
             # None is auto-deployed, and each changes what a deploy of that service does, so
             # it defer-and-alerts on the tasks channel instead of taking the silent docs-only
             # ff-merge — the same asymmetry the secrets / requirements.yml paths close. A
-            # *.md never reaches here; the single docs test at the top of the loop keeps it on
-            # the silent path.
+            # *.md never reaches here: the docs test at the top of the loop keeps it silent.
             cs.tasks.add(at.role)
     return cs
 

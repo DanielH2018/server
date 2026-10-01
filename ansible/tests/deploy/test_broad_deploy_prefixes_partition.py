@@ -14,13 +14,6 @@ subtraction, and this is the guard that it stays one.
 Run: uv run pytest ansible/tests/deploy/test_broad_deploy_prefixes_partition.py
 """
 
-import sys
-
-from _helpers import REPO
-
-sys.path.insert(0, str(REPO / "scripts"))
-sys.path.insert(0, str(REPO / "ansible/roles/setup/gitops_deploy/files"))
-
 from deploy_logic import _BROAD_DEPLOY_PREFIXES
 from deploy_tools import narrow_broad
 
