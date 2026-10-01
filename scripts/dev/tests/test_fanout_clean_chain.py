@@ -19,7 +19,6 @@ asserts the stub recorded a call, so the stub cannot silently stop being reached
 Run: uv run pytest scripts/dev/tests/test_fanout_clean_chain.py
 """
 
-import os
 import shlex
 import shutil
 import subprocess
@@ -27,6 +26,7 @@ import subprocess
 from fanout_lib.clean import remote_clean_command
 from fanout_lib.manifest import Batch
 from lib.git_testing import git, git_out, init_repo, scrubbed_env
+from lib.proc_testing import fake_bin, path_with
 
 BRANCH = "worktree-fanout-x"
 UNIT = "fanout-x"
@@ -40,7 +40,7 @@ def _scrubbed_env(extra_path=None):
     """
     env = scrubbed_env()
     if extra_path:
-        env["PATH"] = f"{extra_path}{os.pathsep}{env['PATH']}"
+        env["PATH"] = path_with(extra_path, env=env)
     return env
 
 
@@ -91,21 +91,19 @@ def _stub_bin(tmp_path, gh_prints=None, unit_active=False):
     and leakguard catches that as a live call to the forge.
     """
     bin_dir = tmp_path / "bin"
-    bin_dir.mkdir(exist_ok=True)
-    systemctl = bin_dir / "systemctl"
     is_active_rc = 0 if unit_active else 3
-    systemctl.write_text(
-        f'#!/bin/sh\necho "$@" >> {bin_dir / "systemctl-calls"}\n'
-        f'case "$2" in is-active) exit {is_active_rc} ;; esac\nexit 0\n'
+    return fake_bin(
+        bin_dir,
+        systemctl=(
+            f'#!/bin/sh\necho "$@" >> {bin_dir / "systemctl-calls"}\n'
+            f'case "$2" in is-active) exit {is_active_rc} ;; esac\nexit 0\n'
+        ),
+        gh=(
+            '#!/bin/sh\necho "gh: command not found" >&2\nexit 127\n'
+            if gh_prints is None
+            else f"#!/bin/sh\nprintf '%s' {shlex.quote(gh_prints)}\n"
+        ),
     )
-    systemctl.chmod(0o755)
-    gh = bin_dir / "gh"
-    if gh_prints is None:
-        gh.write_text('#!/bin/sh\necho "gh: command not found" >&2\nexit 127\n')
-    else:
-        gh.write_text(f"#!/bin/sh\nprintf '%s' {shlex.quote(gh_prints)}\n")
-    gh.chmod(0o755)
-    return bin_dir
 
 
 def _run_chain(repo, worktree, stub_bin):
@@ -226,12 +224,10 @@ def _stub_uv(stub_bin):
     The real interpreter leg would run `clean-one` for real; what these tests need is
     evidence the chain REACHED it, and that it did not reach it for a stub directory.
     """
-    uv = stub_bin / "uv"
-    uv.write_text(
-        f'#!/bin/sh\necho "$@" >> {stub_bin / "uv-calls"}\necho "kept: by-uv"\n'
+    return fake_bin(
+        stub_bin,
+        uv=f'#!/bin/sh\necho "$@" >> {stub_bin / "uv-calls"}\necho "kept: by-uv"\n',
     )
-    uv.chmod(0o755)
-    return stub_bin
 
 
 def test_a_directory_that_is_no_longer_a_checkout_reads_as_gone(tmp_path):

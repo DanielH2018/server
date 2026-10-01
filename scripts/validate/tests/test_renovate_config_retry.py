@@ -16,6 +16,7 @@ import subprocess
 
 import pytest
 
+from lib.proc_testing import fake_bin, path_with
 from lib.repo_paths import REPO
 
 SCRIPT = REPO / "scripts" / "validate" / "renovate_config.sh"
@@ -47,10 +48,7 @@ chmod +x "$prefix/node_modules/.bin/renovate-config-validator"
 
 @pytest.fixture
 def sandbox(tmp_path):
-    (tmp_path / "bin").mkdir()
-    npm = tmp_path / "bin" / "npm"
-    npm.write_text(FAKE_NPM)
-    npm.chmod(0o755)
+    fake_bin(tmp_path / "bin", npm=FAKE_NPM)
     shutil.copy2(SCRIPT, tmp_path / "renovate_config.sh")
     (tmp_path / "renovate.json").write_text("{}\n")
     return tmp_path
@@ -60,7 +58,7 @@ def run(
     sandbox: Path, *, npm_failures: int = 0, validator_exit: int = 0, attempts: int = 6
 ):
     env = dict(os.environ)
-    env["PATH"] = f"{sandbox / 'bin'}{os.pathsep}{env['PATH']}"
+    env["PATH"] = path_with(sandbox / "bin", env=env)
     env["CALL_LOG"] = str(sandbox / "calls.log")
     env["NPM_FAILURES"] = str(npm_failures)
     env["VALIDATOR_EXIT"] = str(validator_exit)
