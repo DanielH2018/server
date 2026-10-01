@@ -15,7 +15,7 @@
 # produced its applied manifests. `probe.py releases --stale-only` reads those records and
 # compares each one's role paths (the service's own role, plus the entry-less shared roles that
 # supply bytes to every service's manifests -- manifests, volume-claim, image-builder,
-# arr-notification, game-stats-lib; `manifest_affecting_shared_roles()` derives the set, and the
+# arr-notification; `manifest_affecting_shared_roles()` derives the set, and the
 # deploy-time roles beside them are deliberately out of it, #1636) against origin/master, and
 # since #1993 also the inventory keys and shared macros that service's render reads --
 # derived per changed path by `scripts/deploy_tools/narrow_broad.py`, the same rules the
