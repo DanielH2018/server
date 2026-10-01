@@ -77,6 +77,11 @@ def namespace() -> str:
     return host_context()["k8s_namespace"]
 
 
+def domain() -> str:
+    """`domain` at the value the render used, for a guard naming a routed hostname."""
+    return host_context()["domain"]
+
+
 def config_urls(node=None) -> set[str]:
     """Every `url` value anywhere in the tile list, however deeply nested.
 

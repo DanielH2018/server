@@ -30,7 +30,7 @@ Run: uv run pytest ansible/tests/services/test_homepage_widget_urls_carry_no_cre
 
 import re
 
-from _homepage_config import config_urls
+from _homepage_config import config_urls, domain, namespace
 
 # A query parameter whose NAME says it carries a credential. `?query=` (the Headlamp tile's
 # PromQL) is not one of these, and must stay unflagged.
@@ -38,15 +38,22 @@ CREDENTIAL_PARAM = re.compile(
     r"[?&](api_?key|apikey|token|access_token|password|passwd|secret|auth)=", re.I
 )
 
-# Non-vacuity: named URLs the census must keep finding, at their RENDERED values. A reshaped
-# tile list would otherwise leave the census empty, and an `all()` over nothing passes.
-KNOWN_URLS = frozenset(
-    {
-        "https://uptime-kuma.local.example.com",
-        "http://scrutiny.homelab.svc.cluster.local:8080",
-        "http://sonarr.homelab.svc.cluster.local:8989",
-    }
-)
+
+def known_urls() -> frozenset[str]:
+    """Non-vacuity: URLs the census must keep finding, at their RENDERED values.
+
+    A reshaped tile list would otherwise leave the census empty, and an `all()` over nothing
+    passes. The hostname's domain and namespace come from the render context rather than being
+    written out, so a member breaks when the TILE changes and not when the harness's stub
+    inventory does — the service name and port are the part this is pinning.
+    """
+    return frozenset(
+        {
+            f"https://uptime-kuma.local.{domain()}",
+            f"http://scrutiny.{namespace()}.svc.cluster.local:8080",
+            f"http://sonarr.{namespace()}.svc.cluster.local:8989",
+        }
+    )
 
 
 def urls_carrying_credentials(urls: set[str]) -> set[str]:
@@ -61,7 +68,7 @@ def test_no_widget_url_carries_a_credential_in_its_query_string():
 
 def test_the_census_still_finds_the_urls_it_is_meant_to_cover():
     """Non-vacuity. The test above passes on an empty census."""
-    assert KNOWN_URLS <= config_urls()
+    assert known_urls() <= config_urls()
 
 
 def test_the_census_reaches_a_nested_integration_url():

@@ -100,31 +100,61 @@ def test_no_override_renames_a_block_the_table_does_not_cover():
     )
 
 
+def misdirected_overrides(fields: dict[str, list[str]]) -> list[str]:
+    """One message per override whose block index does not land on the field it renames.
+
+    Pure so the rejecting halves below can hand it a swapped or truncated `fields:` list. Taking
+    the real census and a synthetic one through the same function is what makes a green run on
+    the real tree evidence that the comparison still fires.
+    """
+    out = []
+    for (fragment, index), expected in sorted(EXPECTED_LABELS.items()):
+        names = resolve(fragment, fields)
+        if len(names) < index:
+            out.append(
+                f"the CSS renames block {index} of the {fragment!r} tile, but its fields: list "
+                f"has only {len(names)} entries ({names}) — the override lands on nothing"
+            )
+        elif names[index - 1] != expected:
+            out.append(
+                f"block {index} of the {fragment!r} tile is {names[index - 1]!r} but the CSS "
+                f"renames it as though it were {expected!r} — the tile would show the new "
+                f"heading over the wrong number"
+            )
+    return out
+
+
 def test_each_override_index_lands_on_the_field_it_renames():
     """Block N of a tile must be the field EXPECTED_LABELS says the override renames."""
-    fields = tile_fields()
-    for (fragment, index), expected in EXPECTED_LABELS.items():
-        names = resolve(fragment, fields)
-        assert len(names) >= index, (
-            f"the CSS renames block {index} of the {fragment!r} tile, but its fields: list has "
-            f"only {len(names)} entries ({names}) — the override lands on nothing"
-        )
-        assert names[index - 1] == expected, (
-            f"block {index} of the {fragment!r} tile is {names[index - 1]!r} but the CSS "
-            f"renames it as though it were {expected!r} — the tile would show the new heading "
-            "over the wrong number"
-        )
+    assert misdirected_overrides(tile_fields()) == []
+
+
+def _tile_fields_with(fragment: str, names: list[str]) -> dict[str, list[str]]:
+    """The real census with the `fields:` list of the `fragment` tile replaced by `names`.
+
+    Keyed off the href the render actually produced, so a change to the tile's URL reshapes the
+    fixture with it rather than leaving two tiles matching `fragment`.
+    """
+    fields = dict(tile_fields())
+    href = next(h for h in fields if fragment in h)
+    fields[href] = names
+    return fields
 
 
 def test_a_reordered_fields_list_is_rejected():
     """The red half: swapping a tile's fields must fail the index check.
 
-    Without this there is no evidence the check above can fail — both halves of the real-file
-    assertion pass whether or not the comparison is doing anything.
+    Without this there is no evidence the check above can fail — it passes whether or not the
+    comparison is doing anything. Both of the UPS tile's overrides must be flagged, because the
+    swap moves each of its two fields onto the other's heading.
     """
-    swapped = {"https://peanut.example.com/": ["ups_status", "battery_charge"]}
-    names = resolve("peanut.", swapped)
-    assert names[0] != EXPECTED_LABELS[("peanut.", 1)], (
-        "the swapped fixture must disagree with EXPECTED_LABELS, or the real-file test proves "
-        "nothing"
-    )
+    swapped = _tile_fields_with("peanut.", ["ups_status", "battery_charge"])
+    flagged = [m for m in misdirected_overrides(swapped) if "peanut." in m]
+    assert len(flagged) == 2, flagged
+
+
+def test_an_override_landing_past_the_end_of_a_fields_list_is_rejected():
+    """The other way an override goes wrong: the block it renames no longer exists."""
+    truncated = _tile_fields_with("peanut.", ["battery_charge"])
+    flagged = [m for m in misdirected_overrides(truncated) if "lands on nothing" in m]
+    assert len(flagged) == 1, flagged
