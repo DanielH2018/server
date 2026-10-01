@@ -654,6 +654,15 @@ every node, so both hosts reach their own node's collector directly — the Dock
 dissolved/archived. The reader is the `claude-permission-audit` plugin (`/audit-permissions`),
 installed globally rather than vendored per-repo.
 
+**The plugin loads in this repo too.** `.claude/settings.json` disabled it per-project while this
+repo kept its own logger and `audit-permissions.py`, because both wrote
+`.claude/logs/permissions.json` and running the two double-logged. Retiring the logger removed
+that reason, and the entry outlived it until #3142. The plugin registers no hooks of its own: it
+ships the skill and the Loki reader, so enabling it here adds `/audit-permissions` and changes
+nothing else about a session.
+`.claude/hooks/tests/test_project_settings_shape.py::test_no_plugin_is_disabled_here_without_a_reason_on_the_list`
+fails if a disable for it comes back without a reason written here.
+
 The events land in **observability's Loki** (`observability` namespace, Service `loki`), not in
 `loki-homelab`. `probe.py loki-query` asks `loki-homelab` by default, and until #2210 a
 `{service_name="claude-code"}` query there returned a well-formed empty result that read as

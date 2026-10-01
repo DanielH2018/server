@@ -165,3 +165,51 @@ def test_the_timeout_check_reads_the_entries_it_claims_to():
     entries = hook_entries()
     assert len(entries) >= 5, "the hook walk found almost nothing — the shape changed"
     assert any(e.get("command", "").endswith("session-health.sh") for _, e in entries)
+
+
+# The project-scope plugin disables this file may carry. `superpowers` is off here by choice
+# (commit 6d84aa665). `claude-permission-audit` is the reader docs/claude-tooling.md names for
+# the OTEL `tool_decision` stream, and its `false` here outlived the double-logging it was
+# written for: this repo's own permission logger went away in fe63a79da and the entry stayed
+# until #3142. Disabling it removes `/audit-permissions` from every session opened in this repo,
+# and nothing in a session says so.
+PLUGINS_ALLOWED_TO_BE_DISABLED = frozenset({"superpowers@claude-plugins-official"})
+
+PERMISSION_AUDIT_PLUGIN = "claude-permission-audit@daniel-tools"
+
+
+def disabled_plugins(data: dict) -> set[str]:
+    """Every plugin the given settings object switches off for sessions in this repo."""
+    return {
+        name
+        for name, enabled in data.get("enabledPlugins", {}).items()
+        if enabled is False
+    }
+
+
+def test_no_plugin_is_disabled_here_without_a_reason_on_the_list():
+    unexplained = sorted(
+        disabled_plugins(json.loads(SETTINGS.read_text()))
+        - PLUGINS_ALLOWED_TO_BE_DISABLED
+    )
+    assert not unexplained, (
+        f"{SETTINGS} disables {unexplained} for every session in this repo. For "
+        f"{PERMISSION_AUDIT_PLUGIN} that removes the `/audit-permissions` reader "
+        "docs/claude-tooling.md names. Keep a disable only with its reason written in that "
+        "page's *Permission auditing* section, then name the plugin in "
+        "PLUGINS_ALLOWED_TO_BE_DISABLED."
+    )
+
+
+def test_the_disable_check_would_catch_the_permission_audit_plugin():
+    """The RED half. The check reads `false` only, so `true` and absence both pass."""
+    assert disabled_plugins({"enabledPlugins": {PERMISSION_AUDIT_PLUGIN: False}}) == {
+        PERMISSION_AUDIT_PLUGIN
+    }
+    assert PERMISSION_AUDIT_PLUGIN not in PLUGINS_ALLOWED_TO_BE_DISABLED
+
+
+def test_the_disable_check_accepts_an_enabled_plugin():
+    assert (
+        disabled_plugins({"enabledPlugins": {PERMISSION_AUDIT_PLUGIN: True}}) == set()
+    )
