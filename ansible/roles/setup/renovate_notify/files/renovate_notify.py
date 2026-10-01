@@ -39,10 +39,13 @@ from notify_logic import (
     DASHBOARD_UNPARSEABLE_MSG,
 )
 from pending_logic import (
+    churn_fingerprint,
+    churning_pending,
     parse_pending,
     pending_fingerprint,
     pending_reset_fingerprint,
     pending_section_unreadable,
+    render_churning,
     render_pending,
     render_pending_reset,
     stale_pending,
@@ -316,12 +319,16 @@ def main() -> int:
     pending_reset = pending_state_lost(seen_file, run_file)
     seen = update_pending_seen(read_pending_seen(seen_file), pending, now)
     stuck_pending = stale_pending(seen, pending, now)
+    # A tag re-pushed faster than its own soak + grace resets the dwell above forever, so the
+    # branch clock is the floor under it (#3076).
+    churning = churning_pending(seen, pending, now)
     cur_fp = (
         fingerprint(items)
         + ("|dashboard-stale" if stale else "")
         + ("|dashboard-unparseable" if unparseable else "")
         + ("|problems:" + problems_fingerprint(problems) if problems else "")
         + ("|pending:" + pending_fingerprint(stuck_pending) if stuck_pending else "")
+        + ("|pending-churn:" + churn_fingerprint(churning) if churning else "")
         # Keyed on the date the clocks become usable, so the same loss pages once. The run
         # after this one rewrites the file, the component drops, and the fingerprint moves
         # again — so expect one follow-up digest (or CLEARED_MSG) the next day. That is the
@@ -332,13 +339,14 @@ def main() -> int:
     notify, kind = should_notify(prev_fp, cur_fp)
     log(
         "actionable=%d dashboard_stale=%s problems=%d pending=%d stuck_pending=%d "
-        "unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
+        "churning=%d unparseable=%s pending_reset=%s fp=%r prev=%r -> %s"
         % (
             len(items),
             stale,
             len(problems),
             len(pending),
             len(stuck_pending),
+            len(churning),
             unparseable,
             pending_reset,
             cur_fp,
@@ -348,7 +356,14 @@ def main() -> int:
     )
 
     if notify:
-        if stale or problems or stuck_pending or unparseable or pending_reset:
+        if (
+            stale
+            or problems
+            or stuck_pending
+            or churning
+            or unparseable
+            or pending_reset
+        ):
             parts = []
             if stale:
                 parts.append(DASHBOARD_STALE_MSG % repo)
@@ -360,6 +375,8 @@ def main() -> int:
                 parts.append(render_problems(problems))
             if stuck_pending:
                 parts.append(render_pending(stuck_pending))
+            if churning:
+                parts.append(render_churning(churning))
             content = "\n\n".join(parts)
             if items:
                 content += "\n\n" + render_digest(items)

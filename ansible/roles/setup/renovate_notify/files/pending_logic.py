@@ -11,6 +11,7 @@ the pair cannot cycle. `renovate_notify.py` imports from both.
 
 from __future__ import annotations
 
+import hashlib
 from datetime import datetime, timezone
 
 # --- Pending Status Checks: updates that soak forever and never get a PR ---------------
@@ -137,16 +138,97 @@ def item_soak_days(description: str) -> int:
     return VERSION_SOAK_DAYS
 
 
+# --- Two clocks per pending item (issue #3076) ------------------------------------------
+#
+# A mutable tag's branch outlives any one digest: Renovate reuses `renovate/k8s-image-nginx`
+# across every re-push, so a dwell keyed on the branch alone measures how long SOME digest has
+# been pending. renovate-notify reported the FreshRSS cache digest stuck 18.8 days when no
+# single digest had been pending more than about 3 (#2886).
+#
+# So each item carries two first-seen stamps in the one flat `{key: epoch}` state file, in two
+# key namespaces:
+#
+#   "<branch>"                  the branch clock — when the item entered the section, never
+#                               reset by a re-push. `churning_pending` reads it.
+#   "<branch>#<content token>"  the digest clock — when the update now on the branch first
+#                               appeared. A re-push writes a new token, so this resets.
+#                               `stale_pending` reads it.
+#
+# Composite keys rather than a richer value: `read_pending_seen` filters values to int/float,
+# so a dict-valued schema would be dropped silently on read and every clock would restart at
+# zero on every run, which no check can see.
+CONTENT_KEY_SEP = "#"
+
+
+def content_key(branch: str, description: str) -> str:
+    """The digest-clock key for one pending item: its branch plus a hash of its description.
+
+    sha256 and NOT the builtin `hash()`, which is salted per interpreter process: substituting
+    it would write a different key on every run, reset the digest clock every run, and leave
+    `stale_pending` permanently unable to fire — behind a green `pending_state_lost`, which only
+    sees a lost or malformed file, never a self-rotating key. Truncated to 12 hex characters to
+    keep the state file readable; a collision only merges two clocks on one branch.
+
+    Hashed rather than carrying the digest literally because the description is all this module
+    gets, and the token that changes on a re-push is not always a digest (a version bump, a
+    grouped row's rendered name). Any change to the description is a new clock, which is the
+    rule the branch key exists to soften.
+    """
+    digest = hashlib.sha256((description or "").encode("utf-8")).hexdigest()[:12]
+    return branch + CONTENT_KEY_SEP + digest
+
+
+def _content_keys_for(prev: dict[str, float], branch: str) -> list[str]:
+    """Every digest-clock key `prev` holds for `branch`, newest-first order not implied."""
+    prefix = branch + CONTENT_KEY_SEP
+    return [k for k in prev if k.startswith(prefix)]
+
+
+def _digest_first_seen(
+    seen: dict[str, float], branch: str, description: str, now_epoch: float
+) -> float:
+    """The digest clock for one item, falling back to its branch clock, then to now.
+
+    The branch-clock fallback covers the one run where a legacy state file has not been
+    rewritten yet (`update_pending_seen` seeds the digest key, but only the run after a read of
+    the old file writes it), and reading a state file written by the pre-#3076 version at all.
+    Falling back to the branch clock over-reports, which is the behaviour this fix narrows;
+    falling back to `now_epoch` would under-report to zero, which is a check that cannot fire.
+    """
+    ckey = content_key(branch, description)
+    if ckey in seen:
+        return seen[ckey]
+    return seen.get(branch, now_epoch)
+
+
 def update_pending_seen(
     prev: dict[str, float], current: dict[str, str], now_epoch: float
 ) -> dict[str, float]:
-    """Carry each still-pending item's first-seen epoch forward; stamp new ones; drop departed ones.
+    """Carry both clocks forward for each still-pending item; stamp new ones; drop departed ones.
 
-    Pruning is what makes the dwell continuous rather than cumulative: an item that leaves the
-    section (its PR was finally raised, or the update stopped being offered) and comes back later
-    starts a fresh clock, so a resolved stall cannot re-page off its old timestamp.
+    Rebuilt from `current` rather than edited in place, so pruning covers both namespaces: an
+    item that leaves the section (its PR was finally raised, or the update stopped being
+    offered) and comes back later starts a fresh clock in both, and a superseded digest key
+    goes rather than waiting to resurrect an old clock when a tag oscillates A -> B -> A.
+
+    A legacy entry — a branch key with no digest key beside it, which is every entry written
+    before #3076 — seeds its digest clock from the branch clock instead of from now. The
+    alternative restarts all 20-odd clocks on the upgrade run and blinds the arm for up to 14
+    days, the exact failure `pending_state_lost` exists to report. The cost is that a churning
+    branch keeps over-reporting until its next re-push, one cycle at most.
     """
-    return {branch: prev.get(branch, now_epoch) for branch in current}
+    out: dict[str, float] = {}
+    for branch, desc in current.items():
+        branch_first = prev.get(branch, now_epoch)
+        ckey = content_key(branch, desc)
+        if ckey in prev:
+            out[ckey] = prev[ckey]
+        elif branch in prev and not _content_keys_for(prev, branch):
+            out[ckey] = branch_first
+        else:
+            out[ckey] = now_epoch
+        out[branch] = branch_first
+    return out
 
 
 def stale_pending(
@@ -157,6 +239,11 @@ def stale_pending(
 ) -> list[tuple[str, str, int]]:
     """(branch, description, whole days pending) for every item past its soak + `grace_days`.
 
+    The dwell is the DIGEST clock's — the age of the update now on the branch, not the age of
+    the branch (#3076). A re-push restarts it, which is what the soak it is measured against
+    means: `minimumReleaseAge` applies to the version on the branch. The branch that churns so
+    fast that no digest ever ages out is `churning_pending`'s subject, not this one's.
+
     Sorted longest-pending first, so the digest names the worst offender before any truncation.
     An item with no first-seen entry is treated as first seen now (dwell 0), not as infinitely
     old — the first run after this ships seeds an empty state file and must not page for all of
@@ -164,7 +251,7 @@ def stale_pending(
     """
     out = []
     for branch, desc in current.items():
-        days = (now_epoch - seen.get(branch, now_epoch)) / 86400
+        days = (now_epoch - _digest_first_seen(seen, branch, desc, now_epoch)) / 86400
         if days > item_soak_days(desc) + grace_days:
             out.append((branch, desc, int(days)))
     return sorted(out, key=lambda item: (-item[2], item[0]))
@@ -266,3 +353,109 @@ def pending_reset_fingerprint(now_epoch: float) -> str:
     (it pushes the date out), while the same loss cannot page twice on one day.
     """
     return pending_clock_ready(now_epoch, VERSION_SOAK_DAYS)
+
+
+# --- The branch that churns indefinitely (issue #3076) ----------------------------------
+#
+# Splitting the dwell onto the digest clock closes the over-report and opens a hole: a tag
+# re-pushed faster than its own soak + grace never lets any one digest age out, so
+# `stale_pending` can never fire for it however long the branch sits there. `nginx:alpine` is
+# the live case — re-pushed about every 3.6 days against the 1-day soak and 7-day grace
+# `FAST_DIGEST_SOAK_DAYS` records, so its digest clock resets at roughly half the threshold,
+# forever. This arm is the floor under that: it pages on the BRANCH clock.
+#
+# DECIDED: the churn allowance is three times the item's own soak + grace, not a flat day
+# count. Three consecutive full allowances elapsed with the item never once leaving the section
+# says the stall is the branch's, not this digest's — one allowance could be a single unlucky
+# re-push landing mid-soak. Keeping it a multiple of the per-item allowance preserves
+# `PENDING_GRACE_DAYS`'s rule that the threshold derives from the soak that applies: 24 days for
+# an `nginx:alpine` row, 30 for an ordinary digest row, 42 for a version row. Rejected
+# alternative: page as soon as the branch clock passes soak + grace, which is just the
+# pre-#3076 over-report back again under a new name.
+PENDING_CHURN_MULTIPLIER = 3
+
+
+def churning_pending(
+    seen: dict[str, float],
+    current: dict[str, str],
+    now_epoch: float,
+    grace_days: int = PENDING_GRACE_DAYS,
+    multiplier: int = PENDING_CHURN_MULTIPLIER,
+) -> list[tuple[str, str, int, int]]:
+    """(branch, description, branch days, digest days) for every endlessly churning item.
+
+    An item `stale_pending` already reports is left out: the two arms page about the same row
+    for different reasons, and reporting it twice in one digest tells the operator nothing the
+    first line did not. Sorted longest-churning first, like `stale_pending`.
+    """
+    stuck = {
+        branch
+        for branch, _desc, _days in stale_pending(seen, current, now_epoch, grace_days)
+    }
+    out = []
+    for branch, desc in current.items():
+        if branch in stuck:
+            continue
+        allowance = (item_soak_days(desc) + grace_days) * multiplier
+        branch_days = (now_epoch - seen.get(branch, now_epoch)) / 86400
+        if branch_days <= allowance:
+            continue
+        digest_days = (
+            now_epoch - _digest_first_seen(seen, branch, desc, now_epoch)
+        ) / 86400
+        out.append((branch, desc, int(branch_days), int(digest_days)))
+    return sorted(out, key=lambda item: (-item[2], item[0]))
+
+
+def churn_fingerprint(items: list[tuple[str, str, int, int]]) -> str:
+    """Dedupe key for the churning set: whole weeks of BRANCH dwell, so it re-pages weekly.
+
+    The digest dwell is deliberately out of it — it resets every few days by construction, and
+    folding it in would re-page on every re-push, which is the noise this arm exists to avoid.
+    """
+    return ",".join(
+        sorted(
+            "%s:%dw" % (branch, bdays // 7) for branch, _desc, bdays, _ddays in items
+        )
+    )
+
+
+CHURN_HEADER_MSG = (
+    "\U0001f501 Renovate — pending update(s) whose branch keeps churning (every re-push "
+    "restarts the soak, so no single digest ever ages out):"
+)
+
+
+CHURN_REMEDY = (
+    "   The branch has sat in Pending Status Checks across many re-pushes. Tick its box on "
+    "the Dependency Dashboard to force the PR, or shorten that package's minimumReleaseAge."
+)
+
+
+def render_churning(items: list[tuple[str, str, int, int]], limit: int = 1200) -> str:
+    """Render the churning list into a Discord message, truncated to `limit` characters.
+
+    A third section that can join the other two into one post, so it bounds itself for
+    `render_pending`'s reason — and lower, because it is the least urgent of the three.
+    """
+    out = [CHURN_HEADER_MSG]
+    shown = 0
+    for branch, desc, branch_days, digest_days in items:
+        line = (
+            " \u2022 %s \u2014 branch pending %d days, the digest on it only %d (%s)"
+            % (
+                desc or branch,
+                branch_days,
+                digest_days,
+                branch,
+            )
+        )
+        # Leave room for the "…and N more" tail and the remedy line.
+        if len("\n".join(out + [line, CHURN_REMEDY])) > limit - 30:
+            break
+        out.append(line)
+        shown += 1
+    if shown < len(items):
+        out.append("\u2026and %d more" % (len(items) - shown))
+    out.append(CHURN_REMEDY)
+    return "\n".join(out)

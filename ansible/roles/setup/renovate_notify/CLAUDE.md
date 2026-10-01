@@ -6,7 +6,7 @@ changes**. It is the reporting half of the pair whose acting half is `setup/reno
 this role says what is open and what needs manual work, that one does it.
 
 Runs on exactly one host, `renovate_notify_host` (`inventory/group_vars/all.yml`, daniel-box):
-the query is fleet-wide, so a second host would duplicate every notification.
+the query is fleet-wide, so a second host duplicates every notification.
 
 Invoked from `initial_setup.yml`, **not** `deploy.yml` — the role is not in
 `containers_list`, so `./scripts/deploy.sh --tags renovate_notify` exits 2 on an unmatched
@@ -22,7 +22,7 @@ change here applies on the next tick without a hand deploy.
 
 **Every task notifies `Run renovate-notify once`,** so a deploy of this role is never silent:
 it kicks a real GitHub query and, if the fingerprint moved, a real Discord post. The sibling
-`renovate_agent` has no run-once handler because its run costs money and changes the fleet.
+`renovate_agent` has no such handler — its run costs money and changes the fleet.
 
 The working-out behind the rules below is `docs/renovate-notify-internals.md`: the sandbox's
 two overrides, the dashboard parsers, the module layout and what a dry run does not prove.
@@ -36,7 +36,7 @@ two overrides, the dashboard parsers, the module layout and what a dry run does 
 
 ## What it watches, and why each arm exists
 
-Three signals, all read from the same repo, each blind to what the others see:
+Three signals, read from the same repo, each blind to what the others see:
 
 | Arm | Reads | The failure it exists to catch |
 |---|---|---|
@@ -51,54 +51,57 @@ both blocks and why a lookup failure leaves the other two arms quiet.
 ## The stuck-pending clock, and the two ways it goes inert
 
 A fourth arm reads the dashboard's `## Pending Status Checks` section and pages when an item
-outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886 — promtail sat 111 days
-against a 7-day soak). It measures dwell, so it needs state:
-`/var/lib/renovate-notify/pending_seen.json` holds each pending branch's first-seen epoch, and
-`write_pending_seen` writes it on every run regardless of what was posted. That state is the
-arm's single point of failure, and it fails silently in two shapes:
+outlives its `minimumReleaseAge` plus `PENDING_GRACE_DAYS` (issue #886). It measures dwell, so it needs state:
+`/var/lib/renovate-notify/pending_seen.json` holds two first-seen epochs per item, and
+`write_pending_seen` writes it every run whatever was posted. That state is the arm's single
+point of failure, failing silently in two shapes:
 
 - **A renamed marker empties the parse** (#1472). `pending_section_unreadable` and
   `dashboard_headers_unrecognized` are the runtime non-vacuity checks for that.
-- **A lost `pending_seen.json` restarts every clock at zero.** `stale_pending` treats an item
-  with no entry as first seen now, so a wiped state file looks like a bootstrap;
-  `pending_state_lost` tells the two apart using `last_run`, and the digest names the date the
-  clocks become usable again (#1526).
+- **A lost `pending_seen.json` restarts every clock at zero**, which reads exactly like the
+  intended bootstrap: `stale_pending` treats an item with no entry as first seen now.
+  `pending_state_lost` tells the two apart using `last_run` (#1526).
 
-**Two packages soak less than the digest default.** `renovate.json` soaks the nginx alpine
-digests 1 day rather than 3, because upstream re-pushes those tags about every 3.6 days (#2886),
-and `files/pending_logic.py:FAST_DIGEST_SOAK_DAYS` is this arm's copy of that exception —
+**Each item carries two clocks** (#3076), because a mutable tag's branch outlives any one
+digest: `files/pending_logic.py:content_key` keys the dwell on the update, so a re-push resets
+it, and `files/pending_logic.py:churning_pending` pages off the branch clock for a tag re-pushed
+faster than its own soak.
+
+**Two packages soak less than the digest default.**
+`files/pending_logic.py:FAST_DIGEST_SOAK_DAYS` is this arm's copy of the 1-day nginx alpine
+exception `renovate.json` carries (#2886) —
 `tests/test_pending_soak.py::test_soak_constants_match_renovate_json` fails when the two
 disagree.
 
 **A grouped row carries no update type, so it takes the digest soak.**
 `ansible/roles/setup/renovate_notify/files/pending_logic.py:GROUPED_TITLE_MARKER` is the
-parenthetical `item_soak_days` matches; the cost, weighed in the `DECIDED:` comment there, is a
-grouped VERSION bump paging four days early.
+parenthetical `item_soak_days` matches; the cost, in the `DECIDED:` comment there, is a grouped
+VERSION bump paging four days early.
 
-Both failure shapes with their measurements, the grouped row that alerted four days late
-(#2885) and why a reset posts twice are in `docs/renovate-notify-internals.md`.
+Every measurement behind this section — both failure shapes, the dwell that over-reported 18.8
+days, the grouped row four days late (#2885), why a reset posts twice — is in
+`docs/renovate-notify-internals.md`.
 
 ## Notification is fingerprint-gated, not state-gated
 
 `fingerprint()` is the whole dedupe: the digest posts when the fingerprint changes and stays
 silent when it does not, so **a standing problem goes quiet after one page** and a new problem
-beside it re-pages. Two deliberate qualifications: `stuck` PRs carry a coarse age dimension so
-one broken for weeks re-pages at 1/3/7/14 days, and the fingerprint persists only on confirmed
-delivery, so a failed Discord post retries on the next run rather than being lost.
+beside it re-pages. Two qualifications: `stuck` PRs carry an age dimension, so one broken for
+weeks re-pages at 1/3/7/14 days, and the fingerprint persists only on confirmed delivery, so a
+failed Discord post retries next run.
 
 ## Liveness, and the sandbox
 
 `ExecStartPost` beats a Kuma push monitor ("Renovate Notifier — Alive", token
 `monitor_bridge_renovate_alive_push_token`) and runs only when `ExecStart` succeeded, so a
 crash pages twice — `OnFailure=renovate-notify-alert.service` and the missed 36h beat.
-**That monitor watches the notifier, not Renovate**, and it greens regardless of Discord
-delivery.
+**That monitor watches the notifier, not Renovate**, and greens whatever Discord did.
 
 The unit is sandboxed (`ProtectSystem=strict` + `ProtectHome=read-only`), and two overrides
 are load-bearing: `UV_CACHE_DIR=/tmp/uv-cache`, without which the unit dies with exit 2 before
 Python starts on every tick, and the Kuma push URL reaching curl on stdin (`-K -`) rather than
 in argv, where any local user could read the token. `docs/renovate-notify-internals.md` has
-both, and what covers the gaps the alive monitor leaves.
+both, and the gaps the alive monitor leaves.
 
 ## Working on it
 
@@ -113,13 +116,13 @@ uv run python ansible/roles/setup/renovate_notify/files/renovate_notify.py --dry
 ```
 
 **A dry run proves only the paths today's dashboard exercises,** and `--check` fails at
-"Enable and start the timer" without that being a bug in the role. Both, plus the
-captured-fixture rule a new parsing arm meets, are in `docs/renovate-notify-internals.md`.
+"Enable and start the timer", which is not a bug. Both, plus the captured-fixture rule a new
+parsing arm meets, are in `docs/renovate-notify-internals.md`.
 
 ## Verifying a deploy took effect
 
 The role installs to `/opt/renovate-notify/`, its state to `/var/lib/renovate-notify/`.
-`last_run` is written **only on clean completion**, so its mtime is the honest signal that the
+`last_run` is written **only on clean completion**, so its mtime is the honest signal the
 deployed code ran end-to-end:
 
 ```bash
