@@ -302,18 +302,18 @@ class ChangeSet:
     secrets: bool = False
     pi_shared: bool = False  # a `_PI_SHARED_PREFIX` change: merged, never applied here
     # `tasks` is the defer-and-alert channel for a service's structural, not-auto-deployed dirs:
-    # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …). The alert names all
-    # of them, so the field keeps its name for continuity even though it's no longer tasks/-only.
+    # tasks/ plus the role-root catch-all (defaults/, vars/, handlers/, …), named for history.
     tasks: set[str] = field(default_factory=set)
     meta: set[str] = field(default_factory=set)
     # k8s-platform role(s) that changed (ansible/roles/k8s/<role>/...) and are not promoted to
     # `k8s_deploy` below. Each defer-and-alerts; nothing this tick applies can cover one.
     k8s: set[str] = field(default_factory=set)
     # k8s service(s) whose change is an image-pin bump ELIGIBLE for auto-deploy, split out of
-    # `k8s` by split_k8s_auto_deploy. `k8s` keeps its "defer-and-alert, never applied" meaning,
-    # so every existing consumer of that field is unchanged and this stays inert until a service
-    # actually qualifies.
+    # `k8s` by split_k8s_auto_deploy; `k8s` keeps its "defer-and-alert, never applied" meaning.
     k8s_deploy: set[str] = field(default_factory=set)
+    # The newest commit in the range whose own diff reaches each `k8s` service, which
+    # `k8s_unapplied` records instead of the tip (#3111). `deploy_phases.plan_tick` fills it.
+    k8s_origins: dict[str, str] = field(default_factory=dict)
     # k8s roles that import a changed `files/*.py` owned by another role — see
     # shared_module_consumers. Kept separate from `k8s` so it stays inert for every consumer
     # that reads `k8s` directly; only k8s_remediation folds it in, and only after

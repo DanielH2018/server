@@ -45,6 +45,8 @@ class ScriptedTick:
         dirty: whether `git status --porcelain` reports anything.
         ci: what the CI gate reports for origin.
         paths: what `git diff --name-only local..origin` lists.
+        commits: `(sha, paths)` per commit, newest first, for the per-commit `git log`; None
+            reads as one commit at `origin` carrying `paths`, the range as one change.
         files: `"<ref>:<path>"` to the content `git show` returns for it.
         tree_listing: what `git ls-tree` at origin lists under roles/k8s/.
         diffs: k8s service to the `-U0` diff of its defaults file across the range. Every
@@ -78,6 +80,7 @@ class ScriptedTick:
         # no GitHub request at all.
         self.authenticated = True
         self.paths: list[str] = []
+        self.commits: list[tuple[str, list[str]]] | None = None
         self.files: dict[str, str] = {}
         self.tree_listing = ""
         self.diffs: dict[str, str] = {}
@@ -130,6 +133,11 @@ class ScriptedTick:
             return self.origin if argv[2].startswith("origin/") else self.head
         if sub == "diff" and argv[2] == "--name-only":
             return "\n".join(self.paths)
+        if sub == "log" and "--name-only" in argv:
+            commits = self.commits
+            if commits is None:
+                commits = [(self.origin, self.paths)]
+            return "\n".join(f"@@{sha}\n" + "\n".join(ps) for sha, ps in commits)
         if sub == "diff" and argv[2] == "-U0":
             service = argv[-1].split("/")[3]
             # No `.get(..., "")` default. An empty diff is a REAL production answer (the
@@ -314,6 +322,8 @@ def build_tools(scripted: ScriptedTick) -> DeployTools:
         narrow_setup_role=scripted.narrow_setup_role,
         # The host's render records, read for a log line alone, so no tick test reads them.
         digest_diff=lambda _ref: {},
+        # A subprocess over the real tree; no tick test discharges by an own-role digest.
+        digest_provable=lambda _repo, _roles: set(),
         emit_deploy_annotation=scripted.emit_deploy_annotation,
         now=scripted.now,
     )
