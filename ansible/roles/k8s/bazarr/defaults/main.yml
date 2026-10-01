@@ -29,7 +29,7 @@ bazarr_k8s_claim: bazarr-config
 # incremental backups bound bandwidth, not transactions. Returned the same day: the exclusion left
 # this volume with a single frozen 08-08 restore point, and whether steady-state incrementals are
 # actually the problem cannot be read off anything Longhorn or B2 expose. So it is being tested
-# rather than assumed, with B2 Reachable as the readout. docs/b2-transaction-cap-monitoring-gaps.md.
+# rather than assumed, with B2 Reachable as the readout. docs/archive/b2-transaction-cap-monitoring-gaps.md.
 bazarr_k8s_storage_class: longhorn
 
 # Mounted at /data/media via subPath — NOT the whole tree. bazarr never imports, so it has no

@@ -29,8 +29,8 @@
 > *monitoring* lessons, which still apply; the remediation steps that say `docker stop kopia` /
 > `deploy.yml --tags kopia` on daniel-server can no longer be run — that host has no Docker and
 > no kopia (the kopia role is archived). Current backup docs:
-> [`longhorn-backup-tiering.md`](longhorn-backup-tiering.md) and
-> [`longhorn-disaster-recovery.md`](longhorn-disaster-recovery.md).
+> [`longhorn-backup-tiering.md`](../longhorn-backup-tiering.md) and
+> [`longhorn-disaster-recovery.md`](../longhorn-disaster-recovery.md).
 
 Backblaze B2 hit an **account transaction cap** on 2026-08-02. Every backup tier stopped
 working: Kopia could not read its own repository blob, and Longhorn could not list its backup

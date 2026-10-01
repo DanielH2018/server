@@ -140,7 +140,7 @@ the per-volume map and each exclusion's rationale:
 
    Mind the B2 transaction caps: a full-restore day is exactly when the cap can bite
    again, and the storm ratchet is documented in
-   [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md).
+   [`b2-transaction-cap-monitoring-gaps.md`](archive/b2-transaction-cap-monitoring-gaps.md).
 
    **A cap denial does NOT surface as a 403 here.** The denied metadata GET arrives as
    `cannot find volume.cfg in backupstore` — which reads exactly like the backup is

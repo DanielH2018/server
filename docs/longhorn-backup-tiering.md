@@ -8,7 +8,7 @@
 > the seventh cap event was drained, and the weekly B2 shard schedule below is now current
 > behaviour rather than design. See *The transaction budget* section for what the backlog was
 > and why draining it was the precondition, and
-> [`b2-transaction-cap-monitoring-gaps.md`](b2-transaction-cap-monitoring-gaps.md) for the
+> [`b2-transaction-cap-monitoring-gaps.md`](archive/b2-transaction-cap-monitoring-gaps.md) for the
 > monitoring history.
 
 2026-08-12, after the fifth B2 transaction-cap event. The operator declined to raise the

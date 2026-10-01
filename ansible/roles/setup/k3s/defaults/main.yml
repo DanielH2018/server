@@ -808,7 +808,7 @@ k3s_longhorn_snapshot_reap_min_age_days: 3
 k3s_longhorn_snapshot_reap_delete_timeout: 120s
 
 # Daily-backup-volume budget, added 2026-08-08 after B2's TRANSACTION cap fired for the second
-# time (docs/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
+# time (docs/archive/b2-transaction-cap-monitoring-gaps.md, gap G2 — bytes were monitored, transactions
 # were not). B2 exposes no cap-headroom API, so nothing can measure the remaining allowance
 # directly; what CAN be watched is the input that grew. Longhorn's daily run went 4 -> 7 -> 15
 # backups over three days as slice 4 moved config PVCs into the cluster, and the free tier's

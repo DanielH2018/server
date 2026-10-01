@@ -265,11 +265,10 @@ nav:
       - Break glass: break-glass.md
   # Work that shipped, a spike that concluded and an incident that closed: kept as the record,
   # not as instructions. Operations holds only pages that describe the lab as it runs.
-  # The archive index lists every archived plan and names where its live documentation went;
-  # the pages under it stay off the nav (see not_in_nav above). The page after it is history
-  # as well but keeps its docs/ path, and the index's *History outside this directory*
-  # section says why. The #2245 runner spike used to sit beside it; ADR-0018 recorded the
-  # repository-visibility decision its verdict waited on, so the page moved into the archive.
+  # The archive index lists every archived plan and names where its live documentation went,
+  # and the pages under it stay off the nav (see not_in_nav above). So this heading is the
+  # index alone. Two pages used to sit beside it: the #2245 runner spike, which moved into
+  # the archive once ADR-0018 recorded the repository-visibility decision its verdict waited
+  # on, and the 2026-08-02 B2 transaction-cap incident record, which #2821 moved there too.
   - History:
       - Archive index: archive/README.md
-      - "B2 transaction cap incident, 2026-08-02": b2-transaction-cap-monitoring-gaps.md

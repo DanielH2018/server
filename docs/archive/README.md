@@ -51,6 +51,7 @@ recording rather than that nobody looked.
 | `kopia-disaster-recovery.md` | retired 2026-08-13 and fully historical since 2026-08-14 (marked in the file itself) | `docs/longhorn-disaster-recovery.md`, its successor | [ADR-0014](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md) |
 | `b2-api-drain-scoping.md` | built as `scripts/backup/b2_drain.py`, run by `ansible/prune_backups.yml`'s `b2-drain` mode | the `b2_drain.py` docstring and the playbook's header | — |
 | `self-hosted-runner-spike.md` | the #2245 spike concluded 2026-09-22 and its issue closed; no runner was built | ADR-0018 states the repository-visibility decision the verdict waited on, and this page holds the measurements behind it | [ADR-0018](../adr/0018-the-repository-stays-public-and-ci-stays-hosted.md) |
+| `b2-transaction-cap-monitoring-gaps.md` | the 2026-08-02 B2 transaction-cap incident closed; B2 re-armed 2026-08-17 and no eighth event has followed | `docs/longhorn-backup-tiering.md`, `docs/longhorn-disaster-recovery.md`, `docs/monitor-bridge-checks.md` | [ADR-0014](../adr/0014-kopia-retired-longhorn-owns-the-b2-credentials.md); the `transactions` comment in `ansible/roles/setup/k3s/defaults/main.yml` |
 
 `docs/superpowers/plans/` and `docs/superpowers/ledgers/` are **not** in this archive: that
 directory is gitignored (`.gitignore:6`, see commit `eadfdd57`) and untracked, so
@@ -62,19 +63,14 @@ files as GitHub Issues via `scripts/dev/findings.py`.
 describes the enforced end state rather than the plan to reach it, so it reads as current
 documentation and not as history.
 
-## History outside this directory
-
-One page is history and still sits directly under `docs/`. The site lists it under
-*History*, beside this index, so the Operations section holds only pages that describe the
-lab as it runs.
-
-- `docs/b2-transaction-cap-monitoring-gaps.md` is the record of the 2026-08-02 B2 cap
-  incident. Comments in monitor-bridge's `files/gates.py` and `files/bridge/config_io.py`
-  cite it by path, and so do the defaults of eight k8s media roles and the `setup/k3s` role.
-  Moving it rewrites those comments. The monitor-bridge files feed the pod's `check-script`
-  checksum, so the edit restarts monitor-bridge on its next deploy, and the eight media roles
-  join the deployer's changed set for a comment. That is the same trade the `slice-` decision
-  above records.
+`b2-transaction-cap-monitoring-gaps.md` held its `docs/` path longer than the rest, because
+shipped code cites it by path. Comments in monitor-bridge's `files/gates.py` and
+`files/bridge/config_io.py` cite it, and so do the defaults of eight k8s media roles and the
+`setup/k3s` role. The monitor-bridge files feed the pod's `check-script` checksum, so
+repointing them restarted monitor-bridge on the next deploy, and the eight media roles joined
+the deployer's changed set for a comment. That is the same trade the `slice-` decision above
+records; the operator accepted it in #2821 rather than waiting for another change to those
+files.
 
 `staging-phase-c.md` is here because #2859 retired what it specced: the GitOps tick's staging
 arm. `staging-cluster.md` followed it a day later — #2941 retired the cluster the arm gated,

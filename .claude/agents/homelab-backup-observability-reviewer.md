@@ -22,7 +22,7 @@ operator's time).
   the TSDBs (prometheus, loki, tempo, scrutiny-influxdb), uptime-kuma-data, and crowdsec-db.
   The Pi's data is covered separately by the `k8s/pi-peer-backup` CronJob.
 - **B2 is now a single-consumer account** (Longhorn only). The historical transaction-cap
-  incidents in `docs/b2-transaction-cap-monitoring-gaps.md` were driven by Kopia and Longhorn
+  incidents in `docs/archive/b2-transaction-cap-monitoring-gaps.md` were driven by Kopia and Longhorn
   contending for one cap; that contention is gone. `check_b2_reachable` remains.
 - **Monitoring: Uptime-Kuma** (k8s, AutoKuma file-provisioned monitors), the **cluster
   Grafana/Loki/Prometheus** (`k8s/observability` + `k8s/loki-homelab` roles — the Docker
