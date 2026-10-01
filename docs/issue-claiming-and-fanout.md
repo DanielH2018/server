@@ -197,7 +197,7 @@ view at once — invisible rather than wrong, which is harder to notice.
 body's `Closes #<n>`, which GitHub honours — posts no release comment at all and leaves the
 label on; `open` then reopens that issue for a later re-observation and the stale claim comes
 back LIVE, blocking `claim` and withholding the issue from `next` for as long as the claiming
-worktree exists. Both paths now go through one helper, `_release_held_claim`, and release
+worktree exists. Both paths now go through one helper, `plan_release_held`, and release
 whoever holds the claim rather than only the caller.
 
 `verify --close` was a third such path, and grew a live-claim refusal of its own in #1302 so

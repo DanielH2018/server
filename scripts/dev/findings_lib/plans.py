@@ -97,13 +97,31 @@ def plan_defer(
     return plans
 
 
+def plan_release_held(issue: dict, *, when: str, reason: str) -> list[list[str]]:
+    """The gh argv releasing whatever claim ``issue`` carries, or ``[]`` when it carries none.
+
+    Releases whoever holds it, not just the caller's own worktree. `claims`, `reap` and
+    `next` all read OPEN issues, so a claim left on a closed one is invisible to every view
+    at once — wrong rather than merely stale, and unreapable.
+
+    Shared by `close`, `open`'s reopen path and `manual` (#1277). A `Closes #<n>` merge strands
+    a claim too, and `plan_open` reopening that issue for a later re-observation brought the
+    stale claim back LIVE, blocking `claim` and withholding the issue from `next` for as long
+    as the claiming worktree existed.
+    """
+    held = current_claim(issue)
+    if not held:
+        return []
+    return plan_release(issue, worktree=held, when=when, reason=reason)
+
+
 def plan_manual(issue: dict, *, clear: bool) -> list[list[str]]:
     """Plans the gh argv that reserves ``issue`` for the operator, or hands it back.
 
     `next` withholds a `manual` issue and `claim` refuses one. Unlike `not-before:`, nothing
     expires it, so `--clear` is the only way back. The comment records the change in the
     thread, as `plan_defer`'s does. Releasing a claim the issue already carries is the
-    caller's job (`findings._release_held_claim`), since `reap` skips `manual` issues.
+    caller's job (`plan_release_held`), since `reap` skips `manual` issues.
 
     Raises:
         ClaimRefused: the issue is closed, already `manual`, or `clear` finds no label.
