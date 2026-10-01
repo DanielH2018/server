@@ -193,3 +193,22 @@ claude_code_login_caps_enabled: true
 # here: it would need `become: true` just to read NSS and would make the render tests below
 # depend on a fact rather than a plain default.
 claude_code_login_uid: 1000
+
+# ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
+# Sessions on each host read that host's own ~/.claude memory store, and nothing kept the two
+# in step: on 2026-10-01 daniel-server's and daniel-box's stores shared 2 of 85 and 66 file
+# names, and daniel-server's index told sessions to stay on master. The operator chose
+# daniel-box as the source and a one-way, overwriting copy, so this is true only in
+# daniel-box's host_vars. False stops and disables the timer and removes its units.
+claude_code_memory_sync_enabled: false
+
+# The ssh destination the store is copied to, as this host's user resolves it.
+claude_code_memory_sync_target: daniel-server
+
+# The store's directory, the same path on both hosts. Claude Code keys a project's store by
+# its working directory with every `/` turned into `-`, so it derives from the checkout.
+claude_code_memory_sync_dir: "/home/{{ sys_user }}/.claude/projects/{{ claude_code_rc_workdir | replace('/', '-') }}/memory"
+
+# How often the copy runs, as a systemd time span. A memory written here reaches the other
+# host's next session within this interval.
+claude_code_memory_sync_interval: 15min

@@ -1,7 +1,8 @@
 # `setup/claude_code` — Claude Code install + the Remote Control host
 
-Two things live here: the **install** (native installer, per-user, auto-updating) and
-**`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone.
+Three things live here: the **install** (native installer, per-user, auto-updating),
+**`claude-rc.service`**, the Remote Control host that lets sessions be created from a phone, and
+**`claude-memory-sync.timer`**, which copies daniel-box's Claude memory store to daniel-server.
 
 Runs on every host with `has_claude_code: true` — daniel-box and daniel-server, each carrying its own
 cap numbers in its own host_vars. The unit is enabled only where `claude_code_rc_enabled` is also
@@ -19,19 +20,16 @@ verify a caps deploy from cgroupfs.
 ## At a glance
 <!-- generated_from: scripts/docs/gen_role_glance.py -- do not edit between this line and the closing marker. Regenerate with `uv run python scripts/docs/gen_role_glance.py` after changing this role's tasks, timer templates, defaults or playbook entry, or a schedule var in group_vars/all.yml. -->
 - **Applied by:** `initial_setup.yml --tags "claude_code"` when `has_claude_code`
-- **Timers (2):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+- **Timers (3):** `claude-cgroup-metrics.timer` (`OnBootSec=30s`, `OnUnitActiveSec=30s`),
+  `claude-memory-sync.timer` (`OnBootSec=5min`, `OnUnitActiveSec=15min`),
   `claude-rc-restart.timer` (`OnCalendar=weekly`)
 <!-- /generated_from -->
 
 ## The two Remote Control modes are different features
 
-- `/remote-control` **inside a running session** publishes that one session to your phone, as
-  `remoteControlAtStartup` does for every terminal session here.
-- `claude rc` **from a shell** is a persistent server: one pre-created session, the rest spawned
-  **on demand** up to `--capacity`. `claude-rc.service` supervises this one, and only this one lets a
-  session be created from the phone.
-
-Claude Code ships no always-on host to enable, which is why systemd supervises one.
+`/remote-control` **inside a running session** publishes that one session to the phone. `claude rc`
+**from a shell** is a persistent server that spawns sessions **on demand** up to `--capacity`; only
+it lets the phone create a session, and Claude Code ships no always-on host, so systemd runs one.
 
 ## Activating it
 
@@ -100,9 +98,18 @@ One number for both Claude cgroups, on the one slice that parents both:
 line, the per-plane caps remain as sub-bounds, and `claude_code_fleet_caps_enabled: false` removes
 both.
 
-**`user-<uid>.slice` cannot be reparented** — a slice's parent is its name — which is why the RC unit
-is what moves, and **sharing a variable is not sharing a cap**: rendered at two sibling cgroups under
-different parents, one number bounds each plane separately and the fleet's throttle point is the sum
-(#1264). **Re-derive the number in `defaults/main.yml`**, never from a summary. **The `Slice=` line
-takes effect at the next start**, so the deploy that changes it drops the sessions the RC host had
-spawned; verify from cgroupfs rather than `systemctl show`, which the docs page covers.
+**Re-derive the number in `defaults/main.yml`**, never from a summary. **The `Slice=` line takes
+effect at the next start**, so the deploy that changes it drops the RC host's sessions. The docs
+page has why `user.slice` is the only possible parent, why a shared variable is not a shared cap
+(#1264), and how to verify from cgroupfs.
+
+## Autonomous-role contract (`claude-memory-sync` overwrites a store on another host)
+
+- **Scope:** `rsync --delete` of `claude_code_memory_sync_dir` to the same path on
+  `claude_code_memory_sync_target`, one-way. A memory a daniel-server session writes is lost
+  at the next run, by the operator's decision (#3123); `docs/claude-memory-sync.md` has why.
+- **Mode:** `claude_code_memory_sync_enabled`, true only in daniel-box's host_vars; false
+  stops the timer and removes its units.
+- **Abort valve:** the unit skips unless the source `MEMORY.md` is non-empty.
+- **Evidence:** `journalctl -u claude-memory-sync` lists each file a run changed or deleted;
+  a failure pages Discord.

@@ -1,0 +1,21 @@
+[Unit]
+Description=Copy the Claude memory store from {{ inventory_hostname }} to {{ claude_code_memory_sync_target }}
+OnFailure=claude-memory-sync-alert.service
+
+[Service]
+Type=oneshot
+# As the user that owns the store: the copy authenticates with that user's ssh key, and the
+# files on the far side must stay owned by the same account.
+User={{ sys_user }}
+# DECIDED: one-way and overwriting (operator, issue #3123). This host is the only writer that
+# counts; a file a session on {{ claude_code_memory_sync_target }} wrote is replaced or deleted
+# on the next run. --delete is what makes the far store MATCH rather than keep entries this
+# host archived. An empty or missing source must never reach --delete, which would wipe the
+# far store, so the condition skips the run unless the index exists and is non-empty.
+ExecCondition=/usr/bin/test -s {{ claude_code_memory_sync_dir }}/MEMORY.md
+# --itemize-changes puts every overwritten or deleted file in the journal, the only record of
+# what a far-side write lost. BatchMode makes a missing key fail instead of prompting.
+ExecStart=/usr/bin/rsync -a --delete --mkpath --itemize-changes \
+  -e "ssh -o BatchMode=yes -o ConnectTimeout=20" \
+  {{ claude_code_memory_sync_dir }}/ \
+  {{ claude_code_memory_sync_target }}:{{ claude_code_memory_sync_dir }}/

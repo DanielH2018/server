@@ -334,6 +334,73 @@
   become: false
   when: not claude_code_login_caps_enabled
 
+# ── Memory store copy (issue #3123) ─────────────────────────────────────────────────────
+# Copies this host's Claude memory store to claude_code_memory_sync_target, one-way and
+# overwriting. Armed only in daniel-box's host_vars; see defaults/main.yml and this role's
+# CLAUDE.md contract. The alert unit reads the webhook file written above.
+
+- name: Install the memory store copy units
+  tags: [claude_code]
+  ansible.builtin.template:
+    src: "{{ item }}.j2"
+    dest: "/etc/systemd/system/{{ item }}"
+    owner: root
+    group: root
+    mode: "0644"
+  loop:
+    - claude-memory-sync.service
+    - claude-memory-sync.timer
+    - claude-memory-sync-alert.service
+  become: true
+  when: claude_code_memory_sync_enabled
+  notify: Reload systemd
+
+- name: Enable and start the memory store copy timer
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-memory-sync.timer
+    enabled: true
+    state: started
+    daemon_reload: true
+  become: true
+  when: claude_code_memory_sync_enabled
+
+# The way out: false stops the timer and removes all three units, so a disarmed host is left
+# with nothing that could copy. The far store keeps whatever the last run wrote.
+- name: Check whether a memory store copy timer is installed
+  tags: [claude_code]
+  ansible.builtin.stat:
+    path: /etc/systemd/system/claude-memory-sync.timer
+  register: claude_code_memory_sync_timer_file
+  become: true
+  when: not claude_code_memory_sync_enabled
+
+# Guarded on the file: systemd refuses to stop a unit it has never heard of, which is every
+# host that was never armed.
+- name: Stop and disable the memory store copy timer when disarmed
+  tags: [claude_code]
+  ansible.builtin.systemd:
+    name: claude-memory-sync.timer
+    enabled: false
+    state: stopped
+  become: true
+  when:
+    - not claude_code_memory_sync_enabled
+    - claude_code_memory_sync_timer_file.stat.exists
+
+- name: Remove the memory store copy units when disarmed
+  tags: [claude_code]
+  ansible.builtin.file:
+    path: "/etc/systemd/system/{{ item }}"
+    state: absent
+  loop:
+    - claude-memory-sync.service
+    - claude-memory-sync.timer
+    - claude-memory-sync-alert.service
+  become: true
+  when: not claude_code_memory_sync_enabled
+  notify: Reload systemd
+
 # Render provenance for manifest-prune-check.sh's stale-script arm. This role landed on
 # 2026-08-23 rendering five files and stamping none, so an edit to any of them could sit
 # undeployed on this host with every repo-side check green — the H1 gap the 2026-08-23b sweep
@@ -356,6 +423,9 @@
       - ansible/roles/setup/claude_code/templates/fleet-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/login-slice-caps.conf.j2
       - ansible/roles/setup/claude_code/templates/pytest-fanout-cap.conf.j2
+      - ansible/roles/setup/claude_code/templates/claude-memory-sync.service.j2
+      - ansible/roles/setup/claude_code/templates/claude-memory-sync.timer.j2
+      - ansible/roles/setup/claude_code/templates/claude-memory-sync-alert.service.j2
 
 # Sibling of the stamp above, for the ONE copy:-deployed (not template:-rendered) artifact
 # this role now carries — manifest-prune-check.sh's second arm (is the deployed code the repo's

@@ -236,6 +236,7 @@ nav:
       - qbittorrent VPN and prefs: qbittorrent-vpn-and-prefs.md
       - Jellyfin plugins: jellyfin-plugins.md
       - claude-rc caps: claude-code-rc-caps.md
+      - Claude memory store copy: claude-memory-sync.md
       - hypervisor libvirt internals: hypervisor-libvirt-internals.md
       # The same split again (#2993), working the remaining over-budget role docs smallest first.
       - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
