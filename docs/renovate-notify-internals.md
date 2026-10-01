@@ -50,9 +50,12 @@ The role doc names both shapes; these are the measurements behind them.
 - **A lost `pending_seen.json` restarts every clock at zero.** The arm then finds nothing for
   soak plus grace: 14 days for a version bump, 10 for a digest one, with every run reporting
   healthy. A package in `pending_logic.py:FAST_DIGEST_SOAK_DAYS` waits 8 rather than 10: the two
-  nginx alpine pins soak 1 day in `renovate.json` since #2886. `pending_state_lost` tells a wiped state file from a bootstrap using `last_run` as
-  the witness that this host has completed a run before, and the digest names the date the
-  clocks become usable again (#1526).
+  nginx alpine pins soak 1 day in `renovate.json` since #2886. The churn arm is blind for its
+  own, longer window — a loss restarts the branch clocks too, so it can find nothing for
+  `PENDING_CHURN_MULTIPLIER` times soak plus grace, 42 days for a version row (#3076).
+  `pending_state_lost` tells a wiped state file from a bootstrap using `last_run` as
+  the witness that this host has completed a run before, and the digest names all three dates
+  the clocks become usable again (#1526).
 - **A branch-keyed dwell over-reported a mutable tag.** Renovate reuses one branch across
   every re-push of a mutable tag, so a dwell keyed on the branch measured how long some digest
   had been pending: this arm reported the freshrss cache digest stuck 18.8 days when no

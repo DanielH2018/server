@@ -448,10 +448,13 @@ def test_pending_clock_ready_names_a_nearer_date_for_a_digest_clock():
     assert pl.pending_clock_ready(_RESET_NOW, pl.DIGEST_SOAK_DAYS) == "2026-09-19"
 
 
-def test_render_pending_reset_carries_both_dates_and_the_dashboard():
+def test_render_pending_reset_carries_every_date_and_the_dashboard():
+    """Three dates, because a loss restarts the branch clocks the churn arm reads too (#3076)."""
     msg = pl.render_pending_reset(_RESET_NOW, "o/r")
     assert "2026-09-23" in msg
     assert "2026-09-19" in msg
+    # (7-day soak + 7-day grace) * 3 = 42 days out, the latest of the three.
+    assert "2026-10-21" in msg
     assert "https://github.com/o/r/issues/3" in msg
 
 

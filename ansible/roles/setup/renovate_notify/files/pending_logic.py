@@ -318,9 +318,9 @@ def render_pending(items: list[tuple[str, str, int]], limit: int = 1500) -> str:
 PENDING_RESET_MSG = (
     "⚠️ Renovate — the pending-item dwell state was lost, so every stuck-pending "
     "clock restarted at zero. The stuck-pending check can find nothing until %s for a "
-    "version bump (%s for a digest bump), whatever an item's real dwell was. Anything "
-    "already overdue will not page in that window — check it by hand on "
-    "https://github.com/%s/issues/3"
+    "version bump (%s for a digest bump), and the churn arm nothing until %s, whatever an "
+    "item's real dwell was. Anything already overdue will not page in that window — check it "
+    "by hand on https://github.com/%s/issues/3"
 )
 
 
@@ -338,10 +338,22 @@ def pending_clock_ready(
 
 
 def render_pending_reset(now_epoch: float, repo: str) -> str:
-    """The Discord line for a dwell-state loss, naming both dates the clocks become usable."""
+    """The Discord line for a dwell-state loss, naming every date a clock becomes usable.
+
+    A loss restarts the BRANCH clocks too, so the churn arm is blind for its own, longer window
+    — `PENDING_CHURN_MULTIPLIER` times soak plus grace (#3076). The third date is the version
+    row's, the latest of the three, so it bounds the whole blind window rather than one shape of
+    row. Reporting only the dwell arm's two dates would say the check is trustworthy again weeks
+    before the churn arm can fire, which is the claim this message exists to refuse.
+    """
     return PENDING_RESET_MSG % (
         pending_clock_ready(now_epoch, VERSION_SOAK_DAYS),
         pending_clock_ready(now_epoch, DIGEST_SOAK_DAYS),
+        pending_clock_ready(
+            now_epoch,
+            VERSION_SOAK_DAYS * PENDING_CHURN_MULTIPLIER,
+            PENDING_GRACE_DAYS * PENDING_CHURN_MULTIPLIER,
+        ),
         repo,
     )
 
