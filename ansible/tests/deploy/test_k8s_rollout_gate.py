@@ -25,6 +25,7 @@ from lib import yaml_fast
 from _helpers import REPO as _REPO
 from _helpers import load_tasks as _tasks
 from _helpers import command_of as _cmd
+from _helpers import render_expr as _render
 
 
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests/tasks/main.yml"
@@ -69,15 +70,86 @@ def test_manifests_does_not_wait_on_its_own_rollout() -> None:
     )
 
 
-def test_manifests_records_whether_the_render_changed() -> None:
-    """`changed` decides whether the stabilisation gate watches the workload at all."""
-    queued = next(
-        str(t["ansible.builtin.set_fact"])
+def _queue_exprs() -> list[str]:
+    """Both `k8s_pending_rollouts` appends in main.yml: the primary rollout, then the extras."""
+    exprs = [
+        t["ansible.builtin.set_fact"]["k8s_pending_rollouts"]
         for t in _tasks(_MANIFESTS)
         if "k8s_pending_rollouts" in str(t.get("ansible.builtin.set_fact", ""))
+    ]
+    assert len(exprs) == 2, [str(e)[:60] for e in exprs]
+    return exprs
+
+
+def _queued(expr: str, **over) -> dict:
+    """Render one append the way Ansible does, against fake registers."""
+    ctx = dict(
+        manifests_service="prowlarr",
+        manifests_rollout="prowlarr",
+        manifests_rollout_kind="deploy",
+        manifests_rollout_timeout="600s",
+        manifests_rollout_timeout_default="600s",
+        k8s_namespace="homelab",
+        k8s_pending_rollouts=[],
+        k8s_rebuilt_images=[],
+        manifests_render={"changed": True},
+        manifests_secret_render={"changed": False},
+        manifests_apply={
+            "changed": True,
+            "stdout": "deployment.apps/prowlarr configured",
+        },
+        # No `| default` on this one in the expression, and ansible-core's `default` filter
+        # recognises only its own Undefined — pass it defined.
+        manifests_image_changed=False,
+        item={"name": "flaresolverr", "kind": "deploy", "image": "flaresolverr"},
     )
-    assert "manifests_render is changed" in queued
-    assert "manifests_secret_render is changed" in queued
+    ctx.update(over)
+    return _render(expr, **ctx)[0]
+
+
+def test_manifests_records_whether_the_render_changed() -> None:
+    """`changed` decides whether the stabilisation gate watches the workload at all.
+
+    #3125: the config arm is the render AND the apply's own verdict, matching the `rollout
+    restart` tasks since #3115. Asserted as the whole conjunction, because
+    `manifests_render is changed` is a substring of it and would stay green either way.
+    """
+    for expr in _queue_exprs():
+        assert "manifests_render is changed and manifests_apply is changed" in expr, (
+            expr
+        )
+        assert "manifests_secret_render is changed" in expr, expr
+
+
+def test_an_inert_manifest_edit_queues_nothing_for_the_stabilisation_gate() -> None:
+    """A YAML-comment or whitespace edit moves rendered bytes and no live object.
+
+    The apply prints every object `unchanged`, so nothing restarts (#3115) — queueing it
+    `changed` cost the play the gate's soak over a workload that never moved (#3125).
+    """
+    inert = {"changed": False, "stdout": "deployment.apps/prowlarr unchanged"}
+    for expr in _queue_exprs():
+        assert _queued(expr, manifests_apply=inert)["changed"] is False, expr
+        # RED-proof on the other side: the same render with an apply that moved an object.
+        assert _queued(expr)["changed"] is True, expr
+        # The secret and image arms still queue the soak on their own.
+        assert (
+            _queued(
+                expr,
+                manifests_apply=inert,
+                manifests_secret_render={"changed": True},
+            )["changed"]
+            is True
+        ), expr
+        assert (
+            _queued(
+                expr,
+                manifests_apply=inert,
+                manifests_image_changed=True,
+                k8s_rebuilt_images=["flaresolverr"],
+            )["changed"]
+            is True
+        ), expr
 
 
 def test_drain_waits_then_clears_the_queue() -> None:

@@ -45,9 +45,13 @@
     cmd: "k3s kubectl apply -f {{ manifests_deferred_dir }}/"
   become: true
   register: pihole_k8s_instance_2_apply
+  # Pinned false under a dry run, like the shared apply's. This verdict now decides whether
+  # roll_one.yml restarts pihole-2 (#3127), and kubectl prints `configured` for objects a dry
+  # run did not persist. The pin is belt and braces: roll_one.yml is gated on `k8s_no_mutate`.
   changed_when: >-
-    'created' in (pihole_k8s_instance_2_apply.stdout | default(''))
-    or 'configured' in (pihole_k8s_instance_2_apply.stdout | default(''))
+    not (k8s_dry_run | bool)
+    and ('created' in (pihole_k8s_instance_2_apply.stdout | default(''))
+         or 'configured' in (pihole_k8s_instance_2_apply.stdout | default('')))
 
 - name: Fingerprint pihole-2's pod template after its apply
   ansible.builtin.shell:

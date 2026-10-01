@@ -341,49 +341,44 @@ def _pihole_restart_task():
     )
 
 
+def _pihole_restart_fires(instance: str, **overrides) -> bool:
+    """Render every clause of the restart task's `when` for one loop item, the way Ansible
+    ANDs a list. The trigger facts default to "the shared apply changed", so a caller varies
+    only the fact under test."""
+    ctx = {
+        "pihole_instance": instance,
+        "manifests_render": {"changed": True},
+        "manifests_apply": {"changed": True},
+        "manifests_secret_render": {"changed": False},
+        "manifests_image_changed": False,
+        "manifests_deferred_render": {"changed": False},
+        "pihole_k8s_instance_2_apply": {"changed": False},
+        "manifests_rolled_by_apply": {},
+        "pihole_k8s_rolled_by_own_apply": {},
+        **overrides,
+    }
+    return all(
+        render_expr("{{ " + str(clause) + " }}", **ctx) in (True, "True")
+        for clause in _pihole_restart_task()["when"]
+    )
+
+
 def test_pihole_skips_its_restart_of_an_instance_the_apply_rolled_but_still_waits():
     """The accept/reject pair for #1994 on pihole: an instance whose template moved is not
     restarted again, one whose template held (a ConfigMap-only change) is, and the wait
     that follows carries no such gate -- it is the only thing in the play that follows the
     roll the apply started on a Recreate Deployment."""
-    when = _pihole_restart_task()["when"]
-    assert not render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole",
-        manifests_rolled_by_apply={"pihole": True, "pihole-2": False},
-        pihole_k8s_rolled_by_own_apply={},
-    )
-    assert render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole-2",
-        manifests_rolled_by_apply={"pihole": True, "pihole-2": False},
-        pihole_k8s_rolled_by_own_apply={},
-    )
-    assert render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole",
-        manifests_rolled_by_apply={},
-        pihole_k8s_rolled_by_own_apply={},
-    )
+    rolled = {"pihole": True, "pihole-2": False}
+    assert not _pihole_restart_fires("pihole", manifests_rolled_by_apply=rolled)
+    assert _pihole_restart_fires("pihole-2", manifests_rolled_by_apply=rolled)
+    assert _pihole_restart_fires("pihole")
     # The same pair over the second apply's own verdict (#2884): instance 2 is not restarted on
     # top of the apply that just rolled it, and instance 1's restart is untouched by that answer.
-    assert not render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole-2",
-        manifests_rolled_by_apply={},
-        pihole_k8s_rolled_by_own_apply={"pihole-2": True},
-    )
-    assert render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole",
-        manifests_rolled_by_apply={},
-        pihole_k8s_rolled_by_own_apply={"pihole-2": True},
-    )
-    assert render_expr(
-        "{{ " + when + " }}",
-        pihole_instance="pihole-2",
-        manifests_rolled_by_apply={},
-        pihole_k8s_rolled_by_own_apply={"pihole-2": False},
+    own = {"pihole-2": True}
+    assert not _pihole_restart_fires("pihole-2", pihole_k8s_rolled_by_own_apply=own)
+    assert _pihole_restart_fires("pihole", pihole_k8s_rolled_by_own_apply=own)
+    assert _pihole_restart_fires(
+        "pihole-2", pihole_k8s_rolled_by_own_apply={"pihole-2": False}
     )
     wait = task_named(load_tasks(PIHOLE / "tasks/roll_one.yml"), "Wait for serving")
     assert "when" not in wait, wait
@@ -417,3 +412,68 @@ def test_the_private_restarts_run_after_the_record_is_written():
         )
         restart = next(i for i, n in enumerate(names) if n.startswith(restart_name))
         assert include < restart, (role_dir.name, names[include], names[restart])
+
+
+def test_pihole_a_comment_only_edit_restarts_neither_instance():
+    """#3127, the reject half. A YAML-comment edit moves the rendered bytes while the matching
+    apply prints every object `unchanged`, so the restart must wait for that apply's own
+    verdict, per instance. Instance 1 reads the shared apply; instance 2 reads its own apply
+    for deployment-2.yaml, and the shared apply for the ConfigMap both instances mount."""
+    # Shared files: bytes moved, shared apply unchanged.
+    for instance in ("pihole", "pihole-2"):
+        assert not _pihole_restart_fires(instance, manifests_apply={"changed": False})
+    # deployment-2.yaml.j2: deferred bytes moved, pihole-2's own apply unchanged.
+    quiet = {
+        "manifests_render": {"changed": False},
+        "manifests_apply": {"changed": False},
+        "manifests_deferred_render": {"changed": True},
+        "pihole_k8s_instance_2_apply": {"changed": False},
+    }
+    assert not _pihole_restart_fires("pihole-2", **quiet)
+    assert not _pihole_restart_fires("pihole", **quiet)
+
+
+def test_pihole_a_changed_apply_restarts_the_instance_it_carries():
+    """#3127, the accept half. A changed shared apply restarts both instances (the ConfigMap is
+    shared), and a changed pihole-2 apply restarts pihole-2 alone. The secret render and an
+    image rebuild still restart without any apply verdict: the first because
+    verify_secret_keys.yml patches a Secret after an apply that printed `unchanged`."""
+    assert _pihole_restart_fires("pihole")
+    assert _pihole_restart_fires("pihole-2")
+    own = {
+        "manifests_render": {"changed": False},
+        "manifests_apply": {"changed": False},
+        "manifests_deferred_render": {"changed": True},
+        "pihole_k8s_instance_2_apply": {"changed": True},
+    }
+    assert _pihole_restart_fires("pihole-2", **own)
+    assert not _pihole_restart_fires("pihole", **own)
+    unapplied = {
+        "manifests_render": {"changed": False},
+        "manifests_apply": {"changed": False},
+    }
+    assert _pihole_restart_fires(
+        "pihole", **unapplied, manifests_secret_render={"changed": True}
+    )
+    assert _pihole_restart_fires("pihole-2", **unapplied, manifests_image_changed=True)
+
+
+def test_pihole_instance_two_apply_is_changed_only_by_a_real_apply():
+    """#3127: pihole-2's apply verdict now decides a restart, so its `changed_when` must read
+    kubectl's `created`/`configured` and stay false for `unchanged` and for a dry run."""
+    task = task_named(
+        load_tasks(PIHOLE / "tasks/apply_instance_2.yml"), "Apply pihole-2's Deployment"
+    )
+
+    def changed(stdout: str, dry_run: bool = False) -> bool:
+        expr = "{{ " + str(task["changed_when"]) + " }}"
+        ctx = {
+            "k8s_dry_run": dry_run,
+            "pihole_k8s_instance_2_apply": {"stdout": stdout},
+        }
+        return render_expr(expr, **ctx) in (True, "True")
+
+    assert changed("deployment.apps/pihole-2 configured")
+    assert changed("deployment.apps/pihole-2 created")
+    assert not changed("deployment.apps/pihole-2 unchanged")
+    assert not changed("deployment.apps/pihole-2 configured", dry_run=True)

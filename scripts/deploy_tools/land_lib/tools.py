@@ -515,6 +515,11 @@ class Tools:
     confirm_narrowing: Callable[
         [list[str], str, Path, str | None], dict[str, frozenset[str]]
     ] = land_tags.confirmed_narrow_tags
+    # The PR's own narrowing with no row to hold it against, for a landing that never awaits
+    # the tick (#3126). Git over the PR's range too; `classify.narrow_plane` is its caller.
+    own_narrowing: Callable[[list[str], str, Path], dict[str, frozenset[str]]] = (
+        land_tags.own_narrow_tags
+    )
     # Also runs git over the PR's range -- the key diff of a shared role's `defaults/main.yml`
     # and a grep of every template for those keys (#2462). `classify.classify` is its caller.
     paths_a_hand_must_apply: Callable[

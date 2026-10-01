@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/reference/backlog.py
-generated_at: 2026-10-01 06:17 UTC
-generated_sha: 89bf63ff9
+generated_at: 2026-10-01 18:17 UTC
+generated_sha: 3d5b8e000
 ---
 
 !!! warning "Generated file — do not edit"
@@ -18,25 +18,28 @@ Findings Claude confirmed and did not fix in the session that found them, filed 
 |---|---|---|---|---|---|---|---|---|
 | [#3027](https://github.com/DanielH2018/server/issues/3027) | high | gap | security | Rotate the Google Cast refresh token HA leaked, and age out the Loki records that still carry it | 2026-09-30 | 0 | - | ✓ |
 | [#2806](https://github.com/DanielH2018/server/issues/2806) | medium | improvement | backup-observability | Trim monitor-bridge's duplicate checks and retire the self-hosted Healthchecks | 2026-09-28 | 0 | - | ✓ |
-| [#2808](https://github.com/DanielH2018/server/issues/2808) | medium | improvement | docs | Sixteen stores hold what the next session needs; consolidate to seven and retire facts.lock | 2026-09-28 | 0 | - | ✓ |
-| [#2809](https://github.com/DanielH2018/server/issues/2809) | medium | improvement | cicd | Tests pin template and doc source text; move them to render assertions and cut bookkeeping churn | 2026-09-28 | 1 | - | ✓ |
-| [#3016](https://github.com/DanielH2018/server/issues/3016) | medium | gap | docs | homelab-review step 2 primes from three memory files this host does not have | 2026-09-30 | 0 | - | ✓ |
 | [#3045](https://github.com/DanielH2018/server/issues/3045) | medium | improvement | cicd | Narrow a refused broad deploy by render digest, shadow mode first | 2026-09-30 | 0 | - | ✓ |
+| [#3107](https://github.com/DanielH2018/server/issues/3107) | medium | improvement | cicd | Convert the rest of ansible/tests/services from source-text pins to render assertions, one role per PR | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
+| [#3123](https://github.com/DanielH2018/server/issues/3123) | medium | improvement | docs | Keep daniel-server's Claude memory store in sync with daniel-box's | 2026-10-01 | 0 | - | ✓ |
 | [#2124](https://github.com/DanielH2018/server/issues/2124) | low | gap | security | CrowdSec agent drops Traefik access-log lines with UnmarshalJSON errors | 2026-09-19 | 0 | - | ✓ |
 | [#2367](https://github.com/DanielH2018/server/issues/2367) | low | gap | cicd | Renovate #2258 (k3s v1.37.0+k3s1) needs an operator-planned control-plane upgrade | 2026-09-24 | 1 | - | - |
 | [#2652](https://github.com/DanielH2018/server/issues/2652) | low | gap | cicd | Re-measure inject-nested-docs subagent coverage after the agent_id key lands | 2026-09-26 | 0 | - | ✓ |
 | [#2660](https://github.com/DanielH2018/server/issues/2660) | low | gap | docs | Measure the head form's coverage for over-budget inject-nested-docs payloads | 2026-09-26 | 0 | - | ✓ |
 | [#2764](https://github.com/DanielH2018/server/issues/2764) | low | gap | network | A Traefik router rejected for a reason other than empty endpoints still pins long-lived clients on 421 | 2026-09-27 | 0 | - | ✓ |
-| [#2818](https://github.com/DanielH2018/server/issues/2818) | low | improvement | cicd | Move shared harness code from server to dotfiles: escaping-write arm, memory survey, scaffolding skill, grammar fixture | 2026-09-28 | 0 | - | ✓ |
-| [#2860](https://github.com/DanielH2018/server/issues/2860) | low | improvement | backup-observability | Six Prometheus/Loki HTTP clients: route homelab-mcp and postflight through probe_lib | 2026-09-28 | 0 | - | ✓ |
-| [#2878](https://github.com/DanielH2018/server/issues/2878) | low | improvement | docs | Clear the stale references and host leftovers the #2813 role merges left | 2026-09-28 | 0 | - | ✓ |
 | [#2886](https://github.com/DanielH2018/server/issues/2886) | low | gap | cicd | The nginx:alpine digest re-pushes faster than its soak clears between daily Renovate runs, so it only lands by hand — *no vetted remediation* | 2026-09-28 | 0 | - | ✓ |
 | [#2949](https://github.com/DanielH2018/server/issues/2949) | low | gap | backup-observability | Verify the weekly-reboot maintenance window suppresses the Sunday Discord burst | 2026-09-29 | 0 | - | ✓ |
 | [#2962](https://github.com/DanielH2018/server/issues/2962) | low | improvement | container | Measure what DISABLE_MEDIA cost and saved on flaresolverr, then re-size the memory limit | 2026-09-29 | 0 | - | ✓ |
 | [#2972](https://github.com/DanielH2018/server/issues/2972) | low | improvement | - | Replace the host literals in bootstrap.yml and initial_setup.yml with a planned manual run | 2026-09-29 | 0 | - | ✓ |
 | [#2978](https://github.com/DanielH2018/server/issues/2978) | low | improvement | - | Move longhorn_reap out of the k3s setup role with a planned manual k3s apply | 2026-09-29 | 0 | - | ✓ |
-| [#3043](https://github.com/DanielH2018/server/issues/3043) | low | improvement | - | Render a default IngressRoute from the containers_list entry once the traefik edge stops reading the template | 2026-09-30 | 0 | - | ✓ |
-| [#3057](https://github.com/DanielH2018/server/issues/3057) | low | improvement | cicd | Derive the deployer's k8s_unapplied discharge from the render digest | 2026-09-30 | 1 | - | ✓ |
+| [#3088](https://github.com/DanielH2018/server/issues/3088) | low | gap | cicd | Remove the daniel-box manifest and release-record leftovers from the #2813 role merge and the #2911 rename | 2026-10-01 | 0 | - | ✓ |
+| [#3089](https://github.com/DanielH2018/server/issues/3089) | low | improvement | docs | review-standing-decisions memory holds code-line-anchored and dangling-path rows | 2026-10-01 | 0 | - | ✓ |
+| [#3120](https://github.com/DanielH2018/server/issues/3120) | low | improvement | cicd | Narrow the deployer's setup-plane apply to the block tags a diff touches | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | - |
+| [#3124](https://github.com/DanielH2018/server/issues/3124) | low | improvement | cicd | land.sh redeploys every manifests caller for a tasks/-only change to the shared role | 2026-10-01 | 0 | - | ✓ |
+| [#3125](https://github.com/DanielH2018/server/issues/3125) | low | improvement | cicd | An inert manifest edit still queues the workload for the stabilisation-gate soak | 2026-10-01 | 0 | worktree-issue-fanout-2026-10-01-wave2 | ✓ |
+| [#3130](https://github.com/DanielH2018/server/issues/3130) | low | improvement | cicd | Rule on the three test folds #3108 measured as not worth doing | 2026-10-01 | 0 | - | ✓ |
+| [#3133](https://github.com/DanielH2018/server/issues/3133) | low | improvement | backup-observability | Observability hands six workloads to the stabilisation gate after an inert manifest edit | 2026-10-01 | 0 | - | ✓ |
+| [#3134](https://github.com/DanielH2018/server/issues/3134) | low | improvement | cicd | Give initial_setup crons.yml a subject tag instead of always, so its ranges can narrow | 2026-10-01 | 0 | - | - |
+| [#3135](https://github.com/DanielH2018/server/issues/3135) | low | improvement | cicd | Tag the setup roles whose task files no tag selects, so their changes can narrow | 2026-10-01 | 0 | - | - |
 
 ## Settled findings — do not re-flag
 

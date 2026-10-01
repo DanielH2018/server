@@ -287,8 +287,15 @@ it only where the row contains the tags derived for that PR alone
 (`land_tags.confirmed_narrow_tags`).
 Nothing else ties the row to that PR. Read before the tick, the row is absent or belongs to an
 earlier range, and a stale `coredns` row printed for an RBAC PR would apply `coredns`, clear the
-marker, and leave the RBAC change unapplied with no marker recording it. A landing that skips
-the tick, or whose row does not cover its own tags, prints the role tag.
+marker, and leave the RBAC change unapplied with no marker recording it. A landing whose row
+does not cover its own tags prints the role tag.
+
+A landing that deploys its own merge commit skips the tick, so no row exists for its range
+yet. It prints the tags derived for that PR alone (`land_tags.own_narrow_tags`, #3126), with
+the narrowed `--applied` clear beside them, which drops only those tags from whatever row the
+next tick records. Until #3126 that path printed the role tag. PR #3091 touched one k8s role and
+one k3s cron template, and its note asked for `--tags k3s` and the control-plane tasks that tag
+arms.
 
 **A sidecar file, not a fifth field on the `manual_plane` line.** `parse_manual_plane` accepts
 exactly four fields and skips anything else, and the copies of `gitops_markers.py` reach their

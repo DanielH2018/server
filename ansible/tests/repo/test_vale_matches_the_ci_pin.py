@@ -20,6 +20,8 @@ Run: uv run pytest ansible/tests/repo/test_vale_matches_the_ci_pin.py
 
 import re
 
+import pytest
+
 from _helpers import REPO
 
 CI_REL = ".github/workflows/ci.yml"
@@ -48,23 +50,24 @@ def pins_agree(ci: set[str], host: set[str]) -> bool:
     return len(ci) == 1 and ci == host
 
 
-def test_matching_pins_are_clean():
-    assert pins_agree({"3.20.0"}, {"3.20.0"})
-
-
-def test_a_host_left_on_the_old_version_is_flagged():
-    """The bump Renovate wrote into ci.yml alone: CI lints with 3.21.0, the host with 3.20.0."""
-    assert not pins_agree({"3.21.0"}, {"3.20.0"})
-
-
-def test_a_partially_rewritten_ci_url_is_flagged():
-    """The tag bumped, the asset name left behind — ci.yml names two versions, not one."""
-    assert not pins_agree({"3.21.0", "3.20.0"}, {"3.21.0"})
-
-
-def test_a_pattern_that_matches_nothing_is_flagged():
-    assert not pins_agree(set(), set())
-    assert not pins_agree({"3.20.0"}, set())
+@pytest.mark.parametrize(
+    ("ci", "host", "agree"),
+    [
+        pytest.param({"3.20.0"}, {"3.20.0"}, True, id="matching-pins-are-clean"),
+        # The bump Renovate wrote into ci.yml alone: CI lints with 3.21.0, the host with 3.20.0.
+        pytest.param({"3.21.0"}, {"3.20.0"}, False, id="host-left-on-the-old-version"),
+        # The tag bumped, the asset name left behind — ci.yml names two versions, not one.
+        pytest.param(
+            {"3.21.0", "3.20.0"}, {"3.21.0"}, False, id="partially-rewritten-ci-url"
+        ),
+        pytest.param(set(), set(), False, id="neither-pattern-matches"),
+        pytest.param({"3.20.0"}, set(), False, id="host-pattern-matches-nothing"),
+    ],
+)
+def test_pins_agree_only_on_one_shared_version(
+    ci: set[str], host: set[str], agree: bool
+) -> None:
+    assert pins_agree(ci, host) is agree
 
 
 def test_both_files_still_carry_a_vale_pin():

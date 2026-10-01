@@ -12,17 +12,12 @@ staging reaches long after the deploy reads green.
 
 Every rule here is a pair — one input it must accept, one it must reject — because a check that
 has only ever been observed passing carries no evidence it can fail.
+
+The checks every opt-out flag shares — both branches parse, every mount resolves, the flag
+defaults on — are `ansible/tests/k8s/test_staging_opt_out_flags_render.py`'s.
 """
 
-import pytest
-
-
 from lib import yaml_fast
-
-from validate.k8s_manifests import (
-    K8S_ROLES,
-    load_yaml,
-)
 
 from _k8s_render import render_role_template
 
@@ -40,13 +35,6 @@ def _deployment(manage_acme: bool) -> dict:
 
 def _pod_spec(manage_acme: bool) -> dict:
     return _deployment(manage_acme)["spec"]["template"]["spec"]
-
-
-@pytest.mark.parametrize("template", ["deployment.yaml.j2", "static-config.yaml.j2"])
-@pytest.mark.parametrize("manage_acme", [True, False])
-def test_both_branches_parse_as_yaml(template: str, manage_acme: bool) -> None:
-    """A stray conditional shifts indentation, which shows up here and nowhere else."""
-    assert yaml_fast.safe_load(_render(template, manage_acme)) is not None
 
 
 def test_resolver_is_declared_with_acme_on_and_absent_with_it_off() -> None:
@@ -86,32 +74,9 @@ def test_cloudflare_env_is_present_with_acme_on_and_the_key_is_gone_with_it_off(
     assert "env" not in traefik
 
 
-@pytest.mark.parametrize("manage_acme", [True, False])
-def test_every_mount_resolves_to_a_declared_volume(manage_acme: bool) -> None:
-    """The half-gated failure: a mount left behind by a volume that dropped out.
-
-    Nothing upstream catches it — the manifest is valid YAML and applies cleanly; the pod
-    simply never starts.
-    """
-    spec = _pod_spec(manage_acme)
-    declared = {v["name"] for v in spec["volumes"]}
-    for container in spec.get("initContainers", []) + spec["containers"]:
-        for mount in container.get("volumeMounts", []):
-            assert mount["name"] in declared, (
-                f"{container['name']} mounts {mount['name']}, which no volume declares "
-                f"({_FLAG}={manage_acme})"
-            )
-
-
 def test_acme_volumes_are_declared_with_acme_on_and_absent_with_it_off() -> None:
     declared = {v["name"] for v in _pod_spec(True)["volumes"]}
     assert {"traefik-acme", "traefik-cloudflare"} <= declared
 
     declared = {v["name"] for v in _pod_spec(False)["volumes"]}
     assert not {"traefik-acme", "traefik-cloudflare"} & declared
-
-
-def test_prod_manages_acme() -> None:
-    """The flag defaults on, so no cluster loses certificate issuance by omission."""
-    defaults = load_yaml(K8S_ROLES / _ROLE / "defaults" / "main.yml")
-    assert defaults[_FLAG] is True
