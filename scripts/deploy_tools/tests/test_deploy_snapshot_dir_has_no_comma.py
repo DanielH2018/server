@@ -104,7 +104,7 @@ def test_single_tag_snapshot_dir_is_unaffected(tmp_path: Path) -> None:
 # The 58 callers `--tags volume-snapshot` expanded to on 2026-09-27. Joined in full they name
 # a directory past the 255-byte filename limit, and `git worktree add` refused it.
 _SHARED_ROLE_CALLERS: list[str] = (
-    "artifacts authelia autofix-bridge bazarr bento-pdf claude-otel cloudflare-ddns "
+    "artifacts authelia autofix-bridge bazarr bento-pdf observability cloudflare-ddns "
     "code-server configarr crowdsec deploy-ui docs dri-device-plugin freshrss gpu-exporter "
     "headlamp healthchecks home-assistant homelab-mcp homepage ical-proxy janitorr jellyfin "
     "karakeep littlelink livesync loki-homelab longhorn-ui media-volume monitor-bridge "

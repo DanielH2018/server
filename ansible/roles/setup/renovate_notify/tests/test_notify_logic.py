@@ -381,7 +381,7 @@ _LOOKUP_WARNING_BODY = """This issue lists Renovate updates and detected depende
 > [!WARNING]
 > Renovate failed to look up the following dependencies: `Failed to look up pypi package ruff: no-result`, `Failed to look up docker package registry.k8s.io/kube-state-metrics/kube-state-metrics: no-result`.
 >
-> Files affected: `pyproject.toml`, `ansible/roles/k8s/claude-otel/defaults/main.yml`
+> Files affected: `pyproject.toml`, `ansible/roles/k8s/observability/defaults/main.yml`
 
 ---
 
@@ -412,7 +412,7 @@ def test_parse_dependency_lookup_failures_ignores_files_affected_backticks():
     # report two package files as if they were failing dependencies.
     parsed = nl.parse_dependency_lookup_failures(_LOOKUP_WARNING_BODY)
     assert not any("pyproject.toml" in p for p in parsed)
-    assert not any("claude-otel" in p for p in parsed)
+    assert not any("observability" in p for p in parsed)
 
 
 def test_parse_dependency_lookup_failures_matches_the_older_callout_marker():

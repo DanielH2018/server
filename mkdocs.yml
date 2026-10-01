@@ -214,9 +214,9 @@ nav:
       # Same split as the line above, for k8s/volume-snapshot (#2699): the drill records and the
       # measured traps, kept off the role CLAUDE.md a session loads on every touch of the role.
       - volume-snapshot drill record: volume-snapshot-drills.md
-      # And again for k8s/claude-otel (#2925): the board provenance and the panel-query traps a
+      # And again for k8s/observability (#2925): the board provenance and the panel-query traps a
       # 2026-09-10 audit measured, kept off the role CLAUDE.md, which keeps the editing rules.
-      - claude-otel dashboard record: claude-otel-dashboards.md
+      - observability dashboard record: observability-dashboards.md
       # Four more of the same split (#2985), each taking one role CLAUDE.md back under the
       # inject hook's character budget. The role doc keeps the operating rules; the page takes
       # the working-out a session reads only when it edits that code.
@@ -239,7 +239,7 @@ nav:
       - hypervisor libvirt internals: hypervisor-libvirt-internals.md
       # The same split again (#2993), working the remaining over-budget role docs smallest first.
       - Docker engine pins and runtime: docker-engine-pins-and-runtime.md
-      - claude-otel OIDC and idle diagnosis: claude-otel-oidc-and-idle-diagnosis.md
+      - observability OIDC and idle diagnosis: observability-oidc-and-idle-diagnosis.md
       - monitor-bridge internals: monitor-bridge-internals.md
       # And again (#2995), on the three smallest of the ten role docs still over the budget.
       - homepage widgets and layout: homepage-widgets-and-layout.md

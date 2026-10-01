@@ -1,7 +1,7 @@
-# loki-homelab — the cluster log store (separate from claude-otel's Loki)
+# loki-homelab — the cluster log store (separate from observability's Loki)
 
 Grafana Loki plus a Grafana Alloy DaemonSet that ships every pod's logs to it. Deliberately
-separate from the `claude-otel` Loki (decision KL1, `docs/archive/.../slice-7-phase-d-loki.md`)
+separate from the `observability` Loki (decision KL1, `docs/archive/.../slice-7-phase-d-loki.md`)
 — merging would give the verbatim-prompts store this role's LAN route, which it must not have.
 
 ## At a glance

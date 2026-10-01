@@ -54,7 +54,7 @@ spec:
               value: http://prometheus.observability.svc.cluster.local:9090
             - name: LOKI_URL
               value: http://loki-homelab.{{ k8s_namespace }}.svc.cluster.local:3100
-            # The claude-otel Loki — verbatim prompt/response content (KL1). Only
+            # The observability Loki — verbatim prompt/response content (KL1). Only
             # claude_code_events reads it, and only through the metadata whitelist
             # (k8s_reads.claude_event_rows); the raw store stays without a LAN route.
             - name: CLAUDE_LOKI_URL

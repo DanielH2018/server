@@ -69,7 +69,7 @@ def oidc_clients(docs):
 def grafana_env(docs):
     """The Grafana container's env, as a name -> raw entry mapping."""
     for role, _name, doc in docs:
-        if role != "claude-otel" or not isinstance(doc, dict):
+        if role != "observability" or not isinstance(doc, dict):
             continue
         if doc.get("kind") != "Deployment" or doc["metadata"]["name"] != "grafana":
             continue
@@ -165,7 +165,9 @@ def live():
         f"{sorted(clients)}. Every assertion below would pass vacuously without it."
     )
     env = grafana_env(docs)
-    assert env, "no Grafana Deployment env found in the rendered claude-otel manifests"
+    assert env, (
+        "no Grafana Deployment env found in the rendered observability manifests"
+    )
     return clients[CLIENT_ID], env, oidc_provider(docs)
 
 

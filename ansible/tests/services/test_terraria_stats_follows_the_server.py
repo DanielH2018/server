@@ -9,7 +9,7 @@ and three renders read it.
 
 The scrape job is the third, and it is tested here rather than filed as a follow-up: a
 Prometheus job whose Service has no endpoint reads `up == 0`, which is exactly the signal
-claude-otel's scrape-target check pages on. Scaling the exporter without gating the job trades
+observability's scrape-target check pages on. Scaling the exporter without gating the job trades
 a pointless pod for a permanent page.
 """
 
@@ -60,7 +60,7 @@ def _scrape_job_names(replicas: int) -> list[str]:
     doc = next(
         d
         for d in yaml_fast.safe_load_all(
-            _render("claude-otel", "prometheus.yaml.j2", replicas)
+            _render("observability", "prometheus.yaml.j2", replicas)
         )
         if d and d.get("kind") == "ConfigMap"
     )

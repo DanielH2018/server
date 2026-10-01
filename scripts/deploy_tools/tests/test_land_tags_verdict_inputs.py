@@ -31,8 +31,11 @@ from deploy_tools.land_lib import tools
 # tree, and a deleted role is indistinguishable from the reader dropping an entry, so an
 # explicit list is the only honest signal. An entry earns its place for one PR: once the
 # retiring commit is HEAD, the tag is gone from both sides and the line can go.
+#
+# A RENAME loses the old tag the same way a retirement does, so it is named here too, for the
+# same one PR: `claude-otel` became `observability` on 2026-10-01 (#2911).
 RETIRED_TAGS: frozenset[str] = frozenset(
-    {"n8n-images", "terraria-stats", "valheim-stats"}
+    {"claude-otel", "n8n-images", "terraria-stats", "valheim-stats"}
 )
 
 

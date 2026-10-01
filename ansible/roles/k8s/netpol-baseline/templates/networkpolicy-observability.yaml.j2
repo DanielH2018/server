@@ -52,7 +52,7 @@ spec:
         # Intra-namespace: grafana -> prometheus/loki/tempo, prometheus -> kube-state-metrics /
         # the otel collector. The mesh here is thick and entirely trusted — the real
         # justification is not "one telemetry system, one role" but that this namespace is
-        # SOLE-TENANT today: claude-otel is the only role that renders into it. That is the
+        # SOLE-TENANT today: observability is the only role that renders into it. That is the
         # invariant this bare selector leans on, and it is exactly what a second role landing in
         # the namespace later would silently invalidate — it would get free ingress to every
         # already-fenced pod here with no policy change of its own (guarded by

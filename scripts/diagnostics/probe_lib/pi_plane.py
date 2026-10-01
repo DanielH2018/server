@@ -37,7 +37,7 @@ PROMETHEUS_TEMPLATE_PATH = (
     / "ansible"
     / "roles"
     / "k8s"
-    / "claude-otel"
+    / "observability"
     / "templates"
     / "prometheus.yaml.j2"
 )
@@ -50,7 +50,7 @@ _JOB_NAME_RE = re.compile(r"^\s*-\s*job_name:\s*(\S+)")
 def declared_pi_job_names(text):
     """Prometheus job names whose static target is daniel-pi's LAN IP.
 
-    Parses claude-otel's prometheus.yaml.j2 rather than hand-listing "node-pi"/"alloy-pi": a
+    Parses observability's prometheus.yaml.j2 rather than hand-listing "node-pi"/"alloy-pi": a
     job renamed or added there is picked up with no change to this file. `k8s_pi_client_ip`
     is the only thing in the template that names daniel-pi — the Pi runs no kubelet, so it
     can never appear via the pod-discovery jobs, only via a STATIC target (see the "daniel-pi,

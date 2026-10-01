@@ -55,10 +55,10 @@ traefik_k8s_uid: 65532
 # a namespace Traefik watches with no Role fails SILENTLY (informers never sync, the host
 # 404s); a Role for an absent namespace fails LOUDLY, which is how staging surfaced it —
 # `namespaces "observability" not found` aborted the first staging Traefik deploy, because
-# claude-otel is not in that cluster's subset and nothing else creates the namespace.
+# observability is not in that cluster's subset and nothing else creates the namespace.
 traefik_k8s_watched_namespaces:
   - "{{ k8s_namespace }}"
-  # Telemetry stack (claude-otel).
+  # Telemetry stack (observability).
   - "{{ k8s_observability_namespace }}"
   # Longhorn's namespace, for the single route roles/k8s/longhorn-ui adds to its UI.
   - "{{ k8s_longhorn_namespace }}"

@@ -163,7 +163,7 @@ name = "Validate Grafana dashboard datasource uids"
 entry = "uv run --frozen python scripts/validate/grafana_dashboards.py"
 language = "system"
 pass_filenames = false
-files = "^(ansible/roles/k8s/claude-otel/files/dashboards/.*\\.json|ansible/roles/k8s/claude-otel/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py)$"
+files = "^(ansible/roles/k8s/observability/files/dashboards/.*\\.json|ansible/roles/k8s/observability/templates/grafana\\.yaml\\.j2|scripts/validate/grafana_dashboards\\.py)$"
 
 # Render the high-value NON-compose YAML config templates with stubbed vars and assert each
 # parses — the render-then-parse guard the compose templates already get

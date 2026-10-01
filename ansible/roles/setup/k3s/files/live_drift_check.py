@@ -243,7 +243,7 @@ def is_server_side_applied(meta: dict) -> bool:
 
     The signal is managedFields, not a list of names: five roles apply script and dashboard
     ConfigMaps server-side (roles/k8s/{monitor-bridge,autofix-bridge,terraria-stats,
-    valheim-stats,claude-otel}), and a sixth joins them without touching this file.
+    valheim-stats,observability}), and a sixth joins them without touching this file.
     """
     return any(
         entry.get("operation") == "Apply" and entry.get("manager") != _MIGRATION_MANAGER

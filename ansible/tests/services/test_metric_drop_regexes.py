@@ -38,7 +38,7 @@ def _scrape_jobs():
     ever sees it as an opaque block scalar — a broken inner config renders and applies cleanly.
     """
     for role, template, doc in rendered_docs():
-        if role != "claude-otel" or "prometheus" not in str(template):
+        if role != "observability" or "prometheus" not in str(template):
             continue
         if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
             continue

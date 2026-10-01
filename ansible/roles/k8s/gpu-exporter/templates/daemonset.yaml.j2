@@ -8,7 +8,7 @@
 # DIFFERENT GPUs: daniel-box an AMD Phoenix3 on amdgpu, daniel-server an Intel Iris Xe on i915.
 # One replica behind a ClusterIP would report whichever node the scrape happened to land on —
 # a single series flipping between two GPUs, which plots perfectly and means nothing. Hence
-# also no Service: the `gpu` job in claude-otel's prometheus.yaml.j2 discovers these pods
+# also no Service: the `gpu` job in observability's prometheus.yaml.j2 discovers these pods
 # individually and labels each with its node.
 #
 # UNPRIVILEGED, unlike the dri-device-plugin DaemonSet beside it. Everything read here is a

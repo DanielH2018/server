@@ -15,7 +15,7 @@ from deploy_tools.land_lib.ledger import Ledger, annotation_line
 
 _BOARD = (
     _REPO
-    / "ansible/roles/k8s/claude-otel/files/dashboards/Infrastructure/landings.json"
+    / "ansible/roles/k8s/observability/files/dashboards/Infrastructure/landings.json"
 )
 
 

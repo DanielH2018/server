@@ -80,7 +80,7 @@ def from_file_configmap_roles(roles_dir: Path = K8S_ROLES) -> set[str]:
 # landing here without a real mechanism is exactly the false-clear this census exists to
 # prevent, so a reason is required, not optional.
 DEBT: dict[str, str] = {
-    "claude-otel": (
+    "observability": (
         "grafana.yaml.j2's dashboard ConfigMaps are staged this way, but Grafana's own file "
         "provisioner polls the mount every 30s (`updateIntervalSeconds: 30` in "
         "templates/grafana.yaml.j2) and reloads dashboards without a pod restart — a "
@@ -100,7 +100,7 @@ CENSUS = sorted(from_file_configmap_roles())
 # parametrized check below on zero cases.
 KNOWN_FLOOR = {
     "autofix-bridge",
-    "claude-otel",
+    "observability",
     "game-stats",
     "monitor-bridge",
 }

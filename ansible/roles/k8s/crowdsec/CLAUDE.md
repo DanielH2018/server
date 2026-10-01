@@ -97,7 +97,7 @@ nothing.
 ## Which Prometheus job covers which agent
 
 Four CrowdSec containers run here and one job in
-`roles/k8s/claude-otel/templates/prometheus.yaml.j2` covers each: `crowdsec` (the engine pod, LAPI
+`roles/k8s/observability/templates/prometheus.yaml.j2` covers each: `crowdsec` (the engine pod, LAPI
 plus AppSec), `crowdsec-node-agents` (the DaemonSet), `crowdsec-traefik-agent` and
 `crowdsec-authelia-agent` (the two sidecars).
 

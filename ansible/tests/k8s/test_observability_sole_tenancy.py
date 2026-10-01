@@ -2,7 +2,7 @@
 
 `networkpolicy-observability.yaml.j2` admits a bare `podSelector: {}` as the intra-namespace
 ingress peer for the `observability` namespace — every pod there may reach every other pod
-there. That is sound only because the namespace is SOLE-TENANT today: `claude-otel` is the only
+there. That is sound only because the namespace is SOLE-TENANT today: `observability` is the only
 role that renders a workload into it. A second role landing a pod in this namespace would get
 free, unrestricted ingress to every already-fenced workload here, with no policy change of its
 own — the fence would look intact while quietly covering less than it claims to.
@@ -21,10 +21,10 @@ from _k8s_render import rendered_docs
 POD_KINDS = {"Deployment", "DaemonSet", "StatefulSet", "CronJob", "Job"}
 
 OBSERVABILITY_NAMESPACE = "observability"
-SOLE_TENANT_ROLE = "claude-otel"
+SOLE_TENANT_ROLE = "observability"
 
 
-def test_only_claude_otel_renders_a_workload_into_observability() -> None:
+def test_only_observability_renders_a_workload_into_observability() -> None:
     intruders = sorted(
         f"{role}/{doc.get('kind')}/{doc.get('metadata', {}).get('name', '?')}"
         for role, _tpl, doc in rendered_docs()

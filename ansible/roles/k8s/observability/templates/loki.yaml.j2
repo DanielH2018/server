@@ -12,7 +12,7 @@ metadata:
 data:
   loki.yaml: |
 {# Captured so the Deployment below can hash it into checksum/config. #}
-{% set claude_otel_loki_config %}
+{% set observability_loki_config %}
     auth_enabled: false
     # Loki's usage reporter defaults to on and POSTs to stats.grafana.org, which Pi-hole
     # blocks. Every 4h cycle then burns its whole 5-retry budget (an A plus an AAAA lookup
@@ -46,7 +46,7 @@ data:
             prefix: index_
             period: 24h
     limits_config:
-      retention_period: {{ claude_otel_loki_retention }}
+      retention_period: {{ observability_loki_retention }}
       # Claude Code sends whole prompts and responses as single log lines. The default 256KB
       # cap silently drops anything larger, which would lose exactly the long turns most worth
       # keeping — and a dropped line is invisible unless you go looking for it.
@@ -65,9 +65,9 @@ data:
         local:
           directory: /loki/rules
 {% endset %}
-{{ claude_otel_loki_config -}}
+{{ observability_loki_config -}}
 ---
-{{ pvc('loki-data', claude_otel_storage_class, claude_otel_loki_storage, namespace=k8s_observability_namespace) }}
+{{ pvc('loki-data', observability_storage_class, observability_loki_storage, namespace=k8s_observability_namespace) }}
 ---
 apiVersion: apps/v1
 kind: Deployment
@@ -89,26 +89,26 @@ spec:
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
         # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
         # under `## One config change, one restart`.
-        {{ checksum_annotation('config', value=claude_otel_loki_config | hash('sha1')) }}
+        {{ checksum_annotation('config', value=observability_loki_config | hash('sha1')) }}
       labels:
         app: loki
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
       # in this role's CLAUDE.md.
 {{ pod_shell('homelab-best-effort', run_as_user=10001, run_as_group=10001, fs_group=10001) }}
       containers:
         - name: loki
-          image: {{ claude_otel_loki_image }}
+          image: {{ observability_loki_image }}
           args: ["-config.file=/etc/loki/loki.yaml"]
 {{ hardened_security_context(non_root=true) }}
           ports:
             - name: http
               containerPort: 3100
               # On the node's loopback so otelq can reach it; see
-              # claude_otel_query_host_ip in defaults/main.yml.
+              # observability_query_host_ip in defaults/main.yml.
               hostPort: 3100
-              hostIP: {{ claude_otel_query_host_ip }}
+              hostIP: {{ observability_query_host_ip }}
           volumeMounts:
             - name: loki-config
               mountPath: /etc/loki
@@ -136,8 +136,8 @@ metadata:
   namespace: {{ k8s_observability_namespace }}
 spec:
   # Pinned: host-side query tools carry this address as a constant. See
-  # claude_otel_loki_cluster_ip in defaults/main.yml for why.
-  clusterIP: {{ claude_otel_loki_cluster_ip }}
+  # observability_loki_cluster_ip in defaults/main.yml for why.
+  clusterIP: {{ observability_loki_cluster_ip }}
   selector:
     app: loki
   ports:

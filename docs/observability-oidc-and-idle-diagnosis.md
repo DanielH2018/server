@@ -1,9 +1,9 @@
-# claude-otel — the OIDC measurements and the idle-versus-broken diagnosis
+# observability — the OIDC measurements and the idle-versus-broken diagnosis
 
-Working-out moved off `ansible/roles/k8s/claude-otel/CLAUDE.md` (#2993), which a session reads on
+Working-out moved off `ansible/roles/k8s/observability/CLAUDE.md` (#2993), which a session reads on
 every touch of the telemetry stack. The role doc keeps the rules; this page keeps the two Grafana
 OIDC measurements, the four behaviours that make an idle stack look broken, and the commands that
-exercise the pipeline end to end. `docs/claude-otel-dashboards.md` is the sibling page for the
+exercise the pipeline end to end. `docs/observability-dashboards.md` is the sibling page for the
 boards.
 
 ## Granting the `groups` scope does not deliver the `groups` claim
@@ -21,6 +21,28 @@ first, and this expression always yields a value there because `|| 'Viewer'` fir
 absent — so `userinfo` is never consulted. Confirming that needs
 `GF_LOG_FILTERS=oauth.generic_oauth:debug` and a deploy. **Do not drop the claims policy on the
 strength of this paragraph**; the two measurements above are what the config rests on.
+
+## The three OIDC rules
+
+Lifted here from the role's `CLAUDE.md` on 2026-10-01 (#2911), which keeps the summary and
+points at this section.
+
+**`GF_SERVER_ROOT_URL` names the LAN host, and that is the whole design constraint.** Grafana
+builds its OAuth callback from `root_url` alone, so only one route carries the OIDC login and
+**`grafana.<domain>` cannot complete one**. That is why `GF_AUTH_DISABLE_LOGIN_FORM` and
+auto-login are deliberately absent: the admin form is the public path in, and the break-glass
+path when Authelia is down. Moving `root_url` flips which route works — both callbacks are
+registered.
+
+**Keep the `with_groups` claims policy on the Authelia client.** The `groups` scope alone
+leaves an `admins` user logged in as Viewer behind a green pod and a green health gate, and
+`/api/user/orgs` is the only check that sees it — the measurement is the section above. Three
+settings are written twice and drift silently (`require_pkce`, the `groups` scope, that
+`claims_policy`); `ansible/tests/services/test_grafana_authelia_oidc.py` holds both the
+`observability` and `authelia` roles to all three.
+
+**The client secret is one credential in two SOPS keys** — `grafana_oidc_client_secret` and
+`grafana_oidc_client_secret_hash` — so rotate them together.
 
 ## UNVERIFIED: the admin form on the public route
 

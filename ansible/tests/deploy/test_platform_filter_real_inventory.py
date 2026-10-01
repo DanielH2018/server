@@ -101,7 +101,7 @@ def test_daniel_server_is_fully_drained():
     # its worlds were the only irreplaceable data kopia still uniquely protected — and
     # kopia itself (17 -> 16) RETIRED, replaced by the Longhorn backup plane it had been
     # sharing a B2 account cap with. Then tempo (16 -> 15) RETIRED at D7 later that day:
-    # the otel-collector became a pure forwarder into the cluster claude-otel stack, so
+    # the otel-collector became a pure forwarder into the cluster observability stack, so
     # nothing fed the Docker tempo anymore — cluster tempo is the successor. The count
     # stays hardcoded on purpose — bumping it is the deliberate act that says "a service was
     # retired" (or added), and a drop nobody edited means the default regressed and production

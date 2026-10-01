@@ -7,7 +7,7 @@ nobody can see, which is half a feature. This is the reader.
 WHAT IT ANSWERS THAT NOTHING ELSE DOES. `kubectl` reports what is running; git reports what is
 committed; neither knows which commit produced the running manifests. `deploy.sh` renders from
 whatever tree it is invoked in, so those two can disagree without anything going red -- a
-worktree 48 commits behind master reverted claude-otel for nine minutes on 2026-08-19 and the
+worktree 48 commits behind master reverted observability for nine minutes on 2026-08-19 and the
 only symptom was a scrape-target count moving.
 
 THREE FLAGS. `dirty` means the tree had uncommitted tracked changes, so no commit reproduces

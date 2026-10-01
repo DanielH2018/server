@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Red-proof for claude-otel's three dashboard prunes.
+"""Red-proof for observability's three dashboard prunes.
 
 A retired Grafana board stayed live because the ConfigMap kept a key no file justified, and #517
 shipped a prune for it that was INERT — #520's own commit message says so: "Correcting #517. Its
@@ -34,7 +34,7 @@ from _helpers import render_expr
 from _helpers import task_named
 
 
-DASHBOARDS = ANSIBLE / "roles" / "k8s" / "claude-otel" / "tasks" / "dashboards.yml"
+DASHBOARDS = ANSIBLE / "roles" / "k8s" / "observability" / "tasks" / "dashboards.yml"
 STAGED = "/etc/rancher/k3s/dashboards"
 ANNOTATED = "/etc/rancher/k3s/dashboards-annotated"
 
@@ -61,8 +61,8 @@ def _found(paths: list[str]) -> dict:
 def _staged_selection(on_disk: list[str], justified: list[str]) -> list[str]:
     return render_expr(
         _loop_of("Remove staged dashboards with no file behind them"),
-        claude_otel_staged_found=_found(on_disk),
-        claude_otel_valid_staged=justified,
+        observability_staged_found=_found(on_disk),
+        observability_valid_staged=justified,
     )
 
 
@@ -94,8 +94,8 @@ def test_the_staged_prune_is_clean_when_the_sets_agree() -> None:
 def _annotated_selection(on_disk: list[str], justified_staged: list[str]) -> list[str]:
     return render_expr(
         _loop_of("Remove annotated dashboards with no staged source"),
-        claude_otel_annotated_found=_found(on_disk),
-        claude_otel_valid_staged=justified_staged,
+        observability_annotated_found=_found(on_disk),
+        observability_valid_staged=justified_staged,
     )
 
 
@@ -141,8 +141,8 @@ def _stale_keys(live_json: str, source_files: list[str]) -> list[str]:
     )
     v = task["vars"]
     ctx = {
-        "claude_otel_dashboard_live_keys": {"results": [{"stdout": live_json}]},
-        "claude_otel_dashboard_source_files": {
+        "observability_dashboard_live_keys": {"results": [{"stdout": live_json}]},
+        "observability_dashboard_source_files": {
             "results": [{"files": [{"path": p} for p in source_files]}]
         },
         "idx": 0,
@@ -195,10 +195,10 @@ def test_the_expressions_read_the_registers_the_find_tasks_set() -> None:
     each register name is asserted against the task that actually sets it.
     """
     registers = {
-        "Find the staged dashboards that no longer exist in the role": "claude_otel_staged_found",
-        "Find the annotated dashboards that no longer have a staged source": "claude_otel_annotated_found",
-        "Read the live dashboard ConfigMap keys": "claude_otel_dashboard_live_keys",
-        "Find the dashboard files each ConfigMap should carry": "claude_otel_dashboard_source_files",
+        "Find the staged dashboards that no longer exist in the role": "observability_staged_found",
+        "Find the annotated dashboards that no longer have a staged source": "observability_annotated_found",
+        "Read the live dashboard ConfigMap keys": "observability_dashboard_live_keys",
+        "Find the dashboard files each ConfigMap should carry": "observability_dashboard_source_files",
     }
     for name, expected in registers.items():
         actual = task_named(load_tasks(DASHBOARDS), name).get("register")
@@ -252,7 +252,7 @@ def test_the_pruned_tree_is_derived_not_enumerated() -> None:
     justify = task_named(
         load_tasks(DASHBOARDS), "Build the staged paths the role's own files justify"
     )
-    expr = str(justify["ansible.builtin.set_fact"]["claude_otel_valid_staged"])
+    expr = str(justify["ansible.builtin.set_fact"]["observability_valid_staged"])
     assert "fileglob" in expr and "role_path" in expr, (
         "the allow-list must be globbed from the role's files/ tree; an enumerated list would "
         "silently stop justifying a board someone adds"

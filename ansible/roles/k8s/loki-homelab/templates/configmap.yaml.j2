@@ -7,7 +7,7 @@ metadata:
 data:
   loki.yaml: |
     auth_enabled: false
-    # See the same block in roles/k8s/claude-otel/templates/loki.yaml.j2: the usage reporter
+    # See the same block in roles/k8s/observability/templates/loki.yaml.j2: the usage reporter
     # defaults to on, Pi-hole blocks stats.grafana.org, and each 4h cycle spends its full
     # 5-retry budget on a name that never resolves. The Alloy shipper has the same reporter
     # and turns it off with --disable-reporting in alloy-daemonset.yaml.j2.

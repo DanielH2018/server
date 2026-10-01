@@ -26,7 +26,7 @@ _TICK = chr(96)
 _BOARD = (
     Path(__file__).resolve().parents[3]
     / "k8s"
-    / "claude-otel"
+    / "observability"
     / "files"
     / "dashboards"
     / "Infrastructure"

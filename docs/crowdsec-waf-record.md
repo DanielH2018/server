@@ -114,7 +114,7 @@ is gone, for two reasons:
   withheld the `crowdsec` Service endpoints that front LAPI and AppSec. Observed 2026-08-16: LAPI
   was serving while the pod sat 1/2 with no endpoints.
 - **Its aggregate view was already Grafana's.** The four Security-folder boards
-  (`ansible/roles/k8s/claude-otel/files/dashboards/Security/`) read the engine's `:6060` metrics.
+  (`ansible/roles/k8s/observability/files/dashboards/Security/`) read the engine's `:6060` metrics.
 
 **What was lost, and has no Grafana equivalent.** Metabase read the LAPI's `decisions` and
 `alerts` tables directly, so it could show what Prometheus has no label for: per-IP identity

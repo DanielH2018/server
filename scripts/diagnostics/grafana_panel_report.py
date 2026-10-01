@@ -44,7 +44,7 @@ _BARE_DASHBOARD_URL = re.compile(r"^/d/[^/]+/?$")
 # restart, when the counters behind it start from nothing.
 #
 # The cost of that choice, stated rather than buried: a panel whose metric DIED reads "No
-# data" too, and this tier will not catch it. That is the gap the claude-otel role's
+# data" too, and this tier will not catch it. That is the gap the observability role's
 # CLAUDE.md already names — `kopia_b2_billable_bytes` went away with Kopia and three panels
 # returned nothing for two weeks behind a healthy pod. Catching it needs a per-panel
 # expectation of what the metric should return, which is a different check from this one.

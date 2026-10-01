@@ -7,7 +7,7 @@
 # loki-homelab isn't drafted on the assumption that monitor-bridge has no loki caller at all.
 #
 # loki itself is ALSO read on host loopback by `otelq` (a workstation host process — see
-# claude-otel/CLAUDE.md), covered the same way as tempo/otel-collector below, not by this file.
+# observability/CLAUDE.md), covered the same way as tempo/otel-collector below, not by this file.
 # The other four need no per-workload policy, each for a different reason — don't collapse them
 # into one mechanism:
 #   - tempo, otel-collector: loopback-hostPort callers only, admitted by the node-CIDR `ipBlock`

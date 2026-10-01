@@ -2,7 +2,7 @@
 
 Two roles have to agree for etcd metrics to be readable, and they are applied by different
 playbooks: `setup/k3s` puts `--etcd-expose-metrics` in the server args (k3s-bringup.yml, a
-broad-plane run), and `claude-otel` gates its `etcd` scrape job (deploy.yml). Either half
+broad-plane run), and `observability` gates its `etcd` scrape job (deploy.yml). Either half
 alone is a silent fault rather than a loud one:
 
   * flag without job  — the port binds 0.0.0.0 for nobody. A control-plane port is open, and
@@ -25,7 +25,7 @@ from _helpers import REPO
 _REPO = REPO
 _ALL_VARS = _REPO / "ansible/inventory/group_vars/all.yml"
 _K3S_DEFAULTS = _REPO / "ansible/roles/setup/k3s/defaults/main.yml"
-_PROM_TEMPLATE = _REPO / "ansible/roles/k8s/claude-otel/templates/prometheus.yaml.j2"
+_PROM_TEMPLATE = _REPO / "ansible/roles/k8s/observability/templates/prometheus.yaml.j2"
 
 _SWITCH = "k3s_etcd_expose_metrics"
 
@@ -67,7 +67,7 @@ def test_the_scrape_job_is_gated_on_the_same_switch():
     job_line = next(
         (i for i, ln in enumerate(lines) if ln.strip() == "- job_name: etcd"), None
     )
-    assert job_line is not None, "claude-otel must declare an `etcd` scrape job"
+    assert job_line is not None, "observability must declare an `etcd` scrape job"
 
     # Walk back to the nearest enclosing Jinja conditional and require it to be ours.
     guard = next(

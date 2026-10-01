@@ -160,7 +160,7 @@ def iter_cron_targets(roles: Path = ROLES):
     """Yield (template_path, task_file, cron_task) for every cron-scheduled shell template.
 
     Two hops, not one: the deployed script's basename does not always match the template's own
-    filename — claude-otel deploys templates/telemetry-health.sh.j2 to
+    filename — observability deploys templates/telemetry-health.sh.j2 to
     /usr/local/bin/claude-otel-health.sh (a `dest:` rename), and the cron `job:` only ever names
     the dest. So this resolves `job:` -> dest basename -> the `ansible.builtin.template` task in
     the SAME file whose `dest:` matches -> that task's `src:`, and only then has a template.

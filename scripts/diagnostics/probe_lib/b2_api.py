@@ -67,7 +67,7 @@ def b2_authorize_config(key_id, app_key):
 
 
 # DECIDED: b2_list_file_names is never a billable-bytes source; it sums current objects and
-# under-reports what the cap measures. docs/claude-otel-dashboards.md has the trap.
+# under-reports what the cap measures. docs/observability-dashboards.md has the trap.
 def b2_list_files_config(api_url, token, bucket_id, prefix, start=None):
     """Build the `curl --config -` body (via stdin) for one B2 `b2_list_file_names` page.
 

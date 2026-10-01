@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """A dashboard in an unlisted folder is provisioned nowhere, silently.
 
-`tasks/dashboards.yml` bakes one ConfigMap per name in `claude_otel_dashboard_folders`, and the
+`tasks/dashboards.yml` bakes one ConfigMap per name in `observability_dashboard_folders`, and the
 Deployment mounts each by EXPLICIT per-folder volume name (see the comment above that variable in
 `defaults/main.yml`). A board dropped into `files/dashboards/<folder>/` whose folder is not on that
 list is therefore never baked and never mounted: the deploy is green, Grafana is Ready, and the
@@ -19,7 +19,7 @@ import pytest
 from _helpers import ANSIBLE
 from _helpers import load_yaml
 
-ROLE = ANSIBLE / "roles" / "k8s" / "claude-otel"
+ROLE = ANSIBLE / "roles" / "k8s" / "observability"
 DASHBOARDS_DIR = ROLE / "files" / "dashboards"
 
 # The folders that must still exist, named rather than counted. A census that globs for its own
@@ -48,7 +48,7 @@ def unmounted_folders(dashboards_dir: Path, provisioned: list[str]) -> set[str]:
 
 
 def provisioned_folders() -> list[str]:
-    return load_yaml(ROLE / "defaults" / "main.yml")["claude_otel_dashboard_folders"]
+    return load_yaml(ROLE / "defaults" / "main.yml")["observability_dashboard_folders"]
 
 
 def test_every_folder_holding_a_board_is_provisioned():

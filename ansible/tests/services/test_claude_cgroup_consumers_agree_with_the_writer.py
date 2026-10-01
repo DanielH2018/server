@@ -33,7 +33,7 @@ BOARD = (
     ANSIBLE
     / "roles"
     / "k8s"
-    / "claude-otel"
+    / "observability"
     / "files"
     / "dashboards"
     / "AI"

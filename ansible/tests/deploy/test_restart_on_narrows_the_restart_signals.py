@@ -3,7 +3,7 @@
 `k8s/manifests` has three signals that queue a `rollout restart` and make the release record
 expect a fresh `restartedAt`: the ordinary render changed, the secret render changed, or
 `k8s/image-builder` rebuilt the role's image. All three are per-ROLE, which is wrong for a role
-that renders several workloads: claude-otel renders six from eight manifests, so one changed
+that renders several workloads: observability renders six from eight manifests, so one changed
 manifest read as "all six changed" and restarted all six (issue #2858).
 
 A rollout entry can now name a subset in `restart_on`. An entry that names none is the role
@@ -32,7 +32,7 @@ _SIGNALS = frozenset({"config", "secret", "image"})
 
 # Roles known to narrow. Keeps the census below non-vacuous: a renamed variable would leave it
 # iterating nothing and passing.
-_EXPECTED_NARROWERS = frozenset({"claude-otel"})
+_EXPECTED_NARROWERS = frozenset({"observability"})
 
 _TRIGGERS_VAR = "manifests_target_triggers"
 

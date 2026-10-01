@@ -84,13 +84,13 @@ netpol_baseline_obs_exempt_workloads: []
 #
 # The cni0 pair (10.42.0.1/32, 10.42.1.1/32) is load-bearing on BOTH nodes, not just
 # daniel-box's: loki, prometheus and tempo each publish a loopback hostPort for `otelq` (a
-# workstation host process — see claude-otel/CLAUDE.md), a hostPort binds only on the node the
+# workstation host process — see observability/CLAUDE.md), a hostPort binds only on the node the
 # pod is actually scheduled to, and all three are unpinned single-replica Deployments — so
 # whichever node one lands on is where otelq's loopback path, and therefore that node's own
 # cni0, originates. Trimming either cni0 entry on the reasoning that "daniel-server has no
 # caller nameable today" breaks otelq the moment that pod reschedules there.
 #
-# prometheus has no node pin, so it can also land on daniel-server. When it does, the claude-otel
+# prometheus has no node pin, so it can also land on daniel-server. When it does, the observability
 # health cron — installed on daniel-box only (`containers_list` in host_vars/daniel-box.yml; no
 # entry, and no `delegate_to`, for daniel-server) — calling its ClusterIP is cross-node. By
 # slice 2's own evidence, a cross-node host->pod packet arrives as the SENDING node's flannel.1,
@@ -106,7 +106,7 @@ netpol_baseline_obs_exempt_workloads: []
 netpol_baseline_obs_node_cidrs:
   - 10.42.0.1/32    # daniel-box cni0 (otelq's loopback path when loki/prometheus/tempo land here; the API server's proxy for Headlamp's Prometheus plugin, same condition)
   - 10.42.1.1/32    # daniel-server cni0 (otelq's loopback path when loki/prometheus/tempo land here)
-  - 10.42.0.0/32    # daniel-box flannel.1 (the claude-otel cron, and the API server's proxy for Headlamp's Prometheus plugin, when prometheus is cross-node)
+  - 10.42.0.0/32    # daniel-box flannel.1 (the observability cron, and the API server's proxy for Headlamp's Prometheus plugin, when prometheus is cross-node)
   - 10.42.1.0/32    # daniel-server flannel.1 (no caller nameable today; deliberate over-inclusion)
 
 # The slice-4.5 probe's targets, in one place because THREE things must agree about them: the

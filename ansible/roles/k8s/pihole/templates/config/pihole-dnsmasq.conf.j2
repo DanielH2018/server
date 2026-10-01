@@ -47,7 +47,7 @@ local=/local.{{ domain }}/
 # the first time someone forgets it. Entries without a `hostname` (traefik itself) have no
 # route of their own and are skipped.
 #
-# `extra_hostnames` covers an entry that fronts MORE THAN ONE routed workload — claude-otel
+# `extra_hostnames` covers an entry that fronts MORE THAN ONE routed workload — observability
 # runs Grafana, Prometheus, Loki and Tempo under a single containers_list entry, so its
 # `hostname` can only name one of them. Without this, a second workload's IngressRoute exists
 # in the cluster but its name falls through to the local.<domain> wildcard above, resolves to

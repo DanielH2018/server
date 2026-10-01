@@ -29,7 +29,7 @@ claims are unchanged.
   `terraria-stats` as the rollout and `valheim-stats` in `manifests_extra_rollouts`; a second
   include under the same service would prune the first one's staged files. A render change to
   either game therefore restarts both pods.
-- **Scraped by:** claude-otel prometheus, `job_name: terraria-stats` and `valheim-stats`.
+- **Scraped by:** observability prometheus, `job_name: terraria-stats` and `valheim-stats`.
 - Stock `python:3.14-alpine`, not an `image-builder` build: both scripts and `stats_lib.py` are
   pure stdlib, so a build would add a layer and change nothing that runs.
   **Not because a built image could not be pulled here.** The in-cluster `registry` serves a
@@ -53,7 +53,7 @@ claims are unchanged.
 - **It runs as many pods as the game server does**, reading `terraria_k8s_replicas` from
   `ansible/inventory/group_vars/all.yml` — not from terraria's defaults, since a role default
   does not cross a role boundary and `| default(1)` here would have rendered 1 forever
-  (#2877). claude-otel's `terraria-stats` scrape job reads the same value, because a Service
+  (#2877). observability's `terraria-stats` scrape job reads the same value, because a Service
   with no endpoint reads `up == 0` and pages the scrape-target check.
   `ansible/tests/services/test_terraria_stats_follows_the_server.py` holds the three renders
   together. valheim-stats has no such knob.

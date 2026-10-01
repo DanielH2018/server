@@ -110,19 +110,19 @@ def test_check_one_flags_a_declared_pi_container_that_is_absent():
 
 
 def test_check_one_flags_a_resolved_k8s_workload_that_is_absent():
-    """claude-otel deploys six workloads and none is named claude-otel, so the old gate asked
+    """observability deploys six workloads and none is named observability, so the old gate asked
     for a name nothing carries, got "no Deployment or DaemonSet", and skipped. Now the role's
     manifests name the workloads, and one of them missing is a failed deploy."""
 
     def run(argv, **kwargs):
         return _result(
             1,
-            "claude-otel: 1 of 6 workloads FAILED the gate — Deployment "
+            "observability: 1 of 6 workloads FAILED the gate — Deployment "
             "observability/grafana",
         )
 
     state, detail = notify_mod.check_one(
-        "claude-otel", tools=notify_mod.NotifyTools(run=run)
+        "observability", tools=notify_mod.NotifyTools(run=run)
     )
     assert state == "unhealthy"
     assert "FAILED the gate" in detail
@@ -134,11 +134,11 @@ def test_gate_fails_on_a_resolved_workload_that_is_absent():
     def run(argv, **kwargs):
         return _result(
             1,
-            "claude-otel: 1 of 6 workloads FAILED the gate — Deployment homelab/grafana",
+            "observability: 1 of 6 workloads FAILED the gate — Deployment homelab/grafana",
         )
 
     ok, lines = notify_mod.gate(
-        ["claude-otel"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
+        ["observability"], ansible_ok=True, tools=notify_mod.NotifyTools(run=run)
     )
     assert ok is False
     assert not any("skipped" in line for line in lines)
@@ -479,7 +479,7 @@ def test_probes_absent_workload_messages_carry_no_skip_marker():
     """
     docker_missing, _ = health_docker.format_health([], "wg-easy", declared=True)
     k8s_missing, _ = health.format_role_health(
-        "claude-otel",
+        "observability",
         [("observability", "Deployment", "grafana", None, None)],
         _NOW,
     )

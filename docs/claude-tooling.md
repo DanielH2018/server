@@ -118,7 +118,7 @@ a `--pi`-shaped answer of their own rather than the cluster's — this is the Do
 equivalent of the four cluster checks above, backed by `probe_lib/pi_plane.py`.
 
 - **`targets --pi`** — Prometheus scrape-target health, scoped to daniel-pi. The declared job
-  set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in claude-otel's
+  set (`node-pi`, `alloy-pi`) is parsed from `k8s_pi_client_ip` static targets in observability's
   `prometheus.yaml.j2` rather than hand-listed, so a renamed or added job needs no change here.
   A declared job absent from the live set is reported MISSING and fails the gate — dividing the
   Pi's own live set by itself would repeat `monitors`' N/N-up mistake.
@@ -151,7 +151,7 @@ Which commit produced the manifests each k8s service is running. `kubectl` repor
 running and git reports what is committed; until this existed, nothing joined the two. That join
 matters here because `deploy.sh` renders from whatever git tree it is invoked in, so the running
 manifests and master can disagree with every repo-side check still green — a worktree 48 commits
-behind reverted claude-otel for nine minutes on 2026-08-19, and the only symptom was a
+behind reverted observability for nine minutes on 2026-08-19, and the only symptom was a
 scrape-target count moving.
 
 The records come from `roles/k8s/manifests/tasks/release_stamp.yml`, which writes one JSON file
@@ -653,19 +653,19 @@ No longer lives here. A `log-permission` hook used to count tool calls and promp
 `user`) instead of leaving it inferred.
 
 Both hosts' Claude Code exports OTLP to their local node's hostPort (127.0.0.1:4317); since
-Phase F (2026-08-13) the cluster claude-otel collector is a DaemonSet with a loopback hostPort on
+Phase F (2026-08-13) the cluster observability collector is a DaemonSet with a loopback hostPort on
 every node, so both hosts reach their own node's collector directly — the Docker forwarder is
 dissolved/archived. The reader is the `claude-permission-audit` plugin (`/audit-permissions`),
 installed globally rather than vendored per-repo.
 
-The events land in **claude-otel's Loki** (`observability` namespace, Service `loki`), not in
+The events land in **observability's Loki** (`observability` namespace, Service `loki`), not in
 `loki-homelab`. `probe.py loki-query` asks `loki-homelab` by default, and until #2210 a
 `{service_name="claude-code"}` query there returned a well-formed empty result that read as
 "the OTEL stream is gone" while 1.07M lines sat in the other store. A query whose
-selector is `service_name="claude-code"` routes to claude-otel's Loki on its own, with a
-stderr line saying so; `--loki claude-otel` asks that store for any query, and an explicit
+selector is `service_name="claude-code"` routes to observability's Loki on its own, with a
+stderr line saying so; `--loki observability` asks that store for any query, and an explicit
 `--loki homelab` with that selector is refused rather than answered empty. `otelq logs` only
-ever asks the claude-otel store.
+ever asks the observability store.
 
 ### `/audit-permissions` breaks whenever Loki is not on the node you run it from
 

@@ -8,7 +8,7 @@ the stale tree is internally self-consistent. Tests pass, prek passes, `--dry-ru
 validates: they all measure the old tree against itself. Nothing in the deploy path
 compares HEAD to origin/master.
 
-Measured 2026-08-19. A worktree 48 commits behind master ran `--tags claude-otel`. That
+Measured 2026-08-19. A worktree 48 commits behind master ran `--tags observability`. That
 reverted the role for ~9 minutes: Prometheus lost the endpoint-based scrape discovery
 that reaches both longhorn-manager pods (falling back to a single Service target), and
 telemetry-health.sh went back to its branch-point version. It surfaced only because a

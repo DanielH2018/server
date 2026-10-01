@@ -18,7 +18,7 @@ the three CrowdSec seeding containers are in `docs/authelia-sessions-and-crowdse
 - **`authelia-config` is on the daily R2 tier.** Sessions live in redis, not on the claim.
 - **Routes name the `authelia` Middleware, which is a chain, not the forwardAuth.** Its first member
   clears X-Forwarded-Host/-Uri/-Method so forwardAuth rebuilds them, and no route names
-  `authelia-forwardauth` directly; the same unit is copied into the longhorn-ui and claude-otel
+  `authelia-forwardauth` directly; the same unit is copied into the longhorn-ui and observability
   namespaces. ENFORCED: `ansible/tests/k8s/test_forwardauth_rebuilds_request_target.py`.
 
 ## Access control comes from containers_list

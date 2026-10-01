@@ -75,7 +75,7 @@ the way back out.
 `daemon.json` on 9323, and `[metrics] address` in `/etc/containerd/config.toml` on 1338 at path
 `/v1/metrics`, each with a UFW allow from `lan_subnet` — a host listener gets none of the bypass
 Docker's own iptables chain gives a published port. The cluster's Prometheus scrapes them as
-`dockerd-pi` and `containerd-pi` (`ansible/roles/k8s/claude-otel/`). A change here restarts
+`dockerd-pi` and `containerd-pi` (`ansible/roles/k8s/observability/`). A change here restarts
 containerd, with no cascade into `dockerd`, and `live-restore` keeps the containers up.
 
 They exist to size `GOMEMLIMIT`. On 2026-09-18 the two daemons took 97 and 53 major faults/s on

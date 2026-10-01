@@ -130,7 +130,7 @@ def test_no_template_names_a_mount_under_run_secrets():
 # to test_pod_template_hygiene.py as test_every_pod_template_disables_service_link_env_vars.
 # It rendered `deployment.yaml.j2` per role through `_render`, so 16 Deployments in other
 # filenames and every DaemonSet, Job and CronJob were never checked, and deleting the field
-# from claude-otel/templates/grafana.yaml.j2 passed the suite (#1858). The replacement reads
+# from observability/templates/grafana.yaml.j2 passed the suite (#1858). The replacement reads
 # the whole rendered corpus. The Authelia incident that justifies the guard is in its docstring.
 
 

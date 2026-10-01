@@ -37,7 +37,7 @@ on the assumption that a scrape must authenticate.
 
 **The UPS reading is on `/ups_metrics`, not `/metrics`.** `/metrics` is the exporter's own Go and
 process registry and carries no UPS variable at all, so a scrape job pointed there succeeds and
-returns nothing useful. The scrape job in `claude-otel/templates/prometheus.yaml.j2` (`job_name:
+returns nothing useful. The scrape job in `observability/templates/prometheus.yaml.j2` (`job_name:
 nut`) sets `metrics_path` accordingly and passes `ups=` as a param — the exporter fails a scrape
 outright if it discovers several UPS devices and has not been told which, so naming it means a
 second UPS cannot silently blank the job.

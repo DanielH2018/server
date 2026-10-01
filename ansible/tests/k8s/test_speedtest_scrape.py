@@ -4,7 +4,7 @@ directly and pushes a verdict to Kuma — a tile, not a series — and nothing s
 app itself, so "is 78.8 Mbps a one-off or a week-long slide" was unanswerable.
 
 speedtest-tracker natively exposes `/prometheus` with no config needed on its side, so the
-fix is a scrape job in claude-otel's prometheus.yaml.j2, mirroring the terraria-stats and
+fix is a scrape job in observability's prometheus.yaml.j2, mirroring the terraria-stats and
 valheim-stats jobs it sits beside. This guards that job's shape: present, at the right
 path, at the right target — the ways it could regress into a silently-empty or 404ing
 target without any renderer or test noticing.
@@ -29,7 +29,7 @@ def _speedtest_job(jobs: list[dict]) -> dict | None:
 
 def _scrape_jobs() -> list[dict]:
     for role, template, doc in rendered_docs():
-        if role != "claude-otel" or "prometheus" not in str(template):
+        if role != "observability" or "prometheus" not in str(template):
             continue
         if not isinstance(doc, dict) or doc.get("kind") != "ConfigMap":
             continue

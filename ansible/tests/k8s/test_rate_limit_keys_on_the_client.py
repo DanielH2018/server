@@ -46,8 +46,8 @@ REQUIRED_LIMITERS = frozenset(
         "traefik/rate-limit-proxied",
         "traefik/rate-limit-public-livesync",
         "traefik/rate-limit-public-livesync-proxied",
-        "claude-otel/rate-limit",
-        "claude-otel/rate-limit-proxied",
+        "observability/rate-limit",
+        "observability/rate-limit-proxied",
         "longhorn-ui/rate-limit",
     }
 )

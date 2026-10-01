@@ -1,4 +1,4 @@
-"""One claude-otel config edit must roll one claude-otel workload.
+"""One observability config edit must roll one observability workload.
 
 The role sets `manifests_rollout: ''`, so `k8s/manifests` neither waits nor restarts for it,
 and the role does both itself. Until 2026-09-28 its restart task looped over all six workloads
@@ -23,7 +23,7 @@ The replacement has two halves, and this module guards both against the ways the
     original bug with the gate blinded, so the key count is pinned below.
 
 `restart_on` also decides what the release record expects (`rollouts[].restart`,
-`k8s/manifests/tasks/release_stamp.yml`), so a wrong value fails `probe.py health claude-otel`
+`k8s/manifests/tasks/release_stamp.yml`), so a wrong value fails `probe.py health observability`
 with NOT ROLLED rather than going quiet. That half is the loud one; these two are not.
 """
 
@@ -33,7 +33,7 @@ from _helpers import REPO, load_defaults
 from _k8s_render import rendered_docs
 
 
-_ROLE = "claude-otel"
+_ROLE = "observability"
 
 # The census must find these. A renamed template or a moved role would otherwise leave every
 # loop below iterating nothing, and an `all(...)` over nothing passes.
@@ -116,7 +116,7 @@ def _restart_on():
     declared = load_defaults(REPO / "ansible/roles/k8s" / _ROLE)
     return {
         entry["name"]: entry.get("restart_on")
-        for entry in declared["claude_otel_stabilise_workloads"]
+        for entry in declared["observability_stabilise_workloads"]
     }
 
 
@@ -125,10 +125,10 @@ def test_the_census_finds_every_workload_the_role_renders():
 
 
 def test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation():
-    # fact: ansible/roles/k8s/claude-otel/CLAUDE.md#One config change, one restart
+    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
     docs = _role_docs()
     own_configmaps = _names_of_kind(docs, "ConfigMap")
-    assert own_configmaps, "claude-otel renders no ConfigMap — the census is vacuous."
+    assert own_configmaps, "observability renders no ConfigMap — the census is vacuous."
 
     checked = []
     for name, workload in sorted(_workloads().items()):
@@ -149,10 +149,10 @@ def test_a_workload_mounting_a_role_configmap_carries_the_checksum_annotation():
 
 
 def test_every_workload_reading_a_role_secret_declares_restart_on_secret():
-    # fact: ansible/roles/k8s/claude-otel/CLAUDE.md#One config change, one restart
+    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
     docs = _role_docs()
     own_secrets = _names_of_kind(docs, "Secret")
-    assert own_secrets, "claude-otel renders no Secret — the census is vacuous."
+    assert own_secrets, "observability renders no Secret — the census is vacuous."
 
     readers = {
         name
@@ -160,7 +160,7 @@ def test_every_workload_reading_a_role_secret_declares_restart_on_secret():
         if _secret_inputs(workload) & own_secrets
     }
     assert readers == _EXPECTED_SECRET_READERS, (
-        f"the workloads reading a claude-otel Secret are {sorted(readers)}, not "
+        f"the workloads reading a observability Secret are {sorted(readers)}, not "
         f"{sorted(_EXPECTED_SECRET_READERS)}. Update restart_on and this set together."
     )
 
@@ -168,7 +168,7 @@ def test_every_workload_reading_a_role_secret_declares_restart_on_secret():
     for name in sorted(_workloads()):
         triggers = restart_on.get(name)
         assert triggers is not None, (
-            f"{name} has no restart_on in claude_otel_stabilise_workloads, so it falls back to "
+            f"{name} has no restart_on in observability_stabilise_workloads, so it falls back to "
             "all three signals and the role restarts it for any manifest change again."
         )
         if name in readers:
@@ -186,14 +186,14 @@ def test_every_workload_reading_a_role_secret_declares_restart_on_secret():
 
 
 def test_no_role_configmap_grew_a_key_the_annotation_does_not_hash():
-    # fact: ansible/roles/k8s/claude-otel/CLAUDE.md#One config change, one restart
+    # fact: ansible/roles/k8s/observability/CLAUDE.md#One config change, one restart
     counts = {
         (doc.get("metadata") or {}).get("name"): len(doc.get("data") or {})
         for doc in _role_docs()
         if doc.get("kind") == "ConfigMap"
     }
     assert counts == _CONFIGMAP_DATA_KEYS, (
-        f"claude-otel's ConfigMap data keys are {counts}, not {_CONFIGMAP_DATA_KEYS}. Each "
+        f"observability's ConfigMap data keys are {counts}, not {_CONFIGMAP_DATA_KEYS}. Each "
         "template hashes one `{% set %}` capture into its pod template; a key added outside "
         "that capture changes the ConfigMap without moving the pod template, so the edit "
         "reaches the object and never the pod. Widen the capture, then update this map."

@@ -37,7 +37,7 @@ spec:
     # anywhere. Same shape as networkpolicy-traefik.yaml.j2's :8080/:6060 grant.
     #
     # This grant and the `crowdsec-authelia-agent` scrape job in
-    # claude-otel/templates/prometheus.yaml.j2 only work as a pair: without the grant the job
+    # observability/templates/prometheus.yaml.j2 only work as a pair: without the grant the job
     # reads `up == 0` forever.
     - from:
         - namespaceSelector:

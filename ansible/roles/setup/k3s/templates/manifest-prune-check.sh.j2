@@ -12,7 +12,7 @@
 # cluster object running forever after its template entry is gone. This is the exact shape of
 # two live incidents on 2026-08-13: the claude-otel-ingest IngressRoute (observability
 # namespace) is STILL RUNNING right now with no ownerReferences and no mention anywhere in
-# ansible/roles/k8s/claude-otel/templates/ — confirmed live while writing this check — and Kuma
+# ansible/roles/k8s/observability/templates/ — confirmed live while writing this check — and Kuma
 # monitors 300/301 outlived their static-monitors.yaml.j2 entries at E7.
 #
 # LIMITATION, by design: Kuma monitors are NOT checked here. AutoKuma reconciles those from a

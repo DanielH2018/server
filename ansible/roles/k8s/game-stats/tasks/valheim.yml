@@ -55,7 +55,7 @@
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so it
 # becomes a ConfigMap via kubectl --from-file, never via a template — the same reasoning
-# as terraria-stats, claude-otel's dashboards, and image-builder's context files.
+# as terraria-stats, observability's dashboards, and image-builder's context files.
 - name: Render the script ConfigMap manifest for valheim-stats
   tags: [config]
   ansible.builtin.shell:

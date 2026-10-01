@@ -62,13 +62,16 @@ _RECREATE = {
         "authelia-redis",
     ): "one in-memory session store; two would each hold their own and split the fleet's logins",
     ("crowdsec", "crowdsec"): "sqlite LAPI DB on an RWO volume",
-    ("claude-otel", "grafana"): "sqlite DB on a ReadWriteOnce PVC",
+    ("observability", "grafana"): "sqlite DB on a ReadWriteOnce PVC",
     ("scrutiny", "scrutiny-web"): "local config store",
     ("karakeep", "karakeep"): "sqlite DB on the data PVC",
     # ── single-writer TSDB / index ──
-    ("claude-otel", "prometheus"): "TSDB holds an exclusive lock on its data directory",
-    ("claude-otel", "loki"): "single-writer index on a filesystem store",
-    ("claude-otel", "tempo"): "single-writer trace store",
+    (
+        "observability",
+        "prometheus",
+    ): "TSDB holds an exclusive lock on its data directory",
+    ("observability", "loki"): "single-writer index on a filesystem store",
+    ("observability", "tempo"): "single-writer trace store",
     ("loki-homelab", "loki-homelab"): "single-writer index on a filesystem store",
     (
         "scrutiny",

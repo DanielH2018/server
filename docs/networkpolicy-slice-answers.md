@@ -127,7 +127,7 @@ in a workload role.
 
 **Slice 3 found two more gaps in the same census, worth folding into the method for slices 4–5.**
 First: a role is not the unit of fencing. Nine roles render more than one pod-producing document, so
-a census scoped to `containers_list` entries undercounts every one of them — `claude-otel` (6, this
+a census scoped to `containers_list` entries undercounts every one of them — `observability` (6, this
 slice), `karakeep` (4), `scrutiny` (3), `prowlarr` (2, already handled via the flaresolverr
 exemption, Ruling 4), `n8n` (2), `loki-homelab` (2), `freshrss` (2), `crowdsec` (2),
 `cloudflare-ddns` (2). None of the unhandled ones are in scope for slices 1–3. Whichever slice
@@ -138,15 +138,15 @@ instances" in "Slice 3 specifics" above. Resolve the env value the manifest actu
 Service name a role's own template happens to use.
 
 **Warning for slice 3, where that stops being true — corrected below.**
-`roles/k8s/claude-otel/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
+`roles/k8s/observability/templates/telemetry-health.sh.j2` resolves `prometheus`'s ClusterIP at runtime
 (`kubectl get svc prometheus -o jsonpath='{.spec.clusterIP}'`, then curls it). An earlier draft of
 this section claimed the cron installing it "runs from a host cron on both nodes." **That is false,
-verified:** `claude-otel` appears in `containers_list` only in `host_vars/daniel-box.yml`;
-`daniel-server.yml` has no entry, and the cron task in `roles/k8s/claude-otel/tasks/main.yml` has no
+verified:** `observability` appears in `containers_list` only in `host_vars/daniel-box.yml`;
+`daniel-server.yml` has no entry, and the cron task in `roles/k8s/observability/tasks/main.yml` has no
 `delegate_to`. The cron installs and fires from daniel-box alone.
 
 That does not remove the cross-node exposure, it relocates it. `prometheus` has **no node pin** —
-`roles/k8s/claude-otel/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
+`roles/k8s/observability/templates/prometheus.yaml.j2` sets no `nodeSelector`, `nodeAffinity` or
 `nodeName` — so the moment `prometheus` lands on daniel-server, the daniel-box cron's call becomes
 cross-node, silently and without a deploy to blame it on. By slice 2's own evidence ("Answers from
 slice 2" above, the `registry`/`flannel.1` finding), a cross-node host→pod packet arrives as the
@@ -198,7 +198,7 @@ janitorr — and is worth fixing independently of this work.
 
 ## Answers from slice 3
 
-Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the labels while
+Deployed 2026-08-19 in two stages, as designed: `observability` first to add the labels while
 `netpol_baseline_obs_enforced` stayed `false`, then `netpol-baseline` to arm the fence.
 
 - **The two-stage split earned its keep, for a reason the plan did not anticipate.** Stage A rolled
@@ -211,7 +211,7 @@ Deployed 2026-08-19 in two stages, as designed: `claude-otel` first to add the l
   probe and the callers.
 - **Stage A deployed stale templates, and that is the session's most reusable finding.** The
   worktree was 48 commits behind master, and `scripts/deploy.sh` renders from whatever tree it
-  runs in, so stage A reverted `claude-otel` to its state at the branch point. Live for roughly
+  runs in, so stage A reverted `observability` to its state at the branch point. Live for roughly
   nine minutes (22:14–22:23): the longhorn scrape lost the endpoint-based service discovery that
   scrapes both `longhorn-manager` pods, falling back to a single Service target, and
   `telemetry-health.sh` was reverted alongside it. Rebasing onto master and redeploying restored

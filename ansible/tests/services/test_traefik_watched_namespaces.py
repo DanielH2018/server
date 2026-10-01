@@ -17,7 +17,7 @@ Why the two failure modes are asymmetric, and why the list is per-cluster:
   so an IngressRoute there applies cleanly, reports nothing wrong, and the host 404s.
 - A Role for a namespace that does not exist fails LOUDLY, at apply time. That is how this
   surfaced: the first staging Traefik deploy aborted with
-  `namespaces "observability" not found`, because claude-otel is not in that cluster's
+  `namespaces "observability" not found`, because observability is not in that cluster's
   subset and nothing else creates the namespace.
 
 Neither is something a render can see on its own, which is the point of checking the pair.
@@ -124,7 +124,7 @@ def test_prod_still_watches_the_three_namespaces() -> None:
 
 
 def test_a_narrowed_list_reaches_both_readings() -> None:
-    """The rejecting half. A cluster with no claude-otel must not name `observability` — that
+    """The rejecting half. A cluster with no observability must not name `observability` — that
     aborts the RBAC apply — and both readings have to follow the variable to say so.
 
     daniel-stage was the live example of such a cluster until #2941 retired it, so the narrowed

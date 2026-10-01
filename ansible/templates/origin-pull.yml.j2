@@ -12,8 +12,8 @@
 
   Two objects, one macro each, because a TLSOption resolves its Secret in ITS OWN namespace and
   an IngressRoute resolves its TLSOption in its own — the same cross-namespace trap the `modern`
-  copies in claude-otel's and longhorn-ui's middlewares.yaml.j2 document. Every namespace with a
-  public route renders both: traefik for k8s_namespace, claude-otel for the observability
+  copies in observability's and longhorn-ui's middlewares.yaml.j2 document. Every namespace with a
+  public route renders both: traefik for k8s_namespace, observability for the observability
   namespace (grafana's public name). ENFORCED by
   ansible/tests/k8s/test_public_routes_require_cloudflare_origin_pull.py.
 

@@ -233,7 +233,7 @@ containers_list:
     platform: k8s
     depends_on: [media-volume, sonarr, radarr, jellyfin]
 
-  - name: claude-otel
+  - name: observability
     platform: k8s
     # `hostname`/`port` describe Grafana — the only routed workload here. The OTEL
     # collector, Loki, Prometheus and Tempo are reached on the node's loopback via hostPort
@@ -496,7 +496,7 @@ containers_list:
   - name: valheim
     platform: k8s
 
-  # The homelab log store — a SECOND cluster Loki, deliberately separate from claude-otel's,
+  # The homelab log store — a SECOND cluster Loki, deliberately separate from observability's,
   # which holds verbatim prompts and stays loopback-only. The route is ClientIP-gated
   # (monitoring_route), so use_authelia is moot but stated. Ships with the pod-log promtail
   # DaemonSet.
@@ -506,7 +506,7 @@ containers_list:
     port: 3100
     use_authelia: false
   # MUST follow loki-homelab: both exporters tail their game pod's console lines from that
-  # Loki. No web UI — each :9420 exporter is scraped in-cluster (claude-otel prometheus jobs
+  # Loki. No web UI — each :9420 exporter is scraped in-cluster (observability prometheus jobs
   # terraria-stats and valheim-stats), so no port/route derives.
   - name: game-stats
     platform: k8s

@@ -123,9 +123,9 @@ def test_no_cluster_route_carries_the_retired_k8s_suffix(
 
 # --- Two Loki stores (#2210) ------------------------------------------------------------------
 #
-# `{service_name="claude-code"}` lives only in claude-otel's Loki; `loki-homelab` returned a
+# `{service_name="claude-code"}` lives only in observability's Loki; `loki-homelab` returned a
 # well-formed empty result for it that read as "the OTEL stream is gone". The default store
-# stays `homelab` so every existing call is unchanged; `--loki claude-otel` reaches the other
+# stays `homelab` so every existing call is unchanged; `--loki observability` reaches the other
 # by its pinned ClusterIP, and the one selector with a known home is refused at the wrong one.
 
 
@@ -143,11 +143,11 @@ def test_plan_loki_query_default_store_is_homelab(fake_resolve, fake_k8s_endpoin
     assert "--resolve" in stages[0]
 
 
-def test_plan_loki_query_claude_otel_store_uses_cluster_ip_without_pin(
+def test_plan_loki_query_observability_store_uses_cluster_ip_without_pin(
     fake_resolve, fake_k8s_endpoint
 ):
     stages = curl_pipeline.plan(
-        ["loki-query", '{service_name="claude-code"}', "--loki", "claude-otel"],
+        ["loki-query", '{service_name="claude-code"}', "--loki", "observability"],
         fake_resolve,
         fake_k8s_endpoint,
         _fake_cluster_ip,
@@ -161,11 +161,11 @@ def test_plan_loki_query_claude_otel_store_uses_cluster_ip_without_pin(
     ]
 
 
-def test_plan_loki_labels_claude_otel_store_uses_cluster_ip_without_pin(
+def test_plan_loki_labels_observability_store_uses_cluster_ip_without_pin(
     fake_resolve, fake_k8s_endpoint
 ):
     stages = curl_pipeline.plan(
-        ["loki-labels", "--loki", "claude-otel"],
+        ["loki-labels", "--loki", "observability"],
         fake_resolve,
         fake_k8s_endpoint,
         _fake_cluster_ip,
@@ -173,7 +173,7 @@ def test_plan_loki_labels_claude_otel_store_uses_cluster_ip_without_pin(
     assert stages == [core.curl_argv("http://10.43.0.99:3100/loki/api/v1/labels")]
 
 
-def test_plan_routes_bare_claude_code_selector_to_claude_otel(
+def test_plan_routes_bare_claude_code_selector_to_observability(
     fake_resolve, fake_k8s_endpoint, capsys
 ):
     # The issue's own verify-by command, with no --loki: it must return lines, not a refusal.
@@ -184,13 +184,13 @@ def test_plan_routes_bare_claude_code_selector_to_claude_otel(
         _fake_cluster_ip,
     )
     assert stages[0][-1].startswith("http://10.43.0.99:3100/loki/api/v1/query_range?")
-    assert "claude-otel" in capsys.readouterr().err
+    assert "observability" in capsys.readouterr().err
 
 
 def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(
     fake_resolve, fake_k8s_endpoint
 ):
-    with pytest.raises(SystemExit, match="--loki claude-otel"):
+    with pytest.raises(SystemExit, match="--loki observability"):
         curl_pipeline.plan(
             ["loki-query", '{service_name="claude-code"}', "--loki", "homelab"],
             fake_resolve,
@@ -208,7 +208,7 @@ def test_plan_refuses_claude_code_selector_at_explicit_homelab_store(
     ],
 )
 def test_pick_loki_store_is_flagged(logql):
-    assert core.pick_loki_store(logql, None)[0] == "claude-otel"
+    assert core.pick_loki_store(logql, None)[0] == "observability"
     with pytest.raises(SystemExit):
         core.pick_loki_store(logql, "homelab")
 
@@ -225,11 +225,11 @@ def test_pick_loki_store_is_flagged(logql):
 def test_pick_loki_store_is_clean(logql):
     assert core.pick_loki_store(logql, None) == ("homelab", None)
     assert core.pick_loki_store(logql, "homelab") == ("homelab", None)
-    assert core.pick_loki_store(logql, "claude-otel") == ("claude-otel", None)
+    assert core.pick_loki_store(logql, "observability") == ("observability", None)
 
 
-def test_claude_otel_loki_ip_reads_the_role_default():
-    # The role template pins `clusterIP: {{ claude_otel_loki_cluster_ip }}`; a parse that
+def test_observability_loki_ip_reads_the_role_default():
+    # The role template pins `clusterIP: {{ observability_loki_cluster_ip }}`; a parse that
     # silently returned nothing would build `http://:3100`.
-    ip = core.claude_otel_loki_ip()
+    ip = core.observability_loki_ip()
     assert ip.startswith("10.43."), ip

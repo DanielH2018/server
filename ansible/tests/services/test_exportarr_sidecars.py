@@ -285,7 +285,7 @@ def test_only_sonarr_enables_the_additional_metrics_collector():
 
 
 def _scrape_jobs() -> list[dict]:
-    """claude-otel's scrape_configs, read from the RENDERED prometheus ConfigMap.
+    """observability's scrape_configs, read from the RENDERED prometheus ConfigMap.
 
     Through the render rather than the template text (#2809). The text form split
     `prometheus.yaml.j2` on the job's name and then asked whether two strings appeared
@@ -296,7 +296,7 @@ def _scrape_jobs() -> list[dict]:
     so a keep rule there is a keep rule.
     """
     for role, template, doc in rendered_docs():
-        if role != "claude-otel" or "prometheus" not in str(template):
+        if role != "observability" or "prometheus" not in str(template):
             continue
         if doc.get("kind") != "ConfigMap":
             continue

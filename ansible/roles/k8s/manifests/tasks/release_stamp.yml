@@ -7,7 +7,7 @@
 # working copy rather than a release. `deploy.sh` renders from whatever git tree it runs in
 # (scripts/deploy_tools/deploy_staleness.py states the problem in full), which makes the
 # question genuinely open rather than merely unrecorded: on 2026-08-19 a worktree 48 commits
-# behind master reverted claude-otel for nine minutes, and the only reason anyone noticed was a
+# behind master reverted observability for nine minutes, and the only reason anyone noticed was a
 # scrape-target count moving for no reason the diff explained.
 #
 # Three guards already compensate for this — the /var/lock/server-git-tree.lock, deploy.sh's
@@ -103,7 +103,7 @@
   #
   # `manifests_self_rollouts` is the third source (issue #1902): the workloads a role with
   # `manifests_rollout: ''` restarts through a PRIVATE task after this role returns
-  # (claude-otel's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
+  # (observability's loop, pihole's roll_one.yml). Those tasks gate on the same three facts, so
   # the record can hold the expectation for them; appending from the private task itself is
   # too late, since the record is written here, before that task runs. An entry here reaches
   # `rollouts[]` and nothing else -- not the shared restart, not the batch drain -- which is

@@ -60,7 +60,7 @@
 
 # The script is Jinja-hostile (its Prometheus exposition strings carry {…} braces), so
 # it becomes a ConfigMap via kubectl --from-file, never via a template — the same
-# reasoning as claude-otel's dashboards and image-builder's context files.
+# reasoning as observability's dashboards and image-builder's context files.
 - name: Render the script ConfigMap manifest for terraria-stats
   tags: [config]
   ansible.builtin.shell:

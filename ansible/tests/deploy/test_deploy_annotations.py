@@ -20,7 +20,7 @@ import re
 from _helpers import REPO, load_defaults
 
 _REPO = REPO
-_ROLE = _REPO / "ansible/roles/k8s/claude-otel"
+_ROLE = _REPO / "ansible/roles/k8s/observability"
 _GRAFANA = _ROLE / "templates/grafana.yaml.j2"
 _DASHBOARDS_TASKS = _ROLE / "tasks/dashboards.yml"
 # deploy.sh's locked halves: the foreground's and --detach's both call `annotate` (#2412).
@@ -38,7 +38,7 @@ def test_the_query_matches_what_the_deployers_actually_log():
     the line filter in the expr stops matching the text `logger` writes, every board keeps
     rendering and silently shows no deploys.
     """
-    expr = load_defaults(_ROLE)["claude_otel_deploy_annotation_expr"]
+    expr = load_defaults(_ROLE)["observability_deploy_annotation_expr"]
 
     literals = re.findall(r'\|=\s*"([^"]+)"', expr)
     assert literals, f"the expr must carry a line filter to match on: {expr}"
@@ -61,7 +61,7 @@ def test_the_expr_parses_the_fields_the_annotation_renders():
 
     import inject_dashboard_annotations as inject
 
-    expr = load_defaults(_ROLE)["claude_otel_deploy_annotation_expr"]
+    expr = load_defaults(_ROLE)["observability_deploy_annotation_expr"]
     annotation = inject.build_annotation("x", expr)
 
     field = re.fullmatch(r"\{\{(\w+)\}\}", annotation["textFormat"])
@@ -84,7 +84,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
     Same silent shape as the stale-uid class validate/grafana_dashboards.py guards for panels —
     but an injected annotation never appears in the source JSON, so that validator cannot see it.
     """
-    uid = load_defaults(_ROLE)["claude_otel_loki_homelab_uid"]
+    uid = load_defaults(_ROLE)["observability_loki_homelab_uid"]
 
     grafana = _GRAFANA.read_text()
     block = grafana.split("- name: loki-homelab", 1)
@@ -95,7 +95,7 @@ def test_the_datasource_uid_matches_the_provisioned_one():
     provisioned = re.search(r"uid:\s*(\S+)", block[1])
     assert provisioned, "the loki-homelab datasource declares no uid"
     assert provisioned.group(1) == uid, (
-        f"claude_otel_loki_homelab_uid ({uid}) and the provisioned datasource "
+        f"observability_loki_homelab_uid ({uid}) and the provisioned datasource "
         f"({provisioned.group(1)}) have drifted"
     )
 

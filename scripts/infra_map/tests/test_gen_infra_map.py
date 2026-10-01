@@ -86,8 +86,8 @@ def test_declared_services_resolves_k8s_hostname_and_namespace():
 
 
 def test_declared_services_gives_namespace_owner_its_own_namespace():
-    """claude-otel is one entry that owns the whole observability namespace."""
-    hv = docker_host([{"name": "claude-otel", "platform": "k8s", "port": 3000}])
+    """observability is one entry that owns the whole observability namespace."""
+    hv = docker_host([{"name": "observability", "platform": "k8s", "port": 3000}])
     (service,) = g.declared_services("daniel-box", hv, GLOBALS)
     assert service["namespace"] == "observability"
 
@@ -125,7 +125,7 @@ def test_match_k8s_workloads_requires_a_hyphen_not_a_bare_prefix():
 
 
 def test_match_k8s_workloads_gives_a_namespace_owner_everything_in_it():
-    service = {"name": "claude-otel", "namespace": "observability"}
+    service = {"name": "observability", "namespace": "observability"}
     assert [w["name"] for w in g.match_k8s_workloads(service, WORKLOADS)] == [
         "loki",
         "tempo",

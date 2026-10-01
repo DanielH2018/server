@@ -76,4 +76,4 @@ sysfs" — a flat zero looks identical to a broken read path otherwise.
   `testpaths`). `uv run python files/gpu_exporter.py --once --sysfs-root /sys` prints one
   exposition against the local node without serving.
 - Manifests: `templates/{configmap,daemonset}.yaml.j2`. Scrape job: `job_name: gpu` in
-  `roles/k8s/claude-otel/templates/prometheus.yaml.j2`.
+  `roles/k8s/observability/templates/prometheus.yaml.j2`.

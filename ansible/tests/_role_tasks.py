@@ -98,7 +98,7 @@ def _loop_of(task: dict, role: str) -> tuple[bool, list | None]:
     """(has a loop, its values or None when they cannot be read statically).
 
     `loop: "{{ some_role_var }}"` is resolved from the role's own defaults/vars — that is how
-    claude-otel's six telemetry workloads become six tasks. A loop over a play-scoped
+    observability's six telemetry workloads become six tasks. A loop over a play-scoped
     accumulator (`k8s_pending_rollouts`) resolves to nothing, and the tasks under it keep their
     `{{ item }}` and are judged unresolved rather than guessed at.
     """

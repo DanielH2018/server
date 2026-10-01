@@ -1,7 +1,7 @@
 ---
 generated_from: scripts/docs/service_catalog.py
-generated_at: 2026-09-29 01:30 UTC
-generated_sha: fea456d31
+generated_at: 2026-10-01 00:11 UTC
+generated_sha: 7f5047711
 ---
 
 !!! warning "Generated file — do not edit"
@@ -26,7 +26,6 @@ generated_sha: fea456d31
 | autofix-bridge | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (observability — auto-remediation loop; a broken deploy silently stops fixing arr issues. ALSO no readinessProbe (probe-less) — two independent reasons) |
 | bazarr | k8s | <span class="fqdn" data-host="bazarr">bazarr.&lt;domain&gt;</span> · <span class="fqdn" data-host="bazarr.local">bazarr.local.&lt;domain&gt;</span> | Authelia one_factor | weekly -> B2 (default target); not Longhorn (media-local) | eligible |
 | bento-pdf | k8s | <span class="fqdn" data-host="bento-pdf">bento-pdf.&lt;domain&gt;</span> · <span class="fqdn" data-host="bento-pdf.local">bento-pdf.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
-| claude-otel | k8s | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | denylisted (observability — Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits) |
 | cloudflare-ddns | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (unprobeable, not merely probe-less — favonia/cloudflare-ddns is a scratch image running an outbound update loop with no HTTP server, no listener and no shell, so no httpGet, tcpSocket or exec readinessProbe can exist. Both rendered Deployments are therefore ungated: the role sets manifests_rollout: '', which skips the shared rollout wait AND the stability soak, and nothing replaces them.) |
 | code-server | k8s | <span class="fqdn" data-host="code-server">code-server.&lt;domain&gt;</span> · <span class="fqdn" data-host="code-server.local">code-server.local.&lt;domain&gt;</span> | Authelia two_factor | no backup (listed in k3s_longhorn_nobackup_volumes); weekly -> B2 (default target) | denylisted (in-cluster-built registry image with no upstream version scheme — Renovate can never generate an update PR for it, so there is no bump event to auto-deploy regardless of the migrating-state PVC shape below) |
 | configarr | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
@@ -59,6 +58,7 @@ generated_sha: fea456d31
 | node-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
 | nut | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | denylisted (NOT probe-less (has a readinessProbe) despite the denylist comment grouping — real reason: USB-passthrough + node-exclusive hostPort (Recreate strategy) on the UPS shutdown-chain pod, privileged:true) |
 | nut-exporter | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | no PVC (stateless) | eligible |
+| observability | k8s | <span class="fqdn" data-host="grafana">grafana.&lt;domain&gt;</span> · <span class="fqdn" data-host="grafana.local">grafana.local.&lt;domain&gt;</span> | Authelia one_factor | no backup (StorageClass longhorn-nobackup) | denylisted (observability — the cluster metrics plane and Claude Code's own telemetry stack, six sub-images across several Deployments. ALSO each stateful component (loki/grafana/prometheus/tempo) is Recreate + its own PVC — compounding, not single-component. COUPLING NOTE for a future promotion: UI-edited Grafana dashboards live only in the PVC until an export script round-trips them to git; a revert discards unsaved edits) |
 | peanut | k8s | <span class="fqdn" data-host="peanut">peanut.&lt;domain&gt;</span> · <span class="fqdn" data-host="peanut.local">peanut.local.&lt;domain&gt;</span> | Authelia one_factor | no PVC (stateless) | eligible |
 | pi-peer-backup | k8s | no route (infra role) | unknown (use_authelia not declared on this entry) | weekly -> B2 (default target) | eligible |
 | pihole | k8s | <span class="fqdn" data-host="pihole">pihole.&lt;domain&gt;</span> · <span class="fqdn" data-host="pihole.local">pihole.local.&lt;domain&gt;</span> | Authelia one_factor | unknown (PVC present, claim name not statically resolvable: {{ claim }}); no backup (StorageClass longhorn-nobackup) | denylisted (platform — LAN DNS resolver; a failed deploy breaks name resolution fleet-wide, and host probes stay green through that kind of outage) |

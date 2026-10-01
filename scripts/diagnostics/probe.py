@@ -22,10 +22,10 @@ Subcommands:
     monitors                 Kuma down-monitors rollup (exit 0 = all up), read from the
                              monitor_status metric Prometheus already scrapes — no Kuma
                              API credential needed
-    loki-labels              Loki label names [--loki homelab|claude-otel]
-    loki-query '<logql>'     Loki range query [--limit N] [--json] [--loki homelab|claude-otel]
+    loki-labels              Loki label names [--loki homelab|observability]
+    loki-query '<logql>'     Loki range query [--limit N] [--json] [--loki homelab|observability]
                              Two Lokis: `homelab` (the default; pod, syslog and
-                             monitor-bridge logs) and `claude-otel` (Claude Code OTEL —
+                             monitor-bridge logs) and `observability` (Claude Code OTEL —
                              the only home of `{service_name="claude-code"}`; that
                              selector routes there on its own, and is refused at an
                              explicit --loki homelab rather than answered empty)

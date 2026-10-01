@@ -15,7 +15,7 @@ their own writes under `--check` and report what would change, and the wider fac
 that diff into a skip.
 
 What the census cannot see: a `command`/`shell` that writes the host through neither a file
-module nor a redirect. claude-otel's `inject_dashboard_annotations.py --dest
+module nor a redirect. observability's `inject_dashboard_annotations.py --dest
 /etc/rancher/k3s/dashboards-annotated` is that shape — guarded today through the include, and
 unguarding it would not fail anything here. Recognising it needs a per-script rule, which is
 worth writing the day a second one exists.
@@ -67,7 +67,7 @@ _ROLES_THAT_WRITE_THE_HOST = frozenset(
     {
         "artifacts",
         "autofix-bridge",
-        "claude-otel",
+        "observability",
         "configarr",
         "crowdsec",
         "game-stats",
@@ -116,7 +116,7 @@ def _unguarded_host_writes(role: Path) -> list[str]:
 
     The guard has to sit on the task itself or on the include that pulled its whole file in —
     `_guard_covered_files` is the same closure the cluster-side check uses, and it is what
-    covers claude-otel's `dashboards.yml` and volume-claim's `claim.yml`.
+    covers observability's `dashboards.yml` and volume-claim's `claim.yml`.
     """
     covered = _guard_covered_files(role)
     offenders = []
@@ -191,7 +191,7 @@ def test_a_guarded_host_write_is_clean(tmp_path: Path) -> None:
     )
     assert _unguarded_host_writes(role) == []
 
-    # And through a guarded include, claude-otel's shape.
+    # And through a guarded include, observability's shape.
     included = _role_with_tasks(
         tmp_path / "b",
         main=(

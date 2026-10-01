@@ -295,7 +295,7 @@ def jinja_env() -> NativeEnvironment:
     # `difference`, `union`, `intersect` and the rest of the set filters live in mathstuff, NOT
     # core — an expression using one renders as `TemplateAssertionError: No filter named
     # 'difference'` without this, which reads as a broken test rather than a missing plugin
-    # module. Found while writing the claude-otel dashboard-prune guard, whose three prunes are
+    # module. Found while writing the observability dashboard-prune guard, whose three prunes are
     # all `difference()`.
     env.filters.update(_MathFilters().filters())
     env.tests.update(_AnsibleTests().tests())

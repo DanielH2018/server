@@ -1,7 +1,7 @@
 ---
 # The one door that lets monitor-bridge (daniel-server) query this cluster's Prometheus.
 #
-# Slice 3, D8. Prometheus' node-side listener is pinned to 127.0.0.1 by claude_otel_query_host_ip
+# Slice 3, D8. Prometheus' node-side listener is pinned to 127.0.0.1 by observability_query_host_ip
 # — deliberately, so `otelq` can reach it while the LAN cannot — and its Service is ClusterIP.
 # Both are correct and neither is changed here: monitor-bridge runs on daniel-server, so it can
 # reach neither, and the k3s API server's own :6443 is firewalled off from daniel-server too

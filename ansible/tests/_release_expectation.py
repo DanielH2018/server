@@ -12,7 +12,7 @@ from _helpers import ANSIBLE, load_tasks, load_yaml, render_expr, task_named, wa
 MANIFESTS_TASKS = ANSIBLE / "roles/k8s/manifests/tasks"
 STAMP = load_tasks(MANIFESTS_TASKS / "release_stamp.yml")
 MAIN = load_tasks(MANIFESTS_TASKS / "main.yml")
-CLAUDE_OTEL = ANSIBLE / "roles/k8s/claude-otel"
+OBSERVABILITY = ANSIBLE / "roles/k8s/observability"
 PIHOLE = ANSIBLE / "roles/k8s/pihole"
 EXPECT = task_named(STAMP, "Work out which workloads this apply must roll")
 LOOP_EXPR = EXPECT["loop"]
@@ -75,11 +75,11 @@ OBSERVABILITY_NAMESPACE = load_yaml(ANSIBLE / "inventory/group_vars/all.yml")[
 ]
 
 
-def claude_otel_self_rollouts():
+def observability_self_rollouts():
     """The declaration as the play sees it: a template over the role's defaults and the
     group var naming the namespace its workloads live in."""
-    declared = include_role_vars(CLAUDE_OTEL)["manifests_self_rollouts"]
-    defaults = load_yaml(CLAUDE_OTEL / "defaults/main.yml")
+    declared = include_role_vars(OBSERVABILITY)["manifests_self_rollouts"]
+    defaults = load_yaml(OBSERVABILITY / "defaults/main.yml")
     return render_expr(
         declared, k8s_observability_namespace=OBSERVABILITY_NAMESPACE, **defaults
     )

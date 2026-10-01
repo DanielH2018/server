@@ -11,7 +11,7 @@ metadata:
 data:
   config.yaml: |
 {# Captured so the Deployment below can hash it into checksum/config. #}
-{% set claude_otel_collector_config %}
+{% set observability_collector_config %}
     receivers:
       otlp:
         protocols:
@@ -74,7 +74,7 @@ data:
           processors: [batch]
           exporters: [otlp/tempo]
 {% endset %}
-{{ claude_otel_collector_config -}}
+{{ observability_collector_config -}}
 ---
 apiVersion: apps/v1
 kind: DaemonSet
@@ -97,17 +97,17 @@ spec:
         # shared rollout-restart, so without this the edit reaches the ConfigMap and never
         # the pod. Why per-workload and not the old restart-all loop: this role's CLAUDE.md,
         # under `## One config change, one restart`.
-        {{ checksum_annotation('config', value=claude_otel_collector_config | hash('sha1')) }}
+        {{ checksum_annotation('config', value=observability_collector_config | hash('sha1')) }}
       labels:
         app: otel-collector
         netpol-baseline: enforced
     spec:
-      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: claude-otel tiers`
+      # Tier 4, with prometheus.yaml.j2 the one exception — see `DECIDED: observability tiers`
       # in this role's CLAUDE.md.
 {{ pod_shell('homelab-best-effort') }}
       containers:
         - name: otel-collector
-          image: {{ claude_otel_collector_image }}
+          image: {{ observability_collector_image }}
           args: ["--config=/conf/config.yaml"]
           # uid pinned with the assertion: `runAsNonRoot` alone does not pin one, and the
           # kubelet refuses a container whose image names its user instead of numbering it.
@@ -123,9 +123,9 @@ spec:
             # collector — which receives prompts, responses and tool output verbatim —
             # becomes reachable from the LAN.
             - name: otlp-grpc
-              containerPort: {{ claude_otel_otlp_port }}
-              hostPort: {{ claude_otel_otlp_port }}
-              hostIP: {{ claude_otel_otlp_host_ip }}
+              containerPort: {{ observability_otlp_port }}
+              hostPort: {{ observability_otlp_port }}
+              hostIP: {{ observability_otlp_host_ip }}
             - name: prom-export
               containerPort: 8889
             - name: self-metrics

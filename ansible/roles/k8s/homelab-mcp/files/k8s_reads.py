@@ -113,7 +113,7 @@ def parse_nodes(resp: dict) -> list[dict]:
     return rows
 
 
-# Metadata-only projection for claude_code_events. The claude-otel Loki holds prompts,
+# Metadata-only projection for claude_code_events. The observability Loki holds prompts,
 # responses and tool output VERBATIM (content logging is on, by design), and KL1's
 # whole boundary is that this content never gets a LAN-reachable path — so rows leaving
 # through the (bearer-gated, LAN-routed) MCP carry ONLY these fields. A whitelist, not
@@ -146,11 +146,11 @@ def claude_event_rows(parsed: list[dict]) -> list[dict]:
 
 
 def claude_loki_base_or_raise(url: str) -> str:
-    """The claude-otel Loki base URL, or a clear error while the tool is dark."""
+    """The observability Loki base URL, or a clear error while the tool is dark."""
     if not url:
         raise RuntimeError(
             "claude_code_events is dark: CLAUDE_LOKI_URL is unset, so this deploy "
-            "cannot reach the claude-otel Loki. claude_code_usage (metrics) and "
+            "cannot reach the observability Loki. claude_code_usage (metrics) and "
             "query_logs (homelab Loki) still work."
         )
     return url

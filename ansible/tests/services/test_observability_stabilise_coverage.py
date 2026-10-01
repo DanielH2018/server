@@ -1,6 +1,6 @@
-"""Guards claude-otel's hand-off to the end-of-play stabilisation gate.
+"""Guards observability's hand-off to the end-of-play stabilisation gate.
 
-claude-otel is the one k8s role that rolls its own workloads. It sets `manifests_rollout: ''`,
+observability is the one k8s role that rolls its own workloads. It sets `manifests_rollout: ''`,
 so the shared `k8s/manifests` role neither waits nor queues anything, and the role restarts and
 waits on six workloads of its own in a different namespace.
 
@@ -15,7 +15,7 @@ else.
 Three things can silently break that, and none of them fails a deploy:
 
   * **The lists drift.** The role spells its workloads out twice — the wait loop, and
-    `claude_otel_stabilise_workloads` in defaults, which the restart loop and the stabilisation
+    `observability_stabilise_workloads` in defaults, which the restart loop and the stabilisation
     tasks read. Add a seventh workload to the wait loop and forget the variable and the gate
     watches six of seven, reporting green for the one that crashloops.
   * **The inline wait gets queued into the drain.** It looks like the obvious next speedup —
@@ -33,7 +33,7 @@ from _helpers import load_tasks, load_defaults
 from _helpers import command_of as _cmd
 
 
-_ROLE = _REPO / "ansible/roles/k8s/claude-otel"
+_ROLE = _REPO / "ansible/roles/k8s/observability"
 _TASKS = _ROLE / "tasks" / "main.yml"
 _MANIFESTS = _REPO / "ansible/roles/k8s/manifests"
 
@@ -68,21 +68,21 @@ def _literal_workload_loops() -> list[set[tuple[str, str]]]:
 
 
 def test_the_role_lists_its_workloads_the_same_way_everywhere() -> None:
-    declared = _pairs(load_defaults(_ROLE).get("claude_otel_stabilise_workloads"))
+    declared = _pairs(load_defaults(_ROLE).get("observability_stabilise_workloads"))
     assert declared, (
-        "claude_otel_stabilise_workloads is missing from the role's defaults. The stabilisation "
+        "observability_stabilise_workloads is missing from the role's defaults. The stabilisation "
         "snapshot iterates it; without it the play gate watches nothing for this role."
     )
 
     # Deliberately not a count. The role spells the workloads out once today (the wait loop;
-    # the restart loop was pointed at claude_otel_stabilise_workloads in #2858), and pointing
+    # the restart loop was pointed at observability_stabilise_workloads in #2858), and pointing
     # the last one at the variable too is a correct consolidation — a test that pinned the
     # number would fail for that improvement. What must hold is that every literal copy still
     # standing agrees with the declared list.
     for loop in _literal_workload_loops():
         assert loop == declared, (
-            "claude-otel rolls a different set of workloads than it hands to the stabilisation "
-            f"gate. Rolled: {sorted(loop)}. Declared in claude_otel_stabilise_workloads: "
+            "observability rolls a different set of workloads than it hands to the stabilisation "
+            f"gate. Rolled: {sorted(loop)}. Declared in observability_stabilise_workloads: "
             f"{sorted(declared)}. The gate would silently watch fewer workloads than rolled."
         )
 
@@ -92,7 +92,7 @@ def test_the_role_still_waits_inline_before_exec_ing_into_grafana() -> None:
     exec_grafana = _index_of(lambda t: "exec deploy/grafana" in _cmd(t))
 
     assert wait >= 0, (
-        "claude-otel no longer waits on its own rollout. It cannot be queued into "
+        "observability no longer waits on its own rollout. It cannot be queued into "
         "k8s/manifests/tasks/drain.yml: the drain runs at the end of the batch, and the Grafana admin "
         "password sync execs into deploy/grafana before then."
     )
@@ -111,7 +111,7 @@ def test_the_restart_snapshot_is_taken_after_the_wait() -> None:
     snapshot = _index_of(lambda t: "restartCount" in _cmd(t))
 
     assert snapshot >= 0, (
-        "claude-otel no longer snapshots restart counts, so post_tasks/k8s_stabilise_gate.yml "
+        "observability no longer snapshots restart counts, so post_tasks/k8s_stabilise_gate.yml "
         "has no `restarts_before` to compare against for these six workloads."
     )
     assert wait < snapshot, (
@@ -128,7 +128,7 @@ def test_the_role_feeds_the_play_level_gate() -> None:
         if "k8s_stabilise_watch" in str(task.get("ansible.builtin.set_fact", ""))
     ]
     assert appends, (
-        "claude-otel does not append to k8s_stabilise_watch. Its six workloads are the only "
+        "observability does not append to k8s_stabilise_watch. Its six workloads are the only "
         "ones outside k8s_namespace and nothing else queues them, so the play gate would skip "
         "them entirely — the 2026-08-07 kube-state-metrics crashloop goes unseen again."
     )

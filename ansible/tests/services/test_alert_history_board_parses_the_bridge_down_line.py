@@ -21,7 +21,7 @@ from _helpers import ROLES
 import bridge.common
 import pytest
 
-BOARD = ROLES / "k8s/claude-otel/files/dashboards/Infrastructure/alert-history.json"
+BOARD = ROLES / "k8s/observability/files/dashboards/Infrastructure/alert-history.json"
 # The panels that carry the monitor-bridge parser. A rename here must land in the census below,
 # or the test would pass over an empty set.
 PARSING_PANELS = frozenset(

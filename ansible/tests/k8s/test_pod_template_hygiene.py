@@ -75,7 +75,7 @@ _MIN_ALL_KINDS = 78
 # read green for the exact regression it was written against.
 _MUST_CONTAIN = frozenset(
     {
-        "claude-otel",
+        "observability",
         "valheim",
         "game-stats",
         "dri-device-plugin",
@@ -241,7 +241,7 @@ def test_every_long_running_pod_template_names_a_homelab_tier():
     """A pod with no priorityClassName sits at 0 — which is not "below tier 4" but outside the
     model altogether, in the pile with unclassified kube-system plumbing.
     `roles/setup/k3s/templates/priorityclass.yaml.j2` explains why homelab-best-effort exists
-    as a real class rather than as the absence of one. The whole claude-otel plane read that
+    as a real class rather than as the absence of one. The whole observability plane read that
     way until 2026-09-17 (#1851)."""
     tiers = _homelab_tiers()
     offenders, seen_roles, count = [], set(), 0
