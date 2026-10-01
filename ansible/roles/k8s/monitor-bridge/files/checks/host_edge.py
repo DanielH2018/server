@@ -164,6 +164,20 @@ def check_speedtest(cfg: Config) -> tuple[bool, str]:
     """
     if not cfg.SPEEDTEST_URL or not cfg.SPEEDTEST_TOKEN:
         return True, "speedtest monitoring disabled (no URL/token)"
+    # DECIDED: the verdict reads the REST API, not Prometheus, although Prometheus scrapes the
+    # same app (#3105 asked for the switch and this is the recorded reason). Three facts decide
+    # it. (1) The scrape carries NO timestamp: `count by (__name__) ({job="speedtest"})` returned
+    # 28 names on 2026-10-01 and not one of them is a created-at, age or timestamp series, so the
+    # staleness arm — the one SPEEDTEST_MAX_AGE_H exists for, and the only arm whose failure mode
+    # (the scheduler dying while the pod stays Ready) nothing else sees — could only be inferred
+    # from when `speedtest_tracker_result_id` last changed over an 8h window. (2)
+    # SPEEDTEST_FLOOR_CONSECUTIVE counts RESULTS, which the REST history hands back in one fetch;
+    # Prometheus samples a 6-hourly result every 5 min, so the same arm would mean grouping
+    # samples by result id before it could count anything. (3) The scrape itself depends on a
+    # manual UI toggle that roles/k8s/speedtest/CLAUDE.md records as impossible to set from
+    # config at the pinned build, on a longhorn-nobackup PVC — a human step this alert path should not
+    # acquire. The scrape stays what it was added for in #996: history in Grafana, which a Kuma
+    # tile cannot keep.
     try:
         # sort=-created_at, because the default order is ASCENDING and would hand back the
         # OLDEST row in the 30-day window — a stale-forever reading that looks like a verdict.

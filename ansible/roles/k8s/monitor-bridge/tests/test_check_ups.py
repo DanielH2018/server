@@ -1,12 +1,12 @@
-"""The UPS: battery health from nut-exporter, with Home Assistant as the fallback.
+"""The UPS: battery health from nut-exporter, the one source every arm reads.
 
-The absence arms are the substance. A missing series means a source is down, not that the
+The absence arms are the substance. A missing series means the nut scrape is down, not that the
 battery is fine, so the check defers to the scrape-target monitor rather than paging twice —
-except when a source IS scraping and the series is still absent, which is a real fault.
+except when the scrape IS answering and the series is still absent, which is a real fault.
 
-Which source answers is decided in PromQL (`max(A) or max(B)`), not here, so these tests drive
-each arm by its configured query string and stay indifferent to it. What they do pin is that
-the mains-loss arm exists, outranks the runway arms, and holds its own streak.
+Home Assistant was each arm's `max(A) or max(B)` fallback until #3105. These tests drive each arm
+by its configured query string and stay indifferent to what that string is. What they do pin is
+that the mains-loss arm exists, outranks the runway arms, and holds its own streak.
 """
 
 from dataclasses import replace
@@ -113,18 +113,18 @@ def test_check_ups_healthy_is_up(monkeypatch, cfg):
 
 
 def test_check_ups_absent_data_defers_to_scrape_targets(monkeypatch, cfg):
-    # HA scrape down (ha_up None via the fake) -> all arms absent defers to Scrape Targets.
-    # on_battery=None with the rest: the on-battery arm is in the same census since #1630, so
-    # "all arms absent" now means all FOUR.
+    # Unqueryable up-gate (source_up None via the fake) -> all arms absent defers to Scrape
+    # Targets. on_battery=None with the rest: the on-battery arm is in the same census since
+    # #1630, so "all arms absent" means all FOUR.
     _ups_scalars(cfg, monkeypatch, None, None, replace=None, on_battery=None)
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "no UPS data" in msg
 
 
-def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch, cfg):
-    # Every UPS entity renamed/removed at once while HA keeps scraping (up{home-assistant}==1):
-    # Scrape Targets can't see it, so the old all-absent defer silently unmonitored the UPS. Now it
-    # pages through the streak (naming the missing arms) instead of deferring.
+def test_check_ups_all_absent_but_nut_scraping_pages(monkeypatch, cfg):
+    # Every UPS series renamed/removed at once while the nut job keeps scraping (up==1): Scrape
+    # Targets can't see it, so the old all-absent defer silently unmonitored the UPS. It pages
+    # through the streak (naming the missing arms) instead of deferring.
     _ups_scalars(
         cfg, monkeypatch, None, None, replace=None, source_up=1.0, on_battery=None
     )
@@ -135,25 +135,21 @@ def test_check_ups_all_absent_but_ha_scraping_pages(monkeypatch, cfg):
     assert bridge.streaks._down_streaks.get("ups", 0) == 2
 
 
-def test_check_ups_all_absent_ha_down_still_defers(monkeypatch, cfg):
-    # HA scrape affirmatively down (up==0) with all arms absent -> still defer (Scrape Targets owns
-    # the HA-source outage); the up-gate only flips the all-absent case to a page when HA is UP.
+def test_check_ups_all_absent_nut_scrape_down_still_defers(monkeypatch, cfg):
+    """A dead upsd and a dead exporter are the SAME shape now that one source answers every arm.
+
+    nut-exporter fails the whole /ups_metrics scrape when upsd is unreachable (its probes are
+    tcpSocket for exactly that reason), so both outages read as all four arms absent with
+    `up{job="nut"} == 0`. check_ups must DEFER — Scrape Targets and the nut pod's liveness probe
+    own those between them, and paging here would double-page one of them with a misdirecting
+    "renamed?" message (the 2026-07-14 review M1 bug). The dedicated numeric-arms defer that used
+    to catch the upsd half existed only because the HA fallback split the absence in two (#3105).
+    """
     _ups_scalars(
         cfg, monkeypatch, None, None, replace=None, source_up=0.0, on_battery=None
     )
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "no UPS data" in msg
-
-
-def test_check_ups_nut_server_down_defers_not_double_pages(monkeypatch, cfg):
-    # A real NUT-server outage (peanut down / USB unplugged): HA drops the numeric charge+runtime
-    # sensors (unavailable) while the replace-battery template FLOORS to 0 (stays present) ->
-    # charge=None, runtime=None, replace=0.0. That's the nut pod liveness probe's page, NOT an
-    # entity rename, so check_ups must DEFER (up) — not partial-absence page with a misdirecting
-    # "entity renamed?" msg (the 2026-07-14 review M1 double-page bug).
-    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0)
-    ok, msg = checks.host_thermal.check_ups(cfg)
-    assert ok and "NUT numeric arms" in msg
     assert bridge.streaks._down_streaks.get("ups", 0) == 0
 
 
@@ -166,9 +162,27 @@ def test_check_ups_replace_battery_pages(monkeypatch, cfg):
     assert not ok2 and "replace-battery" in msg2
 
 
+def test_check_ups_numeric_arms_absent_while_replace_reports_pages(monkeypatch, cfg):
+    """The input the deleted NUT-numeric defer used to catch, and the one whose verdict flipped.
+
+    charge and runtime absent while the replace arm reports was a upsd outage while the HA
+    fallback existed — HA dropped its numeric sensors and its replace-battery template floored
+    to 0 — so check_ups deferred. One source cannot produce that shape for an outage: nut-exporter
+    fails the whole /ups_metrics scrape, taking all four arms with it. What is left is a selective
+    rename or a `--nut.vars_enable` entry dropped from the exporter's arguments, and both must
+    page rather than leave the runway arms silently unmonitored.
+    """
+    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0)
+    ok1, msg1 = checks.host_thermal.check_ups(cfg)
+    assert ok1 and "streak 1/2" in msg1
+    ok2, msg2 = checks.host_thermal.check_ups(cfg)
+    assert not ok2
+    assert "charge" in msg2 and "runtime" in msg2 and "absent" in msg2
+
+
 def test_check_ups_partial_absence_pages_not_silently_survives(monkeypatch, cfg):
-    # charge+runtime present but the replace arm vanished (entity rename) -> flag, don't monitor the
-    # survivor silently. Goes through the streak (HA-restart grace) then pages, naming the missing arm.
+    # charge+runtime present but the replace arm vanished (series rename) -> flag, don't monitor the
+    # survivor silently. Goes through the streak (restart grace) then pages, naming the missing arm.
     _ups_scalars(cfg, monkeypatch, 100, 900, replace=None)
     ok1, msg1 = checks.host_thermal.check_ups(cfg)
     assert ok1 and "streak 1/2" in msg1
@@ -284,20 +298,6 @@ def test_the_on_battery_series_present_is_not_flagged_absent(monkeypatch, cfg):
     _ups_scalars(cfg, monkeypatch, 100, 900, on_battery=0.0)
     ok, msg = checks.host_thermal.check_ups(cfg)
     assert ok and "absent" not in msg
-
-
-def test_a_nut_outage_still_defers_rather_than_naming_the_on_battery_rename(
-    monkeypatch, cfg
-):
-    """OB is absent in a NUT outage too, and that must not read as a rename.
-
-    The numeric-arms-absent defer is judged before the partial-absence page, so an exporter
-    death reaches the nut liveness probe's message rather than "entity renamed?" — adding OB to
-    the census must not reorder that.
-    """
-    _ups_scalars(cfg, monkeypatch, None, None, replace=0.0, on_battery=None)
-    ok, msg = checks.host_thermal.check_ups(cfg)
-    assert ok and "NUT server/integration down" in msg
 
 
 def test_the_on_battery_arm_is_off_when_no_query_is_configured(monkeypatch, cfg):
