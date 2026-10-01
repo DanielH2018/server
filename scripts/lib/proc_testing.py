@@ -33,7 +33,10 @@ Import it from any test, at any depth — `pyproject.toml` puts `scripts/` on `p
 Rule 3 is the deadline: a test-module `subprocess.run` with no `timeout=` is refused, so a
 caller either comes through `run` or states its own budget at the line — `timeout=None`
 included, which is why rule 3 exempts no module. `subprocess.Popen` is outside that rule,
-because it takes no `timeout=` at all; bound its `wait`/`communicate` yourself (#3073).
+because it takes no `timeout=` at all, and no rule replaces it: the guard's
+`# DECIDED: no fourth rule for Popen` marker says why a `wait`/`communicate` rule cannot
+see the sites that need it. Bound and reap your own child — a `communicate(timeout=...)`
+that raises leaves it running.
 
 A test whose SUBJECT is one of the three decisions does not use this. `scripts/lib/tests/
 test_proc_testing.py` covers this module's own behaviour, and a test that pins the minimal

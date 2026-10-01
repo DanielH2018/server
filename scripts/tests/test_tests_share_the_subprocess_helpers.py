@@ -27,8 +27,8 @@ THREE RULES, each with a clean/flagged pair below.
    one. `lib.proc_testing.run` supplies `DEFAULT_TIMEOUT`, so a call through it is clean,
    and so is an explicit `timeout=None` where outliving every deadline is the point — which is
    why rule 3 exempts no module, unlike the two above it. `subprocess.Popen` is NOT covered: it
-   takes no `timeout=` at all, and its deadline lives on the `wait`/`communicate` that follows,
-   which is a different AST shape with its own exemptions (#3073).
+   takes no `timeout=` at all, and its deadline lives on the `wait`/`communicate` that follows.
+   There is no fourth rule for it — see `# DECIDED: no fourth rule for Popen` below.
 
 Every rule reads the AST, so a docstring naming the old form is prose rather than a hit.
 
@@ -100,6 +100,34 @@ KNOWN_UNBOUNDED_MEMBERS = frozenset(
 
 # The launches that take a `timeout=`. `Popen` is deliberately absent — see rule 3 above.
 _BOUNDABLE_LAUNCHES = frozenset({"run", "check_output", "check_call", "call"})
+
+# DECIDED: no fourth rule for Popen. #3073 proposed one — a `Popen` whose enclosing function
+# reaches `wait`/`communicate` with no `timeout=` and no preceding `kill()`. The 2026-10-01
+# census found seven `Popen` call sites in test modules, and that shape sorts them badly.
+#
+# It MISSES both sites that are genuinely unboundable. `scripts/diagnostics/tests/
+# test_ui_smoke.py`'s `McpClient.__init__` launches a long-lived stdio child whose reads are a
+# `readline` loop in another method, and `test_ui_smoke_helpers.py`'s
+# `test_close_closes_every_pipe_and_reaps_the_process` hands its child to `close()`. Neither
+# function contains a `wait`/`communicate` at all, so a function-scoped AST rule cannot see
+# either one — and following the call would mean whole-program analysis.
+#
+# It HITS almost nothing else. Two of the three sites in `ansible/tests/repo/
+# test_process_waits.py` would need an exemption, because that module's subject IS an
+# unbounded wait. The third, and `scripts/deploy_tools/tests/test_land_detach.py`, already
+# clear on the preceding `kill()`. That leaves a rule whose hit set is mostly its own
+# exemption list.
+#
+# And the spelling it would demand is not safe by itself. `communicate(timeout=...)` raises
+# `TimeoutExpired` and leaves the child RUNNING, so a rule satisfied by adding the keyword
+# would bless a site that still leaks a process into `filterwarnings = ["error"]`. The one
+# real hazard the census found — `scripts/validate/tests/test_vale_sync_guard.py`'s
+# `run_concurrently` — needed the deadline AND a `finally` that reaps the batch, and only the
+# second half is what actually keeps a wedged guard from parking CI.
+#
+# What holds the line instead: `lib.proc_testing.run` is the default launch, so reaching for
+# `Popen` in a test is already the deliberate act. Contradict this with a measured `Popen`
+# site that rule 4 would have caught and `kill()` would not have cleared.
 
 # The module names a `subprocess` import can be bound to. A hit needs the call to reach the
 # stdlib module rather than any object that happens to own a `run`, and `sp` is the one alias
@@ -389,7 +417,8 @@ def test_an_unbounded_launch_is_flagged_in_each_spelling():
 def test_a_bounded_launch_is_not_flagged():
     assert unbounded_launches("subprocess.run(['x'], timeout=5)\n") == []
     assert unbounded_launches("subprocess.run(['x'], **kw)\n") == []
-    # `Popen` has no `timeout=`, so rule 3 cannot ask for one. #3073 holds the remainder.
+    # `Popen` has no `timeout=`, so rule 3 cannot ask for one, and no fourth rule covers it
+    # either — the `# DECIDED: no fourth rule for Popen` marker above has why.
     assert unbounded_launches("subprocess.Popen(['x'])\n") == []
     # The helper's own spelling, and a `run` that is not the stdlib's.
     assert unbounded_launches("run(['x'])\nclient.run(['x'])\n") == []

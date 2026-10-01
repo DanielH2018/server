@@ -28,7 +28,7 @@ import tomllib
 import pytest
 
 from pathlib import Path
-from lib.proc_testing import fake_bin, path_with, run, write_exec
+from lib.proc_testing import DEFAULT_TIMEOUT, fake_bin, path_with, run, write_exec
 from lib.repo_paths import REPO
 
 GUARD = REPO / "scripts" / "validate" / "vale.sh"
@@ -98,7 +98,15 @@ def run_guard(repo: Path, *args: str, script: str = "scripts/validate/vale.sh"):
 
 
 def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/vale.sh"):
-    """Start `count` guards at once and wait for all of them — prek's own shape."""
+    """Start `count` guards at once and wait for all of them — prek's own shape.
+
+    Every wait carries `DEFAULT_TIMEOUT`, because a guard that wedges on its own lock is
+    exactly what this module tests for: unbounded, it parks the CI run instead of failing
+    here (#3073). `communicate` raising `TimeoutExpired` leaves its child alive and the
+    siblings never waited on, and `filterwarnings = ["error"]` turns the `ResourceWarning`
+    that follows into a failure on whichever test runs last — so the `finally` reaps the
+    whole batch whatever the first wait did.
+    """
     env = env_for(repo)
     procs = [
         subprocess.Popen(
@@ -112,9 +120,15 @@ def run_concurrently(repo: Path, count: int, script: str = "scripts/validate/val
         for n in range(count)
     ]
     results = []
-    for proc in procs:
-        _, stderr = proc.communicate()
-        results.append((proc.returncode, stderr))
+    try:
+        for proc in procs:
+            _, stderr = proc.communicate(timeout=DEFAULT_TIMEOUT)
+            results.append((proc.returncode, stderr))
+    finally:
+        for proc in procs:
+            if proc.poll() is None:
+                proc.kill()
+                proc.wait(timeout=DEFAULT_TIMEOUT)
     return results
 
 
