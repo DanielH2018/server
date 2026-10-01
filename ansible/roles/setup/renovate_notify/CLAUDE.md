@@ -64,6 +64,12 @@ arm's single point of failure, and it fails silently in two shapes:
   `pending_state_lost` tells the two apart using `last_run`, and the digest names the date the
   clocks become usable again (#1526).
 
+**Two packages soak less than the digest default.** `renovate.json` soaks the nginx alpine
+digests 1 day rather than 3, because upstream re-pushes those tags about every 3.6 days (#2886),
+and `files/pending_logic.py:FAST_DIGEST_SOAK_DAYS` is this arm's copy of that exception —
+`tests/test_pending_soak.py::test_soak_constants_match_renovate_json` fails when the two
+disagree.
+
 **A grouped row carries no update type, so it takes the digest soak.**
 `ansible/roles/setup/renovate_notify/files/pending_logic.py:GROUPED_TITLE_MARKER` is the
 parenthetical `item_soak_days` matches; the cost, weighed in the `DECIDED:` comment there, is a

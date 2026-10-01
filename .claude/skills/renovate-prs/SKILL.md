@@ -21,7 +21,11 @@ A daily timer runs this same skill unattended where it is armed —
 
 `gh pr list` cannot see an update Renovate detected but never raised. Those sit in the
 Dependency Dashboard's **Pending Status Checks** section (issue #3), and they are supposed to
-leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one.
+leave it within their `minimumReleaseAge` — 3 days for a digest bump, 7 for a version one. The
+one exception is the nginx alpine digests (`nginx`, `nginxinc/nginx-unprivileged`), which soak
+1 day: upstream re-pushes those tags about every 3.6 days, and a 3-day soak restarted on each
+re-push left an automerge window the daily Renovate run usually missed (#2886). `renovate-notify`
+measures those two rows against the 1-day soak, so their stuck threshold is 8 days, not 10.
 Measured 2026-09-02, seven had not: grafana/promtail sat there for 111 days against a 7-day
 soak, so the homelab ran promtail 3.3.0 that whole time (issue #886).
 
